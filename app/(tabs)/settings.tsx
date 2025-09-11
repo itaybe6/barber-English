@@ -485,12 +485,23 @@ export default function SettingsScreen() {
       const extGuess = (contentType.split('/')![1] || 'jpg').toLowerCase();
       const randomId = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
       const filePath = `${user?.id || 'anon'}/${Date.now()}_${randomId()}.${extGuess}`;
-      const { error } = await supabase.storage.from('avatars').upload(filePath, fileBody as any, { contentType, upsert: false });
-      if (error) {
-        console.error('avatar upload error', error);
-        return null;
+      let bucketUsed = 'avatars';
+      const firstAttempt = await supabase.storage.from(bucketUsed).upload(filePath, fileBody as any, { contentType, upsert: false });
+      if (firstAttempt.error) {
+        const msg = String((firstAttempt.error as any)?.message || '').toLowerCase();
+        if (msg.includes('bucket') && msg.includes('not found')) {
+          bucketUsed = 'designs';
+          const retry = await supabase.storage.from(bucketUsed).upload(filePath, fileBody as any, { contentType, upsert: false });
+          if (retry.error) {
+            console.error('avatar upload error (retry)', retry.error);
+            return null;
+          }
+        } else {
+          console.error('avatar upload error', firstAttempt.error);
+          return null;
+        }
       }
-      const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
+      const { data } = supabase.storage.from(bucketUsed).getPublicUrl(filePath);
       return data.publicUrl;
     } catch (e) {
       console.error('avatar upload exception', e);

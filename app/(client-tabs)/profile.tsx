@@ -87,12 +87,24 @@ export default function ClientProfileScreen() {
       const extGuess = (contentType.split('/')[1] || 'jpg').toLowerCase();
       const randomId = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
       const filePath = `${user?.id || 'anon'}/${Date.now()}_${randomId()}.${extGuess}`;
-      const { error } = await supabase.storage.from('avatars').upload(filePath, fileBody as any, { contentType, upsert: false });
-      if (error) {
-        console.error('avatar upload error', error);
-        return null;
+      let bucketUsed = 'avatars';
+      const firstAttempt = await supabase.storage.from(bucketUsed).upload(filePath, fileBody as any, { contentType, upsert: false });
+      if (firstAttempt.error) {
+        const msg = String((firstAttempt.error as any)?.message || '').toLowerCase();
+        if (msg.includes('bucket') && msg.includes('not found')) {
+          // Fallback to 'designs' bucket if 'avatars' bucket is missing
+          bucketUsed = 'designs';
+          const retry = await supabase.storage.from(bucketUsed).upload(filePath, fileBody as any, { contentType, upsert: false });
+          if (retry.error) {
+            console.error('avatar upload error (retry)', retry.error);
+            return null;
+          }
+        } else {
+          console.error('avatar upload error', firstAttempt.error);
+          return null;
+        }
       }
-      const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
+      const { data } = supabase.storage.from(bucketUsed).getPublicUrl(filePath);
       return data.publicUrl;
     } catch (e) {
       console.error('avatar upload exception', e);
@@ -105,7 +117,7 @@ export default function ClientProfileScreen() {
       if (!user?.id) return;
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('הרשאה נחוצה', 'יש לאשר גישה לגלריה כדי לבחור תמונת פרופיל');
+        Alert.alert('Permission Required', 'Please allow gallery access to pick a profile picture');
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -121,7 +133,7 @@ export default function ClientProfileScreen() {
       setIsUploadingAvatar(true);
       const uploadedUrl = await uploadAvatar({ uri: a.uri, base64: a.base64 ?? null, mimeType: a.mimeType ?? null, fileName: a.fileName ?? null });
       if (!uploadedUrl) {
-        Alert.alert('שגיאה', 'נכשל בהעלאת התמונה');
+        Alert.alert('Error', 'Failed to upload image');
         return;
       }
       const updated = await usersApi.updateUser(user.id, { image_url: uploadedUrl } as any);
@@ -132,7 +144,7 @@ export default function ClientProfileScreen() {
       }
     } catch (e) {
       console.error('pick/upload avatar failed', e);
-      Alert.alert('שגיאה', 'נכשל בהעלאת התמונה');
+      Alert.alert('Error', 'Failed to upload image');
     } finally {
       setIsUploadingAvatar(false);
     }
@@ -140,12 +152,12 @@ export default function ClientProfileScreen() {
 
   const handleLogout = () => {
     Alert.alert(
-      'התנתקות',
-      'האם אתה בטוח שברצונך להתנתק?',
+      'Log out',
+      'Are you sure you want to log out?',
       [
-        { text: 'ביטול', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' },
         { 
-          text: 'התנתק', 
+          text: 'Log out', 
           style: 'destructive',
           onPress: () => {
             logout();
@@ -160,8 +172,8 @@ export default function ClientProfileScreen() {
     {
       id: 'edit-profile',
       icon: 'person-outline',
-      title: 'עריכת פרופיל',
-      subtitle: 'עדכון פרטים אישיים',
+      title: 'Edit Profile',
+      subtitle: 'Update personal details',
       onPress: async () => {
         setEditName(user?.name ?? '');
         setEditPhone(user?.phone ?? '');
@@ -184,8 +196,8 @@ export default function ClientProfileScreen() {
     {
       id: 'notifications',
       icon: 'notifications-outline',
-      title: 'התראות',
-      subtitle: pushEnabled ? 'התראות מופעלות' : 'התראות כבויות',
+      title: 'Notifications',
+      subtitle: pushEnabled ? 'Notifications enabled' : 'Notifications disabled',
       onPress: async () => {
         const next = !pushEnabled;
         setPushEnabled(next);
@@ -206,17 +218,17 @@ export default function ClientProfileScreen() {
     {
       id: 'delete-account',
       icon: 'trash-outline',
-      title: 'מחיקת חשבון',
-      subtitle: 'מחיקת החשבון לצמיתות',
+      title: 'Delete Account',
+      subtitle: 'Permanently delete your account',
       onPress: async () => {
         if (!user?.id || isDeleting) return;
         Alert.alert(
-          'מחיקת חשבון',
-          'האם אתה בטוח שברצונך למחוק את החשבון? פעולה זו אינה ניתנת לביטול.',
+          'Delete Account',
+          'Are you sure you want to delete your account? This action cannot be undone.',
           [
-            { text: 'ביטול', style: 'cancel' },
+            { text: 'Cancel', style: 'cancel' },
             {
-              text: 'מחק',
+              text: 'Delete',
               style: 'destructive',
               onPress: async () => {
                 try {
@@ -226,11 +238,11 @@ export default function ClientProfileScreen() {
                     logout();
                     router.replace('/login');
                   } else {
-                    Alert.alert('שגיאה', 'נכשל במחיקת החשבון');
+                    Alert.alert('Error', 'Failed to delete account');
                   }
                 } catch (e) {
                   console.error('delete account failed', e);
-                  Alert.alert('שגיאה', 'נכשל במחיקת החשבון');
+                  Alert.alert('Error', 'Failed to delete account');
                 } finally {
                   setIsDeleting(false);
                 }
@@ -243,8 +255,8 @@ export default function ClientProfileScreen() {
     {
       id: 'terms',
       icon: 'document-text-outline',
-      title: 'תנאי שימוש',
-      subtitle: 'הצגת תנאי השימוש באפליקציה',
+      title: 'Terms of Use',
+      subtitle: 'View the app terms of use',
       onPress: () => setIsTermsOpen(true),
     },
   ];
@@ -368,8 +380,8 @@ export default function ClientProfileScreen() {
                     </LinearGradient>
                   </TouchableOpacity>
                 </View>
-                <Text style={[styles.profileName, styles.profileNameOnGradient, styles.centerText]}>{user?.name || 'לקוח יקר'}</Text>
-                <Text style={[styles.profilePhone, styles.profilePhoneOnGradient, styles.centerText]}>{user?.phone || 'מספר טלפון'}</Text>
+                <Text style={[styles.profileName, styles.profileNameOnGradient, styles.centerText]}>{user?.name || 'Valued Client'}</Text>
+                <Text style={[styles.profilePhone, styles.profilePhoneOnGradient, styles.centerText]}>{user?.phone || 'Phone number'}</Text>
                 {(user as any)?.email ? (
                   <Text style={[styles.profileEmail, styles.centerText]}>{(user as any).email}</Text>
                 ) : null}
@@ -378,11 +390,11 @@ export default function ClientProfileScreen() {
               <View style={styles.statsRow}>
                 <TouchableOpacity style={styles.statChip} onPress={() => setIsUpcomingOpen(true)}>
                   <Ionicons name="calendar-outline" size={14} color={Colors.text} />
-                  <Text style={styles.statChipText}>תורים עתידיים {upcomingAppointments.length}</Text>
+                  <Text style={styles.statChipText}>Upcoming {upcomingAppointments.length}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.statChip} onPress={() => setIsHistoryOpen(true)}>
                   <Ionicons name="time-outline" size={14} color={Colors.text} />
-                  <Text style={styles.statChipText}>תורים קודמים {pastAppointments.length}</Text>
+                  <Text style={styles.statChipText}>Past {pastAppointments.length}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -391,8 +403,8 @@ export default function ClientProfileScreen() {
 
         {/* Section Header: Settings */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>הגדרות</Text>
-          <Text style={styles.sectionSubtitle}>ניהול פרטי פרופיל, התראות ותנאי שימוש</Text>
+          <Text style={styles.sectionTitle}>Settings</Text>
+          <Text style={styles.sectionSubtitle}>Manage profile details, notifications, and terms</Text>
         </View>
 
         {/* No inline history. Use the menu item to open the sheet. */}
@@ -458,11 +470,11 @@ export default function ClientProfileScreen() {
             style={styles.logoutGradient}
           >
             <LogOut size={20} color={Colors.white} />
-            <Text style={styles.logoutText}>התנתקות</Text>
+            <Text style={styles.logoutText}>Log out</Text>
           </LinearGradient>
         </TouchableOpacity>
 
-        <Text style={styles.versionText}>גרסה 1.0.0</Text>
+        <Text style={styles.versionText}>Version 1.0.0</Text>
       </ScrollView>
 
       {/* Edit Profile Modal */}
@@ -578,7 +590,7 @@ export default function ClientProfileScreen() {
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
               <View style={{ width: 44 }} />
-              <Text style={styles.sheetTitle}>היסטוריית תורים</Text>
+              <Text style={styles.sheetTitle}>Appointment History</Text>
               <TouchableOpacity onPress={() => setIsHistoryOpen(false)} style={styles.sheetCloseBtn}>
                 <Ionicons name="close" size={22} color={Colors.text} />
               </TouchableOpacity>
@@ -588,22 +600,22 @@ export default function ClientProfileScreen() {
               {isLoading ? (
                 <View style={styles.historyLoadingState}>
                   <ActivityIndicator color={Colors.primary} />
-                  <Text style={styles.historyLoadingText}>טוען היסטוריית תורים...</Text>
+                  <Text style={styles.historyLoadingText}>Loading appointment history...</Text>
                 </View>
               ) : pastAppointments.length === 0 ? (
                 <View style={styles.historyEmpty}>
                   <Ionicons name="calendar-outline" size={56} color={Colors.subtext} />
-                  <Text style={styles.historyEmptyTitle}>אין תורים קודמים</Text>
-                  <Text style={styles.historyEmptySubtitle}>כשתהיה היסטוריה, נראה אותה כאן</Text>
+                  <Text style={styles.historyEmptyTitle}>No past appointments</Text>
+                  <Text style={styles.historyEmptySubtitle}>When there’s history, it’ll appear here</Text>
                 </View>
               ) : (
                 pastAppointments.map((item) => (
                   <View key={`${item.id}-${item.slot_date}-${item.slot_time}`} style={styles.historyCard}>
                     <View style={styles.historyCardHeader}>
-                      <Text style={styles.historyService}>{item.service_name || 'שירות'}</Text>
+                      <Text style={styles.historyService}>{item.service_name || 'Service'}</Text>
                       <View style={styles.statusPill}>
                         <Ionicons name="checkmark-circle" size={16} color="#34C759" />
-                        <Text style={styles.statusPillText}>בוצע</Text>
+                        <Text style={styles.statusPillText}>Completed</Text>
                       </View>
                     </View>
                     <View style={styles.historyCardBody}>
@@ -632,70 +644,70 @@ export default function ClientProfileScreen() {
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
               <View style={{ width: 44 }} />
-              <Text style={styles.sheetTitle}>תנאי שימוש</Text>
+              <Text style={styles.sheetTitle}>Terms of Use</Text>
               <TouchableOpacity onPress={() => setIsTermsOpen(false)} style={styles.sheetCloseBtn}>
                 <Ionicons name="close" size={22} color={Colors.text} />
               </TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={styles.termsContent} showsVerticalScrollIndicator={false}>
               <Text style={styles.termsParagraph}>
-                ברוכים הבאים לאפליקציה לניהול ובניית תורים. השימוש באפליקציה ובשירותים הנלווים לה כפוף לתנאים המפורטים במסמך זה, ומהווה הסכמה מלאה ומודעת לכל תנאיו.
+                Welcome to the appointments management app. Your use of the app and related services is subject to the terms detailed in this document and constitutes full and informed consent to all its provisions.
               </Text>
-              <Text style={styles.termsHeading}>1. יצירת חשבון וזיהוי</Text>
+              <Text style={styles.termsHeading}>1. Account Creation and Identification</Text>
               <Text style={styles.termsParagraph}>
-                לשם שימוש בשירותים ייתכן שתידרש מסירת פרטים מזהים, כגון שם וטלפון. אתה מצהיר כי המידע שנמסר נכון ומעודכן, ותדאג לעדכנו בעת הצורך. אין להשתמש בפרטים של אדם אחר ללא הרשאתו.
+                To use the services, you may be required to provide identifying information such as name and phone number. You declare that the information provided is accurate and up to date and will update it as needed. Do not use another person's details without their permission.
               </Text>
-              <Text style={styles.termsHeading}>2. הזמנת תורים ושינויים</Text>
+              <Text style={styles.termsHeading}>2. Booking and Changes</Text>
               <Text style={styles.termsParagraph}>
-                הזמנת תורים, שינוי או ביטול מתבצעים דרך האפליקציה בכפוף לזמינות. פרטי התור המאושרים יוצגו באפליקציה ויישלחו כהתראה לפי ההגדרות. זמני השירות משוערים ויכולים להשתנות עקב אילוצים תפעוליים.
+                Booking, changes, or cancellation are done through the app subject to availability. The confirmed appointment details will be displayed in the app and sent as a notification per settings. Service times are approximate and may change due to operational constraints.
               </Text>
-              <Text style={styles.termsHeading}>3. ביטולים ואי הגעה</Text>
+              <Text style={styles.termsHeading}>3. Cancellations and No-Shows</Text>
               <Text style={styles.termsParagraph}>
-                ניתן לבטל או לשנות תור בתוך פרק זמן סביר לפני מועדו. אי הגעה או איחורים משמעותיים עלולים לגרור הגבלות עתידיות על קביעת תורים, לפי שיקול דעת העסק.
+                You may cancel or change an appointment within a reasonable time before its scheduled time. No-shows or significant delays may result in future restrictions on booking, at the business's discretion.
               </Text>
-              <Text style={styles.termsHeading}>4. תשלומים וקבלות</Text>
+              <Text style={styles.termsHeading}>4. Payments and Receipts</Text>
               <Text style={styles.termsParagraph}>
-                אם התשלום מתבצע דרך האפליקציה, הוא עשוי להיעשות באמצעות ספקי סליקה חיצוניים. פרטי אמצעי התשלום אינם נשמרים בשרתים שלנו מעבר לנדרש לביצוע העסקה. אם התשלום מתבצע בבית העסק, הוא יוסדר ישירות בינך לבין העסק.
+                If payment is made through the app, it may be processed via third-party payment providers. Payment method details are not stored on our servers beyond what is necessary to complete the transaction. If payment is made at the business, it will be settled directly between you and the business.
               </Text>
-              <Text style={styles.termsHeading}>5. התראות ודיוורים</Text>
+              <Text style={styles.termsHeading}>5. Notifications and Messaging</Text>
               <Text style={styles.termsParagraph}>
-                ניתן להפעיל או לכבות התראות מתוך האפליקציה או דרך הגדרות המכשיר. השבתת התראות עשויה לפגוע בקבלת תזכורות על תורים ועדכונים חשובים.
+                You can enable or disable notifications from the app or through device settings. Disabling notifications may affect receiving reminders and important updates.
               </Text>
-              <Text style={styles.termsHeading}>6. פרטיות ואבטחת מידע</Text>
+              <Text style={styles.termsHeading}>6. Privacy and Data Security</Text>
               <Text style={styles.termsParagraph}>
-                אנו עשויים לאסוף ולעבד מידע הדרוש להפעלת השירות, לרבות פרטי זיהוי בסיסיים ונתוני תורים. המידע נשמר ומעובד בהתאם לדין החל ולמדיניות הפרטיות. באפשרותך לפנות אלינו בבקשה לעיון, עדכון או מחיקה של מידע אישי, בכפוף לחובותינו לפי דין.
+                We may collect and process information necessary to operate the service, including basic identification information and appointment data. Information is stored and processed in accordance with applicable law and the privacy policy. You may contact us to review, update, or delete personal information, subject to our legal obligations.
               </Text>
-              <Text style={styles.termsHeading}>7. שימוש מותר והתנהגות</Text>
+              <Text style={styles.termsHeading}>7. Permitted Use and Conduct</Text>
               <Text style={styles.termsParagraph}>
-                אין לעשות שימוש הפוגע בזכויות אחרים, מפר חוק או משבש את תפעול האפליקציה. אנו רשאים להגביל או לחסום גישה לשירות במקרה של שימוש לרעה או הפרת תנאים אלה.
+                Do not use the service in a way that infringes on others' rights, violates the law, or disrupts app operations. We may limit or block access in cases of misuse or violation of these terms.
               </Text>
-              <Text style={styles.termsHeading}>8. קניין רוחני</Text>
+              <Text style={styles.termsHeading}>8. Intellectual Property</Text>
               <Text style={styles.termsParagraph}>
-                כל הזכויות באפליקציה, לרבות שם, לוגו, עיצובים, תכנים, קוד ותמונות, שמורות לבעליהם. אין להעתיק, לשנות, להפיץ או ליצור יצירות נגזרות ללא רשות מראש ובכתב.
+                All rights in the app, including name, logo, designs, content, code, and images, are reserved by their owners. Do not copy, modify, distribute, or create derivative works without prior written permission.
               </Text>
-              <Text style={styles.termsHeading}>9. הגבלת אחריות</Text>
+              <Text style={styles.termsHeading}>9. Limitation of Liability</Text>
               <Text style={styles.termsParagraph}>
-                השירות ניתן כפי שהוא AS-IS ולפי זמינותו. לא נהיה אחראים לנזקים עקיפים, תוצאתיים או אובדן רווחים הנובעים מהשימוש באפליקציה. האחריות לשימוש ולתכנים המוזנים על ידך היא עליך בלבד.
+                The service is provided as-is and as available. We are not liable for indirect or consequential damages or loss of profits arising from use of the app. You are solely responsible for use and for content you submit.
               </Text>
-              <Text style={styles.termsHeading}>10. זמינות ושינויים בשירות</Text>
+              <Text style={styles.termsHeading}>10. Availability and Service Changes</Text>
               <Text style={styles.termsParagraph}>
-                ייתכנו הפסקות, תקלות או עבודות תחזוקה. אנו רשאים לעדכן, לשנות או להפסיק את השירות, כולו או חלקו, מעת לעת.
+                There may be interruptions, malfunctions, or maintenance work. We may update, change, or discontinue the service, in whole or in part, from time to time.
               </Text>
-              <Text style={styles.termsHeading}>11. צדדים שלישיים</Text>
+              <Text style={styles.termsHeading}>11. Third Parties</Text>
               <Text style={styles.termsParagraph}>
-                האפליקציה עשויה לשלב קישורים או שירותים של צדדים שלישיים, כגון שירותי תשלומים או מסרים. איננו אחראים על אתרים או שירותים אלה ותנאיהם יחולו על שימושך בהם.
+                The app may include links to or services from third parties, such as payment or messaging services. We are not responsible for those sites or services, and their terms will apply to your use of them.
               </Text>
-              <Text style={styles.termsHeading}>12. שימוש על ידי קטינים</Text>
+              <Text style={styles.termsHeading}>12. Use by Minors</Text>
               <Text style={styles.termsParagraph}>
-                אם אינך בגיל כשירות לפי הדין החל, השימוש באפליקציה מותנה בהסכמת הורה או אפוטרופוס כדין.
+                If you are not of legal age under applicable law, app use requires consent from a parent or legal guardian.
               </Text>
-              <Text style={styles.termsHeading}>13. עדכון התנאים</Text>
+              <Text style={styles.termsHeading}>13. Updating the Terms</Text>
               <Text style={styles.termsParagraph}>
-                אנו רשאים לעדכן תנאים אלה מעת לעת. פרסום נוסח מעודכן באפליקציה יהווה הודעה על שינוי. המשך שימושך לאחר העדכון מהווה הסכמה לנוסח המעודכן.
+                We may update these terms from time to time. Publishing an updated version in the app constitutes notice of change. Continued use after the update constitutes consent to the updated text.
               </Text>
-              <Text style={styles.termsHeading}>14. יצירת קשר</Text>
+              <Text style={styles.termsHeading}>14. Contact</Text>
               <Text style={styles.termsParagraph}>
-                לשאלות, תקלות או בקשות בנוגע לתנאים אלה או לשירות, ניתן לפנות אלינו באמצעות פרטי הקשר המופיעים בעמוד העסק.
+                For questions, issues, or requests regarding these terms or the service, you can contact us using the business contact details shown in the app.
               </Text>
               <View style={{ height: 24 }} />
             </ScrollView>
@@ -710,7 +722,7 @@ export default function ClientProfileScreen() {
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
               <View style={{ width: 44 }} />
-              <Text style={styles.sheetTitle}>תורים עתידיים</Text>
+              <Text style={styles.sheetTitle}>Upcoming Appointments</Text>
               <TouchableOpacity onPress={() => setIsUpcomingOpen(false)} style={styles.sheetCloseBtn}>
                 <Ionicons name="close" size={22} color={Colors.text} />
               </TouchableOpacity>
@@ -719,13 +731,13 @@ export default function ClientProfileScreen() {
               {isLoading ? (
                 <View style={styles.historyLoadingState}>
                   <ActivityIndicator color={Colors.primary} />
-                  <Text style={styles.historyLoadingText}>טוען תורים עתידיים...</Text>
+                  <Text style={styles.historyLoadingText}>Loading upcoming appointments...</Text>
                 </View>
               ) : upcomingAppointments.length === 0 ? (
                 <View style={styles.historyEmpty}>
                   <Ionicons name="calendar-outline" size={56} color={Colors.subtext} />
-                  <Text style={styles.historyEmptyTitle}>אין תורים עתידיים</Text>
-                  <Text style={styles.historyEmptySubtitle}>כשתוזמנו תורים, הם יופיעו כאן</Text>
+                  <Text style={styles.historyEmptyTitle}>No upcoming appointments</Text>
+                  <Text style={styles.historyEmptySubtitle}>When appointments are booked, they will appear here</Text>
                 </View>
               ) : (
                 upcomingAppointments.map((item) => (
@@ -792,7 +804,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   profileHeader: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 0,
     paddingTop: 0,
@@ -870,8 +882,8 @@ const styles = StyleSheet.create({
   },
   profileInfo: {
     flex: 1,
-    marginRight: 6,
-    alignItems: 'flex-end',
+    marginLeft: 6,
+    alignItems: 'flex-start',
   },
   profileName: {
     fontSize: 24,
@@ -898,7 +910,7 @@ const styles = StyleSheet.create({
     color: Colors.subtext,
   },
   phoneRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
@@ -1090,7 +1102,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   historyCardHeader: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 8,
@@ -1115,13 +1127,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   historyCardBody: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
     gap: 16,
   },
   historyMeta: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
@@ -1140,13 +1152,13 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginTop: 16,
     marginBottom: 8,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   termsParagraph: {
     fontSize: 14,
     color: Colors.text,
     lineHeight: 22,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   statsContainer: {
     flexDirection: 'row',
@@ -1155,14 +1167,14 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   statsRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     gap: 8,
     marginTop: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
   statChip: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     backgroundColor: 'rgba(255,255,255,0.9)',
@@ -1238,20 +1250,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginTop: 8,
     marginBottom: 12,
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: '800',
     color: Colors.text,
     marginBottom: 4,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   sectionSubtitle: {
     fontSize: 13,
     color: Colors.subtext,
     opacity: 0.8,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   menuContainer: {
     paddingHorizontal: 20,
@@ -1283,11 +1295,11 @@ const styles = StyleSheet.create({
     backgroundColor: `${Colors.primary}15`,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 12,
+    marginRight: 12,
   },
   menuItemText: {
     flex: 1,
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
   },
   menuItemTitle: {
     fontSize: 16,

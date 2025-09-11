@@ -40,7 +40,7 @@ export default function HomeScreen() {
 
   const [appointments] = useState(generateAppointments());
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [selectedCategory, setSelectedCategory] = React.useState('לק ג\'ל');
+  const [selectedCategory, setSelectedCategory] = React.useState('Gel Polish');
   const [nextAppointment, setNextAppointment] = useState<AvailableTimeSlot | null>(null);
   const [loadingNextAppointment, setLoadingNextAppointment] = useState(true);
   const [todayAppointmentsCount, setTodayAppointmentsCount] = useState(0);
@@ -65,19 +65,19 @@ export default function HomeScreen() {
   const [blockedFilter, setBlockedFilter] = useState<'all' | 'blocked' | 'unblocked'>('all');
   const categories = [
     {
-      key: "לק ג'ל",
+      key: 'Gel Polish',
       icon: (color: string) => <MaterialCommunityIcons name="bottle-tonic" size={22} color={color} />,
     },
     {
-      key: 'מניקור',
+      key: 'Manicure',
       icon: (color: string) => <FontAwesome5 name="hand-sparkles" size={20} color={color} />,
     },
     {
-      key: 'לק ברגליים',
+      key: 'Toe Polish',
       icon: (color: string) => <MaterialCommunityIcons name="foot-print" size={22} color={color} />,
     },
     {
-      key: 'פדיקור',
+      key: 'Pedicure',
       icon: (color: string) => <MaterialCommunityIcons name="spa" size={22} color={color} />,
     },
   ];
@@ -112,12 +112,12 @@ export default function HomeScreen() {
   
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
   const formatTimeRange = (dateString: string) => {
     const date = new Date(dateString);
-    const startTime = date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+    const startTime = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     
     // Find the service to get duration
     const appointment = appointments.find(a => a.appointment_date === dateString);
@@ -128,7 +128,7 @@ export default function HomeScreen() {
     
     // Calculate end time
     const endDate = new Date(date.getTime() + service.duration * 60000);
-    const endTime = endDate.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+    const endTime = endDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     
     return `${startTime} — ${endTime}`;
   };
@@ -310,17 +310,17 @@ export default function HomeScreen() {
   // Handle phone call
   const handlePhoneCall = (phone: string) => {
     if (!phone) {
-      Alert.alert('שגיאה', 'מספר הטלפון לא זמין');
+      Alert.alert('Error', 'Phone number is unavailable');
       return;
     }
 
     Alert.alert(
-      'התקשרות',
-      `האם להתקשר ל-${phone}?`,
+      'Call',
+      `Call ${phone}?`,
       [
-        { text: 'ביטול', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'התקשר',
+          text: 'Call',
           onPress: () => {
             Linking.openURL(`tel:${phone}`);
           },
@@ -331,12 +331,12 @@ export default function HomeScreen() {
 
   const handleBlockClient = (client: any) => {
     Alert.alert(
-      'חסימת לקוח',
-      `האם לחסום את ${client?.name || 'הלקוח'}?`,
+      'Block Client',
+      `Block ${client?.name || 'this client'}?`,
       [
-        { text: 'ביטול', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'אישור',
+          text: 'Confirm',
           style: 'destructive',
           onPress: async () => {
             try {
@@ -348,15 +348,15 @@ export default function HomeScreen() {
                 .single();
               if (error) {
                 console.error('Error blocking client:', error);
-                Alert.alert('שגיאה', 'חסימת הלקוח נכשלה');
+                Alert.alert('Error', 'Failed to block client');
                 return;
               }
               setClients((prev) => prev.map((c) => (c.id === client.id ? data : c)));
               setFilteredClients((prev) => prev.map((c) => (c.id === client.id ? data : c)));
-              Alert.alert('הלקוח נחסם', `${data?.name || 'הלקוח'} נחסם בהצלחה`);
+              Alert.alert('Client blocked', `${data?.name || 'Client'} was blocked successfully`);
             } catch (e) {
               console.error('Error blocking client:', e);
-              Alert.alert('שגיאה', 'חסימת הלקוח נכשלה');
+              Alert.alert('Error', 'Failed to block client');
             }
           },
         },
@@ -366,12 +366,12 @@ export default function HomeScreen() {
 
   const handleUnblockClient = (client: any) => {
     Alert.alert(
-      'שחרור חסימה',
-      `האם לשחרר את ${client?.name || 'הלקוח'} מחסימה?`,
+      'Unblock Client',
+      `Unblock ${client?.name || 'this client'}?`,
       [
-        { text: 'ביטול', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'אישור',
+          text: 'Confirm',
           style: 'default',
           onPress: async () => {
             try {
@@ -383,15 +383,15 @@ export default function HomeScreen() {
                 .single();
               if (error) {
                 console.error('Error unblocking client:', error);
-                Alert.alert('שגיאה', 'שחרור הלקוח מחסימה נכשל');
+                Alert.alert('Error', 'Failed to unblock client');
                 return;
               }
               setClients((prev) => prev.map((c) => (c.id === client.id ? data : c)));
               setFilteredClients((prev) => prev.map((c) => (c.id === client.id ? data : c)));
-              Alert.alert('הלקוח שוחרר', `${data?.name || 'הלקוח'} שוחרר מחסימה בהצלחה`);
+              Alert.alert('Client unblocked', `${data?.name || 'Client'} was unblocked successfully`);
             } catch (e) {
               console.error('Error unblocking client:', e);
-              Alert.alert('שגיאה', 'שחרור הלקוח מחסימה נכשל');
+              Alert.alert('Error', 'Failed to unblock client');
             }
           },
         },
@@ -418,7 +418,7 @@ export default function HomeScreen() {
         .single();
       if (error) {
         console.error('Error updating client:', error);
-        Alert.alert('שגיאה', 'עדכון הלקוח נכשל');
+        Alert.alert('Error', 'Failed to update client');
         return;
       }
       // Update local lists
@@ -428,7 +428,7 @@ export default function HomeScreen() {
       setEditingClient(null);
     } catch (e) {
       console.error('Error saving client edit:', e);
-      Alert.alert('שגיאה', 'עדכון הלקוח נכשל');
+      Alert.alert('Error', 'Failed to update client');
     } finally {
       setSavingClient(false);
     }
@@ -436,26 +436,26 @@ export default function HomeScreen() {
 
   const handleDeleteClient = (client: any) => {
     Alert.alert(
-      'מחיקת לקוח',
-      `האם למחוק את ${client?.name || 'הלקוח'}?`,
+      'Delete Client',
+      `Delete ${client?.name || 'this client'}?`,
       [
-        { text: 'ביטול', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'מחק',
+          text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             try {
               const { error } = await supabase.from('users').delete().eq('id', client.id);
               if (error) {
                 console.error('Error deleting client:', error);
-                Alert.alert('שגיאה', 'מחיקת הלקוח נכשלה');
+                Alert.alert('Error', 'Failed to delete client');
                 return;
               }
               setClients((prev) => prev.filter((c) => c.id !== client.id));
               setFilteredClients((prev) => prev.filter((c) => c.id !== client.id));
             } catch (e) {
               console.error('Error deleting client:', e);
-              Alert.alert('שגיאה', 'מחיקת הלקוח נכשלה');
+              Alert.alert('Error', 'Failed to delete client');
             }
           },
         },
@@ -558,7 +558,7 @@ export default function HomeScreen() {
                 ) : (
                   <Text style={styles.statsNumber}>{monthlyStats.totalClients}</Text>
                 )}
-                <Text style={styles.statsLabelSecondary}>לקוחות</Text>
+                <Text style={styles.statsLabelSecondary}>Clients</Text>
               </View>
             </TouchableOpacity>
 
@@ -572,7 +572,7 @@ export default function HomeScreen() {
                 ) : (
                   <Text style={styles.statsNumber}>{monthlyStats.completedAppointments}</Text>
                 )}
-                <Text style={styles.statsLabelSecondary}>תורים החודש</Text>
+                <Text style={styles.statsLabelSecondary}>Appointments this month</Text>
               </View>
             </View>
           </View>
@@ -585,7 +585,7 @@ export default function HomeScreen() {
               activeOpacity={0.85}
               style={styles.editGalleryButton}
             >
-              <Text style={styles.editGalleryButtonText}>עריכת גלריה</Text>
+              <Text style={styles.editGalleryButtonText}>Edit Gallery</Text>
               <View style={[styles.statsButtonIconCircle, { backgroundColor: 'rgba(0,0,0,0.10)', width: 28, height: 28, borderRadius: 14, marginLeft: 8 }]}> 
                 <Ionicons name="create-outline" size={18} color="#1C1C1E" />
               </View>
@@ -705,7 +705,7 @@ export default function HomeScreen() {
             <View style={styles.clientsModal}>
               <View style={styles.modalHeader}>
                 <View style={{ width: 36, height: 36 }} />
-                <Text style={styles.modalTitle}>רשימת לקוחות</Text>
+                <Text style={styles.modalTitle}>Clients List</Text>
                 <TouchableOpacity 
                   style={styles.closeButton}
                   onPress={() => setShowClientsModal(false)}
@@ -719,7 +719,7 @@ export default function HomeScreen() {
                <Ionicons name="search" size={20} color="#8e8e93" style={styles.searchIcon} />
                <TextInput
                  style={styles.searchInput}
-                 placeholder="חיפוש לפי שם..."
+                 placeholder="Search by name..."
                  placeholderTextColor="#8e8e93"
                  value={searchQuery}
                  onChangeText={setSearchQuery}
@@ -733,21 +733,21 @@ export default function HomeScreen() {
                  style={[styles.filterButton, blockedFilter === 'all' && styles.filterButtonActive]}
                  activeOpacity={0.85}
                >
-                 <Text style={[styles.filterButtonText, blockedFilter === 'all' && styles.filterButtonTextActive]}>הכל</Text>
+                 <Text style={[styles.filterButtonText, blockedFilter === 'all' && styles.filterButtonTextActive]}>All</Text>
                </TouchableOpacity>
                <TouchableOpacity
                  onPress={() => setBlockedFilter('blocked')}
                  style={[styles.filterButton, blockedFilter === 'blocked' && styles.filterButtonActive]}
                  activeOpacity={0.85}
                >
-                 <Text style={[styles.filterButtonText, blockedFilter === 'blocked' && styles.filterButtonTextActive]}>חסומים</Text>
+                 <Text style={[styles.filterButtonText, blockedFilter === 'blocked' && styles.filterButtonTextActive]}>Blocked</Text>
                </TouchableOpacity>
                <TouchableOpacity
                  onPress={() => setBlockedFilter('unblocked')}
                  style={[styles.filterButton, blockedFilter === 'unblocked' && styles.filterButtonActive]}
                  activeOpacity={0.85}
                >
-                 <Text style={[styles.filterButtonText, blockedFilter === 'unblocked' && styles.filterButtonTextActive]}>לא חסומים</Text>
+                 <Text style={[styles.filterButtonText, blockedFilter === 'unblocked' && styles.filterButtonTextActive]}>Unblocked</Text>
                </TouchableOpacity>
              </View>
 
@@ -755,7 +755,7 @@ export default function HomeScreen() {
              {loadingClients ? (
                <View style={styles.loadingContainer}>
                  <ActivityIndicator size="large" color="#1C1C1E" />
-                 <Text style={styles.loadingText}>טוען לקוחות...</Text>
+                 <Text style={styles.loadingText}>Loading clients...</Text>
                </View>
               ) : (
                  <FlatList
@@ -776,7 +776,7 @@ export default function HomeScreen() {
                          onPress={() => (item.block ? handleUnblockClient(item) : handleBlockClient(item))}
                          activeOpacity={0.85}
                        >
-                         <Text style={styles.blockButtonText}>{item.block ? 'שחרור מחסימה' : 'חסום'}</Text>
+                         <Text style={styles.blockButtonText}>{item.block ? 'Unblock' : 'Block'}</Text>
                        </TouchableOpacity>
                        <TouchableOpacity
                          style={[styles.phoneButton, { marginRight: 16 }]}

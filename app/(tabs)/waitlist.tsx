@@ -669,21 +669,6 @@ async function fetchImagesForPhones(phones: string[]): Promise<Record<string, st
         }
       });
     }
-
-    const missing = phones.filter((p) => !map[p]);
-    if (missing.length > 0) {
-      const { data: clients, error: clientsError } = await supabase
-        .from('clients')
-        .select('phone, image_url')
-        .in('phone', missing);
-      if (!clientsError && Array.isArray(clients)) {
-        clients.forEach((c: any) => {
-          if (c?.phone && c?.image_url) {
-            map[c.phone] = c.image_url as string;
-          }
-        });
-      }
-    }
   } catch (e) {
     // ignore
   }

@@ -220,8 +220,8 @@ export default function GalleryScreen() {
         <View style={styles.headerContent}>
           <View style={{ width: 22 }} />
           <View style={{ alignItems: 'center' }}>
-            <Text style={styles.headerTitle}>גלריית עיצובים</Text>
-            <Text style={styles.headerSubtitle}>השראה לעיצוב הבא שלך</Text>
+            <Text style={styles.headerTitle}>Design Gallery</Text>
+            <Text style={styles.headerSubtitle}>Inspiration for your next style</Text>
           </View>
           <View style={{ width: 22 }} />
         </View>
@@ -258,8 +258,8 @@ export default function GalleryScreen() {
                 <View style={styles.emptyIconWrap}>
                   <Ionicons name="images-outline" size={26} color={Colors.text} />
                 </View>
-                <Text style={styles.emptyTitle}>אין עדיין עיצובים</Text>
-                <Text style={styles.emptySubtitle}>כשתוסיפי עיצובים, הם יופיעו כאן</Text>
+                <Text style={styles.emptyTitle}>No designs yet</Text>
+                <Text style={styles.emptySubtitle}>When you add designs, they will appear here</Text>
               </View>
             }
             renderItem={({ item }) => (
@@ -286,7 +286,7 @@ export default function GalleryScreen() {
               <TouchableOpacity onPress={() => setViewerVisible(false)} style={styles.viewerCloseBtn}>
                 <Ionicons name="close" size={22} color={Colors.white} />
               </TouchableOpacity>
-              <Text style={styles.viewerTitle}>תמונות העיצוב</Text>
+              <Text style={styles.viewerTitle}>Design Photos</Text>
               <View style={{ width: 44 }} />
             </View>
             <View style={{ flex: 1 }}>
@@ -427,18 +427,18 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     padding: 12,
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
   },
   designName: {
     color: Colors.white,
     fontSize: 14,
     fontWeight: '600',
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 4,
   },
   categoryTags: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     flexWrap: 'wrap',
   },
   categoryTag: {

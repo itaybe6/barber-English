@@ -147,8 +147,8 @@ export default function ClientHomeScreen() {
     if (!isAuthenticated) {
       setLoginModal({
         visible: true,
-        title: 'נדרש להתחבר',
-        message: `כדי ${actionDescription} יש להתחבר לחשבון שלך`,
+        title: 'Login Required',
+        message: `Please sign in to ${actionDescription}.`,
       });
       return;
     }
@@ -473,7 +473,7 @@ export default function ClientHomeScreen() {
   
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('he-IL', {
+    return date.toLocaleDateString('en-US', {
       day: 'numeric',
       month: 'long'
     });
@@ -530,9 +530,9 @@ export default function ClientHomeScreen() {
             <View style={styles.headerSide}>
               <TouchableOpacity
                 style={styles.overlayButton}
-                onPress={() => requireAuth('לגשׁת לפרופיל והגדרות', () => router.push('/(client-tabs)/profile'))}
+                onPress={() => requireAuth('access your profile and settings', () => router.push('/(client-tabs)/profile'))}
                 activeOpacity={0.85}
-                accessibilityLabel="הגדרות ופרופיל"
+                accessibilityLabel="Settings and Profile"
               >
                 <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
               </TouchableOpacity>
@@ -544,13 +544,13 @@ export default function ClientHomeScreen() {
               <TouchableOpacity 
                 style={styles.overlayButton}
                 onPress={async () => {
-                  return requireAuth('לצפות בהתראות', async () => {
+                  return requireAuth('view notifications', async () => {
                     await router.push('/(client-tabs)/notifications');
                     setUnreadNotificationsCount(0);
                   });
                 }}
                 activeOpacity={0.85}
-                accessibilityLabel="התראות"
+                accessibilityLabel="Notifications"
               >
                 <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
                 {unreadNotificationsCount > 0 && (
@@ -573,8 +573,8 @@ export default function ClientHomeScreen() {
               tint="light"
               style={styles.heroTextBlurContainer}
             >
-              <Text style={styles.heroWelcome}>ברוכים הבאים</Text>
-              <Text style={styles.heroTitle}>{user?.name || 'לקוח יקר'}</Text>
+              <Text style={styles.heroWelcome}>Welcome</Text>
+              <Text style={styles.heroTitle}>{user?.name || 'Valued Client'}</Text>
             </BlurView>
           </View>
         </View>
@@ -599,11 +599,11 @@ export default function ClientHomeScreen() {
                   <Ionicons name="time" size={28} color="#FFFFFF" />
                 </View>
                 <View style={styles.waitlistTopInfo}>
-                  <Text style={styles.waitlistTopTitle}>אתה ברשימת המתנה</Text>
+                  <Text style={styles.waitlistTopTitle}>You are on the waitlist</Text>
                   <Text style={styles.waitlistTopSubtitle}>
                     {waitlistEntries.length === 1 
-                      ? `ממתין לתור ל${waitlistEntries[0].service_name}`
-                      : `ממתין ל${waitlistEntries.length} תורים`
+                      ? `Waiting for ${waitlistEntries[0].service_name}`
+                      : `Waiting for ${waitlistEntries.length} appointments`
                     }
                   </Text>
                   <View style={styles.waitlistTimePeriodContainer}>
@@ -619,9 +619,9 @@ export default function ClientHomeScreen() {
                           color="rgba(255, 255, 255, 0.9)" 
                         />
                         <Text style={styles.waitlistTimePeriodText}>
-                          {entry.time_period === 'morning' ? 'בוקר' :
-                           entry.time_period === 'afternoon' ? 'צהריים' :
-                           entry.time_period === 'evening' ? 'ערב' : 'כל זמן'}
+                          {entry.time_period === 'morning' ? 'Morning' :
+                           entry.time_period === 'afternoon' ? 'Afternoon' :
+                           entry.time_period === 'evening' ? 'Evening' : 'Any time'}
                         </Text>
                       </View>
                     ))}
@@ -639,15 +639,15 @@ export default function ClientHomeScreen() {
                 style={styles.waitlistTopButton}
                 onPress={() => {
                   Alert.alert(
-                    'יציאה מרשימת המתנה',
-                    'האם אתה בטוח שאתה רוצה לצאת מרשימת המתנה?',
+                    'Leave waitlist',
+                    'Are you sure you want to leave the waitlist?',
                     [
                       {
-                        text: 'ביטול',
+                        text: 'Cancel',
                         style: 'cancel',
                       },
                       {
-                        text: 'אישור',
+                        text: 'Confirm',
                         style: 'destructive',
                         onPress: () => {
                           // Remove all waitlist entries
@@ -661,7 +661,7 @@ export default function ClientHomeScreen() {
                 }}
                 activeOpacity={0.8}
               >
-                <Text style={styles.waitlistTopButtonText}>הסר מרשימת המתנה</Text>
+                <Text style={styles.waitlistTopButtonText}>Remove from waitlist</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -676,7 +676,7 @@ export default function ClientHomeScreen() {
               <View style={[styles.decorationDot, { opacity: 0.1 }]} />
             </View>
             <View style={styles.headerTitleContainer}>
-              <Text style={styles.modernTitle}>תורים</Text>
+              <Text style={styles.modernTitle}>Appointments</Text>
             </View>
             <View style={styles.headerDecorationRight}>
               <View style={[styles.decorationDot, { opacity: 0.1 }]} />
@@ -688,12 +688,12 @@ export default function ClientHomeScreen() {
           {/* Next Appointment */}
           {isLoading ? (
             <View style={styles.loadingCard}>
-              <Text style={styles.loadingText}>טוען תורים...</Text>
+              <Text style={styles.loadingText}>Loading appointments...</Text>
             </View>
           ) : nextAppointment ? (
             <TouchableOpacity
               activeOpacity={0.9}
-              onPress={() => requireAuth('לצפות בתורים שלך', () => router.push('/(client-tabs)/appointments'))}
+              onPress={() => requireAuth('view your appointments', () => router.push('/(client-tabs)/appointments'))}
               style={styles.nextAppointmentContainer}
             >
               <Image 
@@ -717,8 +717,8 @@ export default function ClientHomeScreen() {
                   style={styles.nextAppointmentInfoBlur}
                 >
                   <View style={styles.appointmentInfo}>
-                    <Text style={styles.nextAppointmentLabel}>התור הבא שלך</Text>
-                    <Text style={styles.nextAppointmentService}>{nextAppointment.service_name || 'שירות'}</Text>
+                    <Text style={styles.nextAppointmentLabel}>Your next appointment</Text>
+                    <Text style={styles.nextAppointmentService}>{nextAppointment.service_name || 'Service'}</Text>
                     <View style={styles.nextAppointmentDetails}>
                       <View style={styles.appointmentDetail}>
                         <Ionicons name="calendar-outline" size={16} color="rgba(255, 255, 255, 0.8)" />
@@ -770,13 +770,13 @@ export default function ClientHomeScreen() {
                     if (!isAuthenticated) {
                       setLoginModal({
                         visible: true,
-                        title: 'נדרש להתחבר',
-                        message: 'כדי לקבוע תור יש להתחבר לחשבון שלך',
+                        title: 'Login Required',
+                        message: 'Please sign in to book an appointment.',
                       });
                       return;
                     }
                     if (isBlocked) {
-                      Alert.alert('חשבון חסום', 'החשבון שלך חסום ואין אפשרות לקבוע תור.');
+                      Alert.alert('Account Blocked', 'Your account is blocked. You cannot book appointments.');
                       return;
                     }
                     router.push('/(client-tabs)/book-appointment');
@@ -790,7 +790,7 @@ export default function ClientHomeScreen() {
                     style={styles.bookAppointmentButtonBlur}
                   >
                     <View style={styles.bookAppointmentButtonContent}>
-                      <Text style={styles.bookAppointmentButtonText}>קבע תור עכשיו</Text>
+                      <Text style={styles.bookAppointmentButtonText}>Book now</Text>
                       <View style={styles.bookAppointmentIconCircle}>
                         <MaterialCommunityIcons name="arrow-top-left" size={20} color="#1C1C1E" />
                       </View>
@@ -811,8 +811,8 @@ export default function ClientHomeScreen() {
               if (!isAuthenticated) {
                 setLoginModal({
                   visible: true,
-                  title: 'נדרש להתחבר',
-                  message: 'כדי לצפות בעיצובים מלאים יש להתחבר לחשבון שלך',
+                  title: 'Login Required',
+                  message: 'Please sign in to view full designs.',
                 });
                 return;
               }
@@ -833,7 +833,7 @@ export default function ClientHomeScreen() {
               <View style={[styles.decorationDot, { opacity: 0.1 }]} />
             </View>
             <View style={styles.headerTitleContainer}>
-              <Text style={styles.modernTitle}>עקבו אחרינו</Text>
+              <Text style={styles.modernTitle}>Follow us</Text>
             </View>
             <View style={styles.headerDecorationRight}>
               <View style={[styles.decorationDot, { opacity: 0.1 }]} />
@@ -857,7 +857,7 @@ export default function ClientHomeScreen() {
             <TouchableOpacity
               style={[styles.socialButton, styles.locationCircleButton]}
               onPress={async () => {
-                const address = businessProfile?.address || 'תל אביב, רחוב הרצל 123';
+                const address = businessProfile?.address || 'Tel Aviv, Herzl St 123';
                 const appUrl = `waze://?q=${encodeURIComponent(address)}&navigate=yes`;
                 const webUrl = `https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`;
                 try {
@@ -868,11 +868,11 @@ export default function ClientHomeScreen() {
                     await Linking.openURL(webUrl);
                   }
                 } catch (e) {
-                  Alert.alert('שגיאה', 'לא ניתן לפתוח את Waze במכשיר זה');
+                  Alert.alert('Error', 'Waze cannot be opened on this device');
                 }
               }}
               activeOpacity={0.8}
-              accessibilityLabel="נווט עם Waze"
+              accessibilityLabel="Navigate with Waze"
             >
               <MaterialCommunityIcons name="waze" size={28} color="#FFFFFF" />
             </TouchableOpacity>
@@ -880,7 +880,7 @@ export default function ClientHomeScreen() {
               style={[styles.socialButton, styles.whatsappCircleButton]}
               onPress={async () => {
                 if (!managerPhone) return;
-                const message = 'היי 😊%0Aאשמח לדבר לגבי פרטים נוספים';
+                const message = 'Hi 😊%0AI would love to chat about more details';
                 const appUrl = `whatsapp://send?phone=${managerPhone}&text=${message}`;
                 const webUrl = `https://wa.me/${managerPhone}?text=${message}`;
                 try {
@@ -891,11 +891,11 @@ export default function ClientHomeScreen() {
                     await Linking.openURL(webUrl);
                   }
                 } catch (e) {
-                  Alert.alert('שגיאה', 'לא ניתן לפתוח את וואטסאפ במכשיר זה');
+                  Alert.alert('Error', 'WhatsApp cannot be opened on this device');
                 }
               }}
               activeOpacity={0.8}
-              accessibilityLabel="צרו קשר בוואטסאפ"
+              accessibilityLabel="Contact us on WhatsApp"
             >
               <Ionicons name="logo-whatsapp" size={24} color="#FFFFFF" />
             </TouchableOpacity>
@@ -967,7 +967,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   overlayHeaderContent: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
@@ -1015,14 +1015,14 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     paddingHorizontal: 15,
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     zIndex: 5,
   },
   scrollContent: {
     paddingBottom: 80,
   },
   header: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
@@ -1033,14 +1033,14 @@ const styles = StyleSheet.create({
   },
   welcomeSection: {
     flex: 1,
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
   },
   welcomeText: {
     fontSize: 16,
     color: '#8E8E93',
     fontWeight: '500',
     letterSpacing: -0.2,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   userName: {
     fontSize: 32,
@@ -1048,7 +1048,7 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
     marginTop: 4,
     letterSpacing: -0.8,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   subtitle: {
     fontSize: 16,
@@ -1056,7 +1056,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginTop: 8,
     letterSpacing: -0.2,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   notificationButton: {
     width: 44,
@@ -1345,7 +1345,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#8E8E93',
     fontWeight: '600',
-    textAlign: 'right',
+    textAlign: 'left',
     letterSpacing: -0.1,
     marginBottom: 4,
   },
@@ -1354,21 +1354,21 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1C1C1E',
     marginBottom: 12,
-    textAlign: 'right',
+    textAlign: 'left',
     letterSpacing: -0.3,
   },
   appointmentSubtext: {
     fontSize: 13,
     color: '#8E8E93',
     fontWeight: '500',
-    textAlign: 'right',
+    textAlign: 'left',
     letterSpacing: -0.2,
     marginTop: -6,
     marginBottom: 6,
   },
   appointmentDetails: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     gap: 16,
   },
   appointmentDetailsPill: {
@@ -1379,7 +1379,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   appointmentDetail: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
@@ -1404,7 +1404,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   appointmentStatusContainer: {
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     marginTop: 12,
   },
   statusDot: {
@@ -1595,7 +1595,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   waitlistTopContent: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 16,
@@ -1610,31 +1610,31 @@ const styles = StyleSheet.create({
   },
   waitlistTopInfo: {
     flex: 1,
-    marginRight: 16,
-    alignItems: 'flex-end',
+    marginLeft: 16,
+    alignItems: 'flex-start',
   },
   waitlistTopTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: '#FFFFFF',
     marginBottom: 4,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   waitlistTopSubtitle: {
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.8)',
     fontWeight: '500',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   waitlistTimePeriodContainer: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'flex-end',
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
     flexWrap: 'wrap',
     gap: 8,
     marginTop: 8,
   },
   waitlistTimePeriodItem: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -1739,7 +1739,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   bookAppointmentButtonContent: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
     gap: 6,
@@ -1749,7 +1749,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     letterSpacing: -0.3,
-    textAlign: 'right',
+    textAlign: 'left',
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
@@ -1883,12 +1883,15 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     gap: 16,
+    direction: 'ltr',
   },
   nextAppointmentDetailText: {
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.9)',
     fontWeight: '600',
     letterSpacing: -0.2,
+    writingDirection: 'ltr',
+    textAlign: 'left',
   },
   nextAppointmentDetailsDivider: {
     width: 1,

@@ -97,42 +97,66 @@ export const businessHoursApi = {
         breaks: (businessHours as any)?.breaks ?? [],
       };
 
-      const { data: upserted, error: upsertError } = await supabase
+      // Insert instead of upsert to avoid ON CONFLICT errors when no unique constraint exists
+      const { data: inserted, error: insertError } = await supabase
         .from('business_hours')
-        .upsert(upsertRow, { onConflict: 'day_of_week,user_id', ignoreDuplicates: false })
+        .insert(upsertRow)
         .select()
         .single();
 
-      if (upsertError) {
-        console.error('Error upserting business hours:', upsertError);
-        throw upsertError;
+      if (insertError) {
+        console.error('Error inserting business hours (fallback path):', insertError);
+        throw insertError;
       }
 
-      return upserted as BusinessHours;
+      return inserted as BusinessHours;
     } catch (error) {
       console.error('Error in updateBusinessHours:', error);
       throw error;
     }
   },
 
-  // Create or update business hours (upsert)
+  // Create or update business hours (update-or-insert without ON CONFLICT)
   async upsertBusinessHours(businessHours: Omit<BusinessHours, 'id' | 'created_at' | 'updated_at'>): Promise<BusinessHours | null> {
     try {
-      const { data, error } = await supabase
+      // Try update by day_of_week and user scope first
+      let updateQuery = supabase
         .from('business_hours')
-        .upsert(businessHours, { 
-          onConflict: 'day_of_week',
-          ignoreDuplicates: false 
-        })
+        .update(businessHours)
+        .eq('day_of_week', (businessHours as any).day_of_week);
+
+      if ((businessHours as any).user_id) {
+        updateQuery = updateQuery.eq('user_id', (businessHours as any).user_id);
+      } else {
+        updateQuery = updateQuery.is('user_id', null);
+      }
+
+      const { data: updated, error: updateErr } = await updateQuery
+        .select()
+        .maybeSingle();
+
+      if (updateErr && (updateErr as any)?.code !== 'PGRST116') {
+        console.error('Error updating business hours in upsertBusinessHours:', updateErr);
+        throw updateErr;
+      }
+
+      if (updated) {
+        return updated as BusinessHours;
+      }
+
+      // If not found, insert a new row
+      const { data: inserted, error: insertErr } = await supabase
+        .from('business_hours')
+        .insert(businessHours as any)
         .select()
         .single();
 
-      if (error) {
-        console.error('Error upserting business hours:', error);
-        throw error;
+      if (insertErr) {
+        console.error('Error inserting business hours in upsertBusinessHours:', insertErr);
+        throw insertErr;
       }
 
-      return data;
+      return inserted as BusinessHours;
     } catch (error) {
       console.error('Error in upsertBusinessHours:', error);
       throw error;

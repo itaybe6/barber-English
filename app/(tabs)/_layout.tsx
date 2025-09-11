@@ -126,19 +126,19 @@ export default function TabsLayout() {
       <Tabs.Screen 
         name="index" 
         options={{
-          title: 'דף בית',
+          title: 'Home',
         }}
       />
       <Tabs.Screen 
         name="waitlist" 
         options={{
-          title: 'ממתינים',
+          title: 'Waitlist',
         }}
       />
       <Tabs.Screen 
         name="appointments" 
         options={{
-          title: 'יומן',
+          title: 'Calendar',
           tabBarButton: () => (
             <TouchableOpacity style={styles.centerTabItem}>
               <FloatingCalendarButton 
@@ -152,19 +152,19 @@ export default function TabsLayout() {
       <Tabs.Screen 
         name="business-hours" 
         options={{
-          title: 'שעות',
+          title: 'Business Hours',
         }}
       />
       <Tabs.Screen 
         name="settings" 
         options={{
-          title: 'הגדרות',
+          title: 'Settings',
         }}
       />
       <Tabs.Screen 
         name="gallery" 
         options={{
-          title: 'גלריה',
+          title: 'Gallery',
           href: null
         }}
       />
@@ -172,7 +172,7 @@ export default function TabsLayout() {
       <Tabs.Screen 
         name="client-notifications" 
         options={{
-          title: 'התראות',
+          title: 'Notifications',
           href: null
         }}
       />
@@ -186,7 +186,7 @@ export default function TabsLayout() {
       <Tabs.Screen 
         name="edit-gallery" 
         options={{
-          title: 'עריכת גלריה',
+          title: 'Edit Gallery',
           href: null
         }}
       />
@@ -198,15 +198,15 @@ export default function TabsLayout() {
 function getTabLabel(routeName: string): string {
   switch (routeName) {
     case 'index':
-      return 'דף בית';
+      return 'Home';
     case 'waitlist':
-      return 'ממתינים';
+      return 'Waitlist';
     case 'appointments':
-      return 'יומן';
+      return 'Calendar';
     case 'settings':
-      return 'הגדרות';
+      return 'Settings';
     case 'business-hours':
-      return 'שעות';
+      return 'Business Hours';
     default:
       return routeName;
   }

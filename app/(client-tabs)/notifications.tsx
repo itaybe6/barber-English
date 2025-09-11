@@ -144,13 +144,13 @@ export default function ClientNotificationsScreen() {
   const getNotificationTypeText = (type: Notification['type']) => {
     switch (type) {
       case 'appointment_reminder':
-        return 'תזכורת לתור';
+        return 'Appointment Reminder';
       case 'promotion':
-        return 'מבצע';
+        return 'Promotion';
       case 'system':
-        return 'התראת מערכת';
+        return 'System Alert';
       default:
-        return 'הודעה כללית';
+        return 'General Message';
     }
   };
 
@@ -160,13 +160,13 @@ export default function ClientNotificationsScreen() {
     const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
 
     if (diffInHours < 1) {
-      return 'עכשיו';
+      return 'Now';
     } else if (diffInHours < 24) {
-      return `לפני ${Math.floor(diffInHours)} שעות`;
+      return `${Math.floor(diffInHours)} hours ago`;
     } else if (diffInHours < 48) {
-      return 'אתמול';
+      return 'Yesterday';
     } else {
-      return date.toLocaleDateString('he-IL', {
+      return date.toLocaleDateString('en-US', {
         day: 'numeric',
         month: 'short',
         year: 'numeric'
@@ -186,7 +186,7 @@ export default function ClientNotificationsScreen() {
       // Name (Heb/Eng) and phone in parentheses
       let name: string | undefined;
       let phone: string | undefined;
-      const namePhoneMatch = text.match(/([א-תA-Za-z\-\s']+)\s*\((0\d{8,10})\)/);
+      const namePhoneMatch = text.match(/([A-Za-z\-\s']+)\s*\((0\d{8,10})\)/);
       if (namePhoneMatch) {
         name = namePhoneMatch[1].trim();
         phone = namePhoneMatch[2];
@@ -211,7 +211,7 @@ export default function ClientNotificationsScreen() {
       let timePretty: string | undefined;
       if (dateMatch) {
         const dt = new Date(`${dateMatch[1]}T00:00:00`);
-        datePretty = dt.toLocaleDateString('he-IL', { day: '2-digit', month: 'short', year: 'numeric' });
+        datePretty = dt.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
         text = text.replace(dateMatch[1], '').trim();
       }
       if (timeMatch) {
@@ -219,11 +219,11 @@ export default function ClientNotificationsScreen() {
         const [h, m] = tm.split(':');
         const fake = new Date();
         fake.setHours(Number(h), Number(m));
-        timePretty = fake.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+        timePretty = fake.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
         text = text.replace(timeMatch[0], '').trim();
       }
 
-      text = text.replace(/בתאריך\s*|בשעה\s*/g, '').replace(/\s{2,}/g, ' ').trim();
+      text = text.replace(/\s{2,}/g, ' ').trim();
 
       return { primary: text, name, phone, service, datePretty, timePretty };
     } catch {
@@ -233,8 +233,8 @@ export default function ClientNotificationsScreen() {
 
   const getTitleStatusIcon = (title: string) => {
     const t = (title || '').toLowerCase();
-    if (/ביטול|בטל|cancel/.test(t)) return <XCircle size={18} color="#FF3B30" />;
-    if (/נקבע|חדש|confirmed|approved/.test(t)) return <CheckCircle size={18} color="#34C759" />;
+    if (/cancel/.test(t)) return <XCircle size={18} color="#FF3B30" />;
+    if (/confirmed|approved|new/.test(t)) return <CheckCircle size={18} color="#34C759" />;
     return null;
   };
 
@@ -247,12 +247,12 @@ export default function ClientNotificationsScreen() {
             <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
               <Ionicons name="arrow-back" size={24} color={Colors.text} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>התראות</Text>
+            <Text style={styles.headerTitle}>Notifications</Text>
             <View style={styles.headerRight} />
           </View>
           <View style={styles.contentWrapper}>
             <View style={styles.loadingContainer}>
-              <Text style={styles.loadingText}>טוען התראות...</Text>
+              <Text style={styles.loadingText}>Loading notifications...</Text>
             </View>
           </View>
         </View>
@@ -269,7 +269,7 @@ export default function ClientNotificationsScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={Colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>התראות</Text>
+          <Text style={styles.headerTitle}>Notifications</Text>
           <View style={styles.headerRight} />
         </View>
         <View style={styles.contentWrapper}>
@@ -284,8 +284,8 @@ export default function ClientNotificationsScreen() {
             {notifications.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Bell size={64} color={ios.secondary} />
-                <Text style={styles.emptyTitle}>אין התראות</Text>
-                <Text style={styles.emptySubtitle}>כשתהיה לך התראה חדשה, היא תופיע כאן</Text>
+                <Text style={styles.emptyTitle}>No notifications</Text>
+                <Text style={styles.emptySubtitle}>When you have a new notification, it will appear here</Text>
               </View>
             ) : (
               <View style={styles.notificationsContainer}>
@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   notificationHeader: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
   },
@@ -479,14 +479,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#8E8E93',
     marginBottom: 2,
-    textAlign: 'right',
-    writingDirection: 'rtl',
+    textAlign: 'left',
   },
   notificationTime: {
     fontSize: 12,
     color: '#8E8E93',
-    textAlign: 'right',
-    writingDirection: 'rtl',
+    textAlign: 'left',
   },
   unreadDot: {
     width: 8,
@@ -499,11 +497,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1C1C1E',
     marginBottom: 8,
-    textAlign: 'right',
-    writingDirection: 'rtl',
+    textAlign: 'left',
   },
   titleWithIcon: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
@@ -511,17 +508,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#1C1C1E',
     lineHeight: 22,
-    textAlign: 'right',
-    writingDirection: 'rtl',
+    textAlign: 'left',
   },
   detailsContainer: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
     marginTop: 8,
   },
   detailRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F2F2F7',
     borderRadius: 12,
@@ -550,7 +546,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#34C759',
     marginLeft: 4,
-    textAlign: 'right',
-    writingDirection: 'rtl',
+    textAlign: 'left',
   },
 }); 

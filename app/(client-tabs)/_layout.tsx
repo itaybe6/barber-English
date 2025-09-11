@@ -128,14 +128,14 @@ export default function ClientTabsLayout() {
                     if (!isAuthenticated) {
                       setLoginModal({
                         visible: true,
-                        title: 'נדרש להתחבר',
-                        message: 'כדי לקבוע תור יש להתחבר לחשבון שלך',
+                        title: 'Login Required',
+                        message: 'Please sign in to book an appointment.',
                       });
                       return;
                     }
                     if (isBlocked) {
                       // Keep Alert for blocked users as it's a different use case
-                      Alert.alert('חשבון חסום', 'החשבון שלך חסום ואין אפשרות לקבוע תור.');
+                      Alert.alert('Account Blocked', 'Your account is blocked. You cannot book appointments.');
                       return;
                     }
                     router.push('/(client-tabs)/book-appointment');
@@ -218,19 +218,19 @@ export default function ClientTabsLayout() {
       <Tabs.Screen 
         name="index" 
         options={{
-          title: 'דף בית',
+          title: 'Home',
         }}
       />
       <Tabs.Screen 
         name="gallery" 
         options={{
-          title: 'גלריה',
+          title: 'Gallery',
         }}
       />
       <Tabs.Screen 
         name="book-appointment" 
         options={{
-          title: 'קביעת תור',
+          title: 'Book',
           tabBarButton: (props: any) => (
             <TouchableOpacity
               {...props}
@@ -238,13 +238,13 @@ export default function ClientTabsLayout() {
                 if (!isAuthenticated) {
                   setLoginModal({
                     visible: true,
-                    title: 'נדרש להתחבר',
-                    message: 'כדי לקבוע תור יש להתחבר לחשבון שלך',
+                    title: 'Login Required',
+                    message: 'Please sign in to book an appointment.',
                   });
                   return;
                 }
                 if (isBlocked) {
-                  Alert.alert('חשבון חסום', 'החשבון שלך חסום ואין אפשרות לקבוע תור.');
+                  Alert.alert('Account Blocked', 'Your account is blocked. You cannot book appointments.');
                   return;
                 }
                 router.push('/(client-tabs)/book-appointment');
@@ -256,13 +256,13 @@ export default function ClientTabsLayout() {
                   if (!isAuthenticated) {
                     setLoginModal({
                       visible: true,
-                      title: 'נדרש להתחבר',
-                      message: 'כדי לקבוע תור יש להתחבר לחשבון שלך',
+                      title: 'Login Required',
+                      message: 'Please sign in to book an appointment.',
                     });
                     return;
                   }
                   if (isBlocked) {
-                    Alert.alert('חשבון חסום', 'החשבון שלך חסום ואין אפשרות לקבוע תור.');
+                    Alert.alert('Account Blocked', 'Your account is blocked. You cannot book appointments.');
                     return;
                   }
                   router.push('/(client-tabs)/book-appointment');
@@ -276,7 +276,7 @@ export default function ClientTabsLayout() {
       <Tabs.Screen 
         name="appointments" 
         options={{
-          title: 'התורים שלי',
+          title: 'Appointments',
           tabBarButton: (props: any) => {
             const isFocused = props?.accessibilityState?.selected;
             const color = isFocused ? '#2C2C2E' : '#3A3A3C';
@@ -287,8 +287,8 @@ export default function ClientTabsLayout() {
                 if (!isAuthenticated) {
                   setLoginModal({
                     visible: true,
-                    title: 'נדרש להתחבר',
-                    message: 'כדי לצפות בתורים שלך יש להתחבר לחשבון שלך',
+                    title: 'Login Required',
+                    message: 'Please sign in to view your appointments.',
                   });
                   return;
                 }
@@ -307,7 +307,7 @@ export default function ClientTabsLayout() {
       <Tabs.Screen 
         name="profile" 
         options={{
-          title: 'פרופיל',
+          title: 'Profile',
           tabBarButton: (props: any) => {
             const isFocused = props?.accessibilityState?.selected;
             const color = isFocused ? '#2C2C2E' : '#3A3A3C';
@@ -318,8 +318,8 @@ export default function ClientTabsLayout() {
                 if (!isAuthenticated) {
                   setLoginModal({
                     visible: true,
-                    title: 'נדרש להתחבר',
-                    message: 'כדי לגשת לפרופיל יש להתחבר לחשבון שלך',
+                    title: 'Login Required',
+                    message: 'Please sign in to access your profile.',
                   });
                   return;
                 }
@@ -377,15 +377,15 @@ export default function ClientTabsLayout() {
 function getTabLabel(routeName: string): string {
   switch (routeName) {
     case 'index':
-      return 'דף בית';
+      return 'Home';
     case 'gallery':
-      return 'גלריה';
+      return 'Gallery';
     case 'appointments':
-      return 'התורים שלי';
+      return 'Appointments';
     case 'profile':
-      return 'פרופיל';
+      return 'Profile';
     case 'book-appointment':
-      return 'קביעת תור';
+      return 'Book';
     default:
       return routeName;
   }

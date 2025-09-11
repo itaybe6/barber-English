@@ -53,25 +53,25 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!phone.trim() || !password.trim()) {
-      Alert.alert('שגיאה', 'אנא מלא את כל השדות');
+      Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
     setIsLoading(true);
     
     try {
-      // נסה להתחבר דרך ה-API האמיתי
+      // Try authenticating via the real API
       const user = await usersApi.authenticateUserByPhone(phone.trim(), password);
       
       if (user) {
         // Blocked user cannot log in
         if ((user as any)?.block) {
-          Alert.alert('חשבון חסום', 'החשבון שלך חסום ואין אפשרות להתחבר. פנה למנהלת לקבלת עזרה.');
+          Alert.alert('Account Blocked', 'Your account is blocked and cannot sign in. Please contact the manager.');
           return;
         }
         // Validate user type
         if (!isValidUserType(user.user_type)) {
-          Alert.alert('שגיאה', 'סוג משתמש לא תקין');
+          Alert.alert('Error', 'Invalid user type');
           return;
         }
         
@@ -94,7 +94,7 @@ export default function LoginScreen() {
           router.replace('/(client-tabs)');
         }
       } else {
-        // אם ה-API לא עובד, נסה עם המשתמשים הדמו
+        // If API fails, try demo users
         const demoUser = findUserByCredentials(phone.trim(), password);
         if (demoUser) {
           login(demoUser);
@@ -105,13 +105,13 @@ export default function LoginScreen() {
             router.replace('/(client-tabs)');
           }
         } else {
-          Alert.alert('שגיאה', 'מספר טלפון או סיסמה שגויים');
+          Alert.alert('Error', 'Incorrect phone or password');
         }
       }
     } catch (error) {
       console.error('API Login error:', error);
       
-      // אם ה-API נכשל, נסה עם המשתמשים הדמו
+      // If API fails, try demo users
       try {
         const demoUser = findUserByCredentials(phone.trim(), password);
         if (demoUser) {
@@ -123,11 +123,11 @@ export default function LoginScreen() {
             router.replace('/(client-tabs)');
           }
         } else {
-          Alert.alert('שגיאה', 'מספר טלפון או סיסמה שגויים');
+          Alert.alert('Error', 'Incorrect phone or password');
         }
       } catch (demoError) {
         console.error('Demo login error:', demoError);
-        Alert.alert('שגיאה', 'אירעה שגיאה בהתחברות');
+        Alert.alert('Error', 'An error occurred during sign-in');
       }
     } finally {
       setIsLoading(false);
@@ -138,7 +138,7 @@ export default function LoginScreen() {
   const handleForgotSubmit = async () => {
     const p = (forgotPhone || '').trim();
     const e = (forgotEmail || '').trim();
-    if (!e) { Alert.alert('שגיאה', 'אנא הזן מייל'); return; }
+    if (!e) { Alert.alert('Error', 'Please enter an email'); return; }
     console.log('[ForgotPassword] pressed', { phone: p, email: e });
     setIsSendingReset(true);
     try {
@@ -152,14 +152,14 @@ export default function LoginScreen() {
         console.warn('[ForgotPassword] edge failed, falling back to auth.resetPasswordForEmail', fnErr);
         const { error: rpErr } = await supabase.auth.resetPasswordForEmail(e);
         if (rpErr) {
-          const msg = (rpErr as any)?.message || 'שגיאה בבקשת איפוס סיסמה';
-          Alert.alert('שגיאה', String(msg));
+          const msg = (rpErr as any)?.message || 'Error requesting password reset';
+          Alert.alert('Error', String(msg));
           return;
         }
       }
 
-      Alert.alert('נשלח מייל', 'שלחנו אליך מייל לאיפוס סיסמה. בדוק את הדואר הנכנס.', [
-        { text: 'אישור', onPress: () => setIsForgotOpen(false) },
+      Alert.alert('Email Sent', 'We sent you a password reset email. Check your inbox.', [
+        { text: 'OK', onPress: () => setIsForgotOpen(false) },
       ]);
     } catch (err) {
       console.error('Forgot password error (invoke/catch):', err);
@@ -167,15 +167,15 @@ export default function LoginScreen() {
       try {
         const { error: rpErr } = await supabase.auth.resetPasswordForEmail(e);
         if (rpErr) {
-          Alert.alert('שגיאה', String((rpErr as any)?.message || 'אירעה שגיאה בבקשה. נסה שוב.'));
+          Alert.alert('Error', String((rpErr as any)?.message || 'An error occurred. Please try again.'));
           return;
         }
-        Alert.alert('נשלח מייל', 'שלחנו אליך מייל לאיפוס סיסמה. בדוק את הדואר הנכנס.', [
-          { text: 'אישור', onPress: () => setIsForgotOpen(false) },
+        Alert.alert('Email Sent', 'We sent you a password reset email. Check your inbox.', [
+          { text: 'OK', onPress: () => setIsForgotOpen(false) },
         ]);
       } catch (subErr) {
         console.error('Forgot password fallback error:', subErr);
-        Alert.alert('שגיאה', 'אירעה שגיאה בבקשה. נסה שוב.');
+        Alert.alert('Error', 'An error occurred. Please try again.');
       }
     } finally {
       setIsSendingReset(false);
@@ -212,7 +212,7 @@ export default function LoginScreen() {
               {/* Header inside card */}
               <View style={styles.headerContent}>
                 <Image source={require('@/assets/images/logo-03.png')} style={styles.logoImage} resizeMode="contain" />
-                <Text style={styles.appSubtitle}>מלא פרטים כדי להתחבר לחשבון שלך</Text>
+                <Text style={styles.appSubtitle}>Enter details to sign in to your account</Text>
               </View>
 
               {/* Phone */}
@@ -221,13 +221,13 @@ export default function LoginScreen() {
                   <Ionicons name="call-outline" size={18} color={palette.textSecondary} style={styles.iconRight} />
                   <TextInput
                     style={styles.input}
-                    placeholder="מספר טלפון"
+                    placeholder="Phone number"
                     placeholderTextColor={palette.textSecondary}
                     value={phone}
                     onChangeText={setPhone}
                     keyboardType="phone-pad"
                     autoCorrect={false}
-                    textAlign="right"
+                    textAlign="left"
                   />
                 </View>
               </View>
@@ -238,13 +238,13 @@ export default function LoginScreen() {
                   <Ionicons name="lock-closed-outline" size={18} color={palette.textSecondary} style={styles.iconRight} />
                   <TextInput
                     style={[styles.input, styles.inputPassword]}
-                    placeholder="סיסמה"
+                    placeholder="Password"
                     placeholderTextColor={palette.textSecondary}
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
-                    textAlign="right"
+                    textAlign="left"
                   />
                   <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
                     <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={palette.textSecondary} />
@@ -256,19 +256,19 @@ export default function LoginScreen() {
               <TouchableOpacity onPress={handleLogin} activeOpacity={0.9} disabled={isLoading} style={styles.ctaShadow}>
                 <View style={styles.ctaRadiusWrap}>
                   <View style={[styles.cta, styles.ctaOutlined]}>
-                    <Text style={styles.ctaText}>{isLoading ? 'מתחבר…' : 'התחברות'}</Text>
+                    <Text style={styles.ctaText}>{isLoading ? 'Signing in…' : 'Sign In'}</Text>
                   </View>
                 </View>
               </TouchableOpacity>
 
               {/* Links */}
               <TouchableOpacity style={styles.forgotPasswordButton} onPress={() => setIsForgotOpen(true)}>
-                <Text style={styles.forgotPasswordText}>שכחתי סיסמה</Text>
+                <Text style={styles.forgotPasswordText}>Forgot password</Text>
               </TouchableOpacity>
               <Text style={styles.registerLine}>
-                אין לך חשבון? 
+                Don't have an account? 
                 <Link href="/register" asChild>
-                  <Text style={styles.registerAction}>הירשם עכשיו</Text>
+                  <Text style={styles.registerAction}>Sign up now</Text>
                 </Link>
               </Text>
             </View>
@@ -279,20 +279,20 @@ export default function LoginScreen() {
       {isForgotOpen && (
         <View style={styles.forgotOverlay}>
           <View style={styles.forgotCard}>
-            <Text style={styles.forgotTitle}>איפוס סיסמה</Text>
-            <Text style={styles.forgotSubtitle}>הזן מספר טלפון ומייל כפי שמופיעים בחשבון</Text>
+            <Text style={styles.forgotTitle}>Reset Password</Text>
+            <Text style={styles.forgotSubtitle}>Enter phone and email as they appear on your account</Text>
             <View style={{ height: 10 }} />
             <View style={[styles.inputRow, { backgroundColor: palette.inputBg, borderColor: palette.inputBorder }]}> 
               <Ionicons name="call-outline" size={18} color={palette.textSecondary} style={styles.iconRight} />
               <TextInput
                 style={styles.input}
-                placeholder="מספר טלפון"
+                placeholder="Phone number"
                 placeholderTextColor={palette.textSecondary}
                 value={forgotPhone}
                 onChangeText={setForgotPhone}
                 keyboardType="phone-pad"
                 autoCorrect={false}
-                textAlign="right"
+                textAlign="left"
               />
             </View>
             <View style={{ height: 10 }} />
@@ -300,23 +300,23 @@ export default function LoginScreen() {
               <Ionicons name="mail-outline" size={18} color={palette.textSecondary} style={styles.iconRight} />
               <TextInput
                 style={styles.input}
-                placeholder="אימייל"
+                placeholder="Email"
                 placeholderTextColor={palette.textSecondary}
                 value={forgotEmail}
                 onChangeText={setForgotEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
-                textAlign="right"
+                textAlign="left"
               />
             </View>
             <View style={{ height: 14 }} />
             <View style={styles.forgotActions}>
               <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setIsForgotOpen(false)} disabled={isSendingReset}>
-                <Text style={styles.cancelBtnText}>ביטול</Text>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.modalBtn, styles.saveBtn]} onPress={handleForgotSubmit} disabled={isSendingReset}>
-                <Text style={styles.saveBtnText}>{isSendingReset ? 'שולח…' : 'אישור'}</Text>
+                <Text style={styles.saveBtnText}>{isSendingReset ? 'Sending…' : 'Confirm'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -436,7 +436,7 @@ const styles = StyleSheet.create({
     color: palette.textPrimary,
     paddingHorizontal: 8,
     paddingRight: 36,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   inputPassword: {
     paddingRight: 36, // space for lock icon on right

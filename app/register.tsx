@@ -73,33 +73,33 @@ export default function RegisterScreen() {
     const newErrors: {[key: string]: string} = {};
 
     if (!name.trim()) {
-      newErrors.name = 'שם מלא הוא שדה חובה';
+      newErrors.name = 'Full name is required';
     }
 
     if (!phone.trim()) {
-      newErrors.phone = 'מספר טלפון הוא שדה חובה';
+      newErrors.phone = 'Phone number is required';
     } else if (phone.length < 10) {
-      newErrors.phone = 'מספר טלפון לא תקין';
+      newErrors.phone = 'Invalid phone number';
     }
 
     // Email required and must be valid
     if (!email.trim()) {
-      newErrors.email = 'דואר אלקטרוני הוא שדה חובה';
+      newErrors.email = 'Email is required';
     } else {
       const emailRegex = /^(?:[a-zA-Z0-9_'^&+%!-]+(?:\.[a-zA-Z0-9_'^&+%!-]+)*)@(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/;
       if (!emailRegex.test(email.trim())) {
-        newErrors.email = 'כתובת דוא"ל לא תקינה';
+        newErrors.email = 'Invalid email address';
       }
     }
 
     if (!password) {
-      newErrors.password = 'סיסמה היא שדה חובה';
+      newErrors.password = 'Password is required';
     } else if (!validatePassword(password)) {
-      newErrors.password = 'הסיסמה חייבת להכיל לפחות 6 תווים';
+      newErrors.password = 'Password must be at least 6 characters';
     }
 
     if (password !== confirmPassword) {
-      newErrors.confirmPassword = 'הסיסמאות לא תואמות';
+      newErrors.confirmPassword = 'Passwords do not match';
     }
 
     setErrors(newErrors);
@@ -114,7 +114,7 @@ export default function RegisterScreen() {
     setLoading(true);
     
     try {
-      // בדיקה אם המשתמש כבר קיים לפי מספר טלפון
+      // Check if user already exists by phone
       const { data: existingUser } = await supabase
         .from('users')
         .select('*')
@@ -122,11 +122,11 @@ export default function RegisterScreen() {
         .single();
 
       if (existingUser) {
-        Alert.alert('שגיאה', 'משתמש עם מספר הטלפון הזה כבר קיים במערכת');
+        Alert.alert('Error', 'A user with this phone number already exists');
         return;
       }
 
-      // יצירת המשתמש החדש בטבלה המותאמת אישית עם הסיסמה שבחר
+      // Create new user in custom table with chosen password
       const newUser = await usersApi.createUserWithPassword({
         name: name.trim(),
         user_type: 'client', // כל ההרשמות החדשות הן לקוחות
@@ -135,17 +135,17 @@ export default function RegisterScreen() {
       } as any, password);
 
       if (!newUser) {
-        Alert.alert('שגיאה', 'אירעה שגיאה ביצירת החשבון. אנא נסה שוב.');
+        Alert.alert('Error', 'An error occurred creating the account. Please try again.');
         return;
       }
 
-      // הצלחה!
+      // Success!
       Alert.alert(
-        'הרשמה הושלמה בהצלחה!', 
-        `החשבון שלך נוצר בהצלחה.\n\nכעת תוכל להתחבר למערכת עם מספר הטלפון והסיסמה שבחרת.\n\nמספר טלפון: ${phone.trim()}`,
+        'Registration successful!', 
+        `Your account was created successfully.\n\nYou can now sign in with your phone number and chosen password.\n\nPhone number: ${phone.trim()}`,
         [
           {
-            text: 'אישור',
+            text: 'OK',
             onPress: () => router.push('/login')
           }
         ]
@@ -153,7 +153,7 @@ export default function RegisterScreen() {
       
     } catch (error) {
       console.error('Registration error:', error);
-      Alert.alert('שגיאה', 'אירעה שגיאה במערכת. אנא נסה שוב.');
+      Alert.alert('Error', 'A system error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -161,15 +161,15 @@ export default function RegisterScreen() {
 
   const getErrorMessage = (error: string) => {
     if (error.includes('User already registered')) {
-      return 'משתמש זה כבר רשום במערכת';
+      return 'This user is already registered';
     }
     if (error.includes('Invalid email')) {
-      return 'כתובת אימייל לא תקינה';
+      return 'Invalid email address';
     }
     if (error.includes('Password should be at least 6 characters')) {
-      return 'הסיסמה חייבת להכיל לפחות 6 תווים';
+      return 'Password must be at least 6 characters';
     }
-    return 'אירעה שגיאה בהרשמה. אנא נסה שוב.';
+    return 'There was an error during registration. Please try again.';
   };
 
   return (
@@ -202,7 +202,7 @@ export default function RegisterScreen() {
                 style={styles.backButton}
                 onPress={() => router.back()}
               >
-                <Ionicons name="arrow-forward" size={24} color={Colors.white} />
+                <Ionicons name="arrow-back" size={24} color={Colors.white} />
               </TouchableOpacity>
             </View>
 
@@ -218,8 +218,8 @@ export default function RegisterScreen() {
             >
               {/* Form header text */}
               <View style={styles.formHeader}>
-                <Text style={styles.formTitle}>הירשם עכשיו</Text>
-                <Text style={styles.formSubtitle}>מלא את הפרטים כדי להירשם ולהתחבר</Text>
+                <Text style={styles.formTitle}>Sign up now</Text>
+                <Text style={styles.formSubtitle}>Fill in your details to register and sign in</Text>
               </View>
               {/* Name Input */}
               <View style={styles.field}>
@@ -227,7 +227,7 @@ export default function RegisterScreen() {
                   <Ionicons name="person-outline" size={16} color={palette.textSecondary} style={styles.iconRight} />
                   <TextInput
                     style={styles.input}
-                    placeholder="שם מלא"
+                    placeholder="Full name"
                     placeholderTextColor={palette.textSecondary}
                     value={name}
                     onChangeText={(text) => {
@@ -236,7 +236,7 @@ export default function RegisterScreen() {
                         setErrors(prev => ({...prev, name: ''}));
                       }
                     }}
-                    textAlign="right"
+                    textAlign="left"
                     autoCorrect={false}
                   />
                 </View>
@@ -249,7 +249,7 @@ export default function RegisterScreen() {
                   <Ionicons name="call-outline" size={16} color={palette.textSecondary} style={styles.iconRight} />
                   <TextInput
                     style={styles.input}
-                    placeholder="מספר טלפון"
+                    placeholder="Phone number"
                     placeholderTextColor={palette.textSecondary}
                     value={phone}
                     onChangeText={(text) => {
@@ -260,7 +260,7 @@ export default function RegisterScreen() {
                     }}
                     keyboardType="phone-pad"
                     autoCorrect={false}
-                    textAlign="right"
+                    textAlign="left"
                   />
                 </View>
                 {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
@@ -272,7 +272,7 @@ export default function RegisterScreen() {
                   <Ionicons name="mail-outline" size={16} color={palette.textSecondary} style={styles.iconRight} />
                   <TextInput
                     style={styles.input}
-                    placeholder="דואר אלקטרוני"
+                    placeholder="Email"
                     placeholderTextColor={palette.textSecondary}
                     value={email}
                     onChangeText={(text) => {
@@ -284,7 +284,7 @@ export default function RegisterScreen() {
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
-                    textAlign="right"
+                    textAlign="left"
                   />
                 </View>
                 {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
@@ -298,7 +298,7 @@ export default function RegisterScreen() {
                   <Ionicons name="lock-closed-outline" size={16} color={palette.textSecondary} style={styles.iconRight} />
                   <TextInput
                     style={[styles.input, styles.inputPassword]}
-                    placeholder="סיסמה (לפחות 6 תווים)"
+                    placeholder="Password (at least 6 characters)"
                     placeholderTextColor={palette.textSecondary}
                     value={password}
                     onChangeText={(text) => {
@@ -309,7 +309,7 @@ export default function RegisterScreen() {
                     }}
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
-                    textAlign="right"
+                    textAlign="left"
                   />
                   <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
                     <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={16} color={palette.textSecondary} />
@@ -324,7 +324,7 @@ export default function RegisterScreen() {
                   <Ionicons name="lock-closed-outline" size={16} color={palette.textSecondary} style={styles.iconRight} />
                   <TextInput
                     style={[styles.input, styles.inputPassword]}
-                    placeholder="אימות סיסמה"
+                    placeholder="Confirm password"
                     placeholderTextColor={palette.textSecondary}
                     value={confirmPassword}
                     onChangeText={(text) => {
@@ -335,7 +335,7 @@ export default function RegisterScreen() {
                     }}
                     secureTextEntry={!showConfirmPassword}
                     autoCapitalize="none"
-                    textAlign="right"
+                    textAlign="left"
                   />
                   <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeButton}>
                     <Ionicons name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} size={16} color={palette.textSecondary} />
@@ -351,7 +351,7 @@ export default function RegisterScreen() {
                     {loading ? (
                       <ActivityIndicator color={palette.white} size="small" />
                     ) : (
-                      <Text style={styles.ctaText}>הרשמה</Text>
+                      <Text style={styles.ctaText}>Register</Text>
                     )}
                   </LinearGradient>
                 </View>
@@ -360,8 +360,8 @@ export default function RegisterScreen() {
               {/* Login Link */}
               <View style={styles.loginSection}>
                 <Text style={styles.loginText}>
-                  יש לך כבר חשבון? 
-                  <Text onPress={() => router.push('/login')} style={[styles.loginLink, styles.loginLinkSpacer]}>התחבר עכשיו</Text>
+                  Already have an account? 
+                  <Text onPress={() => router.push('/login')} style={[styles.loginLink, styles.loginLinkSpacer]}>Sign in now</Text>
                 </Text>
               </View>
             </Animated.View>
@@ -477,7 +477,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     color: palette.textPrimary,
-    textAlign: 'right',
+    textAlign: 'left',
     paddingHorizontal: 6,
     paddingRight: 32,
   },
@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
     color: Colors.error,
     fontSize: 12,
     marginTop: 5,
-    textAlign: 'right',
+    textAlign: 'left',
     width: '92%',
     alignSelf: 'center',
   },
@@ -575,7 +575,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   loginLinkSpacer: {
-    marginRight: 4,
+    marginLeft: 4,
   },
   bottomWhiteInset: {
     position: 'absolute',

@@ -199,7 +199,7 @@ export default function ClientAppointmentsScreen() {
   // Open WhatsApp chat with manager
   const contactManagerOnWhatsApp = useCallback(async (message: string) => {
     if (!managerPhone) {
-      Alert.alert('שגיאה', 'מספר המנהל לא זמין כרגע');
+      Alert.alert('Error', 'Manager phone number is currently unavailable');
       return;
     }
     const encoded = encodeURIComponent(message);
@@ -213,7 +213,7 @@ export default function ClientAppointmentsScreen() {
         await Linking.openURL(webUrl);
       }
     } catch (e) {
-      Alert.alert('שגיאה', 'לא ניתן לפתוח את וואטסאפ במכשיר זה');
+      Alert.alert('Error', 'WhatsApp cannot be opened on this device');
     }
   }, [managerPhone]);
 
@@ -289,7 +289,7 @@ export default function ClientAppointmentsScreen() {
 
   const formatDate = React.useCallback((dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('he-IL', { 
+    return date.toLocaleDateString('en-US', { 
       weekday: 'long', 
       year: 'numeric', 
       month: 'long', 
@@ -463,10 +463,10 @@ export default function ClientAppointmentsScreen() {
               activeOpacity={0.8}
             >
               <Ionicons name="close" size={16} color="#FF3B30" />
-              <Text style={styles.heroCancelButtonText}>ביטול</Text>
+              <Text style={styles.heroCancelButtonText}>Cancel</Text>
             </TouchableOpacity>
 
-            <Text style={styles.heroServiceNameNext}>{nextAppointment!.service_name || 'שירות'}</Text>
+            <Text style={styles.heroServiceNameNext}>{nextAppointment!.service_name || 'Service'}</Text>
             
             {/* Show client info for admin users (barbers) */}
             {user?.user_type === 'admin' && nextAppointment!.client_name && (
@@ -531,20 +531,20 @@ export default function ClientAppointmentsScreen() {
         setSelectedAppointment(null);
 
         // Create admin notification about the cancellation
-        const canceledBy = user?.name || selectedAppointment.client_name || 'לקוח';
+        const canceledBy = user?.name || selectedAppointment.client_name || 'Client';
         const canceledPhone = user?.phone || selectedAppointment.client_phone || '';
-        const serviceName = selectedAppointment.service_name || 'שירות';
+        const serviceName = selectedAppointment.service_name || 'Service';
         const date = selectedAppointment.slot_date;
         const time = selectedAppointment.slot_time;
-        const title = 'ביטול תור';
-        const content = `${canceledBy} (${canceledPhone}) ביטל/ה תור ל"${serviceName}" בתאריך ${date} בשעה ${time}`;
+        const title = 'Appointment Cancellation';
+        const content = `${canceledBy} (${canceledPhone}) canceled an appointment for "${serviceName}" on ${date} at ${time}`;
         // Ignore result; best-effort
         notificationsApi.createAdminNotification(title, content, 'system').catch(() => {});
       } else {
-        Alert.alert('שגיאה', 'לא ניתן היה לבטל את התור. אנא נסה שוב.');
+        Alert.alert('Error', 'Unable to cancel the appointment. Please try again.');
       }
     } catch (error) {
-      Alert.alert('שגיאה', 'אירעה שגיאה בביטול התור. אנא נסה שוב.');
+      Alert.alert('Error', 'An error occurred while cancelling. Please try again.');
     } finally {
       setIsCanceling(false);
     }
@@ -566,14 +566,14 @@ export default function ClientAppointmentsScreen() {
               <View style={styles.regularHeader}>
                 <View style={styles.pastBadge}>
                   <Ionicons name="checkmark-circle" size={16} color="#34C759" />
-                  <Text style={styles.pastBadgeText}>הושלם</Text>
+                  <Text style={styles.pastBadgeText}>Completed</Text>
                 </View>
                 <View style={styles.regularHeaderRight}>
                   <BarberAvatar userId={item.user_id} size={44} />
                 </View>
               </View>
 
-              <Text style={styles.heroServiceName}>{item.service_name || 'שירות'}</Text>
+              <Text style={styles.heroServiceName}>{item.service_name || 'Service'}</Text>
               
               {/* Show client info for admin users (barbers) */}
               {user?.user_type === 'admin' && item.client_name && (
@@ -638,10 +638,10 @@ export default function ClientAppointmentsScreen() {
               activeOpacity={0.8}
             >
               <Ionicons name="close" size={16} color="#FF3B30" />
-              <Text style={styles.heroCancelButtonText}>ביטול</Text>
+              <Text style={styles.heroCancelButtonText}>Cancel</Text>
             </TouchableOpacity>
 
-            <Text style={styles.heroServiceNameNext}>{item.service_name || 'שירות'}</Text>
+            <Text style={styles.heroServiceNameNext}>{item.service_name || 'Service'}</Text>
             
             {/* Show client info for admin users (barbers) */}
             {user?.user_type === 'admin' && item.client_name && (
@@ -689,10 +689,10 @@ export default function ClientAppointmentsScreen() {
           <View style={{ width: 22 }} />
           <View style={{ alignItems: 'center' }}>
             <Text style={styles.headerTitle}>
-              {user?.user_type === 'admin' ? 'הלוז שלי' : 'התורים שלי'}
+              {user?.user_type === 'admin' ? 'My Schedule' : 'My Appointments'}
             </Text>
             <Text style={styles.headerSubtitle}>
-              {user?.user_type === 'admin' ? 'התורים שלך כספר' : 'הקרובים והקודמים שלך'}
+              {user?.user_type === 'admin' ? 'Your appointments as a barber' : 'Upcoming and past appointments'}
             </Text>
           </View>
           <View style={{ width: 22 }} />
@@ -725,7 +725,7 @@ export default function ClientAppointmentsScreen() {
                 styles.toggleText, 
                 activeTab === 'upcoming' && styles.toggleTextActive
               ]}>
-                קרובים
+                Upcoming
               </Text>
               <Ionicons 
                 name="calendar-outline" 
@@ -757,7 +757,7 @@ export default function ClientAppointmentsScreen() {
                 styles.toggleText, 
                 activeTab === 'past' && styles.toggleTextActive
               ]}>
-                היסטוריה
+                History
               </Text>
               <Ionicons 
                 name="checkmark-done-circle-outline" 
@@ -779,7 +779,7 @@ export default function ClientAppointmentsScreen() {
                 onRefresh={onRefresh}
                 colors={[Colors.primary]}
                 tintColor={Colors.primary}
-                title="מעדכן התורים..."
+                title="Updating appointments..."
                 titleColor={Colors.primary}
               />
             }
@@ -787,12 +787,12 @@ export default function ClientAppointmentsScreen() {
             <NextAppointmentHero />
             <ActivityIndicator size="large" color={Colors.primary} style={{ alignSelf: 'center' }} />
             <Text style={styles.loadingText}>
-              {user?.user_type === 'admin' ? 'טוען את הלוז שלך...' : 'טוען התורים שלך...'}
+              {user?.user_type === 'admin' ? 'Loading your schedule...' : 'Loading your appointments...'}
             </Text>
             <Text style={styles.loadingSubtext}>
               {user?.user_type === 'admin' 
-                ? (user?.name ? `טוען תורים עבור הספר ${user.name}` : 'טוען תורים...')
-                : (user?.name ? `מחפש תורים עבור ${user.name}` : 'מחפש תורים...')
+                ? (user?.name ? `Loading appointments for barber ${user.name}` : 'Loading appointments...')
+                : (user?.name ? `Searching appointments for ${user.name}` : 'Searching appointments...')
               }
             </Text>
           </ScrollView>
@@ -815,7 +815,7 @@ export default function ClientAppointmentsScreen() {
                 onRefresh={onRefresh}
                 colors={[Colors.primary]}
                 tintColor={Colors.primary}
-                title="מעדכן התורים..."
+                title="Updating appointments..."
                 titleColor={Colors.primary}
               />
             }
@@ -830,7 +830,7 @@ export default function ClientAppointmentsScreen() {
                   onRefresh={onRefresh}
                   colors={[Colors.primary]}
                   tintColor={Colors.primary}
-                  title="מעדכן התורים..."
+                  title="Updating appointments..."
                   titleColor={Colors.primary}
                 />
               }
@@ -846,7 +846,7 @@ export default function ClientAppointmentsScreen() {
                   onRefresh={onRefresh}
                   colors={[Colors.primary]}
                   tintColor={Colors.primary}
-                  title="מעדכן התורים..."
+                  title="Updating appointments..."
                   titleColor={Colors.primary}
                 />
               }
@@ -859,13 +859,13 @@ export default function ClientAppointmentsScreen() {
               />
               <Text style={styles.emptyTitle}>
                 {activeTab === 'upcoming' 
-                  ? (user?.user_type === 'admin' ? 'אין תורים קרובים' : 'אין תורים קרובים')
-                  : (user?.user_type === 'admin' ? 'אין תורים קודמים' : 'אין תורים קודמים')}
+                  ? (user?.user_type === 'admin' ? 'No upcoming appointments' : 'No upcoming appointments')
+                  : (user?.user_type === 'admin' ? 'No past appointments' : 'No past appointments')}
               </Text>
               <Text style={styles.emptySubtitle}>
                 {activeTab === 'upcoming' 
-                  ? (user?.user_type === 'admin' ? 'התורים הקרובים שלך יופיעו כאן' : 'התורים הקרובים שלך יופיעו כאן')
-                  : (user?.user_type === 'admin' ? 'התורים שטיפלת בהם יופיעו כאן' : 'התורים הקודמים שלך יופיעו כאן')}
+                  ? (user?.user_type === 'admin' ? 'Your upcoming appointments will appear here' : 'Your upcoming appointments will appear here')
+                  : (user?.user_type === 'admin' ? 'Appointments you handled will appear here' : 'Your past appointments will appear here')}
               </Text>
             </ScrollView>
           )
@@ -883,9 +883,9 @@ export default function ClientAppointmentsScreen() {
           <View style={styles.cancelModal}>
             <View style={styles.modalHeader}>
               <Ionicons name="warning" size={48} color="#FF9500" />
-              <Text style={styles.modalTitle}>ביטול תור</Text>
+              <Text style={styles.modalTitle}>Cancel Appointment</Text>
               <Text style={styles.modalMessage}>
-                האם ברצונך לבטל את התור שלך?
+                Would you like to cancel your appointment?
               </Text>
               {selectedAppointment && (
                 <View style={styles.appointmentSummary}>
@@ -902,7 +902,7 @@ export default function ClientAppointmentsScreen() {
                 onPress={() => setShowCancelModal(false)}
                 disabled={isCanceling}
               >
-                <Text style={styles.cancelModalButtonText}>ביטול</Text>
+                <Text style={styles.cancelModalButtonText}>Cancel</Text>
               </TouchableOpacity>
               
               <TouchableOpacity
@@ -913,7 +913,7 @@ export default function ClientAppointmentsScreen() {
                 {isCanceling ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.confirmModalButtonText}>אישור</Text>
+                  <Text style={styles.confirmModalButtonText}>Confirm</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -932,14 +932,14 @@ export default function ClientAppointmentsScreen() {
           <View style={styles.iosModalCard}>
             <View style={styles.modalHeader}>
               <View style={styles.policyBadge}>
-                <Text style={styles.policyBadgeText}>מדיניות ביטולים</Text>
+                <Text style={styles.policyBadgeText}>Cancellation Policy</Text>
               </View>
               <View style={styles.modalIconCircle}>
                 <Ionicons name="alert" size={28} color="#FF3B30" />
               </View>
-              <Text style={styles.modalTitle}>לא ניתן לבטל תור</Text>
+              <Text style={styles.modalTitle}>Cannot Cancel Appointment</Text>
               <Text style={styles.modalMessage}>
-                ניתן לבטל תור עד 48 שעות לפני המועד. לביטול בטווח קצר יש ליצור קשר עם המנהל/ת.
+                Appointments can be canceled up to 48 hours before the time. For short notice cancellations, please contact the manager.
               </Text>
               {selectedAppointment && (
                 <View style={styles.appointmentChips}>
@@ -969,7 +969,7 @@ export default function ClientAppointmentsScreen() {
                 onPress={() => setShowLateCancelModal(false)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.cancelModalButtonText}>סגור</Text>
+                <Text style={styles.cancelModalButtonText}>Close</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -977,8 +977,8 @@ export default function ClientAppointmentsScreen() {
                 onPress={() => {
                   const apt = selectedAppointment;
                   const msg = apt
-                    ? `היי, אני רוצה לבטל תור שנקבע ל-${formatDate(apt.slot_date)} בשעה ${formatTime(apt.slot_time)} עבור \"${apt.service_name || 'שירות'}\". האם אפשר לעזור?`
-                    : 'היי, אשמח לעזרה בביטול תור בטווח קצר.';
+                    ? `Hi, I would like to cancel the appointment set for ${formatDate(apt.slot_date)} at ${formatTime(apt.slot_time)} for \"${apt.service_name || 'Service'}\". Can you help?`
+                    : 'Hi, I need help cancelling an appointment on short notice.';
                   contactManagerOnWhatsApp(msg);
                   setShowLateCancelModal(false);
                 }}
@@ -986,7 +986,7 @@ export default function ClientAppointmentsScreen() {
               >
                 <View style={styles.whatsappButtonRow}>
                   <Ionicons name="logo-whatsapp" size={18} color="#FFFFFF" style={styles.whatsappButtonIcon} />
-                  <Text style={styles.whatsappButtonText}>שליחת הודעה</Text>
+                  <Text style={styles.whatsappButtonText}>Send Message</Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -1143,13 +1143,13 @@ const styles = StyleSheet.create({
   },
   serviceInfo: {
     flex: 1,
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
   },
   serviceName: {
     fontSize: 22,
     fontWeight: '800',
     color: '#1C1C1E',
-    textAlign: 'right',
+    textAlign: 'left',
     letterSpacing: -0.5,
     marginBottom: 6,
   },
@@ -1187,7 +1187,7 @@ const styles = StyleSheet.create({
   },
   detailRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
   },
   detailContent: {
     flexDirection: 'row',
@@ -1211,12 +1211,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1C1C1E',
     fontWeight: '600',
-    textAlign: 'right',
+    textAlign: 'left',
     letterSpacing: -0.2,
   },
   cardFooter: {
     marginTop: 20,
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
   },
   priorityIndicator: {
     width: 60,
@@ -1290,6 +1290,7 @@ const styles = StyleSheet.create({
   heroContent: {
     position: 'relative',
     zIndex: 1,
+    alignItems: 'flex-start',
   },
   heroHeaderActions: {
     flexDirection: 'row',
@@ -1360,7 +1361,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
     color: '#1C1C1E',
-    textAlign: 'right',
+    textAlign: 'left',
     letterSpacing: -0.4,
     marginBottom: 4,
   },
@@ -1368,7 +1369,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
     color: '#1C1C1E',
-    textAlign: 'right',
+    textAlign: 'left',
     letterSpacing: -0.4,
     marginBottom: 4,
     marginTop: 50,
@@ -1376,7 +1377,7 @@ const styles = StyleSheet.create({
   heroLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     marginBottom: 16,
     gap: 6,
   },
@@ -1392,17 +1393,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     color: '#8E8E93',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   heroDetailsContainer: {
-    flexDirection: 'row-reverse',
-    justifyContent: 'flex-end',
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
     gap: 16,
   },
   heroDetailCard: {
     flexShrink: 0,
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-start',
     gap: 8,
     backgroundColor: 'rgba(0, 0, 0, 0.05)',
     paddingHorizontal: 12,
@@ -1413,7 +1416,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#1C1C1E',
-    textAlign: 'right',
+    textAlign: 'left',
   },
 
   // Regular appointment card styles
@@ -1469,7 +1472,7 @@ const styles = StyleSheet.create({
   },
   regularFooter: {
     marginTop: 16,
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
   },
   regularStatusIndicator: {
     flexDirection: 'row',
@@ -1566,7 +1569,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     marginTop: 8,
   },
   chip: {
@@ -1629,7 +1632,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   modalActions: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     gap: 12,
   },
   modalButton: {

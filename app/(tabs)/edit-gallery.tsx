@@ -134,12 +134,24 @@ export default function EditGalleryScreen() {
       const extGuess = (contentType.split('/')[1] || 'jpg').toLowerCase();
       const randomId = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
       const filePath = `uploads/${Date.now()}_${randomId()}.${extGuess}`;
-      const { error } = await supabase.storage.from('designs').upload(filePath, fileBody as any, { contentType, upsert: false });
-      if (error) {
-        console.error('upload error', error);
-        return null;
+      let bucketUsed = 'designs';
+      const firstAttempt = await supabase.storage.from(bucketUsed).upload(filePath, fileBody as any, { contentType, upsert: false });
+      if (firstAttempt.error) {
+        const msg = String((firstAttempt.error as any)?.message || '').toLowerCase();
+        if (msg.includes('bucket') && msg.includes('not found')) {
+          // Second fallback to 'public' if a different bucket is configured
+          bucketUsed = 'public';
+          const retry = await supabase.storage.from(bucketUsed).upload(filePath, fileBody as any, { contentType, upsert: false });
+          if (retry.error) {
+            console.error('upload error (retry)', retry.error);
+            return null;
+          }
+        } else {
+          console.error('upload error', firstAttempt.error);
+          return null;
+        }
       }
-      const { data } = supabase.storage.from('designs').getPublicUrl(filePath);
+      const { data } = supabase.storage.from(bucketUsed).getPublicUrl(filePath);
       return data.publicUrl;
     } catch (e) {
       console.error('upload exception', e);

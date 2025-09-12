@@ -518,7 +518,7 @@ export default function ClientHomeScreen() {
           resizeMode="cover"
         />
         <LinearGradient
-          colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.1)', 'rgba(0,0,0,0.7)']}
+          colors={['rgba(0,0,0,0.2)', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.85)']}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
           style={styles.fullScreenHeroOverlay}
@@ -568,14 +568,13 @@ export default function ClientHomeScreen() {
         {/* Hero Text Content */}
         <View style={styles.fullScreenHeroContent}>
           <View style={styles.heroTextContainer}>
-            <BlurView 
-              intensity={30} 
-              tint="light"
-              style={styles.heroTextBlurContainer}
-            >
-              <Text style={styles.heroWelcome}>Welcome</Text>
-              <Text style={styles.heroTitle}>{user?.name || 'Valued Client'}</Text>
-            </BlurView>
+            <Text style={styles.heroWelcome}>Welcome</Text>
+            <Text style={styles.heroTitle}>{user?.name || 'Valued Client'}</Text>
+            <Text style={styles.heroSubtitle}>
+              Discover the art of perfect grooming.{'\n'}
+              Where tradition meets modern style, and every visit{'\n'}
+              becomes an experience you'll remember.
+            </Text>
           </View>
         </View>
 
@@ -1011,10 +1010,10 @@ const styles = StyleSheet.create({
   },
   fullScreenHeroContent: {
     position: 'absolute',
-    bottom: 160,
+    bottom: 120,
     left: 0,
     right: 0,
-    paddingHorizontal: 15,
+    paddingHorizontal: 24,
     alignItems: 'flex-start',
     zIndex: 5,
   },
@@ -1239,47 +1238,42 @@ const styles = StyleSheet.create({
   },
   heroTextContainer: {
     flex: 1,
-    alignItems: 'flex-end',
-  },
-  heroTextBlurContainer: {
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    shadowColor: 'rgba(0, 0, 0, 0.2)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 6,
-    overflow: 'hidden',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-end',
   },
   heroWelcome: {
-    fontSize: 16,
+    fontSize: 18,
     color: 'rgba(255, 255, 255, 0.9)',
     fontWeight: '600',
-    textAlign: 'right',
-    marginBottom: 4,
-    letterSpacing: 0.5,
-  },
-  heroTitle: {
-    fontSize: 28,
-    color: '#FFFFFF',
-    fontWeight: '900',
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 8,
-    letterSpacing: -0.5,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
   },
+  heroTitle: {
+    fontSize: 32,
+    color: '#FFFFFF',
+    fontWeight: '900',
+    textAlign: 'left',
+    marginBottom: 16,
+    letterSpacing: -0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
+  },
   heroSubtitle: {
-    fontSize: 15,
-    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.9)',
     fontWeight: '500',
-    textAlign: 'right',
-    lineHeight: 22,
-    letterSpacing: -0.1,
+    textAlign: 'left',
+    lineHeight: 24,
+    letterSpacing: 0.2,
+    textShadowColor: 'rgba(0, 0, 0, 0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+    maxWidth: '85%',
   },
   greetingContainer: {
     paddingHorizontal: 24,
@@ -1840,7 +1834,7 @@ const styles = StyleSheet.create({
     bottom: 20,
     left: 20,
     right: 20,
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
   },
   nextAppointmentInfoBlur: {
     borderRadius: 20,
@@ -1859,7 +1853,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.9)',
     fontWeight: '600',
-    textAlign: 'right',
+    textAlign: 'left',
     letterSpacing: -0.1,
     marginBottom: 6,
   },
@@ -1868,7 +1862,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#FFFFFF',
     marginBottom: 16,
-    textAlign: 'right',
+    textAlign: 'left',
     letterSpacing: -0.4,
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 0, height: 2 },
@@ -1876,7 +1870,7 @@ const styles = StyleSheet.create({
   },
   nextAppointmentDetails: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderRadius: 14,

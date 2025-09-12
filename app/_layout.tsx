@@ -20,7 +20,8 @@ export const unstable_settings = {
 };
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
+// In dev with fast refresh this can be called multiple times; ignore errors.
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -101,13 +102,14 @@ export default function RootLayout() {
     }
   }, [error]);
 
-  useEffect(() => {
-    // Hide splash screen when fonts are loaded OR when there's a font error
-    // This ensures the app doesn't hang on font loading issues
+  const onLayoutRootView = React.useCallback(async (_e?: any) => {
+    // Hide splash screen only after the root view has mounted
     if (loaded || fontError) {
-      SplashScreen.hideAsync().catch((err) => {
+      try {
+        await SplashScreen.hideAsync();
+      } catch (err) {
         console.warn('Failed to hide splash screen:', err);
-      });
+      }
     }
   }, [loaded, fontError]);
 
@@ -164,7 +166,7 @@ export default function RootLayout() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1 }} onLayout={onLayoutRootView}>
       {content}
     </GestureHandlerRootView>
   );

@@ -421,7 +421,7 @@ export default function ClientProfileScreen() {
                 activeOpacity={isNotifications ? 0.7 : 0.6}
               >
                 {!isNotifications && (
-                  <Ionicons name="chevron-back-outline" size={20} color={Colors.subtext} />
+                  <Ionicons name="chevron-forward-outline" size={20} color={Colors.subtext} />
                 )}
                 {isNotifications && (
                   <Switch
@@ -482,30 +482,30 @@ export default function ClientProfileScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={insets.top + 12} style={styles.modalOverlay}>
           <ScrollView contentContainerStyle={styles.modalOverlayContent} keyboardShouldPersistTaps="handled">
             <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>עריכת פרופיל</Text>
+            <Text style={styles.modalTitle}>Edit Profile</Text>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>שם</Text>
+              <Text style={styles.inputLabel}>Name</Text>
               <TextInput
                 value={editName}
                 onChangeText={setEditName}
-                placeholder="שם מלא"
+                placeholder="Full Name"
                 style={styles.textInput}
-                textAlign="right"
+                textAlign="left"
               />
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>טלפון</Text>
+              <Text style={styles.inputLabel}>Phone</Text>
               <TextInput
                 value={editPhone}
                 onChangeText={setEditPhone}
-                placeholder="מספר טלפון"
+                placeholder="Phone Number"
                 keyboardType="phone-pad"
                 style={styles.textInput}
-                textAlign="right"
+                textAlign="left"
               />
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>מייל</Text>
+              <Text style={styles.inputLabel}>Email</Text>
               <TextInput
                 value={editEmail}
                 onChangeText={setEditEmail}
@@ -514,21 +514,21 @@ export default function ClientProfileScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 style={styles.textInput}
-                textAlign="right"
+                textAlign="left"
               />
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>סיסמה חדשה</Text>
+              <Text style={styles.inputLabel}>New Password</Text>
               <View style={styles.inputWrapper}>
                 <TextInput
                   value={editPassword}
                   onChangeText={setEditPassword}
-                  placeholder="השאירו ריק אם אין שינוי"
+                  placeholder="Leave empty if no change"
                   secureTextEntry={!showEditPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  style={[styles.textInput, { paddingLeft: 44 }]}
-                  textAlign="right"
+                  style={[styles.textInput, { paddingRight: 44 }]}
+                  textAlign="left"
                 />
                 <TouchableOpacity onPress={() => setShowEditPassword(v => !v)} style={styles.passwordToggle}>
                   <Ionicons name={showEditPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={Colors.subtext} />
@@ -538,7 +538,7 @@ export default function ClientProfileScreen() {
 
             <View style={styles.modalActions}>
               <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setIsEditOpen(false)} disabled={isSaving}>
-                <Text style={styles.cancelBtnText}>ביטול</Text>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalBtn, styles.saveBtn]}
@@ -548,7 +548,7 @@ export default function ClientProfileScreen() {
                     return;
                   }
                   if (!editName.trim() || !editPhone.trim()) {
-                    Alert.alert('שגיאה', 'אנא מלא את כל השדות');
+                    Alert.alert('Error', 'Please fill in all fields');
                     return;
                   }
                   try {
@@ -568,14 +568,14 @@ export default function ClientProfileScreen() {
                     setIsEditOpen(false);
                   } catch (e) {
                     console.error('Failed to save profile', e);
-                    Alert.alert('שגיאה', 'נכשל בשמירת הפרופיל');
+                    Alert.alert('Error', 'Failed to save profile');
                   } finally {
                     setIsSaving(false);
                   }
                 }}
                 disabled={isSaving}
               >
-                {isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>שמירה</Text>}
+                {isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Save</Text>}
               </TouchableOpacity>
             </View>
             </View>
@@ -968,7 +968,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.subtext,
     marginBottom: 6,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   inputWrapper: {
     position: 'relative',
@@ -985,7 +985,7 @@ const styles = StyleSheet.create({
   },
   passwordToggle: {
     position: 'absolute',
-    left: 10,
+    right: 10,
     top: 0,
     bottom: 0,
     justifyContent: 'center',
@@ -1295,7 +1295,7 @@ const styles = StyleSheet.create({
     backgroundColor: `${Colors.primary}15`,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginLeft: 12,
   },
   menuItemText: {
     flex: 1,

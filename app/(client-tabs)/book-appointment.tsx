@@ -1055,7 +1055,7 @@ export default function BookAppointment() {
   // Move the booking logic to execute only after confirmation in the modal
   const handleBookAppointment = async () => {
     if (!selectedService || selectedTime === null || selectedDay === null) {
-      Alert.alert('שגיאה', 'אנא בחר תאריך, שעה ושירות לפני קביעת התור');
+      Alert.alert('Error', 'Please select a date, time, and service before booking the appointment');
       return;
     }
 
@@ -1096,8 +1096,8 @@ export default function BookAppointment() {
         <View style={styles.headerContent}>
           <View style={{ width: 22 }} />
           <View style={{ alignItems: 'center' }}>
-            <Text style={styles.title}>קביעת תור</Text>
-            <Text style={styles.headerSubtitle}>בחר/י שירות, יום ושעה</Text>
+            <Text style={styles.title}>Appointment Booking</Text>
+            <Text style={styles.headerSubtitle}>Select a service, day, and time</Text>
           </View>
           <View style={{ width: 22 }} />
         </View>
@@ -1112,10 +1112,10 @@ export default function BookAppointment() {
         {/* Step 1: Barber Selection */}
         {currentStep === 1 && (
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>בחירת ספר</Text>
+            <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>Select Barber</Text>
             {isLoadingBarbers ? (
               <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>טוען ספרים...</Text>
+                <Text style={styles.loadingText}>Loading barbers...</Text>
               </View>
             ) : (
               <View style={styles.barbersGrid}>
@@ -1145,7 +1145,7 @@ export default function BookAppointment() {
                           <View style={styles.barberOverlay}>
                             <View style={styles.barberNameContainer}>
                               <Text style={styles.barberNameOverlay}>{barber.name}</Text>
-                              <Text style={styles.barberRoleOverlay}>ספר מקצועי</Text>
+                              <Text style={styles.barberRoleOverlay}>Professional Barber</Text>
                             </View>
                           </View>
                         </>
@@ -1157,7 +1157,7 @@ export default function BookAppointment() {
                           <View style={styles.barberOverlay}>
                             <View style={styles.barberNameContainer}>
                               <Text style={styles.barberNameOverlay}>{barber.name}</Text>
-                              <Text style={styles.barberRoleOverlay}>ספר מקצועי</Text>
+                              <Text style={styles.barberRoleOverlay}>Professional Barber</Text>
                             </View>
                           </View>
                         </>
@@ -1184,12 +1184,12 @@ export default function BookAppointment() {
               <TouchableOpacity onPress={() => setCurrentStep(1)} style={styles.backCircle} activeOpacity={0.8}>
                 <Ionicons name="arrow-forward" size={18} color="#000000" />
               </TouchableOpacity>
-              <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>בחירת שירות</Text>
+              <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>Select Service</Text>
               <View style={{ width: 36 }} />
             </View>
             {isLoadingServices ? (
               <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>טוען שירותים...</Text>
+                <Text style={styles.loadingText}>Loading services...</Text>
               </View>
             ) : (
               <View style={styles.servicesGrid}>
@@ -1235,7 +1235,7 @@ export default function BookAppointment() {
                       <View style={styles.infoRow}>
                         <View style={styles.durationChip}>
                           <Ionicons name="time-outline" size={12} color="rgba(0,0,0,0.6)" />
-                          <Text style={styles.durationChipText}>{(service.duration_minutes ?? 60)} דק'</Text>
+                          <Text style={styles.durationChipText}>{(service.duration_minutes ?? 60)} min</Text>
                         </View>
                       </View>
                     </View>
@@ -1257,7 +1257,7 @@ export default function BookAppointment() {
               >
                 <Ionicons name="arrow-forward" size={18} color="#000000" />
               </TouchableOpacity>
-              <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>בחירת יום</Text>
+              <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>Select Day</Text>
               <View style={{ width: 36 }} />
             </View>
             <View style={styles.daysList}>
@@ -1269,7 +1269,7 @@ export default function BookAppointment() {
                 const dsPretty = `${dd}/${mm}/${yy}`;
                 const hasAvail = (dayAvailability[dsIso] ?? 0) > 0;
                 const isToday = new Date().toDateString() === day.fullDate.toDateString();
-                const label = isToday ? 'היום' : day.dayName;
+                const label = isToday ? 'Today' : day.dayName;
                 const isSelected = selectedDay === idx;
                 return (
                   <TouchableOpacity
@@ -1301,9 +1301,9 @@ export default function BookAppointment() {
                 );
               })}
             </View>
-            <Text style={styles.daysLegend}>* ימים ללא תורים פנויים מסומנים באדום</Text>
+            <Text style={styles.daysLegend}>* Days with no available appointments are marked in red</Text>
             <Text style={styles.daysLegendSecondary}>
-              * גם אם אין תורים פנויים – אפשר ללחוץ על היום ולהצטרף לרשימת ההמתנה לאותו היום
+              * Even if there are no available appointments – you can click on the day and join the waitlist for that day
             </Text>
           </View>
         )}
@@ -1319,12 +1319,12 @@ export default function BookAppointment() {
               >
                 <Ionicons name="arrow-forward" size={18} color="#000000" />
               </TouchableOpacity>
-              <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>בחירת שעה</Text>
+              <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>Select Time</Text>
               <View style={{ width: 36 }} />
             </View>
             {isLoadingSlots ? (
               <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>טוען שעות זמינות...</Text>
+                <Text style={styles.loadingText}>Loading available times...</Text>
               </View>
             ) : availableTimeSlots.length > 0 ? (
               <View style={styles.timesList}>
@@ -1345,7 +1345,7 @@ export default function BookAppointment() {
             ) : (
               <View style={styles.noSlotsContainer}>
                 <Ionicons name="time-outline" size={48} color="rgba(0,0,0,0.35)" />
-                <Text style={styles.noSlotsText}>אין שעות פנויות ביום זה</Text>
+                <Text style={styles.noSlotsText}>No available times on this day</Text>
               </View>
             )}
           </View>
@@ -1443,7 +1443,7 @@ export default function BookAppointment() {
                 <View style={styles.modalIconContainer}>
                   <Ionicons name="calendar-outline" size={32} color={Colors.primary} />
                 </View>
-                <Text style={styles.modalTitle}>אישור קביעת תור</Text>
+                <Text style={styles.modalTitle}>Confirm Appointment Booking</Text>
               </View>
               
               <View style={styles.appointmentDetails}>
@@ -1452,7 +1452,7 @@ export default function BookAppointment() {
                     <Ionicons name="cut-outline" size={20} color="#6B7280" />
                   </View>
                   <View style={styles.detailContent}>
-                    <Text style={styles.detailLabel}>שירות</Text>
+                    <Text style={styles.detailLabel}>Service</Text>
                     <Text style={styles.detailValue}>{selectedService?.name}</Text>
                   </View>
                 </View>
@@ -1462,17 +1462,17 @@ export default function BookAppointment() {
                     <Ionicons name="calendar" size={20} color="#6B7280" />
                   </View>
                   <View style={styles.detailContent}>
-                    <Text style={styles.detailLabel}>תאריך</Text>
+                    <Text style={styles.detailLabel}>Date</Text>
                     <Text style={styles.detailValue}>
                       {selectedDay !== null ? (() => {
                         const date = days[selectedDay].fullDate;
                         const dayName = days[selectedDay].dayName;
-                        const formattedDate = date.toLocaleDateString('he-IL', {
+                        const formattedDate = date.toLocaleDateString('en-US', {
                           day: 'numeric',
                           month: 'long',
                           year: 'numeric'
                         });
-                        return `יום ${dayName}, ${formattedDate}`;
+                        return `${dayName}, ${formattedDate}`;
                       })() : ''}
                     </Text>
                   </View>
@@ -1483,7 +1483,7 @@ export default function BookAppointment() {
                     <Ionicons name="time" size={20} color="#6B7280" />
                   </View>
                   <View style={styles.detailContent}>
-                    <Text style={styles.detailLabel}>שעה</Text>
+                    <Text style={styles.detailLabel}>Time</Text>
                     <Text style={styles.detailValue}>{selectedTime}</Text>
                   </View>
                 </View>
@@ -1494,7 +1494,7 @@ export default function BookAppointment() {
                   style={[styles.modalButton, styles.modalButtonCancel]}
                   onPress={() => setShowConfirmModal(false)}
                 >
-                  <Text style={styles.modalButtonCancelText}>ביטול</Text>
+                  <Text style={styles.modalButtonCancelText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.modalButtonConfirm]}
@@ -1503,7 +1503,7 @@ export default function BookAppointment() {
                     proceedWithBooking();
                   }}
                 >
-                  <Text style={styles.modalButtonText}>אישור</Text>
+                  <Text style={styles.modalButtonText}>Confirm</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1521,23 +1521,23 @@ export default function BookAppointment() {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>יש לך תור קיים</Text>
+              <Text style={styles.modalTitle}>Existing Appointment</Text>
               <Text style={styles.modalMessage} numberOfLines={0} allowFontScaling={false}>
-                יש לך תור קיים ליום {existingAppointment?.slot_date ? new Date(existingAppointment.slot_date).toLocaleDateString('he-IL', { 
+                You have an existing appointment on {existingAppointment?.slot_date ? new Date(existingAppointment.slot_date).toLocaleDateString('en-US', { 
                  weekday: 'long', 
                  month: 'long', 
                  day: 'numeric' 
-               }) : 'לא ידוע'} בשעה {existingAppointment?.slot_time || 'לא ידוע'} לשירות {existingAppointment?.service_name || 'לא מוגדר'}.
+               }) : 'Unknown'} at {existingAppointment?.slot_time || 'Unknown'} for {existingAppointment?.service_name || 'Undefined'}.
                 {'\n'}
                 {'\n'}
-                האם אתה רוצה לבטל את התור הקיים ולקבוע תור חדש ליום {selectedDay !== null ? `${days[selectedDay].dayName} ${days[selectedDay].date}` : ''} בשעה {selectedTime}?
+                Do you want to cancel the existing appointment and book a new one on {selectedDay !== null ? `${days[selectedDay].dayName} ${days[selectedDay].date}` : ''} at {selectedTime}?
               </Text>
               <View style={styles.modalButtons}>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.modalButtonCancel]}
                   onPress={() => setShowReplaceModal(false)}
                 >
-                  <Text style={styles.modalButtonCancelText}>ביטול</Text>
+                  <Text style={styles.modalButtonCancelText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.modalButtonReplace]}
@@ -1548,7 +1548,7 @@ export default function BookAppointment() {
                     }
                   }}
                 >
-                  <Text style={styles.modalButtonText}>החלף תור</Text>
+                  <Text style={styles.modalButtonText}>Replace Appointment</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.modalButtonBookAdditional]}
@@ -1557,7 +1557,7 @@ export default function BookAppointment() {
                     proceedWithBooking();
                   }}
                 >
-                  <Text style={styles.modalButtonText}>קבע תור נוסף</Text>
+                  <Text style={styles.modalButtonText}>Book Additional Appointment</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1575,7 +1575,7 @@ export default function BookAppointment() {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>תור נקבע בהצלחה!</Text>
+              <Text style={styles.modalTitle}>Appointment Successfully Booked!</Text>
               <Text style={styles.modalMessage} numberOfLines={0} allowFontScaling={false}>
                 {successMessage}
               </Text>
@@ -1591,7 +1591,7 @@ export default function BookAppointment() {
                     }
                   }}
                 >
-                  <Text style={styles.modalButtonText}>הבנתי</Text>
+                  <Text style={styles.modalButtonText}>Got it</Text>
                 </TouchableOpacity>
               </View>
             </View>

@@ -115,7 +115,7 @@ export default function ClientTabsLayout() {
             case 'gallery':
               iconName = focused ? 'images' : 'images-outline';
               break;
-            case 'appointments':
+            case 'booking':
               iconName = focused ? 'calendar' : 'calendar-outline';
               break;
             case 'profile':
@@ -381,7 +381,7 @@ function getTabLabel(routeName: string): string {
     case 'gallery':
       return 'Gallery';
     case 'appointments':
-      return 'Appointments';
+      return 'Booking';
     case 'profile':
       return 'Profile';
     case 'book-appointment':

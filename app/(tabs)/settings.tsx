@@ -211,11 +211,11 @@ export default function SettingsScreen() {
         tiktok_url: profileTiktok.trim() || null as any,
       });
       if (!updated) {
-        Alert.alert('שגיאה', 'שמירת פרופיל העסק נכשלה');
+        Alert.alert('Error', 'Failed to save business profile');
         return;
       }
       setProfile(updated);
-      Alert.alert('הצלחה', 'פרטי העסק נשמרו בהצלחה');
+      Alert.alert('Success', 'Business details saved successfully');
     } finally {
       setIsSavingProfile(false);
     }
@@ -249,7 +249,7 @@ export default function SettingsScreen() {
         facebook_url: (profileFacebook || '').trim() || null as any,
       });
       if (!updated) {
-        Alert.alert('שגיאה', 'שמירת הכתובת נכשלה');
+        Alert.alert('Error', 'Failed to save address');
         return;
       }
       setProfile(updated);
@@ -269,7 +269,7 @@ export default function SettingsScreen() {
         facebook_url: (profileFacebook || '').trim() || null as any,
       });
       if (!updated) {
-        Alert.alert('שגיאה', 'שמירת קישור האינסטגרם נכשלה');
+        Alert.alert('Error', 'Failed to save Instagram link');
         return;
       }
       setProfile(updated);
@@ -290,7 +290,7 @@ export default function SettingsScreen() {
         tiktok_url: (profileTiktok || '').trim() || null as any,
       });
       if (!updated) {
-        Alert.alert('שגיאה', 'שמירת קישור הפייסבוק נכשלה');
+        Alert.alert('Error', 'Failed to save Facebook link');
         return;
       }
       setProfile(updated);
@@ -311,7 +311,7 @@ export default function SettingsScreen() {
         tiktok_url: tiktokDraft.trim() || null as any,
       });
       if (!updated) {
-        Alert.alert('שגיאה', 'שמירת קישור הטיקטוק נכשלה');
+        Alert.alert('Error', 'Failed to save TikTok link');
         return;
       }
       setProfile(updated);
@@ -424,7 +424,7 @@ export default function SettingsScreen() {
 
   // Add Service modal state
   const [showAddServiceModal, setShowAddServiceModal] = useState(false);
-  const [addSvcName, setAddSvcName] = useState('שירות חדש');
+  const [addSvcName, setAddSvcName] = useState('');
   const [addSvcPrice, setAddSvcPrice] = useState<string>('0');
   // removed per-service duration field
   const [addSvcDuration, setAddSvcDuration] = useState<string>('60');
@@ -514,7 +514,7 @@ export default function SettingsScreen() {
       if (!user?.id) return;
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('הרשאה נחוצה', 'יש לאשר גישה לגלריה כדי לבחור תמונה');
+        Alert.alert('Permission required', 'Please allow gallery access to pick an image');
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -533,18 +533,18 @@ export default function SettingsScreen() {
         fileName: a.fileName ?? null,
       });
       if (!uploadedUrl) {
-        Alert.alert('שגיאה', 'העלאת התמונה נכשלה');
+        Alert.alert('Error', 'Image upload failed');
         return;
       }
       const updated = await usersApi.updateUser(user.id as any, { image_url: uploadedUrl } as any);
       if (!updated) {
-        Alert.alert('שגיאה', 'שמירת תמונת הפרופיל נכשלה');
+        Alert.alert('Error', 'Failed to save profile image');
         return;
       }
       updateUserProfile({ image_url: uploadedUrl } as any);
     } catch (e) {
       console.error('pick/upload admin avatar failed', e);
-      Alert.alert('שגיאה', 'העלאת התמונה נכשלה');
+      Alert.alert('Error', 'Image upload failed');
     } finally {
       setIsUploadingAdminAvatar(false);
     }
@@ -583,7 +583,7 @@ export default function SettingsScreen() {
   const handlePickServiceImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('הרשאה נחוצה', 'יש לאשר גישה לגלריה כדי לבחור תמונה');
+      Alert.alert('Permission required', 'Please allow gallery access to pick an image');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -606,7 +606,7 @@ export default function SettingsScreen() {
   const handlePickServiceImageForEdit = async (serviceId: string) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('הרשאה נחוצה', 'יש לאשר גישה לגלריה כדי לבחור תמונה');
+      Alert.alert('Permission required', 'Please allow gallery access to pick an image');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -626,7 +626,7 @@ export default function SettingsScreen() {
           fileName: a.fileName ?? null,
         });
         if (!uploadedUrl) {
-          Alert.alert('שגיאה', 'העלאת התמונה נכשלה');
+          Alert.alert('Error', 'Image upload failed');
           return;
         }
         updateLocalServiceField(serviceId, 'image_url', uploadedUrl as any);
@@ -650,7 +650,7 @@ export default function SettingsScreen() {
 
   const handleCreateService = async () => {
     if (!addSvcName.trim()) {
-      Alert.alert('שגיאה', 'אנא מלא שם לשירות');
+      Alert.alert('Error', 'Please enter a service name');
       return;
     }
     setAddSvcIsSaving(true);
@@ -661,7 +661,7 @@ export default function SettingsScreen() {
         imageUrl = await uploadServiceImage(addSvcImage);
         setAddSvcUploading(false);
         if (!imageUrl) {
-          Alert.alert('שגיאה', 'העלאת התמונה נכשלה');
+          Alert.alert('Error', 'Image upload failed');
           return;
         }
       }
@@ -681,20 +681,20 @@ export default function SettingsScreen() {
         setAddSvcDuration('60');
         setAddSvcImage(null);
       } else {
-        Alert.alert('שגיאה', 'יצירת השירות נכשלה');
+        Alert.alert('Error', 'Failed to create service');
       }
     } catch (e) {
-      Alert.alert('שגיאה', 'יצירת השירות נכשלה');
+      Alert.alert('Error', 'Failed to create service');
     } finally {
       setAddSvcIsSaving(false);
     }
   };
 
   const handleDeleteService = (id: string) => {
-    Alert.alert('מחיקת שירות', 'האם אתה בטוח שברצונך למחוק את השירות?', [
-      { text: 'ביטול', style: 'cancel' },
+    Alert.alert('Delete service', 'Are you sure you want to delete this service?', [
+      { text: 'Cancel', style: 'cancel' },
       {
-        text: 'מחק',
+        text: 'Delete', 
         style: 'destructive',
         onPress: async () => {
           const ok = await deleteService(id);
@@ -702,7 +702,7 @@ export default function SettingsScreen() {
             setEditableServices(prev => prev.filter(s => s.id !== id));
             if (expandedServiceId === id) setExpandedServiceId(null);
           } else {
-            Alert.alert('שגיאה', 'מחיקת השירות נכשלה');
+            Alert.alert('Error', 'Failed to delete service');
           }
         }
       }
@@ -720,13 +720,13 @@ export default function SettingsScreen() {
         is_active: service.is_active,
       });
       if (!updated) {
-        Alert.alert('שגיאה', 'שמירת השירות נכשלה');
+        Alert.alert('Error', 'Failed to save service');
         return;
       }
       setEditableServices(prev => prev.map(s => (s.id === service.id ? updated : s)));
-      Alert.alert('הצלחה', 'השירות נשמר בהצלחה');
+      Alert.alert('Success', 'Service saved successfully');
     } catch (e) {
-      Alert.alert('שגיאה', 'שמירת השירות נכשלה');
+      Alert.alert('Error', 'Failed to save service');
     } finally {
       setSavingServiceId(null);
     }
@@ -742,10 +742,10 @@ export default function SettingsScreen() {
       if (supported) {
         await Linking.openURL(url);
       } else {
-        Alert.alert('שגיאה', 'לא ניתן לבצע שיחה מהמכשיר הזה');
+        Alert.alert('Error', 'Cannot place a call on this device');
       }
     } catch {
-      Alert.alert('שגיאה', 'לא ניתן לבצע שיחה מהמכשיר הזה');
+      Alert.alert('Error', 'Cannot place a call on this device');
     }
   };
 
@@ -776,7 +776,7 @@ export default function SettingsScreen() {
   const [repeatWeeks, setRepeatWeeks] = useState<number>(1);
   const [showRepeatDropdown, setShowRepeatDropdown] = useState(false);
 
-  const dayNames = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
+  const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const timeOptions = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2,'0')}:00`);
 
   // Compute next date string (YYYY-MM-DD, local) for a given dayOfWeek (0..6) from today
@@ -1037,13 +1037,13 @@ export default function SettingsScreen() {
 
   const handleSubmitRecurring = async () => {
     if (!selectedClient || selectedDayOfWeek === null || !selectedTime || !selectedService) {
-      Alert.alert('שגיאה', 'אנא מלא את כל השדות: לקוח, יום, שעה ושירות');
+      Alert.alert('Error', 'Please fill all fields: client, day, time, and service');
       return;
     }
     // Final guard before creating: verify time is still available for the nearest occurrence
     const stillAvailable = await isTimeAvailable(selectedDayOfWeek as number, selectedTime as string);
     if (!stillAvailable) {
-      Alert.alert('תור נתפס', 'השעה שבחרת כבר נתפסה לשבוע הקרוב. אנא בחר שעה אחרת.');
+      Alert.alert('Slot taken', 'The selected time is already booked this week. Please choose another time.');
       return;
     }
     setIsSubmittingRecurring(true);
@@ -1062,13 +1062,13 @@ export default function SettingsScreen() {
       }
       const created = await recurringAppointmentsApi.create(recurringData);
       if (created) {
-        Alert.alert('הצלחה', 'התור הקבוע נוצר בהצלחה. לאחר יצירת התורים השבועית, הסלוט יישמר ללקוח.');
+        Alert.alert('Success', 'Recurring appointment created. The slot will be kept after weekly generation.');
         setShowRecurringModal(false);
       } else {
-        Alert.alert('שגיאה', 'יצירת התור הקבוע נכשלה');
+        Alert.alert('Error', 'Failed to create recurring appointment');
       }
     } catch (e) {
-      Alert.alert('שגיאה', 'יצירת התור הקבוע נכשלה');
+      Alert.alert('Error', 'Failed to create recurring appointment');
     } finally {
       setIsSubmittingRecurring(false);
     }
@@ -1091,36 +1091,89 @@ export default function SettingsScreen() {
           onPress={onPress}
           disabled={!onPress}
         >
-          {/* החלפת מיקומים: חץ משמאל, אייקון מימין */}
+          {/* LTR: icon left, text center-left, chevron right */}
           {!rightComponent && onPress ? (
             <>
-              <View style={styles.settingChevron}><ChevronLeft size={20} color={Colors.subtext} /></View>
+              <View style={styles.settingIcon}>{icon}</View>
               <View style={styles.settingContent}>
                 <Text style={styles.settingTitle}>{title}</Text>
                 {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
               </View>
-              <View style={styles.settingIcon}>{icon}</View>
+              <View style={styles.settingChevron}><ChevronLeft size={20} color={Colors.subtext} /></View>
             </>
           ) : (
             <>
               {swapIconAndRight ? (
                 <>
-                  {/* החלפת מיקומים: rightComponent משמאל, אייקון מימין */}
-                  <View>{rightComponent}</View>
+                  <View style={styles.settingIcon}>{icon}</View>
                   <View style={styles.settingContent}>
                     <Text style={styles.settingTitle}>{title}</Text>
                     {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
                   </View>
-                  <View style={styles.settingIcon}>{icon}</View>
+                  <View>{rightComponent}</View>
                 </>
               ) : (
                 <>
-                  <View>{rightComponent}</View>
+                  <View style={styles.settingIcon}>{icon}</View>
                   <View style={styles.settingContent}>
                     <Text style={styles.settingTitle}>{title}</Text>
                     {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
                   </View>
-                  <View style={styles.settingIcon}>{icon}</View>
+                  <View>{rightComponent}</View>
+                </>
+              )}
+            </>
+          )}
+        </TouchableOpacity>
+        <View style={styles.settingDivider} />
+      </View>
+    );
+  };
+
+  const renderSettingItemLTR = (
+    icon: React.ReactNode,
+    title: string,
+    subtitle?: string,
+    rightComponent?: React.ReactNode,
+    onPress?: () => void,
+    swapIconAndRight?: boolean
+  ) => {
+    return (
+      <View>
+        <TouchableOpacity 
+          style={styles.settingItemLTR}
+          onPress={onPress}
+          disabled={!onPress}
+        >
+          {/* Perfect LTR: icon left, text left, chevron right */}
+          {!rightComponent && onPress ? (
+            <>
+              <View style={styles.settingIconLTR}>{icon}</View>
+              <View style={styles.settingContentLTR}>
+                <Text style={styles.settingTitleLTR}>{title}</Text>
+                {subtitle && <Text style={styles.settingSubtitleLTR}>{subtitle}</Text>}
+              </View>
+              <View style={styles.settingChevronLTR}><ChevronLeft size={20} color={Colors.subtext} /></View>
+            </>
+          ) : (
+            <>
+              {swapIconAndRight ? (
+                <>
+                  <View style={styles.settingIconLTR}>{icon}</View>
+                  <View style={styles.settingContentLTR}>
+                    <Text style={styles.settingTitleLTR}>{title}</Text>
+                    {subtitle && <Text style={styles.settingSubtitleLTR}>{subtitle}</Text>}
+                  </View>
+                  <View>{rightComponent}</View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.settingIconLTR}>{icon}</View>
+                  <View style={styles.settingContentLTR}>
+                    <Text style={styles.settingTitleLTR}>{title}</Text>
+                    {subtitle && <Text style={styles.settingSubtitleLTR}>{subtitle}</Text>}
+                  </View>
+                  <View>{rightComponent}</View>
                 </>
               )}
             </>
@@ -1181,13 +1234,13 @@ export default function SettingsScreen() {
       <View style={styles.contentWrapper}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
         
-        <Text style={styles.sectionTitleNew}>התראות והודעות</Text>
+        <Text style={styles.sectionTitleNew}>Notifications & messages</Text>
         
         <View style={[styles.cardNew, shadowStyle]}>
           {renderSettingItem(
             <Bell size={20} color={Colors.primary} />,
-            'התראות',
-            'קבלת התראות על תורים ועדכונים',
+            'Notifications',
+            'Receive notifications about appointments and updates',
             <AppSwitch value={notificationsEnabled} onValueChange={setNotificationsEnabled} />,
             undefined,
             true
@@ -1195,8 +1248,8 @@ export default function SettingsScreen() {
           
           {renderSettingItem(
             <Send size={20} color={Colors.primary} />,
-            'שליחת הודעה לכל הלקוחות',
-            'שלח התראה מותאמת אישית לכל הלקוחות',
+            'Send message to all clients',
+            'Send a custom message to all clients',
             undefined,
             () => setShowBroadcast(true)
           )}
@@ -1204,51 +1257,51 @@ export default function SettingsScreen() {
 
         </View>
         
-        <Text style={styles.sectionTitleNew}>שירותים</Text>
+        <Text style={styles.sectionTitleNew}>Services</Text>
         <View style={[styles.cardNew, shadowStyle]}>
           {renderSettingItem(
             <Pencil size={20} color={Colors.primary} />,
-            'עריכת שירותים',
-            'עדכון מחירים ומשך',
+            'Edit services',
+            'Update prices and durations',
             undefined,
             openServicesModal
           )}
         </View>
 
-        <Text style={styles.sectionTitleNew}>פרטי העסק</Text>
+        <Text style={styles.sectionTitleNew}>Business details</Text>
         <View style={[styles.cardNew, shadowStyle]}>
-          {renderSettingItem(
+          {renderSettingItemLTR(
             <Pencil size={20} color={Colors.primary} />, 
-            'שם העסק',
-            profileDisplayName || 'הוסף שם עסק',
+            'Business name',
+            profileDisplayName || 'Add business name',
             undefined,
             () => { setDisplayNameDraft(profileDisplayName || ''); setShowEditDisplayNameModal(true); }
           )}
-          {renderSettingItem(
+          {renderSettingItemLTR(
             <MapPin size={20} color="#FF3B30" />, 
-            'כתובת העסק',
-            profileAddress || 'הוסף כתובת',
+            'Business address',
+            profileAddress || 'Add address',
             undefined,
             openEditAddress
           )}
-          {renderSettingItem(
+          {renderSettingItemLTR(
             <Instagram size={20} color="#E4405F" />, 
             'Instagram',
-            profileInstagram ? undefined : 'הוסף קישור אינסטגרם',
+            profileInstagram ? undefined : 'Add Instagram link',
             undefined,
             openEditInstagram
           )}
-          {renderSettingItem(
+          {renderSettingItemLTR(
             <Facebook size={20} color="#1877F2" />, 
             'Facebook',
-            profileFacebook ? undefined : 'הוסף קישור פייסבוק',
+            profileFacebook ? undefined : 'Add Facebook link',
             undefined,
             openEditFacebook
           )}
-          {renderSettingItem(
+          {renderSettingItemLTR(
             <Ionicons name="logo-tiktok" size={20} color="#000000" />, 
             'TikTok',
-            profileTiktok ? undefined : 'הוסף קישור טיקטוק',
+            profileTiktok ? undefined : 'Add TikTok link',
             undefined,
             openEditTiktok
           )}
@@ -1256,30 +1309,30 @@ export default function SettingsScreen() {
 
         {isAdmin && (
           <>
-            <Text style={styles.sectionTitleNew}>ניהול תורים</Text>
+            <Text style={styles.sectionTitleNew}>Appointments management</Text>
             <View style={[styles.cardNew, shadowStyle]}>
               {renderSettingItem(
                 <Calendar size={20} color={Colors.primary} />,
-                'הוספת תור ללקוח',
-                'קביעת תור חדש עבור לקוח',
+                'Add appointment for a client',
+                'Create a new appointment for a client',
                 undefined,
                 () => setShowAddAppointmentModal(true)
               )}
             </View>
 
-            <Text style={styles.sectionTitleNew}>תורים קבועים</Text>
+            <Text style={styles.sectionTitleNew}>Recurring appointments</Text>
             <View style={[styles.cardNew, shadowStyle]}>
               {renderSettingItem(
                 <Pencil size={20} color={Colors.primary} />, // reuse icon
-                'הוספת תור קבוע',
-                'בחר לקוח, יום ושעה לקביעת תור קבוע',
+                'Add recurring appointment',
+                'Choose a client, day, and time for a recurring appointment',
                 undefined,
                 () => setShowRecurringModal(true)
               )}
               {renderSettingItem(
                 <Pencil size={20} color={Colors.primary} />, // reuse icon
-                'ניהול תורים קבועים',
-                'צפה, ערוך ומחק תורים קבועים קיימים',
+                'Manage recurring appointments',
+                'View, edit, and delete existing recurring appointments',
                 undefined,
                 async () => {
                   setShowManageRecurringModal(true);
@@ -1298,13 +1351,13 @@ export default function SettingsScreen() {
         
         
         
-        <Text style={styles.sectionTitleNew}>אבטחה ותמיכה</Text>
+        <Text style={styles.sectionTitleNew}>Security & support</Text>
         
         <View style={[styles.cardNew, shadowStyle]}>
           {renderSettingItem(
             <HelpCircle size={20} color={Colors.primary} />,
-            'עזרה ותמיכה',
-            'שאלות נפוצות ויצירת קשר',
+            'Support and help',
+            'Common questions and contact',
             undefined,
             () => setShowSupportModal(true)
           )}
@@ -1312,15 +1365,15 @@ export default function SettingsScreen() {
         
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <LogOut size={20} color={Colors.white} />
-          <Text style={styles.logoutText}>התנתקות</Text>
+          <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
         
-        <Text style={styles.versionText}>גרסה 1.0.0</Text>
+        <Text style={styles.versionText}>Version 1.0.0</Text>
         </ScrollView>
       </View>
 
       {/* Admin broadcast popup (consistent with Home screen) */}
-      <AdminBroadcastComposer open={showBroadcast} onOpenChange={setShowBroadcast} renderTrigger={false} />
+      <AdminBroadcastComposer open={showBroadcast} onOpenChange={setShowBroadcast} renderTrigger={false} language="en" />
 
       {/* Support Modal */}
       <Modal
@@ -1335,22 +1388,22 @@ export default function SettingsScreen() {
               style={styles.modalCloseButton}
               onPress={() => setShowSupportModal(false)}
             >
-              <Text style={styles.modalCloseText}>סגור</Text>
+              <Text style={styles.modalCloseText}>Close</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>עזרה ותמיכה</Text>
+            <Text style={styles.modalTitle}>Support and help</Text>
             <View style={{ width: 44 }} />
           </View>
           <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
             <View style={styles.previewCard}>
               <Text style={styles.previewNotificationTitle}>
-                לכל עזרה ותמיכה יש ליצור קשר טלפוני עם חברת BCODE
+                For any support, please contact BCODE's support team
               </Text>
               <Text style={styles.previewNotificationContent}>
-                צוות התמיכה זמין עבורכם. לחצו על הכפתור מטה לחיוג מיידי.
+                Our support team is available to help you. Please press the button below to contact us immediately.
               </Text>
               <View style={{ marginTop: 16, alignItems: 'center' }}>
                 <TouchableOpacity style={styles.modalSendButton} onPress={handleCallSupport}>
-                  <Text style={styles.modalSendText}>התקשר עכשיו </Text>
+                  <Text style={styles.modalSendText}>Contact us now </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1369,9 +1422,9 @@ export default function SettingsScreen() {
           <View style={styles.smallModalCard}>
             <View style={styles.modalHeader}>
               <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowEditDisplayNameModal(false)}>
-                <Text style={styles.modalCloseText}>ביטול</Text>
+                <Text style={styles.modalCloseText}>Cancel</Text>
               </TouchableOpacity>
-              <Text style={styles.modalTitle}>שם העסק</Text>
+              <Text style={styles.modalTitleLTR}>Business name</Text>
               <TouchableOpacity style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]} onPress={async () => {
                 setIsSavingProfile(true);
                 try {
@@ -1386,23 +1439,23 @@ export default function SettingsScreen() {
                     setProfileDisplayName(updated.display_name || '');
                     setShowEditDisplayNameModal(false);
                   } else {
-                    Alert.alert('שגיאה', 'שמירת שם העסק נכשלה');
+                    Alert.alert('Error', 'Failed to save business name');
                   }
                 } finally {
                   setIsSavingProfile(false);
                 }
               }} disabled={isSavingProfile}>
-                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'שומר...' : 'שמור'}</Text>
+                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'Saving...' : 'Save'}</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>שם העסק</Text>
+                <Text style={styles.inputLabelLTR}>Business name</Text>
                 <TextInput
                   style={styles.textInput}
                   value={displayNameDraft}
                   onChangeText={setDisplayNameDraft}
-                  placeholder="לדוגמה: הסטודיו של הודיה"
+                  placeholder="For example: The Studio of Hadas"
                   placeholderTextColor={Colors.subtext}
                   textAlign="right"
                 />
@@ -1422,14 +1475,14 @@ export default function SettingsScreen() {
         <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#F8F9FA' }]}>
           <View style={styles.modalHeader}>
             <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowEditAdminModal(false)}>
-              <Text style={styles.modalCloseText}>ביטול</Text>
+              <Text style={styles.modalCloseText}>Cancel</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>עריכת מנהל</Text>
+            <Text style={styles.modalTitle}>Edit admin</Text>
             <TouchableOpacity
               style={[styles.modalSendButton, (isSavingAdmin) && styles.modalSendButtonDisabled]}
               onPress={async () => {
                 if (!user?.id) { setShowEditAdminModal(false); return; }
-                if (!adminNameDraft.trim() || !adminPhoneDraft.trim()) { Alert.alert('שגיאה', 'אנא מלא שם ומספר טלפון'); return; }
+                if (!adminNameDraft.trim() || !adminPhoneDraft.trim()) { Alert.alert('Error', 'Please fill in name and phone number'); return; }
                 try {
                   setIsSavingAdmin(true);
                   const updated = await usersApi.updateUser(
@@ -1445,7 +1498,7 @@ export default function SettingsScreen() {
                     updateUserProfile({ name: updated.name as any, phone: (updated as any).phone, email: (updated as any).email } as any);
                     setShowEditAdminModal(false);
                   } else {
-                    Alert.alert('שגיאה', 'שמירת פרטי המנהל נכשלה');
+                    Alert.alert('Error', 'Failed to save admin details');
                   }
                 } finally {
                   setIsSavingAdmin(false);
@@ -1453,7 +1506,7 @@ export default function SettingsScreen() {
               }}
               disabled={isSavingAdmin}
             >
-              <Text style={[styles.modalSendText, isSavingAdmin && styles.modalSendTextDisabled]}>{isSavingAdmin ? 'שומר...' : 'שמור'}</Text>
+              <Text style={[styles.modalSendText, isSavingAdmin && styles.modalSendTextDisabled]}>{isSavingAdmin ? 'Saving...' : 'Save'}</Text>
             </TouchableOpacity>
           </View>
           <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
@@ -1465,7 +1518,7 @@ export default function SettingsScreen() {
                   end={{ x: 1, y: 1 }}
                   style={styles.modalAvatarRing}
                 >
-                  <TouchableOpacity style={styles.modalAvatar} onPress={handlePickAdminAvatar} activeOpacity={0.9} accessibilityRole="button" accessibilityLabel="שנה תמונת מנהלת">
+                  <TouchableOpacity style={styles.modalAvatar} onPress={handlePickAdminAvatar} activeOpacity={0.9} accessibilityRole="button" accessibilityLabel="Change admin profile picture">
                     <Image source={user?.image_url ? { uri: (user as any).image_url } : require('@/assets/images/logo-03.png')} style={styles.modalAvatarImage} resizeMode="cover" />
                     {isUploadingAdminAvatar && (
                       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 36 }}>
@@ -1475,32 +1528,32 @@ export default function SettingsScreen() {
                   </TouchableOpacity>
                 </LinearGradient>
               </View>
-              <Text style={styles.modalAdminName}>{adminNameDraft || user?.name || 'מנהל'}</Text>
+              <Text style={styles.modalAdminName}>{adminNameDraft || user?.name || 'Admin'}</Text>
               <Text style={styles.modalAdminMeta}>{adminPhoneDraft || (user as any)?.phone || ''}</Text>
               {(adminEmailDraft || (user as any)?.email) ? (
                 <Text style={styles.modalAdminMeta}>{adminEmailDraft || (user as any)?.email}</Text>
               ) : null}
               <View style={{ marginTop: 8 }}>
                 <TouchableOpacity onPress={handlePickAdminAvatar} style={[styles.pickButton, { alignSelf: 'center', backgroundColor: '#F2F2F7', borderColor: '#E5E5EA' }]} activeOpacity={0.85} disabled={isUploadingAdminAvatar}>
-                  <Text style={styles.pickButtonText}>{isUploadingAdminAvatar ? 'מעלה...' : 'החלף תמונה'}</Text>
+                  <Text style={styles.pickButtonText}>{isUploadingAdminAvatar ? 'Uploading...' : 'Change profile picture'}</Text>
                 </TouchableOpacity>
               </View>
             </View>
 
             <View style={styles.iosCard}>
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>שם המנהל</Text>
+                <Text style={styles.inputLabel}>Admin name</Text>
                 <TextInput
                   style={styles.textInput}
                   value={adminNameDraft}
                   onChangeText={setAdminNameDraft}
-                  placeholder="שם מלא"
+                  placeholder="Full name"
                   placeholderTextColor={Colors.subtext}
                   textAlign="right"
                 />
               </View>
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>מספר טלפון</Text>
+                <Text style={styles.inputLabel}>Phone number</Text>
                 <TextInput
                   style={styles.textInput}
                   value={adminPhoneDraft}
@@ -1512,7 +1565,7 @@ export default function SettingsScreen() {
                 />
               </View>
               <View style={[styles.inputContainer, { marginBottom: 0 }]}>
-                <Text style={styles.inputLabel}>כתובת מייל</Text>
+                <Text style={styles.inputLabel}>Email</Text>
                 <TextInput
                   style={styles.textInput}
                   value={adminEmailDraft}
@@ -1541,21 +1594,21 @@ export default function SettingsScreen() {
           <View style={styles.smallModalCard}>
             <View style={styles.modalHeader}>
               <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowEditAddressModal(false)}>
-                <Text style={styles.modalCloseText}>ביטול</Text>
+                <Text style={styles.modalCloseText}>Cancel</Text>
               </TouchableOpacity>
-              <Text style={styles.modalTitle}>עריכת כתובת</Text>
+              <Text style={styles.modalTitleLTR}>Edit address</Text>
               <TouchableOpacity style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]} onPress={saveAddress} disabled={isSavingProfile}>
-                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'שומר...' : 'שמור'}</Text>
+                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'Saving...' : 'Save'}</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>כתובת</Text>
+                <Text style={styles.inputLabelLTR}>Address</Text>
                 <TextInput
                   style={styles.textInput}
                   value={addressDraft}
                   onChangeText={setAddressDraft}
-                  placeholder="כתובת העסק"
+                  placeholder="Business address"
                   placeholderTextColor={Colors.subtext}
                   textAlign="right"
                 />
@@ -1576,16 +1629,16 @@ export default function SettingsScreen() {
           <View style={styles.smallModalCard}>
             <View style={styles.modalHeader}>
               <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowEditInstagramModal(false)}>
-                <Text style={styles.modalCloseText}>ביטול</Text>
+                <Text style={styles.modalCloseText}>Cancel</Text>
               </TouchableOpacity>
-              <Text style={styles.modalTitle}>קישור אינסטגרם</Text>
+              <Text style={styles.modalTitleLTR}>Instagram URL</Text>
               <TouchableOpacity style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]} onPress={saveInstagram} disabled={isSavingProfile}>
-                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'שומר...' : 'שמור'}</Text>
+                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'Saving...' : 'Save'}</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Instagram URL</Text>
+                <Text style={styles.inputLabelLTR}>Instagram URL</Text>
                 <TextInput
                   style={styles.textInput}
                   value={instagramDraft}
@@ -1613,16 +1666,16 @@ export default function SettingsScreen() {
           <View style={styles.smallModalCard}>
             <View style={styles.modalHeader}>
               <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowEditFacebookModal(false)}>
-                <Text style={styles.modalCloseText}>ביטול</Text>
+                <Text style={styles.modalCloseText}>Cancel</Text>
               </TouchableOpacity>
-              <Text style={styles.modalTitle}>קישור פייסבוק</Text>
+              <Text style={styles.modalTitleLTR}>Facebook URL</Text>
               <TouchableOpacity style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]} onPress={saveFacebook} disabled={isSavingProfile}>
-                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'שומר...' : 'שמור'}</Text>
+                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'Saving...' : 'Save'}</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Facebook URL</Text>
+                <Text style={styles.inputLabelLTR}>Facebook URL</Text>
                 <TextInput
                   style={styles.textInput}
                   value={facebookDraft}
@@ -1650,16 +1703,16 @@ export default function SettingsScreen() {
           <View style={styles.smallModalCard}>
             <View style={styles.modalHeader}>
               <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowEditTiktokModal(false)}>
-                <Text style={styles.modalCloseText}>ביטול</Text>
+                <Text style={styles.modalCloseText}>Cancel</Text>
               </TouchableOpacity>
-              <Text style={styles.modalTitle}>קישור טיקטוק</Text>
+              <Text style={styles.modalTitleLTR}>TikTok URL</Text>
               <TouchableOpacity style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]} onPress={saveTiktok} disabled={isSavingProfile}>
-                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'שומר...' : 'שמור'}</Text>
+                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'Saving...' : 'Save'}</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>TikTok URL</Text>
+                <Text style={styles.inputLabelLTR}>TikTok URL</Text>
                 <TextInput
                   style={styles.textInput}
                   value={tiktokDraft}
@@ -1690,9 +1743,9 @@ export default function SettingsScreen() {
               style={styles.modalCloseButton}
               onPress={() => setShowManageRecurringModal(false)}
             >
-              <Text style={styles.modalCloseText}>סגור</Text>
+              <Text style={styles.modalCloseText}>Close</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>ניהול תורים קבועים</Text>
+            <Text style={styles.modalTitle}>Manage recurring appointments</Text>
             <View style={{ width: 44 }} />
           </View>
 
@@ -1701,36 +1754,36 @@ export default function SettingsScreen() {
               {isLoadingRecurring ? (
                 <View style={{ paddingVertical: 24, alignItems: 'center' }}>
                   <ActivityIndicator size="large" color={Colors.primary} />
-                  <Text style={{ marginTop: 12, color: Colors.subtext }}>טוען...</Text>
+                  <Text style={{ marginTop: 12, color: Colors.subtext }}>Loading...</Text>
                 </View>
               ) : (
                 <View>
                   {recurringList.length === 0 ? (
-                    <Text style={{ textAlign: 'center', color: Colors.subtext }}>אין תורים קבועים</Text>
+                    <Text style={{ textAlign: 'center', color: Colors.subtext }}>No recurring appointments</Text>
                   ) : (
                     recurringList.map((item, idx) => (
                       <View key={item.id}>
                         <View style={styles.manageItemRow}>
-                          <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <View style={styles.itemActions}>
+                            <TouchableOpacity
+                              style={styles.iconActionButton}
+                              onPress={async () => {
+                                const ok = await recurringAppointmentsApi.delete(item.id);
+                                if (ok) setRecurringList((prev) => prev.filter((x) => x.id !== item.id));
+                                else Alert.alert('Error', 'Failed to delete appointment');
+                              }}
+                              accessibilityRole="button"
+                              accessibilityLabel="Delete"
+                            >
+                              <Trash2 size={18} color="#FF3B30" />
+                            </TouchableOpacity>
+                          </View>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                             <View style={{ alignItems: 'flex-end', flex: 1 }}>
                               <Text style={styles.previewNotificationTitle}>{item.client_name}</Text>
                               <Text style={styles.previewNotificationContent}>{item.client_phone}</Text>
                               <Text style={styles.previewNotificationContent}>{item.service_name}</Text>
                               <Text style={styles.previewNotificationContent}>{['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'][item.day_of_week]} · {String(item.slot_time).slice(0,5)}</Text>
-                            </View>
-                            <View style={styles.itemActions}>
-                              <TouchableOpacity
-                                style={styles.iconActionButton}
-                                onPress={async () => {
-                                  const ok = await recurringAppointmentsApi.delete(item.id);
-                                  if (ok) setRecurringList((prev) => prev.filter((x) => x.id !== item.id));
-                                  else Alert.alert('שגיאה', 'מחיקה נכשלה');
-                                }}
-                                accessibilityRole="button"
-                                accessibilityLabel="מחק"
-                              >
-                                <Trash2 size={18} color="#FF3B30" />
-                              </TouchableOpacity>
                             </View>
                           </View>
                         </View>
@@ -1757,30 +1810,35 @@ export default function SettingsScreen() {
               style={styles.modalCloseButton}
               onPress={() => setShowRecurringModal(false)}
             >
-              <Text style={styles.modalCloseText}>ביטול</Text>
+              <Text style={styles.modalCloseText}>Cancel</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>הוספת תור קבוע</Text>
+            <Text style={styles.modalTitle}>Add recurring appointment</Text>
             <TouchableOpacity 
               style={[styles.modalSendButton, isSubmittingRecurring && styles.modalSendButtonDisabled]}
               onPress={handleSubmitRecurring}
               disabled={isSubmittingRecurring}
             >
               <Text style={[styles.modalSendText, isSubmittingRecurring && styles.modalSendTextDisabled]}>
-                {isSubmittingRecurring ? 'שומר...' : 'שמור'}
+                {isSubmittingRecurring ? 'Saving...' : 'Save'}
               </Text>
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+          <ScrollView 
+            style={styles.modalContent} 
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled={true}
+          >
             <View style={styles.recurringCard}>
             {/* Client select as dropdown with inline search */}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>לקוח</Text>
+              <Text style={[styles.inputLabel, { textAlign: 'left' }]}>Client</Text>
               {!selectedClient ? (
                 <>
                   <Pressable style={[styles.dropdownContainer, styles.grayField]} onPress={() => setShowClientDropdown(!showClientDropdown)}>
                     <View style={styles.dropdownHeader}>
-                      <Text style={[styles.dropdownText, styles.dropdownPlaceholder]}>בחר לקוח...</Text>
+                      <Text style={[styles.dropdownText, styles.dropdownPlaceholder, { textAlign: 'left' }]}>Select client...</Text>
                       {showClientDropdown ? <ChevronUp size={20} color={Colors.subtext} /> : <ChevronDown size={20} color={Colors.subtext} />}
                     </View>
                   </Pressable>
@@ -1791,7 +1849,7 @@ export default function SettingsScreen() {
                           style={[styles.textInput, { borderWidth: 1, borderColor: '#E5E5EA', backgroundColor: '#F2F2F7' }]}
                           value={clientSearch}
                           onChangeText={searchClients}
-                          placeholder="חיפוש לפי שם או טלפון..."
+                          placeholder="Search by name or phone..."
                           placeholderTextColor={Colors.subtext}
                           textAlign="right"
                         />
@@ -1804,14 +1862,14 @@ export default function SettingsScreen() {
                             onPress={() => { setSelectedClient(c); setShowClientDropdown(false); }}
                           >
                             <View style={styles.dropdownOptionContent}>
-                              <Text style={styles.dropdownOptionTitle}>{c.name || 'לקוח'}</Text>
+                              <Text style={styles.dropdownOptionTitle}>{c.name || 'Client'}</Text>
                               <Text style={styles.dropdownOptionDescription}>{c.phone}</Text>
                             </View>
                           </Pressable>
                         ))}
                         {clientResults.length === 0 && (
                           <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-                            <Text style={{ textAlign: 'center', color: Colors.subtext }}>אין תוצאות</Text>
+                            <Text style={{ textAlign: 'center', color: Colors.subtext }}>No results</Text>
                           </View>
                         )}
                       </ScrollView>
@@ -1820,13 +1878,13 @@ export default function SettingsScreen() {
                 </>
               ) : (
                 <View style={[styles.previewCard, { marginTop: 6 }]}>
-                  <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                     <View style={{ alignItems: 'flex-end' }}>
                       <Text style={styles.previewNotificationTitle}>{selectedClient.name}</Text>
                       <Text style={styles.previewNotificationContent}>{selectedClient.phone}</Text>
                     </View>
                     <TouchableOpacity onPress={() => { setSelectedClient(null); setShowClientDropdown(false); }}>
-                      <Text style={{ color: '#FF3B30', fontWeight: '600' }}>שנה</Text>
+                      <Text style={{ color: '#FF3B30', fontWeight: '600' }}>Change</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -1835,18 +1893,18 @@ export default function SettingsScreen() {
 
             {/* Service select (before day/time) */}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>שירות</Text>
+              <Text style={[styles.inputLabel, { textAlign: 'left' }]}>Service</Text>
               <Pressable style={[styles.dropdownContainer, styles.grayField]} onPress={() => setShowServiceDropdown(!showServiceDropdown)}>
                 <View style={styles.dropdownHeader}>
                   {selectedService ? (
                     <View style={{ flex: 1, alignItems: 'flex-end' }}>
                       <Text style={styles.serviceHeaderTitle}>{selectedService.name}</Text>
                       {!!selectedService.duration_minutes && (
-                        <Text style={styles.serviceHeaderSub}>{`${selectedService.duration_minutes} דקות`}</Text>
+                        <Text style={styles.serviceHeaderSub}>{`${selectedService.duration_minutes} minutes`}</Text>
                       )}
                     </View>
                   ) : (
-                    <Text style={[styles.dropdownText, styles.dropdownPlaceholder]}>בחר שירות...</Text>
+                    <Text style={[styles.dropdownText, styles.dropdownPlaceholder, { textAlign: 'left' }]}>Select service...</Text>
                   )}
                   {showServiceDropdown ? <ChevronUp size={20} color={Colors.subtext} /> : <ChevronDown size={20} color={Colors.subtext} />}
                 </View>
@@ -1863,7 +1921,7 @@ export default function SettingsScreen() {
                         <View style={styles.dropdownOptionContent}>
                           <Text style={styles.dropdownOptionTitle}>{svc.name}</Text>
                           {!!svc.duration_minutes && (
-                            <Text style={styles.dropdownOptionDescription}>{`${svc.duration_minutes} דקות`}</Text>
+                            <Text style={styles.dropdownOptionDescription}>{`${svc.duration_minutes} minutes`}</Text>
                           )}
                         </View>
                       </Pressable>
@@ -1875,10 +1933,10 @@ export default function SettingsScreen() {
 
             {/* Repeat interval selection */}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>חזרתיות</Text>
+              <Text style={[styles.inputLabel, { textAlign: 'left' }]}>Repeat every</Text>
               <Pressable style={[styles.dropdownContainer, styles.grayField]} onPress={() => setShowRepeatDropdown(!showRepeatDropdown)}>
                 <View style={styles.dropdownHeader}>
-                  <Text style={styles.dropdownText}>{repeatWeeks === 1 ? 'כל שבוע' : `כל ${repeatWeeks} שבועות`}</Text>
+                  <Text style={[styles.dropdownText, { textAlign: 'left' }]}>{repeatWeeks === 1 ? 'every week' : `every ${repeatWeeks} weeks`}</Text>
                   {showRepeatDropdown ? <ChevronUp size={20} color={Colors.subtext} /> : <ChevronDown size={20} color={Colors.subtext} />}
                 </View>
               </Pressable>
@@ -1891,8 +1949,8 @@ export default function SettingsScreen() {
                         style={[styles.dropdownOption, idx === 3 && styles.dropdownOptionLast]}
                         onPress={() => { setRepeatWeeks(w); setShowRepeatDropdown(false); }}
                       >
-                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <Text style={styles.dropdownOptionTitle}>{w === 1 ? 'כל שבוע' : `כל ${w} שבועות`}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Text style={styles.dropdownOptionTitle}>{w === 1 ? 'every week' : `every ${w} weeks`}</Text>
                           {repeatWeeks === w && <Check size={18} color={Colors.primary} />}
                         </View>
                       </Pressable>
@@ -1904,20 +1962,20 @@ export default function SettingsScreen() {
 
             {/* Day select (disabled until service chosen) */}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>יום בשבוע</Text>
+              <Text style={[styles.inputLabel, { textAlign: 'left' }]}>Day of week</Text>
               <Pressable
                 style={[styles.dropdownContainer, styles.grayField, { opacity: selectedService ? 1 : 0.6 }]}
                 onPress={() => {
                   if (!selectedService) {
-                    Alert.alert('שגיאה', 'בחר תחילה שירות');
+                    Alert.alert('Error', 'Please select a service');
                     return;
                   }
                   setShowDayDropdown(!showDayDropdown);
                 }}
               >
                 <View style={styles.dropdownHeader}>
-                  <Text style={[styles.dropdownText, !Number.isInteger(selectedDayOfWeek as any) && styles.dropdownPlaceholder]}>
-                    {Number.isInteger(selectedDayOfWeek as any) ? dayNames[selectedDayOfWeek as number] : 'בחר יום...'}
+                  <Text style={[styles.dropdownText, !Number.isInteger(selectedDayOfWeek as any) && styles.dropdownPlaceholder, { textAlign: 'left' }]}>
+                    {Number.isInteger(selectedDayOfWeek as any) ? dayNames[selectedDayOfWeek as number] : 'Select day...'}
                   </Text>
                   {showDayDropdown ? <ChevronUp size={20} color={Colors.subtext} /> : <ChevronDown size={20} color={Colors.subtext} />}
                 </View>
@@ -1939,17 +1997,17 @@ export default function SettingsScreen() {
             <View style={styles.inputContainer}> 
               <View style={styles.sectionHeaderRow}>
                 <View style={styles.sectionHeaderIcon}><Pencil size={18} color={Colors.primary} /></View>
-                <Text style={styles.sectionHeaderTitle}>בחירת שעה</Text>
+                <Text style={[styles.sectionHeaderTitle, { textAlign: 'left' }]}>Select time</Text>
               </View>
               <Pressable
                 style={[styles.dropdownContainer, styles.grayField, { opacity: Number.isInteger(selectedDayOfWeek as any) ? 1 : 0.6 }]}
                 onPress={() => {
                   if (!selectedService) {
-                    Alert.alert('שגיאה', 'בחר תחילה שירות');
+                    Alert.alert('Error', 'Please select a service');
                     return;
                   }
                   if (!Number.isInteger(selectedDayOfWeek as any)) {
-                    Alert.alert('שגיאה', 'בחר תחילה יום בשבוע');
+                    Alert.alert('Error', 'Please select a day of the week');
                     return;
                   }
                   setShowTimeDropdown((prev) => !prev);
@@ -1959,8 +2017,8 @@ export default function SettingsScreen() {
                 }}
               >
                 <View style={styles.dropdownHeader}>
-                  <Text style={[styles.dropdownText, !selectedTime && styles.dropdownPlaceholder]}>
-                    {selectedTime || (isLoadingTimes ? 'טוען שעות...' : 'בחר שעה...')}
+                  <Text style={[styles.dropdownText, !selectedTime && styles.dropdownPlaceholder, { textAlign: 'left' }]}>
+                    {selectedTime || (isLoadingTimes ? 'Loading times...' : 'Select time...')}
                   </Text>
                   {showTimeDropdown ? <ChevronUp size={20} color={Colors.subtext} /> : <ChevronDown size={20} color={Colors.subtext} />}
                 </View>
@@ -1973,7 +2031,7 @@ export default function SettingsScreen() {
                     </View>
                   ) : availableTimes.length === 0 ? (
                     <View style={{ padding: 12 }}>
-                      <Text style={{ textAlign: 'center', color: Colors.subtext }}>אין שעות פנויות ליום זה</Text>
+                      <Text style={{ textAlign: 'center', color: Colors.subtext }}>No available times for today</Text>
                     </View>
                   ) : (
                     <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
@@ -1985,7 +2043,7 @@ export default function SettingsScreen() {
                             if (!Number.isInteger(selectedDayOfWeek as any)) return;
                             const ok = await isTimeAvailable(selectedDayOfWeek as number, t);
                             if (!ok) {
-                              Alert.alert('תור נתפס', 'השעה שבחרת כבר נתפסה לשבוע הקרוב. אנא בחר שעה אחרת.');
+                              Alert.alert('Appointment booked', 'The selected time is already booked for this week. Please choose another time.');
                               return;
                             }
                             setSelectedTime(t);
@@ -2031,16 +2089,16 @@ export default function SettingsScreen() {
                   style={styles.modalCloseButton}
                   onPress={closeServicesModal}
                   accessibilityRole="button"
-                  accessibilityLabel="סגור"
+                  accessibilityLabel="Close"
                 >
                   <X size={20} color={Colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.modalTitle}>עריכת שירותים</Text>
+                <Text style={[styles.modalTitle, { textAlign: 'center', alignSelf: 'center', flex: 1 }]}>Edit services</Text>
                 <TouchableOpacity 
                   style={styles.modalActionButton}
                   onPress={handleOpenAddService}
                   accessibilityRole="button"
-                  accessibilityLabel="הוסף שירות"
+                  accessibilityLabel="Add service"
                 >
                   <Text style={styles.modalActionText}>+</Text>
                 </TouchableOpacity>
@@ -2059,7 +2117,7 @@ export default function SettingsScreen() {
                 {isLoadingServices && (
                   <View style={{ paddingVertical: 24, alignItems: 'center' }}>
                     <ActivityIndicator size="large" color={Colors.primary} />
-                    <Text style={{ marginTop: 12, color: Colors.subtext }}>טוען שירותים...</Text>
+                    <Text style={{ marginTop: 12, color: Colors.subtext }}>Loading services...</Text>
                   </View>
                 )}
 
@@ -2079,31 +2137,31 @@ export default function SettingsScreen() {
                         onPress={() => handleDeleteService(svc.id)}
                       >
                         <Trash2 size={20} color={'#fff'} />
-                        <Text style={styles.swipeDeleteText}>מחק</Text>
+                        <Text style={styles.swipeDeleteText}>Delete</Text>
                       </TouchableOpacity>
                     )}
                   >
                     <View style={styles.iosCard}>
                     <TouchableOpacity
-                      style={styles.accordionHeader}
+                      style={[styles.accordionHeader, { flexDirection: 'row' }]}
                       activeOpacity={0.85}
                       onPress={() => setExpandedServiceId(prev => prev === svc.id ? null : svc.id)}
                     >
                       {/* Right: thumbnail */}
                       {svc.image_url ? (
-                        <Image source={{ uri: svc.image_url }} style={styles.accordionThumb} />
+                        <Image source={{ uri: svc.image_url }} style={[styles.accordionThumb, { marginLeft: 0, marginRight: 12 }]} />
                       ) : (
-                        <View style={styles.accordionThumbPlaceholder}>
+                        <View style={[styles.accordionThumbPlaceholder, { marginLeft: 0, marginRight: 12 }]}>
                           <Text style={styles.accordionThumbPlaceholderText}>
-                            {(svc.name || 'ש').slice(0, 1)}
+                            {(svc.name || '').slice(0, 1)}
                           </Text>
                         </View>
                       )}
                       {/* Middle: title and subtitle */}
-                      <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                        <Text style={styles.accordionTitle}>{svc.name || 'ללא שם'}</Text>
+                      <View style={{ flex: 1, alignItems: 'flex-start' }}>
+                        <Text style={styles.accordionTitle}>{svc.name || 'No name'}</Text>
                         <Text style={styles.accordionSubtitle}>
-                          {typeof svc.price === 'number' ? `₪${svc.price}` : 'ללא מחיר'}
+                          {typeof svc.price === 'number' ? `$${svc.price}` : 'No price'}
                         </Text>
                       </View>
                       {/* Left: chevron */}
@@ -2128,7 +2186,7 @@ export default function SettingsScreen() {
                               <Image source={{ uri: svc.image_url }} style={styles.serviceImagePreview} />
                             ) : (
                               <View style={[styles.serviceImagePreview, { alignItems: 'center', justifyContent: 'center' }]}>
-                                <Text style={{ color: Colors.subtext }}>הקש לבחירת תמונה</Text>
+                                <Text style={{ color: Colors.subtext }}>Tap to select an image</Text>
                               </View>
                             )}
                             {editImageUploading[svc.id] && (
@@ -2142,20 +2200,20 @@ export default function SettingsScreen() {
                         {/* Removed separate replace button; image is now tappable to replace */}
 
                         <View style={styles.formGroup}>
-                          <Text style={styles.formLabel}>שם השירות</Text>
+                          <Text style={styles.formLabel}>Service name</Text>
                           <TextInput
                             style={styles.formInput}
                             value={svc.name}
                             onChangeText={(t) => updateLocalServiceField(svc.id, 'name', t)}
-                            textAlign="right"
+                            textAlign="left"
                           />
                         </View>
 
                         
 
-                        <View style={styles.twoColumnRow}>
+                        <View style={[styles.twoColumnRow, { flexDirection: 'row' }]}>
                           <View style={[styles.formGroup, styles.twoColumnItem]}>
-                            <Text style={styles.formLabel}>מחיר (₪)</Text>
+                            <Text style={[styles.formLabel, { textAlign: 'left' }]}>Price ($)</Text>
                             <TextInput
                               style={styles.formInput}
                               value={String(svc.price ?? '')}
@@ -2164,18 +2222,18 @@ export default function SettingsScreen() {
                                 updateLocalServiceField(svc.id, 'price', isNaN(num) ? 0 : num);
                               }}
                               keyboardType="numeric"
-                              textAlign="right"
+                              textAlign="left"
                             />
                           </View>
                           <View style={[styles.formGroup, styles.twoColumnItem]}>
-                            <Text style={styles.formLabel}>משך (דקות)</Text>
+                            <Text style={styles.formLabel}>Duration (minutes)</Text>
                             <Pressable
                               style={styles.dropdownContainer}
                               onPress={() => setEditDurationDropdownFor(prev => prev === svc.id ? null : svc.id)}
                             >
                               <View style={styles.dropdownHeader}>
-                                <Text style={[styles.dropdownText, !svc.duration_minutes && styles.dropdownPlaceholder]}>
-                                  {svc.duration_minutes ? `${svc.duration_minutes} דקות` : 'בחר משך...'}
+                                <Text style={[styles.dropdownText, { textAlign: 'left' }, !svc.duration_minutes && styles.dropdownPlaceholder]}>
+                                  {svc.duration_minutes ? `${svc.duration_minutes} minutes` : 'Select duration...'}
                                 </Text>
                                 {editDurationDropdownFor === svc.id ? (
                                   <ChevronUp size={20} color={Colors.subtext} />
@@ -2193,7 +2251,7 @@ export default function SettingsScreen() {
                                       style={[styles.dropdownOption, idx === durationOptions.length - 1 && styles.dropdownOptionLast]}
                                       onPress={() => { updateLocalServiceField(svc.id, 'duration_minutes', mins as any); setEditDurationDropdownFor(null); }}
                                     >
-                                      <Text style={styles.dropdownOptionTitle}>{`${mins} דקות`}</Text>
+                                      <Text style={[styles.dropdownOptionTitle, { textAlign: 'left' }]}>{`${mins} minutes`}</Text>
                                     </Pressable>
                                   ))}
                                 </ScrollView>
@@ -2212,7 +2270,7 @@ export default function SettingsScreen() {
                             activeOpacity={0.85}
                           >
                             <Text style={styles.primaryPillButtonText}>
-                              {savingServiceId === svc.id ? 'שומר...' : 'שמור שינויים'}
+                              {savingServiceId === svc.id ? 'Saving...' : 'Save changes'}
                             </Text>
                           </TouchableOpacity>
                           <TouchableOpacity
@@ -2220,7 +2278,7 @@ export default function SettingsScreen() {
                             onPress={() => handleDeleteService(svc.id)}
                             activeOpacity={0.85}
                             accessibilityRole="button"
-                            accessibilityLabel="מחק שירות"
+                            accessibilityLabel="Delete service"
                           >
                             <Trash2 size={20} color="#FF3B30" />
                           </TouchableOpacity>
@@ -2254,16 +2312,16 @@ export default function SettingsScreen() {
                 style={styles.modalCloseButton}
                 onPress={() => setShowAddServiceModal(false)}
               >
-                <Text style={styles.modalCloseText}>ביטול</Text>
+                <Text style={styles.modalCloseText} numberOfLines={1}>Cancel</Text>
               </TouchableOpacity>
-              <Text style={styles.modalTitle}>הוספת שירות</Text>
+              <Text style={styles.modalTitle}>Add service</Text>
               <TouchableOpacity 
                 style={[styles.modalSendButton, addSvcIsSaving && styles.modalSendButtonDisabled]}
                 onPress={handleCreateService}
                 disabled={addSvcIsSaving}
               >
                 <Text style={[styles.modalSendText, addSvcIsSaving && styles.modalSendTextDisabled]}>
-                  {addSvcIsSaving ? 'שומר...' : 'שמור'}
+                  {addSvcIsSaving ? 'Saving...' : 'Save'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -2277,7 +2335,7 @@ export default function SettingsScreen() {
             <View style={styles.recurringCard}>
             {/* Service Image Picker */}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>תמונה של השירות</Text>
+              <Text style={[styles.inputLabel, { textAlign: 'left' }]}>Service image</Text>
               <Pressable
                 onPress={handlePickServiceImage}
                 style={{
@@ -2297,12 +2355,12 @@ export default function SettingsScreen() {
                     style={{ width: 160, height: 160, borderRadius: 12 }}
                   />
                 ) : (
-                  <Text style={{ color: Colors.subtext }}>הקשה לבחירת תמונה</Text>
+                  <Text style={{ color: Colors.subtext }}>Tap to select an image</Text>
                 )}
               </Pressable>
               <View
                 style={{
-                  flexDirection: 'row-reverse',
+                  flexDirection: 'row',
                   alignItems: 'center',
                   gap: 12,
                   marginTop: 8,
@@ -2317,7 +2375,7 @@ export default function SettingsScreen() {
                   activeOpacity={0.85}
                 >
                   <Text style={styles.pickButtonText}>
-                    {addSvcImage ? 'החלף תמונה' : 'בחר תמונה'}
+                    {addSvcImage ? 'Change image' : 'Select image'}
                   </Text>
                 </TouchableOpacity>
                 {addSvcUploading && (
@@ -2326,20 +2384,20 @@ export default function SettingsScreen() {
               </View>
             </View>
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>שם השירות</Text>
+              <Text style={[styles.inputLabel, { textAlign: 'left' }]}>Service name</Text>
               <TextInput
                 style={styles.textInput}
                 value={addSvcName}
                 onChangeText={setAddSvcName}
-                textAlign="right"
-                placeholder="שם השירות"
+                textAlign="left"
+                placeholder="New service"
                 placeholderTextColor={Colors.subtext}
               />
             </View>
             
-            <View style={styles.twoColumnRow}>
+            <View style={[styles.twoColumnRow, { flexDirection: 'row' }]}>
               <View style={[styles.formGroup, styles.twoColumnItem]}>
-                <Text style={styles.formLabel}>מחיר (₪)</Text>
+                <Text style={[styles.formLabel, { textAlign: 'left' }]}>Price ($)</Text>
                 <TextInput
                   style={styles.formInput}
                   value={addSvcPrice}
@@ -2348,18 +2406,18 @@ export default function SettingsScreen() {
                     setAddSvcPrice(num);
                   }}
                   keyboardType="numeric"
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
               {/* per-service duration removed */}
             </View>
             {/* Service duration dropdown */}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>משך השירות (דקות)</Text>
+              <Text style={[styles.inputLabel, { textAlign: 'left' }]}>Service duration (minutes)</Text>
               <Pressable style={styles.dropdownContainer} onPress={() => setShowDurationDropdown(!showDurationDropdown)}>
                 <View style={styles.dropdownHeader}>
-                  <Text style={[styles.dropdownText, !addSvcDuration && styles.dropdownPlaceholder]}>
-                    {addSvcDuration ? `${addSvcDuration} דקות` : 'בחר משך...'}
+                  <Text style={[styles.dropdownText, { textAlign: 'left' }, !addSvcDuration && styles.dropdownPlaceholder]}>
+                    {addSvcDuration ? `${addSvcDuration} minutes` : 'Select duration...'}
                   </Text>
                   {showDurationDropdown ? <ChevronUp size={20} color={Colors.subtext} /> : <ChevronDown size={20} color={Colors.subtext} />}
                 </View>
@@ -2373,7 +2431,7 @@ export default function SettingsScreen() {
                         style={[styles.dropdownOption, idx === durationOptions.length - 1 && styles.dropdownOptionLast]}
                         onPress={() => { setAddSvcDuration(String(mins)); setShowDurationDropdown(false); }}
                       >
-                        <Text style={styles.dropdownOptionTitle}>{`${mins} דקות`}</Text>
+                        <Text style={[styles.dropdownOptionTitle, { textAlign: 'left' }]}>{`${mins} minutes`}</Text>
                       </Pressable>
                     ))}
                   </ScrollView>
@@ -2564,10 +2622,10 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: Colors.text,
-    marginRight: 24,
+    marginLeft: 24,
     marginBottom: 10,
     marginTop: 18,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   cardNew: {
     backgroundColor: Colors.white,
@@ -2592,10 +2650,10 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   settingIcon: {
-    marginLeft: 12,
+    marginRight: 12,
   },
   settingChevron: {
-    marginRight: 12,
+    marginLeft: 12,
   },
   settingIconRight: {
     marginLeft: 12,
@@ -2607,12 +2665,42 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.text,
     marginBottom: 2,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   settingSubtitle: {
     fontSize: 14,
     color: Colors.subtext,
-    textAlign: 'right',
+    textAlign: 'left',
+  },
+
+  // LTR Perfect alignment styles for Business details
+  settingItemLTR: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  settingIconLTR: {
+    marginRight: 12,
+  },
+  settingChevronLTR: {
+    marginLeft: 12,
+  },
+  settingContentLTR: {
+    flex: 1,
+    alignItems: 'flex-start',
+  },
+  settingTitleLTR: {
+    fontSize: 16,
+    color: Colors.text,
+    marginBottom: 2,
+    textAlign: 'left',
+    alignSelf: 'flex-start',
+  },
+  settingSubtitleLTR: {
+    fontSize: 14,
+    color: Colors.subtext,
+    textAlign: 'left',
+    alignSelf: 'flex-start',
   },
 
   logoutButton: {
@@ -2676,11 +2764,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
   },
   modalCloseButton: {
-    width: 44,
+    minWidth: 72,
     height: 44,
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 10,
   },
   modalActionButton: {
     width: 44,
@@ -2700,6 +2789,8 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: Colors.primary,
     fontWeight: '500',
+    letterSpacing: 0.2,
+    includeFontPadding: false,
   },
   modalTitle: {
     fontSize: 18,
@@ -2707,6 +2798,13 @@ const styles = StyleSheet.create({
     color: Colors.text,
     flex: 1,
     textAlign: 'center',
+  },
+  modalTitleLTR: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.text,
+    flex: 1,
+    textAlign: 'left',
   },
   modalSendButton: {
     backgroundColor: Colors.primary,
@@ -2794,6 +2892,13 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginBottom: 8,
     textAlign: 'right',
+  },
+  inputLabelLTR: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 8,
+    textAlign: 'left',
   },
   textInput: {
     backgroundColor: Colors.white,
@@ -2925,10 +3030,14 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 0,
     borderTopRightRadius: 0,
     marginTop: -1,
+    zIndex: 1000,
+    elevation: 10,
     ...shadowStyle,
   },
   dropdownList: {
-    maxHeight: 260,
+    maxHeight: 180,
+    flexGrow: 0,
+    flexShrink: 1,
   },
   dropdownOption: {
     paddingHorizontal: 16,

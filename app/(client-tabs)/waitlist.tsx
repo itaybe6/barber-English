@@ -14,7 +14,7 @@ import { useAuthStore } from '@/stores/authStore';
 export default function WaitlistScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { serviceName = 'שירות כללי', selectedDate = '', barberId = '' } = params as { serviceName: string; selectedDate: string; barberId: string };
+  const { serviceName = 'General service', selectedDate = '', barberId = '' } = params as { serviceName: string; selectedDate: string; barberId: string };
   
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod | null>(null);
   const { user } = useAuthStore();
@@ -27,7 +27,7 @@ export default function WaitlistScreen() {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('he-IL', {
+    return date.toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
@@ -37,17 +37,17 @@ export default function WaitlistScreen() {
 
   const handleAddToWaitlist = async () => {
     if (!selectedPeriod) {
-      Alert.alert('שגיאה', 'אנא בחרי טווח זמן מועדף');
+      Alert.alert('Error', 'Please select a preferred time period');
       return;
     }
 
     if (!user?.name || !user?.phone) {
-      Alert.alert('שגיאה', 'מידע המשתמש חסר');
+      Alert.alert('Error', 'User info is missing');
       return;
     }
 
     if (!selectedDate || selectedDate === '') {
-      Alert.alert('שגיאה', 'תאריך לא נבחר');
+      Alert.alert('Error', 'No date selected');
       return;
     }
 
@@ -63,11 +63,11 @@ export default function WaitlistScreen() {
 
       if (success) {
         Alert.alert(
-          'נוספת לרשימת המתנה',
-          `נוספת בהצלחה לרשימת המתנה ליום ${formatDate(selectedDate)}. נודיע לך כשיתפנה מקום!`,
+          'Added to waitlist',
+          `Successfully added to the waitlist for ${formatDate(selectedDate)}. We\'ll notify you when a slot opens!`,
           [
             {
-              text: 'אישור',
+              text: 'OK',
               onPress: () => {
                 router.push('/(client-tabs)/book-appointment');
               },
@@ -75,10 +75,10 @@ export default function WaitlistScreen() {
           ]
         );
       } else {
-        Alert.alert('שגיאה', error || 'אירעה שגיאה בהוספה לרשימת המתנה');
+        Alert.alert('Error', error || 'An error occurred while adding to the waitlist');
       }
     } catch (error) {
-      Alert.alert('שגיאה', 'אירעה שגיאה בהוספה לרשימת המתנה');
+      Alert.alert('Error', 'An error occurred while adding to the waitlist');
     }
   };
 
@@ -98,9 +98,9 @@ export default function WaitlistScreen() {
               <Ionicons name="arrow-back" size={24} color={Colors.text} />
             </TouchableOpacity>
             <View style={{ alignItems: 'center', flexShrink: 1 }}>
-              <Text style={styles.headerTitle}>רשימת המתנה</Text>
+              <Text style={styles.headerTitle}>Waitlist</Text>
               <Text style={styles.headerSubtitle} numberOfLines={2} ellipsizeMode="tail">
-                {`אין תורים זמינים\n${serviceName === 'שירות כללי' ? 'בתאריך זה' : `ל${serviceName} בתאריך זה`}`}
+                {`No appointments available\n${serviceName === 'General service' ? 'on this date' : `for ${serviceName} on this date`}`}
               </Text>
             </View>
             <View style={{ width: 40 }} />
@@ -117,7 +117,7 @@ export default function WaitlistScreen() {
           <View style={styles.infoCard}>
             <View style={styles.infoHeader}>
               <Ionicons name="information-circle" size={24} color={Colors.primary} />
-              <Text style={styles.infoTitle}>פרטי הבקשה</Text>
+              <Text style={styles.infoTitle}>Request details</Text>
             </View>
             
             <View style={styles.infoRow}>
@@ -125,7 +125,7 @@ export default function WaitlistScreen() {
                 <Ionicons name="calendar" size={20} color={Colors.primary} />
               </View>
               <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>תאריך</Text>
+                <Text style={styles.infoLabel}>Date</Text>
                 <Text style={styles.infoValue}>{formatDate(displayDate)}</Text>
               </View>
             </View>
@@ -135,9 +135,9 @@ export default function WaitlistScreen() {
                 <Ionicons name="apps" size={20} color={Colors.primary} />
               </View>
               <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>שירות</Text>
+                <Text style={styles.infoLabel}>Service</Text>
                 <Text style={styles.infoValue}>
-                  {serviceName === 'שירות כללי' ? 'כל שירות זמין' : serviceName}
+                  {serviceName === 'General service' ? 'Any available service' : serviceName}
                 </Text>
               </View>
             </View>
@@ -163,13 +163,13 @@ export default function WaitlistScreen() {
               {isLoading ? (
                 <View style={styles.loadingContainer}>
                   <Ionicons name="hourglass" size={20} color="#FFFFFF" />
-                  <Text style={styles.confirmButtonText}>מוסיף לרשימת המתנה...</Text>
+                  <Text style={styles.confirmButtonText}>Adding to waitlist...</Text>
                 </View>
               ) : (
                 <View style={styles.buttonContent}>
                   <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
                   <Text style={styles.confirmButtonText}>
-                    {selectedPeriod ? 'אישור ושמירה' : 'בחרי טווח זמן תחילה'}
+                    {selectedPeriod ? 'Confirm and save' : 'Select a time period first'}
                   </Text>
                 </View>
               )}
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    writingDirection: 'rtl',
+    writingDirection: 'ltr',
   },
   gradient: {
     flex: 1,
@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(142, 142, 147, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 16,
+    marginRight: 16,
   },
   headerContent: {
     flex: 1,
@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   infoHeader: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 20,
   },
@@ -264,11 +264,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#1C1C1E',
-    marginRight: 12,
-    textAlign: 'right',
+    marginLeft: 12,
+    textAlign: 'left',
   },
   infoRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
   },
@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + '15',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 16,
+    marginRight: 16,
   },
   infoContent: {
     flex: 1,
@@ -288,13 +288,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#8E8E93',
     marginBottom: 4,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   infoValue: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1C1C1E',
-    textAlign: 'right',
+    textAlign: 'left',
   },
 
   footer: {

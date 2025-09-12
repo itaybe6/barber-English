@@ -1118,13 +1118,13 @@ export default function BookAppointment() {
                 <Text style={styles.loadingText}>Loading barbers...</Text>
               </View>
             ) : (
-              <View style={styles.barbersGrid}>
+              <View style={styles.barbersList}>
                 {availableBarbers.map((barber) => (
                   <TouchableOpacity
                     key={barber.id}
                     style={[
-                      styles.barberCard,
-                      selectedBarber?.id === barber.id && styles.barberCardSelected
+                      styles.barberListItem,
+                      selectedBarber?.id === barber.id && styles.barberListItemSelected
                     ]}
                     onPress={() => {
                       const isSame = selectedBarber?.id === barber.id;
@@ -1136,40 +1136,24 @@ export default function BookAppointment() {
                       setIsLoadingSlots(false);
                       setDayAvailability({});
                     }}
-                    activeOpacity={0.9}
+                    activeOpacity={0.7}
                   >
-                    <View style={styles.barberImageWrapper}>
+                    <View style={styles.barberListItemImageContainer}>
                       {barber.image_url ? (
-                        <>
-                          <Image source={{ uri: barber.image_url }} style={styles.barberImage} />
-                          <View style={styles.barberOverlay}>
-                            <View style={styles.barberNameContainer}>
-                              <Text style={styles.barberNameOverlay}>{barber.name}</Text>
-                              <Text style={styles.barberRoleOverlay}>Professional Barber</Text>
-                            </View>
-                          </View>
-                        </>
+                        <Image source={{ uri: barber.image_url }} style={styles.barberListItemImage} />
                       ) : (
-                        <>
-                          <View style={styles.barberImagePlaceholder}>
-                            <Ionicons name="person" size={48} color="rgba(255,255,255,0.8)" />
-                          </View>
-                          <View style={styles.barberOverlay}>
-                            <View style={styles.barberNameContainer}>
-                              <Text style={styles.barberNameOverlay}>{barber.name}</Text>
-                              <Text style={styles.barberRoleOverlay}>Professional Barber</Text>
-                            </View>
-                          </View>
-                        </>
-                      )}
-                      {selectedBarber?.id === barber.id && (
-                        <View style={styles.selectedIndicatorOverlay}>
-                          <View style={styles.selectedCheckmark}>
-                            <Ionicons name="checkmark" size={20} color={Colors.white} />
-                          </View>
+                        <View style={styles.barberListItemImagePlaceholder}>
+                          <Ionicons name="person" size={24} color="#8E8E93" />
                         </View>
                       )}
                     </View>
+                    <View style={styles.barberListItemContent}>
+                      <Text style={styles.barberListItemName}>{barber.name}</Text>
+                      <Text style={styles.barberListItemRole}>Professional Barber</Text>
+                    </View>
+                    {selectedBarber?.id === barber.id && (
+                      <Ionicons name="checkmark-circle" size={24} color="#007AFF" />
+                    )}
                   </TouchableOpacity>
                 ))}
               </View>
@@ -1192,13 +1176,13 @@ export default function BookAppointment() {
                 <Text style={styles.loadingText}>Loading services...</Text>
               </View>
             ) : (
-              <View style={styles.servicesGrid}>
+              <View style={styles.servicesList}>
                 {availableServices.map((service) => (
                   <TouchableOpacity
                     key={service.id}
                     style={[
-                      styles.serviceCardGrid,
-                      selectedService?.id === service.id && styles.serviceCardSelected
+                      styles.serviceListItem,
+                      selectedService?.id === service.id && styles.serviceListItemSelected
                     ]}
                     onPress={() => {
                       const isSame = selectedService?.id === service.id;
@@ -1211,34 +1195,23 @@ export default function BookAppointment() {
                       setShowReplaceModal(false);
                       setExistingAppointment(null);
                     }}
-                    activeOpacity={0.9}
+                    activeOpacity={0.7}
                   >
-                    <View style={styles.imageWrapper}>
-                      {service.image_url ? (
-                        <Image source={{ uri: service.image_url }} style={styles.serviceImage} />
-                      ) : (
-                        <View style={[styles.serviceImage, { alignItems: 'center', justifyContent: 'center', backgroundColor: '#F5F5F5' }]}> 
-                          <Ionicons name="image-outline" size={28} color="rgba(0,0,0,0.3)" />
+                    <View style={styles.serviceListItemContent}>
+                      <Text style={styles.serviceListItemName}>{service.name}</Text>
+                      <View style={styles.serviceListItemDetails}>
+                        <View style={styles.serviceListItemPrice}>
+                          <Text style={styles.serviceListItemPriceText}>${service.price}</Text>
                         </View>
-                      )}
-                      <View style={styles.priceBadge}>
-                        <Text style={styles.priceBadgeText}>₪{service.price}</Text>
-                      </View>
-                      {selectedService?.id === service.id && (
-                        <View style={styles.selectedIndicator}>
-                          <Ionicons name="checkmark" size={16} color={Colors.white} />
-                        </View>
-                      )}
-                    </View>
-                    <View style={styles.serviceInfo}>
-                      <Text style={styles.serviceName}>{service.name}</Text>
-                      <View style={styles.infoRow}>
-                        <View style={styles.durationChip}>
-                          <Ionicons name="time-outline" size={12} color="rgba(0,0,0,0.6)" />
-                          <Text style={styles.durationChipText}>{(service.duration_minutes ?? 60)} min</Text>
+                        <View style={styles.serviceListItemDuration}>
+                          <Ionicons name="time-outline" size={14} color="#8E8E93" />
+                          <Text style={styles.serviceListItemDurationText}>{(service.duration_minutes ?? 60)} min</Text>
                         </View>
                       </View>
                     </View>
+                    {selectedService?.id === service.id && (
+                      <Ionicons name="checkmark-circle" size={24} color="#007AFF" />
+                    )}
                   </TouchableOpacity>
                 ))}
               </View>
@@ -1260,96 +1233,95 @@ export default function BookAppointment() {
               <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>Select Day</Text>
               <View style={{ width: 36 }} />
             </View>
-            <View style={styles.daysList}>
+            <View style={styles.daysListNew}>
               {days.map((day, idx) => {
                 const dsIso = day.fullDate.toISOString().split('T')[0];
                 const dd = String(day.fullDate.getDate()).padStart(2, '0');
                 const mm = String(day.fullDate.getMonth() + 1).padStart(2, '0');
                 const yy = String(day.fullDate.getFullYear()).slice(-2);
-                const dsPretty = `${dd}/${mm}/${yy}`;
+                const dsPretty = `${mm}/${dd}/${yy}`;
                 const hasAvail = (dayAvailability[dsIso] ?? 0) > 0;
                 const isToday = new Date().toDateString() === day.fullDate.toDateString();
                 const label = isToday ? 'Today' : day.dayName;
+                
+                // Convert Hebrew day names to English
+                const getEnglishDayName = (hebrewDay: string) => {
+                  const dayMap: { [key: string]: string } = {
+                    'ראשון': 'Sunday',
+                    'שני': 'Monday', 
+                    'שלישי': 'Tuesday',
+                    'רביעי': 'Wednesday',
+                    'חמישי': 'Thursday',
+                    'שישי': 'Friday',
+                    'שבת': 'Saturday'
+                  };
+                  return dayMap[hebrewDay] || hebrewDay;
+                };
+                
+                const englishLabel = isToday ? 'Today' : getEnglishDayName(day.dayName);
                 const isSelected = selectedDay === idx;
                 return (
                   <TouchableOpacity
                     key={idx}
                     style={[
-                      styles.dayPill,
-                      !hasAvail && styles.dayPillUnavailable,
-                      isSelected && hasAvail && styles.dayPillSelected,
-                      isSelected && !hasAvail && styles.dayPillUnavailableSelected,
+                      styles.dayListItem,
+                      !hasAvail && styles.dayListItemUnavailable,
+                      isSelected && hasAvail && styles.dayListItemSelected,
+                      isSelected && !hasAvail && styles.dayListItemUnavailableSelected,
                     ]}
                     onPress={() => {
                       const isSame = selectedDay === idx;
                       setSelectedDay(isSame ? null : idx);
                       setSelectedTime(null);
                     }}
-                    activeOpacity={0.9}
+                    activeOpacity={0.7}
                   >
-                    <Text style={[
-                      styles.dayPillDate,
-                      !hasAvail && styles.dayPillDateEm,
-                      isSelected && styles.dayPillDateSelected,
-                    ]}>{dsPretty}</Text>
-                    <Text style={[
-                      styles.dayPillLabel,
-                      !hasAvail && styles.dayPillLabelEm,
-                      isSelected && styles.dayPillLabelSelected,
-                    ]}>{label}</Text>
+                    <View style={styles.dayListItemContent}>
+                      <View style={styles.dayListItemLeftSection}>
+                        <Text style={[
+                          styles.dayListItemDate,
+                          !hasAvail && styles.dayListItemDateUnavailable,
+                          isSelected && styles.dayListItemDateSelected,
+                        ]}>{dsPretty}</Text>
+                        <View style={[
+                          styles.dayListItemDayTag,
+                          !hasAvail && styles.dayListItemDayTagUnavailable,
+                          isSelected && styles.dayListItemDayTagSelected,
+                        ]}>
+                          <Text style={[
+                            styles.dayListItemDayTagText,
+                            !hasAvail && styles.dayListItemDayTagTextUnavailable,
+                            isSelected && styles.dayListItemDayTagTextSelected,
+                          ]}>{englishLabel}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.dayListItemRightSection}>
+                        {hasAvail && (
+                          <View style={styles.dayListItemAvailable}>
+                            <Text style={styles.dayListItemAvailableText}>Available</Text>
+                          </View>
+                        )}
+                        {!hasAvail && (
+                          <View style={styles.dayListItemWaitlist}>
+                            <Text style={styles.dayListItemWaitlistText}>Join Waitlist</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                    {isSelected && (
+                      <Ionicons name="checkmark-circle" size={24} color={hasAvail ? "#007AFF" : "#FF3B30"} />
+                    )}
                   </TouchableOpacity>
                 );
               })}
             </View>
-            <Text style={styles.daysLegend}>* Days with no available appointments are marked in red</Text>
-            <Text style={styles.daysLegendSecondary}>
+            <Text style={styles.daysLegendNew}>* Days with no available appointments are marked in red</Text>
+            <Text style={styles.daysLegendSecondaryNew}>
               * Even if there are no available appointments – you can click on the day and join the waitlist for that day
             </Text>
           </View>
         )}
 
-        {/* Step 4: Time Selection */}
-        {currentStep >= 4 && selectedBarber && selectedService && selectedDay !== null && (
-          <View style={styles.section}>
-            <View style={styles.dayHeaderRow}>
-              <TouchableOpacity 
-                onPress={() => setCurrentStep(3)} 
-                style={styles.backCircle} 
-                activeOpacity={0.8}
-              >
-                <Ionicons name="arrow-forward" size={18} color="#000000" />
-              </TouchableOpacity>
-              <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>Select Time</Text>
-              <View style={{ width: 36 }} />
-            </View>
-            {isLoadingSlots ? (
-              <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>Loading available times...</Text>
-              </View>
-            ) : availableTimeSlots.length > 0 ? (
-              <View style={styles.timesList}>
-                {availableTimeSlots.map((slot) => {
-                  const isSelected = selectedTime === slot;
-                  return (
-                    <TouchableOpacity
-                      key={slot}
-                      style={[styles.timePill, isSelected && styles.timePillSelected]}
-                      onPress={() => setSelectedTime(isSelected ? null : slot)}
-                      activeOpacity={0.9}
-                    >
-                      <Text style={[styles.timePillLabel, isSelected && styles.timePillLabelSelected]}>{slot}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            ) : (
-              <View style={styles.noSlotsContainer}>
-                <Ionicons name="time-outline" size={48} color="rgba(0,0,0,0.35)" />
-                <Text style={styles.noSlotsText}>No available times on this day</Text>
-              </View>
-            )}
-          </View>
-        )}
         </ScrollView>
       </View>
 
@@ -1361,7 +1333,7 @@ export default function BookAppointment() {
               style={[styles.bookBtn]}
               onPress={() => setCurrentStep(2)}
             >
-              <Text style={styles.bookBtnText}>המשך לבחירת שירות</Text>
+              <Text style={styles.bookBtnText}>Continue to Service Selection</Text>
             </TouchableOpacity>
           )}
 
@@ -1370,7 +1342,7 @@ export default function BookAppointment() {
               style={[styles.bookBtn]}
               onPress={() => setCurrentStep(3)}
             >
-              <Text style={styles.bookBtnText}>המשך לבחירת יום</Text>
+              <Text style={styles.bookBtnText}>Continue to Day Selection</Text>
             </TouchableOpacity>
           )}
         {currentStep === 3 && selectedDay !== null && (() => {
@@ -1383,10 +1355,21 @@ export default function BookAppointment() {
                   styles.bookBtn,
                   (isBooking || isCheckingAppointments) && styles.bookBtnDisabled
                 ]}
-                onPress={() => setCurrentStep(4)}
+                onPress={() => {
+                const dateStr = selectedDate?.toISOString().split('T')[0] || '';
+                router.push({
+                  pathname: '/(client-tabs)/select-time' as any,
+                  params: {
+                    serviceName: selectedService?.name || '',
+                    durationMinutes: selectedService?.duration_minutes?.toString() || '60',
+                    price: selectedService?.price?.toString() || '0',
+                    selectedDate: dateStr,
+                  } as any
+                });
+              }}
                 disabled={isBooking || isCheckingAppointments}
               >
-                <Text style={styles.bookBtnText}>המשך לבחירת שעה</Text>
+                <Text style={styles.bookBtnText}>Continue to Time Selection</Text>
               </TouchableOpacity>
             );
           }
@@ -1406,7 +1389,7 @@ export default function BookAppointment() {
               activeOpacity={0.9}
             >
               <Ionicons name="hourglass" size={18} color="#FFFFFF" />
-              <Text style={styles.waitlistButtonText}>היכנס לרשימת המתנה</Text>
+              <Text style={styles.waitlistButtonText}>Join Waitlist</Text>
             </TouchableOpacity>
           );
         })()}
@@ -2095,6 +2078,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: -0.3,
+    textAlign: 'center',
+    writingDirection: 'ltr',
   },
   tabBarSpacing: {
     height: 120,
@@ -2151,6 +2136,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     letterSpacing: -0.2,
+    textAlign: 'center',
+    writingDirection: 'ltr',
   },
   modalOverlay: {
     flex: 1,
@@ -2401,5 +2388,262 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 4,
     elevation: 4,
+  },
+  // New barber list item styles
+  barbersList: {
+    gap: 12,
+  },
+  barberListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#F2F2F7',
+  },
+  barberListItemSelected: {
+    borderColor: '#007AFF',
+    backgroundColor: '#F0F8FF',
+    shadowColor: '#007AFF',
+    shadowOpacity: 0.15,
+  },
+  barberListItemImageContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    overflow: 'hidden',
+    marginRight: 16,
+    backgroundColor: '#F2F2F7',
+  },
+  barberListItemImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  barberListItemImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F2F2F7',
+  },
+  barberListItemContent: {
+    flex: 1,
+  },
+  barberListItemName: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 2,
+  },
+  barberListItemRole: {
+    fontSize: 14,
+    color: '#8E8E93',
+    fontWeight: '400',
+  },
+  // New service list item styles
+  servicesList: {
+    gap: 12,
+  },
+  serviceListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#F2F2F7',
+  },
+  serviceListItemSelected: {
+    borderColor: '#007AFF',
+    backgroundColor: '#F0F8FF',
+    shadowColor: '#007AFF',
+    shadowOpacity: 0.15,
+  },
+  serviceListItemContent: {
+    flex: 1,
+  },
+  serviceListItemName: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 8,
+  },
+  serviceListItemDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  serviceListItemPrice: {
+    backgroundColor: '#F2F2F7',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  serviceListItemPriceText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1C1C1E',
+  },
+  serviceListItemDuration: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  serviceListItemDurationText: {
+    fontSize: 14,
+    color: '#8E8E93',
+    fontWeight: '500',
+  },
+  // New day list item styles
+  daysListNew: {
+    gap: 12,
+  },
+  dayListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#F2F2F7',
+    minHeight: 80,
+  },
+  dayListItemUnavailable: {
+    borderColor: '#FF3B30',
+    backgroundColor: '#FFF5F5',
+  },
+  dayListItemSelected: {
+    borderColor: '#007AFF',
+    backgroundColor: '#F0F8FF',
+    shadowColor: '#007AFF',
+    shadowOpacity: 0.15,
+  },
+  dayListItemUnavailableSelected: {
+    borderColor: '#FF3B30',
+    backgroundColor: '#FFF5F5',
+    shadowColor: '#FF3B30',
+    shadowOpacity: 0.15,
+  },
+  dayListItemContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dayListItemLeftSection: {
+    flex: 1,
+  },
+  dayListItemRightSection: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  dayListItemDate: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 6,
+  },
+  dayListItemDateUnavailable: {
+    color: '#FF3B30',
+  },
+  dayListItemDateSelected: {
+    color: '#007AFF',
+  },
+  dayListItemLabel: {
+    fontSize: 14,
+    color: '#8E8E93',
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  dayListItemLabelUnavailable: {
+    color: '#FF3B30',
+  },
+  dayListItemLabelSelected: {
+    color: '#007AFF',
+  },
+  dayListItemWaitlist: {
+    backgroundColor: '#FF3B30',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  dayListItemWaitlistText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  dayListItemDayTag: {
+    backgroundColor: '#F2F2F7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  dayListItemDayTagUnavailable: {
+    backgroundColor: '#FFE5E5',
+  },
+  dayListItemDayTagSelected: {
+    backgroundColor: '#E3F2FD',
+  },
+  dayListItemDayTagText: {
+    fontSize: 12,
+    color: '#1C1C1E',
+    fontWeight: '600',
+  },
+  dayListItemDayTagTextUnavailable: {
+    color: '#FF3B30',
+  },
+  dayListItemDayTagTextSelected: {
+    color: '#007AFF',
+  },
+  dayListItemAvailable: {
+    backgroundColor: '#34C759',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  dayListItemAvailableText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  daysLegendNew: {
+    fontSize: 13,
+    color: '#8E8E93',
+    fontWeight: '500',
+    textAlign: 'left',
+    marginTop: 16,
+    marginBottom: 4,
+    writingDirection: 'ltr',
+  },
+  daysLegendSecondaryNew: {
+    fontSize: 12,
+    color: '#8E8E93',
+    fontWeight: '400',
+    textAlign: 'left',
+    marginBottom: 16,
+    writingDirection: 'ltr',
   },
 });

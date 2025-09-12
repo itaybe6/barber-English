@@ -337,22 +337,22 @@ export default function SelectTimeScreen() {
       }
 
       if (success) {
-        const policyNote = '\n\nלתשומת לבך: אי אפשר לבטל את התור 48 שעות לפני מועד התור. ביטול בתקופה זו יחויב בתשלום על התור.';
-        const message = `התור שלך ל"${serviceName}" נקבע ליום ${selectedDate} בשעה ${selectedTime}${policyNote}`;
+        const policyNote = '\n\nPlease note: You cannot cancel the appointment 48 hours before the appointment time. Cancellation during this period will be charged for the appointment.';
+        const message = `Your appointment for "${serviceName}" has been scheduled for ${selectedDate} at ${selectedTime}${policyNote}`;
         setSuccessMessage(message);
         setShowSuccessModal(true);
         try {
-          const title = 'נקבע תור חדש';
-          const content = `${user?.name || 'לקוח'} (${user?.phone || ''}) קבע/ה תור ל"${serviceName}" בתאריך ${selectedDate} בשעה ${selectedTime}`;
+          const title = 'New appointment booked';
+          const content = `${user?.name || 'Client'} (${user?.phone || ''}) booked an appointment for "${serviceName}" on ${selectedDate} at ${selectedTime}`;
           notificationsApi.createAdminNotification(title, content, 'system').catch(() => {});
         } catch {}
         // Navigate safely without relying on multiple back actions
         // ניווט יקרה לאחר אישור חלון ההצלחה
       } else {
-        Alert.alert('שגיאה', 'קביעת התור נכשלה. אנא נסה שוב.');
+        Alert.alert('Error', 'Failed to book appointment. Please try again.');
       }
     } catch (e) {
-      Alert.alert('שגיאה', 'קביעת התור נכשלה. אנא נסה שוב.');
+      Alert.alert('Error', 'Failed to book appointment. Please try again.');
     } finally {
       setBooking(false);
     }
@@ -380,8 +380,8 @@ export default function SelectTimeScreen() {
         <View style={styles.headerContent}>
           <View style={{ width: 22 }} />
           <View style={{ alignItems: 'center' }}>
-            <Text style={styles.title}>קביעת תור</Text>
-            <Text style={styles.headerSubtitle}>בחר/י שירות, יום ושעה</Text>
+            <Text style={styles.title}>Book Appointment</Text>
+            <Text style={styles.headerSubtitle}>Select service, day and time</Text>
           </View>
           <View style={{ width: 22 }} />
         </View>
@@ -397,12 +397,12 @@ export default function SelectTimeScreen() {
             >
               <Ionicons name="arrow-forward" size={18} color="#000000" />
             </TouchableOpacity>
-            <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>בחירת שעה</Text>
+            <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>Select Time</Text>
             <View style={{ width: 36 }} />
           </View>
           <View style={styles.timesList}>
             {loading ? (
-              <View style={styles.loadingContainer}><Text style={styles.loadingText}>טוען שעות זמינות...</Text></View>
+              <View style={styles.loadingContainer}><Text style={styles.loadingText}>Loading available times...</Text></View>
             ) : availableTimes.length > 0 ? (
               availableTimes.map((t) => {
                 const isSel = selectedTime === t;
@@ -413,7 +413,7 @@ export default function SelectTimeScreen() {
                 );
               })
             ) : (
-              <View style={styles.loadingContainer}><Text style={styles.loadingText}>אין שעות פנויות ביום זה</Text></View>
+              <View style={styles.loadingContainer}><Text style={styles.loadingText}>No available times for this day</Text></View>
             )}
           </View>
         </ScrollView>
@@ -425,7 +425,7 @@ export default function SelectTimeScreen() {
           disabled={!canBook || checkingSameDay}
           onPress={onPressBook}
         >
-          <Text style={styles.bookBtnText}>{booking ? 'קובע תור...' : (checkingSameDay ? 'בודק תור קיים...' : `קבע תור - ₪${params.price || 0}`)}</Text>
+          <Text style={styles.bookBtnText}>{booking ? 'Booking appointment...' : (checkingSameDay ? 'Checking existing appointment...' : `Book Appointment - $${params.price || 0}`)}</Text>
         </TouchableOpacity>
       </View>
 
@@ -438,12 +438,12 @@ export default function SelectTimeScreen() {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>יש לך תור קיים</Text>
+              <Text style={styles.modalTitle}>You have an existing appointment</Text>
               <Text style={styles.modalMessage} numberOfLines={0} allowFontScaling={false}>
-                יש לך תור קיים ליום {existingAppointment?.slot_date ? new Date(existingAppointment.slot_date).toLocaleDateString('he-IL', { weekday: 'long', month: 'long', day: 'numeric' }) : 'לא ידוע'} בשעה {existingAppointment?.slot_time || 'לא ידוע'} לשירות {existingAppointment?.service_name || 'לא מוגדר'}.
+                You have an existing appointment on {existingAppointment?.slot_date ? new Date(existingAppointment.slot_date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : 'unknown date'} at {existingAppointment?.slot_time || 'unknown time'} for {existingAppointment?.service_name || 'unknown service'}.
                 {'\n'}
                 {'\n'}
-                האם להחליף את התור הקיים ולקבוע את התור החדש לשעה {selectedTime} או לקבוע תור נוסף?
+                Would you like to replace the existing appointment with the new one at {selectedTime} or book an additional appointment?
               </Text>
               <View style={styles.modalButtons}>
                 <TouchableOpacity
@@ -451,7 +451,7 @@ export default function SelectTimeScreen() {
                   onPress={() => setShowReplaceModal(false)}
                   activeOpacity={0.9}
                 >
-                  <Text style={styles.modalButtonCancelText}>ביטול</Text>
+                  <Text style={styles.modalButtonCancelText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.modalButtonReplace]}
@@ -460,7 +460,7 @@ export default function SelectTimeScreen() {
                     if (existingAppointment?.id) {
                       const ok = await cancelExistingAppointment(existingAppointment.id);
                       if (!ok) {
-                        Alert.alert('שגיאה', 'ביטול התור הקיים נכשל');
+                        Alert.alert('Error', 'Failed to cancel existing appointment');
                         return;
                       }
                     }
@@ -468,7 +468,7 @@ export default function SelectTimeScreen() {
                   }}
                   activeOpacity={0.9}
                 >
-                  <Text style={styles.modalButtonText}>החלף תור</Text>
+                  <Text style={styles.modalButtonText}>Replace Appointment</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.modalButtonBookAdditional]}
@@ -478,7 +478,7 @@ export default function SelectTimeScreen() {
                   }}
                   activeOpacity={0.9}
                 >
-                  <Text style={styles.modalButtonText}>קבע תור נוסף</Text>
+                  <Text style={styles.modalButtonText}>Book Additional</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -495,7 +495,7 @@ export default function SelectTimeScreen() {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>תור נקבע בהצלחה!</Text>
+              <Text style={styles.modalTitle}>Appointment Booked Successfully!</Text>
               <Text style={styles.modalMessage} numberOfLines={0} allowFontScaling={false}>
                 {successMessage}
               </Text>
@@ -512,7 +512,7 @@ export default function SelectTimeScreen() {
                   }}
                   activeOpacity={0.9}
                 >
-                  <Text style={styles.modalButtonText}>הבנתי</Text>
+                  <Text style={styles.modalButtonText}>Got it</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -555,12 +555,14 @@ const styles = StyleSheet.create({
     color: '#000000',
     textAlign: 'center',
     letterSpacing: -0.3,
+    writingDirection: 'ltr',
   },
   headerSubtitle: {
     fontSize: 12,
     color: '#6b7280',
     marginTop: 6,
     textAlign: 'center',
+    writingDirection: 'ltr',
   },
   contentWrapper: {
     flex: 1,
@@ -582,8 +584,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#000000',
     marginBottom: 0,
-    textAlign: 'right',
+    textAlign: 'center',
     letterSpacing: -0.3,
+    writingDirection: 'ltr',
   },
   sectionTitleCentered: {
     textAlign: 'center',
@@ -650,6 +653,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: -0.3,
+    textAlign: 'center',
+    writingDirection: 'ltr',
   },
   loadingContainer: {
     alignItems: 'center',
@@ -661,6 +666,8 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     fontWeight: '500',
     letterSpacing: -0.2,
+    textAlign: 'center',
+    writingDirection: 'ltr',
   },
   // Apple-like modal styles
   modalOverlay: {
@@ -691,6 +698,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textAlign: 'center',
     letterSpacing: -0.4,
+    writingDirection: 'ltr',
   },
   modalMessage: {
     fontSize: 16,
@@ -700,6 +708,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     letterSpacing: -0.2,
     fontWeight: '500',
+    writingDirection: 'ltr',
   },
   modalButtons: {
     flexDirection: 'row',
@@ -741,6 +750,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
     letterSpacing: -0.2,
+    writingDirection: 'ltr',
   },
   modalButtonCancelText: {
     color: '#007AFF',
@@ -748,6 +758,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
     letterSpacing: -0.2,
+    writingDirection: 'ltr',
   },
 });
 

@@ -420,6 +420,15 @@ export default function ClientProfileScreen() {
                 onPress={item.onPress}
                 activeOpacity={isNotifications ? 0.7 : 0.6}
               >
+                <View style={styles.menuItemIcon}>
+                  <Ionicons name={item.icon as any} size={20} color={Colors.primary} />
+                </View>
+                <View style={styles.menuItemContent}>
+                  <View style={styles.menuItemText}>
+                    <Text style={styles.menuItemTitle}>{item.title}</Text>
+                    <Text style={styles.menuItemSubtitle}>{item.subtitle}</Text>
+                  </View>
+                </View>
                 {!isNotifications && (
                   <Ionicons name="chevron-forward-outline" size={20} color={Colors.subtext} />
                 )}
@@ -447,15 +456,6 @@ export default function ClientProfileScreen() {
                     style={styles.switch}
                   />
                 )}
-                <View style={styles.menuItemContent}>
-                  <View style={styles.menuItemText}>
-                    <Text style={styles.menuItemTitle}>{item.title}</Text>
-                    <Text style={styles.menuItemSubtitle}>{item.subtitle}</Text>
-                  </View>
-                  <View style={styles.menuItemIcon}>
-                    <Ionicons name={item.icon as any} size={20} color={Colors.primary} />
-                  </View>
-                </View>
               </TouchableOpacity>
             );
           })}
@@ -1284,9 +1284,8 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   menuItemContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
     flex: 1,
+    marginLeft: 12,
   },
   menuItemIcon: {
     width: 40,
@@ -1295,7 +1294,6 @@ const styles = StyleSheet.create({
     backgroundColor: `${Colors.primary}15`,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 12,
   },
   menuItemText: {
     flex: 1,

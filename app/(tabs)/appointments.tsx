@@ -264,13 +264,13 @@ export default function AdminAppointmentsScreen() {
   // Actions
   const startPhoneCall = useCallback(async (rawPhone?: string | null) => {
     if (!rawPhone) {
-      Alert.alert('אין מספר טלפון', 'לא נמצא מספר טלפון תקין ללקוח.');
+      Alert.alert('No phone number', 'No valid phone number was found for this client.');
       return;
     }
     // Sanitize phone: keep + and digits
     const phone = rawPhone.trim().replace(/[^+\d]/g, '');
     if (!phone) {
-      Alert.alert('אין מספר טלפון', 'לא נמצא מספר טלפון תקין ללקוח.');
+      Alert.alert('No phone number', 'No valid phone number was found for this client.');
       return;
     }
 
@@ -280,13 +280,13 @@ export default function AdminAppointmentsScreen() {
     try {
       const supported = await Linking.canOpenURL(url);
       if (!supported) {
-        Alert.alert('שגיאה', 'לא ניתן לפתוח חיוג במכשיר זה.');
+        Alert.alert('Error', 'Unable to open the dialer on this device.');
         return;
       }
       await Linking.openURL(url);
     } catch (e) {
       console.error('Failed to initiate phone call:', e);
-      Alert.alert('שגיאה', 'אירעה שגיאה במהלך פתיחת החייגן.');
+      Alert.alert('Error', 'An error occurred while opening the dialer.');
     }
   }, []);
 
@@ -339,7 +339,7 @@ export default function AdminAppointmentsScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>יומן תורים</Text>
+        <Text style={styles.headerTitle}>Appointments</Text>
         <View style={styles.monthSwitcher}>
           <TouchableOpacity onPress={() => {
             const d = new Date(selectedDate);
@@ -351,7 +351,7 @@ export default function AdminAppointmentsScreen() {
             <ChevronRight size={16} color={'#1C1C1E'} />
           </TouchableOpacity>
           <Text style={styles.monthText}>{(() => {
-            const months = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+            const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
             return `${months[selectedDate.getMonth()]} ${selectedDate.getFullYear()}`;
           })()}</Text>
           <TouchableOpacity onPress={() => {
@@ -371,7 +371,7 @@ export default function AdminAppointmentsScreen() {
       {isLoading ? (
         <View style={styles.loaderContainer}>
           <ActivityIndicator size="large" color={Colors.text} />
-          <Text style={styles.loadingText}>טוען תורים ל-{selectedDateStr}...</Text>
+          <Text style={styles.loadingText}>Loading appointments for {selectedDateStr}...</Text>
         </View>
       ) : (
         <ScrollView
@@ -386,7 +386,7 @@ export default function AdminAppointmentsScreen() {
               onRefresh={onRefresh}
               colors={[Colors.text]}
               tintColor={Colors.text}
-              title="מעדכן..."
+              title="Refreshing..."
               titleColor={Colors.text}
             />
           }
@@ -419,7 +419,7 @@ export default function AdminAppointmentsScreen() {
                       <PressableScale
                         onPress={() => openActionsMenu(apt)}
                         style={styles.moreButton}
-                        accessibilityLabel="אפשרויות"
+                        accessibilityLabel="Options"
                         hitSlop={{ top: 24, bottom: 24, left: 24, right: 24 }}
                         pressRetentionOffset={{ top: 24, bottom: 24, left: 24, right: 24 }}
                       >
@@ -427,7 +427,7 @@ export default function AdminAppointmentsScreen() {
                       </PressableScale>
                     </View>
                     <Text style={styles.appointmentTime}>{`${startTime} - ${endTime}`}</Text>
-                    <Text numberOfLines={1} style={styles.appointmentTitle}>{apt.service_name || 'שירות'}</Text>
+                    <Text numberOfLines={1} style={styles.appointmentTitle}>{apt.service_name || 'Service'}</Text>
                     {!!apt.client_name && (
                       <Text numberOfLines={1} style={styles.appointmentClient}>{apt.client_name}</Text>
                     )}
@@ -439,8 +439,8 @@ export default function AdminAppointmentsScreen() {
 
           {appointments.length === 0 && (
             <View style={styles.emptyState}> 
-              <Text style={styles.emptyTitle}>אין תורים ליום זה</Text>
-              <Text style={styles.emptySubtitle}>בחר יום אחר מהפס העליון</Text>
+              <Text style={styles.emptyTitle}>No appointments for this day</Text>
+              <Text style={styles.emptySubtitle}>Choose another day from the top bar</Text>
             </View>
           )}
         </ScrollView>
@@ -455,11 +455,11 @@ export default function AdminAppointmentsScreen() {
       >
         <View style={styles.actionsOverlay}>
           <View style={styles.actionsSheet}>
-            <Text style={styles.actionsTitle}>בחר פעולה</Text>
+            <Text style={styles.actionsTitle}>Choose an action</Text>
             {!!actionsAppointment?.client_phone && (
               <PressableScale
                 style={styles.actionsOption}
-                accessibilityLabel="התקשר ללקוח"
+                accessibilityLabel="Call client"
                 onPress={async () => {
                   const phone = actionsAppointment?.client_phone;
                   closeActionsMenu();
@@ -469,13 +469,13 @@ export default function AdminAppointmentsScreen() {
                 <View style={[styles.actionsIconCircle, { backgroundColor: '#E8F0FF' }]}>
                   <Ionicons name="call" size={18} color="#0A84FF" />
                 </View>
-                <Text style={styles.actionsOptionText}>התקשר ללקוח</Text>
+                <Text style={styles.actionsOptionText}>Call client</Text>
               </PressableScale>
             )}
             <View style={styles.actionsDivider} />
             <PressableScale
               style={styles.actionsOption}
-              accessibilityLabel="בטל תור"
+              accessibilityLabel="Cancel appointment"
               onPress={() => {
                 if (actionsAppointment) {
                   askCancelAppointment(actionsAppointment);
@@ -486,14 +486,14 @@ export default function AdminAppointmentsScreen() {
               <View style={[styles.actionsIconCircle, { backgroundColor: '#FFECEC' }]}>
                 <Ionicons name="close" size={18} color="#FF3B30" />
               </View>
-              <Text style={[styles.actionsOptionText, { color: Colors.error }]}>בטל תור</Text>
+              <Text style={[styles.actionsOptionText, { color: Colors.error }]}>Cancel appointment</Text>
             </PressableScale>
             <PressableScale
               style={styles.actionsCancelButton}
-              accessibilityLabel="סגור"
+              accessibilityLabel="Close"
               onPress={closeActionsMenu}
             >
-              <Text style={styles.actionsCancelText}>סגור</Text>
+              <Text style={styles.actionsCancelText}>Close</Text>
             </PressableScale>
           </View>
         </View>
@@ -511,9 +511,9 @@ export default function AdminAppointmentsScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.iosAlertContainer}>
-            <Text style={styles.iosAlertTitle}>לבטל את התור?</Text>
+            <Text style={styles.iosAlertTitle}>Cancel the appointment?</Text>
             <Text style={styles.iosAlertMessage}>
-              פעולה זו תשחרר את השעה ותמחק את פרטי הלקוח עבור התור הנבחר.
+              This will free the time and remove the client details for the selected appointment.
             </Text>
             <View style={styles.iosAlertButtonsRow}>
               <TouchableOpacity
@@ -525,7 +525,7 @@ export default function AdminAppointmentsScreen() {
                 }}
                 disabled={isCancelling}
               >
-                <Text style={styles.iosAlertButtonDefaultText}>ביטול</Text>
+                <Text style={styles.iosAlertButtonDefaultText}>Cancel</Text>
               </TouchableOpacity>
               <View style={styles.iosAlertButtonDivider} />
               <TouchableOpacity
@@ -537,7 +537,7 @@ export default function AdminAppointmentsScreen() {
                 {isCancelling ? (
                   <ActivityIndicator size="small" color="#FF3B30" />
                 ) : (
-                  <Text style={styles.iosAlertButtonDestructiveText}>אישור</Text>
+                  <Text style={styles.iosAlertButtonDestructiveText}>Confirm</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -565,7 +565,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 8,
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
@@ -573,9 +573,10 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '800',
     color: Colors.text,
+    marginRight: 8,
   },
   monthSwitcher: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     backgroundColor: '#F2F2F7',
@@ -633,13 +634,13 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   gridRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
   },
   timeLabel: {
     width: LABELS_WIDTH,
-    textAlign: 'right',
-    paddingRight: 8,
+    textAlign: 'left',
+    paddingLeft: 8,
     color: Colors.subtext,
   },
   gridLine: {
@@ -699,18 +700,18 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
     fontWeight: '800',
     marginBottom: 2,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   appointmentTitle: {
     fontSize: 14,
     fontWeight: '700',
     color: Colors.text,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   appointmentClient: {
     fontSize: 12,
     color: '#666',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   emptyState: {
     alignItems: 'center',
@@ -755,7 +756,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   actionsOption: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingHorizontal: 8,

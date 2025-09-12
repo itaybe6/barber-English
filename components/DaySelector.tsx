@@ -94,8 +94,8 @@ export default function DaySelector({
   
   const updateCurrentMonth = (date: Date) => {
     const months = [
-      'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
-      'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
     ];
     setCurrentMonth(`${months[date.getMonth()]} ${date.getFullYear()}`);
   };
@@ -143,8 +143,8 @@ export default function DaySelector({
   };
   
   const getDayName = (date: Date) => {
-    // Desired order and labels: א, ב, ג, ד, ה, ו, ש (Sun..Sat)
-    const days = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
+    // English short weekday names: Sun .. Sat
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     return days[date.getDay()];
   };
   
@@ -160,19 +160,13 @@ export default function DaySelector({
     const ITEM_FULL_WIDTH = 68; // 56 width + ~12 margins
     const screenWidth = Dimensions.get('window').width;
     
-    // For RTL, we want to scroll to show the selected item in the center
-    // Since the content is laid out RTL, we need to calculate from the right
+    // For LTR, center the selected item in view
     const totalContentWidth = dates.length * ITEM_FULL_WIDTH;
-    
-    // Calculate position to center the selected item
     const centerOffset = (screenWidth - ITEM_FULL_WIDTH) / 2;
     const itemPosition = selectedIdx * ITEM_FULL_WIDTH;
-    
-    // In RTL, scroll position 0 shows the rightmost content
-    // We want to scroll so the selected item appears centered
     const targetX = Math.max(0, Math.min(
       totalContentWidth - screenWidth,
-      totalContentWidth - itemPosition - ITEM_FULL_WIDTH - centerOffset
+      itemPosition - centerOffset
     ));
     
     try {
@@ -195,7 +189,7 @@ export default function DaySelector({
   }, [dates, selectedDate, mode]);
   
   return (
-    <View style={[styles.container, { direction: 'rtl' }] }>
+    <View style={[styles.container, { direction: 'ltr' }] }>
       <ScrollView
         ref={scrollRef}
         horizontal

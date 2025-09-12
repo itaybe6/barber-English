@@ -97,7 +97,7 @@ export default function HomeScreen() {
   
   const getClientName = (clientId: string) => {
     const client = clients.find(c => c.id === clientId);
-    return client ? client.name : 'לקוחה לא ידועה';
+    return client ? client.name : 'Unknown client';
   };
 
   const getClientImage = (clientId: string) => {
@@ -107,7 +107,7 @@ export default function HomeScreen() {
   
   const getServiceName = (serviceId: string) => {
     const service = services.find(s => s.id === serviceId);
-    return service ? service.name : 'שירות לא ידוע';
+    return service ? service.name : 'Unknown service';
   };
   
   const formatTime = (dateString: string) => {
@@ -517,7 +517,7 @@ export default function HomeScreen() {
         </View>
         {/* Right side: Broadcast icon */}
         <View style={styles.headerSide}>
-          <AdminBroadcastComposer variant="icon" />
+          <AdminBroadcastComposer variant="icon" language="en" />
         </View>
       </View>
     </SafeAreaView>
@@ -572,18 +572,18 @@ export default function HomeScreen() {
                 ) : (
                   <Text style={styles.statsNumber}>{monthlyStats.completedAppointments}</Text>
                 )}
-                <Text style={styles.statsLabelSecondary}>Appointments this month</Text>
+                <Text style={styles.statsLabelSecondary}>This month</Text>
               </View>
             </View>
           </View>
         </View>
         {/* כפתור עריכת גלריה למנהל מעל הגלריה */}
         {isAdmin && (
-          <View style={{ paddingHorizontal: 8, marginBottom: 8, alignItems: 'flex-end' }}>
+          <View style={{ paddingHorizontal: 8, marginBottom: 8, alignItems: 'flex-start' }}>
             <TouchableOpacity
               onPress={() => router.push('/(tabs)/edit-gallery')}
               activeOpacity={0.85}
-              style={styles.editGalleryButton}
+              style={[styles.editGalleryButton, { alignSelf: 'flex-start' }]}
             >
               <Text style={styles.editGalleryButtonText}>Edit Gallery</Text>
               <View style={[styles.statsButtonIconCircle, { backgroundColor: 'rgba(0,0,0,0.10)', width: 28, height: 28, borderRadius: 14, marginLeft: 8 }]}> 
@@ -593,11 +593,11 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* גלריה אופקית */}
+        {/* Horizontal gallery */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          style={[{ marginTop: 0, marginBottom: 8 }, styles.rtlFlip]}
+          style={[{ marginTop: 0, marginBottom: 8 }]}
           contentContainerStyle={{ flexDirection: 'row', gap: 12, paddingHorizontal: 8 }}
         >
           {isLoadingDesigns ? (
@@ -609,7 +609,7 @@ export default function HomeScreen() {
               isAdmin ? (
                 <TouchableOpacity
                   key={item.id}
-                  style={[styles.galleryTile, styles.unflip]}
+                  style={[styles.galleryTile]}
                   activeOpacity={0.85}
                   onPress={() => setPreviewImageUrl(item.image_url)}
                 >
@@ -635,7 +635,7 @@ export default function HomeScreen() {
                   </View>
                 </TouchableOpacity>
               ) : (
-                <View key={item.id} style={[styles.galleryTile, styles.unflip]}>
+                <View key={item.id} style={[styles.galleryTile]}>
                   <View style={styles.galleryImageContainer}>
                     <Image
                       source={{ uri: item.image_url }}
@@ -816,7 +816,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   header: {
-    flexDirection: 'row-reverse', // RTL
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
@@ -872,13 +872,13 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
     color: '#fff',
-    textAlign: 'right',
+    textAlign: 'left',
     letterSpacing: -0.5,
   },
   featuredSubtitle: {
     fontSize: 18,
     color: 'rgba(255, 255, 255, 0.9)',
-    textAlign: 'right',
+    textAlign: 'left',
     marginTop: 8,
     fontWeight: '400',
   },
@@ -911,7 +911,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: Colors.text,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   viewAllButton: {
     flexDirection: 'row',
@@ -920,7 +920,7 @@ const styles = StyleSheet.create({
   viewAllText: {
     fontSize: 14,
     color: Colors.primary,
-    marginRight: 4,
+    marginLeft: 4,
   },
   appointmentsContainer: {
     paddingHorizontal: 16,
@@ -954,14 +954,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#222',
     fontWeight: '500',
-    marginRight: 8,
-    textAlign: 'right',
+    marginLeft: 8,
+    textAlign: 'left',
     flex: 1,
   },
   timeRange: {
     fontSize: 14,
     color: Colors.subtext,
-    textAlign: 'right',
+    textAlign: 'left',
     marginTop: 2,
   },
   ratingContainer: {
@@ -981,7 +981,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: Colors.text,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   statsCard: {
     marginBottom: 24,
@@ -990,7 +990,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: Colors.text,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   statsContainer: {
     flexDirection: 'row',
@@ -1101,12 +1101,12 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: 14,
     fontWeight: '600',
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 4,
   },
   galleryCategoryTags: {
-    flexDirection: 'row-reverse', // RTL
-    justifyContent: 'flex-end',
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
     flexWrap: 'wrap',
   },
   galleryCategoryTag: {
@@ -1131,7 +1131,7 @@ const styles = StyleSheet.create({
     display: 'none',
   },
   cardsRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 18,
     marginBottom: 18,
@@ -1155,7 +1155,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
   },
   profileImage: {
     width: 36,
@@ -1221,7 +1221,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   statsButtonsRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     gap: 12,
   },
   statsItem: {
@@ -1236,9 +1236,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: '#E5E5EA',
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -1255,11 +1255,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 12,
+    marginRight: 12,
   },
   statsButtonContent: {
     flex: 1,
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
   },
   statsValue: {
     fontSize: 18,
@@ -1283,7 +1283,7 @@ const styles = StyleSheet.create({
   statsLabelSecondary: {
     fontSize: 13,
     color: '#8E8E93',
-    textAlign: 'right',
+    textAlign: 'left',
     marginTop: 2,
   },
   statsDivider: {

@@ -152,7 +152,7 @@ export default function TabsLayout() {
       <Tabs.Screen 
         name="business-hours" 
         options={{
-          title: 'Business Hours',
+          title: 'Hours',
         }}
       />
       <Tabs.Screen 
@@ -206,7 +206,7 @@ function getTabLabel(routeName: string): string {
     case 'settings':
       return 'Settings';
     case 'business-hours':
-      return 'Business Hours';
+      return 'Hours';
     default:
       return routeName;
   }

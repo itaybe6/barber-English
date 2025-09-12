@@ -105,7 +105,7 @@ export default function ClientTabsLayout() {
         tabBarHideOnKeyboard: true,
         tabBarIcon: ({ color, size, focused }) => {
           const iconSize = focused ? 26 : 24;
-          const iconColor = focused ? '#2C2C2E' : '#3A3A3C';
+          const iconColor = focused ? '#000000' : '#3A3A3C';
           
           let iconName;
           switch (route.name) {
@@ -115,7 +115,7 @@ export default function ClientTabsLayout() {
             case 'gallery':
               iconName = focused ? 'images' : 'images-outline';
               break;
-            case 'booking':
+            case 'appointments':
               iconName = focused ? 'calendar' : 'calendar-outline';
               break;
             case 'profile':
@@ -160,20 +160,29 @@ export default function ClientTabsLayout() {
         tabBarButton: (props: any) => {
           // Intercept presses for specific routes to enforce auth
           const originalOnPress = props.onPress;
+          const routeName = (props as any).accessibilityLabel || '';
+          
           return (
             <TouchableOpacity
               {...(props as any)}
               onPress={() => {
-                const name = (props as any).accessibilityState?.label || (props as any).toString?.() || '';
-                // Fallback using route key from props if available
-                const target = (props as any).accessibilityLabel || '';
-                // We cannot reliably detect here; rely on options below per screen where possible
+                // Check if this is a protected route
+                if (routeName === 'Appointments' || routeName === 'Profile') {
+                  if (!isAuthenticated) {
+                    setLoginModal({
+                      visible: true,
+                      title: 'Login Required',
+                      message: `Please sign in to access ${routeName.toLowerCase()}.`,
+                    });
+                    return;
+                  }
+                }
                 originalOnPress?.({} as any);
               }}
             />
           );
         },
-        tabBarActiveTintColor: '#2C2C2E',
+        tabBarActiveTintColor: '#000000',
         tabBarInactiveTintColor: '#3A3A3C',
         tabBarLabelStyle: {
           fontSize: 11,
@@ -277,62 +286,12 @@ export default function ClientTabsLayout() {
         name="appointments" 
         options={{
           title: 'Appointments',
-          tabBarButton: (props: any) => {
-            const isFocused = props?.accessibilityState?.selected;
-            const color = isFocused ? '#2C2C2E' : '#3A3A3C';
-            return (
-              <TouchableOpacity
-                {...props}
-              onPress={() => {
-                if (!isAuthenticated) {
-                  setLoginModal({
-                    visible: true,
-                    title: 'Login Required',
-                    message: 'Please sign in to view your appointments.',
-                  });
-                  return;
-                }
-                router.push('/(client-tabs)/appointments');
-              }}
-              >
-                <View style={styles.iconContainer}>
-                  <Ionicons name={'calendar-outline' as any} size={24} color={color} />
-                </View>
-                <RNText style={[styles.manualTabLabel, { color }]}>{getTabLabel('appointments')}</RNText>
-              </TouchableOpacity>
-            );
-          },
         }}
       />
       <Tabs.Screen 
         name="profile" 
         options={{
           title: 'Profile',
-          tabBarButton: (props: any) => {
-            const isFocused = props?.accessibilityState?.selected;
-            const color = isFocused ? '#2C2C2E' : '#3A3A3C';
-            return (
-              <TouchableOpacity
-                {...props}
-              onPress={() => {
-                if (!isAuthenticated) {
-                  setLoginModal({
-                    visible: true,
-                    title: 'Login Required',
-                    message: 'Please sign in to access your profile.',
-                  });
-                  return;
-                }
-                router.push('/(client-tabs)/profile');
-              }}
-              >
-                <View style={styles.iconContainer}>
-                  <Ionicons name={'person-outline' as any} size={24} color={color} />
-                </View>
-                <RNText style={[styles.manualTabLabel, { color }]}>{getTabLabel('profile')}</RNText>
-              </TouchableOpacity>
-            );
-          },
         }}
       />
       <Tabs.Screen 

@@ -6,15 +6,15 @@ import Colors from '@/constants/colors';
 import { businessConstraintsApi } from '@/lib/api/businessConstraints';
 import { Calendar as RNCalendar, LocaleConfig } from 'react-native-calendars';
 
-// Hebrew locale + RTL for react-native-calendars
-LocaleConfig.locales['he'] = {
-  monthNames: ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'],
-  monthNamesShort: ['ינו','פבר','מרץ','אפר','מאי','יונ','יול','אוג','ספט','אוק','נוב','דצמ'],
-  dayNames: ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'],
-  dayNamesShort: ['א','ב','ג','ד','ה','ו','ש'],
-  today: 'היום'
+// English locale + LTR for react-native-calendars
+LocaleConfig.locales['en'] = {
+  monthNames: ['January','February','March','April','May','June','July','August','September','October','November','December'],
+  monthNamesShort: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+  dayNames: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
+  dayNamesShort: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+  today: 'Today'
 };
-LocaleConfig.defaultLocale = 'he';
+LocaleConfig.defaultLocale = 'en';
 
 type ConstraintDraft = {
   date: string; // YYYY-MM-DD
@@ -69,16 +69,16 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
   const [isReasonModalOpen, setIsReasonModalOpen] = useState<boolean>(false);
   const [tempReason, setTempReason] = useState<string>('');
 
-  const dayLabel = (d: Date) => d.toLocaleDateString('he-IL', { weekday: 'long', month: '2-digit', day: '2-digit' });
+  const dayLabel = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'long', month: '2-digit', day: '2-digit' });
   const next14 = useMemo(() => Array.from({ length: 14 }).map((_, i) => addDays(today, i)), [today]);
   const formatDatePretty = (iso: string) => {
     try {
       const dt = new Date(iso);
-      const weekday = dt.toLocaleDateString('he-IL', { weekday: 'long' });
+      const weekday = dt.toLocaleDateString('en-US', { weekday: 'long' });
       const day = String(dt.getDate()).padStart(2, '0');
       const month = String(dt.getMonth() + 1).padStart(2, '0');
       const year = dt.getFullYear();
-      return `${weekday}, ${day}/${month}/${year}`;
+      return `${weekday}, ${month}/${day}/${year}`;
     } catch { return iso; }
   };
 
@@ -213,7 +213,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
       <SafeAreaView style={styles.container} edges={['left','right']}>
         <View style={[styles.header, { paddingTop: Math.max(0, insets.top - 6) }]}>
           <TouchableOpacity onPress={onClose} style={styles.headerBtn}><Ionicons name="close" size={20} color={'#000'} /></TouchableOpacity>
-          <Text style={styles.headerTitle}>אילוצי עבודה</Text>
+          <Text style={styles.headerTitle}>Work constraints</Text>
           <TouchableOpacity onPress={() => setIsExistingModalOpen(true)} style={styles.headerAction} activeOpacity={0.9}>
             <View style={styles.headerActionInner}>
               <Ionicons name="create-outline" size={20} color={'#000000'} />
@@ -227,13 +227,13 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
           <View style={styles.segmentedCard}>
             <View style={styles.segmented}>
               <TouchableOpacity onPress={() => setMode('hours')} style={[styles.segment, mode === 'hours' && styles.segmentActive]} activeOpacity={0.9}>
-                <Text style={[styles.segmentText, mode === 'hours' && styles.segmentTextActive]}>כמה שעות</Text>
+                <Text style={[styles.segmentText, mode === 'hours' && styles.segmentTextActive]}>Hours</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setMode('single-day')} style={[styles.segment, mode === 'single-day' && styles.segmentActive]} activeOpacity={0.9}>
-                <Text style={[styles.segmentText, mode === 'single-day' && styles.segmentTextActive]}>יום אחד</Text>
+                <Text style={[styles.segmentText, mode === 'single-day' && styles.segmentTextActive]}>Single day</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setMode('multi-days')} style={[styles.segment, mode === 'multi-days' && styles.segmentActive]} activeOpacity={0.9}>
-                <Text style={[styles.segmentText, mode === 'multi-days' && styles.segmentTextActive]}>כמה ימים</Text>
+                <Text style={[styles.segmentText, mode === 'multi-days' && styles.segmentTextActive]}>Multiple days</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -242,7 +242,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
           {mode === 'hours' && (
             <>
               <View style={styles.card}>
-                <Text style={styles.sectionTitle}>בחר תאריך</Text>
+                <Text style={styles.sectionTitle}>Pick a date</Text>
                 <View style={styles.calendarCard}>
                                   <RNCalendar
                   current={singleDateISO}
@@ -252,7 +252,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
                   enableSwipeMonths
                   hideDayNames={false}
                   firstDay={0}
-                  style={{ direction: 'rtl' }}
+                  style={{ direction: 'ltr' }}
                   theme={{
                     textDayFontSize: 14,
                     textMonthFontSize: 16,
@@ -292,13 +292,13 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
                 </View>
               </View>
               <View style={styles.card}>
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Text style={styles.sectionTitle}>שעות שלא עובדים</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={styles.sectionTitle}>Closed hours</Text>
                   <TouchableOpacity onPress={() => { setTempStartHour(startTime); setTempEndHour(endTime); setIsHoursModalOpen(true); }} style={styles.smallIconBtn} activeOpacity={0.9}>
                     <Ionicons name="add" size={18} color={'#FFFFFF'} />
                   </TouchableOpacity>
                 </View>
-                <View style={{ marginTop: 8, alignItems: 'flex-end' }}>
+                <View style={{ marginTop: 8, alignItems: 'flex-start' }}>
                   <View style={styles.timeChip}>
                     <Ionicons name="time-outline" size={14} color={'#1C1C1E'} />
                     <Text style={styles.timeChipText}>{startTime}–{endTime}</Text>
@@ -311,7 +311,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
           {/* Single full day: pick one date */}
           {mode === 'single-day' && (
             <View style={styles.card}>
-              <Text style={styles.sectionTitle}>בחר תאריך (סגור כל היום)</Text>
+              <Text style={styles.sectionTitle}>Pick a date (closed all day)</Text>
               <View style={styles.calendarCard}>
                 <RNCalendar
                   current={singleDateISO}
@@ -321,7 +321,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
                   enableSwipeMonths
                   hideDayNames={false}
                   firstDay={0}
-                  style={{ direction: 'rtl' }}
+                  style={{ direction: 'ltr' }}
                   theme={{
                     textDayFontSize: 14,
                     textMonthFontSize: 16,
@@ -365,7 +365,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
           {/* Multi-days: date range selection */}
           {mode === 'multi-days' && (
             <View style={styles.card}>
-              <Text style={styles.sectionTitle}>בחר טווח תאריכים (סגור כל היום)</Text>
+              <Text style={styles.sectionTitle}>Pick a date range (closed all day)</Text>
               <View style={styles.calendarCard}>
                 <RNCalendar
                   current={rangeStartISO || toISODate(today)}
@@ -403,7 +403,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
                   enableSwipeMonths
                   hideDayNames={false}
                   firstDay={0}
-                  style={{ direction: 'rtl' }}
+                  style={{ direction: 'ltr' }}
                   theme={{
                     textDayFontSize: 14,
                     textMonthFontSize: 16,
@@ -442,9 +442,9 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
                 />
               </View>
               {rangeStartISO && rangeEndISO && (
-                <View style={{ marginTop: 12, alignItems: 'flex-end' }}>
+                <View style={{ marginTop: 12, alignItems: 'flex-start' }}>
                   <Text style={{ color: '#6B7280', fontWeight: '600' }}>
-                    טווח שנבחר: <Text style={{ writingDirection: 'ltr' }}>{formatISOToDDMMYYYY(rangeEndISO)} — {formatISOToDDMMYYYY(rangeStartISO)}</Text>
+                    Selected range: <Text style={{ writingDirection: 'ltr' }}>{formatISOToDDMMYYYY(rangeStartISO)} — {formatISOToDDMMYYYY(rangeEndISO)}</Text>
                   </Text>
                 </View>
               )}
@@ -452,8 +452,8 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
           )}
 
           <View style={styles.card}>
-            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>סיבה (לא חובה)</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Reason (optional)</Text>
               <TouchableOpacity
                 onPress={() => { setTempReason(reason); setIsReasonModalOpen(true); }}
                 style={styles.smallIconBtn}
@@ -463,7 +463,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
               </TouchableOpacity>
             </View>
             {!!reason && (
-              <View style={{ marginTop: 8, alignItems: 'flex-end' }}>
+              <View style={{ marginTop: 8, alignItems: 'flex-start' }}>
                 <View style={styles.reasonChip}>
                   <Text style={styles.reasonChipText}>{reason}</Text>
                 </View>
@@ -473,7 +473,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
 
           <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: insets.bottom + 8 }}>
             <TouchableOpacity style={[styles.primaryBtn, isSaving && { opacity: 0.6 }]} onPress={save} disabled={isSaving}>
-              <Text style={styles.primaryBtnText}>{isSaving ? 'שומר...' : 'שמור אילוצים'}</Text>
+              <Text style={styles.primaryBtnText}>{isSaving ? 'Saving...' : 'Save constraints'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -487,20 +487,20 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
         <SafeAreaView style={styles.container} edges={['left','right']}>
           <View style={[styles.header, { paddingTop: Math.max(0, insets.top - 6) }]}>
             <TouchableOpacity onPress={() => setIsExistingModalOpen(false)} style={styles.headerBtn}><Ionicons name="close" size={20} color={'#000'} /></TouchableOpacity>
-            <Text style={styles.headerTitle}>אילוצים עתידיים</Text>
+            <Text style={styles.headerTitle}>Upcoming constraints</Text>
             <View style={styles.headerBtn} />
           </View>
           <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
             <View style={styles.card}>
-              <Text style={styles.sectionTitle}>אילוצים עתידיים</Text>
+              <Text style={styles.sectionTitle}>Upcoming constraints</Text>
               <View style={styles.sectionUnderline} />
               <View style={{ gap: 14 }}>
                 {existing.length === 0 ? (
-                  <Text style={styles.emptyText}>אין אילוצים עתידיים</Text>
+                  <Text style={styles.emptyText}>No upcoming constraints</Text>
                 ) : (
                   (() => {
                     const groups = (existing || []).reduce((m: Record<string, any[]>, c: any) => {
-                      const key = (c.reason || '').trim() || 'ללא סיבה';
+                      const key = (c.reason || '').trim() || 'No reason';
                       (m[key] = m[key] || []).push(c);
                       return m;
                     }, {} as Record<string, any[]>);
@@ -511,7 +511,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
                       return (
                         <View key={reasonKey} style={{ gap: 8 }}>
                           {/* Group header: reason and dates */}
-                          <View style={{ alignItems: 'flex-end' }}>
+                          <View style={{ alignItems: 'flex-start' }}>
                             <Text style={styles.sectionValueText}>{reasonKey}</Text>
                             {dates.length > 1 ? (
                               <Text style={[styles.sectionValueText, { marginTop: 6 }]}>
@@ -531,12 +531,12 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
                                 const isFullDay = start === '00:00' && end === '23:59';
                                 return (
                                   <View key={c.id} style={styles.constraintCard}>
-                                    <View style={{ alignItems: 'flex-end' }}>
+                                    <View style={{ alignItems: 'flex-start' }}>
                                       <Text style={styles.sectionMiniTitle}>{formatDatePretty(c.date)}</Text>
                                       <View style={{ marginTop: 8 }}>
                                         <View style={styles.timeChip}>
                                           <Ionicons name="time-outline" size={14} color={'#1C1C1E'} />
-                                          <Text style={styles.timeChipText}>{isFullDay ? 'יום שלם' : `${start}–${end}`}</Text>
+                                          <Text style={styles.timeChipText}>{isFullDay ? 'All day' : `${start}–${end}`}</Text>
                                         </View>
                                       </View>
                                     </View>
@@ -564,16 +564,16 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
         <View style={styles.centerModal}>
           <View style={styles.centerSheet}>
             <View style={styles.sheetHeaderRow}>
-              <Text style={styles.sheetTitle}>בחר שעות שלא עובדים</Text>
+              <Text style={styles.sheetTitle}>Choose closed hours</Text>
               <TouchableOpacity onPress={() => { setStartTime(tempStartHour); setEndTime(tempEndHour); setIsHoursModalOpen(false); }} style={styles.confirmBtn}>
                 <Ionicons name="checkmark" size={18} color={'#FFFFFF'} />
               </TouchableOpacity>
             </View>
             <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-              <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>התחלה</Text>
+              <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>Start</Text>
               <WheelPicker options={timeOptions} value={tempStartHour} onChange={setTempStartHour} />
               <View style={{ height: 12 }} />
-              <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>סיום</Text>
+              <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>End</Text>
               <WheelPicker options={timeOptions} value={tempEndHour} onChange={setTempEndHour} />
             </View>
           </View>
@@ -586,7 +586,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
         <View style={styles.centerModal}>
           <View style={styles.centerSheet}>
             <View style={styles.sheetHeaderRow}>
-              <Text style={styles.sheetTitle}>כתוב סיבה</Text>
+              <Text style={styles.sheetTitle}>Enter reason</Text>
               <TouchableOpacity onPress={() => { setReason(tempReason.trim()); setIsReasonModalOpen(false); }} style={styles.confirmBtn}>
                 <Ionicons name="checkmark" size={18} color={'#FFFFFF'} />
               </TouchableOpacity>
@@ -596,10 +596,10 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
                 <TextInput
                   value={tempReason}
                   onChangeText={setTempReason}
-                  placeholder="למשל: חופש, סידורים, סגירה זמנית"
+                  placeholder="e.g., vacation, errands, temporary closure"
                   placeholderTextColor={'#8E8E93'}
                   style={styles.input}
-                  textAlign="right"
+                  textAlign="left"
                   multiline
                 />
               </View>
@@ -617,29 +617,29 @@ const styles = StyleSheet.create({
   headerBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   headerIconCircle: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
   headerAction: { paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: '#000000', borderRadius: 999, backgroundColor: '#FFFFFF' },
-  headerActionInner: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6 },
+  headerActionInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   headerActionText: { color: '#000000', fontWeight: '800' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#000' },
-  sectionTitle: { fontSize: 16, fontWeight: '700', textAlign: 'right', marginBottom: 12, color: '#1C1C1E' },
-  sectionUnderline: { alignSelf: 'flex-end', width: '35%', height: 1, backgroundColor: '#E5E5EA', marginTop: -6, marginBottom: 10 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', textAlign: 'left', marginBottom: 12, color: '#1C1C1E' },
+  sectionUnderline: { alignSelf: 'flex-start', width: '35%', height: 1, backgroundColor: '#E5E5EA', marginTop: -6, marginBottom: 10 },
   card: { marginHorizontal: 16, marginTop: 16, backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 4, padding: 16 },
   calendarCard: { borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#E5E5EA' },
-  daysGrid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8 },
+  daysGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   dayChip: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#F2F2F7', borderWidth: 1, borderColor: '#E5E5EA' },
   dayChipActive: { backgroundColor: 'rgba(0,122,255,0.12)', borderColor: 'rgba(0,122,255,0.35)' },
   dayChipText: { fontWeight: '700', color: '#1C1C1E' },
   dayChipTextActive: { color: '#007AFF' },
-  timeRow: { flexDirection: 'row-reverse', gap: 12 },
-  dropdownBtn: { flex: 1, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 12, backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1.5, borderColor: '#E5E5EA' },
+  timeRow: { flexDirection: 'row', gap: 12 },
+  dropdownBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 12, backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1.5, borderColor: '#E5E5EA' },
   dropdownBtnText: { fontWeight: '700', color: '#1C1C1E' },
   dropdownValue: { fontWeight: '800', color: '#007AFF' },
   inputWrapper: { backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5EA', paddingHorizontal: 12, paddingVertical: 10 },
   input: { fontSize: 15, color: '#000' },
   primaryBtn: { backgroundColor: '#000000', paddingVertical: 14, borderRadius: 16, alignItems: 'center', shadowColor: '#000000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 16, elevation: 8 },
   primaryBtnText: { color: '#FFFFFF', fontWeight: '800' },
-  emptyText: { color: '#8E8E93', textAlign: 'right' },
-  constraintRow: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#E5E5EA', borderRadius: 16, padding: 12, backgroundColor: '#FFFFFF' },
-  constraintCard: { borderWidth: 1, borderColor: '#E5E5EA', borderRadius: 16, padding: 12, backgroundColor: '#FFFFFF', flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'flex-start' },
+  emptyText: { color: '#8E8E93', textAlign: 'left' },
+  constraintRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#E5E5EA', borderRadius: 16, padding: 12, backgroundColor: '#FFFFFF' },
+  constraintCard: { borderWidth: 1, borderColor: '#E5E5EA', borderRadius: 16, padding: 12, backgroundColor: '#FFFFFF', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   constraintText: { color: '#1C1C1E', fontWeight: '700' },
   constraintSub: { color: '#6B7280', fontWeight: '600', marginTop: 2 },
   sectionMiniTitle: { fontSize: 13, fontWeight: '800', color: '#6B7280' },
@@ -658,7 +658,7 @@ const styles = StyleSheet.create({
   wheelText: { fontSize: 20, fontWeight: '600', color: '#1C1C1E' },
   wheelTextActive: { color: '#007AFF' },
   // Segmented control
-  segmented: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 4, flexDirection: 'row-reverse', borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 },
+  segmented: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 4, flexDirection: 'row', borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 },
   segmentedCard: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
   segment: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
   segmentActive: { backgroundColor: '#F2F2F7', borderWidth: 1, borderColor: '#E5E5EA', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
@@ -667,11 +667,11 @@ const styles = StyleSheet.create({
   // Pretty constraint list
   constraintIconWrap: { marginLeft: 8 },
   iconCircle: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.08)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(0,0,0,0.25)' },
-  constraintContent: { flex: 1, alignItems: 'flex-end' },
+  constraintContent: { flex: 1, alignItems: 'flex-start' },
   constraintTitle: { fontSize: 15, fontWeight: '800', color: '#1C1C1E' },
-  constraintMetaRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginTop: 6 },
-  constraintMetaCol: { alignItems: 'flex-end', gap: 8, marginTop: 6 },
-  timeChip: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, backgroundColor: '#F2F2F7', borderWidth: 1, borderColor: '#E5E5EA', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  constraintMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  constraintMetaCol: { alignItems: 'flex-start', gap: 8, marginTop: 6 },
+  timeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F2F2F7', borderWidth: 1, borderColor: '#E5E5EA', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
   timeChipText: { color: '#1C1C1E', fontWeight: '700' },
   reasonChip: { backgroundColor: 'rgba(0,122,255,0.06)', borderWidth: 1, borderColor: 'rgba(0,122,255,0.2)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
   reasonChipText: { color: '#007AFF', fontWeight: '800' },

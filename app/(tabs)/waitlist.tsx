@@ -96,25 +96,25 @@ async function makePhoneCall(phoneNumber: string) {
     if (supported) {
       await Linking.openURL(url);
     } else {
-      Alert.alert('שגיאה', 'לא ניתן לפתוח את אפליקציית הטלפון');
+      Alert.alert('Error', 'Unable to open the phone app');
     }
   } catch (error) {
     console.error('Error making phone call:', error);
-    Alert.alert('שגיאה', 'אירעה שגיאה בפתיחת השיחה');
+    Alert.alert('Error', 'An error occurred while starting the call');
   }
 }
 
-// Map time period preference to Hebrew label
+// Map time period preference to English label
 function formatTimePreference(period?: 'morning' | 'afternoon' | 'evening' | 'any'): string {
   switch (period) {
     case 'morning':
-      return 'בוקר';
+      return 'Morning';
     case 'afternoon':
-      return 'צהריים';
+      return 'Afternoon';
     case 'evening':
-      return 'ערב';
+      return 'Evening';
     case 'any':
-      return 'כל שעה';
+      return 'Any time';
     default:
       return '';
   }
@@ -155,13 +155,13 @@ async function fetchWaitlistForRange(startDate: Date, endDate: Date, userId?: st
 }
 
 function formatDate(date: Date) {
-  return date.toLocaleDateString('he-IL', { year: 'numeric', month: 'long', day: 'numeric' });
+  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 function PeriodTitle({ color, children }: { color: string; children: React.ReactNode }) {
   return (
     <View style={styles.periodTitleWrapper}>
-      <Text style={[styles.periodTitleNew, { textAlign: 'right' }]}>{children}</Text>
+      <Text style={[styles.periodTitleNew, { textAlign: 'left' }]}>{children}</Text>
       <View style={[styles.periodTitleAccent, { backgroundColor: color }]} />
     </View>
   );
@@ -187,8 +187,7 @@ export default function WaitlistScreen() {
   const [selectedDate, setSelectedDate] = useState<Date>(() => weekDays[0]);
   const selectedDateKey = useMemo(() => formatDateToLocalString(selectedDate), [selectedDate]);
   const monthYearLabel = useMemo(() => {
-    const months = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
-    return `${months[selectedDate.getMonth()]} ${selectedDate.getFullYear()}`;
+    return selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   }, [selectedDate]);
 
   useEffect(() => {
@@ -213,7 +212,7 @@ export default function WaitlistScreen() {
       }
     } catch (error) {
       console.error('Error loading waitlist week data:', error);
-      Alert.alert('שגיאה', 'אירעה שגיאה בטעינת רשימת ההמתנה לשבוע');
+      Alert.alert('Error', 'An error occurred while loading the weekly waitlist');
     } finally {
       setLoading(false);
     }
@@ -221,12 +220,12 @@ export default function WaitlistScreen() {
 
   const handleCallClient = async (phoneNumber: string) => {
     Alert.alert(
-      'צור קשר',
-      'האם ברצונך להתקשר ללקוח?',
+      'Contact',
+      'Would you like to call this client?',
       [
-        { text: 'ביטול', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'התקשר',
+          text: 'Call',
           onPress: () => makePhoneCall(phoneNumber)
         }
       ]
@@ -235,20 +234,20 @@ export default function WaitlistScreen() {
 
   const handleDelete = async (entryId: string) => {
     Alert.alert(
-      'מחיקת רשומה',
-      'האם אתה בטוח שברצונך למחוק רשומה זו?',
+      'Delete entry',
+      'Are you sure you want to delete this entry?',
       [
-        { text: 'ביטול', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'מחק',
+          text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             const success = await deleteWaitlistEntry(entryId);
             if (success) {
               loadWeekWaitlist();
-              Alert.alert('הצלחה', 'רשומה נמחקה בהצלחה');
+              Alert.alert('Deleted', 'Entry deleted successfully');
             } else {
-              Alert.alert('שגיאה', 'אירעה שגיאה במחיקת הרשומה');
+              Alert.alert('Error', 'An error occurred while deleting the entry');
             }
           }
         }
@@ -277,8 +276,8 @@ export default function WaitlistScreen() {
       <View style={styles.headerLikeAppointments}>
         <View style={styles.headerTopRow}>
           <View style={styles.headerTitleColumn}>
-            <Text style={styles.headerTitle}>רשימת המתנה</Text>
-            <Text style={styles.headerSubtitle}>השבוע הקרוב</Text>
+            <Text style={styles.headerTitle}>Waitlist</Text>
+            <Text style={styles.headerSubtitle}>This week</Text>
           </View>
           <View style={styles.monthBadge}>
             <Text style={styles.monthText}>{monthYearLabel}</Text>
@@ -303,7 +302,7 @@ export default function WaitlistScreen() {
           ) : selectedDayEntries.length > 0 ? (
             <View style={styles.cardsContainer}>
               {selectedDayEntries.map((entry) => {
-                const baseTime = entry.created_at ? new Date(entry.created_at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+                const baseTime = entry.created_at ? new Date(entry.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--';
                 const pref = formatTimePreference(entry.time_period);
                 const time = pref ? `${baseTime} | ${pref}` : baseTime;
                 return (
@@ -313,7 +312,7 @@ export default function WaitlistScreen() {
                       image={phoneToImage[entry.client_phone] || ''}
                       time={time}
                       type={entry.service_name}
-                      tag="המתנה"
+                      tag="Waiting"
                     />
                     <View style={styles.actionButtons}>
                       <TouchableOpacity 
@@ -321,14 +320,14 @@ export default function WaitlistScreen() {
                         onPress={() => handleCallClient(entry.client_phone)}
                       >
                         <Phone size={16} color="#007AFF" />
-                        <Text style={styles.actionButtonText}>צור קשר</Text>
+                        <Text style={styles.actionButtonText}>Contact</Text>
                       </TouchableOpacity>
                       <TouchableOpacity 
                         style={[styles.actionButton, styles.deleteButton]}
                         onPress={() => handleDelete(entry.id)}
                       >
                         <Trash2 size={16} color="#FF3B30" />
-                        <Text style={[styles.actionButtonText, { color: '#FF3B30' }]}>מחק</Text>
+                        <Text style={[styles.actionButtonText, { color: '#FF3B30' }]}>Delete</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -340,8 +339,8 @@ export default function WaitlistScreen() {
               <View style={styles.emptyIconCircle}>
                 <Ionicons name="hourglass-outline" size={22} color="#1C1C1E" />
               </View>
-              <Text style={styles.emptyTitle}>אין ממתינים ליום זה</Text>
-              <Text style={styles.emptySubtitle}>כרגע אין לקוחות ממתינים לים זה</Text>
+              <Text style={styles.emptyTitle}>No waitlist entries for this day</Text>
+              <Text style={styles.emptySubtitle}>No clients are waiting for this day</Text>
             </View>
           )}
         </ScrollView>
@@ -367,12 +366,12 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
   },
   headerTopRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   headerTitleColumn: {
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
   },
   headerTitle: {
     fontSize: 22,
@@ -438,32 +437,32 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   calendarIcon: {
-    marginLeft: 10,
+    marginRight: 10,
   },
   dateTextBox: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
   },
   dateText: {
     fontSize: 17,
     fontWeight: '600',
     color: Colors.text,
-    marginRight: 6,
-    textAlign: 'right',
+    marginLeft: 6,
+    textAlign: 'left',
   },
   title: { fontSize: 22, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
   periodSection: { marginBottom: 24 },
   dayHeader: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
     marginBottom: 12,
     paddingHorizontal: 2,
   },
   dayHeaderCard: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     backgroundColor: '#FFFFFF',
@@ -510,7 +509,7 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 3,
     backgroundColor: Colors.primary,
-    marginLeft: 8,
+    marginRight: 8,
   },
   dayHeaderText: {
     fontSize: 18,
@@ -518,14 +517,14 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
   },
   periodTitleRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 4,
   },
   periodIcon: {
-    marginLeft: 8,
+    marginRight: 8,
   },
-  periodTitle: { fontSize: 18, fontWeight: '600', marginBottom: 8, textAlign: 'right' },
+  periodTitle: { fontSize: 18, fontWeight: '600', marginBottom: 8, textAlign: 'left' },
   card: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -553,7 +552,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   periodTitleWrapper: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
   },
@@ -561,7 +560,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: '#1A1A1A',
-    marginRight: 8,
+    marginLeft: 8,
   },
   periodTitleAccent: {
     width: 4,
@@ -584,7 +583,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   actionButtons: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 12,
     paddingTop: 12,
@@ -592,7 +591,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#F0F0F0',
   },
   actionButton: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,

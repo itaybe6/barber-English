@@ -1,8 +1,12 @@
 import React from 'react';
 import { useRouter } from 'expo-router';
+import { I18nManager } from 'react-native';
 import { useAuthStore } from '@/stores/authStore';
 
 export default function Index() {
+  // Enforce LTR layout for this screen
+  I18nManager.allowRTL(false);
+  I18nManager.forceRTL(false);
   const router = useRouter();
   const { isAuthenticated, isAdminUser, user } = useAuthStore();
   const [hydrated, setHydrated] = React.useState(false);

@@ -137,7 +137,7 @@ const TimePicker: React.FC<TimePickerProps> = ({
           <View style={styles.sheetHandle} />
           <View style={styles.sheetHeader}>
             <Text style={styles.sheetTitle}>{label}</Text>
-            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <TouchableOpacity onPress={() => setIsOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Ionicons name="close" size={20} color={Colors.secondaryText} />
               </TouchableOpacity>
@@ -167,9 +167,7 @@ export default function BusinessHoursScreen() {
   const [isConstraintsOpen, setIsConstraintsOpen] = useState<boolean>(false);
 
   const getDayName = (dayOfWeek: number) => {
-    const dayNames = [
-      'ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'
-    ];
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     return dayNames[dayOfWeek] || '';
   };
 
@@ -247,7 +245,7 @@ export default function BusinessHoursScreen() {
     if (editingDay !== null) {
       {
         if (tempStartTime >= tempEndTime) {
-          Alert.alert('שגיאה', 'שעת הסיום חייבת להיות אחרי שעת ההתחלה');
+          Alert.alert('Error', 'End time must be after start time');
           return;
         }
         // validate multiple breaks (only if useBreaks is on)
@@ -335,7 +333,7 @@ export default function BusinessHoursScreen() {
                         <View key={`${b.start_time}-${b.end_time}-${i}`} style={styles.timeContainer}>
                           <Ionicons name="cafe-outline" size={14} color={Colors.secondaryText} />
                           <Text style={[styles.dayTime, { color: Colors.secondaryText, fontSize: 13 }]}> 
-                            {dayBreaks.length > 1 ? `הפסקה #${i + 1}: ` : 'הפסקה: '}<Text style={styles.ltrText}>{formatRangeLtr(b.start_time, b.end_time)}</Text>
+                            {dayBreaks.length > 1 ? `Break #${i + 1}: ` : 'Break: '}<Text style={styles.ltrText}>{formatRangeLtr(b.start_time, b.end_time)}</Text>
                           </Text>
                         </View>
                       ))}
@@ -347,7 +345,7 @@ export default function BusinessHoursScreen() {
                     <View style={[styles.timeContainer, { marginTop: 4 }]}>
                       <Ionicons name="cafe-outline" size={14} color={Colors.secondaryText} />
                       <Text style={[styles.dayTime, { color: Colors.secondaryText, fontSize: 13 }]}> 
-                        הפסקה: <Text style={styles.ltrText}>{formatRangeLtr(dayHours.break_start_time, dayHours.break_end_time)}</Text>
+                        Break: <Text style={styles.ltrText}>{formatRangeLtr(dayHours.break_start_time, dayHours.break_end_time)}</Text>
                       </Text>
                     </View>
                   );
@@ -359,7 +357,7 @@ export default function BusinessHoursScreen() {
             {dayHours && !dayHours.is_active && (
               <View style={styles.closedContainer}>
                 <Ionicons name="close-circle-outline" size={16} color={Colors.secondaryText} />
-                <Text style={styles.dayClosedText}>סגור</Text>
+                <Text style={styles.dayClosedText}>Closed</Text>
               </View>
             )}
           </View>
@@ -383,9 +381,10 @@ export default function BusinessHoursScreen() {
           <View style={styles.workHoursSection}>
             <View style={styles.sectionHeader}>
               <Ionicons name="briefcase-outline" size={18} color={Colors.primary} />
-              <Text style={styles.sectionTitle}>שעות עבודה</Text>
+              <Text style={styles.sectionTitle}>Work hours</Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <Text style={{ color: Colors.text, fontWeight: '600' }}>Show and set breaks?</Text>
               <Switch
                 value={useBreaks}
                 onValueChange={setUseBreaks}
@@ -393,28 +392,27 @@ export default function BusinessHoursScreen() {
                 thumbColor={useBreaks ? '#000000' : Colors.card}
                 ios_backgroundColor={Colors.border}
               />
-              <Text style={{ color: Colors.text, fontWeight: '600' }}>להציג ולהגדיר הפסקות?</Text>
             </View>
             <View style={styles.timeRow}>
               <View style={styles.timeColumn}>
                 <TimePicker
                   value={tempStartTime}
                   onValueChange={setTempStartTime}
-                  label="שעת התחלה"
+                  label="Start time"
                   options={startTimeOptions}
                   isBreakTime={false}
                 />
               </View>
               
               <View style={styles.timeSeparator}>
-                <Ionicons name="arrow-back" size={16} color={Colors.secondaryText} />
+                <Ionicons name="arrow-forward" size={16} color={Colors.secondaryText} />
               </View>
               
               <View style={styles.timeColumn}>
                 <TimePicker
                   value={tempEndTime}
                   onValueChange={setTempEndTime}
-                  label="שעת סיום"
+                  label="End time"
                   options={endTimeOptions}
                   isBreakTime={false}
                 />
@@ -440,8 +438,8 @@ export default function BusinessHoursScreen() {
                     >
                       <Ionicons name="close" size={16} color={Colors.danger} />
                     </TouchableOpacity>
-                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
-                      <Text style={{ fontSize: 15, fontWeight: '700', color: Colors.text }}>הפסקה #{idx + 1}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={{ fontSize: 15, fontWeight: '700', color: Colors.text }}>Break #{idx + 1}</Text>
                       <Ionicons name="cafe" size={14} color={Colors.secondaryText} />
                     </View>
                   </View>
@@ -454,7 +452,7 @@ export default function BusinessHoursScreen() {
                           next[idx] = { ...next[idx], start_time: v };
                           setTempBreaks(next);
                         }}
-                        label={'התחלה'}
+                        label={'Start'}
                         options={startTimeOptions}
                         isBreakTime
                       />
@@ -470,7 +468,7 @@ export default function BusinessHoursScreen() {
                           next[idx] = { ...next[idx], end_time: v };
                           setTempBreaks(next);
                         }}
-                        label="סיום"
+                        label="End"
                         options={endTimeOptions}
                         isBreakTime
                       />
@@ -484,7 +482,7 @@ export default function BusinessHoursScreen() {
                 style={{ paddingVertical: 14, alignItems: 'center', borderRadius: 16, backgroundColor: 'rgba(255,149,0,0.08)', borderWidth: 1, borderColor: 'rgba(255,149,0,0.2)' }}
                 activeOpacity={0.8}
               >
-                <Text style={{ color: Colors.warning, fontWeight: '700' }}>הוסף הפסקה</Text>
+                <Text style={{ color: Colors.warning, fontWeight: '700' }}>Add break</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -496,10 +494,10 @@ export default function BusinessHoursScreen() {
           <View style={styles.daySummary}>
             <View style={styles.summaryHeader}>
               <Ionicons name="calendar-outline" size={16} color={Colors.primary} />
-              <Text style={styles.summaryTitle}>סיכום היום</Text>
+              <Text style={styles.summaryTitle}>Day summary</Text>
             </View>
             <View style={styles.summaryContent}>
-              <Text style={styles.summaryText}>עבודה: <Text style={styles.ltrText}>{formatRangeLtr(tempStartTime, tempEndTime)}</Text></Text>
+              <Text style={styles.summaryText}>Work: <Text style={styles.ltrText}>{formatRangeLtr(tempStartTime, tempEndTime)}</Text></Text>
               {useBreaks ? (
                 tempBreaks.length > 0 ? (
                   <View style={{ gap: 4 }}>
@@ -513,7 +511,7 @@ export default function BusinessHoursScreen() {
               ) : (
                 tempBreakStartTime && tempBreakEndTime ? (
                   <Text style={styles.summaryBreak}>
-                    הפסקה: <Text style={styles.ltrText}>{formatRangeLtr(tempBreakStartTime, tempBreakEndTime)}</Text>
+                    Break: <Text style={styles.ltrText}>{formatRangeLtr(tempBreakStartTime, tempBreakEndTime)}</Text>
                   </Text>
                 ) : null
               )}
@@ -526,7 +524,7 @@ export default function BusinessHoursScreen() {
               onPress={() => setEditingDay(null)}
               activeOpacity={0.7}
             >
-              <Text style={styles.cancelButtonText}>ביטול</Text>
+              <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
@@ -534,7 +532,7 @@ export default function BusinessHoursScreen() {
               onPress={handleSaveDay}
               activeOpacity={0.7}
             >
-              <Text style={styles.saveButtonText}>שמירה</Text>
+              <Text style={styles.saveButtonText}>Save</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -548,7 +546,7 @@ export default function BusinessHoursScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>טוען שעות עבודה...</Text>
+          <Text style={styles.loadingText}>Loading working hours...</Text>
         </View>
       </SafeAreaView>
     );
@@ -559,10 +557,8 @@ export default function BusinessHoursScreen() {
       {/* Header within a top-only SafeArea to keep top background white */}
       <SafeAreaView edges={['top']} style={{ backgroundColor: Colors.card }}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>שעות פעילות</Text>
-          {user?.user_type === 'admin' && user?.name && (
-            <Text style={styles.headerSubtitle}>של הספר {user.name}</Text>
-          )}
+          <Text style={styles.headerTitle}>Working hours</Text>
+          <Text style={styles.headerSubtitle}>Set your weekly working schedule and breaks</Text>
         </View>
       </SafeAreaView>
 
@@ -582,7 +578,7 @@ export default function BusinessHoursScreen() {
             style={styles.constraintsButton}
           >
             <Ionicons name="remove-circle-outline" size={18} color={'#FFFFFF'} />
-            <Text style={styles.constraintsButtonText}>ניהול אילוצים (ימים/שעות סגורים)</Text>
+            <Text style={styles.constraintsButtonText}>Manage constraints (closed dates/hours)</Text>
           </TouchableOpacity>
         </View>
         {/* Global constant break between appointments */}
@@ -590,17 +586,17 @@ export default function BusinessHoursScreen() {
           <View style={styles.globalBreakCard}>
             <View style={styles.sectionHeader}>
               <Ionicons name="timer-outline" size={18} color={Colors.accent} />
-              <Text style={[styles.sectionTitle, { color: Colors.accent }]}>הפסקה קבועה בין תורים</Text>
+              <Text style={[styles.sectionTitle, { color: Colors.accent }]}>Fixed break between appointments</Text>
             </View>
-            <Text style={{ color: Colors.secondaryText, textAlign: 'right', marginBottom: 12 }}>
-              בחר/י את מספר הדקות שיתווספו בין כל תור לתור. ערך 0 משאיר ללא הפסקה קבועה.
+            <Text style={{ color: Colors.secondaryText, textAlign: 'left', marginBottom: 12 }}>
+              Choose the number of minutes to add between appointments. 0 keeps no fixed break.
             </Text>
             <TouchableOpacity
               style={[styles.dropdownButton, isBreakPickerOpen && styles.dropdownButtonOpen]}
               onPress={() => setIsBreakPickerOpen(true)}
               activeOpacity={0.8}
             >
-              <Text style={[styles.dropdownButtonText, { color: Colors.accent }]}> {globalBreakMinutes} דק׳</Text>
+              <Text style={[styles.dropdownButtonText, { color: Colors.accent }]}> {globalBreakMinutes} min</Text>
               {isSavingGlobalBreak ? (
                 <ActivityIndicator size="small" color={Colors.accent} />
               ) : (
@@ -621,8 +617,10 @@ export default function BusinessHoursScreen() {
           <View style={[styles.bottomSheet, { backgroundColor: Colors.card }]}>
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
-              <Text style={[styles.sheetTitle, { color: Colors.accent }]}>בחר/י הפסקה בין תורים (דקות)</Text>
-              <TouchableOpacity onPress={() => setIsBreakPickerOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Text style={[styles.sheetTitle, { color: Colors.accent, flex: 1 }]} numberOfLines={2}>
+                Select break between appointments (minutes)
+              </Text>
+              <TouchableOpacity onPress={() => setIsBreakPickerOpen(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Ionicons name="close" size={20} color={Colors.secondaryText} />
               </TouchableOpacity>
             </View>
@@ -646,7 +644,7 @@ export default function BusinessHoursScreen() {
                   }}
                 >
                   <Text style={[styles.sheetOptionText, m === globalBreakMinutes && styles.sheetOptionTextSelected]}>
-                    {m} דק׳
+                    {m} min
                   </Text>
                   {m === globalBreakMinutes && <Ionicons name="checkmark" size={18} color={Colors.accent} />}
                 </TouchableOpacity>
@@ -734,7 +732,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
   },
   header: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
@@ -759,6 +757,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.text,
     letterSpacing: -0.5,
+    textAlign: 'center',
   },
   headerSubtitle: {
     fontSize: 14,
@@ -774,7 +773,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   constraintsButton: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
@@ -838,7 +837,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   errorContainer: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 59, 48, 0.1)',
     borderWidth: 1,
@@ -875,13 +874,13 @@ const styles = StyleSheet.create({
     overflow: 'visible',
   },
   dayHeader: {
-    flexDirection: 'row-reverse', // RTL
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   dayInfo: {
     flex: 1,
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
   },
   dayName: {
     fontSize: 20,
@@ -891,7 +890,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   timeContainer: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
@@ -907,7 +906,7 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   closedContainer: {
-    flexDirection: 'row-reverse', // RTL
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
@@ -918,7 +917,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   dayControls: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
   },
@@ -956,7 +955,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: Colors.text,
-    textAlign: 'right',
+    textAlign: 'left',
     letterSpacing: -0.2,
     marginBottom: 8,
   },
@@ -964,7 +963,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   dropdownButton: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
@@ -1022,7 +1021,7 @@ const styles = StyleSheet.create({
     maxHeight: 200,
   },
   optionItem: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
@@ -1082,7 +1081,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   sheetHeader: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
@@ -1123,7 +1122,7 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
   sheetOption: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
@@ -1143,9 +1142,9 @@ const styles = StyleSheet.create({
     color: Colors.accent,
   },
   editActions: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     gap: 12,
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
   },
   cancelButton: {
     paddingHorizontal: 24,
@@ -1190,7 +1189,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   generateButtonContent: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 18,
@@ -1252,7 +1251,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,59,48,0.25)'
   },
   sectionHeader: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
     gap: 8,
@@ -1270,7 +1269,7 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   timeRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 16,
     overflow: 'visible',
@@ -1290,7 +1289,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: Colors.text,
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 12,
     letterSpacing: -0.2,
   },
@@ -1304,7 +1303,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(52, 199, 89, 0.1)',
   },
   summaryHeader: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
     gap: 6,
@@ -1322,21 +1321,21 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
     color: Colors.secondaryText,
-    textAlign: 'right',
+    textAlign: 'left',
     letterSpacing: -0.1,
   },
   summaryBreak: {
     fontSize: 14,
     fontWeight: '500',
     color: Colors.secondaryText,
-    textAlign: 'right',
+    textAlign: 'left',
     letterSpacing: -0.1,
   },
   breakTimeLabel: {
     fontSize: 17,
     fontWeight: '600',
     color: Colors.text,
-    textAlign: 'right',
+    textAlign: 'left',
     letterSpacing: -0.3,
     marginTop: 20,
   },

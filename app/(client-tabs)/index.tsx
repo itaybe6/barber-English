@@ -518,7 +518,7 @@ export default function ClientHomeScreen() {
           resizeMode="cover"
         />
         <LinearGradient
-          colors={['rgba(0,0,0,0.2)', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.85)']}
+          colors={['rgba(0,0,0,0.6)', 'rgba(0,0,0,0.6)', 'rgba(0,0,0,0.6)']}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
           style={styles.fullScreenHeroOverlay}
@@ -570,7 +570,7 @@ export default function ClientHomeScreen() {
           <View style={styles.heroTextContainer}>
             <Text style={styles.heroWelcome}>Welcome</Text>
             <Text style={styles.heroTitle}>{user?.name || 'Valued Client'}</Text>
-            <Text style={styles.heroSubtitle}>
+            <Text style={styles.heroSubtitle} numberOfLines={2} ellipsizeMode="tail">
               Discover the art of perfect grooming.{'\n'}
               Where tradition meets modern style, and every visit{'\n'}
               becomes an experience you'll remember.
@@ -902,15 +902,15 @@ export default function ClientHomeScreen() {
         </View>
         
         {/* Social section merged above with Location */}
-        {/* Footer: Developer logo with link */}
+        {/* Footer: Slotlys logo with link */}
         <View style={styles.footerContainer}>
           <TouchableOpacity
-            onPress={() => Linking.openURL('https://bcode.co.il/')}
+            onPress={() => Linking.openURL('https://slotlys.com/')}
             activeOpacity={0.8}
-            accessibilityLabel="מעבר לאתר BCODE"
+            accessibilityLabel="מעבר לאתר Slotlys"
           >
             <Image
-              source={require('../../assets/images/bcode black-13.png')}
+              source={require('../../assets/images/ddoown-08.png')}
               style={styles.footerLogo}
               resizeMode="contain"
             />
@@ -970,7 +970,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 8,
   },
   overlayButton: {
     width: 44,
@@ -1010,7 +1010,7 @@ const styles = StyleSheet.create({
   },
   fullScreenHeroContent: {
     position: 'absolute',
-    bottom: 120,
+    bottom: 80,
     left: 0,
     right: 0,
     paddingHorizontal: 24,

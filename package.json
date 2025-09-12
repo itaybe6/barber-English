@@ -20,7 +20,7 @@
     "@supabase/supabase-js": "^2.53.0",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.1",
-    "expo": "54.0.2",
+    "expo": "^54.0.2",
     "expo-blur": "~15.0.7",
     "expo-constants": "~18.0.8",
     "expo-dev-client": "~6.0.12",
@@ -60,7 +60,8 @@
     "@babel/core": "^7.25.2",
     "@expo/cli": "^0.24.21",
     "@expo/ngrok": "^4.1.0",
-    "@types/react": "~19.0.10",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
     "babel-plugin-module-resolver": "^5.0.2",
     "eas-cli": "^16.18.0",
     "typescript": "~5.8.3"

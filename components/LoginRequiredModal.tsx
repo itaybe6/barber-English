@@ -35,9 +35,9 @@ export default function LoginRequiredModal({ visible, onClose, onLogin, title, m
 
             {/* Content */}
             <View style={styles.content}>
-              <Text style={styles.title}>{title || 'נדרש להתחבר'}</Text>
+              <Text style={styles.title}>{title || 'Login required'}</Text>
               <Text style={styles.message}>
-                {message || 'כדי לגשת לתכונה זו, יש להתחבר לחשבון שלך תחילה'}
+                {message || 'Please sign in to access this feature'}
               </Text>
             </View>
 
@@ -51,12 +51,12 @@ export default function LoginRequiredModal({ visible, onClose, onLogin, title, m
                   style={styles.primaryButtonGradient}
                 >
                   <Ionicons name="log-in-outline" size={20} color="#FFFFFF" />
-                  <Text style={styles.primaryButtonText}>התחבר עכשיו</Text>
+                  <Text style={styles.primaryButtonText}>Sign in now</Text>
                 </LinearGradient>
               </TouchableOpacity>
               
               <TouchableOpacity style={styles.secondaryButton} onPress={onClose} activeOpacity={0.8}>
-                <Text style={styles.secondaryButtonText}>אולי מאוחר יותר</Text>
+                <Text style={styles.secondaryButtonText}>Maybe later</Text>
               </TouchableOpacity>
             </View>
           </View>

@@ -94,7 +94,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
   return (
     <View style={styles.container}>
       <View style={styles.dailyTitleWrapper}>
-        <Text style={styles.dailyTitle}>לו"ז יומי</Text>
+        <Text style={styles.dailyTitle}>Daily schedule</Text>
         <View style={styles.dailyTitleAccent} />
       </View>
       <View style={styles.cardsRow}>
@@ -109,17 +109,17 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
               <Ionicons name="calendar-outline" size={18} color="#1C1C1E" />
             </View>
             <Text style={styles.dateText}>
-              {new Date().toLocaleDateString('he-IL', { 
-                day: '2-digit', 
-                month: '2-digit' 
-              })} {new Date().toLocaleDateString('he-IL', { weekday: 'short' })}
+              {new Date().toLocaleDateString('en-US', {
+                month: '2-digit',
+                day: '2-digit'
+              })} {new Date().toLocaleDateString('en-US', { weekday: 'short' })}
             </Text>
             {loadingTodayCount ? (
               <ActivityIndicator size="small" color="#1C1C1E" />
             ) : (
               <View style={styles.timePillHeader}>
                 <Text style={styles.timeTextPill}>
-                  {todayAppointmentsCount} תורים להיום
+                  {todayAppointmentsCount} appointments today
                 </Text>
               </View>
             )}
@@ -136,13 +136,13 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
             <View style={styles.headerIconCircle}>
               <Ionicons name="time-outline" size={18} color="#1C1C1E" />
             </View>
-            <Text style={styles.nextTitle}>התור הבא</Text>
+            <Text style={styles.nextTitle}>Next appointment</Text>
           </View>
           
           {loading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color="#7B61FF" />
-              <Text style={styles.loadingText}>טוען...</Text>
+              <Text style={styles.loadingText}>Loading...</Text>
             </View>
           ) : nextAppointment ? (
             <>
@@ -157,7 +157,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
                       )}
                     </View>
                     <Text style={styles.clientNameBlack}>
-                      {nextAppointment.client_name || 'לקוח לא ידוע'}
+                      {nextAppointment.client_name || 'Unknown client'}
                     </Text>
                   </View>
                   {nextAppointment.service_name && (
@@ -176,8 +176,8 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
               <View style={styles.emptyIconCircle}>
                 <Ionicons name="calendar-outline" size={20} color="#1C1C1E" />
               </View>
-              <Text style={styles.emptyTitle}>אין תורים קרובים להיום</Text>
-              <Text style={styles.emptySubtitle}>לא נקבעו עוד תורים להיום</Text>
+              <Text style={styles.emptyTitle}>No upcoming appointments today</Text>
+              <Text style={styles.emptySubtitle}>No appointments scheduled for today</Text>
             </View>
           )}
         </TouchableOpacity>
@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     minHeight: 86,
     marginHorizontal: 0,
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOpacity: 0.04,
@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
     minHeight: 58,
   },
   cardHeaderRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 6,
     width: '100%',
@@ -244,17 +244,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#222',
     fontWeight: '600',
-    marginRight: 6,
-    textAlign: 'right',
+    marginLeft: 6,
+    textAlign: 'left',
     lineHeight: 20,
   },
   nextTitle: {
     fontSize: 15,
     color: '#222',
     fontWeight: '600',
-    marginRight: 6,
-    marginLeft: 0,
-    textAlign: 'right',
+    marginLeft: 6,
+    textAlign: 'left',
     lineHeight: 20,
   },
   icon: {
@@ -267,24 +266,24 @@ const styles = StyleSheet.create({
     height: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 6,
+    marginRight: 6,
   },
   cardLabel: {
     fontSize: 16,
     fontWeight: '700',
     color: '#1C1C1E',
     marginBottom: 4,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   cardLabelBlack: {
     fontSize: 16,
     fontWeight: '500',
     color: '#222',
     marginBottom: 4,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   updatesRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     marginTop: 2,
   },
@@ -298,23 +297,22 @@ const styles = StyleSheet.create({
   updatesText: {
     fontSize: 13,
     color: '#888',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   clientName: {
     fontSize: 15,
     color: '#222',
     fontWeight: '500',
-    marginRight: 6,
-    textAlign: 'right',
+    marginLeft: 6,
+    textAlign: 'left',
     flex: 1,
   },
   clientNameBlack: {
     fontSize: 15,
     color: '#222',
     fontWeight: '700',
-    marginRight: 4,
-    marginLeft: 0,
-    textAlign: 'right',
+    marginLeft: 4,
+    textAlign: 'left',
     flex: 1,
   },
   timeText: {
@@ -322,7 +320,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#222',
     marginTop: 8,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   bigTimeText: {
     fontSize: 42,
@@ -330,10 +328,10 @@ const styles = StyleSheet.create({
     color: '#000',
     letterSpacing: 0.5,
     marginTop: -44,
-    marginLeft: 28,
+    marginRight: 28,
   },
   nextInfoRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
@@ -342,23 +340,23 @@ const styles = StyleSheet.create({
   },
   nextInfoRightColumn: {
     flex: 1,
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
   },
   timeTextSmall: {
     fontSize: 16, // smaller font size for time
     fontWeight: 'bold',
     color: '#222',
     marginTop: 8,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   avatarsRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     marginTop: 2,
-    marginRight: 0,
+    marginLeft: 0,
   },
   avatarWrapper: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
   },
   avatarCircle: {
@@ -386,33 +384,33 @@ const styles = StyleSheet.create({
   },
   
   clientRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 2,
     width: '100%',
   },
   detailsRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
     gap: 12,
   },
   detailsRight: {
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     justifyContent: 'center',
   },
   detailsLeft: {
     flex: 1,
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     justifyContent: 'center',
   },
   clientAvatar: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    marginLeft: 4,
-    marginRight: 0, // ensure avatar is flush right
+    marginRight: 4,
+    marginLeft: 0,
     overflow: 'hidden',
   },
   initialAvatar: {
@@ -435,7 +433,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 4,
     paddingHorizontal: 14,
-    alignSelf: 'flex-end',
+    alignSelf: 'flex-start',
     marginTop: 2,
     marginBottom: 10,
   },
@@ -444,14 +442,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 2,
     paddingHorizontal: 10,
-    marginRight: 8,
+    marginLeft: 8,
   },
   timePillAppointments: {
     backgroundColor: '#f2f2f7',
     borderRadius: 16,
     paddingVertical: 4,
     paddingHorizontal: 14,
-    alignSelf: 'flex-end',
+    alignSelf: 'flex-start',
     marginTop: 0,
     marginBottom: 10,
   },
@@ -470,16 +468,16 @@ const styles = StyleSheet.create({
   },
   dailyTitleWrapper: {
     alignSelf: 'stretch',
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     marginTop: 6,
     marginBottom: 14,
-    marginRight: 12,
+    marginLeft: 12,
   },
   dailyTitle: {
     fontSize: 22,
     color: '#222',
     fontWeight: '800',
-    textAlign: 'right',
+    textAlign: 'left',
     letterSpacing: 0.2,
     marginBottom: 2,
   },
@@ -489,7 +487,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#1C1C1E',
     marginTop: 0,
-    marginRight: 2,
+    marginLeft: 2,
   },
   loadingContainer: {
     alignItems: 'center',
@@ -543,8 +541,8 @@ const styles = StyleSheet.create({
   serviceText: {
     fontSize: 12,
     color: '#666',
-    textAlign: 'right',
+    textAlign: 'left',
     marginTop: 4,
-    marginRight: 8,
+    marginLeft: 8,
   },
 }); 

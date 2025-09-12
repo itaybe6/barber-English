@@ -23,16 +23,16 @@ import { useAuthStore } from '@/stores/authStore';
 
 const { width } = Dimensions.get('window');
 
-// Hebrew locale for react-native-calendars
-LocaleConfig.locales['he'] = {
-  monthNames: ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'],
-  monthNamesShort: ['ינו','פבר','מרץ','אפר','מאי','יונ','יול','אוג','ספט','אוק','נוב','דצמ'],
-  dayNames: ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'],
-  dayNamesShort: ['א','ב','ג','ד','ה','ו','ש'],
-  today: 'היום',
-  direction: 'rtl',
+// English locale for react-native-calendars
+LocaleConfig.locales['en'] = {
+  monthNames: ['January','February','March','April','May','June','July','August','September','October','November','December'],
+  monthNamesShort: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+  dayNames: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
+  dayNamesShort: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+  today: 'Today',
+  direction: 'ltr',
 };
-LocaleConfig.defaultLocale = 'he';
+LocaleConfig.defaultLocale = 'en';
 
 // Helper function to format date as YYYY-MM-DD in local timezone
 function formatDateToLocalString(date: Date): string {
@@ -112,7 +112,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       const validClients = (data || [])
         .filter((client: any) => client.phone && client.phone.trim() !== '')
         .map((client: any) => ({
-          name: client.name || 'לקוח',
+          name: client.name || 'Client',
           phone: client.phone,
         }));
       
@@ -120,7 +120,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       setFilteredClients(validClients);
     } catch (error) {
       console.error('Error loading clients:', error);
-      Alert.alert('שגיאה', 'שגיאה בטעינת רשימת הלקוחות');
+      Alert.alert('Error', 'Error loading client list');
     }
   };
 
@@ -130,7 +130,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       setServices(data);
     } catch (error) {
       console.error('Error loading services:', error);
-      Alert.alert('שגיאה', 'שגיאה בטעינת רשימת השירותים');
+      Alert.alert('Error', 'Error loading services list');
     }
   };
 
@@ -279,7 +279,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       
     } catch (error) {
       console.error('Error loading available times:', error);
-      Alert.alert('שגיאה', 'שגיאה בטעינת השעות הזמינות');
+      Alert.alert('Error', 'Error loading available times');
     } finally {
       setIsLoadingTimes(false);
     }
@@ -314,12 +314,12 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
 
   const handleSubmit = async () => {
     if (!selectedDate || !selectedClient || !selectedService || !selectedTime) {
-      Alert.alert('שגיאה', 'אנא מלא את כל השדות הנדרשים');
+      Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
 
     if (!user?.id) {
-      Alert.alert('שגיאה', 'משתמש לא מחובר');
+      Alert.alert('Error', 'User not logged in');
       return;
     }
 
@@ -333,7 +333,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       .eq('user_id', user.id);
 
     if (conflictingAppointments && conflictingAppointments.length > 0) {
-      Alert.alert('תור נתפס', 'השעה שבחרת כבר נתפסה. אנא בחר שעה אחרת.');
+      Alert.alert('Slot taken', 'The selected time is already booked. Please choose another time.');
       return;
     }
 
@@ -354,9 +354,9 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
 
       if (error) throw error;
 
-      const policyNote = '\n\nלתשומת לבך: אי אפשר לבטל את התור 48 שעות לפני מועד התור. ביטול בתקופה זו יחויב בתשלום על התור.';
-      Alert.alert('הצלחה', `התור נקבע בהצלחה${policyNote}`, [
-        { text: 'אישור', onPress: () => {
+      const policyNote = '\n\nNote: Appointments cannot be cancelled 48 hours before the scheduled time. Cancellation during this period will be charged for the appointment.';
+      Alert.alert('Success', `Appointment scheduled successfully${policyNote}`, [
+        { text: 'OK', onPress: () => {
           onSuccess?.();
           onClose();
         }}
@@ -364,7 +364,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       
     } catch (error) {
       console.error('Error creating appointment:', error);
-      Alert.alert('שגיאה', 'שגיאה בקביעת התור');
+      Alert.alert('Error', 'Error scheduling appointment');
     } finally {
       setIsSubmitting(false);
     }
@@ -379,7 +379,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <CalendarDays size={20} color={'#000000'} />
-          <Text style={styles.sectionTitle}>תאריך התור</Text>
+          <Text style={styles.sectionTitle}>Appointment Date</Text>
         </View>
         <View style={styles.calendarContainer}>
           <RNCalendar
@@ -393,19 +393,46 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
             enableSwipeMonths
             hideDayNames={false}
             firstDay={0}
-            style={{ direction: 'rtl' }}
+            style={{ 
+              direction: 'ltr',
+              width: '100%',
+            }}
             theme={{
               textDayFontSize: 16,
               textMonthFontSize: 16,
+              textDayHeaderFontSize: 14,
               arrowColor: '#000000',
               selectedDayBackgroundColor: '#000000',
               todayTextColor: '#000000',
-              // Force RTL order for header and weeks
+              dayTextColor: '#000000',
+              monthTextColor: '#000000',
+              textDisabledColor: '#C6C6C8',
+              // Force LTR order for header and weeks
               'stylesheet.calendar.header': {
-                week: { flexDirection: 'row-reverse' },
+                week: { 
+                  flexDirection: 'row',
+                  justifyContent: 'space-around',
+                  paddingHorizontal: 0,
+                },
+                dayHeader: {
+                  flex: 1,
+                  textAlign: 'center',
+                  fontSize: 14,
+                  fontWeight: '600',
+                  color: '#000000',
+                },
               },
               'stylesheet.calendar.main': {
-                week: { flexDirection: 'row-reverse' },
+                week: { 
+                  flexDirection: 'row',
+                  justifyContent: 'space-around',
+                  paddingHorizontal: 0,
+                },
+                day: {
+                  flex: 1,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                },
               },
             }}
           />
@@ -418,7 +445,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         <User size={20} color={'#000000'} />
-        <Text style={styles.sectionTitle}>לקוח</Text>
+        <Text style={styles.sectionTitle}>Client</Text>
       </View>
       
       {!selectedClient ? (
@@ -429,9 +456,9 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
                 style={styles.selectorTextInput}
                 value={clientSearch}
                 onChangeText={setClientSearch}
-                placeholder="בחר לקוח..."
+                placeholder="Select client..."
                 placeholderTextColor={Colors.subtext}
-                textAlign="right"
+                textAlign="left"
                 onFocus={() => setShowClientDropdown(true)}
               />
               <View style={styles.selectorIcon}>
@@ -469,7 +496,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
                 ))}
                 {filteredClients.length === 0 && (
                   <View style={styles.emptyState}>
-                    <Text style={styles.emptyStateText}>אין תוצאות</Text>
+                    <Text style={styles.emptyStateText}>No results</Text>
                   </View>
                 )}
               </ScrollView>
@@ -491,7 +518,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
             onPress={() => setSelectedClient(null)}
             style={styles.changeButton}
           >
-            <Text style={styles.changeButtonText}>שנה</Text>
+            <Text style={styles.changeButtonText}>Change</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -502,7 +529,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         <Calendar size={20} color={'#000000'} />
-        <Text style={styles.sectionTitle}>שירות</Text>
+        <Text style={styles.sectionTitle}>Service</Text>
       </View>
       
       <Pressable 
@@ -511,7 +538,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       >
         <View style={styles.selectorContent}>
           <Text style={selectedService ? styles.selectorText : styles.selectorPlaceholder}>
-            {selectedService ? `${selectedService.name} · ₪${selectedService.price}` : 'בחר שירות...'}
+            {selectedService ? `${selectedService.name} · $${selectedService.price}` : 'Select service...'}
           </Text>
           <View style={styles.selectorIcon}>
             <Calendar size={16} color={Colors.subtext} />
@@ -533,7 +560,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
               >
                 <View style={styles.serviceInfo}>
                   <Text style={styles.serviceName}>{service.name}</Text>
-                  <Text style={styles.servicePrice}>₪{service.price}</Text>
+                  <Text style={styles.servicePrice}>${service.price}</Text>
                 </View>
               </Pressable>
             ))}
@@ -547,7 +574,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         <Clock size={20} color={'#000000'} />
-        <Text style={styles.sectionTitle}>שעה</Text>
+        <Text style={styles.sectionTitle}>Time</Text>
       </View>
       
       <Pressable 
@@ -558,7 +585,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
         ]} 
         onPress={() => {
           if (!selectedDate || !selectedService) {
-            Alert.alert('שגיאה', 'בחר תחילה תאריך ושירות');
+            Alert.alert('Error', 'Please select date and service first');
             return;
           }
           // Ensure times are up-to-date when opening
@@ -571,7 +598,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       >
         <View style={styles.selectorContent}>
           <Text style={selectedTime ? styles.selectorText : styles.selectorPlaceholder}>
-            {selectedTime || (isLoadingTimes ? 'טוען שעות...' : 'בחר שעה...')}
+            {selectedTime || (isLoadingTimes ? 'Loading times...' : 'Select time...')}
           </Text>
           <View style={styles.selectorIcon}>
             <Clock size={16} color={Colors.subtext} />
@@ -585,11 +612,11 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
             {isLoadingTimes ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="small" color={Colors.primary} />
-                <Text style={styles.loadingText}>טוען שעות זמינות...</Text>
+                <Text style={styles.loadingText}>Loading available times...</Text>
               </View>
             ) : availableTimes.length === 0 ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyStateText}>אין שעות זמינות ליום זה</Text>
+                <Text style={styles.emptyStateText}>No available times for this day</Text>
               </View>
             ) : (
               availableTimes.map((time, idx) => (
@@ -622,19 +649,19 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-            <Text style={[styles.closeButtonText, { color: '#000000' }]}>ביטול</Text>
+            <Text style={[styles.closeButtonText, { color: '#000000' }]}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>הוספת תור ללקוח</Text>
+          <Text style={styles.title}>Add Appointment for Client</Text>
           <TouchableOpacity 
             style={[styles.submitButton, { backgroundColor: '#000000' }, isSubmitting && styles.submitButtonDisabled]}
             onPress={handleSubmit}
             disabled={isSubmitting}
           >
             <Text style={[styles.submitButtonText, isSubmitting && styles.submitButtonTextDisabled]}>
-              {isSubmitting ? 'שומר...' : 'שמור'}
+              {isSubmitting ? 'Saving...' : 'Save'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -650,36 +677,36 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
           {/* Summary */}
           {selectedDate && selectedClient && selectedService && selectedTime && (
             <View style={styles.summaryCard}>
-              <Text style={styles.summaryTitle}>סיכום התור</Text>
+              <Text style={styles.summaryTitle}>Appointment Summary</Text>
               <View style={styles.summaryContent}>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryValue}>{selectedClient.name}</Text>
-                  <Text style={styles.summaryLabel}>לקוח:</Text>
+                  <Text style={styles.summaryLabel}>Client:</Text>
                 </View>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryValue}>{selectedService.name}</Text>
-                  <Text style={styles.summaryLabel}>שירות:</Text>
+                  <Text style={styles.summaryLabel}>Service:</Text>
                 </View>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryValue}>
-                    {selectedDate.toLocaleDateString('he-IL', { 
+                    {selectedDate.toLocaleDateString('en-US', { 
                       year: 'numeric', 
                       month: 'long', 
                       day: 'numeric',
                       weekday: 'long'
                     })}
                   </Text>
-                  <Text style={styles.summaryLabel}>תאריך:</Text>
+                  <Text style={styles.summaryLabel}>Date:</Text>
                 </View>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryValue}>{selectedTime}</Text>
-                  <Text style={styles.summaryLabel}>שעה:</Text>
+                  <Text style={styles.summaryLabel}>Time:</Text>
                 </View>
               </View>
             </View>
           )}
         </ScrollView>
-      </SafeAreaView>
+      </View>
     </Modal>
     </>
   );
@@ -745,14 +772,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
   },
   sectionTitle: {
     fontSize: 17,
     fontWeight: '600',
     color: '#000000',
     marginLeft: 8,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   selectorButton: {
     backgroundColor: '#FFFFFF',
@@ -775,23 +802,23 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: '#000000',
     flex: 1,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   selectorPlaceholder: {
     fontSize: 17,
     color: '#8E8E93',
     flex: 1,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   selectorTextInput: {
     fontSize: 17,
     color: '#000000',
     flex: 1,
-    textAlign: 'right',
+    textAlign: 'left',
     paddingVertical: 0,
   },
   selectorIcon: {
-    marginLeft: 8,
+    marginRight: 8,
   },
   dropdownContainer: {
     backgroundColor: '#FFFFFF',
@@ -821,7 +848,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 17,
     color: '#000000',
-    textAlign: 'right',
+    textAlign: 'left',
     paddingVertical: 8,
   },
   clearButton: {
@@ -858,7 +885,7 @@ const styles = StyleSheet.create({
   },
   clientInfo: {
     flex: 1,
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
   },
   clientName: {
     fontSize: 17,
@@ -872,7 +899,7 @@ const styles = StyleSheet.create({
   },
   serviceInfo: {
     flex: 1,
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
   },
   serviceName: {
     fontSize: 17,
@@ -888,7 +915,7 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '500',
     color: '#000000',
-    textAlign: 'right',
+    textAlign: 'left',
     flex: 1,
   },
   selectedClientCard: {
@@ -902,8 +929,8 @@ const styles = StyleSheet.create({
   },
   selectedClientInfo: {
     flex: 1,
-    alignItems: 'flex-end',
-    marginRight: 12,
+    alignItems: 'flex-start',
+    marginLeft: 12,
   },
   selectedClientName: {
     fontSize: 17,
@@ -951,8 +978,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#E5E5EA',
-    padding: 12,
-    direction: 'rtl',
+    padding: 8,
+    direction: 'ltr',
+    width: '100%',
   },
   groupCard: {
     backgroundColor: '#FFFFFF',
@@ -1021,7 +1049,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#000000',
     marginBottom: 16,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   summaryContent: {
     gap: 12,
@@ -1041,7 +1069,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#000000',
     fontWeight: '600',
-    textAlign: 'right',
+    textAlign: 'left',
     flex: 1,
     marginLeft: 8,
   },

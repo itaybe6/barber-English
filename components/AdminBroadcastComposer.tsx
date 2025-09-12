@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet, TextInput, Platform, Alert, ScrollView, KeyboardAvoidingView, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +16,8 @@ type AdminBroadcastComposerProps = {
   onOpenChange?: (open: boolean) => void;
   // Hide the built-in trigger (useful when controlling from a parent)
   renderTrigger?: boolean;
+  // Language for UI strings and direction
+  language?: 'en' | 'he';
 };
 
 export default function AdminBroadcastComposer({
@@ -24,6 +26,7 @@ export default function AdminBroadcastComposer({
   open,
   onOpenChange,
   renderTrigger = true,
+  language = 'he',
 }: AdminBroadcastComposerProps) {
   const insets = useSafeAreaInsets();
   const [internalOpen, setInternalOpen] = useState(false);
@@ -33,6 +36,10 @@ export default function AdminBroadcastComposer({
     if (isControlled) onOpenChange?.(value);
     else setInternalOpen(value);
   };
+  const isLTR = language === 'en';
+  const dropdownFieldRef = useRef<View>(null);
+  const [anchorRect, setAnchorRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [showCustomPanel, setShowCustomPanel] = useState(false);
   const [selectedTitleType, setSelectedTitleType] = useState<TitleType>('custom');
   const [showTitleDropdown, setShowTitleDropdown] = useState(false);
   const [customTitle, setCustomTitle] = useState('');
@@ -41,19 +48,78 @@ export default function AdminBroadcastComposer({
   const [isSending, setIsSending] = useState(false);
 
   const predefinedTitles = useMemo(
-    () => [
-      { id: 'promotion', title: 'מבצע חדש! 🎉', description: 'הודעה על מבצע או הנחה' },
-      { id: 'reminder', title: 'תזכורת חשובה ⏰', description: 'תזכורת לתור או אירוע' },
-      { id: 'update', title: 'עדכון שירות 📢', description: 'עדכון על שירותים חדשים' },
-      { id: 'holiday', title: 'סגירה לחג 🏖️', description: 'הודעה על סגירה או שינוי שעות' },
-      { id: 'welcome', title: 'ברוכים הבאים! 👋', description: 'הודעת ברכה ללקוחות' },
-      { id: 'custom', title: 'כותרת מותאמת אישית ✏️', description: 'כותרת מותאמת אישית' },
-    ],
-    []
+    () =>
+      language === 'en'
+        ? [
+            { id: 'promotion', title: 'New promotion! 🎉', description: 'Announcement about a promotion or discount' },
+            { id: 'reminder', title: 'Important reminder ⏰', description: 'Reminder for appointment or event' },
+            { id: 'update', title: 'Service update 📢', description: 'Update about new services' },
+            { id: 'holiday', title: 'Closed for holiday 🏖️', description: 'Notice of closure or changed hours' },
+            { id: 'welcome', title: 'Welcome! 👋', description: 'Greeting message to clients' },
+            { id: 'custom', title: 'Custom title ✏️', description: 'Custom title' },
+          ]
+        : [
+            { id: 'promotion', title: 'מבצע חדש! 🎉', description: 'הודעה על מבצע או הנחה' },
+            { id: 'reminder', title: 'תזכורת חשובה ⏰', description: 'תזכורת לתור או אירוע' },
+            { id: 'update', title: 'עדכון שירות 📢', description: 'עדכון על שירותים חדשים' },
+            { id: 'holiday', title: 'סגירה לחג 🏖️', description: 'הודעה על סגירה או שינוי שעות' },
+            { id: 'welcome', title: 'ברוכים הבאים! 👋', description: 'הודעת ברכה ללקוחות' },
+            { id: 'custom', title: 'כותרת מותאמת אישית ✏️', description: 'כותרת מותאמת אישית' },
+          ],
+    [language]
   );
 
   const currentTitle = selectedTitleType === 'custom' ? customTitle.trim() : notificationTitle.trim();
   const canSend = currentTitle.length > 0 && notificationContent.trim().length > 0 && !isSending;
+
+  const t = useMemo(() => {
+    if (language === 'en') {
+      return {
+        triggerLabel: 'Send message to clients',
+        headerTitle: 'Send message to clients',
+        titleLabel: 'Notification title',
+        dropdownCustomPlaceholder: 'Custom title ✏️',
+        dropdownChoosePlaceholder: 'Choose a title...',
+        customInputPlaceholder: 'Enter a custom title...',
+        contentLabel: 'Notification content',
+        contentPlaceholder: 'Enter notification content...',
+        previewTitlePlaceholder: 'Notification title',
+        previewContentPlaceholder: 'Notification content will appear here...',
+        cancel: 'Cancel',
+        sendAll: 'Send to all',
+        sending: 'Sending...',
+        error: 'Error',
+        errorFill: 'Please fill in title and content',
+        success: 'Success',
+        successMsg: 'Notification sent to all clients',
+        ok: 'OK',
+        failMsg: 'Failed to send notification. Please try again.',
+        accessibilitySend: 'Send message to clients',
+      };
+    }
+    return {
+      triggerLabel: 'שליחת הודעה ללקוחות',
+      headerTitle: 'שליחת הודעה ללקוחות',
+      titleLabel: 'כותרת ההתראה',
+      dropdownCustomPlaceholder: 'כותרת מותאמת אישית ✏️',
+      dropdownChoosePlaceholder: 'בחר כותרת...',
+      customInputPlaceholder: 'הכנס כותרת מותאמת אישית...',
+      contentLabel: 'תוכן ההתראה',
+      contentPlaceholder: 'הכנס את תוכן ההתראה...',
+      previewTitlePlaceholder: 'כותרת ההתראה',
+      previewContentPlaceholder: 'תוכן ההתראה יופיע כאן...',
+      cancel: 'ביטול',
+      sendAll: 'שלח לכולם',
+      sending: 'שולח...',
+      error: 'שגיאה',
+      errorFill: 'אנא מלא את הכותרת והתוכן של ההתראה',
+      success: 'הצלחה',
+      successMsg: 'ההתראה נשלחה בהצלחה לכל הלקוחות',
+      ok: 'אישור',
+      failMsg: 'שגיאה בשליחת ההתראה. אנא נסה שוב.',
+      accessibilitySend: 'שליחת הודעה ללקוחות',
+    };
+  }, [language]);
 
   const resetState = () => {
     setSelectedTitleType('custom');
@@ -66,7 +132,7 @@ export default function AdminBroadcastComposer({
   const handleSend = async () => {
     const finalTitle = currentTitle;
     if (!finalTitle || !notificationContent.trim()) {
-      Alert.alert('שגיאה', 'אנא מלא את הכותרת והתוכן של ההתראה');
+      Alert.alert(t.error, t.errorFill);
       return;
     }
 
@@ -78,14 +144,14 @@ export default function AdminBroadcastComposer({
         'general'
       );
       if (ok) {
-        Alert.alert('הצלחה', 'ההתראה נשלחה בהצלחה לכל הלקוחות', [
-          { text: 'אישור', onPress: () => { setOpen(false); resetState(); } },
+        Alert.alert(t.success, t.successMsg, [
+          { text: t.ok, onPress: () => { setOpen(false); resetState(); } },
         ]);
       } else {
-        Alert.alert('שגיאה', 'שגיאה בשליחת ההתראה. אנא נסה שוב.');
+        Alert.alert(t.error, t.failMsg);
       }
     } catch (e) {
-      Alert.alert('שגיאה', 'שגיאה בשליחת ההתראה. אנא נסה שוב.');
+      Alert.alert(t.error, t.failMsg);
     } finally {
       setIsSending(false);
     }
@@ -109,7 +175,7 @@ export default function AdminBroadcastComposer({
             activeOpacity={0.9}
             onPress={() => setOpen(true)}
             accessibilityRole="button"
-            accessibilityLabel="שליחת הודעה ללקוחות"
+            accessibilityLabel={t.accessibilitySend}
             style={styles.fabWrapper}
           >
             <LinearGradient
@@ -120,7 +186,7 @@ export default function AdminBroadcastComposer({
               style={styles.fab}
             >
               <Ionicons name="paper-plane-outline" size={18} color="#fff" style={{ marginRight: 8, marginLeft: 0 }} />
-              <Text style={styles.fabLabel} numberOfLines={1}>שליחת הודעה ללקוחות</Text>
+              <Text style={styles.fabLabel} numberOfLines={1}>{t.triggerLabel}</Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -129,7 +195,7 @@ export default function AdminBroadcastComposer({
           activeOpacity={0.85}
           onPress={() => setOpen(true)}
           accessibilityRole="button"
-          accessibilityLabel="שליחת הודעה ללקוחות"
+          accessibilityLabel={t.accessibilitySend}
           style={[styles.iconButton, iconContainerStyle]}
         >
           <Ionicons name="paper-plane-outline" size={22} color="#1d1d1f" />
@@ -152,72 +218,64 @@ export default function AdminBroadcastComposer({
               end={{ x: 1, y: 0 }}
               style={styles.sheetHeader}
             >
-              <Text style={styles.sheetTitle}>שליחת הודעה ללקוחות</Text>
-              <TouchableOpacity style={styles.headerCloseButton} onPress={() => setOpen(false)}>
-                <Ionicons name="close" size={22} color="#fff" />
+              <Text style={styles.sheetTitle}>{t.headerTitle}</Text>
+              <TouchableOpacity style={[styles.headerCloseButton, isLTR ? { right: 10 } : { left: 10 }]} onPress={() => setOpen(false)}>
+                <Ionicons name="close" size={18} color="#fff" />
               </TouchableOpacity>
             </LinearGradient>
 
             <ScrollView style={{ maxHeight: '100%' }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
               {/* Title Picker */}
               <View style={styles.sectionCard}>
-                <Text style={styles.label}>כותרת ההתראה</Text>
-                <TouchableOpacity
-                  style={styles.dropdown}
-                  onPress={() => setShowTitleDropdown(!showTitleDropdown)}
-                  activeOpacity={0.85}
-                >
-                  <Text
-                    style={[styles.dropdownText, (!currentTitle) && styles.dropdownPlaceholder]}
-                    numberOfLines={1}
+                <Text style={[styles.label, isLTR && { textAlign: 'left' }]}>{t.titleLabel}</Text>
+                <View style={[
+                  styles.titleDropdownWrap,
+                  showTitleDropdown && styles.titleDropdownWrapOpen,
+                ]}>
+                  <TouchableOpacity
+                    ref={dropdownFieldRef as any}
+                    style={styles.dropdown}
+                    onPress={() => {
+                      if (!showTitleDropdown) {
+                        setShowCustomPanel(false);
+                        setShowTitleDropdown(true);
+                        setTimeout(() => {
+                          try {
+                            (dropdownFieldRef.current as any)?.measureInWindow?.((x: number, y: number, width: number, height: number) => {
+                              setAnchorRect({ x, y, width, height });
+                            });
+                          } catch {}
+                        }, 0);
+                      } else {
+                        setShowTitleDropdown(false);
+                        setShowCustomPanel(false);
+                      }
+                    }}
+                    activeOpacity={0.85}
                   >
-                    {selectedTitleType === 'custom'
-                      ? (customTitle || 'כותרת מותאמת אישית ✏️')
-                      : (notificationTitle || 'בחר כותרת...')}
-                  </Text>
-                  <Ionicons name={showTitleDropdown ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.subtext} />
-                </TouchableOpacity>
+                    <Text
+                      style={[styles.dropdownText, isLTR && { textAlign: 'left' }, (!currentTitle) && styles.dropdownPlaceholder]}
+                      numberOfLines={1}
+                    >
+                      {selectedTitleType === 'custom'
+                        ? (customTitle || t.dropdownCustomPlaceholder)
+                        : (notificationTitle || t.dropdownChoosePlaceholder)}
+                    </Text>
+                    <Ionicons name={showTitleDropdown ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.subtext} />
+                  </TouchableOpacity>
+                  {/* Dropdown is rendered in a portal modal to avoid clipping and z-index issues */}
+                </View>
 
-                {showTitleDropdown && (
-                  <View style={styles.dropdownOptions}>
-                    {predefinedTitles.map((t, idx) => (
-                      <TouchableOpacity
-                        key={t.id}
-                        style={[styles.dropdownOption, idx === predefinedTitles.length - 1 && styles.dropdownOptionLast]}
-                        onPress={() => {
-                          if (t.id === 'custom') {
-                            setSelectedTitleType('custom');
-                            setNotificationTitle('');
-                          } else {
-                            setSelectedTitleType('preset');
-                            setNotificationTitle(t.title);
-                          }
-                          setShowTitleDropdown(false);
-                        }}
-                        activeOpacity={0.85}
-                      >
-                        <View style={styles.dropdownOptionIconCircle}>
-                          <Ionicons name="pricetag-outline" size={16} color="#7B7AFF" />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.dropdownOptionTitle}>{t.title}</Text>
-                          <Text style={styles.dropdownOptionDescription}>{t.description}</Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-
-                {selectedTitleType === 'custom' && (
+                {selectedTitleType === 'custom' && !showTitleDropdown && (
                   <View style={{ marginTop: 8 }}>
                     <TextInput
-                      style={styles.input}
-                      placeholder="הכנס כותרת מותאמת אישית..."
+                      style={[styles.input, isLTR && { textAlign: 'left' }]}
+                      placeholder={t.customInputPlaceholder}
                       placeholderTextColor={Colors.subtext}
                       value={customTitle}
                       onChangeText={setCustomTitle}
                       maxLength={50}
-                      textAlign="right"
+                      textAlign={isLTR ? 'left' : 'right'}
                     />
                     <Text style={styles.counter}>{customTitle.length}/50</Text>
                   </View>
@@ -226,17 +284,17 @@ export default function AdminBroadcastComposer({
 
               {/* Content */}
               <View style={[styles.sectionCard, { marginTop: 12 }]}>
-                <Text style={styles.label}>תוכן ההתראה</Text>
+                <Text style={[styles.label, isLTR && { textAlign: 'left' }]}>{t.contentLabel}</Text>
                 <TextInput
-                  style={[styles.input, styles.textArea]}
-                  placeholder="הכנס את תוכן ההתראה..."
+                  style={[styles.input, styles.textArea, isLTR && { textAlign: 'left' }]}
+                  placeholder={t.contentPlaceholder}
                   placeholderTextColor={Colors.subtext}
                   value={notificationContent}
                   onChangeText={setNotificationContent}
                   multiline
                   numberOfLines={6}
                   maxLength={500}
-                  textAlign="right"
+                  textAlign={isLTR ? 'left' : 'right'}
                   textAlignVertical="top"
                 />
                 <Text style={styles.counter}>{notificationContent.length}/500</Text>
@@ -248,12 +306,12 @@ export default function AdminBroadcastComposer({
                   colors={["#F2F2F7", "#FFFFFF"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
-                  style={styles.previewHeader}
+                  style={[styles.previewHeader, isLTR && { flexDirection: 'row' }]}
                 >
-                  <Ionicons name="notifications-outline" size={18} color="#7B7AFF" style={{ marginLeft: 6 }} />
-                  <Text style={styles.previewTitle}>{currentTitle || 'כותרת ההתראה'}</Text>
+                  <Ionicons name="notifications-outline" size={18} color="#7B7AFF" style={isLTR ? { marginRight: 6 } : { marginLeft: 6 }} />
+                  <Text style={[styles.previewTitle, isLTR && { textAlign: 'left' }]}>{currentTitle || t.previewTitlePlaceholder}</Text>
                 </LinearGradient>
-                <Text style={styles.previewContent}>{notificationContent || 'תוכן ההתראה יופיע כאן...'}</Text>
+                <Text style={[styles.previewContent, isLTR && { textAlign: 'left' }]}>{notificationContent || t.previewContentPlaceholder}</Text>
               </View>
 
               {/* Actions */}
@@ -263,7 +321,7 @@ export default function AdminBroadcastComposer({
                   onPress={() => setOpen(false)}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.secondaryButtonText}>ביטול</Text>
+                  <Text style={styles.secondaryButtonText}>{t.cancel}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={handleSend}
@@ -278,15 +336,99 @@ export default function AdminBroadcastComposer({
                     style={[styles.primaryButton, (!canSend) && { opacity: 0.6 }]}
                   >
                     <Ionicons name="paper-plane" size={18} color="#fff" style={{ marginLeft: 8 }} />
-                    <Text style={styles.primaryButtonText}>{isSending ? 'שולח...' : 'שלח לכולם'}</Text>
+                    <Text style={styles.primaryButtonText}>{isSending ? t.sending : t.sendAll}</Text>
                   </LinearGradient>
                 </TouchableOpacity>
               </View>
             </ScrollView>
             </View>
+            {showTitleDropdown && (
+              <View
+                pointerEvents="box-none"
+                style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
+              >
+                <View
+                  style={[
+                    styles.portalDropdown,
+                    anchorRect && {
+                      left: Math.max(8, anchorRect.x),
+                      top: Math.max(insets.top + 8, anchorRect.y + anchorRect.height + 4),
+                      width: Math.max(220, anchorRect.width),
+                    },
+                    !anchorRect && {
+                      left: 16,
+                      top: Math.max(insets.top + 80, 120),
+                      width: 260,
+                    },
+                  ]}
+                >
+                  {showCustomPanel ? (
+                    <View style={styles.customTitlePanel}>
+                      <TextInput
+                        style={[styles.input, isLTR && { textAlign: 'left' }]}
+                        placeholder={t.customInputPlaceholder}
+                        placeholderTextColor={Colors.subtext}
+                        value={customTitle}
+                        onChangeText={setCustomTitle}
+                        maxLength={50}
+                        textAlign={isLTR ? 'left' : 'right'}
+                      />
+                      <View style={{ marginTop: 8, flexDirection: isLTR ? 'row' : 'row-reverse', justifyContent: 'space-between' }}>
+                        <TouchableOpacity
+                          onPress={() => setShowCustomPanel(false)}
+                          activeOpacity={0.85}
+                          style={[styles.secondaryButton, { paddingVertical: 8, flex: 0 }]}
+                        >
+                          <Text style={styles.secondaryButtonText}>{language === 'en' ? 'Back' : 'חזרה'}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => { setShowTitleDropdown(false); setShowCustomPanel(false); }}
+                          activeOpacity={0.85}
+                          style={styles.applyButton}
+                        >
+                          <Text style={styles.applyButtonText}>{language === 'en' ? 'Apply' : 'אישור'}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                      {predefinedTitles.map((t, idx) => (
+                        <TouchableOpacity
+                          key={t.id}
+                          style={[styles.dropdownOption, idx === predefinedTitles.length - 1 && styles.dropdownOptionLast]}
+                          onPress={() => {
+                            if (t.id === 'custom') {
+                              setSelectedTitleType('custom');
+                              setNotificationTitle('');
+                              setShowCustomPanel(true);
+                              return;
+                            }
+                            setSelectedTitleType('preset');
+                            setNotificationTitle(t.title);
+                            setShowTitleDropdown(false);
+                          }}
+                          activeOpacity={0.85}
+                        >
+                          <View style={styles.dropdownOptionIconCircle}>
+                            <Ionicons name="pricetag-outline" size={16} color="#7B7AFF" />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.dropdownOptionTitle, isLTR && { textAlign: 'left' }]}>{t.title}</Text>
+                            <Text style={[styles.dropdownOptionDescription, isLTR && { textAlign: 'left' }]}>{t.description}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  )}
+                </View>
+              </View>
+            )}
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Dropdown Portal */}
+      {/* Removed external portal modal to avoid double rendering; we render inside the sheet overlay above */}
     </>
   );
 }
@@ -387,7 +529,7 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     color: '#fff',
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '800',
     textAlign: 'center',
   },
@@ -424,6 +566,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  titleDropdownWrap: {
+    position: 'relative',
+  },
+  titleDropdownWrapOpen: {
+    zIndex: 999,
+    ...Platform.select({
+      android: { elevation: 20 },
+      ios: {},
+    }),
+  },
   dropdownText: {
     fontSize: 16,
     color: Colors.text,
@@ -441,6 +593,12 @@ const styles = StyleSheet.create({
     borderColor: '#E5E5EA',
     marginTop: 8,
     overflow: 'hidden',
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 52,
+    maxHeight: 280,
+    zIndex: 1000,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -448,8 +606,15 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.12,
         shadowRadius: 16,
       },
-        android: { elevation: 6 },
+        android: { elevation: 24 },
     }),
+  },
+  customTitlePanel: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+    backgroundColor: '#FAFAFA',
   },
   dropdownOption: {
     paddingHorizontal: 12,
@@ -599,6 +764,43 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+  },
+  applyButton: {
+    backgroundColor: '#0A84FF',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  applyButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  portalRoot: {
+    flex: 1,
+  },
+  portalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
+  },
+  portalDropdown: {
+    position: 'absolute',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    maxHeight: 320,
+    overflow: 'hidden',
+    zIndex: 9999,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.12,
+        shadowRadius: 16,
+      },
+      android: { elevation: 24 },
+    }),
   },
 });
 

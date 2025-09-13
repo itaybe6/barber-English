@@ -25,6 +25,7 @@ import { useDesignsStore } from '@/stores/designsStore';
 import DailySchedule from '@/components/DailySchedule';
 import { useAuthStore } from '@/stores/authStore';
 import { useNotificationsStore } from '@/stores/notificationsStore';
+import { getCurrentClientLogo } from '@/src/theme/assets';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -513,7 +514,7 @@ export default function HomeScreen() {
         </View>
         {/* Center: Logo */}
         <View style={styles.headerCenter}>
-          <Image source={require('@/assets/images/logo-03.png')} style={styles.logo} resizeMode="contain" />
+          <Image source={getCurrentClientLogo()} style={styles.logo} resizeMode="contain" />
         </View>
         {/* Right side: Broadcast icon */}
         <View style={styles.headerSide}>

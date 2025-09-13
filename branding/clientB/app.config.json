@@ -1,0 +1,88 @@
+{
+  "expo": {
+    "name": "Client B App",
+    "slug": "client-b-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./branding/clientB/icon.png",
+    "scheme": "clientb",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./branding/clientB/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1a1a1a"
+    },
+    "ios": {
+      "buildNumber": "1",
+      "supportsTablet": true,
+      "bundleIdentifier": "com.clientb.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleDevelopmentRegion": "en",
+        "CFBundleAllowMixedLocalizations": true,
+        "NSPhotoLibraryUsageDescription": "The app needs access to photos to select and upload images to the gallery or profile.",
+        "NSPhotoLibraryAddUsageDescription": "The app may save photos you've taken to your photo library.",
+        "NSCameraUsageDescription": "The app needs access to the camera to take photos for upload."
+      },
+      "jsEngine": "hermes"
+    },
+    "android": {
+      "package": "com.clientb.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./branding/clientB/icon.png",
+        "backgroundColor": "#1a1a1a"
+      },
+      "intentFilters": [
+        {
+          "autoVerify": true,
+          "action": "VIEW",
+          "data": {
+            "scheme": "https",
+            "host": "clientb.com"
+          },
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
+      "supportsRtl": false
+    },
+    "web": {
+      "favicon": "./branding/clientB/icon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://clientb.com/"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#ffffff"
+        }
+      ],
+      "expo-web-browser",
+      "expo-font",
+      "expo-localization"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "locales": {
+      "he": "./assets/locales/he.json"
+    },
+    "extra": {
+      "router": {
+        "origin": "https://clientb.com/"
+      },
+      "eas": {
+        "projectId": "f0c09635-7e73-4fc6-94e1-b0addf0ab9f3"
+      },
+      "locale": "en"
+    }
+  }
+}

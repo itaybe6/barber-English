@@ -56,23 +56,11 @@ export interface User {
   password_hash?: string;
   image_url?: string;
   push_token?: string;
+  business_id: string;
   created_at: string;
   updated_at: string;
 }
 
-export interface Client {
-  id: string;
-  name: string;
-  phone: string;
-  email?: string;
-  address?: string;
-  notes?: string;
-  image_url?: string;
-  favorite_designs?: string[];
-  created_at: string;
-  last_visit?: string;
-  updated_at: string;
-}
 
 export interface Service {
   id: string;
@@ -82,6 +70,7 @@ export interface Service {
   duration_minutes?: number;
   image_url?: string;
   is_active: boolean;
+  business_id: string;
   created_at: string;
   updated_at: string;
 }
@@ -101,31 +90,31 @@ export interface Design {
   is_featured: boolean;
   // New: user (barber) association - using existing users table
   user_id?: string | null;
+  business_id: string;
   created_at: string;
   updated_at: string;
 }
 
-export interface DesignCategory {
-  id: string;
-  name: string;
-  description?: string;
-  display_order: number;
-}
 
 export interface Appointment {
   id: string;
   service_name: string;
-  appointment_date: string;
-  time: string;
+  service_id?: string;
+  user_id?: string;
+  slot_date: string; // YYYY-MM-DD format
+  slot_time: string; // HH:MM format
+  is_available: boolean;
+  client_name?: string;
+  client_phone?: string;
+  duration_minutes: number;
+  appointment_id?: string;
+  business_id: string;
+  barber_id?: string;
   status: 'confirmed' | 'pending' | 'cancelled' | 'completed' | 'no_show';
   created_at: string;
   updated_at: string;
 }
 
-// Appointment with service details included (if needed for future joins)
-export interface AppointmentWithService extends Appointment {
-  service: Service;
-}
 
 // Business Hours interface
 export interface BusinessHours {
@@ -142,27 +131,11 @@ export interface BusinessHours {
   breaks?: Array<{ start_time: string; end_time: string }>;
   // New: user (barber) association - using existing users table
   user_id?: string | null;
+  business_id: string;
   created_at: string;
   updated_at: string;
 }
 
-// Available Time Slots interface
-export interface AvailableTimeSlot {
-  id: string;
-  slot_date: string; // YYYY-MM-DD format
-  slot_time: string; // HH:MM format
-  is_available: boolean;
-  client_name?: string | null;
-  client_phone?: string | null;
-  service_name?: string | null;
-  // Duration of the appointment in minutes
-  duration_minutes: number;
-  appointment_id?: string | null;
-  // New: user (barber) association - using existing users table
-  user_id?: string | null;
-  created_at: string;
-  updated_at: string;
-}
 
 // Business constraints (date-specific unavailable windows)
 export interface BusinessConstraint {
@@ -171,6 +144,7 @@ export interface BusinessConstraint {
   start_time: string; // HH:MM or HH:MM:SS
   end_time: string;   // HH:MM or HH:MM:SS
   reason?: string | null;
+  business_id: string;
   created_at: string;
   updated_at: string;
 }
@@ -186,6 +160,7 @@ export interface WaitlistEntry {
   status: 'waiting' | 'contacted' | 'booked' | 'cancelled';
   // New: user (barber) association - using existing users table
   user_id?: string | null;
+  business_id: string;
   created_at: string;
   updated_at: string;
 }
@@ -198,11 +173,24 @@ export interface Notification {
   type: 'appointment_reminder' | 'promotion' | 'general' | 'system';
   recipient_name: string;
   recipient_phone: string;
+  business_id: string;
   created_at: string;
   is_read: boolean;
   read_at?: string;
   // Optional flag to indicate if a push was sent successfully
   push_sent?: boolean;
+}
+
+// Recurring appointments interface
+export interface RecurringAppointment {
+  id: string;
+  service_name: string;
+  day_of_week: number; // 0=Sunday, 1=Monday, ..., 6=Saturday
+  time: string; // HH:MM format
+  status: 'active' | 'inactive';
+  business_id: string;
+  created_at: string;
+  updated_at: string;
 }
 
 // Business profile (single-row table storing social links and address)
@@ -216,6 +204,10 @@ export interface BusinessProfile {
   tiktok_url?: string;
   // Number of minutes break between appointments
   break?: number;
+  primary_color?: string;
+  logo_url?: string;
+  secondary_color?: string;
+  splash_image_url?: string;
   created_at: string;
   updated_at: string;
 }

@@ -1,0 +1,27 @@
+{
+  "colors": {
+    "primary": "#007AFF",
+    "secondary": "#5856D6",
+    "accent": "#FF3B30",
+    "background": "#FFFFFF",
+    "surface": "#F2F2F7",
+    "text": "#1C1C1E",
+    "textSecondary": "#8E8E93",
+    "border": "#E5E5EA",
+    "success": "#34C759",
+    "warning": "#FF9500",
+    "error": "#FF3B30",
+    "info": "#007AFF"
+  },
+  "branding": {
+    "logo": "./branding/clientA/logo.png",
+    "logoWhite": "./branding/clientA/logo-white.png",
+    "companyName": "Client A",
+    "website": "https://clienta.com",
+    "supportEmail": "support@clienta.com"
+  },
+  "fonts": {
+    "primary": "System",
+    "secondary": "System"
+  }
+}

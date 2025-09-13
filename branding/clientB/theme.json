@@ -1,0 +1,27 @@
+{
+  "colors": {
+    "primary": "#7B61FF",
+    "secondary": "#5856D6",
+    "accent": "#FF3B30",
+    "background": "#1a1a1a",
+    "surface": "#2c2c2e",
+    "text": "#FFFFFF",
+    "textSecondary": "#8E8E93",
+    "border": "#3a3a3c",
+    "success": "#34C759",
+    "warning": "#FF9500",
+    "error": "#FF3B30",
+    "info": "#007AFF"
+  },
+  "branding": {
+    "logo": "./branding/clientB/logo.png",
+    "logoWhite": "./branding/clientB/logo-white.png",
+    "companyName": "Client B",
+    "website": "https://clientb.com",
+    "supportEmail": "support@clientb.com"
+  },
+  "fonts": {
+    "primary": "System",
+    "secondary": "System"
+  }
+}

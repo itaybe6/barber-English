@@ -17,6 +17,7 @@ import { businessProfileApi } from '@/lib/api/businessProfile';
 import type { BusinessProfile } from '@/lib/supabase';
 import DesignCarousel from '@/components/DesignCarousel';
 import { useDesignsStore } from '@/stores/designsStore';
+import { getCurrentClientLogo } from '@/src/theme/assets';
 
 
 // API functions for client home
@@ -538,7 +539,7 @@ export default function ClientHomeScreen() {
               </TouchableOpacity>
             </View>
             <View style={styles.headerCenter}>
-              <Image source={require('@/assets/images/logo-03.png')} style={styles.overlayLogo} resizeMode="contain" />
+              <Image source={getCurrentClientLogo()} style={styles.overlayLogo} resizeMode="contain" />
             </View>
             <View style={styles.headerSide}>
               <TouchableOpacity 

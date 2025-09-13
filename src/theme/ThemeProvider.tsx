@@ -1,0 +1,197 @@
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { Asset } from 'expo-asset';
+
+// Theme types
+export interface ThemeColors {
+  primary: string;
+  secondary: string;
+  accent: string;
+  background: string;
+  surface: string;
+  text: string;
+  textSecondary: string;
+  border: string;
+  success: string;
+  warning: string;
+  error: string;
+  info: string;
+}
+
+export interface ThemeBranding {
+  logo: string;
+  logoWhite: string;
+  companyName: string;
+  website: string;
+  supportEmail: string;
+}
+
+export interface ThemeFonts {
+  primary: string;
+  secondary: string;
+}
+
+export interface Theme {
+  colors: ThemeColors;
+  branding: ThemeBranding;
+  fonts: ThemeFonts;
+}
+
+export interface ThemeContextType {
+  theme: Theme;
+  isLoading: boolean;
+  error: string | null;
+  client: string;
+}
+
+// Default theme (fallback)
+const defaultTheme: Theme = {
+  colors: {
+    primary: '#007AFF',
+    secondary: '#5856D6',
+    accent: '#FF3B30',
+    background: '#FFFFFF',
+    surface: '#F2F2F7',
+    text: '#1C1C1E',
+    textSecondary: '#8E8E93',
+    border: '#E5E5EA',
+    success: '#34C759',
+    warning: '#FF9500',
+    error: '#FF3B30',
+    info: '#007AFF',
+  },
+  branding: {
+    logo: './assets/images/logo-03.png',
+    logoWhite: './assets/images/logo-03.png',
+    companyName: 'Default Company',
+    website: 'https://default.com',
+    supportEmail: 'support@default.com',
+  },
+  fonts: {
+    primary: 'System',
+    secondary: 'System',
+  },
+};
+
+// Create context
+const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+
+// Theme provider props
+interface ThemeProviderProps {
+  children: ReactNode;
+}
+
+// Theme provider component
+export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
+  const [theme, setTheme] = useState<Theme>(defaultTheme);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [client, setClient] = useState<string>('default');
+
+  useEffect(() => {
+    loadTheme();
+  }, []);
+
+  const loadTheme = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // In a real app, you might fetch this from a remote source
+      // For now, we'll try to load from the current.json file
+      // Note: In React Native, we can't directly read files, so this would need
+      // to be handled differently in a real implementation
+      
+      // For development, we'll use a mock approach
+      // In production, you might want to bundle the theme with the app
+      // or fetch it from a remote source
+      
+      const mockTheme = await loadMockTheme();
+      setTheme(mockTheme);
+      setClient(mockTheme.branding.companyName.toLowerCase().replace(/\s+/g, ''));
+      
+    } catch (err) {
+      console.error('Error loading theme:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load theme');
+      setTheme(defaultTheme);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Mock theme loader - in a real app, this would load from current.json
+  // or from a remote source
+  const loadMockTheme = async (): Promise<Theme> => {
+    // Simulate async loading
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Return a mock theme based on environment or other logic
+    // In a real implementation, this would read from current.json
+    return {
+      colors: {
+        primary: '#7B61FF',
+        secondary: '#5856D6',
+        accent: '#FF3B30',
+        background: '#FFFFFF',
+        surface: '#F2F2F7',
+        text: '#1C1C1E',
+        textSecondary: '#8E8E93',
+        border: '#E5E5EA',
+        success: '#34C759',
+        warning: '#FF9500',
+        error: '#FF3B30',
+        info: '#007AFF',
+      },
+      branding: {
+        logo: './assets/images/logo-03.png',
+        logoWhite: './assets/images/logo-03.png',
+        companyName: 'Current Client',
+        website: 'https://currentclient.com',
+        supportEmail: 'support@currentclient.com',
+      },
+      fonts: {
+        primary: 'System',
+        secondary: 'System',
+      },
+    };
+  };
+
+  const contextValue: ThemeContextType = {
+    theme,
+    isLoading,
+    error,
+    client,
+  };
+
+  return (
+    <ThemeContext.Provider value={contextValue}>
+      {children}
+    </ThemeContext.Provider>
+  );
+};
+
+// Hook to use theme
+export const useTheme = (): ThemeContextType => {
+  const context = useContext(ThemeContext);
+  if (context === undefined) {
+    throw new Error('useTheme must be used within a ThemeProvider');
+  }
+  return context;
+};
+
+// Hook to get just the colors
+export const useColors = (): ThemeColors => {
+  const { theme } = useTheme();
+  return theme.colors;
+};
+
+// Hook to get just the branding
+export const useBranding = (): ThemeBranding => {
+  const { theme } = useTheme();
+  return theme.branding;
+};
+
+// Hook to get just the fonts
+export const useFonts = (): ThemeFonts => {
+  const { theme } = useTheme();
+  return theme.fonts;
+};

@@ -28,6 +28,20 @@
         "cache": {
           "disabled": false
         }
+      },
+      "clientA": {
+        "env": {
+          "ENV_FILE": "branding/clientA/.env",
+          "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+          "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
+        }
+      },
+      "clientB": {
+        "env": {
+          "ENV_FILE": "branding/clientB/.env",
+          "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+          "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
+        }
       }
     },
     "submit": {

@@ -17,8 +17,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '@/stores/authStore';
 import { usersApi } from '@/lib/api/users';
-import { supabase } from '@/lib/supabase';
+import { supabase, getBusinessId } from '@/lib/supabase';
 import { findUserByCredentials, isValidUserType } from '@/constants/auth';
+import { getCurrentClientLogo } from '@/src/theme/assets';
 
 // Local palette to match the provided design (does not affect global colors)
 const palette = {
@@ -94,6 +95,21 @@ export default function LoginScreen() {
           router.replace('/(client-tabs)');
         }
       } else {
+        // Check if user exists in different business
+        const businessId = getBusinessId();
+        const { data: userInOtherBusiness } = await supabase
+          .from('users')
+          .select('*')
+          .eq('phone', phone.trim())
+          .neq('business_id', businessId)
+          .single();
+
+        if (userInOtherBusiness) {
+          // Don't reveal that user exists in another business - just show generic error
+          Alert.alert('Error', 'Incorrect phone or password');
+          return;
+        }
+
         // If API fails, try demo users
         const demoUser = findUserByCredentials(phone.trim(), password);
         if (demoUser) {
@@ -211,7 +227,7 @@ export default function LoginScreen() {
             <View style={styles.card}>
               {/* Header inside card */}
               <View style={styles.headerContent}>
-                <Image source={require('@/assets/images/logo-03.png')} style={styles.logoImage} resizeMode="contain" />
+                <Image source={getCurrentClientLogo()} style={styles.logoImage} resizeMode="contain" />
                 <Text style={styles.appSubtitle}>Enter details to sign in to your account</Text>
               </View>
 

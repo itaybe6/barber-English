@@ -1,4 +1,4 @@
-import { supabase, User } from '../supabase';
+import { supabase, User, getBusinessId } from '../supabase';
 
 export const usersApi = {
   // Simple hash function for passwords (for demo purposes)
@@ -13,10 +13,13 @@ export const usersApi = {
   // Get user by phone and password (for login)
   async authenticateUserByPhone(phone: string, password: string): Promise<User | null> {
     try {
+      const businessId = getBusinessId();
+      
       const { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('phone', phone)
+        .eq('business_id', businessId) // רק משתמשים מאותו business
         .single();
 
       if (error || !data) {
@@ -40,10 +43,13 @@ export const usersApi = {
   // Get user by ID
   async getUserById(id: string): Promise<User | null> {
     try {
+      const businessId = getBusinessId();
+      
       const { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('id', id)
+        .eq('business_id', businessId) // רק משתמשים מאותו business
         .single();
 
       if (error) {
@@ -61,9 +67,12 @@ export const usersApi = {
   // Create new user
   async createUser(userData: Omit<User, 'id' | 'created_at' | 'updated_at'> & { email?: string }): Promise<User | null> {
     try {
+      const businessId = getBusinessId();
+      
       // Add default password hash if not provided
       const userWithPassword = {
         ...userData,
+        business_id: businessId, // הוספת business_id אוטומטית
         password_hash: userData.password_hash || this.hashPassword('123456')
       };
 
@@ -88,8 +97,11 @@ export const usersApi = {
   // Create new user with password
   async createUserWithPassword(userData: Omit<User, 'id' | 'created_at' | 'updated_at'> & { email?: string }, password: string): Promise<User | null> {
     try {
+      const businessId = getBusinessId();
+      
       const userWithPassword = {
         ...userData,
+        business_id: businessId, // הוספת business_id אוטומטית
         password_hash: this.hashPassword(password)
       };
 
@@ -114,6 +126,7 @@ export const usersApi = {
   // Update existing user
   async updateUser(id: string, updates: Partial<User> & { password?: string }): Promise<User | null> {
     try {
+      const businessId = getBusinessId();
       const payload: any = { ...updates };
       // If a plain password is provided, hash it before saving
       if ((updates as any)?.password) {
@@ -125,6 +138,7 @@ export const usersApi = {
         .from('users')
         .update(payload)
         .eq('id', id)
+        .eq('business_id', businessId) // רק משתמשים מאותו business
         .select('*')
         .single();
 
@@ -143,10 +157,13 @@ export const usersApi = {
   // Get all admin users (barbers)
   async getAdminUsers(): Promise<User[]> {
     try {
+      const businessId = getBusinessId();
+      
       const { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('user_type', 'admin')
+        .eq('business_id', businessId) // רק משתמשים מאותו business
         .order('name');
 
       if (error) {
@@ -164,10 +181,13 @@ export const usersApi = {
   // Delete user by ID
   async deleteUser(id: string): Promise<boolean> {
     try {
+      const businessId = getBusinessId();
+      
       const { error } = await supabase
         .from('users')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('business_id', businessId); // רק משתמשים מאותו business
 
       if (error) {
         console.error('Error deleting user:', error);

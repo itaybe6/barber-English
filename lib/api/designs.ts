@@ -1,4 +1,4 @@
-import { supabase, Design } from '../supabase';
+import { supabase, Design, getBusinessId } from '../supabase';
 
 export const designsApi = {
   // Get all designs
@@ -63,6 +63,8 @@ export const designsApi = {
     user_id?: string;
   }): Promise<Design | null> {
     try {
+      const businessId = getBusinessId();
+      
       const payload = {
         name: input.name,
         image_url: input.image_url,
@@ -73,6 +75,7 @@ export const designsApi = {
         price_modifier: input.price_modifier ?? 0,
         is_featured: input.is_featured ?? false,
         user_id: input.user_id ?? null,
+        business_id: businessId, // Add business_id to the payload
       } as const;
 
       const { data, error } = await supabase

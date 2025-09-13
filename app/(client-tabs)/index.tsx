@@ -5,13 +5,13 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
-import { supabase } from '@/lib/supabase';
+import { supabase, getBusinessId } from '@/lib/supabase';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import MovingBorderCard from '@/components/MovingBorderCard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import LoginRequiredModal from '@/components/LoginRequiredModal';
-import { AvailableTimeSlot } from '@/lib/supabase';
+import { Appointment as AvailableTimeSlot } from '@/lib/supabase';
 import { notificationsApi } from '@/lib/api/notifications';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import type { BusinessProfile } from '@/lib/supabase';
@@ -25,9 +25,12 @@ const clientHomeApi = {
   // Get user appointments for multiple dates (most efficient for user appointments)
   async getUserAppointmentsForMultipleDates(dates: string[], userName?: string, userPhone?: string): Promise<AvailableTimeSlot[]> {
     try {
+      const businessId = getBusinessId();
+      
       let query = supabase
         .from('appointments')
         .select('*')
+        .eq('business_id', businessId) // Filter by current business
         .in('slot_date', dates)
         .eq('is_available', false) // Only booked appointments
         .order('slot_date')
@@ -78,12 +81,14 @@ const clientHomeApi = {
   // Get user waitlist entries
   async getUserWaitlistEntries(userPhone: string): Promise<any[]> {
     try {
+      const businessId = getBusinessId();
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
       const { data, error } = await supabase
         .from('waitlist_entries')
         .select('*')
+        .eq('business_id', businessId) // Filter by current business
         .eq('client_phone', userPhone)
         .gte('requested_date', today.toISOString().split('T')[0])
         .eq('status', 'waiting')
@@ -105,10 +110,13 @@ const clientHomeApi = {
   // Remove user from waitlist
   async removeFromWaitlist(entryId: string): Promise<boolean> {
     try {
+      const businessId = getBusinessId();
+      
       const { error } = await supabase
         .from('waitlist_entries')
         .delete()
-        .eq('id', entryId);
+        .eq('id', entryId)
+        .eq('business_id', businessId); // Ensure we only delete from current business
 
       if (error) {
         console.error('Error removing from waitlist:', error);
@@ -139,6 +147,7 @@ export default function ClientHomeScreen() {
   const [cardWidth, setCardWidth] = useState(0);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const [managerPhone, setManagerPhone] = useState<string | null>(null);
+  const [businessPhone, setBusinessPhone] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   // Designs store
@@ -403,9 +412,22 @@ export default function ClientHomeScreen() {
       try {
         const p = await businessProfileApi.getProfile();
         setBusinessProfile(p);
+        
+        // Extract phone number from business profile
+        if (p?.phone) {
+          const numeric = p.phone.replace(/\D/g, '');
+          let normalized = numeric;
+          if (numeric.startsWith('0') && numeric.length >= 9) {
+            normalized = `972${numeric.slice(1)}`;
+          } else if (!numeric.startsWith('972')) {
+            normalized = numeric; // leave as is; wa.me accepts many formats if country code included
+          }
+          setBusinessPhone(normalized);
+        }
       } catch (error) {
         console.error('Error loading business profile:', error);
         setBusinessProfile(null);
+        setBusinessPhone(null);
       }
     };
     loadProfile();
@@ -415,9 +437,12 @@ export default function ClientHomeScreen() {
   useEffect(() => {
     const loadManagerPhone = async () => {
       try {
+        const businessId = getBusinessId();
+        
         const { data, error } = await supabase
           .from('users')
           .select('phone')
+          .eq('business_id', businessId) // Filter by current business
           .eq('user_type', 'admin')
           .not('phone', 'is', null)
           .neq('phone', '')
@@ -879,10 +904,14 @@ export default function ClientHomeScreen() {
             <TouchableOpacity
               style={[styles.socialButton, styles.whatsappCircleButton]}
               onPress={async () => {
-                if (!managerPhone) return;
-                const message = 'Hi 😊%0AI would love to chat about more details';
-                const appUrl = `whatsapp://send?phone=${managerPhone}&text=${message}`;
-                const webUrl = `https://wa.me/${managerPhone}?text=${message}`;
+                const phoneToUse = businessPhone || managerPhone;
+                if (!phoneToUse) {
+                  Alert.alert('Error', 'Business phone number not available');
+                  return;
+                }
+                const message = 'Hi';
+                const appUrl = `whatsapp://send?phone=${phoneToUse}&text=${message}`;
+                const webUrl = `https://wa.me/${phoneToUse}?text=${message}`;
                 try {
                   const canOpen = await Linking.canOpenURL(appUrl);
                   if (canOpen) {

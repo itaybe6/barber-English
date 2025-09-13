@@ -1,11 +1,10 @@
 import Constants from 'expo-constants';
 import { CURRENT_CLIENT } from '../config/currentClient';
 
-// Logo mapping for different clients
+// Logo mapping for different clients - now using branding folder structure
 export const clientLogos = {
-  clientA: require('../../assets/images/clientA-logo.png'),
-  clientB: require('../../assets/images/clientB-logo.png'),
-  default: require('../../assets/images/logo-03.png'), // Fallback logo
+  clientA: require('../../branding/clientA/logo.png'),
+  clientB: require('../../branding/clientB/logo.png'),
 } as const;
 
 // Get the current client from environment or default to clientA
@@ -21,15 +20,13 @@ export const getCurrentClient = (): keyof typeof clientLogos => {
     const client = 
       Constants.expoConfig?.extra?.CLIENT || 
       process.env.CLIENT || 
-      Constants.expoConfig?.extra?.client ||
-      Constants.expoConfig?.client;
+      Constants.expoConfig?.extra?.client;
     
     console.log('🔍 Debug - Looking for client:', {
       'CURRENT_CLIENT': CURRENT_CLIENT,
       'Constants.expoConfig?.extra?.CLIENT': Constants.expoConfig?.extra?.CLIENT,
       'process.env.CLIENT': process.env.CLIENT,
       'Constants.expoConfig?.extra?.client': Constants.expoConfig?.extra?.client,
-      'Constants.expoConfig?.client': Constants.expoConfig?.client,
       'Found client': client
     });
     

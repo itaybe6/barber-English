@@ -39,6 +39,7 @@ export default function EditGalleryScreen() {
   type EditImage = { kind: 'remote'; url: string } | { kind: 'local'; asset: LocalAsset };
   const [editImages, setEditImages] = useState<EditImage[]>([]);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     fetchDesigns();
@@ -291,30 +292,51 @@ export default function EditGalleryScreen() {
     }
 
     try {
+      setIsCreating(true);
       const urls: string[] = [];
-      for (const asset of pickedAssets) {
+      
+      // Upload images one by one with progress indication
+      for (let i = 0; i < pickedAssets.length; i++) {
+        const asset = pickedAssets[i];
+        console.log(`Uploading image ${i + 1}/${pickedAssets.length}`);
         const url = await uploadImage(asset);
-        if (url) urls.push(url);
+        if (url) {
+          urls.push(url);
+        } else {
+          Alert.alert('שגיאה', `העלאת תמונה ${i + 1} נכשלה`);
+          setIsCreating(false);
+          return;
+        }
       }
+      
       if (urls.length === 0) {
         Alert.alert('שגיאה', 'העלאת התמונות נכשלה');
+        setIsCreating(false);
         return;
       }
 
+      console.log('Creating design with URLs:', urls);
       // Create a single design with multiple images (first image is cover)
-      await createDesign({
+      const created = await createDesign({
         name: name.trim(),
         image_url: urls[0],
         image_urls: urls,
         user_id: selectedUserId || undefined,
       });
 
-      Alert.alert('הצלחה', 'העיצוב נוסף לגלריה');
-      setName('');
-      setPickedAssets([]);
-      setCreateVisible(false);
+      if (created) {
+        Alert.alert('הצלחה', 'העיצוב נוסף לגלריה');
+        setName('');
+        setPickedAssets([]);
+        setCreateVisible(false);
+      } else {
+        Alert.alert('שגיאה', 'נכשלה הוספת העיצוב');
+      }
     } catch (e) {
+      console.error('Error in handleCreate:', e);
       Alert.alert('שגיאה', 'נכשלה הוספת העיצוב');
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -499,7 +521,11 @@ export default function EditGalleryScreen() {
                 <View style={styles.modalCard}>
                   <View style={styles.modalHeader}>
                     <Text style={[styles.sectionTitle, { color: Colors.text }]}>הוספת עיצוב</Text>
-                    <TouchableOpacity onPress={() => setCreateVisible(false)} style={styles.closeIconButton}>
+                    <TouchableOpacity 
+                      onPress={() => !isCreating && setCreateVisible(false)} 
+                      style={[styles.closeIconButton, isCreating && { opacity: 0.5 }]}
+                      disabled={isCreating}
+                    >
                       <Ionicons name="close" size={20} color={'#8E8E93'} />
                     </TouchableOpacity>
                   </View>
@@ -509,17 +535,18 @@ export default function EditGalleryScreen() {
 
                     {/* Admin User Selection */}
                     {adminUsers.length > 1 && (
-                      <View style={{ marginBottom: 12 }}>
+                      <View style={{ marginBottom: 12, opacity: isCreating ? 0.5 : 1 }}>
                         <Text style={[styles.sectionTitle, { fontSize: 14, marginBottom: 8 }]}>בחר מנהל</Text>
                         <View style={styles.adminSelectorContainer}>
                           {adminUsers.map((user) => (
                             <TouchableOpacity
                               key={user.id}
-                              onPress={() => setSelectedUserId(user.id)}
+                              onPress={() => !isCreating && setSelectedUserId(user.id)}
                               style={[
                                 styles.adminOption,
                                 selectedUserId === user.id && styles.adminOptionSelected
                               ]}
+                              disabled={isCreating}
                             >
                               <Text style={[
                                 styles.adminOptionText,
@@ -533,7 +560,12 @@ export default function EditGalleryScreen() {
                       </View>
                     )}
 
-                    <TouchableOpacity onPress={pickImages} style={[styles.pickButton, styles.pickButtonPurple]} activeOpacity={0.9}>
+                    <TouchableOpacity 
+                      onPress={pickImages} 
+                      style={[styles.pickButton, styles.pickButtonPurple, isCreating && { opacity: 0.5 }]} 
+                      activeOpacity={0.9}
+                      disabled={isCreating}
+                    >
                       <Ionicons name="images-outline" size={18} color={ACCENT_PURPLE} />
                       <Text style={[styles.pickButtonText, { color: ACCENT_PURPLE }]}>בחר תמונות</Text>
                       {pickedAssets.length > 0 && (
@@ -555,14 +587,22 @@ export default function EditGalleryScreen() {
                     )}
 
                     <TextInput
-                      style={[styles.input, { marginTop: 8 }]}
+                      style={[styles.input, { marginTop: 8 }, isCreating && { opacity: 0.5 }]}
                       placeholder="שם העיצוב"
                       value={name}
                       onChangeText={setName}
+                      editable={!isCreating}
                     />
 
-                    <TouchableOpacity onPress={handleCreate} style={[styles.createButton, styles.createButtonPurple]} disabled={isLoading}>
-                      <Text style={styles.createButtonText}>{isLoading ? 'שומר…' : 'פרסום'}</Text>
+                    <TouchableOpacity onPress={handleCreate} style={[styles.createButton, styles.createButtonPurple]} disabled={isLoading || isCreating}>
+                      {isCreating ? (
+                        <View style={styles.loadingContainer}>
+                          <ActivityIndicator color="#fff" size="small" />
+                          <Text style={[styles.createButtonText, { marginLeft: 8 }]}>מעלה תמונות...</Text>
+                        </View>
+                      ) : (
+                        <Text style={styles.createButtonText}>{isLoading ? 'שומר…' : 'פרסום'}</Text>
+                      )}
                     </TouchableOpacity>
                   </ScrollView>
                 </View>
@@ -917,6 +957,11 @@ const styles = StyleSheet.create({
   },
   adminOptionTextSelected: {
     color: '#FFFFFF',
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

@@ -170,6 +170,7 @@ ALTER TABLE business_hours DISABLE ROW LEVEL SECURITY;
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     display_name TEXT,
     address TEXT,
+    phone TEXT,
     instagram_url TEXT,
     facebook_url TEXT,
     tiktok_url TEXT,
@@ -184,6 +185,10 @@ ALTER TABLE business_hours DISABLE ROW LEVEL SECURITY;
       BEFORE UPDATE ON business_profile 
       FOR EACH ROW 
       EXECUTE FUNCTION update_updated_at_column();
+
+  -- Add phone column to existing business_profile table if it doesn't exist
+  ALTER TABLE business_profile 
+    ADD COLUMN IF NOT EXISTS phone TEXT;
 
   -- Disable RLS for business_profile
   ALTER TABLE business_profile DISABLE ROW LEVEL SECURITY;

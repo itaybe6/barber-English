@@ -18,11 +18,12 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { supabase } from '@/lib/supabase';
+import { supabase, getBusinessId } from '@/lib/supabase';
 import { usersApi } from '@/lib/api/users';
 import Colors from '@/constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { getCurrentClientLogo } from '@/src/theme/assets';
 
 // Local palette (male, dark-neutral accents)
 const palette = {
@@ -114,11 +115,13 @@ export default function RegisterScreen() {
     setLoading(true);
     
     try {
-      // Check if user already exists by phone
+      // Check if user already exists by phone in the same business
+      const businessId = getBusinessId();
       const { data: existingUser } = await supabase
         .from('users')
         .select('*')
         .eq('phone', phone.trim())
+        .eq('business_id', businessId)
         .single();
 
       if (existingUser) {
@@ -208,7 +211,7 @@ export default function RegisterScreen() {
 
             {/* Logo instead of title/subtitle */}
             <View style={styles.titleContainer}>
-              <Image source={require('@/assets/images/logo-03.png')} style={styles.logoImage} resizeMode="contain" />
+              <Image source={getCurrentClientLogo()} style={styles.logoImage} resizeMode="contain" />
             </View>
 
             {/* Form with entrance animation */}

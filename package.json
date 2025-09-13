@@ -23,7 +23,12 @@
     "test:logos": "node scripts/test-logos.mjs",
     "test:logo-debug": "node scripts/test-logo-debug.mjs",
     "check:logo": "node scripts/check-logo.mjs",
-    "test:logo-simple": "node scripts/test-logo-simple.mjs"
+    "test:logo-simple": "node scripts/test-logo-simple.mjs",
+    "switch:client": "node scripts/switch-client.mjs",
+    "add:client": "node scripts/add-client.mjs",
+    "test:business-id": "node scripts/test-business-id.mjs",
+    "test:auth-business-id": "node scripts/test-auth-business-id.mjs",
+    "test:logo-system": "node scripts/test-logo-system.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",

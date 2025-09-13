@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { Asset } from 'expo-asset';
+import Constants from 'expo-constants';
 
 // Theme types
 export interface ThemeColors {
@@ -118,41 +119,22 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     }
   };
 
-  // Mock theme loader - in a real app, this would load from current.json
-  // or from a remote source
+  // Load theme from current.json or fallback to default
   const loadMockTheme = async (): Promise<Theme> => {
-    // Simulate async loading
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // Return a mock theme based on environment or other logic
-    // In a real implementation, this would read from current.json
-    return {
-      colors: {
-        primary: '#7B61FF',
-        secondary: '#5856D6',
-        accent: '#FF3B30',
-        background: '#FFFFFF',
-        surface: '#F2F2F7',
-        text: '#1C1C1E',
-        textSecondary: '#8E8E93',
-        border: '#E5E5EA',
-        success: '#34C759',
-        warning: '#FF9500',
-        error: '#FF3B30',
-        info: '#007AFF',
-      },
-      branding: {
-        logo: './assets/images/logo-03.png',
-        logoWhite: './assets/images/logo-03.png',
-        companyName: 'Current Client',
-        website: 'https://currentclient.com',
-        supportEmail: 'support@currentclient.com',
-      },
-      fonts: {
-        primary: 'System',
-        secondary: 'System',
-      },
-    };
+    try {
+      // Try to get theme from Constants (injected by app.config.js)
+      const currentTheme = Constants.expoConfig?.extra?.theme;
+      if (currentTheme) {
+        console.log('✅ Loaded theme from Constants:', currentTheme.branding?.companyName);
+        return currentTheme as Theme;
+      }
+    } catch (error) {
+      console.warn('Could not load theme from Constants:', error);
+    }
+
+    // Fallback to default theme
+    console.log('⚠️ Using default theme');
+    return defaultTheme;
   };
 
   const contextValue: ThemeContextType = {

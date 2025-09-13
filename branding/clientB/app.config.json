@@ -82,7 +82,10 @@
       "eas": {
         "projectId": "f0c09635-7e73-4fc6-94e1-b0addf0ab9f3"
       },
-      "locale": "en"
+      "locale": "en",
+      "CLIENT": "clientB",
+      "logo": "./branding/clientB/logo.png",
+      "logoWhite": "./branding/clientB/logo-white.png"
     }
   }
 }

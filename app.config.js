@@ -4,6 +4,15 @@ const path = require('path');
 // Get client from environment variable, default to 'clientA'
 const CLIENT = process.env.CLIENT || 'clientA';
 
+// Load environment variables for the specific client
+const envPath = path.join(__dirname, 'branding', CLIENT, '.env');
+if (fs.existsSync(envPath)) {
+  require('dotenv').config({ path: envPath });
+  console.log(`✅ Loaded environment from: ${envPath}`);
+} else {
+  console.warn(`⚠️ Environment file not found: ${envPath}`);
+}
+
 // Paths for client-specific configs
 const clientConfigPath = path.join(__dirname, 'branding', CLIENT, 'app.config.json');
 const clientThemePath = path.join(__dirname, 'branding', CLIENT, 'theme.json');
@@ -87,16 +96,17 @@ const defaultConfig = {
     locales: {
       he: "./assets/locales/he.json"
     },
-    extra: {
-      router: {
-        origin: "https://default.com/"
-      },
-      eas: {
-        projectId: "f0c09635-7e73-4fc6-94e1-b0addf0ab9f3"
-      },
-      locale: "en",
-      CLIENT: CLIENT // Add the current client to extra
-    }
+      extra: {
+        router: {
+          origin: "https://default.com/"
+        },
+        eas: {
+          projectId: "f0c09635-7e73-4fc6-94e1-b0addf0ab9f3"
+        },
+        locale: "en",
+        CLIENT: CLIENT, // Add the current client to extra
+        BUSINESS_ID: process.env.BUSINESS_ID // Add the business ID to extra
+      }
   }
 };
 
@@ -160,6 +170,10 @@ try {
   console.error(`❌ Error loading client theme: ${error.message}`);
   themeConfig = defaultTheme;
 }
+
+// Add theme and business ID to appConfig extra
+appConfig.expo.extra.theme = themeConfig;
+appConfig.expo.extra.BUSINESS_ID = process.env.BUSINESS_ID;
 
 // Create current.json with both config and theme
 const currentConfig = {

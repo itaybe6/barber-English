@@ -16,11 +16,18 @@ const supabaseAnonKey =
   extra.SUPABASE_ANON_KEY ||                   // עדיפות שלישית - legacy
   undefined;
 
+// טעינת BUSINESS_ID עם סדר עדיפויות ברור
+const businessId =
+  process.env.BUSINESS_ID ||                   // עדיפות ראשונה - משתנה סביבה
+  extra.BUSINESS_ID ||                         // עדיפות שנייה - מ app.json
+  undefined;
+
 // הצגת מידע debug רק ב development
 if (__DEV__) {
   console.log('[supabase] Configuration loaded:');
   console.log('- URL:', supabaseUrl ? 'SET' : 'MISSING');
   console.log('- Anon Key:', supabaseAnonKey ? 'SET' : 'MISSING');
+  console.log('- Business ID:', businessId ? 'SET' : 'MISSING');
   console.log('- Source: Using environment variables');
 }
 
@@ -45,6 +52,15 @@ export const supabase = createClient(
     },
   }
 );
+
+// Export business ID for use throughout the app
+export const getBusinessId = (): string => {
+  if (!businessId) {
+    console.error('[supabase] BUSINESS_ID is not configured');
+    throw new Error('Business ID is not configured. Please set BUSINESS_ID in your environment variables.');
+  }
+  return businessId;
+};
 
 // Types for our database tables
 export interface User {
@@ -197,17 +213,12 @@ export interface RecurringAppointment {
 export interface BusinessProfile {
   id: string;
   display_name?: string;
-  description?: string;
   address?: string;
+  phone?: string;
   instagram_url?: string;
   facebook_url?: string;
   tiktok_url?: string;
-  // Number of minutes break between appointments
-  break?: number;
-  primary_color?: string;
-  logo_url?: string;
-  secondary_color?: string;
-  splash_image_url?: string;
+  break_minutes?: number;
   created_at: string;
   updated_at: string;
 }

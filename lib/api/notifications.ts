@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabase, getBusinessId } from '@/lib/supabase';
 import { Notification } from '@/lib/supabase';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
@@ -19,9 +19,12 @@ export const notificationsApi = {
   // Get user's notifications
   async getUserNotifications(userPhone: string): Promise<Notification[]> {
     try {
+      const businessId = getBusinessId();
+      
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
+        .eq('business_id', businessId) // Filter by current business
         .eq('recipient_phone', userPhone)
         .order('created_at', { ascending: false });
 
@@ -40,9 +43,11 @@ export const notificationsApi = {
   // Create a new notification
   async createNotification(notificationData: Omit<Notification, 'id' | 'created_at' | 'is_read'>): Promise<Notification | null> {
     try {
+      const businessId = getBusinessId();
+      
       const { data, error } = await supabase
         .from('notifications')
-        .insert([notificationData])
+        .insert([{ ...notificationData, business_id: businessId }])
         .select()
         .single();
 
@@ -61,9 +66,12 @@ export const notificationsApi = {
   // Create a notification to all admins (studio managers)
   async createAdminNotification(title: string, content: string, type: Notification['type'] = 'system'): Promise<boolean> {
     try {
+      const businessId = getBusinessId();
+      
       const { data: admins, error: adminsError } = await supabase
         .from('users')
         .select('name, phone')
+        .eq('business_id', businessId) // Filter by current business
         .eq('user_type', 'admin')
         .not('phone', 'is', null)
         .neq('phone', '');
@@ -83,6 +91,7 @@ export const notificationsApi = {
         type,
         recipient_name: admin.name || 'מנהל',
         recipient_phone: (admin.phone || '').trim(),
+        business_id: businessId,
       }));
 
       const { error: insertError } = await supabase
@@ -104,10 +113,13 @@ export const notificationsApi = {
   // Send notification to all clients
   async sendNotificationToAllClients(title: string, content: string, type: Notification['type'] = 'general'): Promise<boolean> {
     try {
+      const businessId = getBusinessId();
+      
       // Get all clients with valid phone numbers
       const { data: clients, error: clientsError } = await supabase
         .from('users')
         .select('name, phone')
+        .eq('business_id', businessId) // Filter by current business
         .eq('user_type', 'client')
         .not('phone', 'is', null)
         .neq('phone', '');
@@ -139,6 +151,7 @@ export const notificationsApi = {
         type,
         recipient_name: client.name || 'לקוח',
         recipient_phone: client.phone.trim(),
+        business_id: businessId,
       }));
 
       const { error: insertError } = await supabase
@@ -159,13 +172,16 @@ export const notificationsApi = {
   // Mark notification as read
   async markAsRead(notificationId: string): Promise<boolean> {
     try {
+      const businessId = getBusinessId();
+      
       const { error } = await supabase
         .from('notifications')
         .update({
           is_read: true,
           read_at: new Date().toISOString(),
         })
-        .eq('id', notificationId);
+        .eq('id', notificationId)
+        .eq('business_id', businessId); // Ensure we only update notifications from current business
 
       if (error) {
         console.error('Error marking notification as read:', error);
@@ -182,12 +198,15 @@ export const notificationsApi = {
   // Mark all notifications as read for a specific user
   async markAllAsReadForUser(userPhone: string): Promise<number> {
     try {
+      const businessId = getBusinessId();
+      
       const { data, error } = await supabase
         .from('notifications')
         .update({
           is_read: true,
           read_at: new Date().toISOString(),
         })
+        .eq('business_id', businessId) // Filter by current business
         .eq('recipient_phone', userPhone)
         .eq('is_read', false)
         .select('id');
@@ -207,9 +226,12 @@ export const notificationsApi = {
   // Get unread notifications count
   async getUnreadCount(userPhone: string): Promise<number> {
     try {
+      const businessId = getBusinessId();
+      
       const { count, error } = await supabase
         .from('notifications')
         .select('*', { count: 'exact', head: true })
+        .eq('business_id', businessId) // Filter by current business
         .eq('recipient_phone', userPhone)
         .eq('is_read', false);
 
@@ -229,9 +251,12 @@ export const notificationsApi = {
   async registerPushToken(userPhone: string, pushToken: string): Promise<boolean> {
     try {
       if (!userPhone || !pushToken) return false;
+      const businessId = getBusinessId();
+      
       const { error } = await supabase
         .from('users')
         .update({ push_token: pushToken })
+        .eq('business_id', businessId) // Filter by current business
         .eq('phone', userPhone);
       if (error) {
         console.error('Error saving push token:', error);
@@ -248,9 +273,12 @@ export const notificationsApi = {
   async clearPushToken(userPhone: string): Promise<boolean> {
     try {
       if (!userPhone) return false;
+      const businessId = getBusinessId();
+      
       const { error } = await supabase
         .from('users')
         .update({ push_token: null })
+        .eq('business_id', businessId) // Filter by current business
         .eq('phone', userPhone);
       if (error) {
         console.error('Error clearing push token:', error);
@@ -304,9 +332,12 @@ export const notificationsApi = {
   // Get all notifications (for debugging)
   async getAllNotifications(): Promise<Notification[]> {
     try {
+      const businessId = getBusinessId();
+      
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
+        .eq('business_id', businessId) // Filter by current business
         .order('created_at', { ascending: false });
 
       if (error) {

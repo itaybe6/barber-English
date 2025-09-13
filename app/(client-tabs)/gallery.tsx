@@ -7,7 +7,7 @@ import Colors from '@/constants/colors';
 import { useDesignsStore } from '@/stores/designsStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScrollView } from 'react-native';
-import { supabase } from '@/lib/supabase';
+import { supabase, getBusinessId } from '@/lib/supabase';
 
 const { width } = Dimensions.get('window');
 const numColumns = 2;
@@ -183,10 +183,13 @@ export default function GalleryScreen() {
   useEffect(() => {
     const loadAdminUser = async () => {
       try {
+        const businessId = getBusinessId();
+        
         const { data, error } = await supabase
           .from('users')
           .select('id, name, image_url')
           .eq('user_type', 'admin')
+          .eq('business_id', businessId) // Filter by current business
           .limit(1)
           .maybeSingle();
 

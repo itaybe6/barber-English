@@ -24,34 +24,52 @@ interface ImageSelectionModalProps {
   onClose: () => void;
   onImageSelected: (imageUri: string, isPreset: boolean) => void;
   title: string;
+  mainCategory: 'existingBooking' | 'bookingPage' | 'homePage';
 }
 
-// Preset images organized by category - using local images
+// Preset images organized by category - using local images from default folder
 const PRESET_IMAGES = {
-  barber: [
-    require('../assets/images/1homePage.jpg'),
-    require('../assets/images/bookApp.jpg'),
-    require('../assets/images/nextApp.jpg'),
-    require('../assets/images/user.png'),
-  ],
-  cosmetics: [
-    require('../assets/images/1homePage.jpg'),
-    require('../assets/images/bookApp.jpg'),
-    require('../assets/images/nextApp.jpg'),
-    require('../assets/images/user.png'),
-  ],
-  nail: [
-    require('../assets/images/1homePage.jpg'),
-    require('../assets/images/bookApp.jpg'),
-    require('../assets/images/nextApp.jpg'),
-    require('../assets/images/user.png'),
-  ],
+  existingBooking: {
+    barber: [
+      require('../assets/images/default/ExistingBooking/barber/1.jpg'),
+      require('../assets/images/default/ExistingBooking/barber/2.jpg'),
+      require('../assets/images/default/ExistingBooking/barber/3.jpg'),
+      require('../assets/images/default/ExistingBooking/barber/4.jpg'),
+    ],
+    nails: [
+      // Add nail images when available
+    ],
+  },
+  bookingPage: {
+    barber: [
+      require('../assets/images/default/BookingPage/barber/1.jpg'),
+      require('../assets/images/default/BookingPage/barber/2.jpg'),
+      require('../assets/images/default/BookingPage/barber/3.jpg'),
+      require('../assets/images/default/BookingPage/barber/4.jpg'),
+    ],
+    nails: [
+      // Add nail images when available
+    ],
+  },
+  homePage: {
+    barber: [
+      require('../assets/images/default/HomePage/barber/1.jpg'),
+      require('../assets/images/default/HomePage/barber/2.jpg'),
+      require('../assets/images/default/HomePage/barber/3.jpg'),
+      require('../assets/images/default/HomePage/barber/4.jpg'),
+    ],
+    nails: [
+      require('../assets/images/default/HomePage/barber/1.jpg'),
+      require('../assets/images/default/HomePage/barber/2.jpg'),
+      require('../assets/images/default/HomePage/barber/3.jpg'),
+      require('../assets/images/default/HomePage/barber/4.jpg'),
+    ],
+  },
 };
 
-const CATEGORIES = [
+const SUB_CATEGORIES = [
   { key: 'barber', name: 'Barbers', icon: 'cut-outline' },
-  { key: 'cosmetics', name: 'Cosmetics', icon: 'color-palette-outline' },
-  { key: 'nail', name: 'Nail Art', icon: 'hand-left-outline' },
+  { key: 'nails', name: 'Nail Art', icon: 'hand-left-outline' },
 ];
 
 const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
@@ -59,8 +77,10 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
   onClose,
   onImageSelected,
   title,
+  mainCategory,
 }) => {
-  const [selectedCategory, setSelectedCategory] = useState<string>('barber');
+  const [selectedSubCategory, setSelectedSubCategory] = useState<string>('barber');
+  const [loadingImages, setLoadingImages] = useState<{[key: string]: boolean}>({});
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
 
@@ -79,6 +99,15 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
           useNativeDriver: true,
         }),
       ]).start();
+      
+      // Preload images for better performance
+      const currentImages = PRESET_IMAGES[mainCategory]?.[selectedSubCategory as 'barber' | 'nails'];
+      if (currentImages) {
+        currentImages.forEach((imageSource, index) => {
+          const imageKey = `${mainCategory}-${selectedSubCategory}-${index}`;
+          setLoadingImages(prev => ({ ...prev, [imageKey]: true }));
+        });
+      }
     } else {
       Animated.parallel([
         Animated.timing(fadeAnim, {
@@ -92,8 +121,11 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
           useNativeDriver: true,
         }),
       ]).start();
+      
+      // Clear loading states when modal closes
+      setLoadingImages({});
     }
-  }, [visible]);
+  }, [visible, mainCategory, selectedSubCategory]);
 
   const handlePickFromGallery = async () => {
     try {
@@ -128,6 +160,14 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
     onClose();
   };
 
+  const handleImageLoadStart = (imageKey: string) => {
+    setLoadingImages(prev => ({ ...prev, [imageKey]: true }));
+  };
+
+  const handleImageLoadEnd = (imageKey: string) => {
+    setLoadingImages(prev => ({ ...prev, [imageKey]: false }));
+  };
+
   return (
     <Modal
       visible={visible}
@@ -158,7 +198,7 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
           </View>
         </BlurView>
 
-        {/* Category Selector with Apple-style Segmented Control */}
+        {/* Sub Category Selector */}
         <View style={styles.categorySection}>
           <ScrollView 
             horizontal 
@@ -166,30 +206,30 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
             style={styles.categoryContainer}
             contentContainerStyle={styles.categoryScrollContent}
           >
-            {CATEGORIES.map((category) => (
+            {SUB_CATEGORIES.map((subCategory) => (
               <TouchableOpacity
-                key={category.key}
+                key={subCategory.key}
                 style={[
                   styles.categoryButton,
-                  selectedCategory === category.key && styles.selectedCategoryButton,
+                  selectedSubCategory === subCategory.key && styles.selectedCategoryButton,
                 ]}
-                onPress={() => setSelectedCategory(category.key)}
+                onPress={() => setSelectedSubCategory(subCategory.key)}
                 activeOpacity={0.7}
               >
                 <View style={styles.categoryContent}>
                   <Ionicons 
-                    name={category.icon as any} 
+                    name={subCategory.icon as any} 
                     size={20} 
-                    color={selectedCategory === category.key ? '#FFFFFF' : Colors.primary}
+                    color={selectedSubCategory === subCategory.key ? '#FFFFFF' : Colors.primary}
                     style={styles.categoryIcon}
                   />
                   <Text
                     style={[
                       styles.categoryText,
-                      selectedCategory === category.key && styles.selectedCategoryText,
+                      selectedSubCategory === subCategory.key && styles.selectedCategoryText,
                     ]}
                   >
-                    {category.name}
+                    {subCategory.name}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -203,23 +243,58 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
           contentContainerStyle={styles.imagesGrid}
           showsVerticalScrollIndicator={false}
         >
-          {PRESET_IMAGES[selectedCategory as keyof typeof PRESET_IMAGES]?.map((imageSource, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.imageCard}
-              onPress={() => handlePresetImageSelect(imageSource)}
-              activeOpacity={0.9}
-            >
-              <View style={styles.imageContainer}>
-                <Image source={imageSource} style={styles.presetImage} resizeMode="cover" />
-                <View style={[styles.imageOverlay, { opacity: 0 }]}>
-                  <View style={styles.selectButton}>
-                    <Text style={styles.selectButtonText}>Select</Text>
-                  </View>
+          {(() => {
+            const currentImages = PRESET_IMAGES[mainCategory]?.[selectedSubCategory as 'barber' | 'nails'];
+            
+            if (!currentImages || currentImages.length === 0) {
+              return (
+                <View style={styles.noImagesContainer}>
+                  <Text style={styles.noImagesText}>
+                    No images available for {selectedSubCategory} in {mainCategory}
+                  </Text>
                 </View>
-              </View>
-            </TouchableOpacity>
-          ))}
+              );
+            }
+            
+            return currentImages.map((imageSource, index) => {
+              const imageKey = `${mainCategory}-${selectedSubCategory}-${index}`;
+              const isLoading = loadingImages[imageKey];
+              
+              return (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.imageCard}
+                  onPress={() => handlePresetImageSelect(imageSource)}
+                  activeOpacity={0.9}
+                >
+                  <View style={styles.imageContainer}>
+                    {/* Loading Placeholder */}
+                    {isLoading && (
+                      <View style={styles.imagePlaceholder}>
+                        <Ionicons name="image-outline" size={40} color="#CCCCCC" />
+                        <Text style={styles.loadingText}>Loading...</Text>
+                      </View>
+                    )}
+                    
+                    <Image 
+                      source={imageSource} 
+                      style={[styles.presetImage, isLoading && styles.hiddenImage]} 
+                      resizeMode="cover"
+                      onLoadStart={() => handleImageLoadStart(imageKey)}
+                      onLoadEnd={() => handleImageLoadEnd(imageKey)}
+                      onError={() => handleImageLoadEnd(imageKey)}
+                    />
+                    
+                    <View style={[styles.imageOverlay, { opacity: 0 }]}>
+                      <View style={styles.selectButton}>
+                        <Text style={styles.selectButtonText}>Select</Text>
+                      </View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            });
+          })()}
         </ScrollView>
 
           {/* Bottom Info with Apple-style Typography */}
@@ -414,6 +489,38 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+  },
+  noImagesContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  noImagesText: {
+    fontSize: 16,
+    color: '#8E8E93',
+    textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+  },
+  imagePlaceholder: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#F5F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 16,
+  },
+  loadingText: {
+    fontSize: 12,
+    color: '#999999',
+    marginTop: 8,
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+  },
+  hiddenImage: {
+    opacity: 0,
   },
 });
 

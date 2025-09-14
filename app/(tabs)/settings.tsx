@@ -3551,6 +3551,9 @@ export default function SettingsScreen() {
         title={currentImageType === 'page1' ? 'בחירת תמונת דף בית' : 
                currentImageType === 'page2' ? 'בחירת תמונת דף הזמנה' : 
                'בחירת תמונת הזמנה קיימת'}
+        mainCategory={currentImageType === 'page1' ? 'homePage' : 
+                     currentImageType === 'page2' ? 'bookingPage' : 
+                     'existingBooking'}
       />
     </SafeAreaView>
   );

@@ -12,6 +12,7 @@ import { checkWaitlistAndNotify, notifyServiceWaitlistClients } from '@/lib/api/
 import { notificationsApi } from '@/lib/api/notifications';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
+import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 
 type TabType = 'upcoming' | 'past';
 
@@ -147,6 +148,7 @@ export default function ClientAppointmentsScreen() {
   const [barberImages, setBarberImages] = useState<Record<string, string>>({});
   const [minCancellationHours, setMinCancellationHours] = useState<number>(24);
   const { user } = useAuthStore();
+  const { colors } = useBusinessColors();
 
   // Load manager phone (first admin user)
   useEffect(() => {
@@ -505,12 +507,12 @@ export default function ClientAppointmentsScreen() {
 
             <View style={styles.heroDetailsContainer}>
               <View style={styles.heroDetailCard}>
-                <Ionicons name="calendar" size={16} color="#000000" />
+                <Ionicons name="calendar" size={16} color={colors.primary} />
                 <Text style={styles.heroDetailValue}>{formatDate(nextAppointment!.slot_date)}</Text>
               </View>
 
               <View style={styles.heroDetailCard}>
-                <Ionicons name="time" size={16} color="#000000" />
+                <Ionicons name="time" size={16} color={colors.primary} />
                 <Text style={styles.heroDetailValue}>{formatTime(nextAppointment!.slot_time)}</Text>
               </View>
             </View>
@@ -518,7 +520,7 @@ export default function ClientAppointmentsScreen() {
         </LinearGradient>
       </View>
     );
-  }, [activeTab, nextAppointment, formatDate, formatTime, handleCancelAppointment, businessAddress]);
+  }, [activeTab, nextAppointment, formatDate, formatTime, handleCancelAppointment, businessAddress, colors.primary]);
 
   // Handle cancel appointment
   function handleCancelAppointment(appointment: AvailableTimeSlot) {
@@ -612,11 +614,11 @@ export default function ClientAppointmentsScreen() {
 
               <View style={styles.heroDetailsContainer}>
                 <View style={styles.heroDetailCard}>
-                  <Ionicons name="calendar" size={16} color="#000000" />
+                  <Ionicons name="calendar" size={16} color={colors.primary} />
                   <Text style={styles.heroDetailValue}>{formatDate(item.slot_date)}</Text>
                 </View>
                 <View style={styles.heroDetailCard}>
-                  <Ionicons name="time" size={16} color="#000000" />
+                  <Ionicons name="time" size={16} color={colors.primary} />
                   <Text style={styles.heroDetailValue}>{formatTime(item.slot_time)}</Text>
                 </View>
               </View>
@@ -680,11 +682,11 @@ export default function ClientAppointmentsScreen() {
 
             <View style={styles.heroDetailsContainer}>
               <View style={styles.heroDetailCard}>
-                <Ionicons name="calendar" size={16} color="#000000" />
+                <Ionicons name="calendar" size={16} color={colors.primary} />
                 <Text style={styles.heroDetailValue}>{formatDate(item.slot_date)}</Text>
               </View>
               <View style={styles.heroDetailCard}>
-                <Ionicons name="time" size={16} color="#000000" />
+                <Ionicons name="time" size={16} color={colors.primary} />
                 <Text style={styles.heroDetailValue}>{formatTime(item.slot_time)}</Text>
               </View>
             </View>
@@ -692,7 +694,7 @@ export default function ClientAppointmentsScreen() {
         </LinearGradient>
       </View>
     );
-  }, [formatDate, formatTime, activeTab, handleCancelAppointment, businessAddress]);
+  }, [formatDate, formatTime, activeTab, handleCancelAppointment, businessAddress, colors.primary]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -717,14 +719,18 @@ export default function ClientAppointmentsScreen() {
             <TouchableOpacity 
               style={[
                 styles.toggleBtn,
-                activeTab === 'upcoming' && styles.toggleBtnActive
+                activeTab === 'upcoming' && {
+                  ...styles.toggleBtnActive,
+                  backgroundColor: colors.primary,
+                  shadowColor: colors.primary,
+                }
               ]}
               onPress={() => setActiveTab('upcoming')}
               activeOpacity={0.7}
             >
               <View style={[
                 styles.toggleBadge,
-                { backgroundColor: activeTab === 'upcoming' ? 'rgba(255,255,255,0.3)' : '#000000' }
+                { backgroundColor: activeTab === 'upcoming' ? 'rgba(255,255,255,0.3)' : colors.primary }
               ]}>
                 <Text style={[
                   styles.toggleBadgeText,
@@ -749,14 +755,18 @@ export default function ClientAppointmentsScreen() {
             <TouchableOpacity 
               style={[
                 styles.toggleBtn,
-                activeTab === 'past' && styles.toggleBtnActive
+                activeTab === 'past' && {
+                  ...styles.toggleBtnActive,
+                  backgroundColor: colors.primary,
+                  shadowColor: colors.primary,
+                }
               ]}
               onPress={() => setActiveTab('past')}
               activeOpacity={0.7}
             >
               <View style={[
                 styles.toggleBadge,
-                { backgroundColor: activeTab === 'past' ? 'rgba(255,255,255,0.3)' : '#000000' }
+                { backgroundColor: activeTab === 'past' ? 'rgba(255,255,255,0.3)' : colors.primary }
               ]}>
                 <Text style={[
                   styles.toggleBadgeText,
@@ -956,18 +966,18 @@ export default function ClientAppointmentsScreen() {
               {selectedAppointment && (
                 <View style={styles.appointmentChips}>
                   <View style={styles.chip}>
-                    <Ionicons name="calendar" size={14} color="#000000" style={styles.chipIcon} />
+                    <Ionicons name="calendar" size={14} color={colors.primary} style={styles.chipIcon} />
                     <Text style={styles.chipText}>{formatDate(selectedAppointment.slot_date)}</Text>
                   </View>
                   {Boolean(selectedAppointment.slot_time) && (
                     <View style={styles.chip}>
-                      <Ionicons name="time-outline" size={14} color="#000000" style={styles.chipIcon} />
+                      <Ionicons name="time-outline" size={14} color={colors.primary} style={styles.chipIcon} />
                       <Text style={styles.chipText}>{formatTime(selectedAppointment.slot_time)}</Text>
                     </View>
                   )}
                   {Boolean(selectedAppointment.service_name) && (
                     <View style={styles.chip}>
-                      <Ionicons name="pricetag" size={14} color="#000000" style={styles.chipIcon} />
+                      <Ionicons name="pricetag" size={14} color={colors.primary} style={styles.chipIcon} />
                       <Text style={styles.chipText}>{selectedAppointment.service_name}</Text>
                     </View>
                   )}
@@ -1098,8 +1108,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   toggleBtnActive: {
-    backgroundColor: '#000000',
-    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 8,

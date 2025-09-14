@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LogOut } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
+import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
  
 import { supabase, AvailableTimeSlot } from '@/lib/supabase';
 import { usersApi } from '@/lib/api/users';
@@ -18,6 +19,7 @@ export default function ClientProfileScreen() {
   const router = useRouter();
   const { user, logout, updateUserProfile, notificationsEnabled, setNotificationsEnabled } = useAuthStore();
   const insets = useSafeAreaInsets();
+  const { colors: businessColors } = useBusinessColors();
   const [isLoading, setIsLoading] = useState(true);
   const [pastAppointments, setPastAppointments] = useState<AvailableTimeSlot[]>([]);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -394,11 +396,11 @@ export default function ClientProfileScreen() {
 
               <View style={styles.statsRow}>
                 <TouchableOpacity style={styles.statChip} onPress={() => setIsUpcomingOpen(true)}>
-                  <Ionicons name="calendar-outline" size={14} color={Colors.text} />
+                  <Ionicons name="calendar-outline" size={14} color={businessColors.primary} />
                   <Text style={styles.statChipText}>Upcoming {upcomingAppointments.length}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.statChip} onPress={() => setIsHistoryOpen(true)}>
-                  <Ionicons name="time-outline" size={14} color={Colors.text} />
+                  <Ionicons name="time-outline" size={14} color={businessColors.primary} />
                   <Text style={styles.statChipText}>Past {pastAppointments.length}</Text>
                 </TouchableOpacity>
               </View>
@@ -425,8 +427,8 @@ export default function ClientProfileScreen() {
                 onPress={item.onPress}
                 activeOpacity={isNotifications ? 0.7 : 0.6}
               >
-                <View style={styles.menuItemIcon}>
-                  <Ionicons name={item.icon as any} size={20} color={Colors.primary} />
+                <View style={[styles.menuItemIcon, { backgroundColor: `${businessColors.primary}15` }]}>
+                  <Ionicons name={item.icon as any} size={20} color={businessColors.primary} />
                 </View>
                 <View style={styles.menuItemContent}>
                   <View style={styles.menuItemText}>
@@ -604,14 +606,14 @@ export default function ClientProfileScreen() {
             <ScrollView contentContainerStyle={styles.historyList} showsVerticalScrollIndicator={true}>
               {isLoading ? (
                 <View style={styles.historyLoadingState}>
-                  <ActivityIndicator color={Colors.primary} />
+                  <ActivityIndicator color={businessColors.primary} />
                   <Text style={styles.historyLoadingText}>Loading appointment history...</Text>
                 </View>
               ) : pastAppointments.length === 0 ? (
                 <View style={styles.historyEmpty}>
-                  <Ionicons name="calendar-outline" size={56} color={Colors.subtext} />
+                  <Ionicons name="calendar-outline" size={56} color={businessColors.primary} />
                   <Text style={styles.historyEmptyTitle}>No past appointments</Text>
-                  <Text style={styles.historyEmptySubtitle}>When there’s history, it’ll appear here</Text>
+                  <Text style={styles.historyEmptySubtitle}>When there's history, it'll appear here</Text>
                 </View>
               ) : (
                 pastAppointments.map((item) => (
@@ -619,13 +621,13 @@ export default function ClientProfileScreen() {
                     <View style={styles.historyCardHeader}>
                       <Text style={styles.historyService}>{item.service_name || 'Service'}</Text>
                       <View style={styles.statusPill}>
-                        <Ionicons name="checkmark-circle" size={16} color="#34C759" />
+                        <Ionicons name="checkmark-circle" size={16} color={businessColors.primary} />
                         <Text style={styles.statusPillText}>Completed</Text>
                       </View>
                     </View>
                     <View style={styles.historyCardBody}>
                       <View style={styles.historyMeta}>
-                        <Ionicons name="calendar" size={16} color="#A78BFA" />
+                        <Ionicons name="calendar" size={16} color={businessColors.primary} />
                         <Text style={styles.historyMetaText}>{new Date(item.slot_date).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' })}</Text>
                       </View>
                       <View style={styles.historyMeta}>
@@ -735,12 +737,12 @@ export default function ClientProfileScreen() {
             <ScrollView contentContainerStyle={styles.historyList} showsVerticalScrollIndicator={true}>
               {isLoading ? (
                 <View style={styles.historyLoadingState}>
-                  <ActivityIndicator color={Colors.primary} />
+                  <ActivityIndicator color={businessColors.primary} />
                   <Text style={styles.historyLoadingText}>Loading upcoming appointments...</Text>
                 </View>
               ) : upcomingAppointments.length === 0 ? (
                 <View style={styles.historyEmpty}>
-                  <Ionicons name="calendar-outline" size={56} color={Colors.subtext} />
+                  <Ionicons name="calendar-outline" size={56} color={businessColors.primary} />
                   <Text style={styles.historyEmptyTitle}>No upcoming appointments</Text>
                   <Text style={styles.historyEmptySubtitle}>When appointments are booked, they will appear here</Text>
                 </View>
@@ -749,14 +751,14 @@ export default function ClientProfileScreen() {
                   <View key={`${item.id}-${item.slot_date}-${item.slot_time}`} style={styles.historyCard}>
                     <View style={styles.historyCardHeader}>
                       <Text style={styles.historyService}>{item.service_name || 'שירות'}</Text>
-                      <View style={[styles.statusPill, { backgroundColor: 'rgba(0,122,255,0.12)' }]}>
-                        <Ionicons name="calendar" size={16} color="#A78BFA" />
-                        <Text style={[styles.statusPillText, { color: '#A78BFA' }]}>קרוב</Text>
+                      <View style={[styles.statusPill, { backgroundColor: `${businessColors.primary}20` }]}>
+                        <Ionicons name="calendar" size={16} color={businessColors.primary} />
+                        <Text style={[styles.statusPillText, { color: businessColors.primary }]}>קרוב</Text>
                       </View>
                     </View>
                     <View style={styles.historyCardBody}>
                       <View style={styles.historyMeta}>
-                        <Ionicons name="calendar" size={16} color="#A78BFA" />
+                        <Ionicons name="calendar" size={16} color={businessColors.primary} />
                         <Text style={styles.historyMetaText}>{new Date(item.slot_date).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' })}</Text>
                       </View>
                       <View style={styles.historyMeta}>
@@ -1296,7 +1298,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: `${Colors.primary}15`,
     alignItems: 'center',
     justifyContent: 'center',
   },

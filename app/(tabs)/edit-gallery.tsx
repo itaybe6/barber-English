@@ -51,7 +51,7 @@ export default function EditGalleryScreen() {
       const users = await usersApi.getAdminUsers();
       setAdminUsers(users);
       if (users.length > 0) {
-        setSelectedUserId(users[0].id); // בחירת המשתמש הראשון כברירת מחדל
+        setSelectedUserId(users[0].id); // Select the first user as default
       }
     } catch (error) {
       console.error('Error loading admin users:', error);
@@ -63,7 +63,7 @@ export default function EditGalleryScreen() {
   const pickImages = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('הרשאה נחוצה', 'יש לאשר גישה לגלריה כדי לבחור תמונות');
+      Alert.alert('Permission Required', 'Please allow access to gallery to select images');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -181,7 +181,7 @@ export default function EditGalleryScreen() {
   const addImagesToEdit = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('הרשאה נחוצה', 'יש לאשר גישה לגלריה כדי לבחור תמונות');
+      Alert.alert('Permission Required', 'Please allow access to gallery to select images');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -208,7 +208,7 @@ export default function EditGalleryScreen() {
   const saveEdit = async () => {
     if (!selectedDesign) return;
     if (!editName.trim()) {
-      Alert.alert('שגיאה', 'נא למלא שם לעיצוב');
+      Alert.alert('Error', 'Please enter a design name');
       return;
     }
     try {
@@ -221,7 +221,7 @@ export default function EditGalleryScreen() {
         } else {
           const uploaded = await uploadImage(item.asset);
           if (!uploaded) {
-            Alert.alert('שגיאה', 'העלאת אחת התמונות נכשלה');
+            Alert.alert('Error', 'Failed to upload one of the images');
             setIsSavingEdit(false);
             return;
           }
@@ -229,7 +229,7 @@ export default function EditGalleryScreen() {
         }
       }
       if (finalUrls.length === 0) {
-        Alert.alert('שגיאה', 'דרושה לפחות תמונה אחת');
+        Alert.alert('Error', 'At least one image is required');
         setIsSavingEdit(false);
         return;
       }
@@ -242,7 +242,7 @@ export default function EditGalleryScreen() {
       });
 
       if (!updated) {
-        Alert.alert('שגיאה', 'נכשלה שמירת העיצוב');
+        Alert.alert('Error', 'Failed to save design');
         setIsSavingEdit(false);
         return;
       }
@@ -260,7 +260,7 @@ export default function EditGalleryScreen() {
       // Try delete DB first
       const ok = await deleteDesign(id);
       if (!ok) {
-        Alert.alert('שגיאה', 'מחיקת העיצוב נכשלה');
+        Alert.alert('Error', 'Failed to delete design');
         return;
       }
       // If images are within our public storage bucket, attempt to delete the files as well
@@ -283,11 +283,11 @@ export default function EditGalleryScreen() {
 
   const handleCreate = async () => {
     if (!name.trim()) {
-      Alert.alert('שגיאה', 'נא למלא שם לעיצוב');
+      Alert.alert('Error', 'Please enter a design name');
       return;
     }
     if (pickedAssets.length === 0) {
-      Alert.alert('שגיאה', 'נא לבחור לפחות תמונה אחת');
+      Alert.alert('Error', 'Please select at least one image');
       return;
     }
 
@@ -303,14 +303,14 @@ export default function EditGalleryScreen() {
         if (url) {
           urls.push(url);
         } else {
-          Alert.alert('שגיאה', `העלאת תמונה ${i + 1} נכשלה`);
+          Alert.alert('Error', `Failed to upload image ${i + 1}`);
           setIsCreating(false);
           return;
         }
       }
       
       if (urls.length === 0) {
-        Alert.alert('שגיאה', 'העלאת התמונות נכשלה');
+        Alert.alert('Error', 'Failed to upload images');
         setIsCreating(false);
         return;
       }
@@ -325,12 +325,12 @@ export default function EditGalleryScreen() {
       });
 
       if (created) {
-        Alert.alert('הצלחה', 'העיצוב נוסף לגלריה');
+        Alert.alert('Success', 'Design added to gallery');
         setName('');
         setPickedAssets([]);
         setCreateVisible(false);
       } else {
-        Alert.alert('שגיאה', 'נכשלה הוספת העיצוב');
+        Alert.alert('Error', 'Failed to add design');
       }
     } catch (e) {
       console.error('Error in handleCreate:', e);
@@ -347,7 +347,7 @@ export default function EditGalleryScreen() {
           <TouchableOpacity onPress={() => router.back()}>
             <Ionicons name="arrow-forward" size={24} color={Colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>עריכת גלריה</Text>
+          <Text style={styles.headerTitle}>Edit Gallery</Text>
           <TouchableOpacity onPress={() => setCreateVisible(true)}>
             <Ionicons name="add" size={26} color={Colors.text} />
           </TouchableOpacity>
@@ -393,7 +393,7 @@ export default function EditGalleryScreen() {
               <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%' }}>
                 <View style={styles.modalCard}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={styles.sectionTitle}>עריכת עיצוב</Text>
+                    <Text style={styles.sectionTitle}>Edit Design</Text>
                     <TouchableOpacity onPress={closeEdit}>
                       <Ionicons name="close" size={22} color={Colors.text} />
                     </TouchableOpacity>
@@ -414,7 +414,7 @@ export default function EditGalleryScreen() {
 
                     <TextInput
                       style={[styles.input, { marginTop: 12 }]}
-                      placeholder="שם העיצוב"
+                      placeholder="Design name"
                       value={editName}
                       onChangeText={setEditName}
                       returnKeyType="done"
@@ -423,7 +423,7 @@ export default function EditGalleryScreen() {
                     {/* Admin User Selection for Edit */}
                     {adminUsers.length > 1 && (
                       <View style={{ marginTop: 12 }}>
-                        <Text style={[styles.sectionTitle, { fontSize: 14, marginBottom: 8 }]}>בחר מנהל</Text>
+                        <Text style={[styles.sectionTitle, { fontSize: 14, marginBottom: 8 }]}>Select Admin</Text>
                         <View style={styles.adminSelectorContainer}>
                           {adminUsers.map((user) => (
                             <TouchableOpacity
@@ -449,10 +449,10 @@ export default function EditGalleryScreen() {
                     {/* Thumbnails and actions */}
                     <View style={{ marginTop: 12 }}>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                        <Text style={styles.sectionTitle}>תמונות בעיצוב</Text>
+                        <Text style={styles.sectionTitle}>Design Images</Text>
                         <TouchableOpacity onPress={addImagesToEdit} style={[styles.pickButton, { paddingVertical: 8, paddingHorizontal: 12 }]}> 
                           <Ionicons name="images-outline" size={16} color="#1d1d1f" />
-                          <Text style={styles.pickButtonText}>הוספת תמונות</Text>
+                          <Text style={styles.pickButtonText}>Add Images</Text>
                         </TouchableOpacity>
                       </View>
                       <FlatList
@@ -480,7 +480,7 @@ export default function EditGalleryScreen() {
                               {index === 0 && (
                                 <View style={styles.coverBadge}>
                                   <Ionicons name="star" size={12} color="#fff" />
-                                  <Text style={styles.coverBadgeText}>שער</Text>
+                                  <Text style={styles.coverBadgeText}>Cover</Text>
                                 </View>
                               )}
                             </TouchableOpacity>
@@ -501,7 +501,7 @@ export default function EditGalleryScreen() {
                       {isSavingEdit ? (
                         <ActivityIndicator color="#fff" />
                       ) : (
-                        <Text style={styles.createButtonText}>שמור</Text>
+                        <Text style={styles.createButtonText}>Save</Text>
                       )}
                     </TouchableOpacity>
                   </ScrollView>
@@ -520,7 +520,7 @@ export default function EditGalleryScreen() {
               <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%' }}>
                 <View style={styles.modalCard}>
                   <View style={styles.modalHeader}>
-                    <Text style={[styles.sectionTitle, { color: Colors.text }]}>הוספת עיצוב</Text>
+                    <Text style={[styles.sectionTitle, { color: Colors.text }]}>Add Design</Text>
                     <TouchableOpacity 
                       onPress={() => !isCreating && setCreateVisible(false)} 
                       style={[styles.closeIconButton, isCreating && { opacity: 0.5 }]}
@@ -531,12 +531,12 @@ export default function EditGalleryScreen() {
                   </View>
 
                   <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
-                    <Text style={[styles.helperText, { marginBottom: 4 }]}>ניתן לבחור כמה תמונות. הראשונה תשמש כתמונת שער.</Text>
+                    <Text style={[styles.helperText, { marginBottom: 4 }]}>You can select multiple images. The first one will be used as the cover image.</Text>
 
                     {/* Admin User Selection */}
                     {adminUsers.length > 1 && (
                       <View style={{ marginBottom: 12, opacity: isCreating ? 0.5 : 1 }}>
-                        <Text style={[styles.sectionTitle, { fontSize: 14, marginBottom: 8 }]}>בחר מנהל</Text>
+                        <Text style={[styles.sectionTitle, { fontSize: 14, marginBottom: 8 }]}>Select Admin</Text>
                         <View style={styles.adminSelectorContainer}>
                           {adminUsers.map((user) => (
                             <TouchableOpacity
@@ -567,7 +567,7 @@ export default function EditGalleryScreen() {
                       disabled={isCreating}
                     >
                       <Ionicons name="images-outline" size={18} color={ACCENT_PURPLE} />
-                      <Text style={[styles.pickButtonText, { color: ACCENT_PURPLE }]}>בחר תמונות</Text>
+                      <Text style={[styles.pickButtonText, { color: ACCENT_PURPLE }]}>Select Images</Text>
                       {pickedAssets.length > 0 && (
                         <View style={[styles.badge, { backgroundColor: ACCENT_PURPLE }]}><Text style={styles.badgeText}>{pickedAssets.length}</Text></View>
                       )}
@@ -588,7 +588,7 @@ export default function EditGalleryScreen() {
 
                     <TextInput
                       style={[styles.input, { marginTop: 8 }, isCreating && { opacity: 0.5 }]}
-                      placeholder="שם העיצוב"
+                      placeholder="Design name"
                       value={name}
                       onChangeText={setName}
                       editable={!isCreating}
@@ -598,10 +598,10 @@ export default function EditGalleryScreen() {
                       {isCreating ? (
                         <View style={styles.loadingContainer}>
                           <ActivityIndicator color="#fff" size="small" />
-                          <Text style={[styles.createButtonText, { marginLeft: 8 }]}>מעלה תמונות...</Text>
+                          <Text style={[styles.createButtonText, { marginLeft: 8 }]}>Uploading images...</Text>
                         </View>
                       ) : (
-                        <Text style={styles.createButtonText}>{isLoading ? 'שומר…' : 'פרסום'}</Text>
+                        <Text style={styles.createButtonText}>{isLoading ? 'Saving...' : 'Publish'}</Text>
                       )}
                     </TouchableOpacity>
                   </ScrollView>
@@ -661,13 +661,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: Colors.text,
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 8,
   },
   helperText: {
     fontSize: 13,
     color: '#6e6e73',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   input: {
     backgroundColor: '#f2f2f7',
@@ -675,18 +675,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     marginTop: 8,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   pickButton: {
     marginTop: 10,
-    alignSelf: 'flex-end',
+    alignSelf: 'flex-start',
     backgroundColor: '#F2F2F7',
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 22,
     borderWidth: 1,
     borderColor: '#E5E5EA',
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
@@ -720,7 +720,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: Colors.text,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   categoriesRow: {
     flexDirection: 'row',
@@ -802,7 +802,7 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: 14,
     fontWeight: '600',
-    textAlign: 'right',
+    textAlign: 'left',
     marginBottom: 4,
   },
   popularityContainer: {
@@ -866,7 +866,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   modalHeader: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 8,

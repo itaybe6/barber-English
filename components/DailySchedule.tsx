@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 // import { useFonts } from 'expo-font';
 import { AvailableTimeSlot, supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
+import { useColors } from '@/src/theme/ThemeProvider';
 
 interface DailyScheduleProps {
   nextAppointment: AvailableTimeSlot | null;
@@ -15,6 +16,8 @@ interface DailyScheduleProps {
 
 export default function DailySchedule({ nextAppointment, loading, onRefresh, todayAppointmentsCount, loadingTodayCount }: DailyScheduleProps) {
   const router = useRouter();
+  const colors = useColors();
+  const styles = createStyles(colors);
   const [clientImageUrl, setClientImageUrl] = useState<string | undefined>(undefined);
   // Remove custom font usage; rely on system/default fonts
   const getInitials = (fullName?: string | null): string => {
@@ -106,7 +109,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
         >
           <View style={styles.cardHeaderRow}>
             <View style={styles.headerIconCircle}>
-              <Ionicons name="calendar-outline" size={18} color="#1C1C1E" />
+              <Ionicons name="calendar-outline" size={18} color={colors.primary} />
             </View>
             <Text style={styles.dateText}>
               {new Date().toLocaleDateString('en-US', {
@@ -115,7 +118,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
               })} {new Date().toLocaleDateString('en-US', { weekday: 'short' })}
             </Text>
             {loadingTodayCount ? (
-              <ActivityIndicator size="small" color="#1C1C1E" />
+              <ActivityIndicator size="small" color={colors.primary} />
             ) : (
               <View style={styles.timePillHeader}>
                 <Text style={styles.timeTextPill}>
@@ -134,14 +137,14 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
         >
           <View style={styles.cardHeaderRow}>
             <View style={styles.headerIconCircle}>
-              <Ionicons name="time-outline" size={18} color="#1C1C1E" />
+              <Ionicons name="time-outline" size={18} color={colors.primary} />
             </View>
             <Text style={styles.nextTitle}>Next appointment</Text>
           </View>
           
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color="#7B61FF" />
+              <ActivityIndicator size="small" color={colors.primary} />
               <Text style={styles.loadingText}>Loading...</Text>
             </View>
           ) : nextAppointment ? (
@@ -174,7 +177,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
           ) : (
             <View style={styles.emptyStateContainer}>
               <View style={styles.emptyIconCircle}>
-                <Ionicons name="calendar-outline" size={20} color="#1C1C1E" />
+                <Ionicons name="calendar-outline" size={20} color={colors.primary} />
               </View>
               <Text style={styles.emptyTitle}>No upcoming appointments today</Text>
               <Text style={styles.emptySubtitle}>No appointments scheduled for today</Text>
@@ -186,7 +189,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -242,7 +245,7 @@ const styles = StyleSheet.create({
   // align icon and text to same baseline
   dateText: {
     fontSize: 15,
-    color: '#222',
+    color: colors.text,
     fontWeight: '600',
     marginLeft: 6,
     textAlign: 'left',
@@ -250,7 +253,7 @@ const styles = StyleSheet.create({
   },
   nextTitle: {
     fontSize: 15,
-    color: '#222',
+    color: colors.text,
     fontWeight: '600',
     marginLeft: 6,
     textAlign: 'left',
@@ -260,7 +263,7 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   headerIconCircle: {
-    backgroundColor: 'rgba(0,0,0,0.08)',
+    backgroundColor: `${colors.primary}20`,
     borderRadius: 16,
     width: 32,
     height: 32,
@@ -309,7 +312,7 @@ const styles = StyleSheet.create({
   },
   clientNameBlack: {
     fontSize: 15,
-    color: '#222',
+    color: colors.text,
     fontWeight: '700',
     marginLeft: 4,
     textAlign: 'left',
@@ -325,7 +328,7 @@ const styles = StyleSheet.create({
   bigTimeText: {
     fontSize: 42,
     fontWeight: '900',
-    color: '#000',
+    color: colors.primary,
     letterSpacing: 0.5,
     marginTop: -44,
     marginRight: 28,
@@ -456,7 +459,7 @@ const styles = StyleSheet.create({
   timeTextPill: {
     fontSize: 13,
     fontWeight: 'bold',
-    color: '#222',
+    color: colors.text,
     textAlign: 'center',
     letterSpacing: 0.5,
   },
@@ -475,7 +478,7 @@ const styles = StyleSheet.create({
   },
   dailyTitle: {
     fontSize: 22,
-    color: '#222',
+    color: colors.text,
     fontWeight: '800',
     textAlign: 'left',
     letterSpacing: 0.2,
@@ -485,7 +488,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#1C1C1E',
+    backgroundColor: colors.primary,
     marginTop: 0,
     marginLeft: 2,
   },
@@ -520,7 +523,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   emptyIconCircle: {
-    backgroundColor: 'rgba(123,97,255,0.10)',
+    backgroundColor: `${colors.primary}20`,
     borderRadius: 18,
     width: 36,
     height: 36,
@@ -530,7 +533,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1d1d1f',
+    color: colors.text,
     textAlign: 'center',
   },
   emptySubtitle: {
@@ -540,7 +543,7 @@ const styles = StyleSheet.create({
   },
   serviceText: {
     fontSize: 12,
-    color: '#666',
+    color: colors.textSecondary,
     textAlign: 'left',
     marginTop: 4,
     marginLeft: 8,

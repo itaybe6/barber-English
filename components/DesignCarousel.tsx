@@ -327,7 +327,7 @@ export default function DesignCarousel({
           <View style={[styles.decorationDot, { opacity: 0.1 }]} />
         </View>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.modernTitle}>גלריית העיצובים</Text>
+          <Text style={styles.modernTitle}>Design Gallery</Text>
         </View>
         <View style={styles.headerDecorationRight}>
           <View style={[styles.decorationDot, { opacity: 0.1 }]} />

@@ -26,7 +26,7 @@ import DailySchedule from '@/components/DailySchedule';
 import { useAuthStore } from '@/stores/authStore';
 import { useNotificationsStore } from '@/stores/notificationsStore';
 import { getCurrentClientLogo } from '@/src/theme/assets';
-import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
+import { useColors } from '@/src/theme/ThemeProvider';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -39,8 +39,8 @@ export default function HomeScreen() {
   const user = useAuthStore((state) => state.user);
   const unreadCount = useNotificationsStore((state) => state.unreadCount);
   const fetchUnread = useNotificationsStore((state) => state.fetchUnreadCount);
-  const { colors: businessColors } = useBusinessColors();
-  const styles = createStyles(businessColors);
+  const colors = useColors();
+  const styles = createStyles(colors);
 
   const [appointments] = useState(generateAppointments());
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -508,7 +508,7 @@ export default function HomeScreen() {
             activeOpacity={0.85}
           >
             <View style={styles.bellIconWrapper}>
-              <Ionicons name="notifications-outline" size={24} color="#1d1d1f" />
+              <Ionicons name="notifications-outline" size={24} color={colors.primary} />
             </View>
             {unreadCount > 0 && (
               <View style={styles.notificationBadge}>
@@ -537,7 +537,7 @@ export default function HomeScreen() {
           { paddingBottom: insets.bottom + 120 }
         ]}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
         
                  <DailySchedule 
@@ -557,28 +557,28 @@ export default function HomeScreen() {
               }}
               activeOpacity={0.85}
             >
-              <View style={[styles.statsButtonIconCircle, { backgroundColor: 'rgba(0,0,0,0.10)' }]}> 
-                <Ionicons name="people-outline" size={22} color={businessColors.text} />
+              <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20` }]}> 
+                <Ionicons name="people-outline" size={22} color={colors.primary} />
               </View>
               <View style={styles.statsButtonContent}>
                 {loadingStats ? (
-                  <ActivityIndicator size="small" color={businessColors.primary} />
+                  <ActivityIndicator size="small" color={colors.primary} />
                 ) : (
-                  <Text style={styles.statsNumber}>{monthlyStats.totalClients}</Text>
+                  <Text style={[styles.statsNumber, { color: colors.primary }]}>{monthlyStats.totalClients}</Text>
                 )}
                 <Text style={styles.statsLabelSecondary}>Clients</Text>
               </View>
             </TouchableOpacity>
 
             <View style={styles.statsButton}>
-              <View style={[styles.statsButtonIconCircle, { backgroundColor: 'rgba(0,0,0,0.10)' }]}> 
-                <Ionicons name="checkmark-done-outline" size={22} color={businessColors.text} />
+              <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20` }]}> 
+                <Ionicons name="checkmark-done-outline" size={22} color={colors.primary} />
               </View>
               <View style={styles.statsButtonContent}>
                 {loadingStats ? (
-                  <ActivityIndicator size="small" color={businessColors.success} />
+                  <ActivityIndicator size="small" color={colors.success} />
                 ) : (
-                  <Text style={styles.statsNumber}>{monthlyStats.completedAppointments}</Text>
+                  <Text style={[styles.statsNumber, { color: colors.primary }]}>{monthlyStats.completedAppointments}</Text>
                 )}
                 <Text style={styles.statsLabelSecondary}>This month</Text>
               </View>
@@ -594,8 +594,8 @@ export default function HomeScreen() {
               style={[styles.editGalleryButton, { alignSelf: 'flex-start' }]}
             >
               <Text style={styles.editGalleryButtonText}>Edit Gallery</Text>
-              <View style={[styles.statsButtonIconCircle, { backgroundColor: 'rgba(0,0,0,0.10)', width: 28, height: 28, borderRadius: 14, marginLeft: 8 }]}> 
-                <Ionicons name="create-outline" size={18} color={businessColors.text} />
+              <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20`, width: 28, height: 28, borderRadius: 14, marginLeft: 8 }]}> 
+                <Ionicons name="create-outline" size={18} color={colors.primary} />
               </View>
             </TouchableOpacity>
           </View>
@@ -610,7 +610,7 @@ export default function HomeScreen() {
         >
           {isLoadingDesigns ? (
             <View style={{ paddingHorizontal: 16, justifyContent: 'center' }}>
-              <ActivityIndicator size="small" color={businessColors.text} />
+              <ActivityIndicator size="small" color={colors.primary} />
             </View>
           ) : (
             designsFromStore.map((item) => (
@@ -718,17 +718,17 @@ export default function HomeScreen() {
                   style={styles.closeButton}
                   onPress={() => setShowClientsModal(false)}
                 >
-                  <Ionicons name="close" size={24} color="#1d1d1f" />
+                  <Ionicons name="close" size={24} color={colors.text} />
                 </TouchableOpacity>
               </View>
 
              {/* Search Bar */}
              <View style={styles.searchContainer}>
-               <Ionicons name="search" size={20} color="#8e8e93" style={styles.searchIcon} />
+               <Ionicons name="search" size={20} color={colors.primary} style={styles.searchIcon} />
                <TextInput
                  style={styles.searchInput}
                  placeholder="Search by name..."
-                 placeholderTextColor="#8e8e93"
+                 placeholderTextColor={colors.textSecondary}
                  value={searchQuery}
                  onChangeText={setSearchQuery}
                />
@@ -762,7 +762,7 @@ export default function HomeScreen() {
              {/* Clients List */}
              {loadingClients ? (
                <View style={styles.loadingContainer}>
-                 <ActivityIndicator size="large" color={businessColors.text} />
+                 <ActivityIndicator size="large" color={colors.primary} />
                  <Text style={styles.loadingText}>Loading clients...</Text>
                </View>
               ) : (
@@ -790,7 +790,7 @@ export default function HomeScreen() {
                          style={[styles.phoneButton, { marginRight: 16 }]}
                          onPress={() => handlePhoneCall(item.phone)}
                        >
-                         <Ionicons name="call" size={20} color={businessColors.primary} />
+                         <Ionicons name="call" size={20} color={colors.primary} />
                        </TouchableOpacity>
                      </View>
                    </View>
@@ -1176,13 +1176,13 @@ const createStyles = (colors: any) => StyleSheet.create({
   cardHour: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#222',
+    color: colors.text,
     marginBottom: 2,
     textAlign: 'right',
   },
   cardDate: {
     fontSize: 14,
-    color: '#888',
+    color: colors.textSecondary,
     textAlign: 'right',
   },
   redDot: {
@@ -1194,7 +1194,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   updatesText: {
     fontSize: 13,
-    color: '#222',
+    color: colors.text,
     textAlign: 'right',
   },
   statsBox: {
@@ -1219,7 +1219,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   statsTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#222',
+    color: colors.text,
     marginBottom: 12,
     textAlign: 'right',
   },
@@ -1272,7 +1272,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   statsValue: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1C1C1E',
+    color: colors.text,
     marginBottom: 2,
     textAlign: 'center',
   },
@@ -1285,7 +1285,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   statsLabel: {
     fontSize: 13,
-    color: '#888',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   statsLabelSecondary: {
@@ -1319,12 +1319,12 @@ const createStyles = (colors: any) => StyleSheet.create({
   cardTitleHebrew: {
     fontSize: 15,
     fontWeight: 'bold',
-    color: '#222',
+    color: colors.text,
     marginBottom: 6,
     textAlign: 'right',
   },
   clockIconCircle: {
-    backgroundColor: '#000000',
+    backgroundColor: colors.primary,
     borderRadius: 16,
     width: 32,
     height: 32,

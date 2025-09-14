@@ -620,7 +620,7 @@ export default function ClientHomeScreen() {
         {/* Waitlist Section - Top Priority */}
         {waitlistEntries.length > 0 && (
           <View style={styles.waitlistTopSection}>
-            <View style={styles.waitlistTopCard}>
+            <View style={[styles.waitlistTopCard, { backgroundColor: colors.primary, borderColor: colors.primary, shadowColor: colors.primary }]}>
               <View style={styles.waitlistTopContent}>
                 <View style={styles.waitlistTopIconContainer}>
                   <Ionicons name="time" size={28} color="#FFFFFF" />
@@ -663,7 +663,7 @@ export default function ClientHomeScreen() {
                 </View>
               </View>
               <TouchableOpacity
-                style={[styles.waitlistTopButton, { backgroundColor: colors.primary }]}
+                style={[styles.waitlistTopButton, { backgroundColor: '#4A90E2' }]}
                 onPress={() => {
                   Alert.alert(
                     'Leave waitlist',
@@ -1609,12 +1609,9 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   waitlistTopCard: {
-    backgroundColor: '#7B61FF',
     borderRadius: 20,
     padding: 24,
     borderWidth: 1,
-    borderColor: '#7B61FF',
-    shadowColor: '#7B61FF',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 20,
@@ -1686,7 +1683,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   waitlistTopButtonText: {
-    color: '#7B61FF',
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
     letterSpacing: -0.2,

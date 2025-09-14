@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
 import { notificationsApi } from '@/lib/api/notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useColors } from '@/src/theme/ThemeProvider';
 
 type TitleType = 'custom' | 'preset';
 
@@ -29,6 +30,8 @@ export default function AdminBroadcastComposer({
   language = 'he',
 }: AdminBroadcastComposerProps) {
   const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const styles = createStyles(colors);
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = typeof open === 'boolean';
   const isOpen = isControlled ? !!open : internalOpen;
@@ -198,7 +201,7 @@ export default function AdminBroadcastComposer({
           accessibilityLabel={t.accessibilitySend}
           style={[styles.iconButton, iconContainerStyle]}
         >
-          <Ionicons name="paper-plane-outline" size={22} color="#1d1d1f" />
+          <Ionicons name="paper-plane-outline" size={22} color={colors.primary} />
         </TouchableOpacity>
       ))}
 
@@ -213,7 +216,7 @@ export default function AdminBroadcastComposer({
           <View style={styles.overlay}>
             <View style={styles.sheet}>
             <LinearGradient
-              colors={["#7B61FF", "#7B61FF"]}
+              colors={[colors.primary, colors.primary]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.sheetHeader}
@@ -308,7 +311,7 @@ export default function AdminBroadcastComposer({
                   end={{ x: 1, y: 1 }}
                   style={[styles.previewHeader, isLTR && { flexDirection: 'row' }]}
                 >
-                  <Ionicons name="notifications-outline" size={18} color="#7B7AFF" style={isLTR ? { marginRight: 6 } : { marginLeft: 6 }} />
+                  <Ionicons name="notifications-outline" size={18} color={colors.primary} style={isLTR ? { marginRight: 6 } : { marginLeft: 6 }} />
                   <Text style={[styles.previewTitle, isLTR && { textAlign: 'left' }]}>{currentTitle || t.previewTitlePlaceholder}</Text>
                 </LinearGradient>
                 <Text style={[styles.previewContent, isLTR && { textAlign: 'left' }]}>{notificationContent || t.previewContentPlaceholder}</Text>
@@ -410,7 +413,7 @@ export default function AdminBroadcastComposer({
                           activeOpacity={0.85}
                         >
                           <View style={styles.dropdownOptionIconCircle}>
-                            <Ionicons name="pricetag-outline" size={16} color="#7B7AFF" />
+                            <Ionicons name="pricetag-outline" size={16} color={colors.primary} />
                           </View>
                           <View style={{ flex: 1 }}>
                             <Text style={[styles.dropdownOptionTitle, isLTR && { textAlign: 'left' }]}>{t.title}</Text>
@@ -433,7 +436,7 @@ export default function AdminBroadcastComposer({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   fabContainer: {
     position: 'absolute',
     zIndex: 50,
@@ -644,9 +647,12 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#EFEFFF',
+    backgroundColor: `${colors.primary}20`,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  dropdownList: {
+    maxHeight: 280,
   },
   input: {
     backgroundColor: '#fff',
@@ -747,13 +753,13 @@ const styles = StyleSheet.create({
     }),
   },
   secondaryButtonText: {
-    color: Colors.primary,
+    color: colors.primary,
     fontSize: 16,
     fontWeight: '700',
   },
   primaryButton: {
     flex: 1,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',

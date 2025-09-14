@@ -91,7 +91,7 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [showCustomPicker, setShowCustomPicker] = useState(false);
   const [customColorHex, setCustomColorHex] = useState('#000000');
-  const { updatePrimaryColor, colors } = useBusinessColors();
+  const { updatePrimaryColor, colors, refreshColors } = useBusinessColors();
   const { triggerColorUpdate, forceAppRefresh } = useColorUpdate();
 
   // Color categories for better organization
@@ -149,26 +149,32 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
       if (success) {
         onColorSelect?.(color);
         
-        // Show success message and force app refresh
+        // Force app refresh immediately after successful color update
+        setTimeout(() => {
+          forceAppRefresh();
+          refreshColors(); // Also refresh the colors hook
+        }, 100);
+        
+        // Show success message
         Alert.alert(
-          'צבע עודכן בהצלחה! 🎨', 
-          'הצבע החדש נשמר והאפליקציה מתעדכנת עכשיו. התפריט התחתון יוצג עם הצבע החדש.',
+          'Color Updated Successfully! 🎨', 
+          'The new color has been saved and the app is updating automatically.',
           [
             {
-              text: 'מעולה!',
+              text: 'Great!',
               onPress: () => {
-                // Force comprehensive app refresh
+                // Additional refresh to ensure everything is updated
                 forceAppRefresh();
               }
             }
           ]
         );
       } else {
-        Alert.alert('שגיאה', 'לא ניתן לעדכן את הצבע');
+        Alert.alert('Error', 'Unable to update the color');
       }
     } catch (error) {
       console.error('Error updating color:', error);
-      Alert.alert('שגיאה', 'אירעה שגיאה בעת עדכון הצבע');
+      Alert.alert('Error', 'An error occurred while updating the color');
     }
   };
 
@@ -342,9 +348,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
   },
   modalOverlay: {
     flex: 1,

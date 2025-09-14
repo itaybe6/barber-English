@@ -90,7 +90,7 @@ export default function SettingsScreen() {
   const logout = useAuthStore((state) => state.logout);
   const user = useAuthStore((state) => state.user);
   const updateUserProfile = useAuthStore((s) => s.updateUserProfile);
-  const { triggerColorUpdate } = useColorUpdate();
+  const { triggerColorUpdate, forceAppRefresh } = useColorUpdate();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   
@@ -133,7 +133,7 @@ export default function SettingsScreen() {
   const [showEditImagePage2Modal, setShowEditImagePage2Modal] = useState(false);
   const [showEditCancellationModal, setShowEditCancellationModal] = useState(false);
   const [showCancellationDropdown, setShowCancellationDropdown] = useState(false);
-  const [cancellationDropdownDirection, setCancellationDropdownDirection] = useState<'up' | 'down'>('up');
+  const [cancellationDropdownDirection, setCancellationDropdownDirection] = useState<'up' | 'down'>('down');
   const [isUploadingImagePage1, setIsUploadingImagePage1] = useState(false);
   const [isUploadingImagePage2, setIsUploadingImagePage2] = useState(false);
   const [showImagePreviewModal, setShowImagePreviewModal] = useState(false);
@@ -611,12 +611,14 @@ export default function SettingsScreen() {
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
+      base64: true,
     });
 
     if (!result.canceled && result.assets[0]) {
       setEditProductImageUploading(prev => ({ ...prev, [productId]: true }));
       try {
-        const imageUrl = await productsApi.uploadProductImage(result.assets[0].uri);
+        const asset = result.assets[0];
+        const imageUrl = await productsApi.uploadProductImage(asset.uri, undefined, asset.base64);
         updateLocalProductField(productId, 'image_url', imageUrl);
       } catch (error) {
         Alert.alert('Error', 'Failed to upload image');
@@ -655,12 +657,14 @@ export default function SettingsScreen() {
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
+        base64: true,
       });
 
       if (!result.canceled && result.assets[0]) {
         setIsUploadingProductImage(true);
         try {
-          const imageUrl = await productsApi.uploadProductImage(result.assets[0].uri);
+          const asset = result.assets[0];
+          const imageUrl = await productsApi.uploadProductImage(asset.uri, undefined, asset.base64);
           setProductForm(prev => ({ ...prev, image_url: imageUrl }));
         } catch (error) {
           Alert.alert('Error', 'Failed to upload image');
@@ -1734,11 +1738,19 @@ export default function SettingsScreen() {
               }
               console.log('Color selected:', color);
               
+              // Trigger comprehensive app refresh immediately
+              triggerColorUpdate();
+              forceAppRefresh();
+              
               // Trigger additional color updates to ensure all components refresh
               setTimeout(() => triggerColorUpdate(), 100);
               setTimeout(() => triggerColorUpdate(), 300);
               setTimeout(() => triggerColorUpdate(), 600);
               setTimeout(() => triggerColorUpdate(), 1000);
+              
+              // Force additional app refresh
+              setTimeout(() => forceAppRefresh(), 200);
+              setTimeout(() => forceAppRefresh(), 800);
               
               // Force a complete re-render of the settings screen
               setTimeout(() => {
@@ -2225,55 +2237,60 @@ export default function SettingsScreen() {
           <View style={styles.smallModalOverlay}>
             <TouchableWithoutFeedback onPress={() => {}}>
               <View style={styles.smallModalCard}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity style={styles.modalCloseButton} onPress={() => {
-                setShowCancellationDropdown(false);
-                setShowEditCancellationModal(false);
-              }}>
-                <Text style={styles.modalCloseText}>Cancel</Text>
-              </TouchableOpacity>
-              <Text style={styles.modalTitleLTR}>Minimum cancellation time</Text>
-              <TouchableOpacity style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]} onPress={saveCancellationHours} disabled={isSavingProfile}>
-                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'Saving...' : 'Save'}</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
-              <TouchableWithoutFeedback onPress={() => setShowCancellationDropdown(false)}>
-                <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabelLTR}>Hours before appointment</Text>
-                  <View style={styles.dropdownContainer}>
-                  <TouchableOpacity
-                    style={styles.dropdownButton}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      // Open upward to avoid being cut off
-                      setCancellationDropdownDirection('up');
-                      setShowCancellationDropdown(!showCancellationDropdown);
-                    }}
-                  >
-                    <Text style={styles.dropdownButtonText}>
-                      {cancellationHoursDraft === '0' 
-                        ? '0 hours (No restriction)' 
-                        : `${cancellationHoursDraft} ${cancellationHoursDraft === '1' ? 'hour' : 'hours'}${parseInt(cancellationHoursDraft) >= 24 ? ` (${Math.floor(parseInt(cancellationHoursDraft) / 24)} ${Math.floor(parseInt(cancellationHoursDraft) / 24) === 1 ? 'day' : 'days'}${parseInt(cancellationHoursDraft) % 24 > 0 ? ` ${parseInt(cancellationHoursDraft) % 24} hours` : ''})` : ''}`
-                      }
-                    </Text>
-                    {showCancellationDropdown ? (
-                      <Ionicons name="chevron-up" size={20} color={Colors.primary} />
-                    ) : (
-                      <Ionicons name="chevron-down" size={20} color={Colors.primary} />
-                    )}
+                <View style={styles.modalHeader}>
+                  <TouchableOpacity style={styles.modalCloseButton} onPress={() => {
+                    setShowCancellationDropdown(false);
+                    setShowEditCancellationModal(false);
+                  }}>
+                    <Text style={styles.modalCloseText}>Cancel</Text>
                   </TouchableOpacity>
-                  
-                  {showCancellationDropdown && (
-                    <View style={[
-                      styles.cancellationDropdownOptions,
-                      cancellationDropdownDirection === 'up' 
-                        ? styles.cancellationDropdownOptionsUp 
-                        : styles.cancellationDropdownOptionsDown
-                    ]}>
-                      <ScrollView style={styles.cancellationDropdownList} showsVerticalScrollIndicator={false}>
-                        {/* 0 hours option */}
+                  <Text style={styles.modalTitleLTR}>Minimum cancellation time</Text>
+                  <TouchableOpacity style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]} onPress={saveCancellationHours} disabled={isSavingProfile}>
+                    <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'Saving...' : 'Save'}</Text>
+                  </TouchableOpacity>
+                </View>
+                <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
+                  <TouchableWithoutFeedback onPress={() => setShowCancellationDropdown(false)}>
+                    <View style={styles.inputContainer}>
+                      <Text style={styles.inputLabelLTR}>Hours before appointment</Text>
+                      <View style={styles.dropdownContainer}>
                         <TouchableOpacity
+                          style={styles.dropdownButton}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            // Open downward to ensure visibility
+                            setCancellationDropdownDirection('down');
+                            setShowCancellationDropdown(!showCancellationDropdown);
+                          }}
+                        >
+                          <Text style={styles.dropdownButtonText}>
+                            {cancellationHoursDraft === '0' 
+                              ? '0 hours (No restriction)' 
+                              : `${cancellationHoursDraft} ${cancellationHoursDraft === '1' ? 'hour' : 'hours'}${parseInt(cancellationHoursDraft) >= 24 ? ` (${Math.floor(parseInt(cancellationHoursDraft) / 24)} ${Math.floor(parseInt(cancellationHoursDraft) / 24) === 1 ? 'day' : 'days'}${parseInt(cancellationHoursDraft) % 24 > 0 ? ` ${parseInt(cancellationHoursDraft) % 24} hours` : ''})` : ''}`
+                            }
+                          </Text>
+                          {showCancellationDropdown ? (
+                            <Ionicons name="chevron-up" size={20} color={Colors.primary} />
+                          ) : (
+                            <Ionicons name="chevron-down" size={20} color={Colors.primary} />
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </TouchableWithoutFeedback>
+                </ScrollView>
+                
+                {/* Dropdown positioned outside of ScrollView for better visibility */}
+                {showCancellationDropdown && (
+                  <View style={[
+                    styles.cancellationDropdownOptions,
+                    cancellationDropdownDirection === 'up' 
+                      ? styles.cancellationDropdownOptionsUp 
+                      : styles.cancellationDropdownOptionsDown
+                  ]}>
+                    <ScrollView style={styles.cancellationDropdownList} showsVerticalScrollIndicator={false}>
+                      {/* 0 hours option */}
+                      <TouchableOpacity
                           style={[
                             styles.cancellationDropdownItem,
                             cancellationHoursDraft === '0' && styles.cancellationDropdownItemSelected
@@ -2354,16 +2371,15 @@ export default function SettingsScreen() {
                             Custom hours...
                           </Text>
                         </TouchableOpacity>
-                      </ScrollView>
-                    </View>
-                  )}
-                </View>
+                    </ScrollView>
+                  </View>
+                )}
+                
+                <View style={styles.smallModalContent}>
                   <Text style={[styles.inputLabelLTR, { fontSize: 12, color: Colors.subtext, marginTop: 8 }]}>
                     Clients cannot cancel appointments within this time period before the appointment.
                   </Text>
                 </View>
-              </TouchableWithoutFeedback>
-            </ScrollView>
               </View>
             </TouchableWithoutFeedback>
           </View>
@@ -2725,25 +2741,25 @@ export default function SettingsScreen() {
               <View style={styles.sheetGrabberWrapper} {...panResponder.panHandlers}>
                 <View style={styles.sheetGrabber} />
               </View>
-              <View style={styles.modalHeader}>
-                <TouchableOpacity 
-                  style={styles.modalCloseButton}
-                  onPress={closeServicesModal}
-                  accessibilityRole="button"
-                  accessibilityLabel="Close"
-                >
-                  <X size={20} color={Colors.text} />
-                </TouchableOpacity>
-                <Text style={[styles.modalTitle, { textAlign: 'center', alignSelf: 'center', flex: 1 }]}>Edit services</Text>
-                <TouchableOpacity 
-                  style={styles.modalActionButton}
-                  onPress={handleOpenAddService}
-                  accessibilityRole="button"
-                  accessibilityLabel="Add service"
-                >
-                  <Text style={styles.modalActionText}>+</Text>
-                </TouchableOpacity>
-              </View>
+            </View>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity 
+                style={styles.modalCloseButton}
+                onPress={closeServicesModal}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+              >
+                <X size={20} color={Colors.text} />
+              </TouchableOpacity>
+              <Text style={[styles.modalTitle, { textAlign: 'center', alignSelf: 'center', flex: 1 }]}>Edit services</Text>
+              <TouchableOpacity 
+                style={styles.modalActionButton}
+                onPress={handleOpenAddService}
+                accessibilityRole="button"
+                accessibilityLabel="Add service"
+              >
+                <Text style={styles.modalActionText}>+</Text>
+              </TouchableOpacity>
             </View>
             <View style={styles.sheetBody}>
               <ScrollView
@@ -2939,122 +2955,96 @@ export default function SettingsScreen() {
       <Modal
         visible={showAddServiceModal}
         animationType="slide"
-        presentationStyle="pageSheet"
+        presentationStyle="overFullScreen"
+        transparent={true}
         onRequestClose={() => setShowAddServiceModal(false)}
       >
-        <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#F8F9FA' }]}>
-          <KeyboardAvoidingView
-            behavior={Platform.select({ ios: 'padding', android: undefined })}
-            keyboardVerticalOffset={Platform.select({ ios: 70, android: 0 }) as number}
-            style={{ flex: 1 }}
-          >
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={() => setShowAddServiceModal(false)}>
+            <View style={{ flex: 1 }} />
+          </TouchableWithoutFeedback>
+          <View style={styles.modalBottomSheet}>
+            <KeyboardAvoidingView
+              behavior={Platform.select({ ios: 'padding', android: undefined })}
+              keyboardVerticalOffset={Platform.select({ ios: 0, android: 0 }) as number}
+              style={{ flex: 1 }}
+            >
+            <View style={styles.dragHandleArea}>
+              <View style={styles.sheetGrabberWrapper}>
+                <View style={styles.sheetGrabber} />
+              </View>
+            </View>
             <View style={styles.modalHeader}>
               <TouchableOpacity 
                 style={styles.modalCloseButton}
                 onPress={() => setShowAddServiceModal(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
               >
-                <Text style={styles.modalCloseText} numberOfLines={1}>Cancel</Text>
+                <X size={20} color={Colors.text} />
               </TouchableOpacity>
-              <Text style={styles.modalTitle}>Add service</Text>
-              <TouchableOpacity 
-                style={[styles.modalSendButton, addSvcIsSaving && styles.modalSendButtonDisabled]}
-                onPress={handleCreateService}
-                disabled={addSvcIsSaving}
-              >
-                <Text style={[styles.modalSendText, addSvcIsSaving && styles.modalSendTextDisabled]}>
-                  {addSvcIsSaving ? 'Saving...' : 'Save'}
-                </Text>
-              </TouchableOpacity>
+              <Text style={[styles.modalTitle, { textAlign: 'center', alignSelf: 'center', flex: 1 }]}>
+                Add Service
+              </Text>
+              <View style={{ width: 44 }} />
             </View>
             <ScrollView 
               style={styles.modalContent}
+              contentContainerStyle={{ paddingBottom: 30 }}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 40 }}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode={Platform.select({ ios: 'on-drag', android: 'on-drag' }) as any}
             >
-            <View style={styles.recurringCard}>
-            {/* Service Image Picker */}
-            <View style={styles.inputContainer}>
-              <Text style={[styles.inputLabel, { textAlign: 'left' }]}>Service image</Text>
-              <Pressable
-                onPress={handlePickServiceImage}
-                style={{
-                  borderWidth: 1,
-                  borderColor: Colors.border,
-                  borderStyle: 'dashed',
-                  borderRadius: 14,
-                  padding: 12,
-                  backgroundColor: '#FAFAFA',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                {addSvcImage ? (
-                  <Image
-                    source={{ uri: addSvcImage.uri }}
-                    style={{ width: 160, height: 160, borderRadius: 12 }}
+              <View style={styles.modalFormContent}>
+                <View style={styles.formSection}>
+                  <Text style={styles.inputLabel}>Service Image</Text>
+                  <TouchableOpacity 
+                    style={styles.imagePickerButton}
+                    onPress={handlePickServiceImage}
+                    disabled={addSvcUploading}
+                  >
+                    {addSvcImage ? (
+                      <Image source={{ uri: addSvcImage.uri }} style={styles.previewImage} />
+                    ) : (
+                      <View style={styles.imagePickerPlaceholder}>
+                        {addSvcUploading ? (
+                          <ActivityIndicator size="small" color={Colors.primary} />
+                        ) : (
+                          <>
+                            <ImageIcon size={24} color={Colors.subtext} />
+                            <Text style={styles.imagePickerText}>Tap to add image</Text>
+                          </>
+                        )}
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.formSection}>
+                  <Text style={styles.inputLabel}>Service Name *</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={addSvcName}
+                    onChangeText={setAddSvcName}
+                    placeholder="Enter service name"
+                    placeholderTextColor={Colors.subtext}
                   />
-                ) : (
-                  <Text style={{ color: Colors.subtext }}>Tap to select an image</Text>
-                )}
-              </Pressable>
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 12,
-                  marginTop: 8,
-                }}
-              >
-                <TouchableOpacity
-                  onPress={handlePickServiceImage}
-                  style={[
-                    styles.pickButton,
-                    { backgroundColor: '#F2F2F7', borderColor: '#E5E5EA' },
-                  ]}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.pickButtonText}>
-                    {addSvcImage ? 'Change image' : 'Select image'}
-                  </Text>
-                </TouchableOpacity>
-                {addSvcUploading && (
-                  <ActivityIndicator size="small" color={Colors.primary} />
-                )}
-              </View>
-            </View>
-            <View style={styles.inputContainer}>
-              <Text style={[styles.inputLabel, { textAlign: 'left' }]}>Service name</Text>
-              <TextInput
-                style={styles.textInput}
-                value={addSvcName}
-                onChangeText={setAddSvcName}
-                textAlign="left"
-                placeholder="New service"
-                placeholderTextColor={Colors.subtext}
-              />
-            </View>
-            
-            <View style={[styles.twoColumnRow, { flexDirection: 'row' }]}>
-              <View style={[styles.formGroup, styles.twoColumnItem]}>
-                <Text style={[styles.formLabel, { textAlign: 'left' }]}>Price ($)</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={addSvcPrice}
-                  onChangeText={(t) => {
-                    const num = t.replace(/[^0-9.]/g, '');
-                    setAddSvcPrice(num);
-                  }}
-                  keyboardType="numeric"
-                  textAlign="left"
-                />
-              </View>
-              {/* per-service duration removed */}
-            </View>
-            {/* Service duration dropdown */}
-            <View style={styles.inputContainer}>
-              <Text style={[styles.inputLabel, { textAlign: 'left' }]}>Service duration (minutes)</Text>
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.inputLabel}>Price ($) *</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={addSvcPrice}
+                    onChangeText={(t) => {
+                      const num = t.replace(/[^0-9.]/g, '');
+                      setAddSvcPrice(num);
+                    }}
+                    placeholder="0.00"
+                    placeholderTextColor={Colors.subtext}
+                    keyboardType="numeric"
+                  />
+                </View>
+
+                <View style={styles.formSectionLast}>
+                  <Text style={styles.inputLabel}>Service Duration (minutes) *</Text>
               <Pressable style={styles.dropdownContainer} onPress={() => setShowDurationDropdown(!showDurationDropdown)}>
                 <View style={styles.dropdownHeader}>
                   <Text style={[styles.dropdownText, { textAlign: 'left' }, !addSvcDuration && styles.dropdownPlaceholder]}>
@@ -3080,12 +3070,25 @@ export default function SettingsScreen() {
               )}
             </View>
             {/* category selection removed */}
-            {/* Spacer to ensure last inputs are above keyboard */}
-            <View style={{ height: 60 }} />
             </View>
             </ScrollView>
+            
+            {/* Save Button */}
+            <View style={styles.saveButtonContainer}>
+              <TouchableOpacity 
+                style={[styles.saveButton, { opacity: addSvcIsSaving ? 0.7 : 1 }]}
+                onPress={handleCreateService}
+                disabled={addSvcIsSaving}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.saveButtonText}>
+                  {addSvcIsSaving ? 'Saving...' : 'Add Service'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </KeyboardAvoidingView>
-        </SafeAreaView>
+          </View>
+        </View>
       </Modal>
 
       {/* Add Appointment Modal */}
@@ -3179,30 +3182,33 @@ export default function SettingsScreen() {
               <View style={styles.sheetGrabberWrapper} {...panResponder.panHandlers}>
                 <View style={styles.sheetGrabber} />
               </View>
-              <View style={styles.modalHeader}>
-                <TouchableOpacity 
-                  style={styles.modalCloseButton}
-                  onPress={closeProductsModal}
-                  accessibilityRole="button"
-                  accessibilityLabel="Close"
-                >
-                  <X size={20} color={Colors.text} />
-                </TouchableOpacity>
-                <Text style={[styles.modalTitle, { textAlign: 'center', alignSelf: 'center', flex: 1 }]}>Manage Products</Text>
-                <TouchableOpacity 
-                  style={styles.modalActionButton}
-                  onPress={() => {
-                    setProductForm({ name: '', description: '', price: 0, image_url: '' });
-                    setEditingProduct(null);
+            </View>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity 
+                style={styles.modalCloseButton}
+                onPress={closeProductsModal}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+              >
+                <X size={20} color={Colors.text} />
+              </TouchableOpacity>
+              <Text style={[styles.modalTitle, { textAlign: 'center', alignSelf: 'center', flex: 1 }]}>Manage Products</Text>
+              <TouchableOpacity 
+                style={styles.modalActionButton}
+                onPress={() => {
+                  setProductForm({ name: '', description: '', price: 0, image_url: '' });
+                  setEditingProduct(null);
+                  setShowProductsModal(false);
+                  setTimeout(() => {
                     setShowAddProductModal(true);
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Add product"
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.modalActionText}>+</Text>
-                </TouchableOpacity>
-              </View>
+                  }, 100);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Add product"
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalActionText}>+</Text>
+              </TouchableOpacity>
             </View>
             <View style={styles.sheetBody}>
 
@@ -3348,6 +3354,15 @@ export default function SettingsScreen() {
                                 {savingProductId === product.id ? 'Saving...' : 'Save changes'}
                               </Text>
                             </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.deleteIconButton}
+                              onPress={() => handleDeleteProduct(product.id)}
+                              activeOpacity={0.85}
+                              accessibilityRole="button"
+                              accessibilityLabel="Delete product"
+                            >
+                              <Trash2 size={20} color="#FF3B30" />
+                            </TouchableOpacity>
                           </View>
                         </View>
                       )}
@@ -3364,89 +3379,141 @@ export default function SettingsScreen() {
       <Modal
         visible={showAddProductModal}
         animationType="slide"
-        presentationStyle="pageSheet"
-        transparent={false}
+        presentationStyle="overFullScreen"
+        transparent={true}
         onRequestClose={() => {
           setShowAddProductModal(false);
           setEditingProduct(null);
           setProductForm({ name: '', description: '', price: 0, image_url: '' });
           setIsUploadingProductImage(false);
+          setShowProductsModal(true);
         }}
       >
-        <SafeAreaView style={styles.modalContainer}>
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={() => {
+            setShowAddProductModal(false);
+            setEditingProduct(null);
+            setProductForm({ name: '', description: '', price: 0, image_url: '' });
+            setIsUploadingProductImage(false);
+            setShowProductsModal(true);
+          }}>
+            <View style={{ flex: 1 }} />
+          </TouchableWithoutFeedback>
+          <View style={styles.modalBottomSheet}>
+            <KeyboardAvoidingView
+              behavior={Platform.select({ ios: 'padding', android: undefined })}
+              keyboardVerticalOffset={Platform.select({ ios: 0, android: 0 }) as number}
+              style={{ flex: 1 }}
+            >
+            <View style={styles.dragHandleArea}>
+              <View style={styles.sheetGrabberWrapper}>
+                <View style={styles.sheetGrabber} />
+              </View>
+            </View>
             <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={() => {
-                setShowAddProductModal(false);
-                setEditingProduct(null);
-                setProductForm({ name: '', description: '', price: 0, image_url: '' });
-                setIsUploadingProductImage(false);
-              }}>
-                <Text style={styles.modalCloseText}>Cancel</Text>
+              <TouchableOpacity 
+                style={styles.modalCloseButton}
+                onPress={() => {
+                  setShowAddProductModal(false);
+                  setEditingProduct(null);
+                  setProductForm({ name: '', description: '', price: 0, image_url: '' });
+                  setIsUploadingProductImage(false);
+                  setShowProductsModal(true);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+              >
+                <X size={20} color={Colors.text} />
               </TouchableOpacity>
-              <Text style={styles.modalTitle}>
+              <Text style={[styles.modalTitle, { textAlign: 'center', alignSelf: 'center', flex: 1 }]}>
                 {editingProduct ? 'Edit Product' : 'Add Product'}
               </Text>
-              <TouchableOpacity onPress={handleAddProduct}>
-                <Text style={styles.modalSendText}>Save</Text>
-              </TouchableOpacity>
+              <View style={{ width: 44 }} />
             </View>
 
-            <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+              style={styles.modalContent} 
+              contentContainerStyle={{ paddingBottom: 30 }}
+              showsVerticalScrollIndicator={false}
+            >
               <View style={styles.modalFormContent}>
-                <Text style={styles.inputLabel}>Product Name *</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={productForm.name}
-                  onChangeText={(text) => setProductForm(prev => ({ ...prev, name: text }))}
-                  placeholder="Enter product name"
-                  placeholderTextColor={Colors.subtext}
-                />
+                <View style={styles.formSection}>
+                  <Text style={styles.inputLabel}>Product Image</Text>
+                  <TouchableOpacity 
+                    style={styles.imagePickerButton}
+                    onPress={handlePickProductImage}
+                    disabled={isUploadingProductImage}
+                  >
+                    {productForm.image_url ? (
+                      <Image source={{ uri: productForm.image_url }} style={styles.previewImage} />
+                    ) : (
+                      <View style={styles.imagePickerPlaceholder}>
+                        {isUploadingProductImage ? (
+                          <ActivityIndicator size="small" color={Colors.primary} />
+                        ) : (
+                          <>
+                            <ImageIcon size={24} color={Colors.subtext} />
+                            <Text style={styles.imagePickerText}>Tap to add image</Text>
+                          </>
+                        )}
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </View>
 
-                <Text style={styles.inputLabel}>Description</Text>
-                <TextInput
-                  style={[styles.formInput, styles.textArea]}
-                  value={productForm.description}
-                  onChangeText={(text) => setProductForm(prev => ({ ...prev, description: text }))}
-                  placeholder="Enter product description"
-                  placeholderTextColor={Colors.subtext}
-                  multiline
-                  numberOfLines={3}
-                />
+                <View style={styles.formSection}>
+                  <Text style={styles.inputLabel}>Product Name *</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={productForm.name}
+                    onChangeText={(text) => setProductForm(prev => ({ ...prev, name: text }))}
+                    placeholder="Enter product name"
+                    placeholderTextColor={Colors.subtext}
+                  />
+                </View>
 
-                <Text style={styles.inputLabel}>Price *</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={productForm.price.toString()}
-                  onChangeText={(text) => setProductForm(prev => ({ ...prev, price: parseFloat(text) || 0 }))}
-                  placeholder="0.00"
-                  placeholderTextColor={Colors.subtext}
-                  keyboardType="numeric"
-                />
+                <View style={styles.formSection}>
+                  <Text style={styles.inputLabel}>Description</Text>
+                  <TextInput
+                    style={[styles.formInput, styles.textArea]}
+                    value={productForm.description}
+                    onChangeText={(text) => setProductForm(prev => ({ ...prev, description: text }))}
+                    placeholder="Enter product description"
+                    placeholderTextColor={Colors.subtext}
+                    multiline
+                    numberOfLines={3}
+                  />
+                </View>
 
-                <Text style={styles.inputLabel}>Product Image</Text>
-                <TouchableOpacity 
-                  style={styles.imagePickerButton}
-                  onPress={handlePickProductImage}
-                  disabled={isUploadingProductImage}
-                >
-                  {productForm.image_url ? (
-                    <Image source={{ uri: productForm.image_url }} style={styles.previewImage} />
-                  ) : (
-                    <View style={styles.imagePickerPlaceholder}>
-                      {isUploadingProductImage ? (
-                        <ActivityIndicator size="small" color={Colors.primary} />
-                      ) : (
-                        <>
-                          <ImageIcon size={24} color={Colors.subtext} />
-                          <Text style={styles.imagePickerText}>Tap to add image</Text>
-                        </>
-                      )}
-                    </View>
-                  )}
-                </TouchableOpacity>
+                <View style={styles.formSectionLast}>
+                  <Text style={styles.inputLabel}>Price *</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={productForm.price.toString()}
+                    onChangeText={(text) => setProductForm(prev => ({ ...prev, price: parseFloat(text) || 0 }))}
+                    placeholder="0.00"
+                    placeholderTextColor={Colors.subtext}
+                    keyboardType="numeric"
+                  />
+                </View>
               </View>
             </ScrollView>
-          </SafeAreaView>
+            
+            {/* Save Button */}
+            <View style={styles.saveButtonContainer}>
+              <TouchableOpacity 
+                style={styles.saveButton}
+                onPress={handleAddProduct}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.saveButtonText}>
+                  {editingProduct ? 'Update Product' : 'Add Product'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+          </View>
+        </View>
         </Modal>
 
       {/* Image Selection Modal */}
@@ -3837,6 +3904,12 @@ const styles = StyleSheet.create({
   modalFormContent: {
     padding: 20,
   },
+  formSection: {
+    marginBottom: 24,
+  },
+  formSectionLast: {
+    marginBottom: 16,
+  },
   modalAvatarWrap: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -3900,7 +3973,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: Colors.text,
-    marginBottom: 8,
+    marginBottom: 12,
+    marginTop: 8,
     textAlign: 'left',
   },
   inputLabelLTR: {
@@ -4041,19 +4115,19 @@ const styles = StyleSheet.create({
   },
   cancellationDropdownOptions: {
     position: 'absolute',
-    left: 0,
-    right: 0,
+    left: 20,
+    right: 20,
     backgroundColor: Colors.white,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    maxHeight: 100,
+    maxHeight: 150,
     zIndex: 1000,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
     shadowRadius: 8,
-    elevation: 5,
+    elevation: 8,
   },
   cancellationDropdownOptionsUp: {
     bottom: '100%',
@@ -4061,12 +4135,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -2 },
   },
   cancellationDropdownOptionsDown: {
-    top: '100%',
-    marginTop: 4,
+    top: 160,
     shadowOffset: { width: 0, height: 2 },
   },
   cancellationDropdownList: {
-    maxHeight: 80,
+    maxHeight: 130,
   },
   cancellationDropdownItem: {
     paddingHorizontal: 16,
@@ -4537,11 +4610,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   imagePickerButton: {
-    width: 120,
-    height: 120,
-    borderRadius: 12,
+    width: 140,
+    height: 140,
+    borderRadius: 16,
     overflow: 'hidden',
-    marginTop: 8,
+    marginTop: 12,
+    alignSelf: 'center',
+    borderWidth: 2,
+    borderColor: '#E5E5EA',
+    backgroundColor: '#F8F9FA',
   },
   imagePickerPlaceholder: {
     width: '100%',
@@ -4586,6 +4663,39 @@ const styles = StyleSheet.create({
     ...shadowStyle,
   },
   addProductMainButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalBottomSheet: {
+    backgroundColor: Colors.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '92%',
+    minHeight: '85%',
+    marginTop: 40,
+  },
+  saveButtonContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 30,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5EA',
+    backgroundColor: Colors.background,
+  },
+  saveButton: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',

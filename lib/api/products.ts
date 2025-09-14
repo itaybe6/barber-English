@@ -123,18 +123,66 @@ export const productsApi = {
   },
 
   // Upload product image
-  async uploadProductImage(imageUri: string, productId?: string): Promise<string> {
+  async uploadProductImage(imageUri: string, productId?: string, base64?: string): Promise<string> {
     try {
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
+      let fileBody: Uint8Array | Blob;
+      let contentType = 'image/jpeg';
       
-      const fileExt = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
+      if (base64) {
+        // Use base64 if available (most reliable in React Native)
+        const base64Data = base64.replace(/^data:image\/[a-z]+;base64,/, '');
+        fileBody = new Uint8Array(
+          atob(base64Data)
+            .split('')
+            .map(char => char.charCodeAt(0))
+        );
+        contentType = 'image/jpeg';
+      } else {
+        try {
+          // Try to read as array buffer
+          const response = await fetch(imageUri);
+          const arrayBuffer = await response.arrayBuffer();
+          fileBody = new Uint8Array(arrayBuffer);
+          contentType = response.headers.get('content-type') || 'image/jpeg';
+        } catch (fetchError) {
+          console.log('Fetch failed, trying FormData approach');
+          // Fallback to FormData approach
+          const fileExt = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
+          const fileName = productId ? `product-${productId}-${Date.now()}.${fileExt}` : `product-${Date.now()}.${fileExt}`;
+          
+          const formData = new FormData();
+          formData.append('file', {
+            uri: imageUri,
+            type: `image/${fileExt}`,
+            name: fileName,
+          } as any);
+
+          const { data, error } = await supabase.storage
+            .from('designs')
+            .upload(fileName, formData, {
+              contentType: `image/${fileExt}`,
+            });
+
+          if (error) {
+            console.error('Error uploading product image:', error);
+            throw error;
+          }
+
+          const { data: { publicUrl } } = supabase.storage
+            .from('designs')
+            .getPublicUrl(fileName);
+
+          return publicUrl;
+        }
+      }
+      
+      const fileExt = contentType.split('/')[1] || 'jpg';
       const fileName = productId ? `product-${productId}-${Date.now()}.${fileExt}` : `product-${Date.now()}.${fileExt}`;
       
       const { data, error } = await supabase.storage
         .from('designs')
-        .upload(fileName, blob, {
-          contentType: `image/${fileExt}`,
+        .upload(fileName, fileBody, {
+          contentType,
         });
 
       if (error) {

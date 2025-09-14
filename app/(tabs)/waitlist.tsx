@@ -353,7 +353,7 @@ export default function WaitlistScreen() {
           ) : (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconCircle}>
-                <Ionicons name="hourglass-outline" size={22} color="#1C1C1E" />
+                <Ionicons name="hourglass-outline" size={22} color={colors.primary} />
               </View>
               <Text style={styles.emptyTitle}>No waitlist entries for this day</Text>
               <Text style={styles.emptySubtitle}>No clients are waiting for this day</Text>

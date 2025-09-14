@@ -8,6 +8,7 @@ import { useDesignsStore } from '@/stores/designsStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScrollView } from 'react-native';
 import { supabase, getBusinessId } from '@/lib/supabase';
+import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 
 const { width } = Dimensions.get('window');
 const numColumns = 2;
@@ -48,7 +49,7 @@ const SkeletonTile = memo(() => {
   );
 });
 
-const DesignTile = memo(({ item, onOpen, adminUser }: { item: DesignItem; onOpen: (images: string[]) => void; adminUser: AdminUser | null }) => {
+const DesignTile = memo(({ item, onOpen, adminUser, businessColors }: { item: DesignItem; onOpen: (images: string[]) => void; adminUser: AdminUser | null; businessColors: any }) => {
   const scale = useRef(new Animated.Value(1)).current;
   const imageOpacity = useRef(new Animated.Value(0)).current;
   const onPressIn = () => {
@@ -94,7 +95,7 @@ const DesignTile = memo(({ item, onOpen, adminUser }: { item: DesignItem; onOpen
           </LinearGradient>
           {urls.length > 1 && (
             <View style={styles.multiBadge}>
-              <Ionicons name="images-outline" size={12} color={Colors.white} />
+              <Ionicons name="images-outline" size={12} color={businessColors.primary} />
               <Text style={styles.multiBadgeText}>{urls.length}</Text>
             </View>
           )}
@@ -143,6 +144,7 @@ export default function GalleryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
   const panY = useRef(new Animated.Value(0)).current;
+  const { colors: businessColors } = useBusinessColors();
   const resetPan = () => {
     panY.setValue(0);
   };
@@ -223,7 +225,7 @@ export default function GalleryScreen() {
         <View style={styles.headerContent}>
           <View style={{ width: 22 }} />
           <View style={{ alignItems: 'center' }}>
-            <Text style={styles.headerTitle}>Design Gallery</Text>
+            <Text style={[styles.headerTitle, { color: businessColors.primary }]}>Design Gallery</Text>
             <Text style={styles.headerSubtitle}>Inspiration for your next style</Text>
           </View>
           <View style={{ width: 22 }} />
@@ -255,13 +257,13 @@ export default function GalleryScreen() {
             numColumns={numColumns}
             contentContainerStyle={[styles.listContent, { paddingHorizontal: effectiveContentPadding }]}
             columnWrapperStyle={[styles.columnWrapper, { columnGap: interItemGap }]}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />} 
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={businessColors.primary} />} 
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <View style={styles.emptyIconWrap}>
-                  <Ionicons name="images-outline" size={26} color={Colors.text} />
+                  <Ionicons name="images-outline" size={26} color={businessColors.primary} />
                 </View>
-                <Text style={styles.emptyTitle}>No designs yet</Text>
+                <Text style={[styles.emptyTitle, { color: businessColors.primary }]}>No designs yet</Text>
                 <Text style={styles.emptySubtitle}>When you add designs, they will appear here</Text>
               </View>
             }
@@ -269,6 +271,7 @@ export default function GalleryScreen() {
               <DesignTile
                 item={item}
                 adminUser={adminUser}
+                businessColors={businessColors}
                 onOpen={(urls) => {
                   setViewerImages(urls);
                   setViewerIndex(0);
@@ -289,7 +292,7 @@ export default function GalleryScreen() {
               <TouchableOpacity onPress={() => setViewerVisible(false)} style={styles.viewerCloseBtn}>
                 <Ionicons name="close" size={22} color={Colors.white} />
               </TouchableOpacity>
-              <Text style={styles.viewerTitle}>Design Photos</Text>
+              <Text style={[styles.viewerTitle, { color: businessColors.primary }]}>Design Photos</Text>
               <View style={{ width: 44 }} />
             </View>
             <View style={{ flex: 1 }}>
@@ -317,7 +320,7 @@ export default function GalleryScreen() {
               {viewerImages.length > 1 && (
                 <View style={styles.viewerDots}>
                   {viewerImages.map((_, i) => (
-                    <View key={`dot-${i}`} style={[styles.viewerDot, i === viewerIndex && styles.viewerDotActive]} />
+                    <View key={`dot-${i}`} style={[styles.viewerDot, i === viewerIndex && { backgroundColor: businessColors.primary }]} />
                   ))}
                 </View>
               )}

@@ -44,6 +44,7 @@ import AddAppointmentModal from '@/components/AddAppointmentModal';
 import { ColorPicker } from '@/components/ColorPicker';
 import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
 import ImageSelectionModal from '@/components/ImageSelectionModal';
+import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 
 // Helper for shadow style
 const shadowStyle = Platform.select({
@@ -58,16 +59,16 @@ const shadowStyle = Platform.select({
   },
 });
 
-function AppSwitch({ value, onValueChange }: { value: boolean; onValueChange: (v: boolean) => void }) {
+function AppSwitch({ value, onValueChange, primaryColor }: { value: boolean; onValueChange: (v: boolean) => void; primaryColor: string }) {
   return (
     <Switch
       value={value}
       onValueChange={onValueChange}
       trackColor={{
         false: '#E5E5EA',
-        true: 'rgba(28, 28, 30, 0.2)',
+        true: `${primaryColor}20`,
       }}
-      thumbColor={value ? '#000000' : '#FFFFFF'}
+      thumbColor={value ? primaryColor : '#FFFFFF'}
       ios_backgroundColor={'#E5E5EA'}
       style={{
         transform: [{ scaleX: 1.0 }, { scaleY: 1.0 }],
@@ -91,6 +92,7 @@ export default function SettingsScreen() {
   const user = useAuthStore((state) => state.user);
   const updateUserProfile = useAuthStore((s) => s.updateUserProfile);
   const { triggerColorUpdate, forceAppRefresh } = useColorUpdate();
+  const { colors: businessColors } = useBusinessColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   
@@ -123,6 +125,7 @@ export default function SettingsScreen() {
   const [profileTiktok, setProfileTiktok] = useState('');
   const [profileImageOnPage1, setProfileImageOnPage1] = useState('');
   const [profileImageOnPage2, setProfileImageOnPage2] = useState('');
+  const [profileImageOnPage3, setProfileImageOnPage3] = useState('');
   const [profileMinCancellationHours, setProfileMinCancellationHours] = useState(24);
   const [showEditDisplayNameModal, setShowEditDisplayNameModal] = useState(false);
   const [showEditAddressModal, setShowEditAddressModal] = useState(false);
@@ -136,10 +139,11 @@ export default function SettingsScreen() {
   const [cancellationDropdownDirection, setCancellationDropdownDirection] = useState<'up' | 'down'>('down');
   const [isUploadingImagePage1, setIsUploadingImagePage1] = useState(false);
   const [isUploadingImagePage2, setIsUploadingImagePage2] = useState(false);
+  const [isUploadingImagePage3, setIsUploadingImagePage3] = useState(false);
   const [showImagePreviewModal, setShowImagePreviewModal] = useState(false);
-  const [previewImageType, setPreviewImageType] = useState<'page1' | 'page2' | null>(null);
+  const [previewImageType, setPreviewImageType] = useState<'page1' | 'page2' | 'page3' | null>(null);
   const [showImageSelectionModal, setShowImageSelectionModal] = useState(false);
-  const [currentImageType, setCurrentImageType] = useState<'page1' | 'page2' | null>(null);
+  const [currentImageType, setCurrentImageType] = useState<'page1' | 'page2' | 'page3' | null>(null);
   const [imageScale, setImageScale] = useState(1);
   const [imageTranslateX, setImageTranslateX] = useState(0);
   const [imageTranslateY, setImageTranslateY] = useState(0);
@@ -188,6 +192,7 @@ export default function SettingsScreen() {
         setProfileTiktok((p as any)?.tiktok_url || '');
         setProfileImageOnPage1((p as any)?.image_on_page_1 || '');
         setProfileImageOnPage2((p as any)?.image_on_page_2 || '');
+        setProfileImageOnPage3((p as any)?.image_on_page_3 || '');
         setProfileMinCancellationHours(p?.min_cancellation_hours || 24);
       } finally {
         setIsLoadingProfile(false);
@@ -252,6 +257,7 @@ export default function SettingsScreen() {
         tiktok_url: profileTiktok.trim() || null as any,
         image_on_page_1: profileImageOnPage1.trim() || null as any,
         image_on_page_2: profileImageOnPage2.trim() || null as any,
+        image_on_page_3: profileImageOnPage3.trim() || null as any,
       });
       if (!updated) {
         Alert.alert('Error', 'Failed to save business profile');
@@ -913,7 +919,7 @@ export default function SettingsScreen() {
     }
   };
 
-  const openImagePreview = (imageType: 'page1' | 'page2') => {
+  const openImagePreview = (imageType: 'page1' | 'page2' | 'page3') => {
     setPreviewImageType(imageType);
     setImageScale(1);
     setImageTranslateX(0);
@@ -921,7 +927,7 @@ export default function SettingsScreen() {
     setShowImagePreviewModal(true);
   };
 
-  const handlePickBusinessImage = async (imageType: 'page1' | 'page2') => {
+  const handlePickBusinessImage = async (imageType: 'page1' | 'page2' | 'page3') => {
     setCurrentImageType(imageType);
     setShowImageSelectionModal(true);
   };
@@ -933,8 +939,10 @@ export default function SettingsScreen() {
       // Set loading state
       if (currentImageType === 'page1') {
         setIsUploadingImagePage1(true);
-      } else {
+      } else if (currentImageType === 'page2') {
         setIsUploadingImagePage2(true);
+      } else {
+        setIsUploadingImagePage3(true);
       }
 
       let uploadedUrl: string;
@@ -960,8 +968,10 @@ export default function SettingsScreen() {
       // Update the appropriate image state
       if (currentImageType === 'page1') {
         setProfileImageOnPage1(uploadedUrl);
-      } else {
+      } else if (currentImageType === 'page2') {
         setProfileImageOnPage2(uploadedUrl);
+      } else {
+        setProfileImageOnPage3(uploadedUrl);
       }
 
       // Save to database
@@ -973,6 +983,7 @@ export default function SettingsScreen() {
         tiktok_url: (profileTiktok || '').trim() || null as any,
         image_on_page_1: currentImageType === 'page1' ? uploadedUrl : (profileImageOnPage1 || '').trim() || null as any,
         image_on_page_2: currentImageType === 'page2' ? uploadedUrl : (profileImageOnPage2 || '').trim() || null as any,
+        image_on_page_3: currentImageType === 'page3' ? uploadedUrl : (profileImageOnPage3 || '').trim() || null as any,
       });
 
       if (updated) {
@@ -988,8 +999,10 @@ export default function SettingsScreen() {
       // Clear loading state
       if (currentImageType === 'page1') {
         setIsUploadingImagePage1(false);
-      } else {
+      } else if (currentImageType === 'page2') {
         setIsUploadingImagePage2(false);
+      } else {
+        setIsUploadingImagePage3(false);
       }
       setCurrentImageType(null);
     }
@@ -1505,7 +1518,7 @@ export default function SettingsScreen() {
                 <Text style={styles.settingTitle}>{title}</Text>
                 {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
               </View>
-              <View style={styles.settingChevron}><ChevronRight size={20} color={Colors.subtext} /></View>
+              <View style={styles.settingChevron}><ChevronRight size={20} color={businessColors.primary} /></View>
             </>
           ) : (
             <>
@@ -1560,7 +1573,7 @@ export default function SettingsScreen() {
                 <Text style={styles.settingTitleLTR}>{title}</Text>
                 {subtitle && <Text style={styles.settingSubtitleLTR}>{subtitle}</Text>}
               </View>
-              <View style={styles.settingChevronLTR}><ChevronRight size={20} color={Colors.subtext} /></View>
+              <View style={styles.settingChevronLTR}><ChevronRight size={20} color={businessColors.primary} /></View>
             </>
           ) : (
             <>
@@ -1601,7 +1614,7 @@ export default function SettingsScreen() {
         <View style={styles.adminProfileCard}>
           <View style={styles.adminAvatarWrap}>
             <LinearGradient
-              colors={["#000000", "#000000"]}
+              colors={[businessColors.primary, businessColors.primary]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.adminAvatarRing}
@@ -1623,7 +1636,7 @@ export default function SettingsScreen() {
               accessibilityLabel="Edit Manager"
             >
               <LinearGradient
-                colors={["#000000", "#000000"]}
+                colors={[businessColors.primary, businessColors.primary]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.adminEditFabInner}
@@ -1645,16 +1658,16 @@ export default function SettingsScreen() {
         
         <View style={[styles.cardNew, shadowStyle]}>
           {renderSettingItem(
-            <Bell size={20} color={Colors.primary} />,
+            <Bell size={20} color={businessColors.primary} />,
             'Notifications',
             'Receive notifications about appointments and updates',
-            <AppSwitch value={notificationsEnabled} onValueChange={setNotificationsEnabled} />,
+            <AppSwitch value={notificationsEnabled} onValueChange={setNotificationsEnabled} primaryColor={businessColors.primary} />,
             undefined,
             true
           )}
           
           {renderSettingItem(
-            <Send size={20} color={Colors.primary} />,
+            <Send size={20} color={businessColors.primary} />,
             'Send message to all clients',
             'Send a custom message to all clients',
             undefined,
@@ -1667,7 +1680,7 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitleNew}>Services</Text>
         <View style={[styles.cardNew, shadowStyle]}>
           {renderSettingItem(
-            <Pencil size={20} color={Colors.primary} />,
+            <Pencil size={20} color={businessColors.primary} />,
             'Edit services',
             'Update prices and durations',
             undefined,
@@ -1678,7 +1691,7 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitleNew}>Products</Text>
         <View style={[styles.cardNew, shadowStyle]}>
           {renderSettingItem(
-            <Pencil size={20} color={Colors.primary} />,
+            <Pencil size={20} color={businessColors.primary} />,
             'Manage products',
             'Add, edit, and delete products for sale',
             undefined,
@@ -1691,7 +1704,7 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitleNew}>Business details</Text>
         <View style={[styles.cardNew, shadowStyle]}>
           {renderSettingItemLTR(
-            <Pencil size={20} color={Colors.primary} />, 
+            <Pencil size={20} color={businessColors.primary} />, 
             'Business name',
             profileDisplayName || 'Add business name',
             undefined,
@@ -1727,7 +1740,7 @@ export default function SettingsScreen() {
           )}
         </View>
 
-        <Text style={styles.sectionTitleNew}>App appearance</Text>
+        <Text style={styles.sectionTitleNew}>Design Application</Text>
         <View style={[styles.cardNew, shadowStyle]}>
           <ColorPicker 
             currentColor={profile?.primary_color || '#000000'}
@@ -1759,12 +1772,46 @@ export default function SettingsScreen() {
               }, 1200);
             }}
           />
+          
+          {renderSettingItemLTR(
+            <Home size={20} color={isUploadingImagePage1 ? Colors.subtext : businessColors.primary} />, 
+            'Home page image',
+            isUploadingImagePage1 ? 'Uploading...' : (profileImageOnPage1 ? 'Image uploaded' : 'Upload home page image'),
+            isUploadingImagePage1 ? (
+              <ActivityIndicator size="small" color={businessColors.primary} />
+            ) : undefined,
+            isUploadingImagePage1 ? undefined : (profileImageOnPage1 ? () => openImagePreview('page1') : () => handlePickBusinessImage('page1')),
+            false,
+            isUploadingImagePage1
+          )}
+          {renderSettingItemLTR(
+            <ImageIcon size={20} color={isUploadingImagePage2 ? Colors.subtext : businessColors.primary} />, 
+            'Booking page image',
+            isUploadingImagePage2 ? 'Uploading...' : (profileImageOnPage2 ? 'Image uploaded' : 'Upload booking page image'),
+            isUploadingImagePage2 ? (
+              <ActivityIndicator size="small" color={businessColors.primary} />
+            ) : undefined,
+            isUploadingImagePage2 ? undefined : (profileImageOnPage2 ? () => openImagePreview('page2') : () => handlePickBusinessImage('page2')),
+            false,
+            isUploadingImagePage2
+          )}
+          {renderSettingItemLTR(
+            <ImageIcon size={20} color={isUploadingImagePage3 ? Colors.subtext : businessColors.primary} />, 
+            'Existing Booking',
+            isUploadingImagePage3 ? 'Uploading...' : (profileImageOnPage3 ? 'Image uploaded' : 'Upload existing booking image'),
+            isUploadingImagePage3 ? (
+              <ActivityIndicator size="small" color={businessColors.primary} />
+            ) : undefined,
+            isUploadingImagePage3 ? undefined : (profileImageOnPage3 ? () => openImagePreview('page3') : () => handlePickBusinessImage('page3')),
+            false,
+            isUploadingImagePage3
+          )}
         </View>
 
         <Text style={styles.sectionTitleNew}>Appointment policies</Text>
         <View style={[styles.cardNew, shadowStyle]}>
           {renderSettingItemLTR(
-            <Clock size={20} color={Colors.primary} />, 
+            <Clock size={20} color={businessColors.primary} />, 
             'Minimum cancellation time',
             `${profileMinCancellationHours} hours before appointment`,
             undefined,
@@ -1772,38 +1819,13 @@ export default function SettingsScreen() {
           )}
         </View>
 
-        <Text style={styles.sectionTitleNew}>Home page images</Text>
-        <View style={[styles.cardNew, shadowStyle]}>
-          {renderSettingItemLTR(
-            <Home size={20} color={isUploadingImagePage1 ? Colors.subtext : Colors.primary} />, 
-            'Home page image',
-            isUploadingImagePage1 ? 'Uploading...' : (profileImageOnPage1 ? 'Image uploaded' : 'Upload home page image'),
-            isUploadingImagePage1 ? (
-              <ActivityIndicator size="small" color={Colors.primary} />
-            ) : undefined,
-            isUploadingImagePage1 ? undefined : (profileImageOnPage1 ? () => openImagePreview('page1') : () => handlePickBusinessImage('page1')),
-            false,
-            isUploadingImagePage1
-          )}
-          {renderSettingItemLTR(
-            <ImageIcon size={20} color={isUploadingImagePage2 ? Colors.subtext : Colors.primary} />, 
-            'Booking page image',
-            isUploadingImagePage2 ? 'Uploading...' : (profileImageOnPage2 ? 'Image uploaded' : 'Upload booking page image'),
-            isUploadingImagePage2 ? (
-              <ActivityIndicator size="small" color={Colors.primary} />
-            ) : undefined,
-            isUploadingImagePage2 ? undefined : (profileImageOnPage2 ? () => openImagePreview('page2') : () => handlePickBusinessImage('page2')),
-            false,
-            isUploadingImagePage2
-          )}
-        </View>
 
         {isAdmin && (
           <>
             <Text style={styles.sectionTitleNew}>Appointments management</Text>
             <View style={[styles.cardNew, shadowStyle]}>
               {renderSettingItem(
-                <Calendar size={20} color={Colors.primary} />,
+                <Calendar size={20} color={businessColors.primary} />,
                 'Add appointment for a client',
                 'Create a new appointment for a client',
                 undefined,
@@ -1814,14 +1836,14 @@ export default function SettingsScreen() {
             <Text style={styles.sectionTitleNew}>Recurring appointments</Text>
             <View style={[styles.cardNew, shadowStyle]}>
               {renderSettingItem(
-                <Pencil size={20} color={Colors.primary} />, // reuse icon
+                <Pencil size={20} color={businessColors.primary} />, // reuse icon
                 'Add recurring appointment',
                 'Choose a client, day, and time for a recurring appointment',
                 undefined,
                 () => setShowRecurringModal(true)
               )}
               {renderSettingItem(
-                <Pencil size={20} color={Colors.primary} />, // reuse icon
+                <Pencil size={20} color={businessColors.primary} />, // reuse icon
                 'Manage recurring appointments',
                 'View, edit, and delete existing recurring appointments',
                 undefined,
@@ -1846,7 +1868,7 @@ export default function SettingsScreen() {
         
         <View style={[styles.cardNew, shadowStyle]}>
           {renderSettingItem(
-            <HelpCircle size={20} color={Colors.primary} />,
+            <HelpCircle size={20} color={businessColors.primary} />,
             'Support and help',
             'Common questions and contact',
             undefined,
@@ -1854,7 +1876,7 @@ export default function SettingsScreen() {
           )}
         </View>
         
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        <TouchableOpacity style={[styles.logoutButton, { backgroundColor: businessColors.primary }]} onPress={handleLogout}>
           <LogOut size={20} color={Colors.white} />
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
@@ -2004,7 +2026,7 @@ export default function SettingsScreen() {
             <View style={{ alignItems: 'center', marginBottom: 12 }}>
               <View style={styles.modalAvatarWrap}>
                 <LinearGradient
-                  colors={["#000000", "#000000"]}
+                  colors={[businessColors.primary, businessColors.primary]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.modalAvatarRing}
@@ -2013,7 +2035,7 @@ export default function SettingsScreen() {
                     <Image source={user?.image_url ? { uri: (user as any).image_url } : require('@/assets/images/logo-03.png')} style={styles.modalAvatarImage} resizeMode="cover" />
                     {isUploadingAdminAvatar && (
                       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 36 }}>
-                        <ActivityIndicator size="small" color={Colors.primary} />
+                        <ActivityIndicator size="small" color={businessColors.primary} />
                       </View>
                     )}
                   </TouchableOpacity>
@@ -2270,9 +2292,9 @@ export default function SettingsScreen() {
                             }
                           </Text>
                           {showCancellationDropdown ? (
-                            <Ionicons name="chevron-up" size={20} color={Colors.primary} />
+                            <Ionicons name="chevron-up" size={20} color={businessColors.primary} />
                           ) : (
-                            <Ionicons name="chevron-down" size={20} color={Colors.primary} />
+                            <Ionicons name="chevron-down" size={20} color={businessColors.primary} />
                           )}
                         </TouchableOpacity>
                       </View>
@@ -2410,7 +2432,7 @@ export default function SettingsScreen() {
             <View style={styles.recurringCard}>
               {isLoadingRecurring ? (
                 <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-                  <ActivityIndicator size="large" color={Colors.primary} />
+                  <ActivityIndicator size="large" color={businessColors.primary} />
                   <Text style={{ marginTop: 12, color: Colors.subtext }}>Loading...</Text>
                 </View>
               ) : (
@@ -2496,7 +2518,7 @@ export default function SettingsScreen() {
                   <Pressable style={[styles.dropdownContainer, styles.grayField]} onPress={() => setShowClientDropdown(!showClientDropdown)}>
                     <View style={styles.dropdownHeader}>
                       <Text style={[styles.dropdownText, styles.dropdownPlaceholder, { textAlign: 'left' }]}>Select client...</Text>
-                      {showClientDropdown ? <ChevronUp size={20} color={Colors.subtext} /> : <ChevronDown size={20} color={Colors.subtext} />}
+                      {showClientDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
                     </View>
                   </Pressable>
                   {showClientDropdown && (
@@ -2563,7 +2585,7 @@ export default function SettingsScreen() {
                   ) : (
                     <Text style={[styles.dropdownText, styles.dropdownPlaceholder, { textAlign: 'left' }]}>Select service...</Text>
                   )}
-                  {showServiceDropdown ? <ChevronUp size={20} color={Colors.subtext} /> : <ChevronDown size={20} color={Colors.subtext} />}
+                  {showServiceDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
                 </View>
               </Pressable>
               {showServiceDropdown && (
@@ -2594,7 +2616,7 @@ export default function SettingsScreen() {
               <Pressable style={[styles.dropdownContainer, styles.grayField]} onPress={() => setShowRepeatDropdown(!showRepeatDropdown)}>
                 <View style={styles.dropdownHeader}>
                   <Text style={[styles.dropdownText, { textAlign: 'left' }]}>{repeatWeeks === 1 ? 'every week' : `every ${repeatWeeks} weeks`}</Text>
-                  {showRepeatDropdown ? <ChevronUp size={20} color={Colors.subtext} /> : <ChevronDown size={20} color={Colors.subtext} />}
+                  {showRepeatDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
                 </View>
               </Pressable>
               {showRepeatDropdown && (
@@ -2608,7 +2630,7 @@ export default function SettingsScreen() {
                       >
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                           <Text style={styles.dropdownOptionTitle}>{w === 1 ? 'every week' : `every ${w} weeks`}</Text>
-                          {repeatWeeks === w && <Check size={18} color={Colors.primary} />}
+                          {repeatWeeks === w && <Check size={18} color={businessColors.primary} />}
                         </View>
                       </Pressable>
                     ))}
@@ -2634,7 +2656,7 @@ export default function SettingsScreen() {
                   <Text style={[styles.dropdownText, !Number.isInteger(selectedDayOfWeek as any) && styles.dropdownPlaceholder, { textAlign: 'left' }]}>
                     {Number.isInteger(selectedDayOfWeek as any) ? dayNames[selectedDayOfWeek as number] : 'Select day...'}
                   </Text>
-                  {showDayDropdown ? <ChevronUp size={20} color={Colors.subtext} /> : <ChevronDown size={20} color={Colors.subtext} />}
+                  {showDayDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
                 </View>
               </Pressable>
               {showDayDropdown && (
@@ -2653,7 +2675,7 @@ export default function SettingsScreen() {
             {/* Time select */}
             <View style={styles.inputContainer}> 
               <View style={styles.sectionHeaderRow}>
-                <View style={styles.sectionHeaderIcon}><Pencil size={18} color={Colors.primary} /></View>
+                <View style={styles.sectionHeaderIcon}><Pencil size={18} color={businessColors.primary} /></View>
                 <Text style={[styles.sectionHeaderTitle, { textAlign: 'left' }]}>Select time</Text>
               </View>
               <Pressable
@@ -2677,14 +2699,14 @@ export default function SettingsScreen() {
                   <Text style={[styles.dropdownText, !selectedTime && styles.dropdownPlaceholder, { textAlign: 'left' }]}>
                     {selectedTime || (isLoadingTimes ? 'Loading times...' : 'Select time...')}
                   </Text>
-                  {showTimeDropdown ? <ChevronUp size={20} color={Colors.subtext} /> : <ChevronDown size={20} color={Colors.subtext} />}
+                  {showTimeDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
                 </View>
               </Pressable>
               {showTimeDropdown && (
                 <View style={styles.dropdownOptions}>
                   {isLoadingTimes ? (
                     <View style={{ padding: 12, alignItems: 'center' }}>
-                      <ActivityIndicator size="small" color={Colors.primary} />
+                      <ActivityIndicator size="small" color={businessColors.primary} />
                     </View>
                   ) : availableTimes.length === 0 ? (
                     <View style={{ padding: 12 }}>
@@ -2773,7 +2795,7 @@ export default function SettingsScreen() {
               >
                 {isLoadingServices && (
                   <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-                    <ActivityIndicator size="large" color={Colors.primary} />
+                    <ActivityIndicator size="large" color={businessColors.primary} />
                     <Text style={{ marginTop: 12, color: Colors.subtext }}>Loading services...</Text>
                   </View>
                 )}
@@ -2824,9 +2846,9 @@ export default function SettingsScreen() {
                       {/* Left: chevron */}
                       <View style={styles.accordionChevron}>
                         {expandedServiceId === svc.id ? (
-                          <ChevronUp size={18} color={Colors.subtext} />
+                          <ChevronUp size={18} color={businessColors.primary} />
                         ) : (
-                          <ChevronDown size={18} color={Colors.subtext} />
+                          <ChevronDown size={18} color={businessColors.primary} />
                         )}
                       </View>
                     </TouchableOpacity>
@@ -2848,7 +2870,7 @@ export default function SettingsScreen() {
                             )}
                             {editImageUploading[svc.id] && (
                               <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 16 }}>
-                                <ActivityIndicator size="large" color={Colors.primary} />
+                                <ActivityIndicator size="large" color={businessColors.primary} />
                               </View>
                             )}
                           </TouchableOpacity>
@@ -2893,9 +2915,9 @@ export default function SettingsScreen() {
                                   {svc.duration_minutes ? `${svc.duration_minutes} minutes` : 'Select duration...'}
                                 </Text>
                                 {editDurationDropdownFor === svc.id ? (
-                                  <ChevronUp size={20} color={Colors.subtext} />
+                                  <ChevronUp size={20} color={businessColors.primary} />
                                 ) : (
-                                  <ChevronDown size={20} color={Colors.subtext} />
+                                  <ChevronDown size={20} color={businessColors.primary} />
                                 )}
                               </View>
                             </Pressable>
@@ -3006,10 +3028,10 @@ export default function SettingsScreen() {
                     ) : (
                       <View style={styles.imagePickerPlaceholder}>
                         {addSvcUploading ? (
-                          <ActivityIndicator size="small" color={Colors.primary} />
+                          <ActivityIndicator size="small" color={businessColors.primary} />
                         ) : (
                           <>
-                            <ImageIcon size={24} color={Colors.subtext} />
+                            <ImageIcon size={24} color={businessColors.primary} />
                             <Text style={styles.imagePickerText}>Tap to add image</Text>
                           </>
                         )}
@@ -3050,7 +3072,7 @@ export default function SettingsScreen() {
                   <Text style={[styles.dropdownText, { textAlign: 'left' }, !addSvcDuration && styles.dropdownPlaceholder]}>
                     {addSvcDuration ? `${addSvcDuration} minutes` : 'Select duration...'}
                   </Text>
-                  {showDurationDropdown ? <ChevronUp size={20} color={Colors.subtext} /> : <ChevronDown size={20} color={Colors.subtext} />}
+                  {showDurationDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
                 </View>
               </Pressable>
               {showDurationDropdown && (
@@ -3148,7 +3170,9 @@ export default function SettingsScreen() {
             >
               <Image
                 source={{
-                  uri: previewImageType === 'page1' ? profileImageOnPage1 : profileImageOnPage2
+                  uri: previewImageType === 'page1' ? profileImageOnPage1 : 
+                        previewImageType === 'page2' ? profileImageOnPage2 : 
+                        profileImageOnPage3
                 }}
                 style={styles.imagePreviewImage}
                 resizeMode="contain"
@@ -3223,7 +3247,7 @@ export default function SettingsScreen() {
               >
                 {isLoadingProducts && (
                   <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-                    <ActivityIndicator size="large" color={Colors.primary} />
+                    <ActivityIndicator size="large" color={businessColors.primary} />
                     <Text style={{ marginTop: 12, color: Colors.subtext }}>Loading products...</Text>
                   </View>
                 )}
@@ -3274,9 +3298,9 @@ export default function SettingsScreen() {
                         {/* Left: chevron */}
                         <View style={styles.accordionChevron}>
                           {expandedProductId === product.id ? (
-                            <ChevronUp size={18} color={Colors.subtext} />
+                            <ChevronUp size={18} color={businessColors.primary} />
                           ) : (
-                            <ChevronDown size={18} color={Colors.subtext} />
+                            <ChevronDown size={18} color={businessColors.primary} />
                           )}
                         </View>
                       </TouchableOpacity>
@@ -3298,7 +3322,7 @@ export default function SettingsScreen() {
                               )}
                               {editProductImageUploading[product.id] && (
                                 <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 16 }}>
-                                  <ActivityIndicator size="large" color={Colors.primary} />
+                                  <ActivityIndicator size="large" color={businessColors.primary} />
                                 </View>
                               )}
                             </TouchableOpacity>
@@ -3449,10 +3473,10 @@ export default function SettingsScreen() {
                     ) : (
                       <View style={styles.imagePickerPlaceholder}>
                         {isUploadingProductImage ? (
-                          <ActivityIndicator size="small" color={Colors.primary} />
+                          <ActivityIndicator size="small" color={businessColors.primary} />
                         ) : (
                           <>
-                            <ImageIcon size={24} color={Colors.subtext} />
+                            <ImageIcon size={24} color={businessColors.primary} />
                             <Text style={styles.imagePickerText}>Tap to add image</Text>
                           </>
                         )}
@@ -3524,7 +3548,9 @@ export default function SettingsScreen() {
           setCurrentImageType(null);
         }}
         onImageSelected={handleImageSelected}
-        title={currentImageType === 'page1' ? 'בחירת תמונת דף בית' : 'בחירת תמונת דף הזמנה'}
+        title={currentImageType === 'page1' ? 'בחירת תמונת דף בית' : 
+               currentImageType === 'page2' ? 'בחירת תמונת דף הזמנה' : 
+               'בחירת תמונת הזמנה קיימת'}
       />
     </SafeAreaView>
   );

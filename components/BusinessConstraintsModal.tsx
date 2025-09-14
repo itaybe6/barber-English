@@ -4,6 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
 import { businessConstraintsApi } from '@/lib/api/businessConstraints';
+import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { Calendar as RNCalendar, LocaleConfig } from 'react-native-calendars';
 
 // English locale + LTR for react-native-calendars
@@ -47,6 +48,7 @@ const formatISOToDDMMYYYY = (iso: string) => {
 
 export default function BusinessConstraintsModal({ visible, onClose }: BusinessConstraintsModalProps) {
   const insets = useSafeAreaInsets();
+  const { colors: businessColors } = useBusinessColors();
   const today = useMemo(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -167,7 +169,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
   // time options (hourly)
   const timeOptions = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`);
 
-  const WheelPicker: React.FC<{ options: string[]; value: string; onChange: (v: string) => void }> = ({ options, value, onChange }) => {
+  const WheelPicker: React.FC<{ options: string[]; value: string; onChange: (v: string) => void; primaryColor?: string }> = ({ options, value, onChange, primaryColor = businessColors.primary }) => {
     const listRef = useRef<ScrollView | null>(null);
     const [selectedIndex, setSelectedIndex] = useState(() => Math.max(0, options.findIndex(o => o === value)));
     useEffect(() => {
@@ -185,7 +187,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
     };
     return (
       <View style={styles.wheelContainer}>
-        <View style={{ position: 'absolute', left: 16, right: 16, top: (220/2 - 22), height: 44, borderRadius: 12, borderWidth: 1, borderColor: '#E5E5EA', backgroundColor: 'rgba(0,0,0,0.03)' }} />
+        <View style={{ position: 'absolute', left: 16, right: 16, top: (220/2 - 22), height: 44, borderRadius: 12, borderWidth: 1, borderColor: primaryColor, backgroundColor: 'rgba(0,0,0,0.03)' }} />
         <ScrollView
           ref={(ref) => { (listRef as any).current = ref; }}
           showsVerticalScrollIndicator={false}
@@ -197,9 +199,9 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
           {options.map((opt, i) => {
             const active = i === selectedIndex;
             return (
-              <View key={opt} style={styles.wheelItem}>
-                <Text style={[styles.wheelText, active && styles.wheelTextActive]}>{opt}</Text>
-              </View>
+            <View key={opt} style={styles.wheelItem}>
+              <Text style={[styles.wheelText, active && { color: primaryColor }]}>{opt}</Text>
+            </View>
             );
           })}
           <View style={{ height: (220/2 - 22) }} />
@@ -226,14 +228,14 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
           {/* Mode selector */}
           <View style={styles.segmentedCard}>
             <View style={styles.segmented}>
-              <TouchableOpacity onPress={() => setMode('hours')} style={[styles.segment, mode === 'hours' && styles.segmentActive]} activeOpacity={0.9}>
-                <Text style={[styles.segmentText, mode === 'hours' && styles.segmentTextActive]}>Hours</Text>
+              <TouchableOpacity onPress={() => setMode('hours')} style={[styles.segment, mode === 'hours' && { backgroundColor: `${businessColors.primary}15`, borderColor: `${businessColors.primary}30` }]} activeOpacity={0.9}>
+                <Text style={[styles.segmentText, mode === 'hours' && { color: businessColors.primary }]}>Hours</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setMode('single-day')} style={[styles.segment, mode === 'single-day' && styles.segmentActive]} activeOpacity={0.9}>
-                <Text style={[styles.segmentText, mode === 'single-day' && styles.segmentTextActive]}>Single day</Text>
+              <TouchableOpacity onPress={() => setMode('single-day')} style={[styles.segment, mode === 'single-day' && { backgroundColor: `${businessColors.primary}15`, borderColor: `${businessColors.primary}30` }]} activeOpacity={0.9}>
+                <Text style={[styles.segmentText, mode === 'single-day' && { color: businessColors.primary }]}>Single day</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setMode('multi-days')} style={[styles.segment, mode === 'multi-days' && styles.segmentActive]} activeOpacity={0.9}>
-                <Text style={[styles.segmentText, mode === 'multi-days' && styles.segmentTextActive]}>Multiple days</Text>
+              <TouchableOpacity onPress={() => setMode('multi-days')} style={[styles.segment, mode === 'multi-days' && { backgroundColor: `${businessColors.primary}15`, borderColor: `${businessColors.primary}30` }]} activeOpacity={0.9}>
+                <Text style={[styles.segmentText, mode === 'multi-days' && { color: businessColors.primary }]}>Multiple days</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -248,7 +250,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
                   current={singleDateISO}
                   minDate={toISODate(today)}
                   onDayPress={(d: any) => setSingleDateISO(d.dateString)}
-                  markedDates={{ [singleDateISO]: { selected: true, selectedColor: '#000000' } }}
+                  markedDates={{ [singleDateISO]: { selected: true, selectedColor: businessColors.primary } }}
                   enableSwipeMonths
                   hideDayNames={false}
                   firstDay={0}
@@ -256,9 +258,9 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
                   theme={{
                     textDayFontSize: 14,
                     textMonthFontSize: 16,
-                    arrowColor: '#000000',
-                    selectedDayBackgroundColor: '#000000',
-                    todayTextColor: '#000000',
+                    arrowColor: businessColors.primary,
+                    selectedDayBackgroundColor: businessColors.primary,
+                    todayTextColor: businessColors.primary,
                     'stylesheet.calendar.header': {
                       week: {
                         flexDirection: 'row',
@@ -294,7 +296,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
               <View style={styles.card}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                   <Text style={styles.sectionTitle}>Closed hours</Text>
-                  <TouchableOpacity onPress={() => { setTempStartHour(startTime); setTempEndHour(endTime); setIsHoursModalOpen(true); }} style={styles.smallIconBtn} activeOpacity={0.9}>
+                  <TouchableOpacity onPress={() => { setTempStartHour(startTime); setTempEndHour(endTime); setIsHoursModalOpen(true); }} style={[styles.smallIconBtn, { backgroundColor: businessColors.primary }]} activeOpacity={0.9}>
                     <Ionicons name="add" size={18} color={'#FFFFFF'} />
                   </TouchableOpacity>
                 </View>
@@ -317,7 +319,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
                   current={singleDateISO}
                   minDate={toISODate(today)}
                   onDayPress={(d: any) => setSingleDateISO(d.dateString)}
-                  markedDates={{ [singleDateISO]: { selected: true, selectedColor: '#000000' } }}
+                  markedDates={{ [singleDateISO]: { selected: true, selectedColor: businessColors.primary } }}
                   enableSwipeMonths
                   hideDayNames={false}
                   firstDay={0}
@@ -325,9 +327,9 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
                   theme={{
                     textDayFontSize: 14,
                     textMonthFontSize: 16,
-                    arrowColor: '#000000',
-                    selectedDayBackgroundColor: '#000000',
-                    todayTextColor: '#000000',
+                    arrowColor: businessColors.primary,
+                    selectedDayBackgroundColor: businessColors.primary,
+                    todayTextColor: businessColors.primary,
                     'stylesheet.calendar.header': {
                       week: {
                         flexDirection: 'row',
@@ -374,7 +376,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
                   markedDates={((): any => {
                     const marks: any = {};
                     if (rangeStartISO) {
-                      marks[rangeStartISO] = { startingDay: true, color: '#000000', textColor: '#FFFFFF' };
+                      marks[rangeStartISO] = { startingDay: true, color: businessColors.primary, textColor: '#FFFFFF' };
                     }
                     if (rangeStartISO && rangeEndISO) {
                       // Build all days between
@@ -386,8 +388,8 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
                         marks[iso] = marks[iso] || { color: 'rgba(0,0,0,0.25)', textColor: '#1C1C1E' };
                         cur.setDate(cur.getDate() + 1);
                       }
-                      marks[rangeStartISO] = { startingDay: true, color: '#000000', textColor: '#FFFFFF' };
-                      marks[rangeEndISO] = { endingDay: true, color: '#000000', textColor: '#FFFFFF' };
+                      marks[rangeStartISO] = { startingDay: true, color: businessColors.primary, textColor: '#FFFFFF' };
+                      marks[rangeEndISO] = { endingDay: true, color: businessColors.primary, textColor: '#FFFFFF' };
                     }
                     return marks;
                   })()}
@@ -407,9 +409,9 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
                   theme={{
                     textDayFontSize: 14,
                     textMonthFontSize: 16,
-                    arrowColor: '#000000',
-                    selectedDayBackgroundColor: '#000000',
-                    todayTextColor: '#000000',
+                    arrowColor: businessColors.primary,
+                    selectedDayBackgroundColor: businessColors.primary,
+                    todayTextColor: businessColors.primary,
                     'stylesheet.calendar.header': {
                       week: {
                         flexDirection: 'row',
@@ -456,7 +458,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
               <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Reason (optional)</Text>
               <TouchableOpacity
                 onPress={() => { setTempReason(reason); setIsReasonModalOpen(true); }}
-                style={styles.smallIconBtn}
+                style={[styles.smallIconBtn, { backgroundColor: businessColors.primary }]}
                 activeOpacity={0.9}
               >
                 <Ionicons name="add" size={18} color={'#FFFFFF'} />
@@ -464,15 +466,15 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
             </View>
             {!!reason && (
               <View style={{ marginTop: 8, alignItems: 'flex-start' }}>
-                <View style={styles.reasonChip}>
-                  <Text style={styles.reasonChipText}>{reason}</Text>
+                <View style={[styles.reasonChip, { backgroundColor: `${businessColors.primary}15`, borderColor: `${businessColors.primary}30` }]}>
+                  <Text style={[styles.reasonChipText, { color: businessColors.primary }]}>{reason}</Text>
                 </View>
               </View>
             )}
           </View>
 
           <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: insets.bottom + 8 }}>
-            <TouchableOpacity style={[styles.primaryBtn, isSaving && { opacity: 0.6 }]} onPress={save} disabled={isSaving}>
+            <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: businessColors.primary, shadowColor: businessColors.primary }, isSaving && { opacity: 0.6 }]} onPress={save} disabled={isSaving}>
               <Text style={styles.primaryBtnText}>{isSaving ? 'Saving...' : 'Save constraints'}</Text>
             </TouchableOpacity>
           </View>
@@ -565,16 +567,16 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
           <View style={styles.centerSheet}>
             <View style={styles.sheetHeaderRow}>
               <Text style={styles.sheetTitle}>Choose closed hours</Text>
-              <TouchableOpacity onPress={() => { setStartTime(tempStartHour); setEndTime(tempEndHour); setIsHoursModalOpen(false); }} style={styles.confirmBtn}>
+              <TouchableOpacity onPress={() => { setStartTime(tempStartHour); setEndTime(tempEndHour); setIsHoursModalOpen(false); }} style={[styles.confirmBtn, { backgroundColor: businessColors.primary }]}>
                 <Ionicons name="checkmark" size={18} color={'#FFFFFF'} />
               </TouchableOpacity>
             </View>
             <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
               <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>Start</Text>
-              <WheelPicker options={timeOptions} value={tempStartHour} onChange={setTempStartHour} />
+              <WheelPicker options={timeOptions} value={tempStartHour} onChange={setTempStartHour} primaryColor={businessColors.primary} />
               <View style={{ height: 12 }} />
               <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>End</Text>
-              <WheelPicker options={timeOptions} value={tempEndHour} onChange={setTempEndHour} />
+              <WheelPicker options={timeOptions} value={tempEndHour} onChange={setTempEndHour} primaryColor={businessColors.primary} />
             </View>
           </View>
         </View>
@@ -587,7 +589,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
           <View style={styles.centerSheet}>
             <View style={styles.sheetHeaderRow}>
               <Text style={styles.sheetTitle}>Enter reason</Text>
-              <TouchableOpacity onPress={() => { setReason(tempReason.trim()); setIsReasonModalOpen(false); }} style={styles.confirmBtn}>
+              <TouchableOpacity onPress={() => { setReason(tempReason.trim()); setIsReasonModalOpen(false); }} style={[styles.confirmBtn, { backgroundColor: businessColors.primary }]}>
                 <Ionicons name="checkmark" size={18} color={'#FFFFFF'} />
               </TouchableOpacity>
             </View>
@@ -635,7 +637,7 @@ const styles = StyleSheet.create({
   dropdownValue: { fontWeight: '800', color: '#007AFF' },
   inputWrapper: { backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5EA', paddingHorizontal: 12, paddingVertical: 10 },
   input: { fontSize: 15, color: '#000' },
-  primaryBtn: { backgroundColor: '#000000', paddingVertical: 14, borderRadius: 16, alignItems: 'center', shadowColor: '#000000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 16, elevation: 8 },
+  primaryBtn: { paddingVertical: 14, borderRadius: 16, alignItems: 'center', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 16, elevation: 8 },
   primaryBtnText: { color: '#FFFFFF', fontWeight: '800' },
   emptyText: { color: '#8E8E93', textAlign: 'left' },
   constraintRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#E5E5EA', borderRadius: 16, padding: 12, backgroundColor: '#FFFFFF' },
@@ -652,7 +654,7 @@ const styles = StyleSheet.create({
   bottomSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#F2F2F7', borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingTop: 8, paddingBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: -6 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 24 },
   sheetHeaderRow: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 0.5, borderBottomColor: 'rgba(60,60,67,0.2)' },
   sheetTitle: { fontSize: 16, fontWeight: '700', color: '#1C1C1E' },
-  confirmBtn: { backgroundColor: '#007AFF', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8 },
+  confirmBtn: { borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8 },
   wheelContainer: { height: 220, overflow: 'hidden', paddingHorizontal: 16 },
   wheelItem: { height: 44, alignItems: 'center', justifyContent: 'center' },
   wheelText: { fontSize: 20, fontWeight: '600', color: '#1C1C1E' },
@@ -675,7 +677,7 @@ const styles = StyleSheet.create({
   timeChipText: { color: '#1C1C1E', fontWeight: '700' },
   reasonChip: { backgroundColor: 'rgba(0,122,255,0.06)', borderWidth: 1, borderColor: 'rgba(0,122,255,0.2)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
   reasonChipText: { color: '#007AFF', fontWeight: '800' },
-  smallIconBtn: { backgroundColor: '#000000', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8 },
+  smallIconBtn: { borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8 },
   centerModal: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   centerSheet: { width: '90%', backgroundColor: '#F2F2F7', borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 10 },
 });

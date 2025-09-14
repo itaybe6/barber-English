@@ -359,7 +359,7 @@ export default function ClientProfileScreen() {
               <View style={styles.profileTop}>
                 <View style={styles.avatarWrap}>
                   <LinearGradient
-                    colors={["#7B61FF", "#7B61FF"]}
+                    colors={[businessColors.primary, businessColors.primary]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={styles.avatarGradientRing}
@@ -374,7 +374,7 @@ export default function ClientProfileScreen() {
                   </LinearGradient>
                   <TouchableOpacity style={styles.avatarPlusWrap} onPress={pickAndUploadAvatar} disabled={isUploadingAvatar}>
                     <LinearGradient
-                      colors={["#7B61FF", "#7B61FF"]}
+                      colors={[businessColors.primary, businessColors.primary]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       style={styles.avatarPlus}
@@ -457,8 +457,8 @@ export default function ClientProfileScreen() {
                         }
                       } catch {}
                     }}
-                    trackColor={{ false: '#E5E5EA', true: 'rgba(123,97,255,0.3)' }}
-                    thumbColor={pushEnabled ? '#7B61FF' : Colors.card}
+                    trackColor={{ false: '#E5E5EA', true: `${businessColors.primary}30` }}
+                    thumbColor={pushEnabled ? businessColors.primary : Colors.card}
                     ios_backgroundColor="#E5E5EA"
                     style={styles.switch}
                   />
@@ -471,7 +471,7 @@ export default function ClientProfileScreen() {
         {/* Logout Button */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <LinearGradient
-            colors={["#2F2F2F", "#4A4A4A"]}
+            colors={[businessColors.primary, businessColors.primary]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.logoutGradient}

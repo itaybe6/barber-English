@@ -4,7 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import Colors from '@/constants/colors';
+import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { Service } from '@/lib/supabase';
 import { servicesApi } from '@/lib/api/services';
 import { supabase, getBusinessId, Appointment } from '@/lib/supabase';
@@ -350,7 +350,9 @@ const getNext7Days = () => {
 export default function BookAppointment() {
   const router = useRouter();
   const { user } = useAuthStore();
+  const { colors } = useBusinessColors();
   const insets = useSafeAreaInsets();
+  const styles = createStyles(colors);
   const footerBottom = Math.max(insets.bottom, 16) + 80;
   const params = (router as any).useLocalSearchParams?.() || {};
   
@@ -1258,7 +1260,7 @@ export default function BookAppointment() {
                       <Text style={styles.barberListItemRole}>Professional Barber</Text>
                     </View>
                     {selectedBarber?.id === barber.id && (
-                      <Ionicons name="checkmark-circle" size={24} color="#007AFF" />
+                      <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
                     )}
                   </TouchableOpacity>
                 ))}
@@ -1316,7 +1318,7 @@ export default function BookAppointment() {
                       </View>
                     </View>
                     {selectedService?.id === service.id && (
-                      <Ionicons name="checkmark-circle" size={24} color="#007AFF" />
+                      <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
                     )}
                   </TouchableOpacity>
                 ))}
@@ -1415,7 +1417,7 @@ export default function BookAppointment() {
                       </View>
                     </View>
                     {isSelected && (
-                      <Ionicons name="checkmark-circle" size={24} color={hasAvail ? "#007AFF" : "#FF3B30"} />
+                      <Ionicons name="checkmark-circle" size={24} color={hasAvail ? colors.primary : "#FF3B30"} />
                     )}
                   </TouchableOpacity>
                 );
@@ -1534,7 +1536,7 @@ export default function BookAppointment() {
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
                 <View style={styles.modalIconContainer}>
-                  <Ionicons name="calendar-outline" size={32} color={Colors.primary} />
+                  <Ionicons name="calendar-outline" size={32} color={colors.primary} />
                 </View>
                 <Text style={styles.modalTitle}>Confirm Appointment Booking</Text>
               </View>
@@ -1695,7 +1697,7 @@ export default function BookAppointment() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -1809,7 +1811,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   serviceCardSelected: {
-    borderColor: Colors.primary,
+    borderColor: colors.primary,
     shadowOpacity: 0.15,
     transform: [{ scale: 1.02 }],
   },
@@ -1880,11 +1882,11 @@ const styles = StyleSheet.create({
     left: 10,
     width: 28,
     height: 28,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.primary,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
@@ -1931,8 +1933,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(142, 142, 147, 0.2)',
   },
   dayBtnSelected: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
     shadowOpacity: 0.15,
     transform: [{ scale: 1.05 }],
   },
@@ -1981,8 +1983,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
   },
   dayPillSelected: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
     shadowOpacity: 0.18,
   },
   dayPillDate: {
@@ -2028,8 +2030,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0,0,0,0.06)'
   },
   timePillSelected: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   timePillLabel: {
     fontSize: 16,
@@ -2167,13 +2169,13 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   bookBtn: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     borderRadius: 20,
     paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
     width: '88%',
-    shadowColor: Colors.primary,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
@@ -2230,12 +2232,12 @@ const styles = StyleSheet.create({
   waitlistButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 25,
     gap: 8,
-    shadowColor: Colors.primary,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
@@ -2362,9 +2364,9 @@ const styles = StyleSheet.create({
     borderColor: '#E5E5EA',
   },
   modalButtonConfirm: {
-    backgroundColor: '#000000',
+    backgroundColor: colors.primary,
     borderWidth: 1,
-    borderColor: '#000000',
+    borderColor: colors.primary,
   },
   modalButtonReplace: {
     backgroundColor: '#FF9500',
@@ -2384,7 +2386,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   modalButtonCancelText: {
-    color: '#007AFF',
+    color: colors.primary,
     fontSize: 17,
     fontWeight: '700',
     textAlign: 'center',
@@ -2413,8 +2415,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   barberCardSelected: {
-    borderColor: Colors.primary,
-    shadowColor: Colors.primary,
+    borderColor: colors.primary,
+    shadowColor: colors.primary,
     shadowOpacity: 0.25,
     transform: [{ scale: 1.05 }],
   },
@@ -2490,10 +2492,10 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.primary,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4,
     shadowRadius: 4,
@@ -2519,9 +2521,9 @@ const styles = StyleSheet.create({
     borderColor: '#F2F2F7',
   },
   barberListItemSelected: {
-    borderColor: '#007AFF',
+    borderColor: colors.primary,
     backgroundColor: '#F0F8FF',
-    shadowColor: '#007AFF',
+    shadowColor: colors.primary,
     shadowOpacity: 0.15,
   },
   barberListItemImageContainer: {
@@ -2578,9 +2580,9 @@ const styles = StyleSheet.create({
     borderColor: '#F2F2F7',
   },
   serviceListItemSelected: {
-    borderColor: '#007AFF',
+    borderColor: colors.primary,
     backgroundColor: '#F0F8FF',
-    shadowColor: '#007AFF',
+    shadowColor: colors.primary,
     shadowOpacity: 0.15,
   },
   serviceListItemContent: {
@@ -2644,9 +2646,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF5F5',
   },
   dayListItemSelected: {
-    borderColor: '#007AFF',
+    borderColor: colors.primary,
     backgroundColor: '#F0F8FF',
-    shadowColor: '#007AFF',
+    shadowColor: colors.primary,
     shadowOpacity: 0.15,
   },
   dayListItemUnavailableSelected: {
@@ -2678,7 +2680,7 @@ const styles = StyleSheet.create({
     color: '#FF3B30',
   },
   dayListItemDateSelected: {
-    color: '#007AFF',
+    color: colors.primary,
   },
   dayListItemLabel: {
     fontSize: 14,
@@ -2726,7 +2728,7 @@ const styles = StyleSheet.create({
     color: '#FF3B30',
   },
   dayListItemDayTagTextSelected: {
-    color: '#007AFF',
+    color: colors.primary,
   },
   dayListItemAvailable: {
     backgroundColor: '#34C759',

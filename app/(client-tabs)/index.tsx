@@ -562,7 +562,7 @@ export default function ClientHomeScreen() {
                 activeOpacity={0.85}
                 accessibilityLabel="Settings and Profile"
               >
-                <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
+                <Ionicons name="settings-outline" size={24} color={colors.primary} />
               </TouchableOpacity>
             </View>
             <View style={styles.headerCenter}>
@@ -580,7 +580,7 @@ export default function ClientHomeScreen() {
                 activeOpacity={0.85}
                 accessibilityLabel="Notifications"
               >
-                <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
+                <Ionicons name="notifications-outline" size={24} color={colors.primary} />
                 {unreadNotificationsCount > 0 && (
                   <View style={[styles.overlayNotificationBadge, { backgroundColor: colors.primary }]}>
                     <Text style={styles.notificationBadgeText}>

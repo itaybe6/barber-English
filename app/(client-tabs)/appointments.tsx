@@ -366,16 +366,16 @@ export default function ClientAppointmentsScreen() {
   // Load barber images for appointments
   useEffect(() => {
     const loadBarberImages = async () => {
-      const userIds = Array.from(new Set(verifiedUserAppointments.map(apt => apt.user_id).filter(Boolean)));
-      if (userIds.length === 0) return;
+      const barberIds = Array.from(new Set(verifiedUserAppointments.map(apt => apt.barber_id).filter(Boolean)));
+      if (barberIds.length === 0) return;
 
       const images: Record<string, string> = {};
       await Promise.all(
-        userIds.map(async (userId) => {
+        barberIds.map(async (barberId) => {
           try {
-            const userData = await usersApi.getUserById(userId);
+            const userData = await usersApi.getUserById(barberId);
             if (userData?.image_url) {
-              images[userId] = userData.image_url;
+              images[barberId] = userData.image_url;
             }
           } catch (error) {
             console.error('Error loading barber image:', error);
@@ -424,10 +424,10 @@ export default function ClientAppointmentsScreen() {
   const currentAppointments = activeTab === 'upcoming' ? displayedUpcomingAppointments : pastAppointments;
 
   // Barber Avatar Component
-  const BarberAvatar: React.FC<{ userId?: string; size?: number }> = React.useCallback(({ userId, size = 36 }) => {
-    if (!userId) return null;
+  const BarberAvatar: React.FC<{ barberId?: string; size?: number }> = React.useCallback(({ barberId, size = 36 }) => {
+    if (!barberId) return null;
     
-    const imageUrl = barberImages[userId];
+    const imageUrl = barberImages[barberId];
     
     return (
       <View style={[styles.barberAvatarContainer, { width: size, height: size }]}>
@@ -467,7 +467,7 @@ export default function ClientAppointmentsScreen() {
           <View style={styles.heroContent}>
             {/* Barber Avatar in top right corner */}
             <View style={styles.heroBarberAvatarContainer}>
-              <BarberAvatar userId={nextAppointment!.user_id} size={48} />
+              <BarberAvatar barberId={nextAppointment!.barber_id} size={48} />
             </View>
             
             {/* Cancel button in top left corner */}
@@ -583,7 +583,7 @@ export default function ClientAppointmentsScreen() {
                   <Text style={styles.pastBadgeText}>Completed</Text>
                 </View>
                 <View style={styles.regularHeaderRight}>
-                  <BarberAvatar userId={item.user_id} size={44} />
+                  <BarberAvatar barberId={item.barber_id} size={44} />
                 </View>
               </View>
 
@@ -642,7 +642,7 @@ export default function ClientAppointmentsScreen() {
           <View style={styles.heroContent}>
             {/* Barber Avatar in top right corner */}
             <View style={styles.heroBarberAvatarContainer}>
-              <BarberAvatar userId={item.user_id} size={48} />
+              <BarberAvatar barberId={item.barber_id} size={48} />
             </View>
             
             {/* Cancel button in top left corner */}

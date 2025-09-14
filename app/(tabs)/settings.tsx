@@ -1233,7 +1233,7 @@ export default function SettingsScreen() {
                 <Text style={styles.settingTitle}>{title}</Text>
                 {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
               </View>
-              <View style={styles.settingChevron}><ChevronLeft size={20} color={Colors.subtext} /></View>
+              <View style={styles.settingChevron}><ChevronRight size={20} color={Colors.subtext} /></View>
             </>
           ) : (
             <>
@@ -1288,7 +1288,7 @@ export default function SettingsScreen() {
                 <Text style={styles.settingTitleLTR}>{title}</Text>
                 {subtitle && <Text style={styles.settingSubtitleLTR}>{subtitle}</Text>}
               </View>
-              <View style={styles.settingChevronLTR}><ChevronLeft size={20} color={Colors.subtext} /></View>
+              <View style={styles.settingChevronLTR}><ChevronRight size={20} color={Colors.subtext} /></View>
             </>
           ) : (
             <>

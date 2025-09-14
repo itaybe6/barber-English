@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Dimensions, I18nM
 import Colors from '@/constants/colors';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useColors } from '@/src/theme/ThemeProvider';
 
 interface DaySelectorProps {
   selectedDate: Date;
@@ -21,6 +22,7 @@ export default function DaySelector({
   markedDates,
   startFromToday = false,
 }: DaySelectorProps) {
+  const colors = useColors();
   const [dates, setDates] = useState<Date[]>([]);
   const [currentMonth, setCurrentMonth] = useState('');
   const scrollRef = useRef<ScrollView | null>(null);
@@ -220,7 +222,7 @@ export default function DaySelector({
             return (
               <LinearGradient
                 key={index}
-                colors={[Colors.black, Colors.black]}
+                colors={[colors.primary, colors.primary]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={[...common, styles.selectedDayItem]}

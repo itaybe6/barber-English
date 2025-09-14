@@ -22,6 +22,7 @@ import { notifyWaitlistOnBusinessHoursUpdate } from '@/lib/api/waitlistNotificat
 import { BusinessHours } from '@/lib/supabase';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { useAuthStore } from '@/stores/authStore';
+import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 
 // Modern Apple-like Colors
 const Colors = {
@@ -71,12 +72,13 @@ interface TimePickerProps {
   isBreakTime?: boolean;
 }
 
-const TimePicker: React.FC<TimePickerProps> = ({ 
+const TimePicker: React.FC<TimePickerProps & { primaryColor?: string }> = ({ 
   value, 
   onValueChange, 
   label, 
   options, 
-  isBreakTime = false 
+  isBreakTime = false,
+  primaryColor = Colors.primary
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const wheelRef = useRef<ScrollView | null>(null);
@@ -95,7 +97,7 @@ const TimePicker: React.FC<TimePickerProps> = ({
     ? 'rgba(255, 149, 0, 0.3)' 
     : 'rgba(0, 122, 255, 0.3)';
     
-  const selectedColor = isBreakTime ? Colors.warning : Colors.primary;
+  const selectedColor = isBreakTime ? Colors.warning : primaryColor;
 
   return (
     <View style={[styles.timePickerContainer, { zIndex: isOpen ? 10000 : 1 }]}> 
@@ -141,7 +143,7 @@ const TimePicker: React.FC<TimePickerProps> = ({
               <TouchableOpacity onPress={() => setIsOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Ionicons name="close" size={20} color={Colors.secondaryText} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={handleConfirm} style={styles.confirmButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <TouchableOpacity onPress={handleConfirm} style={[styles.confirmButton, { backgroundColor: primaryColor }]} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Ionicons name="checkmark" size={20} color={'#FFFFFF'} />
               </TouchableOpacity>
             </View>
@@ -156,6 +158,7 @@ const TimePicker: React.FC<TimePickerProps> = ({
 export default function BusinessHoursScreen() {
   const router = useRouter();
   const { user } = useAuthStore();
+  const { colors: businessColors } = useBusinessColors();
   const [businessHours, setBusinessHours] = useState<BusinessHours[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -366,8 +369,8 @@ export default function BusinessHoursScreen() {
             <Switch
               value={dayHours?.is_active || false}
               onValueChange={(value) => handleDayToggle(dayOfWeek, value)}
-              trackColor={{ false: Colors.border, true: 'rgba(0,0,0,0.3)' }}
-              thumbColor={(dayHours?.is_active || false) ? '#000000' : Colors.card}
+              trackColor={{ false: Colors.border, true: `${businessColors.primary}30` }}
+              thumbColor={(dayHours?.is_active || false) ? businessColors.primary : Colors.card}
               ios_backgroundColor={Colors.border}
               style={styles.switch}
             />
@@ -388,8 +391,8 @@ export default function BusinessHoursScreen() {
               <Switch
                 value={useBreaks}
                 onValueChange={setUseBreaks}
-                trackColor={{ false: Colors.border, true: 'rgba(0,0,0,0.3)' }}
-                thumbColor={useBreaks ? '#000000' : Colors.card}
+                trackColor={{ false: Colors.border, true: `${businessColors.primary}30` }}
+                thumbColor={useBreaks ? businessColors.primary : Colors.card}
                 ios_backgroundColor={Colors.border}
               />
             </View>
@@ -401,6 +404,7 @@ export default function BusinessHoursScreen() {
                   label="Start time"
                   options={startTimeOptions}
                   isBreakTime={false}
+                  primaryColor={businessColors.primary}
                 />
               </View>
               
@@ -415,6 +419,7 @@ export default function BusinessHoursScreen() {
                   label="End time"
                   options={endTimeOptions}
                   isBreakTime={false}
+                  primaryColor={businessColors.primary}
                 />
               </View>
             </View>
@@ -455,6 +460,7 @@ export default function BusinessHoursScreen() {
                         label={'Start'}
                         options={startTimeOptions}
                         isBreakTime
+                        primaryColor={businessColors.primary}
                       />
                     </View>
                     <View style={styles.timeSeparator}>
@@ -471,6 +477,7 @@ export default function BusinessHoursScreen() {
                         label="End"
                         options={endTimeOptions}
                         isBreakTime
+                        primaryColor={businessColors.primary}
                       />
                     </View>
                   </View>
@@ -528,7 +535,7 @@ export default function BusinessHoursScreen() {
             </TouchableOpacity>
             
             <TouchableOpacity
-              style={styles.saveButton}
+              style={[styles.saveButton, { backgroundColor: businessColors.primary, shadowColor: businessColors.primary }]}
               onPress={handleSaveDay}
               activeOpacity={0.7}
             >
@@ -575,7 +582,7 @@ export default function BusinessHoursScreen() {
           <TouchableOpacity
             onPress={() => setIsConstraintsOpen(true)}
             activeOpacity={0.9}
-            style={styles.constraintsButton}
+            style={[styles.constraintsButton, { backgroundColor: businessColors.primary, shadowColor: businessColors.primary }]}
           >
             <Ionicons name="remove-circle-outline" size={18} color={'#FFFFFF'} />
             <Text style={styles.constraintsButtonText}>Manage constraints (closed dates/hours)</Text>
@@ -585,8 +592,8 @@ export default function BusinessHoursScreen() {
         <View style={{ paddingHorizontal: 24, marginBottom: 16 }}>
           <View style={styles.globalBreakCard}>
             <View style={styles.sectionHeader}>
-              <Ionicons name="timer-outline" size={18} color={Colors.accent} />
-              <Text style={[styles.sectionTitle, { color: Colors.accent }]}>Fixed break between appointments</Text>
+              <Ionicons name="timer-outline" size={18} color={businessColors.primary} />
+              <Text style={[styles.sectionTitle, { color: businessColors.primary }]}>Fixed break between appointments</Text>
             </View>
             <Text style={{ color: Colors.secondaryText, textAlign: 'left', marginBottom: 12 }}>
               Choose the number of minutes to add between appointments. 0 keeps no fixed break.
@@ -596,11 +603,11 @@ export default function BusinessHoursScreen() {
               onPress={() => setIsBreakPickerOpen(true)}
               activeOpacity={0.8}
             >
-              <Text style={[styles.dropdownButtonText, { color: Colors.accent }]}> {globalBreakMinutes} min</Text>
+              <Text style={[styles.dropdownButtonText, { color: businessColors.primary }]}> {globalBreakMinutes} min</Text>
               {isSavingGlobalBreak ? (
-                <ActivityIndicator size="small" color={Colors.accent} />
+                <ActivityIndicator size="small" color={businessColors.primary} />
               ) : (
-                <Ionicons name={isBreakPickerOpen ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.accent} />
+                <Ionicons name={isBreakPickerOpen ? 'chevron-up' : 'chevron-down'} size={16} color={businessColors.primary} />
               )}
             </TouchableOpacity>
           </View>
@@ -617,7 +624,7 @@ export default function BusinessHoursScreen() {
           <View style={[styles.bottomSheet, { backgroundColor: Colors.card }]}>
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
-              <Text style={[styles.sheetTitle, { color: Colors.accent, flex: 1 }]} numberOfLines={2}>
+              <Text style={[styles.sheetTitle, { color: businessColors.primary, flex: 1 }]} numberOfLines={2}>
                 Select break between appointments (minutes)
               </Text>
               <TouchableOpacity onPress={() => setIsBreakPickerOpen(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
@@ -643,10 +650,10 @@ export default function BusinessHoursScreen() {
                     }
                   }}
                 >
-                  <Text style={[styles.sheetOptionText, m === globalBreakMinutes && styles.sheetOptionTextSelected]}>
+                  <Text style={[styles.sheetOptionText, m === globalBreakMinutes && { color: businessColors.primary }]}>
                     {m} min
                   </Text>
-                  {m === globalBreakMinutes && <Ionicons name="checkmark" size={18} color={Colors.accent} />}
+                  {m === globalBreakMinutes && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
                 </TouchableOpacity>
               ))}
             </View>
@@ -716,7 +723,7 @@ const WheelPicker: React.FC<{ options: string[]; value: string; onChange: (v: st
           const active = i === selectedIndex;
           return (
             <View key={opt} style={styles.wheelItem}>
-              <Text style={[styles.wheelText, active && styles.wheelTextActive]}>{formatHHMM(opt)}</Text>
+              <Text style={[styles.wheelText, active && { color: accentColor }]}>{formatHHMM(opt)}</Text>
             </View>
           );
         })}
@@ -777,10 +784,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: Colors.accent,
     borderRadius: 18,
     paddingVertical: 14,
-    shadowColor: Colors.accent,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.25,
     shadowRadius: 16,
@@ -1090,7 +1095,6 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(60, 60, 67, 0.2)',
   },
   confirmButton: {
-    backgroundColor: Colors.primary,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 12,
@@ -1164,8 +1168,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 14,
-    backgroundColor: Colors.primary,
-    shadowColor: Colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,

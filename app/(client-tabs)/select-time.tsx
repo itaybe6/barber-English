@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal } fr
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import Colors from '@/constants/colors';
+import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { supabase, getBusinessId } from '@/lib/supabase';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { useAuthStore } from '@/stores/authStore';
@@ -13,6 +13,8 @@ export default function SelectTimeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
+  const { colors } = useBusinessColors();
+  const styles = createStyles(colors);
   const params = useLocalSearchParams<{
     serviceName?: string;
     durationMinutes?: string;
@@ -557,7 +559,7 @@ export default function SelectTimeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -647,8 +649,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0,0,0,0.06)'
   },
   timePillSelected: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   timePillLabel: {
     fontSize: 16,
@@ -666,13 +668,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   bookBtn: {
-    backgroundColor: Colors.primary,
+    backgroundColor: colors.primary,
     borderRadius: 20,
     paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
     width: '88%',
-    shadowColor: Colors.primary,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
@@ -787,7 +789,7 @@ const styles = StyleSheet.create({
     writingDirection: 'ltr',
   },
   modalButtonCancelText: {
-    color: '#007AFF',
+    color: colors.primary,
     fontSize: 16,
     fontWeight: '700',
     textAlign: 'center',

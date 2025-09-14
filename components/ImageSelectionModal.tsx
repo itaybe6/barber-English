@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Modal,
   View,
@@ -9,7 +9,13 @@ import {
   StyleSheet,
   Dimensions,
   Alert,
+  Platform,
+  StatusBar,
+  SafeAreaView,
+  Animated,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
+import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/colors';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -18,34 +24,52 @@ interface ImageSelectionModalProps {
   onClose: () => void;
   onImageSelected: (imageUri: string, isPreset: boolean) => void;
   title: string;
+  mainCategory: 'existingBooking' | 'bookingPage' | 'homePage';
 }
 
-// Preset images organized by category - using external URLs for now
+// Preset images organized by category - using local images from default folder
 const PRESET_IMAGES = {
-  barber: [
-    'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=800&h=600&fit=crop',
-    'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&h=600&fit=crop',
-    'https://images.unsplash.com/photo-1585747860715-2ba37e788b70?w=800&h=600&fit=crop',
-    'https://images.unsplash.com/photo-1594736797933-d0401ba2fe65?w=800&h=600&fit=crop',
-  ],
-  cosmetics: [
-    'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=800&h=600&fit=crop',
-    'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=800&h=600&fit=crop',
-    'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=800&h=600&fit=crop',
-    'https://images.unsplash.com/photo-1608245445807-1a0b7d3f6e8b?w=800&h=600&fit=crop',
-  ],
-  nail: [
-    'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=800&h=600&fit=crop',
-    'https://images.unsplash.com/photo-1607779097040-26e80aa78e66?w=800&h=600&fit=crop',
-    'https://images.unsplash.com/photo-1612817288484-6f916006741a?w=800&h=600&fit=crop',
-    'https://images.unsplash.com/photo-1609205607569-7e8c3c4c5b5c?w=800&h=600&fit=crop',
-  ],
+  existingBooking: {
+    barber: [
+      require('../assets/images/default/ExistingBooking/barber/1.jpg'),
+      require('../assets/images/default/ExistingBooking/barber/2.jpg'),
+      require('../assets/images/default/ExistingBooking/barber/3.jpg'),
+      require('../assets/images/default/ExistingBooking/barber/4.jpg'),
+    ],
+    nails: [
+      // Add nail images when available
+    ],
+  },
+  bookingPage: {
+    barber: [
+      require('../assets/images/default/BookingPage/barber/1.jpg'),
+      require('../assets/images/default/BookingPage/barber/2.jpg'),
+      require('../assets/images/default/BookingPage/barber/3.jpg'),
+      require('../assets/images/default/BookingPage/barber/4.jpg'),
+    ],
+    nails: [
+      // Add nail images when available
+    ],
+  },
+  homePage: {
+    barber: [
+      require('../assets/images/default/HomePage/barber/1.jpg'),
+      require('../assets/images/default/HomePage/barber/2.jpg'),
+      require('../assets/images/default/HomePage/barber/3.jpg'),
+      require('../assets/images/default/HomePage/barber/4.jpg'),
+    ],
+    nails: [
+      require('../assets/images/default/HomePage/barber/1.jpg'),
+      require('../assets/images/default/HomePage/barber/2.jpg'),
+      require('../assets/images/default/HomePage/barber/3.jpg'),
+      require('../assets/images/default/HomePage/barber/4.jpg'),
+    ],
+  },
 };
 
-const CATEGORIES = [
-  { key: 'barber', name: 'ספרים', icon: '✂️' },
-  { key: 'cosmetics', name: 'קוסמטיקאיות', icon: '💄' },
-  { key: 'nail', name: 'בונות ציפורניים', icon: '💅' },
+const SUB_CATEGORIES = [
+  { key: 'barber', name: 'Barbers', icon: 'cut-outline' },
+  { key: 'nails', name: 'Nail Art', icon: 'hand-left-outline' },
 ];
 
 const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
@@ -53,14 +77,61 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
   onClose,
   onImageSelected,
   title,
+  mainCategory,
 }) => {
-  const [selectedCategory, setSelectedCategory] = useState<string>('barber');
+  const [selectedSubCategory, setSelectedSubCategory] = useState<string>('barber');
+  const [loadingImages, setLoadingImages] = useState<{[key: string]: boolean}>({});
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+
+  React.useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          tension: 50,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+      ]).start();
+      
+      // Preload images for better performance
+      const currentImages = PRESET_IMAGES[mainCategory]?.[selectedSubCategory as 'barber' | 'nails'];
+      if (currentImages) {
+        currentImages.forEach((imageSource, index) => {
+          const imageKey = `${mainCategory}-${selectedSubCategory}-${index}`;
+          setLoadingImages(prev => ({ ...prev, [imageKey]: true }));
+        });
+      }
+    } else {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 0.95,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+      
+      // Clear loading states when modal closes
+      setLoadingImages({});
+    }
+  }, [visible, mainCategory, selectedSubCategory]);
 
   const handlePickFromGallery = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('הרשאה נדרשת', 'אנא אפשר גישה לגלריה כדי לבחור תמונה');
+        Alert.alert('Permission Required', 'Please allow gallery access to select an image');
         return;
       }
 
@@ -78,13 +149,23 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('שגיאה', 'לא ניתן לבחור תמונה');
+      Alert.alert('Error', 'Unable to select image');
     }
   };
 
-  const handlePresetImageSelect = (imageUri: string) => {
+  const handlePresetImageSelect = (imageSource: any) => {
+    // Convert local image source to URI for consistency
+    const imageUri = Image.resolveAssetSource(imageSource).uri;
     onImageSelected(imageUri, true);
     onClose();
+  };
+
+  const handleImageLoadStart = (imageKey: string) => {
+    setLoadingImages(prev => ({ ...prev, [imageKey]: true }));
+  };
+
+  const handleImageLoadEnd = (imageKey: string) => {
+    setLoadingImages(prev => ({ ...prev, [imageKey]: false }));
   };
 
   return (
@@ -94,146 +175,243 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <Text style={styles.closeButtonText}>סגור</Text>
-          </TouchableOpacity>
-          <Text style={styles.title}>{title}</Text>
-          <TouchableOpacity onPress={handlePickFromGallery} style={styles.galleryButton}>
-            <Text style={styles.galleryButtonText}>גלריה</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Category Selector */}
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          style={styles.categoryContainer}
-          contentContainerStyle={styles.categoryContent}
+      <SafeAreaView style={styles.container}>
+        <Animated.View 
+          style={[
+            styles.animatedContainer,
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }],
+            },
+          ]}
         >
-          {CATEGORIES.map((category) => (
-            <TouchableOpacity
-              key={category.key}
-              style={[
-                styles.categoryButton,
-                selectedCategory === category.key && styles.selectedCategoryButton,
-              ]}
-              onPress={() => setSelectedCategory(category.key)}
-            >
-              <Text style={styles.categoryIcon}>{category.icon}</Text>
-              <Text
+          {/* Header with Blur Effect */}
+          <BlurView intensity={100} tint="light" style={styles.headerBlur}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <Text style={styles.closeButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={styles.title}>{title}</Text>
+            <TouchableOpacity onPress={handlePickFromGallery} style={styles.galleryButton}>
+              <Text style={styles.galleryButtonText}>Gallery</Text>
+            </TouchableOpacity>
+          </View>
+        </BlurView>
+
+        {/* Sub Category Selector */}
+        <View style={styles.categorySection}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.categoryContainer}
+            contentContainerStyle={styles.categoryScrollContent}
+          >
+            {SUB_CATEGORIES.map((subCategory) => (
+              <TouchableOpacity
+                key={subCategory.key}
                 style={[
-                  styles.categoryText,
-                  selectedCategory === category.key && styles.selectedCategoryText,
+                  styles.categoryButton,
+                  selectedSubCategory === subCategory.key && styles.selectedCategoryButton,
                 ]}
+                onPress={() => setSelectedSubCategory(subCategory.key)}
+                activeOpacity={0.7}
               >
-                {category.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* Images Grid */}
-        <ScrollView style={styles.imagesContainer} contentContainerStyle={styles.imagesGrid}>
-          {PRESET_IMAGES[selectedCategory as keyof typeof PRESET_IMAGES]?.map((imageUri, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.imageContainer}
-              onPress={() => handlePresetImageSelect(imageUri)}
-            >
-              <Image source={{ uri: imageUri }} style={styles.presetImage} resizeMode="cover" />
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* Bottom Info */}
-        <View style={styles.bottomInfo}>
-          <Text style={styles.infoText}>
-            בחר תמונה מוכנה מהקטגוריות למעלה או לחץ על "גלריה" להעלאת תמונה משלך
-          </Text>
+                <View style={styles.categoryContent}>
+                  <Ionicons 
+                    name={subCategory.icon as any} 
+                    size={20} 
+                    color={selectedSubCategory === subCategory.key ? '#FFFFFF' : Colors.primary}
+                    style={styles.categoryIcon}
+                  />
+                  <Text
+                    style={[
+                      styles.categoryText,
+                      selectedSubCategory === subCategory.key && styles.selectedCategoryText,
+                    ]}
+                  >
+                    {subCategory.name}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
-      </View>
+
+        {/* Images Grid with Apple-style Cards */}
+        <ScrollView 
+          style={styles.imagesContainer} 
+          contentContainerStyle={styles.imagesGrid}
+          showsVerticalScrollIndicator={false}
+        >
+          {(() => {
+            const currentImages = PRESET_IMAGES[mainCategory]?.[selectedSubCategory as 'barber' | 'nails'];
+            
+            if (!currentImages || currentImages.length === 0) {
+              return (
+                <View style={styles.noImagesContainer}>
+                  <Text style={styles.noImagesText}>
+                    No images available for {selectedSubCategory} in {mainCategory}
+                  </Text>
+                </View>
+              );
+            }
+            
+            return currentImages.map((imageSource, index) => {
+              const imageKey = `${mainCategory}-${selectedSubCategory}-${index}`;
+              const isLoading = loadingImages[imageKey];
+              
+              return (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.imageCard}
+                  onPress={() => handlePresetImageSelect(imageSource)}
+                  activeOpacity={0.9}
+                >
+                  <View style={styles.imageContainer}>
+                    {/* Loading Placeholder */}
+                    {isLoading && (
+                      <View style={styles.imagePlaceholder}>
+                        <Ionicons name="image-outline" size={40} color="#CCCCCC" />
+                        <Text style={styles.loadingText}>Loading...</Text>
+                      </View>
+                    )}
+                    
+                    <Image 
+                      source={imageSource} 
+                      style={[styles.presetImage, isLoading && styles.hiddenImage]} 
+                      resizeMode="cover"
+                      onLoadStart={() => handleImageLoadStart(imageKey)}
+                      onLoadEnd={() => handleImageLoadEnd(imageKey)}
+                      onError={() => handleImageLoadEnd(imageKey)}
+                    />
+                    
+                    <View style={[styles.imageOverlay, { opacity: 0 }]}>
+                      <View style={styles.selectButton}>
+                        <Text style={styles.selectButtonText}>Select</Text>
+                      </View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            });
+          })()}
+        </ScrollView>
+
+          {/* Bottom Info with Apple-style Typography */}
+          <View style={styles.bottomInfo}>
+            <Text style={styles.infoText}>
+              Choose a preset image from the categories above or tap "Gallery" to upload your own
+            </Text>
+          </View>
+        </Animated.View>
+      </SafeAreaView>
     </Modal>
   );
 };
 
-const { width } = Dimensions.get('window');
-const imageSize = (width - 60) / 3; // 3 images per row with padding
+const { width, height } = Dimensions.get('window');
+const imageSize = (width - 80) / 2; // 2 images per row with better spacing
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8F9FA',
+  },
+  animatedContainer: {
+    flex: 1,
+  },
+  headerBlur: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1000,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 50,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5E5',
+    paddingVertical: 16,
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
   },
   closeButton: {
-    padding: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   closeButtonText: {
-    fontSize: 16,
-    color: Colors.primary,
-    fontWeight: '600',
+    fontSize: 17,
+    color: '#007AFF',
+    fontWeight: '400',
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
   },
   title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000000',
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#000',
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
   },
   galleryButton: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   galleryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 17,
+    color: '#007AFF',
+    fontWeight: '400',
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+  },
+  categorySection: {
+    marginTop: Platform.OS === 'ios' ? 90 : 70,
+    marginBottom: 24,
   },
   categoryContainer: {
-    maxHeight: 80,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5E5',
-  },
-  categoryContent: {
     paddingHorizontal: 20,
-    paddingVertical: 15,
+  },
+  categoryScrollContent: {
+    paddingHorizontal: 0,
   },
   categoryButton: {
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    marginRight: 15,
-    borderRadius: 20,
-    backgroundColor: '#F5F5F5',
-    minWidth: 80,
+    marginRight: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.1)',
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   selectedCategoryButton: {
-    backgroundColor: Colors.primary,
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  categoryContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   categoryIcon: {
-    fontSize: 24,
-    marginBottom: 5,
+    marginRight: 8,
   },
   categoryText: {
-    fontSize: 12,
-    color: '#666666',
-    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#000',
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
   },
   selectedCategoryText: {
     color: '#FFFFFF',
-    fontWeight: '600',
   },
   imagesContainer: {
     flex: 1,
@@ -243,39 +421,106 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    paddingTop: 20,
+    paddingBottom: 100,
+  },
+  imageCard: {
+    width: imageSize,
+    height: imageSize + 40,
+    marginBottom: 20,
   },
   imageContainer: {
-    width: imageSize,
-    height: imageSize,
-    marginBottom: 15,
-    borderRadius: 10,
+    flex: 1,
+    borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FFFFFF',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   presetImage: {
     width: '100%',
-    height: '100%',
+    height: imageSize,
+  },
+  imageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    opacity: 0,
+  },
+  selectButton: {
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.8)',
+  },
+  selectButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#000',
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
   },
   bottomInfo: {
-    padding: 20,
-    backgroundColor: '#F9F9F9',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E5E5',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+    backgroundColor: 'rgba(248,249,250,0.95)',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.1)',
   },
   infoText: {
-    fontSize: 14,
-    color: '#666666',
+    fontSize: 15,
+    color: '#8E8E93',
     textAlign: 'center',
     lineHeight: 20,
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+  },
+  noImagesContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  noImagesText: {
+    fontSize: 16,
+    color: '#8E8E93',
+    textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+  },
+  imagePlaceholder: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#F5F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 16,
+  },
+  loadingText: {
+    fontSize: 12,
+    color: '#999999',
+    marginTop: 8,
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+  },
+  hiddenImage: {
+    opacity: 0,
   },
 });
 

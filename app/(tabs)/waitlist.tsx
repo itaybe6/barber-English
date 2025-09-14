@@ -8,6 +8,7 @@ import WaitlistClientCard from '@/components/WaitlistClientCard';
 import { supabase, WaitlistEntry } from '@/lib/supabase';
 import DaySelector from '@/components/DaySelector';
 import { useAuthStore } from '@/stores/authStore';
+import { useColors } from '@/src/theme/ThemeProvider';
 
 // Helper function to format date as YYYY-MM-DD in local timezone
 function formatDateToLocalString(date: Date): string {
@@ -186,6 +187,7 @@ export default function WaitlistScreen() {
   const [loading, setLoading] = useState(false);
   const [phoneToImage, setPhoneToImage] = useState<Record<string, string>>({});
   const { user } = useAuthStore();
+  const colors = useColors();
 
   // Next 7 days (rolling from today)
   const weekDays = useMemo(() => {
@@ -290,7 +292,7 @@ export default function WaitlistScreen() {
       <View style={styles.headerLikeAppointments}>
         <View style={styles.headerTopRow}>
           <View style={styles.headerTitleColumn}>
-            <Text style={styles.headerTitle}>Waitlist</Text>
+            <Text style={[styles.headerTitle, { color: colors.primary }]}>Waitlist</Text>
             <Text style={styles.headerSubtitle}>This week</Text>
           </View>
           <View style={styles.monthBadge}>
@@ -312,7 +314,7 @@ export default function WaitlistScreen() {
       <View style={[styles.waitlistBg, { marginTop: 0, paddingTop: 12 }]}>
         <ScrollView contentContainerStyle={[styles.scrollContent, { flexDirection: 'column', padding: 16 }]} showsVerticalScrollIndicator={false}>
           {loading ? (
-            <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 32 }} />
+            <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 32 }} />
           ) : selectedDayEntries.length > 0 ? (
             <View style={styles.cardsContainer}>
               {selectedDayEntries.map((entry) => {
@@ -330,11 +332,11 @@ export default function WaitlistScreen() {
                     />
                     <View style={styles.actionButtons}>
                       <TouchableOpacity 
-                        style={[styles.actionButton, styles.callButton]}
+                        style={[styles.actionButton, styles.callButton, { borderColor: colors.primary }]}
                         onPress={() => handleCallClient(entry.client_phone)}
                       >
-                        <Phone size={16} color="#007AFF" />
-                        <Text style={styles.actionButtonText}>Contact</Text>
+                        <Phone size={16} color={colors.primary} />
+                        <Text style={[styles.actionButtonText, { color: colors.primary }]}>Contact</Text>
                       </TouchableOpacity>
                       <TouchableOpacity 
                         style={[styles.actionButton, styles.deleteButton]}
@@ -351,7 +353,7 @@ export default function WaitlistScreen() {
           ) : (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconCircle}>
-                <Ionicons name="hourglass-outline" size={22} color="#1C1C1E" />
+                <Ionicons name="hourglass-outline" size={22} color={colors.primary} />
               </View>
               <Text style={styles.emptyTitle}>No waitlist entries for this day</Text>
               <Text style={styles.emptySubtitle}>No clients are waiting for this day</Text>
@@ -444,7 +446,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     minWidth: 220,
     maxWidth: 340,
-    shadowColor: Colors.primary,
     shadowOpacity: 0.07,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
@@ -522,7 +523,6 @@ const styles = StyleSheet.create({
     width: 6,
     height: 24,
     borderRadius: 3,
-    backgroundColor: Colors.primary,
     marginRight: 8,
   },
   dayHeaderText: {
@@ -579,7 +579,6 @@ const styles = StyleSheet.create({
   periodTitleAccent: {
     width: 4,
     height: 24,
-    backgroundColor: Colors.primary,
     borderRadius: 2,
   },
   waitlistCard: {
@@ -627,7 +626,6 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#007AFF',
     marginLeft: 4,
   },
   emptyState: {

@@ -16,31 +16,31 @@ interface TimePeriodOption {
 const timePeriodOptions: TimePeriodOption[] = [
   {
     value: 'morning',
-    label: 'בוקר',
+    label: 'Morning',
     icon: 'sunny',
     color: '#FF9500',
     description: '8:00 - 12:00',
   },
   {
     value: 'afternoon',
-    label: 'צהריים',
+    label: 'Afternoon',
     icon: 'partly-sunny',
     color: '#FF6B6B',
     description: '12:00 - 16:00',
   },
   {
     value: 'evening',
-    label: 'ערב',
+    label: 'Evening',
     icon: 'moon',
     color: '#5856D6',
     description: '16:00 - 20:00',
   },
   {
     value: 'any',
-    label: 'כל זמן',
+    label: 'Any time',
     icon: 'time',
     color: '#34C759',
-    description: 'גמיש בזמן',
+    description: 'Flexible timing',
   },
 ];
 
@@ -57,9 +57,9 @@ export default function TimePeriodSelector({
 }: TimePeriodSelectorProps) {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>בחרי טווח זמן מועדף</Text>
+      <Text style={styles.title}>Select preferred time period</Text>
       <Text style={styles.subtitle}>
-        נודיע לך כשיתפנה מקום בטווח הזמן שבחרת
+        We'll notify you when a slot opens in your preferred time period
       </Text>
       
       <View style={styles.optionsContainer}>
@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   optionCard: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     padding: 16,
@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 16,
+    marginRight: 16,
   },
   optionContent: {
     flex: 1,
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1C1C1E',
     marginBottom: 4,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   selectedOptionLabel: {
     color: Colors.primary,
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
   optionDescription: {
     fontSize: 14,
     color: '#8E8E93',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   selectedOptionDescription: {
     color: Colors.primary + 'CC',

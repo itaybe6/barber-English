@@ -5,12 +5,10 @@
   "private": true,
   "scripts": {
     "start": "expo start --tunnel",
-
     "start:clientA": "cross-env CLIENT=clientA node app.config.js && cross-env CLIENT=clientA expo start --tunnel",
     "start:clientB": "cross-env CLIENT=clientB node app.config.js && cross-env CLIENT=clientB expo start --tunnel",
     "start:web:clientA": "cross-env CLIENT=clientA node app.config.js && cross-env CLIENT=clientA expo start --web --tunnel",
     "start:web:clientB": "cross-env CLIENT=clientB node app.config.js && cross-env CLIENT=clientB expo start --web --tunnel",
-
     "build:client": "node scripts/build-client.mjs",
     "build:clientA:ios": "cross-env CLIENT=clientA node scripts/build-client.mjs clientA ios",
     "build:clientA:android": "cross-env CLIENT=clientA node scripts/build-client.mjs clientA android",
@@ -18,7 +16,6 @@
     "build:clientB:ios": "cross-env CLIENT=clientB node scripts/build-client.mjs clientB ios",
     "build:clientB:android": "cross-env CLIENT=clientB node scripts/build-client.mjs clientB android",
     "build:clientB:all": "cross-env CLIENT=clientB node scripts/build-client.mjs clientB all",
-
     "test:theme": "node scripts/test-theme.mjs",
     "test:logos": "node scripts/test-logos.mjs",
     "test:logo-debug": "node scripts/test-logo-debug.mjs",
@@ -59,6 +56,7 @@
     "expo-status-bar": "~3.0.8",
     "expo-symbols": "~1.0.7",
     "expo-system-ui": "~6.0.7",
+    "expo-updates": "^29.0.10",
     "expo-web-browser": "~15.0.7",
     "lodash": "^4.17.21",
     "lucide-react-native": "^0.536.0",

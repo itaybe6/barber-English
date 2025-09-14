@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   scrollContent: {
-    paddingBottom: 20, // מרווח קטן בתחתית
+    paddingBottom: 20, // Small spacing at the bottom
   },
   infoCard: {
     backgroundColor: '#FFFFFF',

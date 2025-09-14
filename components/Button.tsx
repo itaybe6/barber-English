@@ -8,7 +8,7 @@ import {
   TextStyle,
   View
 } from 'react-native';
-import Colors from '@/constants/colors';
+import { useColors } from '@/src/theme/ThemeProvider';
 
 interface ButtonProps {
   title: string;
@@ -35,6 +35,8 @@ export default function Button({
   textStyle,
   fullWidth = false,
 }: ButtonProps) {
+  const colors = useColors();
+  
   const getButtonStyle = () => {
     let buttonStyle: ViewStyle = {};
     
@@ -42,20 +44,20 @@ export default function Button({
     switch (variant) {
       case 'primary':
         buttonStyle = {
-          backgroundColor: Colors.black,
-          borderColor: Colors.black,
+          backgroundColor: colors.primary,
+          borderColor: colors.primary,
         };
         break;
       case 'secondary':
         buttonStyle = {
-          backgroundColor: '#111111',
-          borderColor: '#111111',
+          backgroundColor: colors.secondary,
+          borderColor: colors.secondary,
         };
         break;
       case 'outline':
         buttonStyle = {
           backgroundColor: 'transparent',
-          borderColor: Colors.black,
+          borderColor: colors.primary,
           borderWidth: 1,
         };
         break;
@@ -126,19 +128,19 @@ export default function Button({
       case 'secondary':
         style = {
           ...style,
-          color: Colors.white,
+          color: '#ffffff',
         };
         break;
       case 'outline':
         style = {
           ...style,
-          color: Colors.black,
+          color: colors.primary,
         };
         break;
       case 'text':
         style = {
           ...style,
-          color: '#111111',
+          color: colors.secondary,
         };
         break;
     }
@@ -178,7 +180,7 @@ export default function Button({
       <View style={styles.contentContainer}>
         {loading ? (
           <ActivityIndicator 
-            color={variant === 'outline' || variant === 'text' ? '#111111' : Colors.white} 
+            color={variant === 'outline' || variant === 'text' ? colors.secondary : '#ffffff'} 
             size={size === 'small' ? 'small' : 'small'} 
           />
         ) : (

@@ -10,7 +10,6 @@
     "exactOptionalPropertyTypes": false,
     "jsx": "react-jsx",
     "skipLibCheck": true,
-    "suppressImplicitAnyIndexErrors": true,
     "paths": {
       "@/*": [
         "./*"

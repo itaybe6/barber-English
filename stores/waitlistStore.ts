@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { WaitlistEntry, supabase } from '@/lib/supabase';
+import { WaitlistEntry, supabase, getBusinessId } from '@/lib/supabase';
 import { notificationsApi } from '@/lib/api/notifications';
 
 interface WaitlistStore {
@@ -14,7 +14,8 @@ interface WaitlistStore {
     clientPhone: string,
     serviceName: string,
     requestedDate: string,
-    timePeriod: 'morning' | 'afternoon' | 'evening' | 'any'
+    timePeriod: 'morning' | 'afternoon' | 'evening' | 'any',
+    userId?: string
   ) => Promise<boolean>;
   
   getClientWaitlistEntries: (clientPhone: string) => Promise<void>;
@@ -41,6 +42,8 @@ export const useWaitlistStore = create<WaitlistStore>((set, get) => ({
     set({ isLoading: true, error: null });
     
     try {
+      const businessId = getBusinessId();
+      
       // Check if client is already on waitlist for this date
       const { data: existingEntry } = await supabase
         .from('waitlist_entries')
@@ -48,10 +51,11 @@ export const useWaitlistStore = create<WaitlistStore>((set, get) => ({
         .eq('client_phone', clientPhone)
         .eq('requested_date', requestedDate)
         .eq('status', 'waiting')
+        .eq('business_id', businessId)
         .single();
 
       if (existingEntry) {
-        set({ error: 'את כבר ברשימת המתנה לתאריך זה', isLoading: false });
+        set({ error: 'You are already on the waitlist for this date', isLoading: false });
         return false;
       }
 
@@ -64,13 +68,14 @@ export const useWaitlistStore = create<WaitlistStore>((set, get) => ({
           requested_date: requestedDate,
           time_period: timePeriod,
           user_id: userId,
+          business_id: businessId,
         })
         .select()
         .single();
 
       if (error) {
         console.error('Error adding to waitlist:', error);
-        set({ error: 'אירעה שגיאה בהוספה לרשימת המתנה', isLoading: false });
+        set({ error: 'An error occurred while adding to the waitlist', isLoading: false });
         return false;
       }
 
@@ -82,13 +87,13 @@ export const useWaitlistStore = create<WaitlistStore>((set, get) => ({
         }));
         try {
           const periodLabel: Record<'morning' | 'afternoon' | 'evening' | 'any', string> = {
-            morning: 'בוקר',
-            afternoon: 'צהריים',
-            evening: 'ערב',
-            any: 'כל שעה',
+            morning: 'Morning',
+            afternoon: 'Afternoon',
+            evening: 'Evening',
+            any: 'Any time',
           };
-          const title = 'לקוח חדש הצטרף לרשימת המתנה';
-          const content = `${clientName} (${clientPhone}) הצטרף/ה לרשימת המתנה לשירות "${serviceName}" בתאריך ${requestedDate} לטווח ${periodLabel[timePeriod]}.`;
+          const title = 'New client joined the waitlist';
+          const content = `${clientName} (${clientPhone}) joined the waitlist for "${serviceName}" on ${requestedDate} for ${periodLabel[timePeriod]} period.`;
           notificationsApi.createAdminNotification(title, content, 'system').catch(() => {});
         } catch {}
         return true;
@@ -97,7 +102,7 @@ export const useWaitlistStore = create<WaitlistStore>((set, get) => ({
       set({ isLoading: false });
       return false;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'אירעה שגיאה בהוספה לרשימת המתנה';
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred while adding to the waitlist';
       set({ error: errorMessage, isLoading: false });
       return false;
     }
@@ -108,22 +113,25 @@ export const useWaitlistStore = create<WaitlistStore>((set, get) => ({
     set({ isLoading: true, error: null });
     
     try {
+      const businessId = getBusinessId();
+      
       const { data, error } = await supabase
         .from('waitlist_entries')
         .select('*')
         .eq('client_phone', clientPhone)
+        .eq('business_id', businessId)
         .order('requested_date', { ascending: true })
         .order('created_at', { ascending: true });
 
       if (error) {
         console.error('Error fetching client waitlist entries:', error);
-        set({ error: 'אירעה שגיאה בטעינת רשימת המתנה', isLoading: false });
+        set({ error: 'An error occurred while loading the waitlist', isLoading: false });
         return;
       }
 
       set({ clientWaitlistEntries: data || [], isLoading: false });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'אירעה שגיאה בטעינת רשימת המתנה';
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred while loading the waitlist';
       set({ error: errorMessage, isLoading: false });
     }
   },
@@ -133,14 +141,17 @@ export const useWaitlistStore = create<WaitlistStore>((set, get) => ({
     set({ isLoading: true, error: null });
     
     try {
+      const businessId = getBusinessId();
+      
       const { error } = await supabase
         .from('waitlist_entries')
         .delete()
-        .eq('id', entryId);
+        .eq('id', entryId)
+        .eq('business_id', businessId);
 
       if (error) {
         console.error('Error removing from waitlist:', error);
-        set({ error: 'אירעה שגיאה בהסרה מרשימת המתנה', isLoading: false });
+        set({ error: 'An error occurred while removing from the waitlist', isLoading: false });
         return false;
       }
 
@@ -151,7 +162,7 @@ export const useWaitlistStore = create<WaitlistStore>((set, get) => ({
       }));
       return true;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'אירעה שגיאה בהסרה מרשימת המתנה';
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred while removing from the waitlist';
       set({ error: errorMessage, isLoading: false });
       return false;
     }

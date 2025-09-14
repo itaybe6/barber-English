@@ -13,7 +13,7 @@ import { recurringAppointmentsApi } from '@/lib/api/recurringAppointments';
 import { supabase, getBusinessId } from '@/lib/supabase';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import type { BusinessProfile } from '@/lib/supabase';
-
+import { productsApi, type Product, type CreateProductData } from '@/lib/api/products';
 import { 
   Bell, 
   HelpCircle, 
@@ -32,7 +32,8 @@ import {
   MapPin,
   Calendar,
   Image as ImageIcon,
-  Home
+  Home,
+  Clock
 } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -40,6 +41,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usersApi } from '@/lib/api/users';
 import AdminBroadcastComposer from '@/components/AdminBroadcastComposer';
 import AddAppointmentModal from '@/components/AddAppointmentModal';
+import { ColorPicker } from '@/components/ColorPicker';
+import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
+import ImageSelectionModal from '@/components/ImageSelectionModal';
 
 // Helper for shadow style
 const shadowStyle = Platform.select({
@@ -86,6 +90,7 @@ export default function SettingsScreen() {
   const logout = useAuthStore((state) => state.logout);
   const user = useAuthStore((state) => state.user);
   const updateUserProfile = useAuthStore((s) => s.updateUserProfile);
+  const { triggerColorUpdate } = useColorUpdate();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   
@@ -118,6 +123,7 @@ export default function SettingsScreen() {
   const [profileTiktok, setProfileTiktok] = useState('');
   const [profileImageOnPage1, setProfileImageOnPage1] = useState('');
   const [profileImageOnPage2, setProfileImageOnPage2] = useState('');
+  const [profileMinCancellationHours, setProfileMinCancellationHours] = useState(24);
   const [showEditDisplayNameModal, setShowEditDisplayNameModal] = useState(false);
   const [showEditAddressModal, setShowEditAddressModal] = useState(false);
   const [showEditInstagramModal, setShowEditInstagramModal] = useState(false);
@@ -125,13 +131,24 @@ export default function SettingsScreen() {
   const [showEditTiktokModal, setShowEditTiktokModal] = useState(false);
   const [showEditImagePage1Modal, setShowEditImagePage1Modal] = useState(false);
   const [showEditImagePage2Modal, setShowEditImagePage2Modal] = useState(false);
+  const [showEditCancellationModal, setShowEditCancellationModal] = useState(false);
+  const [showCancellationDropdown, setShowCancellationDropdown] = useState(false);
+  const [cancellationDropdownDirection, setCancellationDropdownDirection] = useState<'up' | 'down'>('up');
   const [isUploadingImagePage1, setIsUploadingImagePage1] = useState(false);
   const [isUploadingImagePage2, setIsUploadingImagePage2] = useState(false);
+  const [showImagePreviewModal, setShowImagePreviewModal] = useState(false);
+  const [previewImageType, setPreviewImageType] = useState<'page1' | 'page2' | null>(null);
+  const [showImageSelectionModal, setShowImageSelectionModal] = useState(false);
+  const [currentImageType, setCurrentImageType] = useState<'page1' | 'page2' | null>(null);
+  const [imageScale, setImageScale] = useState(1);
+  const [imageTranslateX, setImageTranslateX] = useState(0);
+  const [imageTranslateY, setImageTranslateY] = useState(0);
   const [displayNameDraft, setDisplayNameDraft] = useState('');
   const [addressDraft, setAddressDraft] = useState('');
   const [instagramDraft, setInstagramDraft] = useState('');
   const [facebookDraft, setFacebookDraft] = useState('');
   const [tiktokDraft, setTiktokDraft] = useState('');
+  const [cancellationHoursDraft, setCancellationHoursDraft] = useState('24');
   // Admin name/phone edit
   const [showEditAdminModal, setShowEditAdminModal] = useState(false);
   const [adminNameDraft, setAdminNameDraft] = useState('');
@@ -171,6 +188,7 @@ export default function SettingsScreen() {
         setProfileTiktok((p as any)?.tiktok_url || '');
         setProfileImageOnPage1((p as any)?.image_on_page_1 || '');
         setProfileImageOnPage2((p as any)?.image_on_page_2 || '');
+        setProfileMinCancellationHours(p?.min_cancellation_hours || 24);
       } finally {
         setIsLoadingProfile(false);
       }
@@ -202,6 +220,19 @@ export default function SettingsScreen() {
       setTiktokDraft(profileTiktok || '');
     }
   }, [showEditTiktokModal, profileTiktok]);
+
+  useEffect(() => {
+    if (showEditCancellationModal) {
+      setCancellationHoursDraft(profileMinCancellationHours.toString());
+    }
+  }, [showEditCancellationModal, profileMinCancellationHours]);
+
+  // Close dropdown when modal closes
+  useEffect(() => {
+    if (!showEditCancellationModal) {
+      setShowCancellationDropdown(false);
+    }
+  }, [showEditCancellationModal]);
 
   // Keep business name draft in sync when modal opens
   useEffect(() => {
@@ -249,6 +280,11 @@ export default function SettingsScreen() {
   const openEditTiktok = () => {
     setTiktokDraft(profileTiktok || '');
     setShowEditTiktokModal(true);
+  };
+
+  const openEditCancellation = () => {
+    setCancellationHoursDraft(profileMinCancellationHours.toString());
+    setShowEditCancellationModal(true);
   };
 
   // Save single-field handlers (preserve other values)
@@ -334,6 +370,36 @@ export default function SettingsScreen() {
     }
   };
 
+  const saveCancellationHours = async () => {
+    const hours = parseInt(cancellationHoursDraft);
+    if (isNaN(hours) || hours < 0 || hours > 168) {
+      Alert.alert('Error', 'Please enter a valid number between 0 and 168 hours');
+      return;
+    }
+    
+    setIsSavingProfile(true);
+    try {
+      const updated = await businessProfileApi.upsertProfile({
+        display_name: (profileDisplayName || '').trim() || null as any,
+        address: (profileAddress || '').trim() || null as any,
+        instagram_url: (profileInstagram || '').trim() || null as any,
+        facebook_url: (profileFacebook || '').trim() || null as any,
+        tiktok_url: (profileTiktok || '').trim() || null as any,
+        min_cancellation_hours: hours,
+      });
+      if (!updated) {
+        Alert.alert('Error', 'Failed to save cancellation policy');
+        return;
+      }
+      setProfile(updated);
+      setProfileMinCancellationHours(updated.min_cancellation_hours || 24);
+      setShowCancellationDropdown(false);
+      setShowEditCancellationModal(false);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   const animateCloseSheet = (after?: () => void) => {
     Animated.timing(sheetAnim, {
       toValue: 0,
@@ -348,8 +414,8 @@ export default function SettingsScreen() {
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onStartShouldSetPanResponderCapture: () => true,
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
       onMoveShouldSetPanResponder: (_: GestureResponderEvent, g: PanResponderGestureState) => {
         return g.dy > 4 && Math.abs(g.dy) > Math.abs(g.dx);
       },
@@ -360,7 +426,20 @@ export default function SettingsScreen() {
       onPanResponderRelease: (_: GestureResponderEvent, g: PanResponderGestureState) => {
         const shouldClose = g.dy > 140 || g.vy > 0.9;
         if (shouldClose) {
-          animateCloseSheet(() => setShowServicesModal(false));
+          if (showServicesModal) {
+            animateCloseSheet(() => setShowServicesModal(false));
+          } else if (showProductsModal) {
+            animateCloseSheet(() => {
+              setShowProductsModal(false);
+              setProducts([]);
+              setIsLoadingProducts(false);
+              setProductsError(null);
+              setShowAddProductModal(false);
+              setEditingProduct(null);
+              setProductForm({ name: '', description: '', price: 0, image_url: '' });
+              setIsUploadingProductImage(false);
+            });
+          }
         } else {
           Animated.timing(dragY, {
             toValue: 0,
@@ -383,26 +462,26 @@ export default function SettingsScreen() {
  
   // Predefined titles
   const predefinedTitles = [
-    { id: 'promotion', title: 'מבצע חדש! 🎉', description: 'הודעה על מבצע או הנחה' },
-    { id: 'reminder', title: 'תזכורת חשובה ⏰', description: 'תזכורת לתור או אירוע' },
-    { id: 'update', title: 'עדכון שירות 📢', description: 'עדכון על שירותים חדשים' },
-    { id: 'holiday', title: 'סגירה לחג 🏖️', description: 'הודעה על סגירה או שינוי שעות' },
-    { id: 'welcome', title: 'ברוכים הבאים! 👋', description: 'הודעת ברכה ללקוחות' },
-    { id: 'custom', title: 'כותרת מותאמת אישית ✏️', description: 'כותרת מותאמת אישית' }
+    { id: 'promotion', title: 'New Promotion! 🎉', description: 'Message about promotion or discount' },
+    { id: 'reminder', title: 'Important Reminder ⏰', description: 'Reminder for appointment or event' },
+    { id: 'update', title: 'Service Update 📢', description: 'Update about new services' },
+    { id: 'holiday', title: 'Holiday Closure 🏖️', description: 'Message about closure or schedule change' },
+    { id: 'welcome', title: 'Welcome! 👋', description: 'Welcome message for clients' },
+    { id: 'custom', title: 'Custom Title ✏️', description: 'Custom title' }
   ];
 
   const handleLogout = () => {
     Alert.alert(
-      'התנתקות',
-      'האם אתה בטוח שברצונך להתנתק?',
+      'Logout',
+      'Are you sure you want to logout?',
       [
-        { text: 'ביטול', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' },
         { 
-          text: 'התנתק', 
+          text: 'Logout', 
           style: 'destructive',
           onPress: () => {
             logout();
-            // כפה מעבר לעמוד התחברות
+            // Force navigation to login page
             router.replace('/login');
           }
         }
@@ -418,7 +497,7 @@ export default function SettingsScreen() {
       const data = await servicesApi.getAllServices();
       setEditableServices(data);
     } catch (e) {
-      setServicesError('שגיאה בטעינת השירותים');
+      setServicesError('Error loading services');
     } finally {
       setIsLoadingServices(false);
       // defer to allow modal mount
@@ -430,12 +509,198 @@ export default function SettingsScreen() {
     animateCloseSheet(() => setShowServicesModal(false));
   };
 
+  // Products management functions
+  const openProductsModal = async () => {
+    setShowProductsModal(true);
+    animateOpenSheet();
+    setIsLoadingProducts(true);
+    setProductsError(null);
+    try {
+      const data = await productsApi.getAllProducts();
+      setProducts(data);
+    } catch (e) {
+      console.error('Error loading products:', e);
+      setProductsError('Error loading products');
+    } finally {
+      setIsLoadingProducts(false);
+    }
+  };
+
+  const closeProductsModal = () => {
+    animateCloseSheet(() => {
+      setShowProductsModal(false);
+      // Reset all product-related state when closing the modal
+      setProducts([]);
+      setIsLoadingProducts(false);
+      setProductsError(null);
+      setShowAddProductModal(false);
+      setEditingProduct(null);
+      setProductForm({ name: '', description: '', price: 0, image_url: '' });
+      setIsUploadingProductImage(false);
+    });
+  };
+
+  const handleAddProduct = async () => {
+    if (!productForm.name.trim() || productForm.price <= 0) {
+      Alert.alert('Error', 'Please fill in product name and price');
+      return;
+    }
+
+    try {
+      if (editingProduct) {
+        // Update existing product
+        const updatedProduct = await productsApi.updateProduct(editingProduct.id, productForm);
+        setProducts(prev => prev.map(p => p.id === editingProduct.id ? updatedProduct : p));
+      } else {
+        // Create new product
+        const newProduct = await productsApi.createProduct(productForm);
+        setProducts(prev => [newProduct, ...prev]);
+      }
+      
+      setProductForm({ name: '', description: '', price: 0, image_url: '' });
+      setEditingProduct(null);
+      setShowAddProductModal(false);
+    } catch (error) {
+      Alert.alert('Error', editingProduct ? 'Failed to update product' : 'Failed to create product');
+    }
+  };
+
+  const handleUpdateProduct = async (id: string, updates: Partial<CreateProductData>) => {
+    try {
+      const updatedProduct = await productsApi.updateProduct(id, updates);
+      setProducts(prev => prev.map(p => p.id === id ? updatedProduct : p));
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update product');
+    }
+  };
+
+  const handleDeleteProduct = async (id: string) => {
+    Alert.alert(
+      'Delete Product',
+      'Are you sure you want to delete this product?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await productsApi.deleteProduct(id);
+              setProducts(prev => prev.filter(p => p.id !== id));
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete product');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const updateLocalProductField = <K extends keyof Product>(id: string, key: K, value: Product[K]) => {
+    setProducts(prev => prev.map(p => p.id === id ? { ...p, [key]: value } : p));
+  };
+
+  const handlePickProductImageForEdit = async (productId: string) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Please allow gallery access to pick an image');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setEditProductImageUploading(prev => ({ ...prev, [productId]: true }));
+      try {
+        const imageUrl = await productsApi.uploadProductImage(result.assets[0].uri);
+        updateLocalProductField(productId, 'image_url', imageUrl);
+      } catch (error) {
+        Alert.alert('Error', 'Failed to upload image');
+      } finally {
+        setEditProductImageUploading(prev => ({ ...prev, [productId]: false }));
+      }
+    }
+  };
+
+  const handleSaveProduct = async (product: Product) => {
+    setSavingProductId(product.id);
+    try {
+      const updated = await productsApi.updateProduct(product.id, {
+        name: product.name,
+        description: product.description,
+        price: product.price,
+        image_url: product.image_url
+      });
+      if (updated) {
+        setProducts(prev => prev.map(p => p.id === product.id ? updated : p));
+        Alert.alert('Success', 'Product saved successfully');
+      } else {
+        Alert.alert('Error', 'Failed to save product');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Failed to save product');
+    } finally {
+      setSavingProductId(null);
+    }
+  };
+
+  const handlePickProductImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setIsUploadingProductImage(true);
+        try {
+          const imageUrl = await productsApi.uploadProductImage(result.assets[0].uri);
+          setProductForm(prev => ({ ...prev, image_url: imageUrl }));
+        } catch (error) {
+          Alert.alert('Error', 'Failed to upload image');
+        } finally {
+          setIsUploadingProductImage(false);
+        }
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
   const updateLocalServiceField = <K extends keyof Service>(id: string, key: K, value: Service[K]) => {
     setEditableServices(prev => prev.map(s => (s.id === id ? { ...s, [key]: value } : s)));
   };
 
   // Add Service modal state
   const [showAddServiceModal, setShowAddServiceModal] = useState(false);
+  
+  // Products management state
+  const [showProductsModal, setShowProductsModal] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+  const [productsError, setProductsError] = useState<string | null>(null);
+  const [showAddProductModal, setShowAddProductModal] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
+  const [savingProductId, setSavingProductId] = useState<string | null>(null);
+  const [editProductImageUploading, setEditProductImageUploading] = useState<Record<string, boolean>>({});
+  
+  
+  const [productForm, setProductForm] = useState<CreateProductData>({
+    name: '',
+    description: '',
+    price: 0,
+    image_url: ''
+  });
+  const [isUploadingProductImage, setIsUploadingProductImage] = useState(false);
+  
+  
   const [addSvcName, setAddSvcName] = useState('');
   const [addSvcPrice, setAddSvcPrice] = useState<string>('0');
   // removed per-service duration field
@@ -644,82 +909,85 @@ export default function SettingsScreen() {
     }
   };
 
+  const openImagePreview = (imageType: 'page1' | 'page2') => {
+    setPreviewImageType(imageType);
+    setImageScale(1);
+    setImageTranslateX(0);
+    setImageTranslateY(0);
+    setShowImagePreviewModal(true);
+  };
+
   const handlePickBusinessImage = async (imageType: 'page1' | 'page2') => {
+    setCurrentImageType(imageType);
+    setShowImageSelectionModal(true);
+  };
+
+  const handleImageSelected = async (imageUri: string, isPreset: boolean) => {
+    if (!currentImageType) return;
+
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission required', 'Please allow gallery access to pick an image');
+      // Set loading state
+      if (currentImageType === 'page1') {
+        setIsUploadingImagePage1(true);
+      } else {
+        setIsUploadingImagePage2(true);
+      }
+
+      let uploadedUrl: string;
+
+      if (isPreset) {
+        // For preset images, we'll use the URL directly since they're external URLs
+        uploadedUrl = imageUri;
+      } else {
+        // For gallery images, upload normally
+        uploadedUrl = await uploadBusinessImage({
+          uri: imageUri,
+          base64: null,
+          mimeType: null,
+          fileName: null,
+        });
+      }
+
+      if (!uploadedUrl) {
+        Alert.alert('שגיאה', 'העלאת התמונה נכשלה');
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'images',
-        allowsMultipleSelection: false,
-        quality: 0.9,
-        base64: true,
+
+      // Update the appropriate image state
+      if (currentImageType === 'page1') {
+        setProfileImageOnPage1(uploadedUrl);
+      } else {
+        setProfileImageOnPage2(uploadedUrl);
+      }
+
+      // Save to database
+      const updated = await businessProfileApi.upsertProfile({
+        display_name: (profileDisplayName || '').trim() || null as any,
+        address: (profileAddress || '').trim() || null as any,
+        instagram_url: (profileInstagram || '').trim() || null as any,
+        facebook_url: (profileFacebook || '').trim() || null as any,
+        tiktok_url: (profileTiktok || '').trim() || null as any,
+        image_on_page_1: currentImageType === 'page1' ? uploadedUrl : (profileImageOnPage1 || '').trim() || null as any,
+        image_on_page_2: currentImageType === 'page2' ? uploadedUrl : (profileImageOnPage2 || '').trim() || null as any,
       });
-      if (!result.canceled && result.assets.length > 0) {
-        const a: any = result.assets[0];
-        
-        // Set loading state
-        if (imageType === 'page1') {
-          setIsUploadingImagePage1(true);
-        } else {
-          setIsUploadingImagePage2(true);
-        }
-        
-        try {
-          const uploadedUrl = await uploadBusinessImage({
-            uri: a.uri,
-            base64: a.base64 ?? null,
-            mimeType: a.mimeType ?? null,
-            fileName: a.fileName ?? null,
-          });
-          if (!uploadedUrl) {
-            Alert.alert('Error', 'Image upload failed');
-            return;
-          }
-          
-          // Update the appropriate image state
-          if (imageType === 'page1') {
-            setProfileImageOnPage1(uploadedUrl);
-          } else {
-            setProfileImageOnPage2(uploadedUrl);
-          }
-          
-          // Save to database
-          const updated = await businessProfileApi.upsertProfile({
-            display_name: (profileDisplayName || '').trim() || null as any,
-            address: (profileAddress || '').trim() || null as any,
-            instagram_url: (profileInstagram || '').trim() || null as any,
-            facebook_url: (profileFacebook || '').trim() || null as any,
-            tiktok_url: (profileTiktok || '').trim() || null as any,
-            image_on_page_1: imageType === 'page1' ? uploadedUrl : (profileImageOnPage1 || '').trim() || null as any,
-            image_on_page_2: imageType === 'page2' ? uploadedUrl : (profileImageOnPage2 || '').trim() || null as any,
-          });
-          if (updated) {
-            setProfile(updated);
-            Alert.alert('Success', 'Image uploaded successfully');
-          } else {
-            Alert.alert('Error', 'Failed to save image');
-          }
-        } finally {
-          // Clear loading state
-          if (imageType === 'page1') {
-            setIsUploadingImagePage1(false);
-          } else {
-            setIsUploadingImagePage2(false);
-          }
-        }
+
+      if (updated) {
+        setProfile(updated);
+        Alert.alert('הצלחה', 'התמונה נשמרה בהצלחה');
+      } else {
+        Alert.alert('שגיאה', 'שמירת התמונה נכשלה');
       }
     } catch (e) {
-      console.error('pick business image failed', e);
-      Alert.alert('Error', 'Image upload failed');
-      // Clear loading state on error
-      if (imageType === 'page1') {
+      console.error('image selection failed', e);
+      Alert.alert('שגיאה', 'שמירת התמונה נכשלה');
+    } finally {
+      // Clear loading state
+      if (currentImageType === 'page1') {
         setIsUploadingImagePage1(false);
       } else {
         setIsUploadingImagePage2(false);
       }
+      setCurrentImageType(null);
     }
   };
 
@@ -796,7 +1064,7 @@ export default function SettingsScreen() {
         setEditableServices(prev => [created, ...prev]);
         setShowAddServiceModal(false);
         // reset
-        setAddSvcName('שירות חדש');
+        setAddSvcName('New Service');
         setAddSvcPrice('0');
         setAddSvcDuration('60');
         setAddSvcImage(null);
@@ -1183,7 +1451,7 @@ export default function SettingsScreen() {
     setIsSubmittingRecurring(true);
     try {
       const recurringData: any = {
-        client_name: selectedClient.name || 'לקוח',
+        client_name: selectedClient.name || 'Client',
         client_phone: selectedClient.phone,
         day_of_week: selectedDayOfWeek,
         slot_time: selectedTime,
@@ -1348,7 +1616,7 @@ export default function SettingsScreen() {
               }}
               activeOpacity={0.9}
               accessibilityRole="button"
-              accessibilityLabel="עריכת מנהל"
+              accessibilityLabel="Edit Manager"
             >
               <LinearGradient
                 colors={["#000000", "#000000"]}
@@ -1360,9 +1628,9 @@ export default function SettingsScreen() {
               </LinearGradient>
             </TouchableOpacity>
           </View>
-          <Text style={styles.adminName}>{user?.name || 'מנהל'}</Text>
-          <Text style={styles.adminPhone}>{user?.phone || 'מספר טלפון'}</Text>
-          <Text style={styles.adminEmail}>{(user as any)?.email || 'כתובת מייל'}</Text>
+          <Text style={styles.adminName}>{user?.name || 'Manager'}</Text>
+          <Text style={styles.adminPhone}>{user?.phone || 'Phone Number'}</Text>
+          <Text style={styles.adminEmail}>{(user as any)?.email || 'Email Address'}</Text>
         </View>
       </LinearGradient>
       
@@ -1400,6 +1668,19 @@ export default function SettingsScreen() {
             'Update prices and durations',
             undefined,
             openServicesModal
+          )}
+        </View>
+
+        <Text style={styles.sectionTitleNew}>Products</Text>
+        <View style={[styles.cardNew, shadowStyle]}>
+          {renderSettingItem(
+            <Pencil size={20} color={Colors.primary} />,
+            'Manage products',
+            'Add, edit, and delete products for sale',
+            undefined,
+            () => {
+              openProductsModal();
+            }
           )}
         </View>
 
@@ -1442,6 +1723,43 @@ export default function SettingsScreen() {
           )}
         </View>
 
+        <Text style={styles.sectionTitleNew}>App appearance</Text>
+        <View style={[styles.cardNew, shadowStyle]}>
+          <ColorPicker 
+            currentColor={profile?.primary_color || '#000000'}
+            onColorSelect={(color) => {
+              // Update local profile state immediately
+              if (profile) {
+                setProfile({ ...profile, primary_color: color });
+              }
+              console.log('Color selected:', color);
+              
+              // Trigger additional color updates to ensure all components refresh
+              setTimeout(() => triggerColorUpdate(), 100);
+              setTimeout(() => triggerColorUpdate(), 300);
+              setTimeout(() => triggerColorUpdate(), 600);
+              setTimeout(() => triggerColorUpdate(), 1000);
+              
+              // Force a complete re-render of the settings screen
+              setTimeout(() => {
+                // This will force the entire component to re-render
+                setProfile(prev => prev ? { ...prev } : null);
+              }, 1200);
+            }}
+          />
+        </View>
+
+        <Text style={styles.sectionTitleNew}>Appointment policies</Text>
+        <View style={[styles.cardNew, shadowStyle]}>
+          {renderSettingItemLTR(
+            <Clock size={20} color={Colors.primary} />, 
+            'Minimum cancellation time',
+            `${profileMinCancellationHours} hours before appointment`,
+            undefined,
+            openEditCancellation
+          )}
+        </View>
+
         <Text style={styles.sectionTitleNew}>Home page images</Text>
         <View style={[styles.cardNew, shadowStyle]}>
           {renderSettingItemLTR(
@@ -1451,7 +1769,7 @@ export default function SettingsScreen() {
             isUploadingImagePage1 ? (
               <ActivityIndicator size="small" color={Colors.primary} />
             ) : undefined,
-            isUploadingImagePage1 ? undefined : () => handlePickBusinessImage('page1'),
+            isUploadingImagePage1 ? undefined : (profileImageOnPage1 ? () => openImagePreview('page1') : () => handlePickBusinessImage('page1')),
             false,
             isUploadingImagePage1
           )}
@@ -1462,7 +1780,7 @@ export default function SettingsScreen() {
             isUploadingImagePage2 ? (
               <ActivityIndicator size="small" color={Colors.primary} />
             ) : undefined,
-            isUploadingImagePage2 ? undefined : () => handlePickBusinessImage('page2'),
+            isUploadingImagePage2 ? undefined : (profileImageOnPage2 ? () => openImagePreview('page2') : () => handlePickBusinessImage('page2')),
             false,
             isUploadingImagePage2
           )}
@@ -1618,7 +1936,7 @@ export default function SettingsScreen() {
                   onChangeText={setDisplayNameDraft}
                   placeholder="For example: The Studio of Hadas"
                   placeholderTextColor={Colors.subtext}
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
             </ScrollView>
@@ -1710,7 +2028,7 @@ export default function SettingsScreen() {
                   onChangeText={setAdminNameDraft}
                   placeholder="Full name"
                   placeholderTextColor={Colors.subtext}
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
               <View style={styles.inputContainer}>
@@ -1722,7 +2040,7 @@ export default function SettingsScreen() {
                   placeholder="050-0000000"
                   placeholderTextColor={Colors.subtext}
                   keyboardType="phone-pad"
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
               <View style={[styles.inputContainer, { marginBottom: 0 }]}>
@@ -1736,7 +2054,7 @@ export default function SettingsScreen() {
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
             </View>
@@ -1771,7 +2089,7 @@ export default function SettingsScreen() {
                   onChangeText={setAddressDraft}
                   placeholder="Business address"
                   placeholderTextColor={Colors.subtext}
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
             </ScrollView>
@@ -1808,7 +2126,7 @@ export default function SettingsScreen() {
                   placeholderTextColor={Colors.subtext}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
             </ScrollView>
@@ -1845,7 +2163,7 @@ export default function SettingsScreen() {
                   placeholderTextColor={Colors.subtext}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
             </ScrollView>
@@ -1882,12 +2200,174 @@ export default function SettingsScreen() {
                   placeholderTextColor={Colors.subtext}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  textAlign="right"
+                  textAlign="left"
                 />
               </View>
             </ScrollView>
           </View>
         </View>
+      </Modal>
+
+      {/* Edit Cancellation Policy Modal */}
+      <Modal
+        visible={showEditCancellationModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          setShowCancellationDropdown(false);
+          setShowEditCancellationModal(false);
+        }}
+      >
+        <TouchableWithoutFeedback onPress={() => {
+          setShowCancellationDropdown(false);
+          setShowEditCancellationModal(false);
+        }}>
+          <View style={styles.smallModalOverlay}>
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <View style={styles.smallModalCard}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity style={styles.modalCloseButton} onPress={() => {
+                setShowCancellationDropdown(false);
+                setShowEditCancellationModal(false);
+              }}>
+                <Text style={styles.modalCloseText}>Cancel</Text>
+              </TouchableOpacity>
+              <Text style={styles.modalTitleLTR}>Minimum cancellation time</Text>
+              <TouchableOpacity style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]} onPress={saveCancellationHours} disabled={isSavingProfile}>
+                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'Saving...' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
+              <TouchableWithoutFeedback onPress={() => setShowCancellationDropdown(false)}>
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabelLTR}>Hours before appointment</Text>
+                  <View style={styles.dropdownContainer}>
+                  <TouchableOpacity
+                    style={styles.dropdownButton}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      // Open upward to avoid being cut off
+                      setCancellationDropdownDirection('up');
+                      setShowCancellationDropdown(!showCancellationDropdown);
+                    }}
+                  >
+                    <Text style={styles.dropdownButtonText}>
+                      {cancellationHoursDraft === '0' 
+                        ? '0 hours (No restriction)' 
+                        : `${cancellationHoursDraft} ${cancellationHoursDraft === '1' ? 'hour' : 'hours'}${parseInt(cancellationHoursDraft) >= 24 ? ` (${Math.floor(parseInt(cancellationHoursDraft) / 24)} ${Math.floor(parseInt(cancellationHoursDraft) / 24) === 1 ? 'day' : 'days'}${parseInt(cancellationHoursDraft) % 24 > 0 ? ` ${parseInt(cancellationHoursDraft) % 24} hours` : ''})` : ''}`
+                      }
+                    </Text>
+                    {showCancellationDropdown ? (
+                      <Ionicons name="chevron-up" size={20} color={Colors.primary} />
+                    ) : (
+                      <Ionicons name="chevron-down" size={20} color={Colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                  
+                  {showCancellationDropdown && (
+                    <View style={[
+                      styles.cancellationDropdownOptions,
+                      cancellationDropdownDirection === 'up' 
+                        ? styles.cancellationDropdownOptionsUp 
+                        : styles.cancellationDropdownOptionsDown
+                    ]}>
+                      <ScrollView style={styles.cancellationDropdownList} showsVerticalScrollIndicator={false}>
+                        {/* 0 hours option */}
+                        <TouchableOpacity
+                          style={[
+                            styles.cancellationDropdownItem,
+                            cancellationHoursDraft === '0' && styles.cancellationDropdownItemSelected
+                          ]}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            setCancellationHoursDraft('0');
+                            setShowCancellationDropdown(false);
+                          }}
+                        >
+                          <Text style={[
+                            styles.cancellationDropdownItemText,
+                            cancellationHoursDraft === '0' && styles.cancellationDropdownItemTextSelected
+                          ]}>
+                            0 hours (No restriction)
+                          </Text>
+                        </TouchableOpacity>
+                        
+                        {/* Common options */}
+                        {[1, 2, 3, 6, 12, 24, 48, 72, 168].map((hour) => (
+                          <TouchableOpacity
+                            key={hour}
+                            style={[
+                              styles.cancellationDropdownItem,
+                              cancellationHoursDraft === hour.toString() && styles.cancellationDropdownItemSelected
+                            ]}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              setCancellationHoursDraft(hour.toString());
+                              setShowCancellationDropdown(false);
+                            }}
+                          >
+                            <Text style={[
+                              styles.cancellationDropdownItemText,
+                              cancellationHoursDraft === hour.toString() && styles.cancellationDropdownItemTextSelected
+                            ]}>
+                              {hour} {hour === 1 ? 'hour' : 'hours'}
+                              {hour >= 24 && (
+                                <Text style={styles.cancellationDropdownItemSubtext}>
+                                  {' '}({Math.floor(hour / 24)} {Math.floor(hour / 24) === 1 ? 'day' : 'days'}
+                                  {hour % 24 > 0 ? ` ${hour % 24} hours` : ''})
+                                </Text>
+                              )}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                        
+                        {/* Custom option */}
+                        <TouchableOpacity
+                          style={styles.cancellationDropdownItem}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            Alert.prompt(
+                              'Custom Hours',
+                              'Enter number of hours (1-168):',
+                              [
+                                { text: 'Cancel', style: 'cancel' },
+                                {
+                                  text: 'OK',
+                                  onPress: (text) => {
+                                    const hours = parseInt(text || '0');
+                                    if (hours >= 0 && hours <= 168) {
+                                      setCancellationHoursDraft(hours.toString());
+                                    } else {
+                                      Alert.alert('Error', 'Please enter a number between 0 and 168');
+                                    }
+                                  }
+                                }
+                              ],
+                              'plain-text',
+                              cancellationHoursDraft,
+                              'numeric'
+                            );
+                            setShowCancellationDropdown(false);
+                          }}
+                        >
+                          <Text style={styles.cancellationDropdownItemText}>
+                            Custom hours...
+                          </Text>
+                        </TouchableOpacity>
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+                  <Text style={[styles.inputLabelLTR, { fontSize: 12, color: Colors.subtext, marginTop: 8 }]}>
+                    Clients cannot cancel appointments within this time period before the appointment.
+                  </Text>
+                </View>
+              </TouchableWithoutFeedback>
+            </ScrollView>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
       {/* Time selection now uses inline dropdown below the field (no nested modal) */}
@@ -1940,11 +2420,11 @@ export default function SettingsScreen() {
                             </TouchableOpacity>
                           </View>
                           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <View style={{ alignItems: 'flex-end', flex: 1 }}>
+                            <View style={{ alignItems: 'flex-start', flex: 1 }}>
                               <Text style={styles.previewNotificationTitle}>{item.client_name}</Text>
                               <Text style={styles.previewNotificationContent}>{item.client_phone}</Text>
                               <Text style={styles.previewNotificationContent}>{item.service_name}</Text>
-                              <Text style={styles.previewNotificationContent}>{['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'][item.day_of_week]} · {String(item.slot_time).slice(0,5)}</Text>
+                              <Text style={styles.previewNotificationContent}>{['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][item.day_of_week]} · {String(item.slot_time).slice(0,5)}</Text>
                             </View>
                           </View>
                         </View>
@@ -2012,7 +2492,7 @@ export default function SettingsScreen() {
                           onChangeText={searchClients}
                           placeholder="Search by name or phone..."
                           placeholderTextColor={Colors.subtext}
-                          textAlign="right"
+                          textAlign="left"
                         />
                       </View>
                       <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
@@ -2040,7 +2520,7 @@ export default function SettingsScreen() {
               ) : (
                 <View style={[styles.previewCard, { marginTop: 6 }]}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <View style={{ alignItems: 'flex-end' }}>
+                    <View style={{ alignItems: 'flex-start' }}>
                       <Text style={styles.previewNotificationTitle}>{selectedClient.name}</Text>
                       <Text style={styles.previewNotificationContent}>{selectedClient.phone}</Text>
                     </View>
@@ -2058,7 +2538,7 @@ export default function SettingsScreen() {
               <Pressable style={[styles.dropdownContainer, styles.grayField]} onPress={() => setShowServiceDropdown(!showServiceDropdown)}>
                 <View style={styles.dropdownHeader}>
                   {selectedService ? (
-                    <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                    <View style={{ flex: 1, alignItems: 'flex-start' }}>
                       <Text style={styles.serviceHeaderTitle}>{selectedService.name}</Text>
                       {!!selectedService.duration_minutes && (
                         <Text style={styles.serviceHeaderSub}>{`${selectedService.duration_minutes} minutes`}</Text>
@@ -2617,6 +3097,368 @@ export default function SettingsScreen() {
           console.log('Appointment created successfully');
         }}
       />
+
+      {/* Image Preview Modal */}
+      <Modal
+        visible={showImagePreviewModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowImagePreviewModal(false)}
+      >
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#000000' }]}>
+          <View style={styles.imagePreviewHeader}>
+            <TouchableOpacity 
+              style={styles.modalCloseButton}
+              onPress={() => setShowImagePreviewModal(false)}
+            >
+              <Text style={[styles.modalCloseText, { color: '#FFFFFF' }]}>Close</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: '#FFFFFF' }]}>
+              {previewImageType === 'page1' ? 'Home page image' : 'Booking page image'}
+            </Text>
+            <TouchableOpacity 
+              style={[styles.modalSendButton, { backgroundColor: '#FFFFFF' }]}
+              onPress={() => {
+                setShowImagePreviewModal(false);
+                if (previewImageType) {
+                  handlePickBusinessImage(previewImageType);
+                }
+              }}
+            >
+              <Text style={[styles.modalSendText, { color: '#000000' }]}>Change Image</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.imagePreviewContainer}>
+            <ScrollView
+              contentContainerStyle={styles.imagePreviewScrollContent}
+              maximumZoomScale={3}
+              minimumZoomScale={0.5}
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+              onScroll={(event) => {
+                const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+                const scale = Math.max(contentSize.width / layoutMeasurement.width, contentSize.height / layoutMeasurement.height);
+                setImageScale(scale);
+              }}
+              scrollEventThrottle={16}
+            >
+              <Image
+                source={{
+                  uri: previewImageType === 'page1' ? profileImageOnPage1 : profileImageOnPage2
+                }}
+                style={styles.imagePreviewImage}
+                resizeMode="contain"
+              />
+            </ScrollView>
+          </View>
+          
+          <View style={styles.imagePreviewFooter}>
+            <Text style={styles.imagePreviewInstructions}>
+              Pinch to zoom • Drag to pan • Tap "Change Image" to replace
+            </Text>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Products Management Modal */}
+      <Modal
+        visible={showProductsModal}
+        transparent
+        animationType="fade"
+        onRequestClose={closeProductsModal}
+      >
+        <View style={styles.sheetRoot}>
+          <TouchableWithoutFeedback onPress={closeProductsModal}>
+            <Animated.View style={[styles.sheetOverlay, { opacity: overlayOpacity }]} />
+          </TouchableWithoutFeedback>
+          <Animated.View
+            style={[styles.sheetContainer, { transform: [{ translateY: combinedTranslateY }] } ] }
+          >
+            <View style={styles.dragHandleArea}>
+              <View style={styles.sheetGrabberWrapper} {...panResponder.panHandlers}>
+                <View style={styles.sheetGrabber} />
+              </View>
+              <View style={styles.modalHeader}>
+                <TouchableOpacity 
+                  style={styles.modalCloseButton}
+                  onPress={closeProductsModal}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close"
+                >
+                  <X size={20} color={Colors.text} />
+                </TouchableOpacity>
+                <Text style={[styles.modalTitle, { textAlign: 'center', alignSelf: 'center', flex: 1 }]}>Manage Products</Text>
+                <TouchableOpacity 
+                  style={styles.modalActionButton}
+                  onPress={() => {
+                    setProductForm({ name: '', description: '', price: 0, image_url: '' });
+                    setEditingProduct(null);
+                    setShowAddProductModal(true);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add product"
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.modalActionText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.sheetBody}>
+
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={[styles.modalContentContainer, { paddingBottom: insets.bottom + 8 }]}
+                showsVerticalScrollIndicator={true}
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled={false}
+                scrollIndicatorInsets={{ bottom: 0 }}
+                alwaysBounceVertical
+              >
+                {isLoadingProducts && (
+                  <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                    <ActivityIndicator size="large" color={Colors.primary} />
+                    <Text style={{ marginTop: 12, color: Colors.subtext }}>Loading products...</Text>
+                  </View>
+                )}
+
+                {productsError && (
+                  <Text style={{ color: 'red', textAlign: 'center', marginVertical: 12 }}>{productsError}</Text>
+                )}
+
+                {!isLoadingProducts && !productsError && products.map((product) => (
+                  <Swipeable
+                    key={product.id}
+                    friction={2}
+                    rightThreshold={28}
+                    renderRightActions={(progress, dragX) => (
+                      <TouchableOpacity
+                        style={styles.swipeDeleteAction}
+                        activeOpacity={0.85}
+                        onPress={() => handleDeleteProduct(product.id)}
+                      >
+                        <Trash2 size={20} color={'#fff'} />
+                        <Text style={styles.swipeDeleteText}>Delete</Text>
+                      </TouchableOpacity>
+                    )}
+                  >
+                    <View style={styles.iosCard}>
+                      <TouchableOpacity
+                        style={[styles.accordionHeader, { flexDirection: 'row' }]}
+                        activeOpacity={0.85}
+                        onPress={() => setExpandedProductId(prev => prev === product.id ? null : product.id)}
+                      >
+                        {/* Right: thumbnail */}
+                        {product.image_url ? (
+                          <Image source={{ uri: product.image_url }} style={[styles.accordionThumb, { marginLeft: 0, marginRight: 12 }]} />
+                        ) : (
+                          <View style={[styles.accordionThumbPlaceholder, { marginLeft: 0, marginRight: 12 }]}>
+                            <Text style={styles.accordionThumbPlaceholderText}>
+                              {(product.name || '').slice(0, 1)}
+                            </Text>
+                          </View>
+                        )}
+                        {/* Middle: title and subtitle */}
+                        <View style={{ flex: 1, alignItems: 'flex-start' }}>
+                          <Text style={styles.accordionTitle}>{product.name || 'No name'}</Text>
+                          <Text style={styles.accordionSubtitle}>
+                            ${product.price.toFixed(2)}
+                          </Text>
+                        </View>
+                        {/* Left: chevron */}
+                        <View style={styles.accordionChevron}>
+                          {expandedProductId === product.id ? (
+                            <ChevronUp size={18} color={Colors.subtext} />
+                          ) : (
+                            <ChevronDown size={18} color={Colors.subtext} />
+                          )}
+                        </View>
+                      </TouchableOpacity>
+
+                      {expandedProductId === product.id && (
+                        <View>
+                          <View style={styles.imageHeaderContainer}>
+                            <TouchableOpacity
+                              onPress={() => handlePickProductImageForEdit(product.id)}
+                              activeOpacity={0.9}
+                              style={{ position: 'relative' }}
+                            >
+                              {!!product.image_url ? (
+                                <Image source={{ uri: product.image_url }} style={styles.serviceImagePreview} />
+                              ) : (
+                                <View style={[styles.serviceImagePreview, { alignItems: 'center', justifyContent: 'center' }]}>
+                                  <Text style={{ color: Colors.subtext }}>Tap to select an image</Text>
+                                </View>
+                              )}
+                              {editProductImageUploading[product.id] && (
+                                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 16 }}>
+                                  <ActivityIndicator size="large" color={Colors.primary} />
+                                </View>
+                              )}
+                            </TouchableOpacity>
+                          </View>
+
+                          <View style={styles.formGroup}>
+                            <Text style={styles.formLabel}>Product name</Text>
+                            <TextInput
+                              style={styles.formInput}
+                              value={product.name}
+                              onChangeText={(text) => updateLocalProductField(product.id, 'name', text)}
+                              placeholder="Product name"
+                              placeholderTextColor={Colors.subtext}
+                              textAlign="left"
+                            />
+                          </View>
+
+                          <View style={styles.formGroup}>
+                            <Text style={styles.formLabel}>Description</Text>
+                            <TextInput
+                              style={[styles.formInput, { height: 80, textAlignVertical: 'top' }]}
+                              value={product.description || ''}
+                              onChangeText={(text) => updateLocalProductField(product.id, 'description', text)}
+                              placeholder="Product description"
+                              placeholderTextColor={Colors.subtext}
+                              multiline
+                              numberOfLines={3}
+                              textAlign="left"
+                            />
+                          </View>
+
+                          <View style={styles.formGroup}>
+                            <Text style={styles.formLabel}>Price ($)</Text>
+                            <TextInput
+                              style={styles.formInput}
+                              value={product.price.toString()}
+                              onChangeText={(text) => updateLocalProductField(product.id, 'price', parseFloat(text) || 0)}
+                              placeholder="0.00"
+                              placeholderTextColor={Colors.subtext}
+                              keyboardType="numeric"
+                              textAlign="left"
+                            />
+                          </View>
+
+                          <View style={styles.actionsRowInline}>
+                            <TouchableOpacity
+                              style={[styles.primaryPillButton, { opacity: savingProductId === product.id ? 0.7 : 1 }]}
+                              onPress={() => handleSaveProduct(product)}
+                              disabled={savingProductId === product.id}
+                              activeOpacity={0.85}
+                            >
+                              <Text style={styles.primaryPillButtonText}>
+                                {savingProductId === product.id ? 'Saving...' : 'Save changes'}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  </Swipeable>
+                ))}
+              </ScrollView>
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
+
+      {/* Add/Edit Product Modal */}
+      <Modal
+        visible={showAddProductModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        transparent={false}
+        onRequestClose={() => {
+          setShowAddProductModal(false);
+          setEditingProduct(null);
+          setProductForm({ name: '', description: '', price: 0, image_url: '' });
+          setIsUploadingProductImage(false);
+        }}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={() => {
+                setShowAddProductModal(false);
+                setEditingProduct(null);
+                setProductForm({ name: '', description: '', price: 0, image_url: '' });
+                setIsUploadingProductImage(false);
+              }}>
+                <Text style={styles.modalCloseText}>Cancel</Text>
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>
+                {editingProduct ? 'Edit Product' : 'Add Product'}
+              </Text>
+              <TouchableOpacity onPress={handleAddProduct}>
+                <Text style={styles.modalSendText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+              <View style={styles.modalFormContent}>
+                <Text style={styles.inputLabel}>Product Name *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={productForm.name}
+                  onChangeText={(text) => setProductForm(prev => ({ ...prev, name: text }))}
+                  placeholder="Enter product name"
+                  placeholderTextColor={Colors.subtext}
+                />
+
+                <Text style={styles.inputLabel}>Description</Text>
+                <TextInput
+                  style={[styles.formInput, styles.textArea]}
+                  value={productForm.description}
+                  onChangeText={(text) => setProductForm(prev => ({ ...prev, description: text }))}
+                  placeholder="Enter product description"
+                  placeholderTextColor={Colors.subtext}
+                  multiline
+                  numberOfLines={3}
+                />
+
+                <Text style={styles.inputLabel}>Price *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={productForm.price.toString()}
+                  onChangeText={(text) => setProductForm(prev => ({ ...prev, price: parseFloat(text) || 0 }))}
+                  placeholder="0.00"
+                  placeholderTextColor={Colors.subtext}
+                  keyboardType="numeric"
+                />
+
+                <Text style={styles.inputLabel}>Product Image</Text>
+                <TouchableOpacity 
+                  style={styles.imagePickerButton}
+                  onPress={handlePickProductImage}
+                  disabled={isUploadingProductImage}
+                >
+                  {productForm.image_url ? (
+                    <Image source={{ uri: productForm.image_url }} style={styles.previewImage} />
+                  ) : (
+                    <View style={styles.imagePickerPlaceholder}>
+                      {isUploadingProductImage ? (
+                        <ActivityIndicator size="small" color={Colors.primary} />
+                      ) : (
+                        <>
+                          <ImageIcon size={24} color={Colors.subtext} />
+                          <Text style={styles.imagePickerText}>Tap to add image</Text>
+                        </>
+                      )}
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </SafeAreaView>
+        </Modal>
+
+      {/* Image Selection Modal */}
+      <ImageSelectionModal
+        visible={showImageSelectionModal}
+        onClose={() => {
+          setShowImageSelectionModal(false);
+          setCurrentImageType(null);
+        }}
+        onImageSelected={handleImageSelected}
+        title={currentImageType === 'page1' ? 'בחירת תמונת דף בית' : 'בחירת תמונת דף הזמנה'}
+      />
     </SafeAreaView>
   );
 }
@@ -2912,6 +3754,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 18,
     overflow: 'hidden',
+    maxHeight: '90%',
   },
   smallModalContent: {
     padding: 20,
@@ -2988,8 +3831,11 @@ const styles = StyleSheet.create({
     color: Colors.subtext,
   },
   modalContent: {
-    padding: 20,
+    flex: 1,
     backgroundColor: '#F8F9FA',
+  },
+  modalFormContent: {
+    padding: 20,
   },
   modalAvatarWrap: {
     alignItems: 'center',
@@ -3055,7 +3901,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.text,
     marginBottom: 8,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   inputLabelLTR: {
     fontSize: 16,
@@ -3073,7 +3919,7 @@ const styles = StyleSheet.create({
     color: Colors.text,
     borderWidth: 1,
     borderColor: Colors.border,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   textArea: {
     height: 120,
@@ -3093,7 +3939,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.text,
     marginBottom: 12,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   previewCard: {
     backgroundColor: Colors.white,
@@ -3134,13 +3980,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: Colors.text,
     marginBottom: 8,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   previewNotificationContent: {
     fontSize: 14,
     color: Colors.subtext,
     lineHeight: 20,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   pickButton: {
     marginTop: 6,
@@ -3176,11 +4022,80 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
+  dropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  dropdownButtonText: {
+    fontSize: 16,
+    color: Colors.text,
+    flex: 1,
+    textAlign: 'left',
+  },
+  cancellationDropdownOptions: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    maxHeight: 100,
+    zIndex: 1000,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  cancellationDropdownOptionsUp: {
+    bottom: '100%',
+    marginBottom: 4,
+    shadowOffset: { width: 0, height: -2 },
+  },
+  cancellationDropdownOptionsDown: {
+    top: '100%',
+    marginTop: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  cancellationDropdownList: {
+    maxHeight: 80,
+  },
+  cancellationDropdownItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
+  },
+  cancellationDropdownItemSelected: {
+    backgroundColor: '#F0F8FF',
+  },
+  cancellationDropdownItemText: {
+    fontSize: 16,
+    color: Colors.text,
+    textAlign: 'left',
+  },
+  cancellationDropdownItemTextSelected: {
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  cancellationDropdownItemSubtext: {
+    fontSize: 14,
+    color: Colors.subtext,
+    fontWeight: '400',
+  },
   dropdownText: {
     fontSize: 16,
     color: Colors.text,
     flex: 1,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   dropdownPlaceholder: {
     color: Colors.subtext,
@@ -3221,23 +4136,23 @@ const styles = StyleSheet.create({
     color: Colors.text,
     fontWeight: '500',
     marginBottom: 2,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   dropdownOptionDescription: {
     fontSize: 14,
     color: Colors.subtext,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   serviceHeaderTitle: {
     fontSize: 16,
     color: Colors.text,
-    textAlign: 'right',
+    textAlign: 'left',
     fontWeight: '500',
   },
   serviceHeaderSub: {
     fontSize: 13,
     color: Colors.subtext,
-    textAlign: 'right',
+    textAlign: 'left',
     marginTop: 2,
   },
   customTitleContainer: {
@@ -3303,7 +4218,7 @@ const styles = StyleSheet.create({
   },
   sectionHeaderTitle: {
     flex: 1,
-    textAlign: 'right',
+    textAlign: 'left',
     fontSize: 16,
     fontWeight: '700',
     color: Colors.text,
@@ -3332,12 +4247,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.text,
     fontWeight: '600',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   accordionSubtitle: {
     fontSize: 13,
     color: Colors.subtext,
-    textAlign: 'right',
+    textAlign: 'left',
     marginTop: 2,
   },
   accordionThumb: {
@@ -3383,7 +4298,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.subtext,
     marginBottom: 6,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   formInput: {
     backgroundColor: Colors.white,
@@ -3394,7 +4309,7 @@ const styles = StyleSheet.create({
     color: Colors.text,
     borderWidth: 1,
     borderColor: '#E5E5EA',
-    textAlign: 'right',
+    textAlign: 'left',
   },
   formTextArea: {
     height: 110,
@@ -3458,5 +4373,222 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   // deleteIconText removed in favor of vector icon
+
+  // Image Preview Modal Styles
+  imagePreviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  imagePreviewContainer: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
+  imagePreviewScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: '100%',
+  },
+  imagePreviewImage: {
+    width: '100%',
+    height: '100%',
+    minHeight: 400,
+  },
+  imagePreviewFooter: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+  },
+  imagePreviewInstructions: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+
+  // Products Modal Styles
+  productCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    ...shadowStyle,
+  },
+  productImageContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginRight: 12,
+  },
+  productImage: {
+    width: '100%',
+    height: '100%',
+  },
+  productImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  productInfo: {
+    flex: 1,
+  },
+  productName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 4,
+  },
+  productDescription: {
+    fontSize: 14,
+    color: Colors.subtext,
+    marginBottom: 4,
+  },
+  productPrice: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.primary,
+  },
+  productActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  editButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFF5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  addButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: Colors.subtext,
+    textAlign: 'center',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: Colors.subtext,
+    marginTop: 12,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#FF3B30',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  imagePickerButton: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginTop: 8,
+  },
+  imagePickerPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#E5E5EA',
+    borderStyle: 'dashed',
+  },
+  imagePickerText: {
+    fontSize: 12,
+    color: Colors.subtext,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
+  },
+
+  // Add Product Button Styles
+  addProductHeaderButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  addProductHeaderButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  addProductMainButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    marginTop: 20,
+    alignItems: 'center',
+    ...shadowStyle,
+  },
+  addProductMainButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 
 });

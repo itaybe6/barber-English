@@ -259,9 +259,46 @@ const bookingApi = {
   },
 
   // Cancel a time slot booking
-  async cancelTimeSlot(slotId: string): Promise<Appointment | null> {
+  async cancelTimeSlot(slotId: string): Promise<{ success: boolean; data?: Appointment; error?: string }> {
     try {
       const businessId = getBusinessId();
+      
+      // First, get the appointment details before cancelling
+      const { data: appointmentData, error: fetchError } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('id', slotId)
+        .eq('business_id', businessId)
+        .single();
+
+      if (fetchError) {
+        console.error('Error fetching appointment before cancellation:', fetchError);
+        return { success: false, error: 'Failed to fetch appointment details' };
+      }
+
+      if (!appointmentData) {
+        return { success: false, error: 'Appointment not found' };
+      }
+
+      // Check cancellation policy
+      const { data: businessProfile } = await supabase
+        .from('business_profile')
+        .select('min_cancellation_hours')
+        .single();
+
+      const minCancellationHours = businessProfile?.min_cancellation_hours || 24;
+      
+      // Calculate time difference
+      const appointmentDateTime = new Date(`${appointmentData.slot_date}T${appointmentData.slot_time}`);
+      const now = new Date();
+      const hoursUntilAppointment = (appointmentDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+      if (hoursUntilAppointment < minCancellationHours) {
+        return { 
+          success: false, 
+          error: `Cannot cancel appointment. Minimum cancellation time is ${minCancellationHours} hours before the appointment.` 
+        };
+      }
       
       const { data, error } = await supabase
         .from('appointments')
@@ -269,7 +306,8 @@ const bookingApi = {
           is_available: true,
           client_name: null,
           client_phone: null,
-          service_name: null,
+          // Don't set service_name to null to avoid constraint violation
+          // service_name: null,
           appointment_id: null,
         })
         .eq('id', slotId)
@@ -279,13 +317,13 @@ const bookingApi = {
 
       if (error) {
         console.error('Error canceling time slot:', error);
-        throw error;
+        return { success: false, error: 'Failed to cancel appointment' };
       }
 
-      return data;
+      return { success: true, data };
     } catch (error) {
       console.error('Error in cancelTimeSlot:', error);
-      throw error;
+      return { success: false, error: 'An unexpected error occurred' };
     }
   },
 };

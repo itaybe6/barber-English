@@ -18,6 +18,7 @@ import type { BusinessProfile } from '@/lib/supabase';
 import DesignCarousel from '@/components/DesignCarousel';
 import { useDesignsStore } from '@/stores/designsStore';
 import { getCurrentClientLogo } from '@/src/theme/assets';
+import { useColors } from '@/src/theme/ThemeProvider';
 
 
 // API functions for client home
@@ -137,6 +138,7 @@ export default function ClientHomeScreen() {
   const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isBlocked = Boolean((user as any)?.block);
+  const colors = useColors();
   
   const [nextAppointment, setNextAppointment] = useState<AvailableTimeSlot | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -555,7 +557,7 @@ export default function ClientHomeScreen() {
           <View style={styles.overlayHeaderContent}>
             <View style={styles.headerSide}>
               <TouchableOpacity
-                style={styles.overlayButton}
+                style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}
                 onPress={() => requireAuth('access your profile and settings', () => router.push('/(client-tabs)/profile'))}
                 activeOpacity={0.85}
                 accessibilityLabel="Settings and Profile"
@@ -568,7 +570,7 @@ export default function ClientHomeScreen() {
             </View>
             <View style={styles.headerSide}>
               <TouchableOpacity 
-                style={styles.overlayButton}
+                style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}
                 onPress={async () => {
                   return requireAuth('view notifications', async () => {
                     await router.push('/(client-tabs)/notifications');
@@ -580,7 +582,7 @@ export default function ClientHomeScreen() {
               >
                 <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
                 {unreadNotificationsCount > 0 && (
-                  <View style={styles.overlayNotificationBadge}>
+                  <View style={[styles.overlayNotificationBadge, { backgroundColor: colors.primary }]}>
                     <Text style={styles.notificationBadgeText}>
                       {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
                     </Text>
@@ -661,7 +663,7 @@ export default function ClientHomeScreen() {
                 </View>
               </View>
               <TouchableOpacity
-                style={styles.waitlistTopButton}
+                style={[styles.waitlistTopButton, { backgroundColor: colors.primary }]}
                 onPress={() => {
                   Alert.alert(
                     'Leave waitlist',
@@ -686,7 +688,7 @@ export default function ClientHomeScreen() {
                 }}
                 activeOpacity={0.8}
               >
-                <Text style={styles.waitlistTopButtonText}>Remove from waitlist</Text>
+                <Text style={[styles.waitlistTopButtonText, { color: '#FFFFFF' }]}>Remove from waitlist</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -816,8 +818,8 @@ export default function ClientHomeScreen() {
                   >
                     <View style={styles.bookAppointmentButtonContent}>
                       <Text style={styles.bookAppointmentButtonText}>Book now</Text>
-                      <View style={styles.bookAppointmentIconCircle}>
-                        <MaterialCommunityIcons name="arrow-top-left" size={20} color="#1C1C1E" />
+                      <View style={[styles.bookAppointmentIconCircle, { backgroundColor: colors.primary }]}>
+                        <MaterialCommunityIcons name="arrow-top-left" size={20} color="#FFFFFF" />
                       </View>
                     </View>
                   </BlurView>

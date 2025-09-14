@@ -7,9 +7,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import LoginRequiredModal from '@/components/LoginRequiredModal';
+import { useColors } from '@/src/theme/ThemeProvider';
+import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
 
 // Custom floating button component
 const FloatingBookButton = ({ onPress, focused }: { onPress: () => void; focused: boolean }) => {
+  const colors = useColors();
+  
   // Distinct animation: wobble (rotate) + bob (translateY) + brief pop (scale) with pauses
   const wobble = React.useRef(new Animated.Value(0)).current; // -1 .. 1
   const bob = React.useRef(new Animated.Value(0)).current;    // -1 .. 1
@@ -62,7 +66,7 @@ const FloatingBookButton = ({ onPress, focused }: { onPress: () => void; focused
     >
       <Animated.View style={motionStyle}>
         <LinearGradient
-          colors={['#1C1C1E', '#1C1C1E']}
+          colors={[colors.primary, colors.primary]}
           style={styles.floatingGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
@@ -91,8 +95,16 @@ export default function ClientTabsLayout() {
   const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isBlocked = Boolean((user as any)?.block);
+  const colors = useColors();
+  const { colorUpdateTrigger } = useColorUpdate();
   
   const [loginModal, setLoginModal] = React.useState<{ visible: boolean; title?: string; message?: string }>({ visible: false });
+  
+  // Force re-render when colors change
+  React.useEffect(() => {
+    // This effect will trigger re-render when colorUpdateTrigger changes
+    console.log('Client tabs layout: color update triggered', colorUpdateTrigger);
+  }, [colorUpdateTrigger]);
   
   // RTL debug removed; rely on explicit layout directions
 
@@ -105,7 +117,7 @@ export default function ClientTabsLayout() {
         tabBarHideOnKeyboard: true,
         tabBarIcon: ({ color, size, focused }) => {
           const iconSize = focused ? 26 : 24;
-          const iconColor = focused ? '#000000' : '#3A3A3C';
+          const iconColor = focused ? colors.primary : '#3A3A3C';
           
           let iconName;
           switch (route.name) {
@@ -160,19 +172,18 @@ export default function ClientTabsLayout() {
         tabBarButton: (props: any) => {
           // Intercept presses for specific routes to enforce auth
           const originalOnPress = props.onPress;
-          const routeName = (props as any).accessibilityLabel || '';
           
           return (
             <TouchableOpacity
               {...(props as any)}
               onPress={() => {
-                // Check if this is a protected route
-                if (routeName === 'Appointments' || routeName === 'Profile') {
+                // Check if this is a protected route based on route name
+                if (route.name === 'appointments' || route.name === 'profile') {
                   if (!isAuthenticated) {
                     setLoginModal({
                       visible: true,
                       title: 'Login Required',
-                      message: `Please sign in to access ${routeName.toLowerCase()}.`,
+                      message: `Please sign in to access ${route.name === 'appointments' ? 'booking' : 'profile'}.`,
                     });
                     return;
                   }
@@ -182,7 +193,7 @@ export default function ClientTabsLayout() {
             />
           );
         },
-        tabBarActiveTintColor: '#000000',
+        tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: '#3A3A3C',
         tabBarLabelStyle: {
           fontSize: 11,
@@ -285,7 +296,7 @@ export default function ClientTabsLayout() {
       <Tabs.Screen 
         name="appointments" 
         options={{
-          title: 'Appointments',
+          title: 'Booking',
         }}
       />
       <Tabs.Screen 
@@ -403,7 +414,7 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#F472B6',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
@@ -430,8 +441,8 @@ const styles = StyleSheet.create({
     right: 4,
     bottom: 4,
     borderRadius: 26,
-    backgroundColor: 'rgba(244, 114, 182, 0.2)',
-    shadowColor: '#F472B6',
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.25,
     shadowRadius: 20,

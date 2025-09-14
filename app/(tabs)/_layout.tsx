@@ -5,39 +5,53 @@ import Colors from '@/constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { useColors } from '@/src/theme/ThemeProvider';
+import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
 
 // Custom floating button component
-const FloatingCalendarButton = ({ onPress, focused }: { onPress: () => void; focused: boolean }) => (
-  <TouchableOpacity 
-    style={styles.floatingButton} 
-    onPress={onPress}
-    activeOpacity={0.8}
-  >
-    <LinearGradient
-      colors={['#000000', '#000000']}
-      style={styles.floatingGradient}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 0 }}
+const FloatingCalendarButton = ({ onPress, focused }: { onPress: () => void; focused: boolean }) => {
+  const colors = useColors();
+  
+  return (
+    <TouchableOpacity 
+      style={styles.floatingButton} 
+      onPress={onPress}
+      activeOpacity={0.8}
     >
-      <View style={[styles.floatingIcon, focused && styles.floatingIconFocused]}>
-        <Ionicons 
-          name="calendar" 
-          size={28} 
-          color="#FFFFFF" 
-          style={{ 
-            transform: [{ scale: focused ? 1.1 : 1 }],
-            fontWeight: '700'
-          }} 
-        />
-      </View>
-    </LinearGradient>
-    {/* Floating shadow effect */}
-    <View style={styles.floatingShadow} />
-  </TouchableOpacity>
-);
+      <LinearGradient
+        colors={[colors.primary, colors.primary]}
+        style={styles.floatingGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+      >
+        <View style={[styles.floatingIcon, focused && styles.floatingIconFocused]}>
+          <Ionicons 
+            name="calendar" 
+            size={28} 
+            color="#FFFFFF" 
+            style={{ 
+              transform: [{ scale: focused ? 1.1 : 1 }],
+              fontWeight: '700'
+            }} 
+          />
+        </View>
+      </LinearGradient>
+      {/* Floating shadow effect */}
+      <View style={styles.floatingShadow} />
+    </TouchableOpacity>
+  );
+};
 
 export default function TabsLayout() {
   const router = useRouter();
+  const colors = useColors();
+  const { colorUpdateTrigger } = useColorUpdate();
+  
+  // Force re-render when colors change
+  React.useEffect(() => {
+    // This effect will trigger re-render when colorUpdateTrigger changes
+    console.log('Admin tabs layout: color update triggered', colorUpdateTrigger);
+  }, [colorUpdateTrigger]);
   
   // RTL debug removed; rely on explicit layout directions
 
@@ -49,7 +63,7 @@ export default function TabsLayout() {
         tabBarHideOnKeyboard: true,
         tabBarIcon: ({ color, size, focused }) => {
           const iconSize = focused ? 26 : 24;
-          const iconColor = focused ? '#2C2C2E' : '#3A3A3C';
+          const iconColor = focused ? colors.primary : '#3A3A3C';
           
           let iconName;
           switch (route.name) {
@@ -81,7 +95,7 @@ export default function TabsLayout() {
             </View>
           );
         },
-        tabBarActiveTintColor: '#2C2C2E',
+        tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: '#3A3A3C',
         tabBarLabelStyle: {
           fontSize: 11,

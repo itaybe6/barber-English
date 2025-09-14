@@ -11,6 +11,7 @@ import React from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { notificationsApi } from '@/lib/api/notifications';
 import { ThemeProvider } from '@/src/theme/ThemeProvider';
+import { ColorUpdateProvider } from '@/lib/contexts/ColorUpdateContext';
 
 // Configure RTL layout properly
 I18nManager.allowRTL(false);
@@ -167,10 +168,12 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider>
-      <GestureHandlerRootView style={{ flex: 1 }} onLayout={onLayoutRootView}>
-        {content}
-      </GestureHandlerRootView>
-    </ThemeProvider>
+    <ColorUpdateProvider>
+      <ThemeProvider>
+        <GestureHandlerRootView style={{ flex: 1 }} onLayout={onLayoutRootView}>
+          {content}
+        </GestureHandlerRootView>
+      </ThemeProvider>
+    </ColorUpdateProvider>
   );
 }

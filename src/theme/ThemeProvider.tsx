@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { Asset } from 'expo-asset';
 import Constants from 'expo-constants';
+import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
+import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
 
 // Theme types
 export interface ThemeColors {
@@ -87,10 +89,59 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [client, setClient] = useState<string>('default');
+  
+  // Use business colors hook
+  const { colors: businessColors, isLoading: colorsLoading, error: colorsError } = useBusinessColors();
+  
+  // Use color update context for immediate updates
+  const { colorUpdateTrigger, forceThemeUpdate } = useColorUpdate();
 
   useEffect(() => {
     loadTheme();
   }, []);
+
+  // Update theme when business colors change
+  useEffect(() => {
+    if (!colorsLoading && businessColors) {
+      setTheme(prevTheme => ({
+        ...prevTheme,
+        colors: businessColors,
+      }));
+    }
+  }, [businessColors, colorsLoading]);
+
+  // Force update when colors change (for immediate updates)
+  const forceUpdate = React.useCallback(() => {
+    setTheme(prevTheme => ({
+      ...prevTheme,
+      colors: businessColors,
+    }));
+  }, [businessColors]);
+
+  // Register force update function with color update context
+  useEffect(() => {
+    forceThemeUpdate(forceUpdate);
+  }, [forceThemeUpdate, forceUpdate]);
+
+  // Listen for color update triggers and force immediate update
+  useEffect(() => {
+    if (colorUpdateTrigger > 0) {
+      console.log('ThemeProvider: color update triggered', colorUpdateTrigger, businessColors?.primary);
+      // Force immediate update even if businessColors haven't loaded yet
+      if (businessColors) {
+        setTheme(prevTheme => ({
+          ...prevTheme,
+          colors: businessColors,
+        }));
+      } else {
+        // If businessColors aren't loaded yet, force a re-render anyway
+        setTheme(prevTheme => ({
+          ...prevTheme,
+          // Keep existing colors but force update
+        }));
+      }
+    }
+  }, [colorUpdateTrigger, businessColors]);
 
   const loadTheme = async () => {
     try {
@@ -139,8 +190,8 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 
   const contextValue: ThemeContextType = {
     theme,
-    isLoading,
-    error,
+    isLoading: isLoading || colorsLoading,
+    error: error || colorsError,
     client,
   };
 

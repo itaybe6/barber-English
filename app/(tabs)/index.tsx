@@ -26,6 +26,7 @@ import DailySchedule from '@/components/DailySchedule';
 import { useAuthStore } from '@/stores/authStore';
 import { useNotificationsStore } from '@/stores/notificationsStore';
 import { getCurrentClientLogo } from '@/src/theme/assets';
+import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -38,6 +39,8 @@ export default function HomeScreen() {
   const user = useAuthStore((state) => state.user);
   const unreadCount = useNotificationsStore((state) => state.unreadCount);
   const fetchUnread = useNotificationsStore((state) => state.fetchUnreadCount);
+  const { colors: businessColors } = useBusinessColors();
+  const styles = createStyles(businessColors);
 
   const [appointments] = useState(generateAppointments());
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -555,11 +558,11 @@ export default function HomeScreen() {
               activeOpacity={0.85}
             >
               <View style={[styles.statsButtonIconCircle, { backgroundColor: 'rgba(0,0,0,0.10)' }]}> 
-                <Ionicons name="people-outline" size={22} color="#1C1C1E" />
+                <Ionicons name="people-outline" size={22} color={businessColors.text} />
               </View>
               <View style={styles.statsButtonContent}>
                 {loadingStats ? (
-                  <ActivityIndicator size="small" color="#007AFF" />
+                  <ActivityIndicator size="small" color={businessColors.primary} />
                 ) : (
                   <Text style={styles.statsNumber}>{monthlyStats.totalClients}</Text>
                 )}
@@ -569,11 +572,11 @@ export default function HomeScreen() {
 
             <View style={styles.statsButton}>
               <View style={[styles.statsButtonIconCircle, { backgroundColor: 'rgba(0,0,0,0.10)' }]}> 
-                <Ionicons name="checkmark-done-outline" size={22} color="#1C1C1E" />
+                <Ionicons name="checkmark-done-outline" size={22} color={businessColors.text} />
               </View>
               <View style={styles.statsButtonContent}>
                 {loadingStats ? (
-                  <ActivityIndicator size="small" color="#34C759" />
+                  <ActivityIndicator size="small" color={businessColors.success} />
                 ) : (
                   <Text style={styles.statsNumber}>{monthlyStats.completedAppointments}</Text>
                 )}
@@ -592,7 +595,7 @@ export default function HomeScreen() {
             >
               <Text style={styles.editGalleryButtonText}>Edit Gallery</Text>
               <View style={[styles.statsButtonIconCircle, { backgroundColor: 'rgba(0,0,0,0.10)', width: 28, height: 28, borderRadius: 14, marginLeft: 8 }]}> 
-                <Ionicons name="create-outline" size={18} color="#1C1C1E" />
+                <Ionicons name="create-outline" size={18} color={businessColors.text} />
               </View>
             </TouchableOpacity>
           </View>
@@ -607,7 +610,7 @@ export default function HomeScreen() {
         >
           {isLoadingDesigns ? (
             <View style={{ paddingHorizontal: 16, justifyContent: 'center' }}>
-              <ActivityIndicator size="small" color="#1C1C1E" />
+              <ActivityIndicator size="small" color={businessColors.text} />
             </View>
           ) : (
             designsFromStore.map((item) => (
@@ -759,7 +762,7 @@ export default function HomeScreen() {
              {/* Clients List */}
              {loadingClients ? (
                <View style={styles.loadingContainer}>
-                 <ActivityIndicator size="large" color="#1C1C1E" />
+                 <ActivityIndicator size="large" color={businessColors.text} />
                  <Text style={styles.loadingText}>Loading clients...</Text>
                </View>
               ) : (
@@ -787,7 +790,7 @@ export default function HomeScreen() {
                          style={[styles.phoneButton, { marginRight: 16 }]}
                          onPress={() => handlePhoneCall(item.phone)}
                        >
-                         <Ionicons name="call" size={20} color="#007AFF" />
+                         <Ionicons name="call" size={20} color={businessColors.primary} />
                        </TouchableOpacity>
                      </View>
                    </View>
@@ -807,7 +810,7 @@ export default function HomeScreen() {
    );
  }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
@@ -1053,7 +1056,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -2,
     right: -2,
-    backgroundColor: '#000000',
+    backgroundColor: colors.primary,
     borderRadius: 10,
     minWidth: 22,
     height: 22,
@@ -1186,7 +1189,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#FF3B30',
+    backgroundColor: colors.error,
     marginLeft: 6,
   },
   updatesText: {
@@ -1276,7 +1279,7 @@ const styles = StyleSheet.create({
   statsNumber: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#1C1C1E',
+    color: colors.text,
     textAlign: 'right',
     letterSpacing: -0.3,
   },
@@ -1287,7 +1290,7 @@ const styles = StyleSheet.create({
   },
   statsLabelSecondary: {
     fontSize: 13,
-    color: '#8E8E93',
+    color: colors.textSecondary,
     textAlign: 'left',
     marginTop: 2,
   },
@@ -1308,7 +1311,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   editGalleryButtonText: {
-    color: '#1d1d1f',
+    color: colors.text,
     fontWeight: '600',
     letterSpacing: -0.2,
     marginLeft: 8,
@@ -1343,7 +1346,7 @@ const styles = StyleSheet.create({
   dailyTitleText: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#1C1C1E',
+    color: colors.text,
     textAlign: 'center',
     letterSpacing: 0.5,
   },
@@ -1414,7 +1417,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1d1d1f',
+    color: colors.text,
     textAlign: 'center',
     flex: 1,
   },
@@ -1435,7 +1438,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: '#1d1d1f',
+    color: colors.text,
     textAlign: 'right',
   },
   loadingContainer: {
@@ -1445,7 +1448,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: '#8e8e93',
+    color: colors.textSecondary,
     marginTop: 16,
     textAlign: 'center',
   },
@@ -1470,15 +1473,15 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   filterButtonActive: {
-    backgroundColor: 'rgba(0,0,0,0.10)',
-    borderColor: '#000000',
+    backgroundColor: `${colors.primary}20`,
+    borderColor: colors.primary,
   },
   filterButtonText: {
-    color: '#1d1d1f',
+    color: colors.text,
     fontSize: 14,
   },
   filterButtonTextActive: {
-    color: '#000000',
+    color: colors.primary,
     fontWeight: '600',
   },
   clientItem: {
@@ -1507,7 +1510,7 @@ const styles = StyleSheet.create({
   modalClientName: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1d1d1f',
+    color: colors.text,
     textAlign: 'right',
   },
   clientInfo: {
@@ -1516,7 +1519,7 @@ const styles = StyleSheet.create({
   },
   clientPhone: {
     fontSize: 14,
-    color: '#8e8e93',
+    color: colors.textSecondary,
     textAlign: 'right',
     marginTop: 4,
   },

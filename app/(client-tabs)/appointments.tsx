@@ -76,7 +76,7 @@ const clientAppointmentsApi = {
   },
 
   // Cancel appointment
-  async cancelAppointment(slotId: string): Promise<boolean> {
+  async cancelAppointment(slotId: string, minCancellationHours: number): Promise<{ success: boolean; error?: string }> {
     try {
       // First, get the appointment details before cancelling
       const { data: appointmentData, error: fetchError } = await supabase
@@ -87,8 +87,15 @@ const clientAppointmentsApi = {
 
       if (fetchError) {
         console.error('Error fetching appointment before cancellation:', fetchError);
-        return false;
+        return { success: false, error: 'Failed to fetch appointment details' };
       }
+
+      if (!appointmentData) {
+        return { success: false, error: 'Appointment not found' };
+      }
+
+      // Note: Cancellation time validation is already done in the component
+      // before calling this function, so we skip the validation here
 
       // Cancel the appointment
       const { error } = await supabase
@@ -97,14 +104,15 @@ const clientAppointmentsApi = {
           is_available: true,
           client_name: null,
           client_phone: null,
-          service_name: null,
+          // Don't set service_name to null to avoid constraint violation
+          // service_name: null,
         })
         .eq('id', slotId)
         .eq('is_available', false);
 
       if (error) {
         console.error('Error canceling appointment:', error);
-        return false;
+        return { success: false, error: 'Failed to cancel appointment' };
       }
 
       // Check waitlist and notify waiting clients
@@ -116,10 +124,10 @@ const clientAppointmentsApi = {
         await notifyServiceWaitlistClients(appointmentData);
       }
 
-      return true;
+      return { success: true };
     } catch (error) {
       console.error('Error in cancelAppointment:', error);
-      return false;
+      return { success: false, error: 'An unexpected error occurred' };
     }
   },
 };
@@ -137,6 +145,7 @@ export default function ClientAppointmentsScreen() {
   const [managerPhone, setManagerPhone] = useState<string | null>(null);
   const [businessAddress, setBusinessAddress] = useState<string>('');
   const [barberImages, setBarberImages] = useState<Record<string, string>>({});
+  const [minCancellationHours, setMinCancellationHours] = useState<number>(24);
   const { user } = useAuthStore();
 
   // Load manager phone (first admin user)
@@ -176,6 +185,9 @@ export default function ClientAppointmentsScreen() {
         } else {
           console.log('No address found in profile');
         }
+        if (profile?.min_cancellation_hours !== undefined) {
+          setMinCancellationHours(profile.min_cancellation_hours);
+        }
       } catch (error) {
         console.error('Error loading business address:', error);
       }
@@ -185,16 +197,16 @@ export default function ClientAppointmentsScreen() {
     loadBusinessAddress();
   }, []);
 
-  // Helper to check if appointment is within 48 hours from now
-  const isWithin48Hours = useCallback((appointment: AvailableTimeSlot) => {
+  // Helper to check if appointment is within the minimum cancellation hours from now
+  const isWithinMinCancellationHours = useCallback((appointment: AvailableTimeSlot) => {
     if (!appointment?.slot_date) return false;
     const time = appointment.slot_time ? String(appointment.slot_time) : '00:00';
     const [hh = '00', mm = '00'] = time.split(':');
     const dateTime = new Date(`${appointment.slot_date}T${hh.padStart(2, '0')}:${mm.padStart(2, '0')}`);
     const diffMs = dateTime.getTime() - Date.now();
     const hours = diffMs / (1000 * 60 * 60);
-    return hours < 48;
-  }, []);
+    return hours < (minCancellationHours || 24);
+  }, [minCancellationHours]);
 
   // Open WhatsApp chat with manager
   const contactManagerOnWhatsApp = useCallback(async (message: string) => {
@@ -511,7 +523,7 @@ export default function ClientAppointmentsScreen() {
   // Handle cancel appointment
   function handleCancelAppointment(appointment: AvailableTimeSlot) {
     setSelectedAppointment(appointment);
-    if (isWithin48Hours(appointment)) {
+    if (isWithinMinCancellationHours(appointment)) {
       setShowLateCancelModal(true);
       return;
     }
@@ -523,8 +535,8 @@ export default function ClientAppointmentsScreen() {
 
     setIsCanceling(true);
     try {
-      const success = await clientAppointmentsApi.cancelAppointment(selectedAppointment.id);
-      if (success) {
+      const result = await clientAppointmentsApi.cancelAppointment(selectedAppointment.id, minCancellationHours);
+      if (result.success) {
         // Remove the canceled appointment from the list
         setUserAppointments(prev => prev.filter(apt => apt.id !== selectedAppointment.id));
         setShowCancelModal(false);
@@ -541,7 +553,7 @@ export default function ClientAppointmentsScreen() {
         // Ignore result; best-effort
         notificationsApi.createAdminNotification(title, content, 'system').catch(() => {});
       } else {
-        Alert.alert('Error', 'Unable to cancel the appointment. Please try again.');
+        Alert.alert('Cannot Cancel Appointment', result.error || 'Unable to cancel the appointment. Please try again.');
       }
     } catch (error) {
       Alert.alert('Error', 'An error occurred while cancelling. Please try again.');
@@ -939,7 +951,7 @@ export default function ClientAppointmentsScreen() {
               </View>
               <Text style={styles.modalTitle}>Cannot Cancel Appointment</Text>
               <Text style={styles.modalMessage}>
-                Appointments can be canceled up to 48 hours before the time. For short notice cancellations, please contact the manager.
+                Appointments can be canceled up to {minCancellationHours} hours before the time. For short notice cancellations, please contact the manager.
               </Text>
               {selectedAppointment && (
                 <View style={styles.appointmentChips}>

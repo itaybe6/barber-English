@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, ActivityIndicator, View } from 'react-native';
+import { useColors } from '@/src/theme/ThemeProvider';
 
 interface PrimaryButtonProps {
   title: string;
@@ -8,25 +9,45 @@ interface PrimaryButtonProps {
   loading?: boolean;
 }
 
-const COLORS = {
-  black: '#000000',
-  blackPressed: '#111111',
-  white: '#ffffff',
-};
-
 export default function PrimaryButton({ title, onPress, disabled, loading }: PrimaryButtonProps) {
+  const colors = useColors();
+  
+  const dynamicStyles = StyleSheet.create({
+    button: {
+      backgroundColor: colors.primary,
+      borderRadius: 14,
+      height: 48,
+      justifyContent: 'center',
+      alignItems: 'center',
+      width: '100%',
+      marginVertical: 16,
+      shadowColor: '#000',
+      shadowOpacity: 0.05,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 2,
+    },
+    text: {
+      color: '#ffffff',
+      fontWeight: 'bold',
+      fontSize: 18,
+      textAlign: 'center',
+      width: '100%',
+    },
+  });
+
   return (
     <TouchableOpacity
-      style={[styles.button, disabled && { opacity: 0.5 }]}
+      style={[dynamicStyles.button, disabled && { opacity: 0.5 }]}
       onPress={onPress}
       disabled={disabled || loading}
       activeOpacity={0.8}
     >
       <View style={styles.contentContainer}>
         {loading ? (
-          <ActivityIndicator color={COLORS.white} />
+          <ActivityIndicator color="#ffffff" />
         ) : (
-          <Text style={styles.text}>{title}</Text>
+          <Text style={dynamicStyles.text}>{title}</Text>
         )}
       </View>
     </TouchableOpacity>
@@ -34,32 +55,11 @@ export default function PrimaryButton({ title, onPress, disabled, loading }: Pri
 }
 
 const styles = StyleSheet.create({
-  button: {
-    backgroundColor: COLORS.black,
-    borderRadius: 14,
-    height: 48,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: '100%',
-    marginVertical: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
   contentContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
     height: '100%',
-  },
-  text: {
-    color: COLORS.white,
-    fontWeight: 'bold',
-    fontSize: 18,
-    textAlign: 'center',
-    width: '100%',
   },
 }); 

@@ -43,6 +43,8 @@ export const businessProfileApi = {
         image_on_page_1: null,
         image_on_page_2: null,
         break_minutes: 0,
+        min_cancellation_hours: 24, // Default 24 hours
+        primary_color: '#000000', // Default black color
       };
 
       const { data, error } = await supabase
@@ -81,6 +83,8 @@ export const businessProfileApi = {
             image_on_page_1: (updates as any).image_on_page_1,
             image_on_page_2: (updates as any).image_on_page_2,
             break: (updates as any).break,
+            min_cancellation_hours: updates.min_cancellation_hours,
+            primary_color: updates.primary_color,
           })
           .eq('id', businessId)
           .select('*')
@@ -106,6 +110,8 @@ export const businessProfileApi = {
           image_on_page_1: (updates as any).image_on_page_1,
           image_on_page_2: (updates as any).image_on_page_2,
           break: (updates as any).break,
+          min_cancellation_hours: updates.min_cancellation_hours,
+          primary_color: updates.primary_color || '#000000',
         })
         .select('*')
         .single();

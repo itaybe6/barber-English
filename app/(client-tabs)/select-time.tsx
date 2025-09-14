@@ -291,7 +291,8 @@ export default function SelectTimeScreen() {
         is_available: true,
         client_name: null,
         client_phone: null,
-        service_name: null,
+        // Don't set service_name to null to avoid constraint violation
+        // service_name: null,
         appointment_id: null,
       })
       .eq('id', appointmentId)

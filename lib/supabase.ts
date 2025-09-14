@@ -131,6 +131,9 @@ export interface Appointment {
   updated_at: string;
 }
 
+// Alias for backward compatibility
+export type AvailableTimeSlot = Appointment;
+
 
 // Business Hours interface
 export interface BusinessHours {
@@ -221,6 +224,21 @@ export interface BusinessProfile {
   image_on_page_1?: string;
   image_on_page_2?: string;
   break_minutes?: number;
+  min_cancellation_hours?: number;
+  primary_color?: string; // Hex color code for primary UI color
+  created_at: string;
+  updated_at: string;
+}
+
+// Product interface for products table
+export interface Product {
+  id: string;
+  business_id: string;
+  name: string;
+  description?: string;
+  price: number;
+  image_url?: string;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }

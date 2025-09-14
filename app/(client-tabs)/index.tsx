@@ -703,7 +703,7 @@ export default function ClientHomeScreen() {
               <View style={[styles.decorationDot, { opacity: 0.1 }]} />
             </View>
             <View style={styles.headerTitleContainer}>
-              <Text style={styles.modernTitle}>Appointments</Text>
+              <Text style={[styles.modernTitle, { color: colors.primary }]}>Appointments</Text>
             </View>
             <View style={styles.headerDecorationRight}>
               <View style={[styles.decorationDot, { opacity: 0.1 }]} />
@@ -860,7 +860,7 @@ export default function ClientHomeScreen() {
               <View style={[styles.decorationDot, { opacity: 0.1 }]} />
             </View>
             <View style={styles.headerTitleContainer}>
-              <Text style={styles.modernTitle}>Follow us</Text>
+              <Text style={[styles.modernTitle, { color: colors.primary }]}>Follow us</Text>
             </View>
             <View style={styles.headerDecorationRight}>
               <View style={[styles.decorationDot, { opacity: 0.1 }]} />

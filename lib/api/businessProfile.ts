@@ -40,6 +40,8 @@ export const businessProfileApi = {
         instagram_url: null,
         facebook_url: null,
         tiktok_url: null,
+        image_on_page_1: null,
+        image_on_page_2: null,
         break_minutes: 0,
       };
 
@@ -76,6 +78,8 @@ export const businessProfileApi = {
             instagram_url: updates.instagram_url,
             facebook_url: updates.facebook_url,
             tiktok_url: (updates as any).tiktok_url,
+            image_on_page_1: (updates as any).image_on_page_1,
+            image_on_page_2: (updates as any).image_on_page_2,
             break: (updates as any).break,
           })
           .eq('id', businessId)
@@ -99,6 +103,8 @@ export const businessProfileApi = {
           instagram_url: updates.instagram_url,
           facebook_url: updates.facebook_url,
           tiktok_url: (updates as any).tiktok_url,
+          image_on_page_1: (updates as any).image_on_page_1,
+          image_on_page_2: (updates as any).image_on_page_2,
           break: (updates as any).break,
         })
         .select('*')

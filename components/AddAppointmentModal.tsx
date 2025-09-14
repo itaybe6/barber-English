@@ -101,10 +101,14 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
 
   const loadClients = async () => {
     try {
+      const { getBusinessId } = await import('@/lib/supabase');
+      const businessId = getBusinessId();
+      
       const { data, error } = await supabase
         .from('users')
         .select('name, phone')
         .eq('user_type', 'client')
+        .eq('business_id', businessId)
         .order('name');
       
       if (error) throw error;
@@ -158,11 +162,15 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       const dayOfWeek = date.getDay();
       
       // Get business hours for this day: prefer user-specific row, fallback to global (null user_id)
+      const { getBusinessId } = await import('@/lib/supabase');
+      const businessId = getBusinessId();
+      
       let businessHours: any | null = null;
       try {
         const { data: bhUser } = await supabase
           .from('business_hours')
           .select('*')
+          .eq('business_id', businessId)
           .eq('day_of_week', dayOfWeek)
           .eq('is_active', true)
           .eq('user_id', user?.id)
@@ -173,6 +181,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
         const { data: bhGlobal } = await supabase
           .from('business_hours')
           .select('*')
+          .eq('business_id', businessId)
           .eq('day_of_week', dayOfWeek)
           .eq('is_active', true)
           .is('user_id', null)
@@ -248,6 +257,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       const { data: existingAppointments } = await supabase
         .from('appointments')
         .select('slot_time, is_available')
+        .eq('business_id', businessId)
         .eq('slot_date', dateString)
         .eq('user_id', user?.id);
 
@@ -261,6 +271,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       const { data: constraintsRows } = await supabase
         .from('business_constraints')
         .select('start_time, end_time')
+        .eq('business_id', businessId)
         .eq('date', dateString)
         .order('start_time');
       const withinConstraint = (t: string) => {
@@ -325,9 +336,13 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
 
     // Final check - verify the time is still available
     const dateString = formatDateToLocalString(selectedDate);
+    const { getBusinessId } = await import('@/lib/supabase');
+    const businessId = getBusinessId();
+    
     const { data: conflictingAppointments } = await supabase
       .from('appointments')
       .select('id')
+      .eq('business_id', businessId)
       .eq('slot_date', dateString)
       .eq('slot_time', `${selectedTime}:00`)
       .eq('user_id', user.id);
@@ -343,6 +358,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       const { error } = await supabase
         .from('appointments')
         .insert({
+          business_id: businessId,
           slot_date: dateString,
           slot_time: `${selectedTime}:00`,
           is_available: false,

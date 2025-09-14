@@ -1,12 +1,15 @@
-import { supabase, Service } from '../supabase';
+import { supabase, Service, getBusinessId } from '../supabase';
 
 export const servicesApi = {
   // Get all services
   async getAllServices(): Promise<Service[]> {
     try {
+      const businessId = getBusinessId();
+      
       const { data, error } = await supabase
         .from('services')
         .select('*')
+        .eq('business_id', businessId)
         .eq('is_active', true)
         .order('name');
 
@@ -22,35 +25,17 @@ export const servicesApi = {
     }
   },
 
-  // Get services by category
-  async getServicesByCategory(category: string): Promise<Service[]> {
-    try {
-      const { data, error } = await supabase
-        .from('services')
-        .select('*')
-        .eq('category', category)
-        .eq('is_active', true)
-        .order('name');
-
-      if (error) {
-        console.error('Error fetching services:', error);
-        return [];
-      }
-
-      return data || [];
-    } catch (error) {
-      console.error('Error fetching services:', error);
-      return [];
-    }
-  },
 
   // Get service by ID
   async getServiceById(id: string): Promise<Service | null> {
     try {
+      const businessId = getBusinessId();
+      
       const { data, error } = await supabase
         .from('services')
         .select('*')
         .eq('id', id)
+        .eq('business_id', businessId)
         .single();
 
       if (error) {
@@ -74,10 +59,13 @@ export async function updateService(
   updates: Partial<Omit<Service, 'id' | 'created_at' | 'updated_at'>>
 ): Promise<Service | null> {
   try {
+    const businessId = getBusinessId();
+    
     const { data, error } = await supabase
       .from('services')
       .update(updates)
       .eq('id', id)
+      .eq('business_id', businessId)
       .select('*')
       .single();
 
@@ -98,9 +86,12 @@ export async function createService(
   payload: Partial<Omit<Service, 'id' | 'created_at' | 'updated_at'>>
 ): Promise<Service | null> {
   try {
+    const businessId = getBusinessId();
+    
     const defaults: Partial<Service> = {
       name: 'שירות חדש',
       price: 0,
+      business_id: businessId,
       // avoid FK violation by not setting category unless provided
       is_active: true,
     };
@@ -128,10 +119,13 @@ export async function createService(
 // Delete a service
 export async function deleteService(id: string): Promise<boolean> {
   try {
+    const businessId = getBusinessId();
+    
     const { error } = await supabase
       .from('services')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('business_id', businessId);
 
     if (error) {
       console.error('Error deleting service:', error);

@@ -21,10 +21,13 @@ function formatDateToLocalString(date: Date): string {
 async function fetchWaitlistByDate(date: Date, userId?: string): Promise<WaitlistEntry[]> {
   try {
     const dateString = formatDateToLocalString(date); // Format: YYYY-MM-DD
+    const { getBusinessId } = await import('@/lib/supabase');
+    const businessId = getBusinessId();
     
     let query = supabase
       .from('waitlist_entries')
       .select('*')
+      .eq('business_id', businessId)
       .eq('requested_date', dateString)
       .eq('status', 'waiting');
 
@@ -50,9 +53,13 @@ async function fetchWaitlistByDate(date: Date, userId?: string): Promise<Waitlis
 // Function to update waitlist entry status
 async function updateWaitlistStatus(entryId: string, status: 'contacted' | 'booked' | 'cancelled'): Promise<boolean> {
   try {
+    const { getBusinessId } = await import('@/lib/supabase');
+    const businessId = getBusinessId();
+    
     const { error } = await supabase
       .from('waitlist_entries')
       .update({ status })
+      .eq('business_id', businessId)
       .eq('id', entryId);
 
     if (error) {
@@ -70,9 +77,13 @@ async function updateWaitlistStatus(entryId: string, status: 'contacted' | 'book
 // Function to delete waitlist entry
 async function deleteWaitlistEntry(entryId: string): Promise<boolean> {
   try {
+    const { getBusinessId } = await import('@/lib/supabase');
+    const businessId = getBusinessId();
+    
     const { error } = await supabase
       .from('waitlist_entries')
       .delete()
+      .eq('business_id', businessId)
       .eq('id', entryId);
 
     if (error) {
@@ -125,10 +136,13 @@ async function fetchWaitlistForRange(startDate: Date, endDate: Date, userId?: st
   try {
     const startStr = formatDateToLocalString(startDate);
     const endStr = formatDateToLocalString(endDate);
+    const { getBusinessId } = await import('@/lib/supabase');
+    const businessId = getBusinessId();
 
     let query = supabase
       .from('waitlist_entries')
       .select('*')
+      .eq('business_id', businessId)
       .gte('requested_date', startStr)
       .lte('requested_date', endStr)
       .eq('status', 'waiting');

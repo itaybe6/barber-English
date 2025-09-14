@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabase, getBusinessId } from '@/lib/supabase';
 import { AvailableTimeSlot } from '@/lib/supabase';
 import { notificationsApi } from './notifications';
 
@@ -66,12 +66,15 @@ export const notifyWaitlistOnBusinessHoursUpdate = async (
     const today = new Date();
     const todayIso = today.toISOString().split('T')[0];
 
+    const businessId = getBusinessId();
+    
     // Fetch future waitlist entries still waiting
     // Note: For business hours updates, we typically notify all barbers' waitlists
     // since business hours affect the entire salon, not just one barber
     const { data: entries, error } = await supabase
       .from('waitlist_entries')
       .select('*')
+      .eq('business_id', businessId)
       .eq('status', 'waiting')
       .gte('requested_date', todayIso)
       .order('requested_date', { ascending: true })
@@ -146,6 +149,8 @@ export const checkWaitlistAndNotify = async (cancelledAppointment: AvailableTime
     
     console.log('⏰ Appointment time period:', timePeriod, 'for hour:', hour);
     
+    const businessId = getBusinessId();
+    
     // Find waitlist entries for the same date and time period
     // Include both specific time period and 'any' time period
     // Also include entries for the same service regardless of time period
@@ -153,6 +158,7 @@ export const checkWaitlistAndNotify = async (cancelledAppointment: AvailableTime
     let query = supabase
       .from('waitlist_entries')
       .select('*')
+      .eq('business_id', businessId)
       .eq('requested_date', cancelledAppointment.slot_date)
       .eq('status', 'waiting')
       .or(`time_period.eq.${timePeriod},time_period.eq.any,service_name.eq.${cancelledAppointment.service_name}`);
@@ -277,11 +283,14 @@ export const notifyServiceWaitlistClients = async (cancelledAppointment: Availab
   try {
     console.log('🔍 Checking service waitlist for cancelled appointment:', cancelledAppointment);
     
+    const businessId = getBusinessId();
+    
     // Find waitlist entries for the same service on any future date
     const today = new Date().toISOString().split('T')[0];
     let query = supabase
       .from('waitlist_entries')
       .select('*')
+      .eq('business_id', businessId)
       .eq('service_name', cancelledAppointment.service_name)
       .eq('status', 'waiting')
       .gte('requested_date', today);
@@ -396,11 +405,14 @@ export const notifyAllWaitlistClients = async (cancelledAppointment: AvailableTi
   try {
     console.log('🔍 Checking all waitlist clients for general availability notification');
     
+    const businessId = getBusinessId();
+    
     // Find all waitlist entries for any future date
     const today = new Date().toISOString().split('T')[0];
     let query = supabase
       .from('waitlist_entries')
       .select('*')
+      .eq('business_id', businessId)
       .eq('status', 'waiting')
       .gte('requested_date', today);
 

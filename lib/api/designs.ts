@@ -4,9 +4,12 @@ export const designsApi = {
   // Get all designs
   async getAllDesigns(userId?: string): Promise<Design[]> {
     try {
+      const businessId = getBusinessId();
+      
       let query = supabase
         .from('designs')
-        .select('*');
+        .select('*')
+        .eq('business_id', businessId); // Filter by current business
 
       if (userId) {
         query = query.eq('user_id', userId);
@@ -34,10 +37,13 @@ export const designsApi = {
   // Delete a design by id
   async deleteDesign(id: string): Promise<boolean> {
     try {
+      const businessId = getBusinessId();
+      
       const { error } = await supabase
         .from('designs')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('business_id', businessId); // Ensure we only delete designs from current business
 
       if (error) {
         console.error('Error deleting design:', error);
@@ -99,9 +105,12 @@ export const designsApi = {
   // Get designs by category
   async getDesignsByCategory(category: string): Promise<Design[]> {
     try {
+      const businessId = getBusinessId();
+      
       const { data, error } = await supabase
         .from('designs')
         .select('*')
+        .eq('business_id', businessId) // Filter by current business
         .contains('categories', [category])
         .order('popularity', { ascending: false });
 
@@ -120,9 +129,12 @@ export const designsApi = {
   // Get featured designs
   async getFeaturedDesigns(): Promise<Design[]> {
     try {
+      const businessId = getBusinessId();
+      
       const { data, error } = await supabase
         .from('designs')
         .select('*')
+        .eq('business_id', businessId) // Filter by current business
         .eq('is_featured', true)
         .order('popularity', { ascending: false });
 
@@ -141,10 +153,13 @@ export const designsApi = {
   // Get design by ID
   async getDesignById(id: string): Promise<Design | null> {
     try {
+      const businessId = getBusinessId();
+      
       const { data, error } = await supabase
         .from('designs')
         .select('*')
         .eq('id', id)
+        .eq('business_id', businessId) // Ensure we only get designs from current business
         .single();
 
       if (error) {
@@ -172,10 +187,13 @@ export const designsApi = {
     user_id?: string;
   }): Promise<Design | null> {
     try {
+      const businessId = getBusinessId();
+      
       const { data, error } = await supabase
         .from('designs')
         .update(updates)
         .eq('id', id)
+        .eq('business_id', businessId) // Ensure we only update designs from current business
         .select()
         .single();
 
@@ -194,9 +212,12 @@ export const designsApi = {
   // Search designs
   async searchDesigns(query: string): Promise<Design[]> {
     try {
+      const businessId = getBusinessId();
+      
       const { data, error } = await supabase
         .from('designs')
         .select('*')
+        .eq('business_id', businessId) // Filter by current business
         .ilike('name', `%${query}%`)
         .order('popularity', { ascending: false });
 

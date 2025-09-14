@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabase, getBusinessId } from '@/lib/supabase';
 
 export interface RecurringAppointment {
   id: string;
@@ -19,6 +19,8 @@ export interface RecurringAppointment {
 export const recurringAppointmentsApi = {
   async create(payload: Omit<RecurringAppointment, 'id' | 'created_at' | 'updated_at'> & { start_date?: string | null; end_date?: string | null }): Promise<RecurringAppointment | null> {
     try {
+      const businessId = getBusinessId();
+      
       // Guard: prevent conflicts with other recurring rules and already-booked slots on the nearest occurrence
       const toDateString = (d: Date) => new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().split('T')[0];
       const today = new Date();
@@ -33,6 +35,7 @@ export const recurringAppointmentsApi = {
       let existingQuery = supabase
         .from('recurring_appointments')
         .select('id')
+        .eq('business_id', businessId)
         .eq('day_of_week', payload.day_of_week)
         .eq('slot_time', payload.slot_time)
         .limit(1);
@@ -59,6 +62,7 @@ export const recurringAppointmentsApi = {
       let bookedQuery = supabase
         .from('appointments')
         .select('id, is_available')
+        .eq('business_id', businessId)
         .eq('slot_date', firstDateStr)
         .eq('slot_time', payload.slot_time)
         .eq('is_available', false);
@@ -83,7 +87,7 @@ export const recurringAppointmentsApi = {
 
       const { data, error } = await supabase
         .from('recurring_appointments')
-        .insert({ ...payload, repeat_interval_weeks: repeatInterval, start_date: startDateToStore })
+        .insert({ ...payload, business_id: businessId, repeat_interval_weeks: repeatInterval, start_date: startDateToStore })
         .select('*')
         .single();
 
@@ -106,9 +110,12 @@ export const recurringAppointmentsApi = {
   },
 
   async getApprovedByDay(dayOfWeek: number): Promise<RecurringAppointment[]> {
+    const businessId = getBusinessId();
+    
     const { data, error } = await supabase
       .from('recurring_appointments')
       .select('*')
+      .eq('business_id', businessId)
       .eq('day_of_week', dayOfWeek);
     if (error) {
       console.error('Error fetching approved recurring for day:', error);
@@ -118,9 +125,12 @@ export const recurringAppointmentsApi = {
   },
 
   async listAll(userId?: string): Promise<RecurringAppointment[]> {
+    const businessId = getBusinessId();
+    
     let query = supabase
       .from('recurring_appointments')
-      .select('*');
+      .select('*')
+      .eq('business_id', businessId);
 
     // Only filter by user_id if provided and column exists
     if (userId) {
@@ -148,10 +158,13 @@ export const recurringAppointmentsApi = {
   },
 
   async update(id: string, updates: Partial<Omit<RecurringAppointment, 'id' | 'created_at' | 'updated_at'>>): Promise<RecurringAppointment | null> {
+    const businessId = getBusinessId();
+    
     const { data, error } = await supabase
       .from('recurring_appointments')
       .update(updates)
       .eq('id', id)
+      .eq('business_id', businessId)
       .select('*')
       .single();
     if (error) {
@@ -162,10 +175,13 @@ export const recurringAppointmentsApi = {
   },
 
   async delete(id: string): Promise<boolean> {
+    const businessId = getBusinessId();
+    
     const { error } = await supabase
       .from('recurring_appointments')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('business_id', businessId);
     if (error) {
       console.error('Error deleting recurring appointment:', error);
       return false;
@@ -210,6 +226,7 @@ export const recurringAppointmentsApi = {
         const { data: slot } = await supabase
           .from('appointments')
           .select('id, is_available, client_phone')
+          .eq('business_id', businessId)
           .eq('slot_date', dateStr)
           .eq('slot_time', rule.slot_time)
           .maybeSingle();
@@ -219,6 +236,7 @@ export const recurringAppointmentsApi = {
           await supabase
             .from('appointments')
             .insert({
+              business_id: businessId,
               slot_date: dateStr,
               slot_time: rule.slot_time,
               is_available: false,
@@ -238,6 +256,7 @@ export const recurringAppointmentsApi = {
               service_name: rule.service_name,
               user_id: rule.user_id,
             })
+            .eq('business_id', businessId)
             .eq('id', slot.id)
             .eq('is_available', true);
         } else {

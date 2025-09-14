@@ -269,9 +269,13 @@ export default function ClientProfileScreen() {
         today.setHours(0, 0, 0, 0);
         const todayStr = today.toISOString().split('T')[0];
 
+        const { getBusinessId } = await import('@/lib/supabase');
+        const businessId = getBusinessId();
+        
         let query = supabase
           .from('appointments')
           .select('*')
+          .eq('business_id', businessId)
           .eq('is_available', false)
           .lt('slot_date', todayStr)
           .order('slot_date', { ascending: false })
@@ -304,6 +308,7 @@ export default function ClientProfileScreen() {
         let upcomingQuery = supabase
           .from('appointments')
           .select('*')
+          .eq('business_id', businessId)
           .eq('is_available', false)
           .gte('slot_date', todayStr);
 

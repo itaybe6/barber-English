@@ -10,7 +10,7 @@ import { servicesApi, updateService, createService, deleteService } from '@/lib/
 import type { Service } from '@/lib/supabase';
 import { notificationsApi } from '@/lib/api/notifications';
 import { recurringAppointmentsApi } from '@/lib/api/recurringAppointments';
-import { supabase } from '@/lib/supabase';
+import { supabase, getBusinessId } from '@/lib/supabase';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import type { BusinessProfile } from '@/lib/supabase';
 
@@ -30,7 +30,9 @@ import {
   Instagram,
   Facebook,
   MapPin,
-  Calendar
+  Calendar,
+  Image as ImageIcon,
+  Home
 } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -114,11 +116,17 @@ export default function SettingsScreen() {
   const [profileInstagram, setProfileInstagram] = useState('');
   const [profileFacebook, setProfileFacebook] = useState('');
   const [profileTiktok, setProfileTiktok] = useState('');
+  const [profileImageOnPage1, setProfileImageOnPage1] = useState('');
+  const [profileImageOnPage2, setProfileImageOnPage2] = useState('');
   const [showEditDisplayNameModal, setShowEditDisplayNameModal] = useState(false);
   const [showEditAddressModal, setShowEditAddressModal] = useState(false);
   const [showEditInstagramModal, setShowEditInstagramModal] = useState(false);
   const [showEditFacebookModal, setShowEditFacebookModal] = useState(false);
   const [showEditTiktokModal, setShowEditTiktokModal] = useState(false);
+  const [showEditImagePage1Modal, setShowEditImagePage1Modal] = useState(false);
+  const [showEditImagePage2Modal, setShowEditImagePage2Modal] = useState(false);
+  const [isUploadingImagePage1, setIsUploadingImagePage1] = useState(false);
+  const [isUploadingImagePage2, setIsUploadingImagePage2] = useState(false);
   const [displayNameDraft, setDisplayNameDraft] = useState('');
   const [addressDraft, setAddressDraft] = useState('');
   const [instagramDraft, setInstagramDraft] = useState('');
@@ -161,6 +169,8 @@ export default function SettingsScreen() {
         setProfileInstagram(p?.instagram_url || '');
         setProfileFacebook(p?.facebook_url || '');
         setProfileTiktok((p as any)?.tiktok_url || '');
+        setProfileImageOnPage1((p as any)?.image_on_page_1 || '');
+        setProfileImageOnPage2((p as any)?.image_on_page_2 || '');
       } finally {
         setIsLoadingProfile(false);
       }
@@ -209,6 +219,8 @@ export default function SettingsScreen() {
         instagram_url: profileInstagram.trim() || null as any,
         facebook_url: profileFacebook.trim() || null as any,
         tiktok_url: profileTiktok.trim() || null as any,
+        image_on_page_1: profileImageOnPage1.trim() || null as any,
+        image_on_page_2: profileImageOnPage2.trim() || null as any,
       });
       if (!updated) {
         Alert.alert('Error', 'Failed to save business profile');
@@ -550,6 +562,35 @@ export default function SettingsScreen() {
     }
   };
 
+  const uploadBusinessImage = async (asset: { uri: string; base64?: string | null; mimeType?: string | null; fileName?: string | null }): Promise<string | null> => {
+    try {
+      let contentType = asset.mimeType || guessMimeFromUri(asset.fileName || asset.uri);
+      let fileBody: Blob | Uint8Array;
+      if (asset.base64) {
+        const bytes = base64ToUint8Array(asset.base64);
+        fileBody = bytes;
+      } else {
+        const response = await fetch(asset.uri, { cache: 'no-store' });
+        const fetched = await response.blob();
+        fileBody = fetched;
+        contentType = fetched.type || contentType;
+      }
+      const extGuess = (contentType.split('/')[1] || 'jpg').toLowerCase();
+      const randomId = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+      const filePath = `business-images/${Date.now()}_${randomId()}.${extGuess}`;
+      const { error } = await supabase.storage.from('designs').upload(filePath, fileBody as any, { contentType, upsert: false });
+      if (error) {
+        console.error('business image upload error', error);
+        return null;
+      }
+      const { data } = supabase.storage.from('designs').getPublicUrl(filePath);
+      return data.publicUrl;
+    } catch (e) {
+      console.error('business image upload exception', e);
+      return null;
+    }
+  };
+
   const uploadServiceImage = async (asset: { uri: string; base64?: string | null; mimeType?: string | null; fileName?: string | null }): Promise<string | null> => {
     try {
       let contentType = asset.mimeType || guessMimeFromUri(asset.fileName || asset.uri);
@@ -600,6 +641,85 @@ export default function SettingsScreen() {
         mimeType: a.mimeType ?? null,
         fileName: a.fileName ?? null,
       });
+    }
+  };
+
+  const handlePickBusinessImage = async (imageType: 'page1' | 'page2') => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission required', 'Please allow gallery access to pick an image');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images',
+        allowsMultipleSelection: false,
+        quality: 0.9,
+        base64: true,
+      });
+      if (!result.canceled && result.assets.length > 0) {
+        const a: any = result.assets[0];
+        
+        // Set loading state
+        if (imageType === 'page1') {
+          setIsUploadingImagePage1(true);
+        } else {
+          setIsUploadingImagePage2(true);
+        }
+        
+        try {
+          const uploadedUrl = await uploadBusinessImage({
+            uri: a.uri,
+            base64: a.base64 ?? null,
+            mimeType: a.mimeType ?? null,
+            fileName: a.fileName ?? null,
+          });
+          if (!uploadedUrl) {
+            Alert.alert('Error', 'Image upload failed');
+            return;
+          }
+          
+          // Update the appropriate image state
+          if (imageType === 'page1') {
+            setProfileImageOnPage1(uploadedUrl);
+          } else {
+            setProfileImageOnPage2(uploadedUrl);
+          }
+          
+          // Save to database
+          const updated = await businessProfileApi.upsertProfile({
+            display_name: (profileDisplayName || '').trim() || null as any,
+            address: (profileAddress || '').trim() || null as any,
+            instagram_url: (profileInstagram || '').trim() || null as any,
+            facebook_url: (profileFacebook || '').trim() || null as any,
+            tiktok_url: (profileTiktok || '').trim() || null as any,
+            image_on_page_1: imageType === 'page1' ? uploadedUrl : (profileImageOnPage1 || '').trim() || null as any,
+            image_on_page_2: imageType === 'page2' ? uploadedUrl : (profileImageOnPage2 || '').trim() || null as any,
+          });
+          if (updated) {
+            setProfile(updated);
+            Alert.alert('Success', 'Image uploaded successfully');
+          } else {
+            Alert.alert('Error', 'Failed to save image');
+          }
+        } finally {
+          // Clear loading state
+          if (imageType === 'page1') {
+            setIsUploadingImagePage1(false);
+          } else {
+            setIsUploadingImagePage2(false);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('pick business image failed', e);
+      Alert.alert('Error', 'Image upload failed');
+      // Clear loading state on error
+      if (imageType === 'page1') {
+        setIsUploadingImagePage1(false);
+      } else {
+        setIsUploadingImagePage2(false);
+      }
     }
   };
 
@@ -796,10 +916,13 @@ export default function SettingsScreen() {
   // Validate that the selected time is still available for the nearest occurrence of the chosen day for this barber
   const isTimeAvailable = async (dayOfWeek: number, timeHHmm: string): Promise<boolean> => {
     try {
+      const businessId = getBusinessId();
+      
       // 1) Check conflicts with other recurring rules for this barber
       let recurringQuery = supabase
         .from('recurring_appointments')
         .select('slot_time')
+        .eq('business_id', businessId)
         .eq('day_of_week', dayOfWeek);
       // Only filter by user_id if the column exists (avoid schema errors)
       try {
@@ -817,6 +940,7 @@ export default function SettingsScreen() {
       let bookedQuery = supabase
         .from('appointments')
         .select('slot_time, slot_date, is_available')
+        .eq('business_id', businessId)
         .eq('is_available', false);
       if (user?.id) {
         bookedQuery = bookedQuery.or(`user_id.eq.${user.id},user_id.is.null`);
@@ -844,12 +968,15 @@ export default function SettingsScreen() {
     setIsLoadingTimes(true);
     setAvailableTimes([]);
     try {
+      const businessId = getBusinessId();
+      
       // Fetch business hours for day: prefer user-specific row, fallback to global (user_id IS NULL)
       let bhRow: any | null = null;
       try {
         const { data: bhUser } = await supabase
           .from('business_hours')
           .select('*')
+          .eq('business_id', businessId)
           .eq('day_of_week', dayOfWeek)
           .eq('is_active', true)
           .eq('user_id', user?.id)
@@ -860,6 +987,7 @@ export default function SettingsScreen() {
         const { data: bhGlobal } = await supabase
           .from('business_hours')
           .select('*')
+          .eq('business_id', businessId)
           .eq('day_of_week', dayOfWeek)
           .eq('is_active', true)
           .is('user_id', null)
@@ -934,6 +1062,7 @@ export default function SettingsScreen() {
       let recurringQuery = supabase
         .from('recurring_appointments')
         .select('slot_time')
+        .eq('business_id', businessId)
         .eq('day_of_week', dayOfWeek);
       // Only filter by user_id if the column exists (avoid schema errors)
       try {
@@ -950,6 +1079,7 @@ export default function SettingsScreen() {
       let bookedQuery = supabase
         .from('appointments')
         .select('slot_time, slot_date, is_available')
+        .eq('business_id', businessId)
         .eq('is_available', false);
       if (user?.id) {
         bookedQuery = bookedQuery.or(`user_id.eq.${user.id},user_id.is.null`);
@@ -1008,10 +1138,13 @@ export default function SettingsScreen() {
   const searchClients = async (q: string) => {
     setClientSearch(q);
     const query = (q || '').trim();
+    const businessId = getBusinessId();
+    
     let builder = supabase
       .from('users')
       .select('name, phone')
       .eq('user_type', 'client')
+      .eq('business_id', businessId)
       .order('name');
     if (query.length > 0) {
       builder = builder.or(`name.ilike.%${query}%,phone.ilike.%${query}%`);
@@ -1025,6 +1158,7 @@ export default function SettingsScreen() {
     const { data: recs } = await supabase
       .from('recurring_appointments')
       .select('client_phone')
+      .eq('business_id', businessId)
       .eq('user_id', user?.id);
     const recurringPhones = new Set((recs || []).map((r: any) => String(r.client_phone).trim()).filter(Boolean));
 
@@ -1136,14 +1270,15 @@ export default function SettingsScreen() {
     subtitle?: string,
     rightComponent?: React.ReactNode,
     onPress?: () => void,
-    swapIconAndRight?: boolean
+    swapIconAndRight?: boolean,
+    disabled?: boolean
   ) => {
     return (
       <View>
         <TouchableOpacity 
-          style={styles.settingItemLTR}
+          style={[styles.settingItemLTR, disabled && styles.settingItemDisabled]}
           onPress={onPress}
-          disabled={!onPress}
+          disabled={!onPress || disabled}
         >
           {/* Perfect LTR: icon left, text left, chevron right */}
           {!rightComponent && onPress ? (
@@ -1304,6 +1439,32 @@ export default function SettingsScreen() {
             profileTiktok ? undefined : 'Add TikTok link',
             undefined,
             openEditTiktok
+          )}
+        </View>
+
+        <Text style={styles.sectionTitleNew}>Home page images</Text>
+        <View style={[styles.cardNew, shadowStyle]}>
+          {renderSettingItemLTR(
+            <Home size={20} color={isUploadingImagePage1 ? Colors.subtext : Colors.primary} />, 
+            'Home page image',
+            isUploadingImagePage1 ? 'Uploading...' : (profileImageOnPage1 ? 'Image uploaded' : 'Upload home page image'),
+            isUploadingImagePage1 ? (
+              <ActivityIndicator size="small" color={Colors.primary} />
+            ) : undefined,
+            isUploadingImagePage1 ? undefined : () => handlePickBusinessImage('page1'),
+            false,
+            isUploadingImagePage1
+          )}
+          {renderSettingItemLTR(
+            <ImageIcon size={20} color={isUploadingImagePage2 ? Colors.subtext : Colors.primary} />, 
+            'Booking page image',
+            isUploadingImagePage2 ? 'Uploading...' : (profileImageOnPage2 ? 'Image uploaded' : 'Upload booking page image'),
+            isUploadingImagePage2 ? (
+              <ActivityIndicator size="small" color={Colors.primary} />
+            ) : undefined,
+            isUploadingImagePage2 ? undefined : () => handlePickBusinessImage('page2'),
+            false,
+            isUploadingImagePage2
           )}
         </View>
 
@@ -2701,6 +2862,9 @@ const styles = StyleSheet.create({
     color: Colors.subtext,
     textAlign: 'left',
     alignSelf: 'flex-start',
+  },
+  settingItemDisabled: {
+    opacity: 0.6,
   },
 
   logoutButton: {

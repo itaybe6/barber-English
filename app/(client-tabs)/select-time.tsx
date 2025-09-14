@@ -4,7 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
-import { supabase } from '@/lib/supabase';
+import { supabase, getBusinessId } from '@/lib/supabase';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { useAuthStore } from '@/stores/authStore';
 import { notificationsApi } from '@/lib/api/notifications';
@@ -18,6 +18,8 @@ export default function SelectTimeScreen() {
     durationMinutes?: string;
     price?: string;
     selectedDate?: string;
+    serviceId?: string;
+    barberId?: string;
   }>();
 
   const serviceName = params.serviceName || '';
@@ -56,10 +58,12 @@ export default function SelectTimeScreen() {
     let isStaleLocal = false;
     try {
       // fetch existing appointments for that date
+      const businessId = getBusinessId();
       const { data: slots } = await supabase
         .from('appointments')
         .select('*')
         .eq('slot_date', selectedDate)
+        .eq('business_id', businessId)
         .order('slot_time');
 
       // Build busy intervals from booked appointments (respecting their duration)
@@ -85,6 +89,7 @@ export default function SelectTimeScreen() {
         .select('*')
         .eq('day_of_week', dow)
         .eq('is_active', true)
+        .eq('business_id', businessId)
         .maybeSingle();
 
       const toHHMM = (mins: number) => {
@@ -117,6 +122,7 @@ export default function SelectTimeScreen() {
         .from('business_constraints')
         .select('start_time, end_time')
         .eq('date', selectedDate)
+        .eq('business_id', businessId)
         .order('start_time');
 
       let windowsAfterConstraints = windows as Array<{ start: string; end: string }>;
@@ -243,6 +249,7 @@ export default function SelectTimeScreen() {
   // Find same-day existing appointment for this user
   const findSameDayAppointment = async (): Promise<any | null> => {
     try {
+      const businessId = getBusinessId();
       const phone = (user?.phone || '').trim();
       const name = (user?.name || '').trim();
       const variants = buildPhoneVariants(phone);
@@ -252,6 +259,7 @@ export default function SelectTimeScreen() {
           .select('*')
           .eq('slot_date', selectedDate)
           .eq('is_available', false)
+          .eq('business_id', businessId)
           .in('client_phone', variants)
           .order('slot_time');
         if (error) return null;
@@ -263,6 +271,7 @@ export default function SelectTimeScreen() {
           .select('*')
           .eq('slot_date', selectedDate)
           .eq('is_available', false)
+          .eq('business_id', businessId)
           .ilike('client_name', `%${name}%`)
           .order('slot_time');
         if (error) return null;
@@ -275,6 +284,7 @@ export default function SelectTimeScreen() {
   };
 
   const cancelExistingAppointment = async (appointmentId: string) => {
+    const businessId = getBusinessId();
     const { error } = await supabase
       .from('appointments')
       .update({
@@ -284,7 +294,8 @@ export default function SelectTimeScreen() {
         service_name: null,
         appointment_id: null,
       })
-      .eq('id', appointmentId);
+      .eq('id', appointmentId)
+      .eq('business_id', businessId);
     return !error;
   };
 
@@ -292,21 +303,35 @@ export default function SelectTimeScreen() {
     if (!selectedTime) return;
     try {
       setBooking(true);
+      const businessId = getBusinessId();
+      const serviceId = params.serviceId;
+      const barberId = params.barberId;
+      
+      
       // Try update existing free slot at date+time
+      const updateData = {
+        is_available: false,
+        client_name: user?.name || 'לקוח',
+        client_phone: user?.phone || '',
+        service_name: serviceName,
+        duration_minutes: durationMinutes,
+        business_id: businessId,
+        service_id: serviceId || null,
+        barber_id: barberId || null,
+        user_id: user?.id || null,
+      };
+      
+      
       const { data: updated, error: updateError } = await supabase
         .from('appointments')
-        .update({
-          is_available: false,
-          client_name: user?.name || 'לקוח',
-          client_phone: user?.phone || '',
-          service_name: serviceName,
-          duration_minutes: durationMinutes,
-        })
+        .update(updateData)
         .eq('slot_date', selectedDate)
         .eq('slot_time', selectedTime)
+        .eq('business_id', businessId)
         .eq('is_available', true)
         .select()
         .maybeSingle();
+
 
       let success = updated;
       if (!updateError && !updated) {
@@ -315,23 +340,31 @@ export default function SelectTimeScreen() {
           .from('appointments')
           .select('id')
           .eq('slot_date', selectedDate)
-          .eq('slot_time', selectedTime);
+          .eq('slot_time', selectedTime)
+          .eq('business_id', businessId);
         if (!existing || existing.length === 0) {
-          const { data: inserted } = await supabase
+          const insertData = {
+            slot_date: selectedDate,
+            slot_time: selectedTime,
+            is_available: false,
+            client_name: user?.name || 'לקוח',
+            client_phone: user?.phone || '',
+            service_name: serviceName,
+            duration_minutes: durationMinutes,
+            business_id: businessId,
+            service_id: serviceId || null,
+            barber_id: barberId || null,
+            user_id: user?.id || null,
+          };
+          
+          
+          const { data: inserted, error: insertError } = await supabase
             .from('appointments')
-            .insert([
-              {
-                slot_date: selectedDate,
-                slot_time: selectedTime,
-                is_available: false,
-                client_name: user?.name || 'לקוח',
-                client_phone: user?.phone || '',
-                service_name: serviceName,
-                duration_minutes: durationMinutes,
-              },
-            ])
+            .insert([insertData])
             .select()
             .single();
+            
+          
           success = inserted;
         }
       }

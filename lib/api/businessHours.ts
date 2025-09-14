@@ -1,12 +1,15 @@
-import { supabase, BusinessHours } from '../supabase';
+import { supabase, BusinessHours, getBusinessId } from '../supabase';
 
 export const businessHoursApi = {
   // Get all business hours
   async getAllBusinessHours(userId?: string): Promise<BusinessHours[]> {
     try {
+      const businessId = getBusinessId();
+      
       let query = supabase
         .from('business_hours')
-        .select('*');
+        .select('*')
+        .eq('business_id', businessId);
 
       if (userId) {
         query = query.eq('user_id', userId);
@@ -58,11 +61,14 @@ export const businessHoursApi = {
   // Update business hours for a specific day and user (barber)
   async updateBusinessHours(dayOfWeek: number, businessHours: Partial<BusinessHours>, userId?: string): Promise<BusinessHours | null> {
     try {
+      const businessId = getBusinessId();
+      
       // Try to update an existing row first
       let query = supabase
         .from('business_hours')
         .update(businessHours)
-        .eq('day_of_week', dayOfWeek);
+        .eq('day_of_week', dayOfWeek)
+        .eq('business_id', businessId);
 
       if (userId) {
         query = query.eq('user_id', userId);
@@ -86,6 +92,7 @@ export const businessHoursApi = {
       // No existing row for this day and user. Upsert a new one with sensible defaults
       const upsertRow: any = {
         day_of_week: dayOfWeek,
+        business_id: businessId,
         user_id: userId || null,
         // Defaults align with UI initial values
         start_time: (businessHours as any)?.start_time || '09:00',
@@ -119,11 +126,14 @@ export const businessHoursApi = {
   // Create or update business hours (update-or-insert without ON CONFLICT)
   async upsertBusinessHours(businessHours: Omit<BusinessHours, 'id' | 'created_at' | 'updated_at'>): Promise<BusinessHours | null> {
     try {
+      const businessId = getBusinessId();
+      
       // Try update by day_of_week and user scope first
       let updateQuery = supabase
         .from('business_hours')
         .update(businessHours)
-        .eq('day_of_week', (businessHours as any).day_of_week);
+        .eq('day_of_week', (businessHours as any).day_of_week)
+        .eq('business_id', businessId);
 
       if ((businessHours as any).user_id) {
         updateQuery = updateQuery.eq('user_id', (businessHours as any).user_id);
@@ -147,7 +157,7 @@ export const businessHoursApi = {
       // If not found, insert a new row
       const { data: inserted, error: insertErr } = await supabase
         .from('business_hours')
-        .insert(businessHours as any)
+        .insert({ ...businessHours, business_id: businessId } as any)
         .select()
         .single();
 
@@ -166,6 +176,8 @@ export const businessHoursApi = {
   // Generate time slots based on business hours
   async generateTimeSlotsForDate(date: string, userId?: string): Promise<any[]> {
     try {
+      const businessId = getBusinessId();
+      
       // Helper: apply recurring appointments for a given date after slots exist
       const applyRecurringAssignments = async (targetDate: string) => {
         try {
@@ -175,6 +187,7 @@ export const businessHoursApi = {
           const { data: rules, error: rulesError } = await supabase
             .from('recurring_appointments')
             .select('*')
+            .eq('business_id', businessId)
             .eq('day_of_week', dayOfWeek);
 
           if (rulesError || !rules || rules.length === 0) {
@@ -193,6 +206,7 @@ export const businessHoursApi = {
           const { data: slot } = await supabase
               .from('appointments')
               .select('id, is_available')
+              .eq('business_id', businessId)
               .eq('slot_date', targetDate)
               .eq('slot_time', rule.slot_time)
               .maybeSingle();
@@ -211,6 +225,7 @@ export const businessHoursApi = {
                 client_phone: rule.client_phone,
                 service_name: rule.service_name,
               })
+              .eq('business_id', businessId)
               .eq('id', slot.id)
               .eq('is_available', true);
           }
@@ -387,9 +402,10 @@ export const businessHoursApi = {
 
       // Insert new slots into database (idempotent): ignore duplicates on unique (slot_date, slot_time)
       if (slots.length > 0) {
+        const slotsWithBusinessId = slots.map(slot => ({ ...slot, business_id: businessId }));
         const { error: insertError } = await supabase
           .from('appointments')
-          .upsert(slots, { onConflict: 'slot_date,slot_time,user_id', ignoreDuplicates: true })
+          .upsert(slotsWithBusinessId, { onConflict: 'slot_date,slot_time,user_id', ignoreDuplicates: true })
           .select();
 
         if (insertError) {
@@ -405,6 +421,7 @@ export const businessHoursApi = {
       let finalQuery = supabase
         .from('appointments')
         .select('*')
+        .eq('business_id', businessId)
         .eq('slot_date', date);
 
       if (userId) {

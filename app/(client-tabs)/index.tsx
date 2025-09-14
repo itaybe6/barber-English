@@ -539,7 +539,7 @@ export default function ClientHomeScreen() {
       {/* Full Screen Hero with Overlay Header */}
       <View style={styles.fullScreenHero}>
         <Image 
-          source={require('@/assets/images/1homePage.jpg')} 
+          source={businessProfile?.image_on_page_1 ? { uri: businessProfile.image_on_page_1 } : require('@/assets/images/1homePage.jpg')} 
           style={styles.fullScreenHeroImage}
           resizeMode="cover"
         />
@@ -762,7 +762,7 @@ export default function ClientHomeScreen() {
           ) : (
             <View style={styles.bookAppointmentContainer}>
               <Image 
-                source={require('@/assets/images/bookApp.jpg')} 
+                source={businessProfile?.image_on_page_2 ? { uri: businessProfile.image_on_page_2 } : require('@/assets/images/bookApp.jpg')} 
                 style={styles.bookAppointmentImage}
                 resizeMode="cover"
               />

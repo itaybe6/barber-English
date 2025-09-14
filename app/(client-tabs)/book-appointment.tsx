@@ -7,8 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
 import { Service } from '@/lib/supabase';
 import { servicesApi } from '@/lib/api/services';
-import { supabase } from '@/lib/supabase';
-import { AvailableTimeSlot } from '@/lib/supabase';
+import { supabase, getBusinessId, Appointment } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { notificationsApi } from '@/lib/api/notifications';
 import { businessProfileApi } from '@/lib/api/businessProfile';
@@ -19,12 +18,15 @@ import { User } from '@/lib/supabase';
 // API functions for booking appointments
 const bookingApi = {
   // Get available time slots for a specific date and barber
-  async getAvailableSlots(date: string, userId?: string): Promise<AvailableTimeSlot[]> {
+  async getAvailableSlots(date: string, userId?: string): Promise<Appointment[]> {
     try {
+      const businessId = getBusinessId();
+      
       let query = supabase
         .from('appointments')
         .select('*')
-        .eq('slot_date', date);
+        .eq('slot_date', date)
+        .eq('business_id', businessId);
 
       if (userId) {
         query = query.eq('user_id', userId);
@@ -45,13 +47,16 @@ const bookingApi = {
   },
 
   // Get user appointments for multiple dates (most efficient for user appointments)
-  async getUserAppointmentsForMultipleDates(dates: string[], userName?: string, userPhone?: string): Promise<AvailableTimeSlot[]> {
+  async getUserAppointmentsForMultipleDates(dates: string[], userName?: string, userPhone?: string): Promise<Appointment[]> {
     try {
+      const businessId = getBusinessId();
+      
       let query = supabase
         .from('appointments')
         .select('*')
         .in('slot_date', dates)
         .eq('is_available', false) // Only booked appointments
+        .eq('business_id', businessId)
         .order('slot_date')
         .order('slot_time');
 
@@ -103,19 +108,32 @@ const bookingApi = {
     clientName: string, 
     clientPhone: string, 
     serviceName: string,
-    durationMinutes?: number
-  ): Promise<AvailableTimeSlot | null> {
+    durationMinutes?: number,
+    barberId?: string,
+    serviceId?: string,
+    userId?: string
+  ): Promise<Appointment | null> {
     try {
+      const businessId = getBusinessId();
+      
+      const updateData = {
+        is_available: false,
+        client_name: clientName,
+        client_phone: clientPhone,
+        service_name: serviceName,
+        business_id: businessId,
+        barber_id: barberId || null,
+        service_id: serviceId || null,
+        user_id: userId || null,
+        ...(typeof durationMinutes === 'number' ? { duration_minutes: durationMinutes } : {}),
+      };
+      
+      
       const { data, error } = await supabase
             .from('appointments')
-            .update({
-                is_available: false,
-                client_name: clientName,
-                client_phone: clientPhone,
-                service_name: serviceName,
-                ...(typeof durationMinutes === 'number' ? { duration_minutes: durationMinutes } : {}),
-            })
+            .update(updateData)
             .eq('id', slotId)
+            .eq('business_id', businessId)
             .eq('is_available', true) // Only book if still available
             .select()
             .single();
@@ -124,7 +142,6 @@ const bookingApi = {
             console.error('Error booking time slot:', error || 'No data returned');
             return null;
         }
-
         return data;
     } catch (error) {
         console.error('Error in bookTimeSlot:', error);
@@ -140,25 +157,37 @@ const bookingApi = {
     clientPhone: string,
     serviceName: string,
     durationMinutes?: number,
+    barberId?: string,
+    serviceId?: string,
     userId?: string
-  ): Promise<AvailableTimeSlot | null> {
+  ): Promise<Appointment | null> {
     try {
+      const businessId = getBusinessId();
+      
       // First try to update an existing available row for this date/time and user
+      const updateData = {
+        is_available: false,
+        client_name: clientName,
+        client_phone: clientPhone,
+        service_name: serviceName,
+        business_id: businessId,
+        barber_id: barberId || null,
+        service_id: serviceId || null,
+        user_id: userId || null,
+        ...(typeof durationMinutes === 'number' ? { duration_minutes: durationMinutes } : {}),
+      };
+      
+      
       let updateQuery = supabase
         .from('appointments')
-        .update({
-          is_available: false,
-          client_name: clientName,
-          client_phone: clientPhone,
-          service_name: serviceName,
-          ...(typeof durationMinutes === 'number' ? { duration_minutes: durationMinutes } : {}),
-        })
+        .update(updateData)
         .eq('slot_date', slotDate)
         .eq('slot_time', slotTime)
+        .eq('business_id', businessId)
         .eq('is_available', true);
 
-      if (userId) {
-        updateQuery = updateQuery.eq('user_id', userId);
+      if (barberId) {
+        updateQuery = updateQuery.eq('user_id', barberId);
       }
 
       const { data: updated, error: updateError } = await updateQuery
@@ -174,42 +203,47 @@ const bookingApi = {
         .from('appointments')
         .select('id, is_available')
         .eq('slot_date', slotDate)
-        .eq('slot_time', slotTime);
+        .eq('slot_time', slotTime)
+        .eq('business_id', businessId);
 
-      if (userId) {
-        existingQuery = existingQuery.eq('user_id', userId);
+      if (barberId) {
+        existingQuery = existingQuery.eq('user_id', barberId);
       }
 
       const { data: existing } = await existingQuery;
 
       if (existing && existing.length > 0) {
-        // If there is already any row (booked or not available), prevent double-booking
         return null;
       }
 
       // Insert a new booked slot
+      const insertData = {
+        slot_date: slotDate,
+        slot_time: slotTime,
+        is_available: false,
+        client_name: clientName,
+        client_phone: clientPhone,
+        service_name: serviceName,
+        user_id: userId || null,
+        business_id: businessId,
+        barber_id: barberId || null,
+        service_id: serviceId || null,
+        duration_minutes: (typeof durationMinutes === 'number' ? durationMinutes : await (async () => {
+          // Infer duration from services table if not provided
+          const svc = (await supabase
+            .from('services')
+            .select('duration_minutes')
+            .eq('name', serviceName)
+            .eq('business_id', businessId)
+            .maybeSingle()).data as any;
+          return (svc && typeof svc.duration_minutes === 'number') ? svc.duration_minutes : 60;
+        })()),
+      };
+      
+
       const { data: inserted, error: insertError } = await supabase
         .from('appointments')
-        .insert([
-          {
-            slot_date: slotDate,
-            slot_time: slotTime,
-            is_available: false,
-            client_name: clientName,
-            client_phone: clientPhone,
-            service_name: serviceName,
-            user_id: userId || null,
-            duration_minutes: (typeof durationMinutes === 'number' ? durationMinutes : await (async () => {
-              // Infer duration from services table if not provided
-              const svc = (await supabase
-                .from('services')
-                .select('duration_minutes')
-                .eq('name', serviceName)
-                .maybeSingle()).data as any;
-              return (svc && typeof svc.duration_minutes === 'number') ? svc.duration_minutes : 60;
-            })()),
-          },
-        ])
+        .insert([insertData])
         .select()
         .single();
 
@@ -217,7 +251,6 @@ const bookingApi = {
         console.error('Error inserting time slot:', insertError);
         return null;
       }
-
       return inserted as any;
     } catch (error) {
       console.error('Error in bookByDateTime:', error);
@@ -226,8 +259,10 @@ const bookingApi = {
   },
 
   // Cancel a time slot booking
-  async cancelTimeSlot(slotId: string): Promise<AvailableTimeSlot | null> {
+  async cancelTimeSlot(slotId: string): Promise<Appointment | null> {
     try {
+      const businessId = getBusinessId();
+      
       const { data, error } = await supabase
         .from('appointments')
         .update({
@@ -238,6 +273,7 @@ const bookingApi = {
           appointment_id: null,
         })
         .eq('id', slotId)
+        .eq('business_id', businessId)
         .select()
         .single();
 
@@ -503,10 +539,13 @@ export default function BookAppointment() {
       let data: any[] | null = null;
       let error: any = null;
 
+      const businessId = getBusinessId();
+      
       if (phoneVariants.length > 0) {
         let query = supabase
           .from('appointments')
           .select('*')
+          .eq('business_id', businessId)
           .eq('slot_date', dateString)
           .eq('is_available', false)
           .in('client_phone', phoneVariants);
@@ -522,6 +561,7 @@ export default function BookAppointment() {
         let query = supabase
           .from('appointments')
           .select('*')
+          .eq('business_id', businessId)
           .eq('slot_date', dateString)
           .eq('is_available', false)
           .ilike('client_name', `%${nameRaw}%`);
@@ -562,11 +602,14 @@ export default function BookAppointment() {
         const slots = await bookingApi.getAvailableSlots(dateString, selectedBarber?.id);
         // Load business hours for DOW and cache time windows on global for this session
         const dayOfWeek = date.getDay();
+        const businessId = getBusinessId();
+        
         let bhQuery = supabase
           .from('business_hours')
           .select('*')
           .eq('day_of_week', dayOfWeek)
-          .eq('is_active', true);
+          .eq('is_active', true)
+          .eq('business_id', businessId);
 
         if (selectedBarber?.id) {
           bhQuery = bhQuery.eq('user_id', selectedBarber.id);
@@ -599,6 +642,7 @@ export default function BookAppointment() {
               .from('business_constraints')
               .select('start_time, end_time')
               .eq('date', dateString)
+              .eq('business_id', businessId)
               .order('start_time');
             for (const c of (constraintsRows || []) as Array<{ start_time: string; end_time: string }>) {
               const next: Window[] = [];
@@ -741,11 +785,14 @@ export default function BookAppointment() {
           })();
           // fetch business hours for that day of week
           const dow = d.fullDate.getDay();
+          const businessId = getBusinessId();
+          
           let bhQuery = supabase
             .from('business_hours')
             .select('*')
             .eq('day_of_week', dow)
-            .eq('is_active', true);
+            .eq('is_active', true)
+            .eq('business_id', businessId);
 
           if (selectedBarber?.id) {
             bhQuery = bhQuery.eq('user_id', selectedBarber.id);
@@ -778,6 +825,7 @@ export default function BookAppointment() {
               .from('business_constraints')
               .select('start_time, end_time')
               .eq('date', dateStr)
+              .eq('business_id', businessId)
               .order('start_time');
             for (const c of (constraintsRows || []) as Array<{ start_time: string; end_time: string }>) {
               const next: Window[] = [];
@@ -866,11 +914,14 @@ export default function BookAppointment() {
       const slots = await bookingApi.getAvailableSlots(dateString, selectedBarber?.id);
       // Refresh business hours windows cache for this DOW
       const dayOfWeek = date.getDay();
+      const businessId = getBusinessId();
+      
       let bhQuery = supabase
         .from('business_hours')
         .select('*')
         .eq('day_of_week', dayOfWeek)
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .eq('business_id', businessId);
 
       if (selectedBarber?.id) {
         bhQuery = bhQuery.eq('user_id', selectedBarber.id);
@@ -903,6 +954,7 @@ export default function BookAppointment() {
             .from('business_constraints')
             .select('start_time, end_time')
             .eq('date', dateString)
+            .eq('business_id', businessId)
             .order('start_time');
           for (const c of (constraintsRows || []) as Array<{ start_time: string; end_time: string }>) {
             const next: Window[] = [];
@@ -941,17 +993,23 @@ export default function BookAppointment() {
 
   // Function to actually book the appointment
   const proceedWithBooking = async (existingAppointmentToCancel?: any) => {
+    
     if (!selectedService || selectedTime === null || selectedDay === null) {
       return;
     }
 
     const dateString = selectedDate?.toISOString().split('T')[0];
+    
+    
     // Guard: disallow booking in constrained windows
     try {
+      const businessId = getBusinessId();
+      
       const { data: constraintsRows } = await supabase
         .from('business_constraints')
         .select('start_time, end_time')
         .eq('date', dateString)
+        .eq('business_id', businessId)
         .order('start_time');
       const withinConstraint = (t: string) => {
         return (constraintsRows || []).some((c: any) => {
@@ -965,6 +1023,7 @@ export default function BookAppointment() {
         return;
       }
     } catch {}
+    
     // קיימים שני תרחישים:
     // 1) יש שורה זמינה עבור התאריך/שעה → נעדכן אותה ל-booked
     // 2) אין שורה זמינה → ניצור שורה חדשה כ-booked
@@ -975,13 +1034,13 @@ export default function BookAppointment() {
               (selectedBarber?.id ? slot.user_id === selectedBarber.id : !slot.user_id)
     );
 
+
     setIsBooking(true);
     try {
       // Cancel existing appointment if provided
       if (existingAppointmentToCancel) {
         const cancelSuccess = await bookingApi.cancelTimeSlot(existingAppointmentToCancel.id);
         if (!cancelSuccess) {
-          console.error('Failed to cancel existing appointment');
           Alert.alert('שגיאה', 'שגיאה בביטול התור הקיים. אנא נסה שוב.');
           return;
         }
@@ -989,13 +1048,18 @@ export default function BookAppointment() {
 
       // Book slot (update existing if available, else insert new row)
       const durationMinutes = selectedService.duration_minutes ?? 60;
+      
+      
       const success = slotToBook
         ? await bookingApi.bookTimeSlot(
             slotToBook.id,
             user?.name || 'לקוח',
             user?.phone || '',
             selectedService.name,
-            durationMinutes
+            durationMinutes,
+            selectedBarber?.id,
+            selectedService.id,
+            user?.id
           )
         : await bookingApi.bookByDateTime(
             dateString!,
@@ -1004,8 +1068,11 @@ export default function BookAppointment() {
             user?.phone || '',
             selectedService.name,
             durationMinutes,
-            selectedBarber?.id
+            selectedBarber?.id,
+            selectedService.id,
+            user?.id
           );
+
 
       if (success) {
         const policyNote = '\n\nלתשומת לבך: אי אפשר לבטל את התור 48 שעות לפני מועד התור. ביטול בתקופה זו יחויב בתשלום על התור.';
@@ -1035,13 +1102,13 @@ export default function BookAppointment() {
               type: 'appointment_reminder',
               recipient_name: user?.name || 'לקוח',
               recipient_phone: user.phone.trim(),
+              business_id: getBusinessId(),
             });
           }
         } catch {}
 
         // הניווט יתבצע לאחר אישור בחלון ההצלחה
       } else {
-        console.error('Booking failed');
         Alert.alert('שגיאה', 'קביעת התור נכשלה. אנא נסה שוב.');
       }
     } catch (error) {
@@ -1054,6 +1121,7 @@ export default function BookAppointment() {
 
   // Move the booking logic to execute only after confirmation in the modal
   const handleBookAppointment = async () => {
+    
     if (!selectedService || selectedTime === null || selectedDay === null) {
       Alert.alert('Error', 'Please select a date, time, and service before booking the appointment');
       return;
@@ -1364,6 +1432,8 @@ export default function BookAppointment() {
                     durationMinutes: selectedService?.duration_minutes?.toString() || '60',
                     price: selectedService?.price?.toString() || '0',
                     selectedDate: dateStr,
+                    serviceId: selectedService?.id || '',
+                    barberId: selectedBarber?.id || '',
                   } as any
                 });
               }}
@@ -1399,7 +1469,9 @@ export default function BookAppointment() {
               styles.bookBtn,
               (!selectedService || selectedTime === null || isBooking || isCheckingAppointments) && styles.bookBtnDisabled
             ]}
-            onPress={handleBookAppointment}
+            onPress={() => {
+              handleBookAppointment();
+            }}
             disabled={!selectedService || selectedTime === null || isBooking || isCheckingAppointments}
           >
             <Text style={styles.bookBtnText}>

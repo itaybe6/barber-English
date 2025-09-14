@@ -218,6 +218,8 @@ export interface BusinessProfile {
   instagram_url?: string;
   facebook_url?: string;
   tiktok_url?: string;
+  image_on_page_1?: string;
+  image_on_page_2?: string;
   break_minutes?: number;
   created_at: string;
   updated_at: string;

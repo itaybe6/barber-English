@@ -7,7 +7,7 @@ import Colors from '@/constants/colors';
 import { generateAppointments } from '@/constants/appointments';
 import { services } from '@/constants/services';
 import { clients } from '@/constants/clients';
-import { AvailableTimeSlot } from '@/lib/supabase';
+// import { AvailableTimeSlot } from '@/lib/supabase'; // Not used in this file
 import { supabase } from '@/lib/supabase';
 import Card from '@/components/Card';
 import { Calendar, Clock, ChevronLeft, ChevronRight, Star } from 'lucide-react-native';
@@ -42,7 +42,7 @@ export default function HomeScreen() {
   const [appointments] = useState(generateAppointments());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedCategory, setSelectedCategory] = React.useState('Gel Polish');
-  const [nextAppointment, setNextAppointment] = useState<AvailableTimeSlot | null>(null);
+  const [nextAppointment, setNextAppointment] = useState<any | null>(null);
   const [loadingNextAppointment, setLoadingNextAppointment] = useState(true);
   const [todayAppointmentsCount, setTodayAppointmentsCount] = useState(0);
   const [loadingTodayCount, setLoadingTodayCount] = useState(true);
@@ -272,10 +272,14 @@ export default function HomeScreen() {
   const fetchClients = async () => {
     try {
       setLoadingClients(true);
+      const { getBusinessId } = await import('@/lib/supabase');
+      const businessId = getBusinessId();
+      
       const { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('user_type', 'client')
+        .eq('business_id', businessId)
         .order('name');
 
       if (error) {

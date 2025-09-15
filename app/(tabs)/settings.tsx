@@ -188,28 +188,30 @@ export default function SettingsScreen() {
     }).start();
   };
 
+  // Load business profile function
+  const loadBusinessProfile = async () => {
+    setIsLoadingProfile(true);
+    try {
+      const p = await businessProfileApi.getProfile();
+      setProfile(p);
+      setProfileDisplayName(p?.display_name || '');
+      setProfileAddress(p?.address || '');
+      setProfileInstagram(p?.instagram_url || '');
+      setProfileFacebook(p?.facebook_url || '');
+      setProfileTiktok((p as any)?.tiktok_url || '');
+      setProfileImageOnPage1((p as any)?.image_on_page_1 || '');
+      setProfileImageOnPage2((p as any)?.image_on_page_2 || '');
+      setProfileImageOnPage3((p as any)?.image_on_page_3 || '');
+      setProfileLoginImg((p as any)?.login_img || '');
+      setProfileMinCancellationHours(p?.min_cancellation_hours || 24);
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  };
+
   // Load business profile on mount
   useEffect(() => {
-    const load = async () => {
-      setIsLoadingProfile(true);
-      try {
-        const p = await businessProfileApi.getProfile();
-        setProfile(p);
-        setProfileDisplayName(p?.display_name || '');
-        setProfileAddress(p?.address || '');
-        setProfileInstagram(p?.instagram_url || '');
-        setProfileFacebook(p?.facebook_url || '');
-        setProfileTiktok((p as any)?.tiktok_url || '');
-        setProfileImageOnPage1((p as any)?.image_on_page_1 || '');
-        setProfileImageOnPage2((p as any)?.image_on_page_2 || '');
-        setProfileImageOnPage3((p as any)?.image_on_page_3 || '');
-        setProfileLoginImg((p as any)?.login_img || '');
-        setProfileMinCancellationHours(p?.min_cancellation_hours || 24);
-      } finally {
-        setIsLoadingProfile(false);
-      }
-    };
-    load();
+    loadBusinessProfile();
   }, []);
 
   // Keep edit drafts in sync when modal opens or profile updates
@@ -822,6 +824,8 @@ export default function SettingsScreen() {
 
       if (updated) {
         setProfile(updated);
+        // Reload the business profile to ensure all data is synchronized
+        await loadBusinessProfile();
         Alert.alert('Success', 'Image saved successfully');
       } else {
         Alert.alert('Error', 'Failed to save image');

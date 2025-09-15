@@ -1,23 +1,23 @@
 {
-  "client": "clientB",
+  "client": "clientA",
   "config": {
     "expo": {
-      "name": "Client B App",
-      "slug": "client-b-app",
+      "name": "Client A App",
+      "slug": "client-a-app",
       "version": "1.0.0",
       "orientation": "portrait",
-      "icon": "./branding/clientB/icon.png",
-      "scheme": "clientb",
+      "icon": "./branding/clientA/icon.png",
+      "scheme": "clienta",
       "userInterfaceStyle": "automatic",
       "splash": {
-        "image": "./branding/clientB/splash.png",
+        "image": "./branding/clientA/splash.png",
         "resizeMode": "contain",
-        "backgroundColor": "#1a1a1a"
+        "backgroundColor": "#ffffff"
       },
       "ios": {
         "buildNumber": "1",
         "supportsTablet": true,
-        "bundleIdentifier": "com.clientb.app",
+        "bundleIdentifier": "com.clienta.app",
         "infoPlist": {
           "ITSAppUsesNonExemptEncryption": false,
           "CFBundleDevelopmentRegion": "en",
@@ -29,11 +29,11 @@
         "jsEngine": "hermes"
       },
       "android": {
-        "package": "com.clientb.app",
+        "package": "com.clienta.app",
         "versionCode": 1,
         "adaptiveIcon": {
-          "foregroundImage": "./branding/clientB/icon.png",
-          "backgroundColor": "#1a1a1a"
+          "foregroundImage": "./branding/clientA/icon.png",
+          "backgroundColor": "#ffffff"
         },
         "intentFilters": [
           {
@@ -41,7 +41,7 @@
             "action": "VIEW",
             "data": {
               "scheme": "https",
-              "host": "clientb.com"
+              "host": "clienta.com"
             },
             "category": [
               "BROWSABLE",
@@ -52,13 +52,13 @@
         "supportsRtl": false
       },
       "web": {
-        "favicon": "./branding/clientB/icon.png"
+        "favicon": "./branding/clientA/icon.png"
       },
       "plugins": [
         [
           "expo-router",
           {
-            "origin": "https://clientb.com/"
+            "origin": "https://clienta.com/"
           }
         ],
         [
@@ -79,72 +79,72 @@
       },
       "extra": {
         "router": {
-          "origin": "https://clientb.com/"
+          "origin": "https://clienta.com/"
         },
         "eas": {
           "projectId": "f0c09635-7e73-4fc6-94e1-b0addf0ab9f3"
         },
         "locale": "en",
-        "CLIENT": "clientB",
-        "logo": "./branding/clientB/logo.png",
-        "logoWhite": "./branding/clientB/logo-white.png",
+        "CLIENT": "clientA",
+        "logo": "./branding/clientA/logo.png",
+        "logoWhite": "./branding/clientA/logo-white.png",
         "theme": {
           "colors": {
-            "primary": "#7B61FF",
+            "primary": "#007AFF",
             "secondary": "#5856D6",
             "accent": "#FF3B30",
-            "background": "#1a1a1a",
-            "surface": "#2c2c2e",
-            "text": "#FFFFFF",
+            "background": "#FFFFFF",
+            "surface": "#F2F2F7",
+            "text": "#1C1C1E",
             "textSecondary": "#8E8E93",
-            "border": "#3a3a3c",
+            "border": "#E5E5EA",
             "success": "#34C759",
             "warning": "#FF9500",
             "error": "#FF3B30",
             "info": "#007AFF"
           },
           "branding": {
-            "logo": "./branding/clientB/logo.png",
-            "logoWhite": "./branding/clientB/logo-white.png",
-            "companyName": "Client B",
-            "website": "https://clientb.com",
-            "supportEmail": "support@clientb.com"
+            "logo": "./branding/clientA/logo.png",
+            "logoWhite": "./branding/clientA/logo-white.png",
+            "companyName": "Client A",
+            "website": "https://clienta.com",
+            "supportEmail": "support@clienta.com"
           },
           "fonts": {
             "primary": "System",
             "secondary": "System"
           }
         },
-        "BUSINESS_ID": "e5d2bdb1-6caa-4982-8cb7-1f439ec3e8b4"
+        "BUSINESS_ID": "01664149-b59f-41e5-a712-9f3bc3c9d29a"
       }
     }
   },
   "theme": {
     "colors": {
-      "primary": "#7B61FF",
+      "primary": "#007AFF",
       "secondary": "#5856D6",
       "accent": "#FF3B30",
-      "background": "#1a1a1a",
-      "surface": "#2c2c2e",
-      "text": "#FFFFFF",
+      "background": "#FFFFFF",
+      "surface": "#F2F2F7",
+      "text": "#1C1C1E",
       "textSecondary": "#8E8E93",
-      "border": "#3a3a3c",
+      "border": "#E5E5EA",
       "success": "#34C759",
       "warning": "#FF9500",
       "error": "#FF3B30",
       "info": "#007AFF"
     },
     "branding": {
-      "logo": "./branding/clientB/logo.png",
-      "logoWhite": "./branding/clientB/logo-white.png",
-      "companyName": "Client B",
-      "website": "https://clientb.com",
-      "supportEmail": "support@clientb.com"
+      "logo": "./branding/clientA/logo.png",
+      "logoWhite": "./branding/clientA/logo-white.png",
+      "companyName": "Client A",
+      "website": "https://clienta.com",
+      "supportEmail": "support@clienta.com"
     },
     "fonts": {
       "primary": "System",
       "secondary": "System"
     }
   },
-  "timestamp": "2025-09-15T10:09:27.749Z"
+  "timestamp": "2025-09-15T15:58:14.222Z"
 }

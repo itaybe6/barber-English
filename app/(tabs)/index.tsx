@@ -27,6 +27,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useNotificationsStore } from '@/stores/notificationsStore';
 import { getCurrentClientLogo } from '@/src/theme/assets';
 import { useColors } from '@/src/theme/ThemeProvider';
+import { useProductsStore } from '@/stores/productsStore';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -34,6 +35,10 @@ export default function HomeScreen() {
   const designsFromStore = useDesignsStore((state) => state.designs);
   const isLoadingDesigns = useDesignsStore((state) => state.isLoading);
   const fetchDesigns = useDesignsStore((state) => state.fetchDesigns);
+  
+  const productsFromStore = useProductsStore((state) => state.products);
+  const isLoadingProducts = useProductsStore((state) => state.isLoading);
+  const fetchProducts = useProductsStore((state) => state.fetchProducts);
 
   const isAdmin = useAuthStore((state) => state.isAdmin);
   const user = useAuthStore((state) => state.user);
@@ -160,14 +165,21 @@ export default function HomeScreen() {
       const today = now.toISOString().split('T')[0];
       const currentTime = now.toTimeString().split(' ')[0];
 
-      // Get only today's upcoming booked appointments
-      const { data, error } = await supabase
+      // Get only today's upcoming booked appointments for the current admin user
+      let query = supabase
         .from('appointments')
         .select('*')
         .eq('is_available', false) // Only booked appointments
         .eq('slot_date', today) // Today only
         .gt('slot_time', currentTime) // After current time
         .order('slot_time');
+
+      // Filter by current user - only appointments assigned to this barber
+      if (user?.id) {
+        query = query.eq('barber_id', user.id);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error('Error fetching next appointment:', error);
@@ -196,9 +208,9 @@ export default function HomeScreen() {
         .eq('slot_date', today)
         .eq('is_available', false); // Only booked appointments
 
-      // סינון לפי המשתמש הנוכחי - רק תורים שהוא יצר
+      // סינון לפי המשתמש הנוכחי - רק תורים שמוקצים לספר הזה
       if (user?.id) {
-        query = query.eq('user_id', user.id);
+        query = query.eq('barber_id', user.id);
       }
 
       const { data, error } = await query;
@@ -477,6 +489,7 @@ export default function HomeScreen() {
     fetchTodayAppointmentsCount();
     fetchMonthlyStats();
     fetchDesigns();
+    fetchProducts();
   }, []);
 
   const onRefresh = React.useCallback(async () => {
@@ -487,11 +500,65 @@ export default function HomeScreen() {
         fetchTodayAppointmentsCount(),
         fetchMonthlyStats(),
         (async () => { try { await fetchDesigns(); } catch {} })(),
+        (async () => { try { await fetchProducts(); } catch {} })(),
       ]);
     } finally {
       setRefreshing(false);
     }
   }, []);
+
+  // Products Section Component
+  const ProductsSection = () => {
+    if (isLoadingProducts) {
+      return (
+        <View style={{ paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center', paddingVertical: 20 }}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={{ marginTop: 8, color: colors.textSecondary }}>Loading products...</Text>
+        </View>
+      );
+    }
+
+    if (productsFromStore.length === 0) {
+      return null; // Don't show anything if no products
+    }
+
+    return (
+      <View style={{ marginBottom: 24 }}>
+        <Text style={[styles.sectionTitle, { paddingHorizontal: 8, marginBottom: 12 }]}>Our Products</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ marginBottom: 8 }}
+          contentContainerStyle={{ flexDirection: 'row', gap: 12, paddingHorizontal: 8 }}
+        >
+          {productsFromStore.map((product) => (
+            <View key={product.id} style={styles.productTile}>
+              <View style={styles.productImageContainer}>
+                {product.image_url ? (
+                  <Image
+                    source={{ uri: product.image_url }}
+                    style={styles.productImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.productPlaceholder}>
+                    <Ionicons name="bag-outline" size={32} color={colors.textSecondary} />
+                  </View>
+                )}
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.7)']}
+                  style={styles.productGradient}
+                >
+                  <Text style={styles.productName}>{product.name}</Text>
+                  <Text style={styles.productPrice}>${product.price.toFixed(2)}</Text>
+                </LinearGradient>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -547,6 +614,7 @@ export default function HomeScreen() {
            todayAppointmentsCount={todayAppointmentsCount}
            loadingTodayCount={loadingTodayCount}
          />
+
         <View style={styles.statsBox}>
           <View style={styles.statsButtonsRow}>
             <TouchableOpacity
@@ -585,6 +653,7 @@ export default function HomeScreen() {
             </View>
           </View>
         </View>
+
         {/* כפתור עריכת גלריה למנהל מעל הגלריה */}
         {isAdmin && (
           <View style={{ paddingHorizontal: 8, marginBottom: 8, alignItems: 'flex-start' }}>
@@ -605,7 +674,7 @@ export default function HomeScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          style={[{ marginTop: 0, marginBottom: 8 }]}
+          style={[{ marginTop: 0, marginBottom: 16 }]}
           contentContainerStyle={{ flexDirection: 'row', gap: 12, paddingHorizontal: 8 }}
         >
           {isLoadingDesigns ? (
@@ -669,6 +738,25 @@ export default function HomeScreen() {
             ))
           )}
         </ScrollView>
+
+        {/* כפתור עריכת מוצרים למנהל מעל המוצרים */}
+        {isAdmin && (
+          <View style={{ paddingHorizontal: 8, marginBottom: 8, alignItems: 'flex-start' }}>
+            <TouchableOpacity
+              onPress={() => router.push('/(tabs)/edit-products')}
+              activeOpacity={0.85}
+              style={[styles.editGalleryButton, { alignSelf: 'flex-start' }]}
+            >
+              <Text style={styles.editGalleryButtonText}>Edit Products</Text>
+              <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20`, width: 28, height: 28, borderRadius: 14, marginLeft: 8 }]}> 
+                <Ionicons name="bag-outline" size={18} color={colors.primary} />
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Products Section */}
+        <ProductsSection />
         {/* Close outer vertical ScrollView */}
         </ScrollView>
       </View>
@@ -1589,5 +1677,54 @@ const createStyles = (colors: any) => StyleSheet.create({
     width: '92%',
     height: '80%',
     borderRadius: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    textAlign: 'left',
+  },
+  productTile: {
+    width: 160,
+    height: 160,
+    padding: 4,
+  },
+  productImageContainer: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  productImage: {
+    width: '100%',
+    height: '100%',
+  },
+  productPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#F2F2F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  productGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 12,
+    justifyContent: 'flex-end',
+  },
+  productName: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'left',
+    marginBottom: 4,
+  },
+  productPrice: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'left',
   },
 });

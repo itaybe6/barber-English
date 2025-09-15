@@ -122,17 +122,17 @@ export const ThemeExample: React.FC = () => {
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <ThemedButton
           title="Primary Button"
-          onPress={() => console.log('Primary pressed')}
+          onPress={() => {}}
           variant="primary"
         />
         <ThemedButton
           title="Secondary Button"
-          onPress={() => console.log('Secondary pressed')}
+          onPress={() => {}}
           variant="secondary"
         />
         <ThemedButton
           title="Accent Button"
-          onPress={() => console.log('Accent pressed')}
+          onPress={() => {}}
           variant="accent"
         />
       </div>

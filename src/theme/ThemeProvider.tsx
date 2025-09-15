@@ -126,7 +126,6 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   // Listen for color update triggers and force immediate update
   useEffect(() => {
     if (colorUpdateTrigger > 0) {
-      console.log('ThemeProvider: color update triggered', colorUpdateTrigger, businessColors?.primary);
       // Force immediate update even if businessColors haven't loaded yet
       if (businessColors) {
         setTheme(prevTheme => ({
@@ -176,7 +175,6 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
       // Try to get theme from Constants (injected by app.config.js)
       const currentTheme = Constants.expoConfig?.extra?.theme;
       if (currentTheme) {
-        console.log('✅ Loaded theme from Constants:', currentTheme.branding?.companyName);
         return currentTheme as Theme;
       }
     } catch (error) {
@@ -184,7 +182,6 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     }
 
     // Fallback to default theme
-    console.log('⚠️ Using default theme');
     return defaultTheme;
   };
 

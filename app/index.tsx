@@ -14,7 +14,6 @@ export default function Index() {
   React.useEffect(() => {
     // Debug mount log to confirm route is being loaded
     // eslint-disable-next-line no-console
-    console.log('[router] / (index) mounted');
   }, []);
 
   React.useEffect(() => {

@@ -145,7 +145,6 @@ export const productsApi = {
           fileBody = new Uint8Array(arrayBuffer);
           contentType = response.headers.get('content-type') || 'image/jpeg';
         } catch (fetchError) {
-          console.log('Fetch failed, trying FormData approach');
           // Fallback to FormData approach
           const fileExt = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
           const fileName = productId ? `product-${productId}-${Date.now()}.${fileExt}` : `product-${Date.now()}.${fileExt}`;

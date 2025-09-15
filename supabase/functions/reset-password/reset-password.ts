@@ -100,7 +100,6 @@ serve(async (req) => {
 
     try {
       await sendEmail(email, subject, text);
-      console.log("reset-password email sent", email);
     } catch (sendErr) {
       console.error("[reset-password] email send error", sendErr);
       // Still return ok to the client to avoid enumeration / UX issues

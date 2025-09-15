@@ -46,7 +46,6 @@ export const recurringAppointmentsApi = {
           existingQuery = existingQuery.eq('user_id', payload.user_id);
         }
       } catch (e) {
-        console.log('user_id column not available in recurring_appointments, skipping user filter');
       }
       
       const { data: existingRecurring, error: existingRecurringErr } = await existingQuery.maybeSingle();
@@ -137,7 +136,6 @@ export const recurringAppointmentsApi = {
       try {
         query = query.eq('user_id', userId);
       } catch (e) {
-        console.log('user_id column not available in recurring_appointments, returning all records');
       }
     }
 

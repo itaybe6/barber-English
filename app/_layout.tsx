@@ -71,7 +71,6 @@ export default function RootLayout() {
       setStoreHydrated(true);
       if (__DEV__) {
         // eslint-disable-next-line no-console
-        console.log('[root] onFinishHydration', { user: useAuthStore.getState().user, isAuthenticated: useAuthStore.getState().isAuthenticated });
       }
     });
     // If already hydrated (e.g., fast refresh), reflect immediately

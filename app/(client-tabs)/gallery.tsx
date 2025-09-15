@@ -5,10 +5,12 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
 import { useDesignsStore } from '@/stores/designsStore';
+import { useProductsStore } from '@/stores/productsStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScrollView } from 'react-native';
 import { supabase, getBusinessId } from '@/lib/supabase';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
+import { Product } from '@/lib/api/products';
 
 const { width } = Dimensions.get('window');
 const numColumns = 2;
@@ -30,6 +32,8 @@ type DesignItem = {
   categories?: string[];
 };
 
+type GalleryItem = DesignItem | Product;
+
 const SkeletonTile = memo(() => {
   const opacity = useRef(new Animated.Value(0.6)).current;
   useEffect(() => {
@@ -49,7 +53,7 @@ const SkeletonTile = memo(() => {
   );
 });
 
-const DesignTile = memo(({ item, onOpen, adminUser, businessColors }: { item: DesignItem; onOpen: (images: string[]) => void; adminUser: AdminUser | null; businessColors: any }) => {
+const DesignTile = memo(({ item, onOpen, adminUser, businessColors, isProduct = false }: { item: GalleryItem; onOpen: (images: string[]) => void; adminUser: AdminUser | null; businessColors: any; isProduct?: boolean }) => {
   const scale = useRef(new Animated.Value(1)).current;
   const imageOpacity = useRef(new Animated.Value(0)).current;
   const onPressIn = () => {
@@ -61,7 +65,7 @@ const DesignTile = memo(({ item, onOpen, adminUser, businessColors }: { item: De
   const onLoad = () => {
     Animated.timing(imageOpacity, { toValue: 1, duration: 250, useNativeDriver: true }).start();
   };
-  const urls = item.image_urls && item.image_urls.length > 0 ? item.image_urls : [item.image_url];
+  const urls = (item as DesignItem).image_urls && (item as DesignItem).image_urls.length > 0 ? (item as DesignItem).image_urls : [item.image_url];
   return (
     <Animated.View style={[styles.tile, { transform: [{ scale }] }]}> 
       <Pressable
@@ -92,6 +96,9 @@ const DesignTile = memo(({ item, onOpen, adminUser, businessColors }: { item: De
           </ScrollView>
           <LinearGradient colors={["transparent", "rgba(0,0,0,0.7)"]} style={styles.gradient}>
             <Text style={styles.designName}>{item.name}</Text>
+            {isProduct && (item as Product).price && (
+              <Text style={styles.productPrice}>${(item as Product).price}</Text>
+            )}
           </LinearGradient>
           {urls.length > 1 && (
             <View style={styles.multiBadge}>
@@ -100,8 +107,8 @@ const DesignTile = memo(({ item, onOpen, adminUser, businessColors }: { item: De
             </View>
           )}
           
-          {/* Manager Profile Circle */}
-          {adminUser && (
+          {/* Manager Profile Circle - Only show for designs */}
+          {adminUser && !isProduct && (
             <View style={styles.managerProfileContainer}>
               <LinearGradient
                 colors={['#000000', '#333333', '#666666']}
@@ -143,6 +150,7 @@ export default function GalleryScreen() {
   const [viewerIndex, setViewerIndex] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
+  const [activeTab, setActiveTab] = useState<'designs' | 'products'>('designs');
   const panY = useRef(new Animated.Value(0)).current;
   const { colors: businessColors } = useBusinessColors();
   const resetPan = () => {
@@ -173,12 +181,14 @@ export default function GalleryScreen() {
     })
   ).current;
   
-  // Use Supabase store
-  const { designs, isLoading, fetchDesigns } = useDesignsStore();
+  // Use Supabase stores
+  const { designs, isLoading: designsLoading, fetchDesigns } = useDesignsStore();
+  const { products, isLoading: productsLoading, fetchProducts } = useProductsStore();
   
   // Load data on component mount
   useEffect(() => {
     fetchDesigns();
+    fetchProducts();
   }, []);
 
   // Load admin user profile
@@ -208,7 +218,11 @@ export default function GalleryScreen() {
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      await fetchDesigns();
+      if (activeTab === 'designs') {
+        await fetchDesigns();
+      } else {
+        await fetchProducts();
+      }
     } finally {
       setRefreshing(false);
     }
@@ -216,7 +230,8 @@ export default function GalleryScreen() {
   
   
   
-  const filteredDesigns = designs; // no text or category filtering
+  const currentData = activeTab === 'designs' ? designs : products;
+  const isLoading = activeTab === 'designs' ? designsLoading : productsLoading;
   
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -225,10 +240,62 @@ export default function GalleryScreen() {
         <View style={styles.headerContent}>
           <View style={{ width: 22 }} />
           <View style={{ alignItems: 'center' }}>
-            <Text style={[styles.headerTitle, { color: businessColors.primary }]}>Design Gallery</Text>
-            <Text style={styles.headerSubtitle}>Inspiration for your next style</Text>
+            <Text style={[styles.headerTitle, { color: businessColors.primary }]}>
+              {activeTab === 'designs' ? 'Design Gallery' : 'Products'}
+            </Text>
+            <Text style={styles.headerSubtitle}>
+              {activeTab === 'designs' ? 'Inspiration for your next style' : 'Browse our products'}
+            </Text>
           </View>
           <View style={{ width: 22 }} />
+        </View>
+        
+        {/* Toggle Button */}
+        <View style={styles.toggleContainer}>
+          <View style={[styles.toggleWrapper, { backgroundColor: businessColors.primary + '15' }]}>
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                activeTab === 'designs' && [styles.toggleButtonActive, { backgroundColor: businessColors.primary }]
+              ]}
+              onPress={() => setActiveTab('designs')}
+              activeOpacity={0.7}
+            >
+              <Ionicons 
+                name="images-outline" 
+                size={16} 
+                color={activeTab === 'designs' ? Colors.white : businessColors.primary} 
+                style={styles.toggleIcon}
+              />
+              <Text style={[
+                styles.toggleButtonText,
+                activeTab === 'designs' && { color: Colors.white }
+              ]}>
+                Designs
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                activeTab === 'products' && [styles.toggleButtonActive, { backgroundColor: businessColors.primary }]
+              ]}
+              onPress={() => setActiveTab('products')}
+              activeOpacity={0.7}
+            >
+              <Ionicons 
+                name="cube-outline" 
+                size={16} 
+                color={activeTab === 'products' ? Colors.white : businessColors.primary} 
+                style={styles.toggleIcon}
+              />
+              <Text style={[
+                styles.toggleButtonText,
+                activeTab === 'products' && { color: Colors.white }
+              ]}>
+                Products
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
       <View style={styles.contentWrapper}>
@@ -252,7 +319,7 @@ export default function GalleryScreen() {
           </View>
         ) : (
           <FlatList
-            data={filteredDesigns as DesignItem[]}
+            data={currentData as GalleryItem[]}
             keyExtractor={(item) => item.id}
             numColumns={numColumns}
             contentContainerStyle={[styles.listContent, { paddingHorizontal: effectiveContentPadding }]}
@@ -261,10 +328,21 @@ export default function GalleryScreen() {
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <View style={styles.emptyIconWrap}>
-                  <Ionicons name="images-outline" size={26} color={businessColors.primary} />
+                  <Ionicons 
+                    name={activeTab === 'designs' ? "images-outline" : "cube-outline"} 
+                    size={26} 
+                    color={businessColors.primary} 
+                  />
                 </View>
-                <Text style={[styles.emptyTitle, { color: businessColors.primary }]}>No designs yet</Text>
-                <Text style={styles.emptySubtitle}>When you add designs, they will appear here</Text>
+                <Text style={[styles.emptyTitle, { color: businessColors.primary }]}>
+                  {activeTab === 'designs' ? 'No designs yet' : 'No products yet'}
+                </Text>
+                <Text style={styles.emptySubtitle}>
+                  {activeTab === 'designs' 
+                    ? 'When you add designs, they will appear here' 
+                    : 'When you add products, they will appear here'
+                  }
+                </Text>
               </View>
             }
             renderItem={({ item }) => (
@@ -272,6 +350,7 @@ export default function GalleryScreen() {
                 item={item}
                 adminUser={adminUser}
                 businessColors={businessColors}
+                isProduct={activeTab === 'products'}
                 onOpen={(urls) => {
                   setViewerImages(urls);
                   setViewerIndex(0);
@@ -292,7 +371,9 @@ export default function GalleryScreen() {
               <TouchableOpacity onPress={() => setViewerVisible(false)} style={styles.viewerCloseBtn}>
                 <Ionicons name="close" size={22} color={Colors.white} />
               </TouchableOpacity>
-              <Text style={[styles.viewerTitle, { color: businessColors.primary }]}>Design Photos</Text>
+              <Text style={[styles.viewerTitle, { color: businessColors.primary }]}>
+                {activeTab === 'designs' ? 'Design Photos' : 'Product Photos'}
+              </Text>
               <View style={{ width: 44 }} />
             </View>
             <View style={{ flex: 1 }}>
@@ -340,7 +421,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
   },
   header: {
-    height: 104,
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 16,
@@ -441,6 +521,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'left',
     marginBottom: 4,
+  },
+  productPrice: {
+    color: Colors.white,
+    fontSize: 12,
+    fontWeight: '500',
+    textAlign: 'left',
+    opacity: 0.9,
   },
   categoryTags: {
     flexDirection: 'row',
@@ -631,5 +718,46 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#000000',
     opacity: 0.7,
+  },
+  // Toggle Button Styles
+  toggleContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+  },
+  toggleWrapper: {
+    flexDirection: 'row',
+    borderRadius: 16,
+    padding: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  toggleButtonActive: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  toggleButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.subtext,
+  },
+  toggleIcon: {
+    marginRight: 4,
   },
 });

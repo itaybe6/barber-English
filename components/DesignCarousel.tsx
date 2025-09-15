@@ -88,8 +88,6 @@ export default function DesignCarousel({
       try {
         // Get unique user IDs from designs
         const userIds = [...new Set(designs.map(design => design.user_id).filter(Boolean))];
-        console.log('Design user IDs:', userIds);
-        console.log('Designs:', designs.map(d => ({ id: d.id, user_id: d.user_id, name: d.name })));
         
         if (userIds.length > 0) {
           const { data: profiles, error } = await supabase
@@ -102,7 +100,6 @@ export default function DesignCarousel({
             return;
           }
           
-          console.log('Fetched profiles:', profiles);
           
           // Create a map of user profiles
           const profilesMap: {[key: string]: AdminUser} = {};
@@ -114,10 +111,8 @@ export default function DesignCarousel({
             };
           });
           
-          console.log('Profiles map:', profilesMap);
           setUserProfiles(profilesMap);
         } else {
-          console.log('No user IDs found in designs - will show placeholder for all');
           // Set empty map so all designs show placeholder
           setUserProfiles({});
         }
@@ -262,7 +257,6 @@ export default function DesignCarousel({
                 }} 
                 style={styles.adminProfileImage}
                 onError={(error) => {
-                  console.log('Image load error for user:', design.user_id, error);
                 }}
               />
             </View>

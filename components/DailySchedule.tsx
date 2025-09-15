@@ -331,7 +331,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     color: colors.primary,
     letterSpacing: 0.5,
     marginTop: -44,
-    marginRight: 28,
+    marginRight: 20,
   },
   nextInfoRow: {
     flexDirection: 'row',

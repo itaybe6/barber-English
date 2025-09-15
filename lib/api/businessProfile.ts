@@ -42,6 +42,8 @@ export const businessProfileApi = {
         tiktok_url: null,
         image_on_page_1: null,
         image_on_page_2: null,
+        image_on_page_3: null,
+        login_img: null,
         break_minutes: 0,
         min_cancellation_hours: 24, // Default 24 hours
         primary_color: '#000000', // Default black color
@@ -80,11 +82,13 @@ export const businessProfileApi = {
             instagram_url: updates.instagram_url,
             facebook_url: updates.facebook_url,
             tiktok_url: (updates as any).tiktok_url,
-            image_on_page_1: (updates as any).image_on_page_1,
-            image_on_page_2: (updates as any).image_on_page_2,
-            break: (updates as any).break,
-            min_cancellation_hours: updates.min_cancellation_hours,
-            primary_color: updates.primary_color,
+        image_on_page_1: (updates as any).image_on_page_1,
+        image_on_page_2: (updates as any).image_on_page_2,
+        image_on_page_3: (updates as any).image_on_page_3,
+        login_img: (updates as any).login_img,
+        break: (updates as any).break,
+        min_cancellation_hours: updates.min_cancellation_hours,
+        primary_color: updates.primary_color,
           })
           .eq('id', businessId)
           .select('*')
@@ -109,6 +113,8 @@ export const businessProfileApi = {
           tiktok_url: (updates as any).tiktok_url,
           image_on_page_1: (updates as any).image_on_page_1,
           image_on_page_2: (updates as any).image_on_page_2,
+          image_on_page_3: (updates as any).image_on_page_3,
+          login_img: (updates as any).login_img,
           break: (updates as any).break,
           min_cancellation_hours: updates.min_cancellation_hours,
           primary_color: updates.primary_color || '#000000',

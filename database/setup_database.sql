@@ -54,7 +54,6 @@ CREATE TABLE IF NOT EXISTS appointments (
   client_name TEXT,
   client_phone TEXT,
   service_name TEXT,
-  appointment_id TEXT,
   user_id UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

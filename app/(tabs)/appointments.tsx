@@ -113,6 +113,9 @@ export default function AdminAppointmentsScreen() {
         setIsLoading(true);
       }
 
+      // Fix any existing appointments with null service_name first
+      await businessHoursApi.fixNullServiceNames();
+
       // Ensure slots exist for the day (idempotent and will not override booked ones)
       await businessHoursApi.generateTimeSlotsForDate(dateString);
 
@@ -124,7 +127,7 @@ export default function AdminAppointmentsScreen() {
 
       // סינון לפי המשתמש הנוכחי - רק תורים שהוא יצר
       if (user?.id) {
-        query = query.eq('user_id', user.id);
+        query = query.eq('barber_id', user.id);
       }
 
       const { data, error } = await query.order('slot_time', { ascending: true });
@@ -316,9 +319,7 @@ export default function AdminAppointmentsScreen() {
           is_available: true,
           client_name: null,
           client_phone: null,
-          // Don't set service_name to null to avoid constraint violation
-          // service_name: null,
-          appointment_id: null,
+          service_name: 'Available Slot', // Set to default value instead of null
         })
         .eq('id', selectedAppointment.id)
         .eq('is_available', false);
@@ -672,7 +673,7 @@ const styles = StyleSheet.create({
   appointmentActions: {
     position: 'absolute',
     top: 6,
-    left: 8,
+    right: 8,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,

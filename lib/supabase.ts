@@ -24,11 +24,7 @@ const businessId =
 
 // הצגת מידע debug רק ב development
 if (__DEV__) {
-  console.log('[supabase] Configuration loaded:');
-  console.log('- URL:', supabaseUrl ? 'SET' : 'MISSING');
-  console.log('- Anon Key:', supabaseAnonKey ? 'SET' : 'MISSING');
-  console.log('- Business ID:', businessId ? 'SET' : 'MISSING');
-  console.log('- Source: Using environment variables');
+  // Debug information removed for production
 }
 
 // מניעת קריסות בזמן ייבוא במצב production
@@ -123,7 +119,6 @@ export interface Appointment {
   client_name?: string;
   client_phone?: string;
   duration_minutes: number;
-  appointment_id?: string;
   business_id: string;
   barber_id?: string;
   status: 'confirmed' | 'pending' | 'cancelled' | 'completed' | 'no_show';
@@ -193,6 +188,7 @@ export interface Notification {
   recipient_name: string;
   recipient_phone: string;
   business_id: string;
+  appointment_id?: string; // Optional reference to appointment for appointment-related notifications
   created_at: string;
   is_read: boolean;
   read_at?: string;

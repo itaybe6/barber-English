@@ -1,6 +1,24 @@
 import { supabase, BusinessHours, getBusinessId } from '../supabase';
 
 export const businessHoursApi = {
+  // Fix any existing appointments with null service_name
+  async fixNullServiceNames(): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .update({ service_name: 'Available Slot' })
+        .is('service_name', null);
+
+      if (error) {
+        console.error('Error fixing null service_name appointments:', error);
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error in fixNullServiceNames:', error);
+      throw error;
+    }
+  },
+
   // Get all business hours
   async getAllBusinessHours(userId?: string): Promise<BusinessHours[]> {
     try {
@@ -177,6 +195,9 @@ export const businessHoursApi = {
   async generateTimeSlotsForDate(date: string, userId?: string): Promise<any[]> {
     try {
       const businessId = getBusinessId();
+      
+      // Fix any existing appointments with null service_name first
+      await this.fixNullServiceNames();
       
       // Helper: apply recurring appointments for a given date after slots exist
       const applyRecurringAssignments = async (targetDate: string) => {
@@ -392,26 +413,51 @@ export const businessHoursApi = {
             is_available: true,
             client_name: null,
             client_phone: null,
-            // Don't set service_name to null to avoid constraint violation
-            // service_name: null,
-            appointment_id: null,
+            service_name: 'Available Slot', // Set a default value instead of null
             user_id: userId || null,
           });
           t = addMinutes(t, slotDurationMinutes);
         }
       }
 
-      // Insert new slots into database (idempotent): ignore duplicates on unique (slot_date, slot_time)
+      // First, fix any existing slots with null service_name
+      const { error: fixError } = await supabase
+        .from('appointments')
+        .update({ service_name: 'Available Slot' })
+        .eq('business_id', businessId)
+        .eq('slot_date', date)
+        .is('service_name', null);
+
+      if (fixError) {
+        console.error('Error fixing null service_name slots:', fixError);
+        // Continue anyway, don't throw
+      }
+
+      // Insert new slots into database (idempotent): check for existing slots first
       if (slots.length > 0) {
         const slotsWithBusinessId = slots.map(slot => ({ ...slot, business_id: businessId }));
-        const { error: insertError } = await supabase
+        
+        // Check which slots already exist to avoid duplicates
+        const existingSlots = await supabase
           .from('appointments')
-          .upsert(slotsWithBusinessId, { onConflict: 'slot_date,slot_time,user_id', ignoreDuplicates: true })
-          .select();
+          .select('slot_time')
+          .eq('business_id', businessId)
+          .eq('slot_date', date)
+          .in('slot_time', slotsWithBusinessId.map(s => s.slot_time));
 
-        if (insertError) {
-          console.error('Error inserting time slots:', insertError);
-          throw insertError;
+        const existingTimes = new Set((existingSlots.data || []).map(s => s.slot_time));
+        const newSlots = slotsWithBusinessId.filter(slot => !existingTimes.has(slot.slot_time));
+
+        if (newSlots.length > 0) {
+          const { error: insertError } = await supabase
+            .from('appointments')
+            .insert(newSlots)
+            .select();
+
+          if (insertError) {
+            console.error('Error inserting time slots:', insertError);
+            throw insertError;
+          }
         }
       }
 

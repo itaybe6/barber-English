@@ -174,7 +174,6 @@ export default function DaySelector({
     try {
       scrollRef.current.scrollTo({ x: targetX, animated });
     } catch (error) {
-      console.log('Scroll error:', error);
     }
   };
 

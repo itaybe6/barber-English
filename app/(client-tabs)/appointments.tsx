@@ -105,8 +105,7 @@ const clientAppointmentsApi = {
           is_available: true,
           client_name: null,
           client_phone: null,
-          // Don't set service_name to null to avoid constraint violation
-          // service_name: null,
+          service_name: 'Available Slot', // Set to default value instead of null
         })
         .eq('id', slotId)
         .eq('is_available', false);
@@ -180,12 +179,8 @@ export default function ClientAppointmentsScreen() {
     const loadBusinessAddress = async () => {
       try {
         const profile = await businessProfileApi.getProfile();
-        console.log('Business profile:', profile);
         if (profile?.address) {
-          console.log('Setting address:', profile.address);
           setBusinessAddress(String(profile.address));
-        } else {
-          console.log('No address found in profile');
         }
         if (profile?.min_cancellation_hours !== undefined) {
           setMinCancellationHours(profile.min_cancellation_hours);
@@ -257,6 +252,15 @@ export default function ClientAppointmentsScreen() {
       setRefreshing(true);
     } else {
       setIsLoading(true);
+    }
+
+    // Fix any existing appointments with null service_name first
+    try {
+      const { businessHoursApi } = await import('@/lib/api/businessHours');
+      await businessHoursApi.fixNullServiceNames();
+    } catch (error) {
+      console.error('Error fixing null service names:', error);
+      // Continue anyway
     }
 
     const today = new Date();

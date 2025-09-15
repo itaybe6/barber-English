@@ -298,7 +298,6 @@ export default function EditGalleryScreen() {
       // Upload images one by one with progress indication
       for (let i = 0; i < pickedAssets.length; i++) {
         const asset = pickedAssets[i];
-        console.log(`Uploading image ${i + 1}/${pickedAssets.length}`);
         const url = await uploadImage(asset);
         if (url) {
           urls.push(url);
@@ -315,7 +314,6 @@ export default function EditGalleryScreen() {
         return;
       }
 
-      console.log('Creating design with URLs:', urls);
       // Create a single design with multiple images (first image is cover)
       const created = await createDesign({
         name: name.trim(),
@@ -580,8 +578,19 @@ export default function EditGalleryScreen() {
                         horizontal
                         showsHorizontalScrollIndicator={false}
                         contentContainerStyle={{ paddingVertical: 8 }}
-                        renderItem={({ item }) => (
-                          <Image source={{ uri: item.uri }} style={styles.previewImage} />
+                        renderItem={({ item, index }) => (
+                          <View style={styles.previewImageContainer}>
+                            <Image source={{ uri: item.uri }} style={styles.previewImage} />
+                            <TouchableOpacity
+                              onPress={() => {
+                                setPickedAssets(prev => prev.filter((_, i) => i !== index));
+                              }}
+                              style={styles.previewRemoveButton}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                              <Ionicons name="close" size={14} color="#fff" />
+                            </TouchableOpacity>
+                          </View>
                         )}
                       />
                     )}
@@ -710,11 +719,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  previewImageContainer: {
+    position: 'relative',
+    marginRight: 8,
+  },
   previewImage: {
     width: 72,
     height: 72,
     borderRadius: 12,
-    marginRight: 8,
+  },
+  previewRemoveButton: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
   },
   categoriesLabel: {
     marginTop: 12,

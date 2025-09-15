@@ -309,7 +309,6 @@ export const notificationsApi = {
       }
 
       if (finalStatus !== 'granted') {
-        console.log('Notification permissions not granted');
         return null;
       }
 

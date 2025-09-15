@@ -168,7 +168,7 @@ export default function GalleryScreen() {
         renderItem={({ item }) => (
           <TouchableOpacity 
             style={styles.tile}
-            onPress={() => console.log('Design selected:', item.id)}
+            onPress={() => {}}
             activeOpacity={0.9}
           >
             <View style={styles.imageContainer}>

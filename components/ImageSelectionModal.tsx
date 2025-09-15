@@ -78,6 +78,9 @@ const PRESET_IMAGES = {
     require('../assets/images/default/LoginPage/4.jpg'),
     require('../assets/images/default/LoginPage/5.jpg'),
     require('../assets/images/default/LoginPage/6.jpg'),
+    require('../assets/images/default/LoginPage/7.jpg'),
+    require('../assets/images/default/LoginPage/8.jpg'),
+    require('../assets/images/default/LoginPage/9.jpg'),
   ],
 };
 
@@ -115,10 +118,18 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
       ]).start();
       
       // Preload images for better performance
-      const currentImages = PRESET_IMAGES[mainCategory]?.[selectedSubCategory as 'barber' | 'nails'];
+      let currentImages;
+      if (mainCategory === 'loginPage') {
+        currentImages = PRESET_IMAGES[mainCategory];
+      } else {
+        currentImages = PRESET_IMAGES[mainCategory]?.[selectedSubCategory as 'barber' | 'nails'];
+      }
+      
       if (currentImages) {
         currentImages.forEach((imageSource, index) => {
-          const imageKey = `${mainCategory}-${selectedSubCategory}-${index}`;
+          const imageKey = mainCategory === 'loginPage' 
+            ? `${mainCategory}-${index}` 
+            : `${mainCategory}-${selectedSubCategory}-${index}`;
           setLoadingImages(prev => ({ ...prev, [imageKey]: true }));
         });
       }
@@ -212,66 +223,79 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
           </View>
         </BlurView>
 
-        {/* Sub Category Selector */}
-        <View style={styles.categorySection}>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            style={styles.categoryContainer}
-            contentContainerStyle={styles.categoryScrollContent}
-          >
-            {SUB_CATEGORIES.map((subCategory) => (
-              <TouchableOpacity
-                key={subCategory.key}
-                style={[
-                  styles.categoryButton,
-                  selectedSubCategory === subCategory.key && styles.selectedCategoryButton,
-                ]}
-                onPress={() => setSelectedSubCategory(subCategory.key)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.categoryContent}>
-                  <Ionicons 
-                    name={subCategory.icon as any} 
-                    size={20} 
-                    color={selectedSubCategory === subCategory.key ? '#FFFFFF' : Colors.primary}
-                    style={styles.categoryIcon}
-                  />
-                  <Text
-                    style={[
-                      styles.categoryText,
-                      selectedSubCategory === subCategory.key && styles.selectedCategoryText,
-                    ]}
-                  >
-                    {subCategory.name}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+        {/* Sub Category Selector - Hide for loginPage */}
+        {mainCategory !== 'loginPage' && (
+          <View style={styles.categorySection}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              style={styles.categoryContainer}
+              contentContainerStyle={styles.categoryScrollContent}
+            >
+              {SUB_CATEGORIES.map((subCategory) => (
+                <TouchableOpacity
+                  key={subCategory.key}
+                  style={[
+                    styles.categoryButton,
+                    selectedSubCategory === subCategory.key && styles.selectedCategoryButton,
+                  ]}
+                  onPress={() => setSelectedSubCategory(subCategory.key)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.categoryContent}>
+                    <Ionicons 
+                      name={subCategory.icon as any} 
+                      size={20} 
+                      color={selectedSubCategory === subCategory.key ? '#FFFFFF' : Colors.primary}
+                      style={styles.categoryIcon}
+                    />
+                    <Text
+                      style={[
+                        styles.categoryText,
+                        selectedSubCategory === subCategory.key && styles.selectedCategoryText,
+                      ]}
+                    >
+                      {subCategory.name}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Images Grid with Apple-style Cards */}
         <ScrollView 
-          style={styles.imagesContainer} 
+          style={[styles.imagesContainer, mainCategory === 'loginPage' && styles.imagesContainerLoginPage]} 
           contentContainerStyle={styles.imagesGrid}
           showsVerticalScrollIndicator={false}
         >
           {(() => {
-            const currentImages = PRESET_IMAGES[mainCategory]?.[selectedSubCategory as 'barber' | 'nails'];
+            // Handle loginPage differently - it's a direct array, not nested by subcategory
+            let currentImages;
+            if (mainCategory === 'loginPage') {
+              currentImages = PRESET_IMAGES[mainCategory];
+            } else {
+              currentImages = PRESET_IMAGES[mainCategory]?.[selectedSubCategory as 'barber' | 'nails'];
+            }
             
             if (!currentImages || currentImages.length === 0) {
               return (
                 <View style={styles.noImagesContainer}>
                   <Text style={styles.noImagesText}>
-                    No images available for {selectedSubCategory} in {mainCategory}
+                    {mainCategory === 'loginPage' 
+                      ? 'No login page images available'
+                      : `No images available for ${selectedSubCategory} in ${mainCategory}`
+                    }
                   </Text>
                 </View>
               );
             }
             
             return currentImages.map((imageSource, index) => {
-              const imageKey = `${mainCategory}-${selectedSubCategory}-${index}`;
+              const imageKey = mainCategory === 'loginPage' 
+                ? `${mainCategory}-${index}` 
+                : `${mainCategory}-${selectedSubCategory}-${index}`;
               const isLoading = loadingImages[imageKey];
               
               return (
@@ -293,7 +317,7 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
                     <Image 
                       source={imageSource} 
                       style={[styles.presetImage, isLoading && styles.hiddenImage]} 
-                      resizeMode="cover"
+                      resizeMode="contain"
                       onLoadStart={() => handleImageLoadStart(imageKey)}
                       onLoadEnd={() => handleImageLoadEnd(imageKey)}
                       onError={() => handleImageLoadEnd(imageKey)}
@@ -314,7 +338,10 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
           {/* Bottom Info with Apple-style Typography */}
           <View style={styles.bottomInfo}>
             <Text style={styles.infoText}>
-              Choose a preset image from the categories above or tap "Gallery" to upload your own
+              {mainCategory === 'loginPage' 
+                ? 'Choose a preset login page image or tap "Gallery" to upload your own'
+                : 'Choose a preset image from the categories above or tap "Gallery" to upload your own'
+              }
             </Text>
           </View>
         </Animated.View>
@@ -325,6 +352,7 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
 
 const { width, height } = Dimensions.get('window');
 const imageSize = (width - 80) / 2; // 2 images per row with better spacing
+const imageCardHeight = imageSize * 1.4; // Increase height to accommodate taller images
 
 const styles = StyleSheet.create({
   container: {
@@ -439,7 +467,7 @@ const styles = StyleSheet.create({
   },
   imageCard: {
     width: imageSize,
-    height: imageSize + 40,
+    height: imageCardHeight,
     marginBottom: 20,
   },
   imageContainer: {
@@ -458,7 +486,7 @@ const styles = StyleSheet.create({
   },
   presetImage: {
     width: '100%',
-    height: imageSize,
+    height: imageCardHeight - 40, // Account for any padding/margin in the card
   },
   imageOverlay: {
     position: 'absolute',
@@ -535,6 +563,9 @@ const styles = StyleSheet.create({
   },
   hiddenImage: {
     opacity: 0,
+  },
+  imagesContainerLoginPage: {
+    marginTop: Platform.OS === 'ios' ? 120 : 100, // Add more top margin when no categories are shown
   },
 });
 

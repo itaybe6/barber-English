@@ -366,6 +366,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
           client_phone: selectedClient.phone,
           service_name: selectedService.name,
           user_id: user.id, // שמירת ה-ID של הספר שיוצר את התור
+          barber_id: user.id, // שמירת ה-ID של הספר שמבצע את השירות
         });
 
       if (error) throw error;

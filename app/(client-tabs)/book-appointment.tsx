@@ -187,7 +187,7 @@ const bookingApi = {
         .eq('is_available', true);
 
       if (barberId) {
-        updateQuery = updateQuery.eq('user_id', barberId);
+        updateQuery = updateQuery.eq('barber_id', barberId);
       }
 
       const { data: updated, error: updateError } = await updateQuery
@@ -207,7 +207,7 @@ const bookingApi = {
         .eq('business_id', businessId);
 
       if (barberId) {
-        existingQuery = existingQuery.eq('user_id', barberId);
+        existingQuery = existingQuery.eq('barber_id', barberId);
       }
 
       const { data: existing } = await existingQuery;
@@ -306,9 +306,7 @@ const bookingApi = {
           is_available: true,
           client_name: null,
           client_phone: null,
-          // Don't set service_name to null to avoid constraint violation
-          // service_name: null,
-          appointment_id: null,
+          service_name: 'Available Slot', // Set to default value instead of null
         })
         .eq('id', slotId)
         .eq('business_id', businessId)

@@ -1,0 +1,353 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  Modal,
+  TouchableOpacity,
+  TextInput,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from 'react-native';
+import { X, User, Phone, Mail, Lock } from 'lucide-react-native';
+import { usersApi } from '@/lib/api/users';
+import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
+
+interface AddAdminModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminModalProps) {
+  const { colors: businessColors } = useBusinessColors();
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Form fields
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  const resetForm = () => {
+    setName('');
+    setPhone('');
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
+  };
+
+  const handleClose = () => {
+    resetForm();
+    onClose();
+  };
+
+  const validateForm = () => {
+    if (!name.trim()) {
+      Alert.alert('Error', 'Please enter a name');
+      return false;
+    }
+    
+    if (!phone.trim()) {
+      Alert.alert('Error', 'Please enter a phone number');
+      return false;
+    }
+    
+    // Phone validation (US and Israeli formats)
+    const cleanPhone = phone.replace(/[\s\-\(\)\.]/g, '');
+    const usPhoneRegex = /^[0-9]{10}$/; // 10 digits for US
+    const israeliPhoneRegex = /^0[0-9]{8,9}$/; // Israeli format: 0XX-XXXXXXX or 0XXX-XXXXXX
+    
+    if (!usPhoneRegex.test(cleanPhone) && !israeliPhoneRegex.test(cleanPhone)) {
+      Alert.alert('Error', 'Please enter a valid phone number (US: (555) 123-4567 or Israeli: 050-1234567)');
+      return false;
+    }
+    
+    if (!password.trim()) {
+      Alert.alert('Error', 'Please enter a password');
+      return false;
+    }
+    
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
+      return false;
+    }
+    
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return false;
+    }
+    
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateForm()) {
+      return;
+    }
+
+    setIsLoading(true);
+    
+    try {
+      const newAdmin = await usersApi.createUserWithPassword({
+        name: name.trim(),
+        phone: phone.trim(),
+        email: email.trim() || undefined,
+        user_type: 'admin',
+        business_id: '', // Will be set automatically by the API
+      }, password);
+
+      if (newAdmin) {
+        Alert.alert(
+          'Success',
+          'Admin user added successfully',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                handleClose();
+                onSuccess();
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Error', 'Error creating user. Phone number may already exist in the system');
+      }
+    } catch (error) {
+      console.error('Error creating admin user:', error);
+      Alert.alert('Error', 'Error creating user');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={handleClose}
+    >
+      <KeyboardAvoidingView 
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.header}>
+          <Text style={styles.title}>Add Admin User</Text>
+          <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+            <X size={24} color="#666" />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.form}>
+            {/* Name Field */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Full Name *</Text>
+              <View style={styles.inputContainer}>
+                <User size={20} color="#666" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Enter full name"
+                  placeholderTextColor="#999"
+                  textAlign="left"
+                />
+              </View>
+            </View>
+
+            {/* Phone Field */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Phone Number *</Text>
+              <View style={styles.inputContainer}>
+                <Phone size={20} color="#666" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={phone}
+                  onChangeText={setPhone}
+                  placeholder="(555) 123-4567 or 050-1234567"
+                  placeholderTextColor="#999"
+                  keyboardType="phone-pad"
+                  textAlign="left"
+                />
+              </View>
+            </View>
+
+            {/* Email Field */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Email Address (Optional)</Text>
+              <View style={styles.inputContainer}>
+                <Mail size={20} color="#666" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="example@email.com"
+                  placeholderTextColor="#999"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  textAlign="left"
+                />
+              </View>
+            </View>
+
+            {/* Password Field */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Password *</Text>
+              <View style={styles.inputContainer}>
+                <Lock size={20} color="#666" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Enter password (at least 6 characters)"
+                  placeholderTextColor="#999"
+                  secureTextEntry
+                  textAlign="left"
+                />
+              </View>
+            </View>
+
+            {/* Confirm Password Field */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Confirm Password *</Text>
+              <View style={styles.inputContainer}>
+                <Lock size={20} color="#666" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder="Confirm password"
+                  placeholderTextColor="#999"
+                  secureTextEntry
+                  textAlign="left"
+                />
+              </View>
+            </View>
+          </View>
+        </ScrollView>
+
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={[styles.cancelButton, { borderColor: businessColors.primary }]}
+            onPress={handleClose}
+            disabled={isLoading}
+          >
+            <Text style={[styles.cancelButtonText, { color: businessColors.primary }]}>
+              Cancel
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.submitButton, { backgroundColor: businessColors.primary }]}
+            onPress={handleSubmit}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <Text style={styles.submitButtonText}>Add User</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1C1C1E',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  form: {
+    paddingVertical: 20,
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1C1C1E',
+    marginBottom: 8,
+    textAlign: 'left',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  inputIcon: {
+    marginLeft: 12,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1C1C1E',
+  },
+  footer: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: 'white',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5EA',
+    gap: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  submitButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  submitButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+  },
+});

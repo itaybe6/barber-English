@@ -16,7 +16,9 @@ import { notificationsApi } from '@/lib/api/notifications';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import type { BusinessProfile } from '@/lib/supabase';
 import DesignCarousel from '@/components/DesignCarousel';
+import ProductCarousel from '@/components/ProductCarousel';
 import { useDesignsStore } from '@/stores/designsStore';
+import { useProductsStore } from '@/stores/productsStore';
 import { getCurrentClientLogo } from '@/src/theme/assets';
 import { useColors } from '@/src/theme/ThemeProvider';
 
@@ -154,6 +156,9 @@ export default function ClientHomeScreen() {
 
   // Designs store
   const { designs, isLoading: isLoadingDesigns, fetchDesigns } = useDesignsStore();
+  
+  // Products store
+  const { products, isLoading: isLoadingProducts, fetchProducts } = useProductsStore();
 
   // Animated background expansion effect
   const backgroundScaleAnim = useRef(new Animated.Value(1)).current;
@@ -453,6 +458,11 @@ export default function ClientHomeScreen() {
     fetchDesigns();
   }, [fetchDesigns]);
 
+  // Fetch products on mount
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
   // Load business profile (address and social links)
   useEffect(() => {
     const loadProfile = async () => {
@@ -530,6 +540,7 @@ export default function ClientHomeScreen() {
         fetchWaitlistEntries(),
         fetchUnreadNotificationsCount(),
         fetchDesigns(),
+        fetchProducts(),
         (async () => {
           try {
             const p = await businessProfileApi.getProfile();
@@ -540,7 +551,7 @@ export default function ClientHomeScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [fetchUserAppointments, fetchWaitlistEntries, fetchUnreadNotificationsCount, fetchDesigns]);
+  }, [fetchUserAppointments, fetchWaitlistEntries, fetchUnreadNotificationsCount, fetchDesigns, fetchProducts]);
 
   // Show all services in a horizontal scroll
   
@@ -753,19 +764,18 @@ export default function ClientHomeScreen() {
 
         {/* Appointments Section */}
         <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeaderModern}>
-            <View style={styles.headerDecorationLeft}>
-              <View style={[styles.decorationDot, { opacity: 0.3 }]} />
-              <View style={[styles.decorationDot, { opacity: 0.2 }]} />
-              <View style={[styles.decorationDot, { opacity: 0.1 }]} />
-            </View>
-            <View style={styles.headerTitleContainer}>
-              <Text style={[styles.modernTitle, { color: colors.primary }]}>Appointments</Text>
-            </View>
-            <View style={styles.headerDecorationRight}>
-              <View style={[styles.decorationDot, { opacity: 0.1 }]} />
-              <View style={[styles.decorationDot, { opacity: 0.2 }]} />
-              <View style={[styles.decorationDot, { opacity: 0.3 }]} />
+          <View style={styles.appointmentsHeader}>
+            <View style={styles.appointmentsHeaderContent}>
+              <View style={{ width: 22 }} />
+              <View style={{ alignItems: 'center' }}>
+                <Text style={[styles.appointmentsHeaderTitle, { color: colors.primary }]}>
+                  Appointments
+                </Text>
+                <Text style={styles.appointmentsHeaderSubtitle}>
+                  Manage your bookings
+                </Text>
+              </View>
+              <View style={{ width: 22 }} />
             </View>
           </View>
 
@@ -901,6 +911,25 @@ export default function ClientHomeScreen() {
                 return;
               }
               router.push('/(client-tabs)/gallery');
+            }}
+          />
+        )}
+
+        {/* Product Carousel */}
+        {products && products.length > 0 && (
+          <ProductCarousel
+            products={products}
+            onProductPress={(product) => {
+              // Handle product press - show product details
+              if (!isAuthenticated) {
+                setLoginModal({
+                  visible: true,
+                  title: 'Login Required',
+                  message: 'Please sign in to view product details.',
+                });
+                return;
+              }
+              // Product details will be shown in the modal
             }}
           />
         )}
@@ -1111,7 +1140,7 @@ const styles = StyleSheet.create({
     zIndex: 0, // Very low z-index so white background can overlap it
   },
   scrollContent: {
-    paddingBottom: 320, // Extra bottom padding to see the image at the bottom
+    paddingBottom: 400, // Extra bottom padding to see the image at the bottom
     flexGrow: 1, // Allow content to grow and be scrollable
   },
   header: {
@@ -1854,7 +1883,31 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.06)'
   },
-  // Modern Section Headers
+  // Appointments Header (matching gallery design)
+  appointmentsHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 16,
+    backgroundColor: '#F8F9FA',
+  },
+  appointmentsHeaderContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  appointmentsHeaderTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    textAlign: 'center',
+  },
+  appointmentsHeaderSubtitle: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginTop: 6,
+  },
+  // Modern Section Headers (for other sections)
   sectionHeaderModern: {
     flexDirection: 'row',
     alignItems: 'center',

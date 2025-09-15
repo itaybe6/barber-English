@@ -13,7 +13,6 @@ import { recurringAppointmentsApi } from '@/lib/api/recurringAppointments';
 import { supabase, getBusinessId } from '@/lib/supabase';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import type { BusinessProfile } from '@/lib/supabase';
-import { productsApi, type Product, type CreateProductData } from '@/lib/api/products';
 import { 
   Bell, 
   HelpCircle, 
@@ -33,7 +32,8 @@ import {
   Calendar,
   Image as ImageIcon,
   Home,
-  Clock
+  Clock,
+  User
 } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -45,6 +45,8 @@ import { ColorPicker } from '@/components/ColorPicker';
 import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
 import ImageSelectionModal from '@/components/ImageSelectionModal';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
+import AddAdminModal from '@/components/AddAdminModal';
+import DeleteAccountModal from '@/components/DeleteAccountModal';
 
 // Helper for shadow style
 const shadowStyle = Platform.select({
@@ -102,6 +104,12 @@ export default function SettingsScreen() {
   
   // Notification modal states (replaced by AdminBroadcastComposer)
   const [showSupportModal, setShowSupportModal] = useState(false);
+  
+  // Add admin modal state
+  const [showAddAdminModal, setShowAddAdminModal] = useState(false);
+  
+  // Delete account modal state
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
   
   // Title dropdown states (removed)
 
@@ -438,17 +446,6 @@ export default function SettingsScreen() {
         if (shouldClose) {
           if (showServicesModal) {
             animateCloseSheet(() => setShowServicesModal(false));
-          } else if (showProductsModal) {
-            animateCloseSheet(() => {
-              setShowProductsModal(false);
-              setProducts([]);
-              setIsLoadingProducts(false);
-              setProductsError(null);
-              setShowAddProductModal(false);
-              setEditingProduct(null);
-              setProductForm({ name: '', description: '', price: 0, image_url: '' });
-              setIsUploadingProductImage(false);
-            });
           }
         } else {
           Animated.timing(dragY, {
@@ -519,173 +516,6 @@ export default function SettingsScreen() {
     animateCloseSheet(() => setShowServicesModal(false));
   };
 
-  // Products management functions
-  const openProductsModal = async () => {
-    setShowProductsModal(true);
-    animateOpenSheet();
-    setIsLoadingProducts(true);
-    setProductsError(null);
-    try {
-      const data = await productsApi.getAllProducts();
-      setProducts(data);
-    } catch (e) {
-      console.error('Error loading products:', e);
-      setProductsError('Error loading products');
-    } finally {
-      setIsLoadingProducts(false);
-    }
-  };
-
-  const closeProductsModal = () => {
-    animateCloseSheet(() => {
-      setShowProductsModal(false);
-      // Reset all product-related state when closing the modal
-      setProducts([]);
-      setIsLoadingProducts(false);
-      setProductsError(null);
-      setShowAddProductModal(false);
-      setEditingProduct(null);
-      setProductForm({ name: '', description: '', price: 0, image_url: '' });
-      setIsUploadingProductImage(false);
-    });
-  };
-
-  const handleAddProduct = async () => {
-    if (!productForm.name.trim() || productForm.price <= 0) {
-      Alert.alert('Error', 'Please fill in product name and price');
-      return;
-    }
-
-    try {
-      if (editingProduct) {
-        // Update existing product
-        const updatedProduct = await productsApi.updateProduct(editingProduct.id, productForm);
-        setProducts(prev => prev.map(p => p.id === editingProduct.id ? updatedProduct : p));
-      } else {
-        // Create new product
-        const newProduct = await productsApi.createProduct(productForm);
-        setProducts(prev => [newProduct, ...prev]);
-      }
-      
-      setProductForm({ name: '', description: '', price: 0, image_url: '' });
-      setEditingProduct(null);
-      setShowAddProductModal(false);
-    } catch (error) {
-      Alert.alert('Error', editingProduct ? 'Failed to update product' : 'Failed to create product');
-    }
-  };
-
-  const handleUpdateProduct = async (id: string, updates: Partial<CreateProductData>) => {
-    try {
-      const updatedProduct = await productsApi.updateProduct(id, updates);
-      setProducts(prev => prev.map(p => p.id === id ? updatedProduct : p));
-    } catch (error) {
-      Alert.alert('Error', 'Failed to update product');
-    }
-  };
-
-  const handleDeleteProduct = async (id: string) => {
-    Alert.alert(
-      'Delete Product',
-      'Are you sure you want to delete this product?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await productsApi.deleteProduct(id);
-              setProducts(prev => prev.filter(p => p.id !== id));
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete product');
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  const updateLocalProductField = <K extends keyof Product>(id: string, key: K, value: Product[K]) => {
-    setProducts(prev => prev.map(p => p.id === id ? { ...p, [key]: value } : p));
-  };
-
-  const handlePickProductImageForEdit = async (productId: string) => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Please allow gallery access to pick an image');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-      base64: true,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      setEditProductImageUploading(prev => ({ ...prev, [productId]: true }));
-      try {
-        const asset = result.assets[0];
-        const imageUrl = await productsApi.uploadProductImage(asset.uri, undefined, asset.base64);
-        updateLocalProductField(productId, 'image_url', imageUrl);
-      } catch (error) {
-        Alert.alert('Error', 'Failed to upload image');
-      } finally {
-        setEditProductImageUploading(prev => ({ ...prev, [productId]: false }));
-      }
-    }
-  };
-
-  const handleSaveProduct = async (product: Product) => {
-    setSavingProductId(product.id);
-    try {
-      const updated = await productsApi.updateProduct(product.id, {
-        name: product.name,
-        description: product.description,
-        price: product.price,
-        image_url: product.image_url
-      });
-      if (updated) {
-        setProducts(prev => prev.map(p => p.id === product.id ? updated : p));
-        Alert.alert('Success', 'Product saved successfully');
-      } else {
-        Alert.alert('Error', 'Failed to save product');
-      }
-    } catch (e) {
-      Alert.alert('Error', 'Failed to save product');
-    } finally {
-      setSavingProductId(null);
-    }
-  };
-
-  const handlePickProductImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-        base64: true,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        setIsUploadingProductImage(true);
-        try {
-          const asset = result.assets[0];
-          const imageUrl = await productsApi.uploadProductImage(asset.uri, undefined, asset.base64);
-          setProductForm(prev => ({ ...prev, image_url: imageUrl }));
-        } catch (error) {
-          Alert.alert('Error', 'Failed to upload image');
-        } finally {
-          setIsUploadingProductImage(false);
-        }
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to pick image');
-    }
-  };
 
   const updateLocalServiceField = <K extends keyof Service>(id: string, key: K, value: Service[K]) => {
     setEditableServices(prev => prev.map(s => (s.id === id ? { ...s, [key]: value } : s)));
@@ -694,25 +524,6 @@ export default function SettingsScreen() {
   // Add Service modal state
   const [showAddServiceModal, setShowAddServiceModal] = useState(false);
   
-  // Products management state
-  const [showProductsModal, setShowProductsModal] = useState(false);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
-  const [productsError, setProductsError] = useState<string | null>(null);
-  const [showAddProductModal, setShowAddProductModal] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
-  const [savingProductId, setSavingProductId] = useState<string | null>(null);
-  const [editProductImageUploading, setEditProductImageUploading] = useState<Record<string, boolean>>({});
-  
-  
-  const [productForm, setProductForm] = useState<CreateProductData>({
-    name: '',
-    description: '',
-    price: 0,
-    image_url: ''
-  });
-  const [isUploadingProductImage, setIsUploadingProductImage] = useState(false);
   
   
   const [addSvcName, setAddSvcName] = useState('');
@@ -967,7 +778,7 @@ export default function SettingsScreen() {
       }
 
       if (!uploadedUrl) {
-        Alert.alert('שגיאה', 'העלאת התמונה נכשלה');
+        Alert.alert('Error', 'Failed to upload image');
         return;
       }
 
@@ -997,13 +808,13 @@ export default function SettingsScreen() {
 
       if (updated) {
         setProfile(updated);
-        Alert.alert('הצלחה', 'התמונה נשמרה בהצלחה');
+        Alert.alert('Success', 'Image saved successfully');
       } else {
-        Alert.alert('שגיאה', 'שמירת התמונה נכשלה');
+        Alert.alert('Error', 'Failed to save image');
       }
     } catch (e) {
       console.error('image selection failed', e);
-      Alert.alert('שגיאה', 'שמירת התמונה נכשלה');
+      Alert.alert('Error', 'Failed to save image');
     } finally {
       // Clear loading state
       if (currentImageType === 'page1') {
@@ -1699,18 +1510,6 @@ export default function SettingsScreen() {
           )}
         </View>
 
-        <Text style={styles.sectionTitleNew}>Products</Text>
-        <View style={[styles.cardNew, shadowStyle]}>
-          {renderSettingItem(
-            <Pencil size={20} color={businessColors.primary} />,
-            'Manage products',
-            'Add, edit, and delete products for sale',
-            undefined,
-            () => {
-              openProductsModal();
-            }
-          )}
-        </View>
 
         <Text style={styles.sectionTitleNew}>Business details</Text>
         <View style={[styles.cardNew, shadowStyle]}>
@@ -1760,7 +1559,6 @@ export default function SettingsScreen() {
               if (profile) {
                 setProfile({ ...profile, primary_color: color });
               }
-              console.log('Color selected:', color);
               
               // Trigger comprehensive app refresh immediately
               triggerColorUpdate();
@@ -1889,6 +1687,15 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitleNew}>Security & support</Text>
         
         <View style={[styles.cardNew, shadowStyle]}>
+          {isAdmin && (
+            renderSettingItem(
+              <User size={20} color={businessColors.primary} />,
+              'Add admin user',
+              'Add another admin to the system',
+              undefined,
+              () => setShowAddAdminModal(true)
+            )
+          )}
           {renderSettingItem(
             <HelpCircle size={20} color={businessColors.primary} />,
             'Support and help',
@@ -1897,6 +1704,22 @@ export default function SettingsScreen() {
             () => setShowSupportModal(true)
           )}
         </View>
+
+        {user && (
+          <>
+            <Text style={styles.sectionTitleNew}>Account Management</Text>
+            
+            <View style={[styles.cardNew, shadowStyle]}>
+              {renderSettingItem(
+                <Trash2 size={20} color="#FF3B30" />,
+                'Delete Account',
+                'Delete your account and all data',
+                undefined,
+                () => setShowDeleteAccountModal(true)
+              )}
+            </View>
+          </>
+        )}
         
         <TouchableOpacity style={[styles.logoutButton, { backgroundColor: businessColors.primary }]} onPress={handleLogout}>
           <LogOut size={20} color={Colors.white} />
@@ -3141,7 +2964,22 @@ export default function SettingsScreen() {
         onClose={() => setShowAddAppointmentModal(false)}
         onSuccess={() => {
           // אפשר להוסיף כאן רענון של רשימת התורים אם צריך
-          console.log('Appointment created successfully');
+        }}
+      />
+
+      {/* Add Admin Modal */}
+      <AddAdminModal
+        visible={showAddAdminModal}
+        onClose={() => setShowAddAdminModal(false)}
+        onSuccess={() => {
+        }}
+      />
+
+      {/* Delete Account Modal */}
+      <DeleteAccountModal
+        visible={showDeleteAccountModal}
+        onClose={() => setShowDeleteAccountModal(false)}
+        onSuccess={() => {
         }}
       />
 
@@ -3214,357 +3052,7 @@ export default function SettingsScreen() {
         </SafeAreaView>
       </Modal>
 
-      {/* Products Management Modal */}
-      <Modal
-        visible={showProductsModal}
-        transparent
-        animationType="fade"
-        onRequestClose={closeProductsModal}
-      >
-        <View style={styles.sheetRoot}>
-          <TouchableWithoutFeedback onPress={closeProductsModal}>
-            <Animated.View style={[styles.sheetOverlay, { opacity: overlayOpacity }]} />
-          </TouchableWithoutFeedback>
-          <Animated.View
-            style={[styles.sheetContainer, { transform: [{ translateY: combinedTranslateY }] } ] }
-          >
-            <View style={styles.dragHandleArea}>
-              <View style={styles.sheetGrabberWrapper} {...panResponder.panHandlers}>
-                <View style={styles.sheetGrabber} />
-              </View>
-            </View>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity 
-                style={styles.modalCloseButton}
-                onPress={closeProductsModal}
-                accessibilityRole="button"
-                accessibilityLabel="Close"
-              >
-                <X size={20} color={Colors.text} />
-              </TouchableOpacity>
-              <Text style={[styles.modalTitle, { textAlign: 'center', alignSelf: 'center', flex: 1 }]}>Manage Products</Text>
-              <TouchableOpacity 
-                style={styles.modalActionButton}
-                onPress={() => {
-                  setProductForm({ name: '', description: '', price: 0, image_url: '' });
-                  setEditingProduct(null);
-                  setShowProductsModal(false);
-                  setTimeout(() => {
-                    setShowAddProductModal(true);
-                  }, 100);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Add product"
-                activeOpacity={0.7}
-              >
-                <Text style={styles.modalActionText}>+</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.sheetBody}>
 
-              <ScrollView
-                style={{ flex: 1 }}
-                contentContainerStyle={[styles.modalContentContainer, { paddingBottom: insets.bottom + 8 }]}
-                showsVerticalScrollIndicator={true}
-                keyboardShouldPersistTaps="handled"
-                nestedScrollEnabled={false}
-                scrollIndicatorInsets={{ bottom: 0 }}
-                alwaysBounceVertical
-              >
-                {isLoadingProducts && (
-                  <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-                    <ActivityIndicator size="large" color={businessColors.primary} />
-                    <Text style={{ marginTop: 12, color: Colors.subtext }}>Loading products...</Text>
-                  </View>
-                )}
-
-                {productsError && (
-                  <Text style={{ color: 'red', textAlign: 'center', marginVertical: 12 }}>{productsError}</Text>
-                )}
-
-                {!isLoadingProducts && !productsError && products.map((product) => (
-                  <Swipeable
-                    key={product.id}
-                    friction={2}
-                    rightThreshold={28}
-                    renderRightActions={(progress, dragX) => (
-                      <TouchableOpacity
-                        style={styles.swipeDeleteAction}
-                        activeOpacity={0.85}
-                        onPress={() => handleDeleteProduct(product.id)}
-                      >
-                        <Trash2 size={20} color={'#fff'} />
-                        <Text style={styles.swipeDeleteText}>Delete</Text>
-                      </TouchableOpacity>
-                    )}
-                  >
-                    <View style={styles.iosCard}>
-                      <TouchableOpacity
-                        style={[styles.accordionHeader, { flexDirection: 'row' }]}
-                        activeOpacity={0.85}
-                        onPress={() => setExpandedProductId(prev => prev === product.id ? null : product.id)}
-                      >
-                        {/* Right: thumbnail */}
-                        {product.image_url ? (
-                          <Image source={{ uri: product.image_url }} style={[styles.accordionThumb, { marginLeft: 0, marginRight: 12 }]} />
-                        ) : (
-                          <View style={[styles.accordionThumbPlaceholder, { marginLeft: 0, marginRight: 12 }]}>
-                            <Text style={styles.accordionThumbPlaceholderText}>
-                              {(product.name || '').slice(0, 1)}
-                            </Text>
-                          </View>
-                        )}
-                        {/* Middle: title and subtitle */}
-                        <View style={{ flex: 1, alignItems: 'flex-start' }}>
-                          <Text style={styles.accordionTitle}>{product.name || 'No name'}</Text>
-                          <Text style={styles.accordionSubtitle}>
-                            ${product.price.toFixed(2)}
-                          </Text>
-                        </View>
-                        {/* Left: chevron */}
-                        <View style={styles.accordionChevron}>
-                          {expandedProductId === product.id ? (
-                            <ChevronUp size={18} color={businessColors.primary} />
-                          ) : (
-                            <ChevronDown size={18} color={businessColors.primary} />
-                          )}
-                        </View>
-                      </TouchableOpacity>
-
-                      {expandedProductId === product.id && (
-                        <View>
-                          <View style={styles.imageHeaderContainer}>
-                            <TouchableOpacity
-                              onPress={() => handlePickProductImageForEdit(product.id)}
-                              activeOpacity={0.9}
-                              style={{ position: 'relative' }}
-                            >
-                              {!!product.image_url ? (
-                                <Image source={{ uri: product.image_url }} style={styles.serviceImagePreview} />
-                              ) : (
-                                <View style={[styles.serviceImagePreview, { alignItems: 'center', justifyContent: 'center' }]}>
-                                  <Text style={{ color: Colors.subtext }}>Tap to select an image</Text>
-                                </View>
-                              )}
-                              {editProductImageUploading[product.id] && (
-                                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 16 }}>
-                                  <ActivityIndicator size="large" color={businessColors.primary} />
-                                </View>
-                              )}
-                            </TouchableOpacity>
-                          </View>
-
-                          <View style={styles.formGroup}>
-                            <Text style={styles.formLabel}>Product name</Text>
-                            <TextInput
-                              style={styles.formInput}
-                              value={product.name}
-                              onChangeText={(text) => updateLocalProductField(product.id, 'name', text)}
-                              placeholder="Product name"
-                              placeholderTextColor={Colors.subtext}
-                              textAlign="left"
-                            />
-                          </View>
-
-                          <View style={styles.formGroup}>
-                            <Text style={styles.formLabel}>Description</Text>
-                            <TextInput
-                              style={[styles.formInput, { height: 80, textAlignVertical: 'top' }]}
-                              value={product.description || ''}
-                              onChangeText={(text) => updateLocalProductField(product.id, 'description', text)}
-                              placeholder="Product description"
-                              placeholderTextColor={Colors.subtext}
-                              multiline
-                              numberOfLines={3}
-                              textAlign="left"
-                            />
-                          </View>
-
-                          <View style={styles.formGroup}>
-                            <Text style={styles.formLabel}>Price ($)</Text>
-                            <TextInput
-                              style={styles.formInput}
-                              value={product.price.toString()}
-                              onChangeText={(text) => updateLocalProductField(product.id, 'price', parseFloat(text) || 0)}
-                              placeholder="0.00"
-                              placeholderTextColor={Colors.subtext}
-                              keyboardType="numeric"
-                              textAlign="left"
-                            />
-                          </View>
-
-                          <View style={styles.actionsRowInline}>
-                            <TouchableOpacity
-                              style={[styles.primaryPillButton, { opacity: savingProductId === product.id ? 0.7 : 1 }]}
-                              onPress={() => handleSaveProduct(product)}
-                              disabled={savingProductId === product.id}
-                              activeOpacity={0.85}
-                            >
-                              <Text style={styles.primaryPillButtonText}>
-                                {savingProductId === product.id ? 'Saving...' : 'Save changes'}
-                              </Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={styles.deleteIconButton}
-                              onPress={() => handleDeleteProduct(product.id)}
-                              activeOpacity={0.85}
-                              accessibilityRole="button"
-                              accessibilityLabel="Delete product"
-                            >
-                              <Trash2 size={20} color="#FF3B30" />
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      )}
-                    </View>
-                  </Swipeable>
-                ))}
-              </ScrollView>
-            </View>
-          </Animated.View>
-        </View>
-      </Modal>
-
-      {/* Add/Edit Product Modal */}
-      <Modal
-        visible={showAddProductModal}
-        animationType="slide"
-        presentationStyle="overFullScreen"
-        transparent={true}
-        onRequestClose={() => {
-          setShowAddProductModal(false);
-          setEditingProduct(null);
-          setProductForm({ name: '', description: '', price: 0, image_url: '' });
-          setIsUploadingProductImage(false);
-          setShowProductsModal(true);
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <TouchableWithoutFeedback onPress={() => {
-            setShowAddProductModal(false);
-            setEditingProduct(null);
-            setProductForm({ name: '', description: '', price: 0, image_url: '' });
-            setIsUploadingProductImage(false);
-            setShowProductsModal(true);
-          }}>
-            <View style={{ flex: 1 }} />
-          </TouchableWithoutFeedback>
-          <View style={styles.modalBottomSheet}>
-            <KeyboardAvoidingView
-              behavior={Platform.select({ ios: 'padding', android: undefined })}
-              keyboardVerticalOffset={Platform.select({ ios: 0, android: 0 }) as number}
-              style={{ flex: 1 }}
-            >
-            <View style={styles.dragHandleArea}>
-              <View style={styles.sheetGrabberWrapper}>
-                <View style={styles.sheetGrabber} />
-              </View>
-            </View>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity 
-                style={styles.modalCloseButton}
-                onPress={() => {
-                  setShowAddProductModal(false);
-                  setEditingProduct(null);
-                  setProductForm({ name: '', description: '', price: 0, image_url: '' });
-                  setIsUploadingProductImage(false);
-                  setShowProductsModal(true);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel="Close"
-              >
-                <X size={20} color={Colors.text} />
-              </TouchableOpacity>
-              <Text style={[styles.modalTitle, { textAlign: 'center', alignSelf: 'center', flex: 1 }]}>
-                {editingProduct ? 'Edit Product' : 'Add Product'}
-              </Text>
-              <View style={{ width: 44 }} />
-            </View>
-
-            <ScrollView 
-              style={styles.modalContent} 
-              contentContainerStyle={{ paddingBottom: 30 }}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.modalFormContent}>
-                <View style={styles.formSection}>
-                  <Text style={styles.inputLabel}>Product Image</Text>
-                  <TouchableOpacity 
-                    style={styles.imagePickerButton}
-                    onPress={handlePickProductImage}
-                    disabled={isUploadingProductImage}
-                  >
-                    {productForm.image_url ? (
-                      <Image source={{ uri: productForm.image_url }} style={styles.previewImage} />
-                    ) : (
-                      <View style={styles.imagePickerPlaceholder}>
-                        {isUploadingProductImage ? (
-                          <ActivityIndicator size="small" color={businessColors.primary} />
-                        ) : (
-                          <>
-                            <ImageIcon size={24} color={businessColors.primary} />
-                            <Text style={styles.imagePickerText}>Tap to add image</Text>
-                          </>
-                        )}
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.formSection}>
-                  <Text style={styles.inputLabel}>Product Name *</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    value={productForm.name}
-                    onChangeText={(text) => setProductForm(prev => ({ ...prev, name: text }))}
-                    placeholder="Enter product name"
-                    placeholderTextColor={Colors.subtext}
-                  />
-                </View>
-
-                <View style={styles.formSection}>
-                  <Text style={styles.inputLabel}>Description</Text>
-                  <TextInput
-                    style={[styles.formInput, styles.textArea]}
-                    value={productForm.description}
-                    onChangeText={(text) => setProductForm(prev => ({ ...prev, description: text }))}
-                    placeholder="Enter product description"
-                    placeholderTextColor={Colors.subtext}
-                    multiline
-                    numberOfLines={3}
-                  />
-                </View>
-
-                <View style={styles.formSectionLast}>
-                  <Text style={styles.inputLabel}>Price *</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    value={productForm.price.toString()}
-                    onChangeText={(text) => setProductForm(prev => ({ ...prev, price: parseFloat(text) || 0 }))}
-                    placeholder="0.00"
-                    placeholderTextColor={Colors.subtext}
-                    keyboardType="numeric"
-                  />
-                </View>
-              </View>
-            </ScrollView>
-            
-            {/* Save Button */}
-            <View style={styles.saveButtonContainer}>
-              <TouchableOpacity 
-                style={styles.saveButton}
-                onPress={handleAddProduct}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.saveButtonText}>
-                  {editingProduct ? 'Update Product' : 'Add Product'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </KeyboardAvoidingView>
-          </View>
-        </View>
-        </Modal>
 
       {/* Image Selection Modal */}
       <ImageSelectionModal
@@ -4541,130 +4029,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
-
-  // Products Modal Styles
-  productCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    ...shadowStyle,
-  },
-  productImageContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    overflow: 'hidden',
-    marginRight: 12,
-  },
-  productImage: {
-    width: '100%',
-    height: '100%',
-  },
-  productImagePlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#F5F5F5',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  productInfo: {
+  modalOverlay: {
     flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
   },
-  productName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 4,
-  },
-  productDescription: {
-    fontSize: 14,
-    color: Colors.subtext,
-    marginBottom: 4,
-  },
-  productPrice: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.primary,
-  },
-  productActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  editButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F5F5F5',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deleteButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#FFF5F5',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  addButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: Colors.subtext,
-    textAlign: 'center',
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: Colors.subtext,
-    marginTop: 12,
-  },
-  errorContainer: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#FF3B30',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  retryButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+  modalBottomSheet: {
+    backgroundColor: Colors.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '92%',
+    minHeight: '85%',
+    marginTop: 40,
   },
   imagePickerButton: {
     width: 140,
@@ -4697,46 +4073,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-
-  // Add Product Button Styles
-  addProductHeaderButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  addProductHeaderButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  addProductMainButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    marginTop: 20,
-    alignItems: 'center',
-    ...shadowStyle,
-  },
-  addProductMainButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalBottomSheet: {
-    backgroundColor: Colors.background,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '92%',
-    minHeight: '85%',
-    marginTop: 40,
-  },
   saveButtonContainer: {
     paddingHorizontal: 20,
     paddingTop: 20,
@@ -4757,5 +4093,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-
 });

@@ -130,7 +130,6 @@ export const notifyWaitlistOnBusinessHoursUpdate = async (
 // Function to check waitlist and notify waiting clients for the same date
 export const checkWaitlistAndNotify = async (cancelledAppointment: AvailableTimeSlot) => {
   try {
-    console.log('🔍 Checking waitlist for cancelled appointment:', cancelledAppointment);
     
     // Get the time period for the cancelled appointment
     const appointmentTime = new Date(`2000-01-01T${cancelledAppointment.slot_time}`);
@@ -147,7 +146,6 @@ export const checkWaitlistAndNotify = async (cancelledAppointment: AvailableTime
       timePeriod = 'any';
     }
     
-    console.log('⏰ Appointment time period:', timePeriod, 'for hour:', hour);
     
     const businessId = getBusinessId();
     
@@ -175,10 +173,8 @@ export const checkWaitlistAndNotify = async (cancelledAppointment: AvailableTime
       return;
     }
 
-    console.log('📋 Found waitlist entries:', waitlistEntries?.length || 0);
     
     if (!waitlistEntries || waitlistEntries.length === 0) {
-      console.log('ℹ️ No waitlist entries found for this date and time period');
       return;
     }
 
@@ -192,12 +188,7 @@ export const checkWaitlistAndNotify = async (cancelledAppointment: AvailableTime
       return timeMatch || serviceMatch;
     });
 
-    console.log('📋 Relevant waitlist entries after filtering:', relevantEntries.length);
 
-    // Log found entries for debugging
-    relevantEntries.forEach((entry, index) => {
-      console.log(`📝 Entry ${index + 1}: ${entry.client_name} (${entry.client_phone}) - ${entry.service_name} - ${entry.time_period}`);
-    });
 
     // Get user data for notification
     const clientPhones = relevantEntries.map(entry => entry.client_phone);
@@ -224,7 +215,6 @@ export const checkWaitlistAndNotify = async (cancelledAppointment: AvailableTime
     for (const entry of relevantEntries) {
       const user = userMap.get(entry.client_phone);
       if (!user) {
-        console.log(`⚠️ User not found for phone: ${entry.client_phone}`);
         continue;
       }
 
@@ -240,10 +230,8 @@ export const checkWaitlistAndNotify = async (cancelledAppointment: AvailableTime
       });
 
       notifiedEntryIds.push(entry.id);
-      console.log(`📱 Prepared notification for: ${entry.client_name} (${entry.client_phone})`);
     }
 
-    console.log('📱 Creating notifications for', notifications.length, 'clients');
 
     // Insert notifications into database
     if (notifications.length > 0) {
@@ -256,7 +244,6 @@ export const checkWaitlistAndNotify = async (cancelledAppointment: AvailableTime
         return;
       }
 
-      console.log('✅ Successfully created notifications for waitlist clients');
 
       // Update waitlist entry status to 'contacted' to prevent duplicate notifications
       if (notifiedEntryIds.length > 0) {
@@ -268,7 +255,6 @@ export const checkWaitlistAndNotify = async (cancelledAppointment: AvailableTime
         if (updateError) {
           console.error('❌ Error updating waitlist entry status:', updateError);
         } else {
-          console.log('✅ Updated waitlist entry status to "contacted" for', notifiedEntryIds.length, 'entries');
         }
       }
     }
@@ -281,7 +267,6 @@ export const checkWaitlistAndNotify = async (cancelledAppointment: AvailableTime
 // Function to notify clients waiting for the same service on any future date
 export const notifyServiceWaitlistClients = async (cancelledAppointment: AvailableTimeSlot) => {
   try {
-    console.log('🔍 Checking service waitlist for cancelled appointment:', cancelledAppointment);
     
     const businessId = getBusinessId();
     
@@ -309,16 +294,13 @@ export const notifyServiceWaitlistClients = async (cancelledAppointment: Availab
       return;
     }
 
-    console.log('📋 Found service waitlist entries:', waitlistEntries?.length || 0);
     
     if (!waitlistEntries || waitlistEntries.length === 0) {
-      console.log('ℹ️ No service waitlist entries found');
       return;
     }
 
     // Log found entries for debugging
     waitlistEntries.forEach((entry, index) => {
-      console.log(`📝 Service Entry ${index + 1}: ${entry.client_name} (${entry.client_phone}) - ${entry.service_name} - ${entry.requested_date} - ${entry.time_period}`);
     });
 
     // Get user data for notification
@@ -346,7 +328,6 @@ export const notifyServiceWaitlistClients = async (cancelledAppointment: Availab
     for (const entry of waitlistEntries) {
       const user = userMap.get(entry.client_phone);
       if (!user) {
-        console.log(`⚠️ User not found for phone: ${entry.client_phone}`);
         continue;
       }
 
@@ -362,10 +343,8 @@ export const notifyServiceWaitlistClients = async (cancelledAppointment: Availab
       });
 
       notifiedEntryIds.push(entry.id);
-      console.log(`📱 Prepared service notification for: ${entry.client_name} (${entry.client_phone})`);
     }
 
-    console.log('📱 Creating service notifications for', notifications.length, 'clients');
 
     // Insert notifications into database
     if (notifications.length > 0) {
@@ -378,7 +357,6 @@ export const notifyServiceWaitlistClients = async (cancelledAppointment: Availab
         return;
       }
 
-      console.log('✅ Successfully created service notifications for waitlist clients');
 
       // Update waitlist entry status to 'contacted' to prevent duplicate notifications
       if (notifiedEntryIds.length > 0) {
@@ -390,7 +368,6 @@ export const notifyServiceWaitlistClients = async (cancelledAppointment: Availab
         if (updateError) {
           console.error('❌ Error updating service waitlist entry status:', updateError);
         } else {
-          console.log('✅ Updated service waitlist entry status to "contacted" for', notifiedEntryIds.length, 'entries');
         }
       }
     }
@@ -403,7 +380,6 @@ export const notifyServiceWaitlistClients = async (cancelledAppointment: Availab
 // Function to notify all waitlist clients for any future date (general availability)
 export const notifyAllWaitlistClients = async (cancelledAppointment: AvailableTimeSlot) => {
   try {
-    console.log('🔍 Checking all waitlist clients for general availability notification');
     
     const businessId = getBusinessId();
     
@@ -431,16 +407,13 @@ export const notifyAllWaitlistClients = async (cancelledAppointment: AvailableTi
       return;
     }
 
-    console.log('📋 Found all waitlist entries:', waitlistEntries?.length || 0);
     
     if (!waitlistEntries || waitlistEntries.length === 0) {
-      console.log('ℹ️ No waitlist entries found');
       return;
     }
 
     // Log found entries for debugging
     waitlistEntries.forEach((entry, index) => {
-      console.log(`📝 All Entry ${index + 1}: ${entry.client_name} (${entry.client_phone}) - ${entry.service_name} - ${entry.requested_date} - ${entry.time_period}`);
     });
 
     // Get user data for notification
@@ -468,7 +441,6 @@ export const notifyAllWaitlistClients = async (cancelledAppointment: AvailableTi
     for (const entry of waitlistEntries) {
       const user = userMap.get(entry.client_phone);
       if (!user) {
-        console.log(`⚠️ User not found for phone: ${entry.client_phone}`);
         continue;
       }
 
@@ -484,10 +456,8 @@ export const notifyAllWaitlistClients = async (cancelledAppointment: AvailableTi
       });
 
       notifiedEntryIds.push(entry.id);
-      console.log(`📱 Prepared general notification for: ${entry.client_name} (${entry.client_phone})`);
     }
 
-    console.log('📱 Creating general notifications for', notifications.length, 'clients');
 
     // Insert notifications into database
     if (notifications.length > 0) {
@@ -500,7 +470,6 @@ export const notifyAllWaitlistClients = async (cancelledAppointment: AvailableTi
         return;
       }
 
-      console.log('✅ Successfully created general notifications for waitlist clients');
 
       // Update waitlist entry status to 'contacted' to prevent duplicate notifications
       if (notifiedEntryIds.length > 0) {
@@ -512,7 +481,6 @@ export const notifyAllWaitlistClients = async (cancelledAppointment: AvailableTi
         if (updateError) {
           console.error('❌ Error updating general waitlist entry status:', updateError);
         } else {
-          console.log('✅ Updated general waitlist entry status to "contacted" for', notifiedEntryIds.length, 'entries');
         }
       }
     }

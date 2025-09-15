@@ -50,7 +50,6 @@ export default function TabsLayout() {
   // Force re-render when colors change
   React.useEffect(() => {
     // This effect will trigger re-render when colorUpdateTrigger changes
-    console.log('Admin tabs layout: color update triggered', colorUpdateTrigger);
   }, [colorUpdateTrigger]);
   
   // RTL debug removed; rely on explicit layout directions
@@ -201,6 +200,13 @@ export default function TabsLayout() {
         name="edit-gallery" 
         options={{
           title: 'Edit Gallery',
+          href: null
+        }}
+      />
+      <Tabs.Screen 
+        name="edit-products" 
+        options={{
+          title: 'Edit Products',
           href: null
         }}
       />

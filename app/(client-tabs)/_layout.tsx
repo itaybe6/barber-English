@@ -103,7 +103,6 @@ export default function ClientTabsLayout() {
   // Force re-render when colors change
   React.useEffect(() => {
     // This effect will trigger re-render when colorUpdateTrigger changes
-    console.log('Client tabs layout: color update triggered', colorUpdateTrigger);
   }, [colorUpdateTrigger]);
   
   // RTL debug removed; rely on explicit layout directions

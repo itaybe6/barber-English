@@ -17,19 +17,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '@/stores/authStore';
 import { usersApi } from '@/lib/api/users';
-import { supabase, getBusinessId } from '@/lib/supabase';
+import { supabase, getBusinessId, BusinessProfile } from '@/lib/supabase';
 import { findUserByCredentials, isValidUserType } from '@/constants/auth';
 import { getCurrentClientLogo } from '@/src/theme/assets';
+import { businessProfileApi } from '@/lib/api/businessProfile';
+import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 
-// Local palette to match the provided design (does not affect global colors)
-const palette = {
-  primary: '#000000',
-  secondary: '#1C1C1E',
-  accent: '#111111',
-  textPrimary: '#1F2937',
-  textSecondary: '#6B7280',
-  inputBg: 'rgba(255,255,255,0.7)',
-  inputBorder: '#E5E7EB',
+// Static colors for UI elements that don't change with business theme
+const staticColors = {
+  textPrimary: '#FFFFFF',
+  textSecondary: 'rgba(255,255,255,0.8)',
+  inputBg: 'rgba(255,255,255,0.2)',
+  inputBorder: 'rgba(255,255,255,0.3)',
   white: '#FFFFFF',
   backgroundStart: '#FFFFFF',
   backgroundEnd: '#F5F5F5',
@@ -44,13 +43,33 @@ export default function LoginScreen() {
   const [forgotPhone, setForgotPhone] = useState('');
   const [forgotEmail, setForgotEmail] = useState('');
   const [isSendingReset, setIsSendingReset] = useState(false);
+  const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const login = useAuthStore((state) => state.login);
   const { isAuthenticated, user } = useAuthStore();
+  const { colors: businessColors } = useBusinessColors();
 
   // Effect to monitor authentication changes
   useEffect(() => {
     // Authentication state monitoring
   }, [isAuthenticated, user]);
+
+  // Load business profile for login background
+  useEffect(() => {
+    const loadBusinessProfile = async () => {
+      try {
+        setIsLoadingProfile(true);
+        const profile = await businessProfileApi.getProfile();
+        setBusinessProfile(profile);
+      } catch (error) {
+        console.error('Failed to load business profile:', error);
+      } finally {
+        setIsLoadingProfile(false);
+      }
+    };
+
+    loadBusinessProfile();
+  }, []);
 
   const handleLogin = async () => {
     if (!phone.trim() || !password.trim()) {
@@ -155,14 +174,12 @@ export default function LoginScreen() {
     const p = (forgotPhone || '').trim();
     const e = (forgotEmail || '').trim();
     if (!e) { Alert.alert('Error', 'Please enter an email'); return; }
-    console.log('[ForgotPassword] pressed', { phone: p, email: e });
     setIsSendingReset(true);
     try {
       // 1) Try Edge Function first
       const { data: fnData, error: fnErr } = await supabase.functions.invoke('reset-password', {
         body: { email: e },
       });
-      console.log('[ForgotPassword] edge response', { fnData, fnErr });
       if (fnErr) {
         // 2) Fallback: call Supabase Auth directly from client
         console.warn('[ForgotPassword] edge failed, falling back to auth.resetPasswordForEmail', fnErr);
@@ -199,28 +216,44 @@ export default function LoginScreen() {
   };
 
   return (
-    <LinearGradient
-      colors={[ '#FFFFFF', '#F6F6F6', '#EFEFEF' ]}
-      locations={[0, 0.55, 1]}
-      start={{ x: 0.2, y: 0 }}
-      end={{ x: 0.8, y: 1 }}
-      style={styles.bgGradient}
-    >
-      {/* modern subtle gradient beams instead of circular blobs */}
-      <LinearGradient
-        colors={[ '#00000022', '#00000000' ]}
-        start={{ x: 1, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={styles.beamRight}
-        pointerEvents="none"
-      />
-      <LinearGradient
-        colors={[ '#00000026', '#FFFFFF00' ]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.beamTop}
-        pointerEvents="none"
-      />
+    <View style={styles.container}>
+      {/* Custom login background image */}
+      {businessProfile?.login_img && !isLoadingProfile ? (
+        <Image 
+          source={{ uri: businessProfile.login_img }} 
+          style={styles.backgroundImage}
+          resizeMode="cover"
+        />
+      ) : (
+        <LinearGradient
+          colors={[ '#FFFFFF', '#F6F6F6', '#EFEFEF' ]}
+          locations={[0, 0.55, 1]}
+          start={{ x: 0.2, y: 0 }}
+          end={{ x: 0.8, y: 1 }}
+          style={styles.bgGradient}
+        >
+          {/* modern subtle gradient beams instead of circular blobs */}
+          <LinearGradient
+            colors={[ '#00000022', '#00000000' ]}
+            start={{ x: 1, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={styles.beamRight}
+            pointerEvents="none"
+          />
+          <LinearGradient
+            colors={[ '#00000026', '#FFFFFF00' ]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.beamTop}
+            pointerEvents="none"
+          />
+        </LinearGradient>
+      )}
+      
+      {/* Dark overlay for better text readability when using custom background */}
+      {businessProfile?.login_img && !isLoadingProfile && (
+        <View style={styles.darkOverlay} />
+      )}
       <SafeAreaView style={styles.fullSafe}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
@@ -233,12 +266,12 @@ export default function LoginScreen() {
 
               {/* Phone */}
               <View style={styles.field}>
-                <View style={[styles.inputRow, { backgroundColor: palette.inputBg, borderColor: palette.inputBorder }]}>
-                  <Ionicons name="call-outline" size={18} color={palette.textSecondary} style={styles.iconRight} />
+                <View style={[styles.inputRow, { backgroundColor: staticColors.inputBg, borderColor: staticColors.inputBorder }]}>
+                  <Ionicons name="call-outline" size={18} color={staticColors.textSecondary} style={styles.iconRight} />
                   <TextInput
                     style={styles.input}
                     placeholder="Phone number"
-                    placeholderTextColor={palette.textSecondary}
+                    placeholderTextColor={staticColors.textSecondary}
                     value={phone}
                     onChangeText={setPhone}
                     keyboardType="phone-pad"
@@ -250,12 +283,12 @@ export default function LoginScreen() {
 
               {/* Password */}
               <View style={styles.field}>
-                <View style={[styles.inputRow, { backgroundColor: palette.inputBg, borderColor: palette.inputBorder }]}>
-                  <Ionicons name="lock-closed-outline" size={18} color={palette.textSecondary} style={styles.iconRight} />
+                <View style={[styles.inputRow, { backgroundColor: staticColors.inputBg, borderColor: staticColors.inputBorder }]}>
+                  <Ionicons name="lock-closed-outline" size={18} color={staticColors.textSecondary} style={styles.iconRight} />
                   <TextInput
                     style={[styles.input, styles.inputPassword]}
                     placeholder="Password"
-                    placeholderTextColor={palette.textSecondary}
+                    placeholderTextColor={staticColors.textSecondary}
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry={!showPassword}
@@ -263,7 +296,7 @@ export default function LoginScreen() {
                     textAlign="left"
                   />
                   <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
-                    <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={palette.textSecondary} />
+                    <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={staticColors.textSecondary} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -271,8 +304,8 @@ export default function LoginScreen() {
               {/* CTA */}
               <TouchableOpacity onPress={handleLogin} activeOpacity={0.9} disabled={isLoading} style={styles.ctaShadow}>
                 <View style={styles.ctaRadiusWrap}>
-                  <View style={[styles.cta, styles.ctaOutlined]}>
-                    <Text style={styles.ctaText}>{isLoading ? 'Signing in…' : 'Sign In'}</Text>
+                  <View style={[styles.cta, styles.ctaOutlined, { backgroundColor: businessColors.primary }]}>
+                    <Text style={[styles.ctaText, { color: '#FFFFFF' }]}>{isLoading ? 'Signing in…' : 'Sign In'}</Text>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -284,7 +317,7 @@ export default function LoginScreen() {
               <Text style={styles.registerLine}>
                 Don't have an account? 
                 <Link href="/register" asChild>
-                  <Text style={styles.registerAction}>Sign up now</Text>
+                  <Text style={[styles.registerAction, { color: businessColors.primary }]}>Sign up now</Text>
                 </Link>
               </Text>
             </View>
@@ -298,12 +331,12 @@ export default function LoginScreen() {
             <Text style={styles.forgotTitle}>Reset Password</Text>
             <Text style={styles.forgotSubtitle}>Enter phone and email as they appear on your account</Text>
             <View style={{ height: 10 }} />
-            <View style={[styles.inputRow, { backgroundColor: palette.inputBg, borderColor: palette.inputBorder }]}> 
-              <Ionicons name="call-outline" size={18} color={palette.textSecondary} style={styles.iconRight} />
+            <View style={[styles.inputRow, { backgroundColor: staticColors.inputBg, borderColor: staticColors.inputBorder }]}> 
+              <Ionicons name="call-outline" size={18} color={staticColors.textSecondary} style={styles.iconRight} />
               <TextInput
                 style={styles.input}
                 placeholder="Phone number"
-                placeholderTextColor={palette.textSecondary}
+                placeholderTextColor={staticColors.textSecondary}
                 value={forgotPhone}
                 onChangeText={setForgotPhone}
                 keyboardType="phone-pad"
@@ -312,12 +345,12 @@ export default function LoginScreen() {
               />
             </View>
             <View style={{ height: 10 }} />
-            <View style={[styles.inputRow, { backgroundColor: palette.inputBg, borderColor: palette.inputBorder }]}> 
-              <Ionicons name="mail-outline" size={18} color={palette.textSecondary} style={styles.iconRight} />
+            <View style={[styles.inputRow, { backgroundColor: staticColors.inputBg, borderColor: staticColors.inputBorder }]}> 
+              <Ionicons name="mail-outline" size={18} color={staticColors.textSecondary} style={styles.iconRight} />
               <TextInput
                 style={styles.input}
                 placeholder="Email"
-                placeholderTextColor={palette.textSecondary}
+                placeholderTextColor={staticColors.textSecondary}
                 value={forgotEmail}
                 onChangeText={setForgotEmail}
                 keyboardType="email-address"
@@ -331,24 +364,47 @@ export default function LoginScreen() {
               <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setIsForgotOpen(false)} disabled={isSendingReset}>
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalBtn, styles.saveBtn]} onPress={handleForgotSubmit} disabled={isSendingReset}>
-                <Text style={styles.saveBtnText}>{isSendingReset ? 'Sending…' : 'Confirm'}</Text>
+              <TouchableOpacity style={[styles.modalBtn, styles.saveBtn, { backgroundColor: businessColors.primary }]} onPress={handleForgotSubmit} disabled={isSendingReset}>
+                <Text style={[styles.saveBtnText, { color: '#FFFFFF' }]}>{isSendingReset ? 'Sending…' : 'Confirm'}</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       )}
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: palette.white,
+    backgroundColor: staticColors.white,
+  },
+  backgroundImage: {
+    position: 'absolute',
+    top: -50, // Extend beyond safe area
+    left: 0,
+    right: 0,
+    bottom: -50, // Extend beyond safe area
+    width: '100%',
+    height: '120%', // Ensure full coverage
+  },
+  darkOverlay: {
+    position: 'absolute',
+    top: -50, // Extend beyond safe area
+    left: 0,
+    right: 0,
+    bottom: -50, // Extend beyond safe area
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
   },
   bgGradient: {
-    flex: 1,
+    position: 'absolute',
+    top: -50, // Extend beyond safe area
+    left: 0,
+    right: 0,
+    bottom: -50, // Extend beyond safe area
+    width: '100%',
+    height: '120%', // Ensure full coverage
   },
   fullSafe: {
     flex: 1,
@@ -395,18 +451,18 @@ const styles = StyleSheet.create({
   appTitle: {
     fontSize: 28,
     fontWeight: '800',
-    color: palette.textPrimary,
+    color: staticColors.textPrimary,
     marginBottom: 4,
   },
   appSubtitle: {
     fontSize: 14,
-    color: palette.textSecondary,
+    color: staticColors.textSecondary,
     opacity: 1,
     marginBottom: 14,
   },
   safeBottom: {
     flex: 1,
-    backgroundColor: palette.white,
+    backgroundColor: staticColors.white,
   },
   scrollContent: {
     flexGrow: 1,
@@ -415,19 +471,20 @@ const styles = StyleSheet.create({
     paddingVertical: 32,
   },
   card: {
-    backgroundColor: 'rgba(255,255,255,0.75)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 24,
     marginTop: 0,
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
+    borderColor: 'rgba(255,255,255,0.2)',
     shadowColor: '#000',
     shadowOpacity: 0.06,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 },
     elevation: 3,
+    backdropFilter: 'blur(20px)',
   },
   field: {
     marginBottom: 16,
@@ -449,7 +506,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 16,
-    color: palette.textPrimary,
+    color: staticColors.textPrimary,
     paddingHorizontal: 8,
     paddingRight: 36,
     textAlign: 'left',
@@ -505,14 +562,14 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   forgotPasswordText: {
-    color: palette.textSecondary,
+    color: staticColors.textSecondary,
     fontSize: 14,
     fontWeight: '600',
   },
   registerLine: {
     marginTop: 8,
     textAlign: 'center',
-    color: palette.textSecondary,
+    color: staticColors.textSecondary,
     fontSize: 14,
   },
   registerAction: {
@@ -530,18 +587,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cancelBtn: {
-    backgroundColor: '#F2F2F7',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   cancelBtnText: {
-    color: palette.textPrimary,
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },
   saveBtn: {
-    backgroundColor: palette.primary,
+    backgroundColor: staticColors.textPrimary, // Will be overridden by inline style
   },
   saveBtnText: {
-    color: palette.white,
+    color: staticColors.white,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -559,27 +618,28 @@ const styles = StyleSheet.create({
   forgotCard: {
     width: '100%',
     maxWidth: 420,
-    backgroundColor: palette.white,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     borderRadius: 18,
     padding: 18,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
+    borderColor: 'rgba(255,255,255,0.2)',
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
     elevation: 6,
+    backdropFilter: 'blur(20px)',
   },
   forgotTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: palette.textPrimary,
+    color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 6,
   },
   forgotSubtitle: {
     fontSize: 13,
-    color: palette.textSecondary,
+    color: 'rgba(255,255,255,0.8)',
     textAlign: 'center',
   },
   forgotActions: {

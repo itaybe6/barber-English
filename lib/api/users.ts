@@ -1,4 +1,5 @@
 import { supabase, User, getBusinessId } from '../supabase';
+import { useAuthStore } from '../../stores/authStore';
 
 export const usersApi = {
   // Simple hash function for passwords (for demo purposes)
@@ -197,6 +198,94 @@ export const usersApi = {
       return true;
     } catch (error) {
       console.error('Error deleting user:', error);
+      return false;
+    }
+  },
+
+  // Delete current user and all associated data
+  async deleteUserAndAllData(): Promise<boolean> {
+    try {
+      const businessId = getBusinessId();
+      const currentUser = useAuthStore.getState().user;
+      
+      if (!currentUser) {
+        console.error('No current user found');
+        return false;
+      }
+
+      const userId = currentUser.id;
+
+      // Delete all data associated with this user
+      const deletePromises = [
+        // Delete appointments
+        supabase
+          .from('appointments')
+          .delete()
+          .eq('user_id', userId)
+          .eq('business_id', businessId),
+        
+        // Delete business constraints
+        supabase
+          .from('business_constraints')
+          .delete()
+          .eq('user_id', userId)
+          .eq('business_id', businessId),
+        
+        // Delete business hours
+        supabase
+          .from('business_hours')
+          .delete()
+          .eq('user_id', userId)
+          .eq('business_id', businessId),
+        
+        // Delete designs
+        supabase
+          .from('designs')
+          .delete()
+          .eq('user_id', userId)
+          .eq('business_id', businessId),
+        
+        // Delete notifications
+        supabase
+          .from('notifications')
+          .delete()
+          .eq('business_id', businessId), // Delete all notifications for this business
+        
+        // Delete recurring appointments
+        supabase
+          .from('recurring_appointments')
+          .delete()
+          .eq('user_id', userId)
+          .eq('business_id', businessId),
+        
+        // Delete waitlist entries
+        supabase
+          .from('waitlist_entries')
+          .delete()
+          .eq('user_id', userId)
+          .eq('business_id', businessId),
+        
+        // Finally delete the user
+        supabase
+          .from('users')
+          .delete()
+          .eq('id', userId)
+          .eq('business_id', businessId)
+      ];
+
+      const results = await Promise.all(deletePromises);
+      
+      // Check if any deletion failed
+      const hasErrors = results.some(result => result.error);
+      
+      if (hasErrors) {
+        console.error('Error deleting user data:', results.filter(r => r.error));
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error deleting user and all data:', error);
       return false;
     }
   }

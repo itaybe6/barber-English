@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 // import { useFonts } from 'expo-font';
 import { AvailableTimeSlot, supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
+import { useColors } from '@/src/theme/ThemeProvider';
 
 interface DailyScheduleProps {
   nextAppointment: AvailableTimeSlot | null;
@@ -16,7 +17,9 @@ interface DailyScheduleProps {
 
 export default function DailySchedule({ nextAppointment, loading, onRefresh, todayAppointmentsCount, loadingTodayCount }: DailyScheduleProps) {
   const router = useRouter();
+  const colors = useColors();
   const [clientImageUrl, setClientImageUrl] = useState<string | undefined>(undefined);
+  const styles = createStyles(colors);
   // Remove custom font usage; rely on system/default fonts
   const getInitials = (fullName?: string | null): string => {
     if (!fullName) return '';
@@ -107,7 +110,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
         >
           <View style={styles.cardHeaderRow}>
             <View style={styles.headerIconCircle}>
-              <Ionicons name="calendar-outline" size={18} color="#1C1C1E" />
+              <Ionicons name="calendar-outline" size={18} color={colors.primary} />
             </View>
             <Text style={styles.dateText}>
               {new Date().toLocaleDateString('en-US', {
@@ -116,7 +119,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
               })} {new Date().toLocaleDateString('en-US', { weekday: 'short' })}
             </Text>
             {loadingTodayCount ? (
-              <ActivityIndicator size="small" color="#1C1C1E" />
+              <ActivityIndicator size="small" color={colors.primary} />
             ) : (
               <View style={styles.timePillHeader}>
                 <Text style={styles.timeTextPill}>
@@ -135,14 +138,14 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
         >
           <View style={styles.cardHeaderRow}>
             <View style={styles.headerIconCircle}>
-              <Ionicons name="time-outline" size={18} color="#1C1C1E" />
+              <Ionicons name="time-outline" size={18} color={colors.primary} />
             </View>
             <Text style={styles.nextTitle}>Next appointment</Text>
           </View>
           
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color="#7B61FF" />
+              <ActivityIndicator size="small" color={colors.primary} />
               <Text style={styles.loadingText}>Loading...</Text>
             </View>
           ) : nextAppointment ? (
@@ -175,7 +178,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
           ) : (
             <View style={styles.emptyStateContainer}>
               <View style={styles.emptyIconCircle}>
-                <Ionicons name="calendar-outline" size={20} color="#1C1C1E" />
+                <Ionicons name="calendar-outline" size={20} color={colors.primary} />
               </View>
               <Text style={styles.emptyTitle}>No upcoming appointments today</Text>
               <Text style={styles.emptySubtitle}>No appointments scheduled for today</Text>
@@ -187,7 +190,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -203,7 +206,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 17,
     fontWeight: 'bold',
-    color: '#7B61FF',
+    color: colors.primary,
     textAlign: 'center',
     marginBottom: 12,
     letterSpacing: 0.5,
@@ -261,7 +264,7 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   headerIconCircle: {
-    backgroundColor: 'rgba(0,0,0,0.08)',
+    backgroundColor: `${colors.primary}15`, // 15% opacity of primary color
     borderRadius: 16,
     width: 32,
     height: 32,
@@ -489,7 +492,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#1C1C1E',
+    backgroundColor: colors.primary,
     marginTop: 0,
     marginLeft: 2,
   },
@@ -524,7 +527,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   emptyIconCircle: {
-    backgroundColor: 'rgba(123,97,255,0.10)',
+    backgroundColor: `${colors.primary}20`, // 20% opacity of primary color
     borderRadius: 18,
     width: 36,
     height: 36,

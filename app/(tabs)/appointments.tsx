@@ -397,7 +397,7 @@ export default function AdminAppointmentsScreen() {
             {/* Grid rows for each 30 minutes */}
             {halfHourLabels.map((label, idx) => (
               <View key={idx} style={[styles.gridRow, { height: HALF_HOUR_BLOCK_HEIGHT }]}> 
-                <Text style={styles.timeLabel}>{label}</Text>
+                <Text style={styles.timeLabel} numberOfLines={1} adjustsFontSizeToFit={true}>{label}</Text>
                 <View style={styles.gridLine} />
               </View>
             ))}
@@ -644,6 +644,8 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     paddingLeft: 8,
     color: Colors.subtext,
+    fontSize: 12,
+    minWidth: LABELS_WIDTH,
   },
   gridLine: {
     height: 1,

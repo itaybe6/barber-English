@@ -193,17 +193,22 @@ export default function SettingsScreen() {
     setIsLoadingProfile(true);
     try {
       const p = await businessProfileApi.getProfile();
-      setProfile(p);
-      setProfileDisplayName(p?.display_name || '');
-      setProfileAddress(p?.address || '');
-      setProfileInstagram(p?.instagram_url || '');
-      setProfileFacebook(p?.facebook_url || '');
-      setProfileTiktok((p as any)?.tiktok_url || '');
-      setProfileImageOnPage1((p as any)?.image_on_page_1 || '');
-      setProfileImageOnPage2((p as any)?.image_on_page_2 || '');
-      setProfileImageOnPage3((p as any)?.image_on_page_3 || '');
-      setProfileLoginImg((p as any)?.login_img || '');
-      setProfileMinCancellationHours(p?.min_cancellation_hours || 24);
+      if (p) {
+        setProfile(p);
+        setProfileDisplayName(p?.display_name || '');
+        setProfileAddress(p?.address || '');
+        setProfileInstagram(p?.instagram_url || '');
+        setProfileFacebook(p?.facebook_url || '');
+        setProfileTiktok((p as any)?.tiktok_url || '');
+        setProfileImageOnPage1((p as any)?.image_on_page_1 || '');
+        setProfileImageOnPage2((p as any)?.image_on_page_2 || '');
+        setProfileImageOnPage3((p as any)?.image_on_page_3 || '');
+        setProfileLoginImg((p as any)?.login_img || '');
+        setProfileMinCancellationHours(p?.min_cancellation_hours || 24);
+      }
+    } catch (error) {
+      console.error('Failed to load business profile:', error);
+      // Don't show error to user, just log it
     } finally {
       setIsLoadingProfile(false);
     }
@@ -824,8 +829,24 @@ export default function SettingsScreen() {
 
       if (updated) {
         setProfile(updated);
-        // Reload the business profile to ensure all data is synchronized
-        await loadBusinessProfile();
+        // Update local state with the new data from server
+        setProfileDisplayName(updated?.display_name || '');
+        setProfileAddress(updated?.address || '');
+        setProfileInstagram(updated?.instagram_url || '');
+        setProfileFacebook(updated?.facebook_url || '');
+        setProfileTiktok((updated as any)?.tiktok_url || '');
+        setProfileImageOnPage1((updated as any)?.image_on_page_1 || '');
+        setProfileImageOnPage2((updated as any)?.image_on_page_2 || '');
+        setProfileImageOnPage3((updated as any)?.image_on_page_3 || '');
+        setProfileLoginImg((updated as any)?.login_img || '');
+        setProfileMinCancellationHours(updated?.min_cancellation_hours || 24);
+        
+        // Clear all modal states immediately after successful save
+        setShowImageSelectionModal(false);
+        setShowImagePreviewModal(false);
+        setPreviewImageType(null);
+        setCurrentImageType(null);
+        
         Alert.alert('Success', 'Image saved successfully');
       } else {
         Alert.alert('Error', 'Failed to save image');
@@ -834,17 +855,20 @@ export default function SettingsScreen() {
       console.error('image selection failed', e);
       Alert.alert('Error', 'Failed to save image');
     } finally {
-      // Clear loading state
-      if (currentImageType === 'page1') {
-        setIsUploadingImagePage1(false);
-      } else if (currentImageType === 'page2') {
-        setIsUploadingImagePage2(false);
-      } else if (currentImageType === 'page3') {
-        setIsUploadingImagePage3(false);
-      } else if (currentImageType === 'login') {
-        setIsUploadingLoginImg(false);
-      }
+      // Clear all image-related states
+      setIsUploadingImagePage1(false);
+      setIsUploadingImagePage2(false);
+      setIsUploadingImagePage3(false);
+      setIsUploadingLoginImg(false);
       setCurrentImageType(null);
+      setShowImageSelectionModal(false);
+      setShowImagePreviewModal(false);
+      setPreviewImageType(null);
+      setImageScale(1);
+      setImageTranslateX(0);
+      setImageTranslateY(0);
+      // Ensure we're not in a loading state
+      setIsLoadingProfile(false);
     }
   };
 

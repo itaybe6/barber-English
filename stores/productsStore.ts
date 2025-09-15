@@ -30,3 +30,5 @@ export const useProductsStore = create<ProductsState>((set, get) => ({
     return products.find(product => product.id === id);
   }
 }));
+
+

@@ -768,7 +768,7 @@ export default function ClientHomeScreen() {
             <View style={styles.appointmentsHeaderContent}>
               <View style={{ width: 22 }} />
               <View style={{ alignItems: 'center' }}>
-                <Text style={[styles.appointmentsHeaderTitle, { color: colors.primary }]}>
+                <Text style={styles.appointmentsHeaderTitle}>
                   Appointments
                 </Text>
                 <Text style={styles.appointmentsHeaderSubtitle}>
@@ -1897,14 +1897,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   appointmentsHeaderTitle: {
-    fontSize: 20,
+    fontSize: 26,
     fontWeight: '700',
     color: '#1C1C1E',
     textAlign: 'center',
+    letterSpacing: -0.3,
   },
   appointmentsHeaderSubtitle: {
-    fontSize: 12,
+    fontSize: 14,
+    fontWeight: '400',
     color: '#8E8E93',
+    textAlign: 'center',
+    letterSpacing: 0.2,
     marginTop: 6,
   },
   // Modern Section Headers (for other sections)

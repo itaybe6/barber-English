@@ -256,7 +256,7 @@ export default function ProductCarousel({
       {/* Elegant Header */}
       <View style={styles.elegantHeader}>
         <View style={styles.headerTitleContainer}>
-          <Text style={[styles.elegantTitle, { color: colors.primary }]}>{title}</Text>
+          <Text style={styles.elegantTitle}>{title}</Text>
           <Text style={styles.elegantSubtitle}>{subtitle}</Text>
         </View>
       </View>

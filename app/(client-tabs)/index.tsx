@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Linking, Alert, Animated, Easing, InteractionManager, AppState, Dimensions, RefreshControl, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -154,6 +154,51 @@ export default function ClientHomeScreen() {
 
   // Designs store
   const { designs, isLoading: isLoadingDesigns, fetchDesigns } = useDesignsStore();
+
+  // Animated background expansion effect
+  const backgroundScaleAnim = useRef(new Animated.Value(1)).current;
+  const backgroundTranslateYAnim = useRef(new Animated.Value(0)).current;
+  const [isBackgroundExpanded, setIsBackgroundExpanded] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  // Handle scroll for background animation
+  const handleScroll = useCallback((event: any) => {
+    const scrollY = event.nativeEvent.contentOffset.y;
+    
+    // If background is not expanded yet, trigger expansion animation
+    if (!isBackgroundExpanded && !isAnimating && scrollY > 5) {
+      setIsBackgroundExpanded(true);
+      setIsAnimating(true);
+      
+      // Smooth background expansion animation
+      Animated.timing(backgroundTranslateYAnim, {
+        toValue: -150, // Move background up significantly
+        duration: 1000, // Longer duration for smooth expansion
+        easing: Easing.out(Easing.cubic), // Smooth easing curve
+        useNativeDriver: true,
+      }).start(() => {
+        // Animation completed
+        setIsAnimating(false);
+      });
+    }
+    
+    // If background is expanded and user scrolls back to top, contract it
+    if (isBackgroundExpanded && !isAnimating && scrollY <= 5) {
+      setIsBackgroundExpanded(false);
+      setIsAnimating(true);
+      
+      // Smooth background contraction animation
+      Animated.timing(backgroundTranslateYAnim, {
+        toValue: 0, // Move background back to original position
+        duration: 800, // Slightly faster contraction
+        easing: Easing.out(Easing.cubic), // Smooth easing curve
+        useNativeDriver: true,
+      }).start(() => {
+        // Animation completed
+        setIsAnimating(false);
+      });
+    }
+  }, [isBackgroundExpanded, isAnimating, backgroundTranslateYAnim]);
 
   const requireAuth = (actionDescription: string, onAuthed: () => void) => {
     if (!isAuthenticated) {
@@ -609,12 +654,24 @@ export default function ClientHomeScreen() {
       </View>
 
       {/* Content Section with Rounded Top */}
-      <SafeAreaView edges={["left","right","bottom"]} style={{ flex: 1 }}>
-        <View style={styles.contentWrapper}>
+      <SafeAreaView edges={["left","right"]} style={{ flex: 1 }}>
+        <Animated.View 
+          style={[
+            styles.contentWrapper,
+            {
+              transform: [
+                { translateY: backgroundTranslateYAnim }
+              ],
+              zIndex: 10, // Always high z-index to stay above hero text
+            }
+          ]}
+        >
           <ScrollView
             contentContainerStyle={styles.scrollContent}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000" />}
             showsVerticalScrollIndicator={false}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
           >
 
         {/* Waitlist Section - Top Priority */}
@@ -934,6 +991,7 @@ export default function ClientHomeScreen() {
         </View>
         
         {/* Social section merged above with Location */}
+        
         {/* Footer: Slotlys logo with link */}
         <View style={styles.footerContainer}>
           <TouchableOpacity
@@ -949,7 +1007,7 @@ export default function ClientHomeScreen() {
           </TouchableOpacity>
         </View>
           </ScrollView>
-        </View>
+        </Animated.View>
 
         {/* Login required modal */}
         <LoginRequiredModal
@@ -971,13 +1029,15 @@ export default function ClientHomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8F9FA', // Same color as contentWrapper to hide the bottom section
+    minHeight: '100%', // Ensure container takes full height
   },
   // Full Screen Hero Styles
   fullScreenHero: {
     position: 'relative',
     height: '45%', // Takes up 45% of screen height
     width: '100%',
+    zIndex: 0, // Very low z-index so white background can overlap it
   },
   fullScreenHeroImage: {
     width: '100%',
@@ -989,13 +1049,14 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    zIndex: 0, // Very low z-index so white background can overlap it
   },
   overlayHeader: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    zIndex: 10,
+    zIndex: 2, // Lower than white background content
   },
   overlayHeaderContent: {
     flexDirection: 'row',
@@ -1047,10 +1108,11 @@ const styles = StyleSheet.create({
     right: 0,
     paddingHorizontal: 24,
     alignItems: 'flex-start',
-    zIndex: 5,
+    zIndex: 0, // Very low z-index so white background can overlap it
   },
   scrollContent: {
-    paddingBottom: 80,
+    paddingBottom: 320, // Extra bottom padding to see the image at the bottom
+    flexGrow: 1, // Allow content to grow and be scrollable
   },
   header: {
     flexDirection: 'row',
@@ -1134,6 +1196,8 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     marginTop: -20, // Overlap with hero image
     paddingTop: 36, // Extra padding to account for overlap
+    paddingBottom: 0, // No bottom padding to allow full scrolling
+    minHeight: '100%', // Fill the entire screen height
     overflow: 'hidden',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: -4 },
@@ -1214,7 +1278,7 @@ const styles = StyleSheet.create({
   },
   sectionContainer: {
     paddingHorizontal: 24,
-    marginBottom: 32,
+    marginBottom: 0, // No margin to avoid extra white space
   },
   sectionTopSpacer: {
     marginTop: 4,
@@ -1551,7 +1615,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 16,
-    marginBottom: 16,
+    marginBottom: 0, // No margin to avoid extra white space
   },
   socialButton: {
     width: 56,
@@ -1579,9 +1643,8 @@ const styles = StyleSheet.create({
   // Footer developer logo
   footerContainer: {
     alignItems: 'center',
-    marginTop: -20,
-    paddingTop: 0,
-    paddingBottom: 26,
+    marginTop: 20, // Add more top margin to create space from Follow us buttons
+    marginBottom: 0,
   },
   footerLogo: {
     width: 160,

@@ -224,6 +224,7 @@ export interface BusinessProfile {
   image_on_page_1?: string;
   image_on_page_2?: string;
   image_on_page_3?: string;
+  login_img?: string; // Image URL for login page
   break_minutes?: number;
   min_cancellation_hours?: number;
   primary_color?: string; // Hex color code for primary UI color

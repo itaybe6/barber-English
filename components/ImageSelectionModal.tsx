@@ -24,7 +24,7 @@ interface ImageSelectionModalProps {
   onClose: () => void;
   onImageSelected: (imageUri: string, isPreset: boolean) => void;
   title: string;
-  mainCategory: 'existingBooking' | 'bookingPage' | 'homePage';
+  mainCategory: 'existingBooking' | 'bookingPage' | 'homePage' | 'loginPage';
 }
 
 // Preset images organized by category - using local images from default folder
@@ -37,7 +37,10 @@ const PRESET_IMAGES = {
       require('../assets/images/default/ExistingBooking/barber/4.jpg'),
     ],
     nails: [
-      // Add nail images when available
+      require('../assets/images/default/ExistingBooking/nails/1.jpg'),
+      require('../assets/images/default/ExistingBooking/nails/2.jpg'),
+      require('../assets/images/default/ExistingBooking/nails/3.jpg'),
+      require('../assets/images/default/ExistingBooking/nails/4.jpg'),
     ],
   },
   bookingPage: {
@@ -48,7 +51,10 @@ const PRESET_IMAGES = {
       require('../assets/images/default/BookingPage/barber/4.jpg'),
     ],
     nails: [
-      // Add nail images when available
+      require('../assets/images/default/BookingPage/nails/1.jpg'),
+      require('../assets/images/default/BookingPage/nails/2.jpg'),
+      require('../assets/images/default/BookingPage/nails/3.jpg'),
+      require('../assets/images/default/BookingPage/nails/4.jpg'),
     ],
   },
   homePage: {
@@ -59,12 +65,20 @@ const PRESET_IMAGES = {
       require('../assets/images/default/HomePage/barber/4.jpg'),
     ],
     nails: [
-      require('../assets/images/default/HomePage/barber/1.jpg'),
-      require('../assets/images/default/HomePage/barber/2.jpg'),
-      require('../assets/images/default/HomePage/barber/3.jpg'),
-      require('../assets/images/default/HomePage/barber/4.jpg'),
+      require('../assets/images/default/HomePage/nails/1.jpg'),
+      require('../assets/images/default/HomePage/nails/2.jpg'),
+      require('../assets/images/default/HomePage/nails/3.jpg'),
+      require('../assets/images/default/HomePage/nails/4.jpg'),
     ],
   },
+  loginPage: [
+    require('../assets/images/default/LoginPage/1.jpg'),
+    require('../assets/images/default/LoginPage/2.jpg'),
+    require('../assets/images/default/LoginPage/3.jpg'),
+    require('../assets/images/default/LoginPage/4.jpg'),
+    require('../assets/images/default/LoginPage/5.jpg'),
+    require('../assets/images/default/LoginPage/6.jpg'),
+  ],
 };
 
 const SUB_CATEGORIES = [
@@ -335,7 +349,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+    paddingTop: Platform.OS === 'ios' ? 40 : 30,
   },
   closeButton: {
     paddingVertical: 8,
@@ -364,7 +378,7 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
   },
   categorySection: {
-    marginTop: Platform.OS === 'ios' ? 90 : 70,
+    marginTop: Platform.OS === 'ios' ? 110 : 90,
     marginBottom: 24,
   },
   categoryContainer: {

@@ -126,6 +126,7 @@ export default function SettingsScreen() {
   const [profileImageOnPage1, setProfileImageOnPage1] = useState('');
   const [profileImageOnPage2, setProfileImageOnPage2] = useState('');
   const [profileImageOnPage3, setProfileImageOnPage3] = useState('');
+  const [profileLoginImg, setProfileLoginImg] = useState('');
   const [profileMinCancellationHours, setProfileMinCancellationHours] = useState(24);
   const [showEditDisplayNameModal, setShowEditDisplayNameModal] = useState(false);
   const [showEditAddressModal, setShowEditAddressModal] = useState(false);
@@ -140,10 +141,11 @@ export default function SettingsScreen() {
   const [isUploadingImagePage1, setIsUploadingImagePage1] = useState(false);
   const [isUploadingImagePage2, setIsUploadingImagePage2] = useState(false);
   const [isUploadingImagePage3, setIsUploadingImagePage3] = useState(false);
+  const [isUploadingLoginImg, setIsUploadingLoginImg] = useState(false);
   const [showImagePreviewModal, setShowImagePreviewModal] = useState(false);
-  const [previewImageType, setPreviewImageType] = useState<'page1' | 'page2' | 'page3' | null>(null);
+  const [previewImageType, setPreviewImageType] = useState<'page1' | 'page2' | 'page3' | 'login' | null>(null);
   const [showImageSelectionModal, setShowImageSelectionModal] = useState(false);
-  const [currentImageType, setCurrentImageType] = useState<'page1' | 'page2' | 'page3' | null>(null);
+  const [currentImageType, setCurrentImageType] = useState<'page1' | 'page2' | 'page3' | 'login' | null>(null);
   const [imageScale, setImageScale] = useState(1);
   const [imageTranslateX, setImageTranslateX] = useState(0);
   const [imageTranslateY, setImageTranslateY] = useState(0);
@@ -193,6 +195,7 @@ export default function SettingsScreen() {
         setProfileImageOnPage1((p as any)?.image_on_page_1 || '');
         setProfileImageOnPage2((p as any)?.image_on_page_2 || '');
         setProfileImageOnPage3((p as any)?.image_on_page_3 || '');
+        setProfileLoginImg((p as any)?.login_img || '');
         setProfileMinCancellationHours(p?.min_cancellation_hours || 24);
       } finally {
         setIsLoadingProfile(false);
@@ -258,6 +261,7 @@ export default function SettingsScreen() {
         image_on_page_1: profileImageOnPage1.trim() || null as any,
         image_on_page_2: profileImageOnPage2.trim() || null as any,
         image_on_page_3: profileImageOnPage3.trim() || null as any,
+        login_img: profileLoginImg.trim() || null as any,
       });
       if (!updated) {
         Alert.alert('Error', 'Failed to save business profile');
@@ -919,7 +923,7 @@ export default function SettingsScreen() {
     }
   };
 
-  const openImagePreview = (imageType: 'page1' | 'page2' | 'page3') => {
+  const openImagePreview = (imageType: 'page1' | 'page2' | 'page3' | 'login') => {
     setPreviewImageType(imageType);
     setImageScale(1);
     setImageTranslateX(0);
@@ -927,7 +931,7 @@ export default function SettingsScreen() {
     setShowImagePreviewModal(true);
   };
 
-  const handlePickBusinessImage = async (imageType: 'page1' | 'page2' | 'page3') => {
+  const handlePickBusinessImage = async (imageType: 'page1' | 'page2' | 'page3' | 'login') => {
     setCurrentImageType(imageType);
     setShowImageSelectionModal(true);
   };
@@ -941,8 +945,10 @@ export default function SettingsScreen() {
         setIsUploadingImagePage1(true);
       } else if (currentImageType === 'page2') {
         setIsUploadingImagePage2(true);
-      } else {
+      } else if (currentImageType === 'page3') {
         setIsUploadingImagePage3(true);
+      } else if (currentImageType === 'login') {
+        setIsUploadingLoginImg(true);
       }
 
       let uploadedUrl: string;
@@ -970,8 +976,10 @@ export default function SettingsScreen() {
         setProfileImageOnPage1(uploadedUrl);
       } else if (currentImageType === 'page2') {
         setProfileImageOnPage2(uploadedUrl);
-      } else {
+      } else if (currentImageType === 'page3') {
         setProfileImageOnPage3(uploadedUrl);
+      } else if (currentImageType === 'login') {
+        setProfileLoginImg(uploadedUrl);
       }
 
       // Save to database
@@ -984,6 +992,7 @@ export default function SettingsScreen() {
         image_on_page_1: currentImageType === 'page1' ? uploadedUrl : (profileImageOnPage1 || '').trim() || null as any,
         image_on_page_2: currentImageType === 'page2' ? uploadedUrl : (profileImageOnPage2 || '').trim() || null as any,
         image_on_page_3: currentImageType === 'page3' ? uploadedUrl : (profileImageOnPage3 || '').trim() || null as any,
+        login_img: currentImageType === 'login' ? uploadedUrl : (profileLoginImg || '').trim() || null as any,
       });
 
       if (updated) {
@@ -1001,8 +1010,10 @@ export default function SettingsScreen() {
         setIsUploadingImagePage1(false);
       } else if (currentImageType === 'page2') {
         setIsUploadingImagePage2(false);
-      } else {
+      } else if (currentImageType === 'page3') {
         setIsUploadingImagePage3(false);
+      } else if (currentImageType === 'login') {
+        setIsUploadingLoginImg(false);
       }
       setCurrentImageType(null);
     }
@@ -1805,6 +1816,17 @@ export default function SettingsScreen() {
             isUploadingImagePage3 ? undefined : (profileImageOnPage3 ? () => openImagePreview('page3') : () => handlePickBusinessImage('page3')),
             false,
             isUploadingImagePage3
+          )}
+          {renderSettingItemLTR(
+            <Ionicons name="log-in-outline" size={20} color={isUploadingLoginImg ? Colors.subtext : businessColors.primary} />, 
+            'Login page image',
+            isUploadingLoginImg ? 'Uploading...' : (profileLoginImg ? 'Image uploaded' : 'Upload login page image'),
+            isUploadingLoginImg ? (
+              <ActivityIndicator size="small" color={businessColors.primary} />
+            ) : undefined,
+            isUploadingLoginImg ? undefined : (profileLoginImg ? () => openImagePreview('login') : () => handlePickBusinessImage('login')),
+            false,
+            isUploadingLoginImg
           )}
         </View>
 
@@ -3139,7 +3161,10 @@ export default function SettingsScreen() {
               <Text style={[styles.modalCloseText, { color: '#FFFFFF' }]}>Close</Text>
             </TouchableOpacity>
             <Text style={[styles.modalTitle, { color: '#FFFFFF' }]}>
-              {previewImageType === 'page1' ? 'Home page image' : 'Booking page image'}
+              {previewImageType === 'page1' ? 'Home page image' : 
+               previewImageType === 'page2' ? 'Booking page image' :
+               previewImageType === 'page3' ? 'Existing Booking image' :
+               'Login page image'}
             </Text>
             <TouchableOpacity 
               style={[styles.modalSendButton, { backgroundColor: '#FFFFFF' }]}
@@ -3172,7 +3197,8 @@ export default function SettingsScreen() {
                 source={{
                   uri: previewImageType === 'page1' ? profileImageOnPage1 : 
                         previewImageType === 'page2' ? profileImageOnPage2 : 
-                        profileImageOnPage3
+                        previewImageType === 'page3' ? profileImageOnPage3 :
+                        profileLoginImg
                 }}
                 style={styles.imagePreviewImage}
                 resizeMode="contain"
@@ -3548,12 +3574,14 @@ export default function SettingsScreen() {
           setCurrentImageType(null);
         }}
         onImageSelected={handleImageSelected}
-        title={currentImageType === 'page1' ? 'בחירת תמונת דף בית' : 
-               currentImageType === 'page2' ? 'בחירת תמונת דף הזמנה' : 
-               'בחירת תמונת הזמנה קיימת'}
+        title={currentImageType === 'page1' ? 'Select Home Page Image' : 
+               currentImageType === 'page2' ? 'Select Booking Page Image' : 
+               currentImageType === 'page3' ? 'Select Existing Booking Image' :
+               'Select Login Page Image'}
         mainCategory={currentImageType === 'page1' ? 'homePage' : 
                      currentImageType === 'page2' ? 'bookingPage' : 
-                     'existingBooking'}
+                     currentImageType === 'page3' ? 'existingBooking' :
+                     'loginPage'}
       />
     </SafeAreaView>
   );

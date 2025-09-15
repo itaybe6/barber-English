@@ -409,12 +409,12 @@ export default function AdminAppointmentsScreen() {
             >
               {appointments.map((apt) => {
                 // Align precisely on the grid: subtract dayStart and anchor to the top of the first row
-                const offsetMinutes = minutesFromMidnight(formatTime(apt.slot_time)) - minutesFromMidnight(dayStart);
-                const top = Math.max(0, (offsetMinutes / 60) * HOUR_BLOCK_HEIGHT + 20);
-                const proportionalHeight = (apt.duration_minutes || 60) / 60 * HOUR_BLOCK_HEIGHT;
+                const offsetMinutes = minutesFromMidnight(apt.slot_time) - minutesFromMidnight(dayStart);
+                const top = Math.max(0, (offsetMinutes / 30) * HALF_HOUR_BLOCK_HEIGHT);
+                const proportionalHeight = (apt.duration_minutes || 60) / 30 * HALF_HOUR_BLOCK_HEIGHT;
                 const cardHeight = Math.max(64, proportionalHeight);
                 const startTime = formatTime(apt.slot_time);
-                const endTime = addMinutes(startTime, apt.duration_minutes || 60);
+                const endTime = formatTime(addMinutes(apt.slot_time, apt.duration_minutes || 60));
                 return (
                   <View key={`${apt.id}-${apt.slot_time}`} style={[styles.appointmentCard, { top, height: cardHeight, paddingTop: 16 }]}> 
                     <View style={styles.appointmentActions}>

@@ -268,7 +268,7 @@ export default function EditProductsScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: '#fff' }]}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity

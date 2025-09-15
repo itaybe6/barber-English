@@ -601,7 +601,7 @@ export default function HomeScreen() {
         <ScrollView 
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: insets.bottom + 120 }
+          { paddingBottom: insets.bottom + 20 }
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
@@ -662,10 +662,10 @@ export default function HomeScreen() {
               activeOpacity={0.85}
               style={[styles.editGalleryButton, { alignSelf: 'flex-start' }]}
             >
-              <Text style={styles.editGalleryButtonText}>Edit Gallery</Text>
-              <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20`, width: 28, height: 28, borderRadius: 14, marginLeft: 8 }]}> 
+              <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20`, width: 28, height: 28, borderRadius: 14, marginRight: 12 }]}> 
                 <Ionicons name="create-outline" size={18} color={colors.primary} />
               </View>
+              <Text style={styles.editGalleryButtonText}>Edit Gallery</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -747,10 +747,10 @@ export default function HomeScreen() {
               activeOpacity={0.85}
               style={[styles.editGalleryButton, { alignSelf: 'flex-start' }]}
             >
-              <Text style={styles.editGalleryButtonText}>Edit Products</Text>
-              <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20`, width: 28, height: 28, borderRadius: 14, marginLeft: 8 }]}> 
+              <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20`, width: 28, height: 28, borderRadius: 14, marginRight: 12 }]}> 
                 <Ionicons name="bag-outline" size={18} color={colors.primary} />
               </View>
+              <Text style={styles.editGalleryButtonText}>Edit Products</Text>
             </TouchableOpacity>
           </View>
         )}

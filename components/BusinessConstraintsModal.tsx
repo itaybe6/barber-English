@@ -36,11 +36,11 @@ const addDays = (date: Date, days: number) => {
   return d;
 };
 
-const formatISOToDDMMYYYY = (iso: string) => {
+const formatISOToMMDDYYYY = (iso: string) => {
   try {
     const [yyyy, mm, dd] = iso.split('-');
     if (!yyyy || !mm || !dd) return iso;
-    return `${dd}/${mm}/${yyyy}`;
+    return `${mm}/${dd}/${yyyy}`;
   } catch {
     return iso;
   }
@@ -59,8 +59,8 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
   const [singleDateISO, setSingleDateISO] = useState<string>(toISODate(today));
   const [rangeStartISO, setRangeStartISO] = useState<string | null>(null);
   const [rangeEndISO, setRangeEndISO] = useState<string | null>(null);
-  const [startTime, setStartTime] = useState<string>('12:00');
-  const [endTime, setEndTime] = useState<string>('13:00');
+  const [startTime, setStartTime] = useState<string>('12:00 PM');
+  const [endTime, setEndTime] = useState<string>('1:00 PM');
   const [reason, setReason] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
   const [existing, setExisting] = useState<Array<{ id: string; date: string; start_time: string; end_time: string; reason?: string }>>([]);
@@ -82,6 +82,33 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
       const year = dt.getFullYear();
       return `${weekday}, ${month}/${day}/${year}`;
     } catch { return iso; }
+  };
+
+  const formatTime12Hour = (time24: string) => {
+    try {
+      const [hours, minutes] = time24.split(':').map(Number);
+      const period = hours >= 12 ? 'PM' : 'AM';
+      const hours12 = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+      return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
+    } catch {
+      return time24;
+    }
+  };
+
+  const formatTime24Hour = (time12: string) => {
+    try {
+      const [time, period] = time12.split(' ');
+      const [hours, minutes] = time.split(':').map(Number);
+      let hours24 = hours;
+      if (period === 'AM' && hours === 12) {
+        hours24 = 0;
+      } else if (period === 'PM' && hours !== 12) {
+        hours24 = hours + 12;
+      }
+      return `${String(hours24).padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    } catch {
+      return time12;
+    }
   };
 
   useEffect(() => {
@@ -108,30 +135,30 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
       const normReason = reason?.trim() || null;
       if (mode === 'hours') {
         if (!singleDateISO) {
-          Alert.alert('שגיאה', 'בחר תאריך');
+          Alert.alert('Error', 'Please select a date');
           return;
         }
         if (startTime >= endTime) {
-          Alert.alert('שגיאה', 'שעת הסיום חייבת להיות אחרי שעת ההתחלה');
+          Alert.alert('Error', 'End time must be after start time');
           return;
         }
-        entries = [{ date: singleDateISO, start_time: startTime, end_time: endTime, reason: normReason }];
+        entries = [{ date: singleDateISO, start_time: formatTime24Hour(startTime), end_time: formatTime24Hour(endTime), reason: normReason }];
       } else if (mode === 'single-day') {
         if (!singleDateISO) {
-          Alert.alert('שגיאה', 'בחר תאריך');
+          Alert.alert('Error', 'Please select a date');
           return;
         }
         entries = [{ date: singleDateISO, start_time: '00:00', end_time: '23:59', reason: normReason }];
       } else {
         // multi-days via date range
         if (!rangeStartISO || !rangeEndISO) {
-          Alert.alert('שגיאה', 'בחר טווח תאריכים');
+          Alert.alert('Error', 'Please select a date range');
           return;
         }
         const start = new Date(rangeStartISO);
         const end = new Date(rangeEndISO);
         if (start > end) {
-          Alert.alert('שגיאה', 'טווח תאריכים שגוי');
+          Alert.alert('Error', 'Invalid date range');
           return;
         }
         const days: string[] = [];
@@ -149,9 +176,9 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
       const end = toISODate(addDays(today, 365));
       const rows = await businessConstraintsApi.getConstraintsInRange(start, end);
       setExisting((rows || []).filter((r: any) => (r.date as string) >= start) as any);
-      Alert.alert('נשמר', 'האילוצים נשמרו בהצלחה');
+      Alert.alert('Saved', 'Constraints saved successfully');
     } catch (e) {
-      Alert.alert('שגיאה', 'שמירת האילוצים נכשלה');
+      Alert.alert('Error', 'Failed to save constraints');
     } finally {
       setIsSaving(false);
     }
@@ -166,8 +193,12 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
     } catch {}
   };
 
-  // time options (hourly)
-  const timeOptions = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`);
+  // time options (hourly) in 12-hour format
+  const timeOptions = Array.from({ length: 24 }, (_, h) => {
+    const period = h >= 12 ? 'PM' : 'AM';
+    const hours12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return `${hours12}:00 ${period}`;
+  });
 
   const WheelPicker: React.FC<{ options: string[]; value: string; onChange: (v: string) => void; primaryColor?: string }> = ({ options, value, onChange, primaryColor = businessColors.primary }) => {
     const listRef = useRef<ScrollView | null>(null);
@@ -213,12 +244,12 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <SafeAreaView style={styles.container} edges={['left','right']}>
-        <View style={[styles.header, { paddingTop: Math.max(0, insets.top - 6) }]}>
+        <View style={[styles.header, { paddingTop: Math.max(16, insets.top + 8) }]}>
           <TouchableOpacity onPress={onClose} style={styles.headerBtn}><Ionicons name="close" size={20} color={'#000'} /></TouchableOpacity>
           <Text style={styles.headerTitle}>Work constraints</Text>
-          <TouchableOpacity onPress={() => setIsExistingModalOpen(true)} style={styles.headerAction} activeOpacity={0.9}>
+          <TouchableOpacity onPress={() => setIsExistingModalOpen(true)} style={[styles.headerAction, { backgroundColor: businessColors.primary, borderWidth: 0 }]} activeOpacity={0.9}>
             <View style={styles.headerActionInner}>
-              <Ionicons name="create-outline" size={20} color={'#000000'} />
+              <Ionicons name="create-outline" size={20} color={'#FFFFFF'} />
             </View>
           </TouchableOpacity>
         </View>
@@ -446,7 +477,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
               {rangeStartISO && rangeEndISO && (
                 <View style={{ marginTop: 12, alignItems: 'flex-start' }}>
                   <Text style={{ color: '#6B7280', fontWeight: '600' }}>
-                    Selected range: <Text style={{ writingDirection: 'ltr' }}>{formatISOToDDMMYYYY(rangeStartISO)} — {formatISOToDDMMYYYY(rangeEndISO)}</Text>
+                    Selected range: <Text style={{ writingDirection: 'ltr' }}>{formatISOToMMDDYYYY(rangeStartISO)} — {formatISOToMMDDYYYY(rangeEndISO)}</Text>
                   </Text>
                 </View>
               )}
@@ -487,7 +518,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
       {/* Existing constraints popup */}
       <Modal visible={isExistingModalOpen} animationType="slide" onRequestClose={() => setIsExistingModalOpen(false)}>
         <SafeAreaView style={styles.container} edges={['left','right']}>
-          <View style={[styles.header, { paddingTop: Math.max(0, insets.top - 6) }]}>
+          <View style={[styles.header, { paddingTop: Math.max(16, insets.top + 8) }]}>
             <TouchableOpacity onPress={() => setIsExistingModalOpen(false)} style={styles.headerBtn}><Ionicons name="close" size={20} color={'#000'} /></TouchableOpacity>
             <Text style={styles.headerTitle}>Upcoming constraints</Text>
             <View style={styles.headerBtn} />
@@ -517,7 +548,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
                             <Text style={styles.sectionValueText}>{reasonKey}</Text>
                             {dates.length > 1 ? (
                               <Text style={[styles.sectionValueText, { marginTop: 6 }]}>
-                                <Text style={{ writingDirection: 'ltr' }}>{formatISOToDDMMYYYY(first)} — {formatISOToDDMMYYYY(last)}</Text>
+                                <Text style={{ writingDirection: 'ltr' }}>{formatISOToMMDDYYYY(first)} — {formatISOToMMDDYYYY(last)}</Text>
                               </Text>
                             ) : (
                               <Text style={[styles.sectionValueText, { marginTop: 6 }]}>{formatDatePretty(first)}</Text>
@@ -538,7 +569,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
                                       <View style={{ marginTop: 8 }}>
                                         <View style={styles.timeChip}>
                                           <Ionicons name="time-outline" size={14} color={'#1C1C1E'} />
-                                          <Text style={styles.timeChipText}>{isFullDay ? 'All day' : `${start}–${end}`}</Text>
+                                          <Text style={styles.timeChipText}>{isFullDay ? 'All day' : `${formatTime12Hour(start)}–${formatTime12Hour(end)}`}</Text>
                                         </View>
                                       </View>
                                     </View>
@@ -588,10 +619,10 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
         <View style={styles.centerModal}>
           <View style={styles.centerSheet}>
             <View style={styles.sheetHeaderRow}>
-              <Text style={styles.sheetTitle}>Enter reason</Text>
               <TouchableOpacity onPress={() => { setReason(tempReason.trim()); setIsReasonModalOpen(false); }} style={[styles.confirmBtn, { backgroundColor: businessColors.primary }]}>
                 <Ionicons name="checkmark" size={18} color={'#FFFFFF'} />
               </TouchableOpacity>
+              <Text style={styles.sheetTitle}>Enter reason</Text>
             </View>
             <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12 }}>
               <View style={styles.inputWrapper}>

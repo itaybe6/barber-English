@@ -345,9 +345,20 @@ export default function ClientProfileScreen() {
   }, [user?.name, user?.phone]);
 
   return (
-    <SafeAreaView style={styles.container} edges={[]}>
-      <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+    <View style={styles.container}>
+      <SafeAreaView edges={['top']} style={{ backgroundColor: '#FFFFFF' }}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Ionicons name="arrow-forward" size={24} color={Colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Profile</Text>
+          <View style={{ width: 24 }} />
+        </View>
+      </SafeAreaView>
+
+      <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1 }}>
+        <View style={styles.contentWrapper}>
+          <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Profile Header */}
         <View style={styles.headerContainer}>
           <View
@@ -481,7 +492,9 @@ export default function ClientProfileScreen() {
         </TouchableOpacity>
 
         <Text style={styles.versionText}>Version 1.0.0</Text>
-      </ScrollView>
+          </ScrollView>
+        </View>
+      </SafeAreaView>
 
       {/* Edit Profile Modal */}
       <Modal visible={isEditOpen} transparent animationType="slide" onRequestClose={() => setIsEditOpen(false)}>
@@ -773,39 +786,53 @@ export default function ClientProfileScreen() {
           </View>
         </View>
       </Modal>
-      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#FFFFFF',
+  },
+  contentWrapper: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    marginTop: 20,
+    paddingTop: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.text,
   },
   scrollContent: {
     paddingBottom: 100,
   },
   headerContainer: {
-    backgroundColor: Colors.white,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    backgroundColor: 'transparent',
     paddingTop: 0,
     paddingBottom: 0,
     paddingHorizontal: 0,
-    // Remove drop shadow/back-plate look
-    shadowColor: 'transparent',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
     marginBottom: 8,
   },
   headerDecor1: { },
   headerDecor2: { },
   gradientHeader: {
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    paddingTop: 24,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    paddingTop: 0,
     paddingBottom: 20,
     paddingHorizontal: 20,
   },

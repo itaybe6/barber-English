@@ -18,6 +18,7 @@ import type { BusinessProfile } from '@/lib/supabase';
 import DesignCarousel from '@/components/DesignCarousel';
 import ProductCarousel from '@/components/ProductCarousel';
 import { useDesignsStore } from '@/stores/designsStore';
+import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { useProductsStore } from '@/stores/productsStore';
 import { getCurrentClientLogo } from '@/src/theme/assets';
 import { useColors } from '@/src/theme/ThemeProvider';
@@ -427,11 +428,11 @@ export default function ClientHomeScreen() {
       if (success) {
         // Remove from local state
         setWaitlistEntries(prev => prev.filter(entry => entry.id !== entryId));
-        Alert.alert('הוסר מרשימת המתנה', 'הוסרת בהצלחה מרשימת המתנה');
+        Alert.alert('Removed from waitlist', 'You have been successfully removed from the waitlist');
       }
     } catch (error) {
       console.error('Error removing from waitlist:', error);
-      Alert.alert('שגיאה', 'אירעה שגיאה בהסרה מרשימת המתנה');
+      Alert.alert('Error', 'An error occurred while removing from the waitlist');
     } finally {
       setIsRemovingFromWaitlist(false);
     }
@@ -573,13 +574,7 @@ export default function ClientHomeScreen() {
   };
   
   const formatTime = (timeString: string) => {
-    if (!timeString) return '';
-    const parts = timeString.split(':');
-    if (parts.length >= 2) {
-      const [hours, minutes] = parts;
-      return `${hours}:${minutes}`;
-    }
-    return timeString;
+    return formatTime12Hour(timeString);
   };
   
   const socialLinks = [
@@ -731,7 +726,7 @@ export default function ClientHomeScreen() {
                 </View>
               </View>
               <TouchableOpacity
-                style={[styles.waitlistTopButton, { backgroundColor: '#4A90E2' }]}
+                style={styles.waitlistTopButton}
                 onPress={() => {
                   Alert.alert(
                     'Leave waitlist',
@@ -756,7 +751,13 @@ export default function ClientHomeScreen() {
                 }}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.waitlistTopButtonText, { color: '#FFFFFF' }]}>Remove from waitlist</Text>
+                <BlurView
+                  intensity={80}
+                  tint="light"
+                  style={styles.waitlistButtonBlur}
+                >
+                  <Text style={styles.waitlistTopButtonText}>Remove from waitlist</Text>
+                </BlurView>
               </TouchableOpacity>
             </View>
           </View>
@@ -946,7 +947,7 @@ export default function ClientHomeScreen() {
               <View style={[styles.decorationDot, { opacity: 0.1 }]} />
             </View>
             <View style={styles.headerTitleContainer}>
-              <Text style={[styles.modernTitle, { color: colors.primary }]}>Follow us</Text>
+              <Text style={[styles.modernTitle, { color: '#1C1C1E' }]}>Follow us</Text>
             </View>
             <View style={styles.headerDecorationRight}>
               <View style={[styles.decorationDot, { opacity: 0.1 }]} />
@@ -1672,7 +1673,7 @@ const styles = StyleSheet.create({
   // Footer developer logo
   footerContainer: {
     alignItems: 'center',
-    marginTop: 20, // Add more top margin to create space from Follow us buttons
+    marginTop: 40, // Increased top margin to create more space from Follow us buttons
     marginBottom: 0,
   },
   footerLogo: {
@@ -1763,19 +1764,23 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   waitlistTopButton: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    alignItems: 'center',
+    overflow: 'hidden',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 4,
   },
+  waitlistButtonBlur: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+  },
   waitlistTopButtonText: {
-    color: '#FFFFFF',
+    color: '#1C1C1E',
     fontSize: 16,
     fontWeight: '600',
     letterSpacing: -0.2,
@@ -1983,7 +1988,7 @@ const styles = StyleSheet.create({
     bottom: 20,
     left: 20,
     right: 20,
-    alignItems: 'flex-start',
+    alignItems: 'center',
   },
   nextAppointmentInfoBlur: {
     borderRadius: 20,

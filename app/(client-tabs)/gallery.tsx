@@ -240,16 +240,17 @@ export default function GalleryScreen() {
         <View style={styles.headerContent}>
           <View style={{ width: 22 }} />
           <View style={{ alignItems: 'center' }}>
-            <Text style={[styles.headerTitle, { color: businessColors.primary }]}>
-              {activeTab === 'designs' ? 'Design Gallery' : 'Products'}
+            <Text style={styles.headerTitle}>
+              Gallery
             </Text>
             <Text style={styles.headerSubtitle}>
-              {activeTab === 'designs' ? 'Inspiration for your next style' : 'Browse our products'}
+              Discover our designs and products
             </Text>
           </View>
           <View style={{ width: 22 }} />
         </View>
-        
+      </View>
+      <View style={styles.contentWrapper}>
         {/* Toggle Button */}
         <View style={styles.toggleContainer}>
           <View style={[styles.toggleWrapper, { backgroundColor: businessColors.primary + '15' }]}>
@@ -297,8 +298,7 @@ export default function GalleryScreen() {
             </TouchableOpacity>
           </View>
         </View>
-      </View>
-      <View style={styles.contentWrapper}>
+        
         {isLoading ? (
           <View style={styles.skeletonContainer}>
             <View style={styles.skeletonRow}>
@@ -421,6 +421,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
   },
   header: {
+    height: 104,
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 16,
@@ -443,6 +444,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: Colors.text,
+    letterSpacing: -0.2,
     textAlign: 'center',
   },
   headerSubtitle: {
@@ -521,6 +523,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'left',
     marginBottom: 4,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   productPrice: {
     color: Colors.white,
@@ -528,6 +533,9 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'left',
     opacity: 0.9,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   categoryTags: {
     flexDirection: 'row',
@@ -721,9 +729,12 @@ const styles = StyleSheet.create({
   },
   // Toggle Button Styles
   toggleContainer: {
+    backgroundColor: 'transparent',
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 12,
+    paddingVertical: 6,
+    borderBottomWidth: 0,
+    borderBottomColor: 'transparent',
+    alignItems: 'center',
   },
   toggleWrapper: {
     flexDirection: 'row',

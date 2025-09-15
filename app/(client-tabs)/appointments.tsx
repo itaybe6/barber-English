@@ -13,6 +13,7 @@ import { notificationsApi } from '@/lib/api/notifications';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
+import { formatTime12Hour } from '@/lib/utils/timeFormat';
 
 type TabType = 'upcoming' | 'past';
 
@@ -316,15 +317,7 @@ export default function ClientAppointmentsScreen() {
   }, []);
 
   const formatTime = React.useCallback((timeString: string) => {
-    if (!timeString) return '';
-    // Normalize time to HH:MM
-    const parts = String(timeString).split(':');
-    if (parts.length >= 2) {
-      const hh = parts[0].padStart(2, '0');
-      const mm = parts[1].padStart(2, '0');
-      return `${hh}:${mm}`;
-    }
-    return timeString;
+    return formatTime12Hour(timeString);
   }, []);
 
   // Memoize date calculations for better performance
@@ -1420,10 +1413,10 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   heroDetailsContainer: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     justifyContent: 'flex-start',
-    alignItems: 'center',
-    gap: 16,
+    alignItems: 'flex-start',
+    gap: 8,
   },
   heroDetailCard: {
     flexShrink: 0,

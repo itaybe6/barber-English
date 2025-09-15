@@ -10,6 +10,7 @@ import { LogOut } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
+import { formatTime12Hour } from '@/lib/utils/timeFormat';
  
 import { supabase, AvailableTimeSlot } from '@/lib/supabase';
 import { usersApi } from '@/lib/api/users';
@@ -38,9 +39,7 @@ export default function ClientProfileScreen() {
   const [isDeleting, setIsDeleting] = useState(false);
   const formatTimeHHMM = (t?: string | null): string => {
     if (!t) return '';
-    const parts = String(t).split(':');
-    if (parts.length >= 2) return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
-    return t as string;
+    return formatTime12Hour(t);
   };
   const guessMimeFromUri = (uriOrName: string): string => {
     const ext = uriOrName.split('.').pop()?.toLowerCase().split('?')[0] || 'jpg';
@@ -548,7 +547,7 @@ export default function ClientProfileScreen() {
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalBtn, styles.saveBtn]}
+                style={[styles.modalBtn, styles.saveBtn, { backgroundColor: businessColors.primary }]}
                 onPress={async () => {
                   if (!user?.id) {
                     setIsEditOpen(false);

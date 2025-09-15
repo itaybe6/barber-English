@@ -9,6 +9,7 @@ import Colors from '@/constants/colors';
 import TimePeriodSelector, { TimePeriod } from '@/components/TimePeriodSelector';
 import { useWaitlistStore } from '@/stores/waitlistStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
  
 
 export default function WaitlistScreen() {
@@ -19,6 +20,7 @@ export default function WaitlistScreen() {
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod | null>(null);
   const { user } = useAuthStore();
   const { addToWaitlist, isLoading, error, clearError } = useWaitlistStore();
+  const { colors } = useBusinessColors();
 
   // Validate selectedDate
   const isValidDate = selectedDate && selectedDate !== '';
@@ -155,6 +157,7 @@ export default function WaitlistScreen() {
             <TouchableOpacity
               style={[
                 styles.confirmButton,
+                { backgroundColor: colors.primary, borderColor: colors.primary },
                 (!selectedPeriod || isLoading) && styles.disabledButton,
               ]}
               onPress={handleAddToWaitlist}

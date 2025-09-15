@@ -8,6 +8,7 @@ import { supabase, getBusinessId } from '@/lib/supabase';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { useAuthStore } from '@/stores/authStore';
 import { notificationsApi } from '@/lib/api/notifications';
+import { formatTime12Hour } from '@/lib/utils/timeFormat';
 
 export default function SelectTimeScreen() {
   const router = useRouter();
@@ -372,12 +373,12 @@ export default function SelectTimeScreen() {
 
       if (success) {
         const policyNote = '\n\nPlease note: You cannot cancel the appointment 48 hours before the appointment time. Cancellation during this period will be charged for the appointment.';
-        const message = `Your appointment for "${serviceName}" has been scheduled for ${selectedDate} at ${selectedTime}${policyNote}`;
+        const message = `Your appointment for "${serviceName}" has been scheduled for ${selectedDate} at ${formatTime12Hour(selectedTime)}${policyNote}`;
         setSuccessMessage(message);
         setShowSuccessModal(true);
         try {
           const title = 'New appointment booked';
-          const content = `${user?.name || 'Client'} (${user?.phone || ''}) booked an appointment for "${serviceName}" on ${selectedDate} at ${selectedTime}`;
+          const content = `${user?.name || 'Client'} (${user?.phone || ''}) booked an appointment for "${serviceName}" on ${selectedDate} at ${formatTime12Hour(selectedTime)}`;
           notificationsApi.createAdminNotification(title, content, 'system').catch(() => {});
         } catch {}
         // Navigate safely without relying on multiple back actions
@@ -441,8 +442,20 @@ export default function SelectTimeScreen() {
               availableTimes.map((t) => {
                 const isSel = selectedTime === t;
                 return (
-                  <TouchableOpacity key={t} style={[styles.timePill, isSel && styles.timePillSelected]} onPress={() => setSelectedTime(isSel ? null : t)} activeOpacity={0.9}>
-                    <Text style={[styles.timePillLabel, isSel && styles.timePillLabelSelected]}>{t}</Text>
+                  <TouchableOpacity key={t} style={[styles.timePill, isSel && styles.timePillSelected]} onPress={() => setSelectedTime(isSel ? null : t)} activeOpacity={0.7}>
+                    <View style={styles.timePillContent}>
+                      <View style={styles.timePillLeftSection}>
+                        <Text style={[styles.timePillLabel, isSel && styles.timePillLabelSelected]}>{formatTime12Hour(t)}</Text>
+                        <View style={[styles.timePillTag, isSel && styles.timePillTagSelected]}>
+                          <Text style={[styles.timePillTagText, isSel && styles.timePillTagTextSelected]}>Available</Text>
+                        </View>
+                      </View>
+                      <View style={styles.timePillRightSection}>
+                        {isSel && (
+                          <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
+                        )}
+                      </View>
+                    </View>
                   </TouchableOpacity>
                 );
               })
@@ -474,10 +487,10 @@ export default function SelectTimeScreen() {
             <View style={styles.modalContent}>
               <Text style={styles.modalTitle}>You have an existing appointment</Text>
               <Text style={styles.modalMessage} numberOfLines={0} allowFontScaling={false}>
-                You have an existing appointment on {existingAppointment?.slot_date ? new Date(existingAppointment.slot_date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : 'unknown date'} at {existingAppointment?.slot_time || 'unknown time'} for {existingAppointment?.service_name || 'unknown service'}.
+                You have an existing appointment on {existingAppointment?.slot_date ? new Date(existingAppointment.slot_date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : 'unknown date'} at {existingAppointment?.slot_time ? formatTime12Hour(existingAppointment.slot_time) : 'unknown time'} for {existingAppointment?.service_name || 'unknown service'}.
                 {'\n'}
                 {'\n'}
-                Would you like to replace the existing appointment with the new one at {selectedTime} or book an additional appointment?
+                Would you like to replace the existing appointment with the new one at {selectedTime ? formatTime12Hour(selectedTime) : 'unknown time'} or book an additional appointment?
               </Text>
               <View style={styles.modalButtons}>
                 <TouchableOpacity
@@ -626,37 +639,73 @@ const createStyles = (colors: any) => StyleSheet.create({
     textAlign: 'center',
   },
   timesList: {
-    gap: 14,
+    gap: 12,
     paddingBottom: 16,
-    paddingHorizontal: 0,
+    paddingHorizontal: 16,
   },
   timePill: {
-    alignSelf: 'center',
-    width: '86%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    paddingVertical: 14,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)'
+    borderColor: '#F2F2F7',
+    minHeight: 60,
   },
   timePillSelected: {
-    backgroundColor: colors.primary,
     borderColor: colors.primary,
+    backgroundColor: '#F0F8FF',
+    shadowColor: colors.primary,
+    shadowOpacity: 0.15,
   },
   timePillLabel: {
-    fontSize: 16,
-    color: '#374151',
-    fontWeight: '800',
+    fontSize: 18,
+    color: '#1C1C1E',
+    fontWeight: '600',
+    letterSpacing: -0.2,
   },
   timePillLabelSelected: {
-    color: '#FFFFFF',
+    color: colors.primary,
+  },
+  timePillContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  timePillLeftSection: {
+    flex: 1,
+  },
+  timePillRightSection: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  timePillTag: {
+    backgroundColor: '#F2F2F7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  timePillTagSelected: {
+    backgroundColor: '#E3F2FD',
+  },
+  timePillTagText: {
+    fontSize: 12,
+    color: '#1C1C1E',
+    fontWeight: '600',
+  },
+  timePillTagTextSelected: {
+    color: colors.primary,
   },
   footer: {
     position: 'absolute',

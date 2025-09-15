@@ -18,6 +18,7 @@ import Colors from '@/constants/colors';
 import DaySelector from '@/components/DaySelector';
 import { AvailableTimeSlot, supabase } from '@/lib/supabase';
 import { businessHoursApi } from '@/lib/api/businessHours';
+import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { Ionicons } from '@expo/vector-icons';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useAuthStore } from '@/stores/authStore';
@@ -240,8 +241,7 @@ export default function AdminAppointmentsScreen() {
 
   const formatTime = (time?: string | null): string => {
     if (!time) return '';
-    const [hh = '00', mm = '00'] = String(time).split(':');
-    return `${hh.padStart(2, '0')}:${mm.padStart(2, '0')}`;
+    return formatTime12Hour(time);
   };
 
   const addMinutes = (hhmm: string, minutes: number): string => {

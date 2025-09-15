@@ -543,8 +543,8 @@ const styles = StyleSheet.create({
   },
   ctaOutlined: {
     backgroundColor: 'rgba(255,255,255,0.88)',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.6)',
+    borderWidth: 0,
+    borderColor: 'transparent',
     borderRadius: 24,
     shadowColor: 'rgba(0,0,0,0.25)',
     shadowOpacity: 0.25,

@@ -16,7 +16,9 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
+import { X, Plus } from 'lucide-react-native';
 import Colors from '../constants/colors';
+import { useColors } from '../src/theme/ThemeProvider';
 import * as ImagePicker from 'expo-image-picker';
 
 interface ImageSelectionModalProps {
@@ -35,6 +37,7 @@ const PRESET_IMAGES = {
       require('../assets/images/default/ExistingBooking/barber/2.jpg'),
       require('../assets/images/default/ExistingBooking/barber/3.jpg'),
       require('../assets/images/default/ExistingBooking/barber/4.jpg'),
+      require('../assets/images/default/ExistingBooking/barber/10.png'),
     ],
     nails: [
       require('../assets/images/default/ExistingBooking/nails/1.jpg'),
@@ -86,7 +89,7 @@ const PRESET_IMAGES = {
 
 const SUB_CATEGORIES = [
   { key: 'barber', name: 'Barbers', icon: 'cut-outline' },
-  { key: 'nails', name: 'Nail Art', icon: 'hand-left-outline' },
+  { key: 'nails', name: 'Nail Art', icon: 'sparkles-outline' },
 ];
 
 const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
@@ -98,8 +101,33 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
 }) => {
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>('barber');
   const [loadingImages, setLoadingImages] = useState<{[key: string]: boolean}>({});
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewImage, setPreviewImage] = useState<any>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const colors = useColors();
+
+  // Preload images for better performance
+  const preloadImages = React.useCallback(() => {
+    let currentImages;
+    if (mainCategory === 'loginPage') {
+      currentImages = PRESET_IMAGES[mainCategory];
+    } else {
+      currentImages = PRESET_IMAGES[mainCategory]?.[selectedSubCategory as 'barber' | 'nails'];
+    }
+    
+    if (currentImages) {
+      currentImages.forEach((imageSource, index) => {
+        const imageKey = mainCategory === 'loginPage' 
+          ? `${mainCategory}-${index}` 
+          : `${mainCategory}-${selectedSubCategory}-${index}`;
+        
+        // Preload the image
+        Image.prefetch(Image.resolveAssetSource(imageSource).uri);
+        setLoadingImages(prev => ({ ...prev, [imageKey]: true }));
+      });
+    }
+  }, [mainCategory, selectedSubCategory]);
 
   React.useEffect(() => {
     if (visible) {
@@ -118,21 +146,7 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
       ]).start();
       
       // Preload images for better performance
-      let currentImages;
-      if (mainCategory === 'loginPage') {
-        currentImages = PRESET_IMAGES[mainCategory];
-      } else {
-        currentImages = PRESET_IMAGES[mainCategory]?.[selectedSubCategory as 'barber' | 'nails'];
-      }
-      
-      if (currentImages) {
-        currentImages.forEach((imageSource, index) => {
-          const imageKey = mainCategory === 'loginPage' 
-            ? `${mainCategory}-${index}` 
-            : `${mainCategory}-${selectedSubCategory}-${index}`;
-          setLoadingImages(prev => ({ ...prev, [imageKey]: true }));
-        });
-      }
+      preloadImages();
     } else {
       Animated.parallel([
         Animated.timing(fadeAnim, {
@@ -152,6 +166,13 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
     }
   }, [visible, mainCategory, selectedSubCategory]);
 
+  // Preload images when subcategory changes
+  React.useEffect(() => {
+    if (visible && mainCategory !== 'loginPage') {
+      preloadImages();
+    }
+  }, [selectedSubCategory, preloadImages, visible, mainCategory]);
+
   const handlePickFromGallery = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -169,7 +190,14 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
 
       if (!result.canceled && result.assets.length > 0) {
         const asset = result.assets[0];
-        onImageSelected(asset.uri, false);
+        // Pass the asset data as a JSON string to include base64 and other metadata
+        const assetData = JSON.stringify({
+          uri: asset.uri,
+          base64: asset.base64,
+          mimeType: asset.type,
+          fileName: asset.fileName
+        });
+        onImageSelected(assetData, false);
         onClose();
       }
     } catch (error) {
@@ -178,11 +206,22 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
     }
   };
 
-  const handlePresetImageSelect = (imageSource: any) => {
-    // Convert local image source to URI for consistency
-    const imageUri = Image.resolveAssetSource(imageSource).uri;
-    onImageSelected(imageUri, true);
-    onClose();
+  const handlePresetImagePreview = (imageSource: any) => {
+    setPreviewImage(imageSource);
+    setShowPreview(true);
+  };
+
+  const handleConfirmSelection = () => {
+    if (previewImage) {
+      const imageUri = Image.resolveAssetSource(previewImage).uri;
+      onImageSelected(imageUri, true);
+      onClose();
+    }
+  };
+
+  const handleCancelPreview = () => {
+    setShowPreview(false);
+    setPreviewImage(null);
   };
 
   const handleImageLoadStart = (imageKey: string) => {
@@ -190,17 +229,20 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
   };
 
   const handleImageLoadEnd = (imageKey: string) => {
-    setLoadingImages(prev => ({ ...prev, [imageKey]: false }));
+    // Add a small delay to prevent flickering for very fast loads
+    setTimeout(() => {
+      setLoadingImages(prev => ({ ...prev, [imageKey]: false }));
+    }, 100);
   };
 
   return (
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="pageSheet"
+      presentationStyle="formSheet"
       onRequestClose={onClose}
     >
-      <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
         <Animated.View 
           style={[
             styles.animatedContainer,
@@ -214,11 +256,13 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
           <BlurView intensity={100} tint="light" style={styles.headerBlur}>
           <View style={styles.header}>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Text style={styles.closeButtonText}>Cancel</Text>
+              <X size={24} color="#000000" />
             </TouchableOpacity>
             <Text style={styles.title}>{title}</Text>
             <TouchableOpacity onPress={handlePickFromGallery} style={styles.galleryButton}>
-              <Text style={styles.galleryButtonText}>Gallery</Text>
+              <View style={[styles.plusIconContainer, { backgroundColor: colors.primary }]}>
+                <Plus size={20} color="#FFFFFF" />
+              </View>
             </TouchableOpacity>
           </View>
         </BlurView>
@@ -238,6 +282,10 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
                   style={[
                     styles.categoryButton,
                     selectedSubCategory === subCategory.key && styles.selectedCategoryButton,
+                    selectedSubCategory === subCategory.key && { 
+                      backgroundColor: colors.primary, 
+                      borderColor: colors.primary 
+                    },
                   ]}
                   onPress={() => setSelectedSubCategory(subCategory.key)}
                   activeOpacity={0.7}
@@ -246,7 +294,7 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
                     <Ionicons 
                       name={subCategory.icon as any} 
                       size={20} 
-                      color={selectedSubCategory === subCategory.key ? '#FFFFFF' : Colors.primary}
+                      color={selectedSubCategory === subCategory.key ? '#FFFFFF' : colors.primary}
                       style={styles.categoryIcon}
                     />
                     <Text
@@ -302,7 +350,7 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
                 <TouchableOpacity
                   key={index}
                   style={styles.imageCard}
-                  onPress={() => handlePresetImageSelect(imageSource)}
+                  onPress={() => handlePresetImagePreview(imageSource)}
                   activeOpacity={0.9}
                 >
                   <View style={styles.imageContainer}>
@@ -317,7 +365,9 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
                     <Image 
                       source={imageSource} 
                       style={[styles.presetImage, isLoading && styles.hiddenImage]} 
-                      resizeMode="contain"
+                      resizeMode="cover"
+                      fadeDuration={0}
+                      cache="force-cache"
                       onLoadStart={() => handleImageLoadStart(imageKey)}
                       onLoadEnd={() => handleImageLoadEnd(imageKey)}
                       onError={() => handleImageLoadEnd(imageKey)}
@@ -335,29 +385,63 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
           })()}
         </ScrollView>
 
-          {/* Bottom Info with Apple-style Typography */}
-          <View style={styles.bottomInfo}>
-            <Text style={styles.infoText}>
-              {mainCategory === 'loginPage' 
-                ? 'Choose a preset login page image or tap "Gallery" to upload your own'
-                : 'Choose a preset image from the categories above or tap "Gallery" to upload your own'
-              }
-            </Text>
-          </View>
         </Animated.View>
-      </SafeAreaView>
+      </View>
+
+       {/* Image Preview Modal */}
+       <Modal
+         visible={showPreview}
+         transparent={true}
+         animationType="fade"
+         onRequestClose={handleCancelPreview}
+       >
+         <View style={styles.previewOverlay}>
+           {/* Full Screen Image */}
+           <View style={styles.fullScreenImageContainer}>
+             {previewImage && (
+               <Image 
+                 source={previewImage} 
+                 style={styles.fullScreenImage}
+                 resizeMode="cover"
+               />
+             )}
+           </View>
+
+           {/* Header Overlay */}
+           <View style={styles.previewHeaderOverlay}>
+             <TouchableOpacity onPress={handleCancelPreview} style={styles.previewCloseButton}>
+               <X size={24} color="#FFFFFF" />
+             </TouchableOpacity>
+             <Text style={styles.previewTitleOverlay}>Preview</Text>
+             <View style={styles.previewHeaderSpacer} />
+           </View>
+
+           {/* Save Button Overlay */}
+           <View style={styles.saveButtonOverlay}>
+             <TouchableOpacity 
+               style={[styles.saveButton, { backgroundColor: colors.primary }]} 
+               onPress={handleConfirmSelection}
+             >
+               <Text style={styles.saveButtonText}>Save</Text>
+             </TouchableOpacity>
+           </View>
+         </View>
+       </Modal>
     </Modal>
   );
 };
 
 const { width, height } = Dimensions.get('window');
 const imageSize = (width - 80) / 2; // 2 images per row with better spacing
-const imageCardHeight = imageSize * 1.4; // Increase height to accommodate taller images
+const imageCardHeight = imageSize * 1.2; // Optimized height for better performance
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8F9FA',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
   },
   animatedContainer: {
     flex: 1,
@@ -370,6 +454,9 @@ const styles = StyleSheet.create({
     zIndex: 1000,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(0,0,0,0.1)',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
@@ -405,8 +492,15 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
   },
+  plusIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   categorySection: {
-    marginTop: Platform.OS === 'ios' ? 110 : 90,
+    marginTop: Platform.OS === 'ios' ? 120 : 100,
     marginBottom: 24,
   },
   categoryContainer: {
@@ -431,8 +525,6 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   selectedCategoryButton: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
     shadowOpacity: 0.15,
     shadowRadius: 4,
     elevation: 3,
@@ -486,7 +578,8 @@ const styles = StyleSheet.create({
   },
   presetImage: {
     width: '100%',
-    height: imageCardHeight - 40, // Account for any padding/margin in the card
+    height: '100%', // Fill the entire container
+    backgroundColor: '#F5F5F5', // Light background while loading
   },
   imageOverlay: {
     position: 'absolute',
@@ -511,25 +604,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#000',
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
-  },
-  bottomInfo: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
-    backgroundColor: 'rgba(248,249,250,0.95)',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.1)',
-  },
-  infoText: {
-    fontSize: 15,
-    color: '#8E8E93',
-    textAlign: 'center',
-    lineHeight: 20,
     fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
   },
   noImagesContainer: {
@@ -567,6 +641,65 @@ const styles = StyleSheet.create({
   imagesContainerLoginPage: {
     marginTop: Platform.OS === 'ios' ? 120 : 100, // Add more top margin when no categories are shown
   },
+   // Preview Modal Styles
+   previewOverlay: {
+     flex: 1,
+     backgroundColor: '#000000',
+   },
+   fullScreenImageContainer: {
+     flex: 1,
+     width: '100%',
+     height: '100%',
+   },
+   fullScreenImage: {
+     width: '100%',
+     height: '100%',
+   },
+   previewHeaderOverlay: {
+     position: 'absolute',
+     top: 0,
+     left: 0,
+     right: 0,
+     flexDirection: 'row',
+     alignItems: 'center',
+     justifyContent: 'space-between',
+     paddingHorizontal: 20,
+     paddingVertical: 16,
+     paddingTop: Platform.OS === 'ios' ? 50 : 30,
+     backgroundColor: 'rgba(0, 0, 0, 0.3)',
+   },
+   previewCloseButton: {
+     padding: 8,
+   },
+   previewTitleOverlay: {
+     fontSize: 18,
+     fontWeight: '600',
+     color: '#FFFFFF',
+   },
+   previewHeaderSpacer: {
+     width: 40, // Same width as close button for centering
+   },
+   saveButtonOverlay: {
+     position: 'absolute',
+     bottom: 0,
+     left: 0,
+     right: 0,
+     paddingHorizontal: 20,
+     paddingVertical: 30,
+     paddingBottom: Platform.OS === 'ios' ? 40 : 30,
+     backgroundColor: 'rgba(0, 0, 0, 0.3)',
+   },
+   saveButton: {
+     paddingVertical: 16,
+     borderRadius: 12,
+     alignItems: 'center',
+     justifyContent: 'center',
+   },
+   saveButtonText: {
+     fontSize: 18,
+     fontWeight: '600',
+     color: '#FFFFFF',
+   },
 });
 
 export default ImageSelectionModal;

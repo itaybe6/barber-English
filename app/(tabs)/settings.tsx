@@ -655,20 +655,23 @@ export default function SettingsScreen() {
   const uploadBusinessImage = async (asset: { uri: string; base64?: string | null; mimeType?: string | null; fileName?: string | null }): Promise<string | null> => {
     try {
       let contentType = asset.mimeType || guessMimeFromUri(asset.fileName || asset.uri);
-      let fileBody: Blob | Uint8Array;
+      let fileBody: Uint8Array;
+      
       if (asset.base64) {
         const bytes = base64ToUint8Array(asset.base64);
         fileBody = bytes;
       } else {
         const response = await fetch(asset.uri, { cache: 'no-store' });
-        const fetched = await response.blob();
-        fileBody = fetched;
-        contentType = fetched.type || contentType;
+        const arrayBuffer = await response.arrayBuffer();
+        fileBody = new Uint8Array(arrayBuffer);
+        contentType = response.headers.get('content-type') || contentType;
       }
+      
       const extGuess = (contentType.split('/')[1] || 'jpg').toLowerCase();
       const randomId = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
       const filePath = `business-images/${Date.now()}_${randomId()}.${extGuess}`;
-      const { error } = await supabase.storage.from('designs').upload(filePath, fileBody as any, { contentType, upsert: false });
+      
+      const { error } = await supabase.storage.from('designs').upload(filePath, fileBody, { contentType, upsert: false });
       if (error) {
         console.error('business image upload error', error);
         return null;
@@ -768,13 +771,24 @@ export default function SettingsScreen() {
         // For preset images, we'll use the URL directly since they're external URLs
         uploadedUrl = imageUri;
       } else {
-        // For gallery images, upload normally
-        uploadedUrl = await uploadBusinessImage({
-          uri: imageUri,
-          base64: null,
-          mimeType: null,
-          fileName: null,
-        });
+        // For gallery images, parse the asset data
+        try {
+          const assetData = JSON.parse(imageUri);
+          uploadedUrl = await uploadBusinessImage({
+            uri: assetData.uri,
+            base64: assetData.base64,
+            mimeType: assetData.mimeType,
+            fileName: assetData.fileName,
+          });
+        } catch (parseError) {
+          // Fallback for old format (just URI)
+          uploadedUrl = await uploadBusinessImage({
+            uri: imageUri,
+            base64: null,
+            mimeType: null,
+            fileName: null,
+          });
+        }
       }
 
       if (!uploadedUrl) {
@@ -2990,22 +3004,22 @@ export default function SettingsScreen() {
         presentationStyle="pageSheet"
         onRequestClose={() => setShowImagePreviewModal(false)}
       >
-        <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#000000' }]}>
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#F8F9FA' }]}>
           <View style={styles.imagePreviewHeader}>
             <TouchableOpacity 
               style={styles.modalCloseButton}
               onPress={() => setShowImagePreviewModal(false)}
             >
-              <Text style={[styles.modalCloseText, { color: '#FFFFFF' }]}>Close</Text>
+              <X size={24} color="#000000" />
             </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: '#FFFFFF' }]}>
+            <Text style={[styles.modalTitle, { color: '#000000' }]}>
               {previewImageType === 'page1' ? 'Home page image' : 
                previewImageType === 'page2' ? 'Booking page image' :
                previewImageType === 'page3' ? 'Existing Booking image' :
                'Login page image'}
             </Text>
             <TouchableOpacity 
-              style={[styles.modalSendButton, { backgroundColor: '#FFFFFF' }]}
+              style={[styles.modalSendButton, { backgroundColor: businessColors.primary }]}
               onPress={() => {
                 setShowImagePreviewModal(false);
                 if (previewImageType) {
@@ -3013,7 +3027,7 @@ export default function SettingsScreen() {
                 }
               }}
             >
-              <Text style={[styles.modalSendText, { color: '#000000' }]}>Change Image</Text>
+              <Text style={[styles.modalSendText, { color: '#FFFFFF' }]}>Change</Text>
             </TouchableOpacity>
           </View>
           
@@ -3046,7 +3060,7 @@ export default function SettingsScreen() {
           
           <View style={styles.imagePreviewFooter}>
             <Text style={styles.imagePreviewInstructions}>
-              Pinch to zoom • Drag to pan • Tap "Change Image" to replace
+              Pinch to zoom • Drag to pan • Tap "Change" to replace
             </Text>
           </View>
         </SafeAreaView>
@@ -4000,11 +4014,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
   },
   imagePreviewContainer: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#F8F9FA',
   },
   imagePreviewScrollContent: {
     flexGrow: 1,
@@ -4021,11 +4035,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    borderTopColor: 'rgba(0, 0, 0, 0.1)',
     alignItems: 'center',
   },
   imagePreviewInstructions: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(0, 0, 0, 0.6)',
     fontSize: 14,
     textAlign: 'center',
   },

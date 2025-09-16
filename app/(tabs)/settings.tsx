@@ -1146,11 +1146,20 @@ export default function SettingsScreen() {
       if (recurringTimes.has(timeHHmm)) return false;
 
       // 2) Check conflicts with existing booked slots on ANY date that falls on this day of week
+      // Limit to recent dates to avoid loading too much data
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const thirtyDaysFromNow = new Date();
+      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+      
       let bookedQuery = supabase
         .from('appointments')
         .select('slot_time, slot_date, is_available')
         .eq('business_id', businessId)
-        .eq('is_available', false);
+        .eq('is_available', false)
+        .gte('slot_date', thirtyDaysAgo.toISOString().split('T')[0])
+        .lte('slot_date', thirtyDaysFromNow.toISOString().split('T')[0])
+        .limit(1000); // Limit results to prevent hanging
       if (user?.id) {
         bookedQuery = bookedQuery.or(`user_id.eq.${user.id},user_id.is.null`);
       } else {
@@ -1178,6 +1187,13 @@ export default function SettingsScreen() {
     setAvailableTimes([]);
     try {
       const businessId = getBusinessId();
+      
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout loading times')), 10000)
+      );
+      
+      const loadPromise = (async () => {
       
       // Fetch business hours for day: prefer user-specific row, fallback to global (user_id IS NULL)
       let bhRow: any | null = null;
@@ -1310,6 +1326,16 @@ export default function SettingsScreen() {
       if (selectedTime && !filtered.includes(selectedTime)) {
         setSelectedTime(null);
       }
+      })();
+      
+      // Race between loading and timeout
+      await Promise.race([loadPromise, timeoutPromise]);
+      
+    } catch (error) {
+      console.error('Error loading available times:', error);
+      setAvailableTimes([]);
+      // Show error to user
+      Alert.alert('Error', 'Failed to load available times. Please try again.');
     } finally {
       setIsLoadingTimes(false);
     }
@@ -1351,7 +1377,7 @@ export default function SettingsScreen() {
     
     let builder = supabase
       .from('users')
-      .select('name, phone')
+      .select('id, name, phone')
       .eq('user_type', 'client')
       .eq('business_id', businessId)
       .order('name');
@@ -1368,7 +1394,7 @@ export default function SettingsScreen() {
       .from('recurring_appointments')
       .select('client_phone')
       .eq('business_id', businessId)
-      .eq('user_id', user?.id);
+      .eq('admin_id', user?.id);
     const recurringPhones = new Set((recs || []).map((r: any) => String(r.client_phone).trim()).filter(Boolean));
 
     const filtered = (data || [])
@@ -1397,16 +1423,17 @@ export default function SettingsScreen() {
         day_of_week: selectedDayOfWeek,
         slot_time: selectedTime,
         service_name: selectedService.name,
-        repeat_interval_weeks: repeatWeeks,
+        service_id: selectedService.id, // Add service_id reference
+        repeat_interval: repeatWeeks,
         business_id: getBusinessId(), // Add business_id from the current business
       };
       // Add admin_id (the current admin creating the recurring appointment)
       if (user?.id) {
         recurringData.admin_id = user.id;
       }
-      // Add client_id if the selected client has an ID
-      if (selectedClient.id) {
-        recurringData.client_id = selectedClient.id;
+      // Add client_id if the selected client has an ID (optional)
+      if ((selectedClient as any).id) {
+        recurringData.client_id = (selectedClient as any).id;
       }
       const created = await recurringAppointmentsApi.create(recurringData);
       if (created) {
@@ -1541,7 +1568,16 @@ export default function SettingsScreen() {
       >
         
         <View style={styles.adminProfileCard}>
-          <View style={styles.adminAvatarWrap}>
+          <TouchableOpacity 
+            style={styles.adminAvatarWrap}
+            onPress={() => {
+              setAdminNameDraft(user?.name || '');
+              setAdminPhoneDraft(user?.phone || '');
+              setAdminEmailDraft((user as any)?.email || '');
+              setShowEditAdminModal(true);
+            }}
+            activeOpacity={0.8}
+          >
             <LinearGradient
               colors={[businessColors.primary, businessColors.primary]}
               start={{ x: 0, y: 0 }}
@@ -1552,28 +1588,10 @@ export default function SettingsScreen() {
                 <Image source={user?.image_url ? { uri: (user as any).image_url } : require('@/assets/images/logo-03.png')} style={styles.adminAvatarImage} resizeMode="cover" />
               </View>
             </LinearGradient>
-            <TouchableOpacity
-              style={styles.adminEditFab}
-              onPress={() => {
-                setAdminNameDraft(user?.name || '');
-                setAdminPhoneDraft((user as any)?.phone || '');
-                setAdminEmailDraft((user as any)?.email || '');
-                setShowEditAdminModal(true);
-              }}
-              activeOpacity={0.9}
-              accessibilityRole="button"
-              accessibilityLabel="Edit Manager"
-            >
-              <LinearGradient
-                colors={[businessColors.primary, businessColors.primary]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.adminEditFabInner}
-              >
-                <Pencil size={16} color={Colors.white} />
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
+            <View style={[styles.editIconContainer, { backgroundColor: businessColors.primary }]}>
+              <Pencil size={16} color={Colors.white} />
+            </View>
+          </TouchableOpacity>
           <Text style={styles.adminName}>{user?.name || 'Manager'}</Text>
           <Text style={styles.adminPhone}>{user?.phone || 'Phone Number'}</Text>
           <Text style={styles.adminEmail}>{(user as any)?.email || 'Email Address'}</Text>
@@ -2627,7 +2645,6 @@ export default function SettingsScreen() {
             {/* Time select */}
             <View style={styles.inputContainer}> 
               <View style={styles.sectionHeaderRow}>
-                <View style={styles.sectionHeaderIcon}><Pencil size={18} color={businessColors.primary} /></View>
                 <Text style={[styles.sectionHeaderTitle, { textAlign: 'left' }]}>Select time</Text>
               </View>
               <Pressable
@@ -2659,10 +2676,15 @@ export default function SettingsScreen() {
                   {isLoadingTimes ? (
                     <View style={{ padding: 12, alignItems: 'center' }}>
                       <ActivityIndicator size="small" color={businessColors.primary} />
+                      <Text style={{ textAlign: 'center', color: Colors.subtext, marginTop: 8 }}>
+                        Loading available times...
+                      </Text>
                     </View>
                   ) : availableTimes.length === 0 ? (
                     <View style={{ padding: 12 }}>
-                      <Text style={{ textAlign: 'center', color: Colors.subtext }}>No available times for today</Text>
+                      <Text style={{ textAlign: 'center', color: Colors.subtext }}>
+                        No available times for this day
+                      </Text>
                     </View>
                   ) : (
                     <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
@@ -3359,6 +3381,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  editIconContainer: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: Colors.white,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
   adminAvatarRing: {
     padding: 2,
     borderRadius: 34,
@@ -3377,20 +3416,6 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-  },
-  adminEditFab: {
-    position: 'absolute',
-    bottom: -2,
-    left: -2,
-  },
-  adminEditFabInner: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
   },
   adminName: {
     fontSize: 20,

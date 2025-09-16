@@ -7,7 +7,8 @@ export interface RecurringAppointment {
   day_of_week: number; // 0-6
   slot_time: string; // HH:MM[:SS]
   service_name: string;
-  repeat_interval_weeks?: number; // 1-4, default 1
+  service_id?: string | null; // Reference to services table
+  repeat_interval?: number; // 1-4, default 1
   start_date?: string | null; // YYYY-MM-DD
   end_date?: string | null;   // YYYY-MM-DD
   // Admin (barber) association - enables multiple barbers to have separate recurring appointments
@@ -84,12 +85,12 @@ export const recurringAppointmentsApi = {
       }
 
       // Default repeat interval and start_date anchor (first upcoming occurrence)
-      const repeatInterval = payload.repeat_interval_weeks && payload.repeat_interval_weeks > 0 ? payload.repeat_interval_weeks : 1;
+      const repeatInterval = payload.repeat_interval && payload.repeat_interval > 0 ? payload.repeat_interval : 1;
       const startDateToStore = payload.start_date ?? firstDateStr;
 
       const { data, error } = await supabase
         .from('recurring_appointments')
-        .insert({ ...payload, business_id: businessId, repeat_interval_weeks: repeatInterval, start_date: startDateToStore })
+        .insert({ ...payload, business_id: businessId, repeat_interval: repeatInterval, start_date: startDateToStore })
         .select('*')
         .single();
 
@@ -100,8 +101,8 @@ export const recurringAppointmentsApi = {
 
       const created = data as RecurringAppointment;
 
-      // Seed concrete appointments in appointments for the next weeks (no duplicates)
-      // Seed only the nearest upcoming occurrence (this week)
+      // Seed concrete appointments in appointments for the next 7 days (no duplicates)
+      // This will book the slot immediately if it's today or in the next 7 days
       await recurringAppointmentsApi.seedUpcomingOccurrences(created, 1);
 
       return created;
@@ -193,6 +194,7 @@ export const recurringAppointmentsApi = {
   // Create or book concrete slots for the next `weeks` occurrences (default 1 = only this week)
   async seedUpcomingOccurrences(rule: RecurringAppointment, weeks: number = 1): Promise<void> {
     try {
+      const businessId = getBusinessId();
       const today = new Date();
       // Normalize to local today date (strip time)
       const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -203,6 +205,9 @@ export const recurringAppointmentsApi = {
       const first = new Date(start);
       first.setDate(start.getDate() + delta);
 
+      // If the first occurrence is today, we need to check if it's still available
+      // If it's in the future (tomorrow or later), we can book it immediately
+
       const toDateString = (d: Date) => new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().split('T')[0];
 
       const withinRange = (d: Date) => {
@@ -212,15 +217,23 @@ export const recurringAppointmentsApi = {
         return startOk && endOk;
       };
 
-      const interval = Math.max(1, rule.repeat_interval_weeks || 1);
-      for (let i = 0; i < weeks; i++) {
-        const occ = new Date(first);
-        occ.setDate(first.getDate() + i * 7);
-        // Respect start/end range and repeat interval (skip weeks not aligned with interval)
+      const interval = Math.max(1, rule.repeat_interval || 1);
+      
+      // Seed appointments for the next 7 days (including today if it matches the day of week)
+      for (let i = 0; i < 7; i++) {
+        const occ = new Date(start);
+        occ.setDate(start.getDate() + i);
+        
+        // Only process if this day matches the recurring day of week
+        if (occ.getDay() !== rule.day_of_week) continue;
+        
+        // Respect start/end range and repeat interval
         if (!withinRange(occ)) continue;
+        
         const anchor = rule.start_date ? new Date(rule.start_date + 'T00:00:00') : first;
         const weeksFromAnchor = Math.floor((occ.getTime() - new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate()).getTime()) / (7 * 24 * 60 * 60 * 1000));
         if (weeksFromAnchor % interval !== 0) continue;
+        
         const dateStr = toDateString(occ);
 
         // Check if a slot exists
@@ -244,7 +257,9 @@ export const recurringAppointmentsApi = {
               client_name: rule.client_name,
               client_phone: rule.client_phone,
               service_name: rule.service_name,
+              service_id: rule.service_id,
               user_id: rule.admin_id,
+              barber_id: rule.admin_id,
             });
         } else if (slot.is_available === true) {
           // Book the existing available slot for this client
@@ -255,7 +270,9 @@ export const recurringAppointmentsApi = {
               client_name: rule.client_name,
               client_phone: rule.client_phone,
               service_name: rule.service_name,
+              service_id: rule.service_id,
               user_id: rule.admin_id,
+              barber_id: rule.admin_id,
             })
             .eq('business_id', businessId)
             .eq('id', slot.id)

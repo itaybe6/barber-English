@@ -3,6 +3,7 @@ import { Modal, View, Text, TouchableOpacity, StyleSheet, Pressable } from 'reac
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import { useColors } from '../src/theme/ThemeProvider';
 
 type Props = {
   visible: boolean;
@@ -13,6 +14,8 @@ type Props = {
 };
 
 export default function LoginRequiredModal({ visible, onClose, onLogin, title, message }: Props) {
+  const colors = useColors();
+  
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
@@ -45,7 +48,7 @@ export default function LoginRequiredModal({ visible, onClose, onLogin, title, m
             <View style={styles.actions}>
               <TouchableOpacity style={styles.primaryButton} onPress={onLogin} activeOpacity={0.8}>
                 <LinearGradient
-                  colors={['#000000', '#111111']}
+                  colors={[colors.primary, colors.primary]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.primaryButtonGradient}

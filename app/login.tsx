@@ -386,12 +386,12 @@ const styles = StyleSheet.create({
   },
   backgroundImage: {
     position: 'absolute',
-    top: -50, // Extend beyond safe area
+    top: -20, // Extend beyond safe area
     left: 0,
     right: 0,
-    bottom: -50, // Extend beyond safe area
+    bottom: -20, // Extend beyond safe area
     width: '100%',
-    height: '120%', // Ensure full coverage
+    height: '110%', // Slightly taller
   },
   darkOverlay: {
     position: 'absolute',

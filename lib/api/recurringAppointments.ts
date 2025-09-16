@@ -10,8 +10,11 @@ export interface RecurringAppointment {
   repeat_interval_weeks?: number; // 1-4, default 1
   start_date?: string | null; // YYYY-MM-DD
   end_date?: string | null;   // YYYY-MM-DD
-  // User (barber) association - enables multiple barbers to have separate recurring appointments
-  user_id?: string | null;
+  // Admin (barber) association - enables multiple barbers to have separate recurring appointments
+  admin_id?: string | null;
+  // Client association - reference to the client who has this recurring appointment
+  client_id?: string | null;
+  business_id: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -40,10 +43,10 @@ export const recurringAppointmentsApi = {
         .eq('slot_time', payload.slot_time)
         .limit(1);
       
-      // Only filter by user_id if provided and column exists
+      // Only filter by admin_id if provided and column exists
       try {
-        if (payload.user_id) {
-          existingQuery = existingQuery.eq('user_id', payload.user_id);
+        if (payload.admin_id) {
+          existingQuery = existingQuery.eq('admin_id', payload.admin_id);
         }
       } catch (e) {
       }
@@ -66,9 +69,9 @@ export const recurringAppointmentsApi = {
         .eq('slot_time', payload.slot_time)
         .eq('is_available', false);
       
-      // Only filter by user_id if provided
-      if (payload.user_id) {
-        bookedQuery = bookedQuery.eq('user_id', payload.user_id);
+      // Only filter by admin_id if provided
+      if (payload.admin_id) {
+        bookedQuery = bookedQuery.eq('user_id', payload.admin_id);
       }
       
       const { data: bookedSlot, error: bookedErr } = await bookedQuery.maybeSingle();
@@ -131,10 +134,10 @@ export const recurringAppointmentsApi = {
       .select('*')
       .eq('business_id', businessId);
 
-    // Only filter by user_id if provided and column exists
+    // Only filter by admin_id if provided and column exists
     if (userId) {
       try {
-        query = query.eq('user_id', userId);
+        query = query.eq('admin_id', userId);
       } catch (e) {
       }
     }
@@ -241,7 +244,7 @@ export const recurringAppointmentsApi = {
               client_name: rule.client_name,
               client_phone: rule.client_phone,
               service_name: rule.service_name,
-              user_id: rule.user_id,
+              user_id: rule.admin_id,
             });
         } else if (slot.is_available === true) {
           // Book the existing available slot for this client
@@ -252,7 +255,7 @@ export const recurringAppointmentsApi = {
               client_name: rule.client_name,
               client_phone: rule.client_phone,
               service_name: rule.service_name,
-              user_id: rule.user_id,
+              user_id: rule.admin_id,
             })
             .eq('business_id', businessId)
             .eq('id', slot.id)

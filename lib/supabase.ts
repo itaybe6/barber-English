@@ -203,6 +203,8 @@ export interface RecurringAppointment {
   day_of_week: number; // 0=Sunday, 1=Monday, ..., 6=Saturday
   time: string; // HH:MM format
   status: 'active' | 'inactive';
+  admin_id?: string | null; // Reference to the admin/barber who manages this recurring appointment
+  client_id?: string | null; // Reference to the client who has this recurring appointment
   business_id: string;
   created_at: string;
   updated_at: string;

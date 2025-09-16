@@ -1338,10 +1338,15 @@ export default function SettingsScreen() {
         slot_time: selectedTime,
         service_name: selectedService.name,
         repeat_interval_weeks: repeatWeeks,
+        business_id: getBusinessId(), // Add business_id from the current business
       };
-      // Only add user_id if the API supports it
+      // Add admin_id (the current admin creating the recurring appointment)
       if (user?.id) {
-        recurringData.user_id = user.id;
+        recurringData.admin_id = user.id;
+      }
+      // Add client_id if the selected client has an ID
+      if (selectedClient.id) {
+        recurringData.client_id = selectedClient.id;
       }
       const created = await recurringAppointmentsApi.create(recurringData);
       if (created) {

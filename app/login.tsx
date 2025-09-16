@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, Link } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { useAuthStore } from '@/stores/authStore';
 import { usersApi } from '@/lib/api/users';
 import { supabase, getBusinessId, BusinessProfile } from '@/lib/supabase';
@@ -27,7 +28,7 @@ import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 const staticColors = {
   textPrimary: '#FFFFFF',
   textSecondary: 'rgba(255,255,255,0.8)',
-  inputBg: 'rgba(255,255,255,0.2)',
+  inputBg: 'rgba(0,0,0,0.2)',
   inputBorder: 'rgba(255,255,255,0.3)',
   white: '#FFFFFF',
   backgroundStart: '#FFFFFF',
@@ -257,17 +258,20 @@ export default function LoginScreen() {
       <SafeAreaView style={styles.fullSafe}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <View style={styles.card}>
+            <BlurView intensity={15} tint="light" style={styles.card}>
               {/* Header inside card */}
               <View style={styles.headerContent}>
                 <Image source={getCurrentClientLogo()} style={styles.logoImage} resizeMode="contain" />
+                {businessProfile?.display_name && (
+                  <Text style={styles.businessName}>{businessProfile.display_name}</Text>
+                )}
                 <Text style={styles.appSubtitle}>Enter details to sign in to your account</Text>
               </View>
 
               {/* Phone */}
               <View style={styles.field}>
                 <View style={[styles.inputRow, { backgroundColor: staticColors.inputBg, borderColor: staticColors.inputBorder }]}>
-                  <Ionicons name="call-outline" size={18} color={staticColors.textSecondary} style={styles.iconRight} />
+                  <Ionicons name="call-outline" size={18} color={staticColors.textSecondary} style={styles.iconLeft} />
                   <TextInput
                     style={styles.input}
                     placeholder="Phone number"
@@ -284,7 +288,7 @@ export default function LoginScreen() {
               {/* Password */}
               <View style={styles.field}>
                 <View style={[styles.inputRow, { backgroundColor: staticColors.inputBg, borderColor: staticColors.inputBorder }]}>
-                  <Ionicons name="lock-closed-outline" size={18} color={staticColors.textSecondary} style={styles.iconRight} />
+                  <Ionicons name="lock-closed-outline" size={18} color={staticColors.textSecondary} style={styles.iconLeft} />
                   <TextInput
                     style={[styles.input, styles.inputPassword]}
                     placeholder="Password"
@@ -295,7 +299,7 @@ export default function LoginScreen() {
                     autoCapitalize="none"
                     textAlign="left"
                   />
-                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButtonRight}>
                     <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={staticColors.textSecondary} />
                   </TouchableOpacity>
                 </View>
@@ -320,7 +324,7 @@ export default function LoginScreen() {
                   <Text style={[styles.registerAction, { color: businessColors.primary }]}>Sign up now</Text>
                 </Link>
               </Text>
-            </View>
+            </BlurView>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -331,12 +335,12 @@ export default function LoginScreen() {
             <Text style={styles.forgotTitle}>Reset Password</Text>
             <Text style={styles.forgotSubtitle}>Enter phone and email as they appear on your account</Text>
             <View style={{ height: 10 }} />
-            <View style={[styles.inputRow, { backgroundColor: staticColors.inputBg, borderColor: staticColors.inputBorder }]}> 
-              <Ionicons name="call-outline" size={18} color={staticColors.textSecondary} style={styles.iconRight} />
+            <View style={[styles.inputRow, { backgroundColor: '#F8F8F8', borderColor: '#E0E0E0' }]}> 
+              <Ionicons name="call-outline" size={18} color="#666666" style={styles.iconRight} />
               <TextInput
-                style={styles.input}
+                style={[styles.input, { color: '#000000' }]}
                 placeholder="Phone number"
-                placeholderTextColor={staticColors.textSecondary}
+                placeholderTextColor="#999999"
                 value={forgotPhone}
                 onChangeText={setForgotPhone}
                 keyboardType="phone-pad"
@@ -345,12 +349,12 @@ export default function LoginScreen() {
               />
             </View>
             <View style={{ height: 10 }} />
-            <View style={[styles.inputRow, { backgroundColor: staticColors.inputBg, borderColor: staticColors.inputBorder }]}> 
-              <Ionicons name="mail-outline" size={18} color={staticColors.textSecondary} style={styles.iconRight} />
+            <View style={[styles.inputRow, { backgroundColor: '#F8F8F8', borderColor: '#E0E0E0' }]}> 
+              <Ionicons name="mail-outline" size={18} color="#666666" style={styles.iconRight} />
               <TextInput
-                style={styles.input}
+                style={[styles.input, { color: '#000000' }]}
                 placeholder="Email"
-                placeholderTextColor={staticColors.textSecondary}
+                placeholderTextColor="#999999"
                 value={forgotEmail}
                 onChangeText={setForgotEmail}
                 keyboardType="email-address"
@@ -382,12 +386,12 @@ const styles = StyleSheet.create({
   },
   backgroundImage: {
     position: 'absolute',
-    top: -50, // Extend beyond safe area
+    top: -20, // Extend beyond safe area
     left: 0,
     right: 0,
-    bottom: -50, // Extend beyond safe area
+    bottom: -20, // Extend beyond safe area
     width: '100%',
-    height: '120%', // Ensure full coverage
+    height: '110%', // Slightly taller
   },
   darkOverlay: {
     position: 'absolute',
@@ -395,7 +399,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: -50, // Extend beyond safe area
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.15)',
   },
   bgGradient: {
     position: 'absolute',
@@ -460,6 +464,14 @@ const styles = StyleSheet.create({
     opacity: 1,
     marginBottom: 14,
   },
+  businessName: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: staticColors.textPrimary,
+    textAlign: 'center',
+    marginTop: 0,
+    marginBottom: 8,
+  },
   safeBottom: {
     flex: 1,
     backgroundColor: staticColors.white,
@@ -471,20 +483,20 @@ const styles = StyleSheet.create({
     paddingVertical: 32,
   },
   card: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 24,
     marginTop: 0,
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(255,255,255,0.15)',
     shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
-    backdropFilter: 'blur(20px)',
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+    overflow: 'hidden',
   },
   field: {
     marginBottom: 16,
@@ -503,17 +515,23 @@ const styles = StyleSheet.create({
     right: 12,
     zIndex: 1,
   },
+  iconLeft: {
+    position: 'absolute',
+    left: 12,
+    zIndex: 1,
+  },
   input: {
     flex: 1,
     fontSize: 16,
     color: staticColors.textPrimary,
     paddingHorizontal: 8,
+    paddingLeft: 36,
     paddingRight: 36,
     textAlign: 'left',
   },
   inputPassword: {
-    paddingRight: 36, // space for lock icon on right
-    paddingLeft: 36,  // space for eye icon on left
+    paddingRight: 36, // space for eye icon on right
+    paddingLeft: 36,  // space for lock icon on left
   },
   eyeButton: {
     padding: 6,
@@ -521,6 +539,14 @@ const styles = StyleSheet.create({
     marginRight: 8,
     position: 'absolute',
     left: 8,
+    zIndex: 1,
+  },
+  eyeButtonRight: {
+    padding: 6,
+    marginLeft: 0,
+    marginRight: 8,
+    position: 'absolute',
+    right: 8,
     zIndex: 1,
   },
   ctaShadow: {
@@ -574,8 +600,9 @@ const styles = StyleSheet.create({
   },
   registerAction: {
     color: '#000000',
-    fontWeight: '800',
-    fontSize: 14,
+    fontWeight: '900',
+    fontSize: 16,
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto-Black',
     marginRight: 4,
   },
   // Reuse modal button styles similar to other screens
@@ -587,12 +614,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cancelBtn: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#F5F5F5',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: '#E0E0E0',
   },
   cancelBtnText: {
-    color: '#FFFFFF',
+    color: '#666666',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -600,7 +627,7 @@ const styles = StyleSheet.create({
     backgroundColor: staticColors.textPrimary, // Will be overridden by inline style
   },
   saveBtnText: {
-    color: staticColors.white,
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
   },
@@ -618,28 +645,27 @@ const styles = StyleSheet.create({
   forgotCard: {
     width: '100%',
     maxWidth: 420,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: '#FFFFFF',
     borderRadius: 18,
     padding: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(0,0,0,0.1)',
     shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
-    backdropFilter: 'blur(20px)',
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
   },
   forgotTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: '#000000',
     textAlign: 'center',
     marginBottom: 6,
   },
   forgotSubtitle: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.8)',
+    color: '#666666',
     textAlign: 'center',
   },
   forgotActions: {

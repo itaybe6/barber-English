@@ -47,6 +47,7 @@ import ImageSelectionModal from '@/components/ImageSelectionModal';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import AddAdminModal from '@/components/AddAdminModal';
 import DeleteAccountModal from '@/components/DeleteAccountModal';
+import { formatTime12Hour } from '@/lib/utils/timeFormat';
 
 // Helper for shadow style
 const shadowStyle = Platform.select({
@@ -154,9 +155,12 @@ export default function SettingsScreen() {
   const [previewImageType, setPreviewImageType] = useState<'page1' | 'page2' | 'page3' | 'login' | null>(null);
   const [showImageSelectionModal, setShowImageSelectionModal] = useState(false);
   const [currentImageType, setCurrentImageType] = useState<'page1' | 'page2' | 'page3' | 'login' | null>(null);
-  const [imageScale, setImageScale] = useState(1);
   const [imageTranslateX, setImageTranslateX] = useState(0);
   const [imageTranslateY, setImageTranslateY] = useState(0);
+  const [isImageLoading, setIsImageLoading] = useState(false);
+  const [imageLoadError, setImageLoadError] = useState(false);
+  const [imageLoadTimeout, setImageLoadTimeout] = useState<number | null>(null);
+  const [progressAnimation] = useState(new Animated.Value(0));
   const [displayNameDraft, setDisplayNameDraft] = useState('');
   const [addressDraft, setAddressDraft] = useState('');
   const [instagramDraft, setInstagramDraft] = useState('');
@@ -205,6 +209,9 @@ export default function SettingsScreen() {
         setProfileImageOnPage3((p as any)?.image_on_page_3 || '');
         setProfileLoginImg((p as any)?.login_img || '');
         setProfileMinCancellationHours(p?.min_cancellation_hours || 24);
+        
+        // Preload images for better performance
+        preloadImages(p);
       }
     } catch (error) {
       console.error('Failed to load business profile:', error);
@@ -214,10 +221,37 @@ export default function SettingsScreen() {
     }
   };
 
+  const preloadImages = (profile: any) => {
+    const images = [
+      profile?.image_on_page_1,
+      profile?.image_on_page_2,
+      profile?.image_on_page_3,
+      profile?.login_img
+    ].filter(Boolean);
+    
+    images.forEach(imageUrl => {
+      if (imageUrl) {
+        Image.prefetch(imageUrl).catch(error => {
+          console.log('Failed to prefetch image:', error);
+        });
+      }
+    });
+  };
+
   // Load business profile on mount
   useEffect(() => {
     loadBusinessProfile();
   }, []);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (imageLoadTimeout) {
+        clearTimeout(imageLoadTimeout);
+      }
+      progressAnimation.stopAnimation();
+    };
+  }, [imageLoadTimeout, progressAnimation]);
 
   // Keep edit drafts in sync when modal opens or profile updates
   useEffect(() => {
@@ -745,11 +779,36 @@ export default function SettingsScreen() {
   };
 
   const openImagePreview = (imageType: 'page1' | 'page2' | 'page3' | 'login') => {
+    // Clear any existing timeout
+    if (imageLoadTimeout) {
+      clearTimeout(imageLoadTimeout);
+    }
+    
     setPreviewImageType(imageType);
-    setImageScale(1);
     setImageTranslateX(0);
     setImageTranslateY(0);
+    setIsImageLoading(true);
+    setImageLoadError(false);
     setShowImagePreviewModal(true);
+    
+    // Start progress animation
+    progressAnimation.setValue(0);
+    Animated.timing(progressAnimation, {
+      toValue: 1,
+      duration: 15000,
+      useNativeDriver: false,
+    }).start();
+    
+    // Set a timeout to show error if image doesn't load within 15 seconds
+    const timeout = setTimeout(() => {
+      // Only show error if still loading (image didn't load successfully)
+      if (isImageLoading) {
+        setIsImageLoading(false);
+        setImageLoadError(true);
+      }
+    }, 15000);
+    
+    setImageLoadTimeout(timeout);
   };
 
   const handlePickBusinessImage = async (imageType: 'page1' | 'page2' | 'page3' | 'login') => {
@@ -864,7 +923,6 @@ export default function SettingsScreen() {
       setShowImageSelectionModal(false);
       setShowImagePreviewModal(false);
       setPreviewImageType(null);
-      setImageScale(1);
       setImageTranslateX(0);
       setImageTranslateY(0);
       // Ensure we're not in a loading state
@@ -1004,17 +1062,19 @@ export default function SettingsScreen() {
   // handleSendNotification removed (handled by AdminBroadcastComposer)
 
   const handleCallSupport = async () => {
-    const phone = '0527488779';
-    const url = `tel:${phone}`;
+    const email = 'slotlysapp@gmail.com';
+    const subject = 'Support Request';
+    const body = 'Hello Slotlys Support Team,\n\nI need assistance with:\n\n';
+    const url = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     try {
       const supported = await Linking.canOpenURL(url);
       if (supported) {
         await Linking.openURL(url);
       } else {
-        Alert.alert('Error', 'Cannot place a call on this device');
+        Alert.alert('Error', 'Cannot open email client on this device');
       }
     } catch {
-      Alert.alert('Error', 'Cannot place a call on this device');
+      Alert.alert('Error', 'Cannot open email client on this device');
     }
   };
 
@@ -1737,8 +1797,8 @@ export default function SettingsScreen() {
           {isAdmin && (
             renderSettingItem(
               <User size={20} color={businessColors.primary} />,
-              'Add admin user',
-              'Add another admin to the system',
+              'Add employee user',
+              'Add another employee to the system',
               undefined,
               () => setShowAddAdminModal(true)
             )
@@ -1787,28 +1847,28 @@ export default function SettingsScreen() {
         presentationStyle="pageSheet"
         onRequestClose={() => setShowSupportModal(false)}
       >
-        <SafeAreaView style={styles.modalContainer}>
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#F2F2F7' }]}>
           <View style={styles.modalHeader}>
             <TouchableOpacity 
-              style={styles.modalCloseButton}
+              style={styles.cancellationModalCloseButton}
               onPress={() => setShowSupportModal(false)}
             >
-              <Text style={styles.modalCloseText}>Close</Text>
+              <X size={20} color={Colors.text} />
             </TouchableOpacity>
             <Text style={styles.modalTitle}>Support and help</Text>
             <View style={{ width: 44 }} />
           </View>
-          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-            <View style={styles.previewCard}>
+          <ScrollView style={[styles.modalContent, { padding: 20 }]} showsVerticalScrollIndicator={false}>
+            <View style={styles.groupCard}>
               <Text style={styles.previewNotificationTitle}>
-                For any support, please contact BCODE's support team
+                Need help? Contact Slotlys support team
               </Text>
               <Text style={styles.previewNotificationContent}>
-                Our support team is available to help you. Please press the button below to contact us immediately.
+                Our dedicated support team is here to assist you with any questions or issues you may have. Whether you need help with appointments, account settings, or technical support, we're ready to help. Please use the contact button below to reach out to us directly.
               </Text>
               <View style={{ marginTop: 16, alignItems: 'center' }}>
-                <TouchableOpacity style={styles.modalSendButton} onPress={handleCallSupport}>
-                  <Text style={styles.modalSendText}>Contact us now </Text>
+                <TouchableOpacity style={[styles.modalSendButton, { backgroundColor: businessColors.primary }]} onPress={handleCallSupport}>
+                  <Text style={[styles.modalSendText, { color: Colors.white }]}>Contact us now </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -2152,15 +2212,15 @@ export default function SettingsScreen() {
             <TouchableWithoutFeedback onPress={() => {}}>
               <View style={styles.smallModalCard}>
                 <View style={styles.modalHeader}>
-                  <TouchableOpacity style={styles.modalCloseButton} onPress={() => {
+                  <TouchableOpacity style={styles.cancellationModalCloseButton} onPress={() => {
                     setShowCancellationDropdown(false);
                     setShowEditCancellationModal(false);
                   }}>
-                    <Text style={styles.modalCloseText}>Cancel</Text>
+                    <X size={20} color={Colors.text} />
                   </TouchableOpacity>
                   <Text style={styles.modalTitleLTR}>Minimum cancellation time</Text>
-                  <TouchableOpacity style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]} onPress={saveCancellationHours} disabled={isSavingProfile}>
-                    <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'Saving...' : 'Save'}</Text>
+                  <TouchableOpacity style={[styles.modalSendButton, { backgroundColor: businessColors.primary }, isSavingProfile && styles.modalSendButtonDisabled]} onPress={saveCancellationHours} disabled={isSavingProfile}>
+                    <Text style={[styles.modalSendText, { color: Colors.white }, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'Saving...' : 'Save'}</Text>
                   </TouchableOpacity>
                 </View>
                 <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
@@ -2378,25 +2438,25 @@ export default function SettingsScreen() {
         <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#F8F9FA' }]}>
           <View style={styles.modalHeader}>
             <TouchableOpacity 
-              style={styles.modalCloseButton}
+              style={styles.cancellationModalCloseButton}
               onPress={() => setShowRecurringModal(false)}
             >
-              <Text style={styles.modalCloseText}>Cancel</Text>
+              <X size={20} color={Colors.text} />
             </TouchableOpacity>
             <Text style={styles.modalTitle}>Add recurring appointment</Text>
             <TouchableOpacity 
-              style={[styles.modalSendButton, isSubmittingRecurring && styles.modalSendButtonDisabled]}
+              style={[styles.modalSendButton, { backgroundColor: businessColors.primary }, isSubmittingRecurring && styles.modalSendButtonDisabled]}
               onPress={handleSubmitRecurring}
               disabled={isSubmittingRecurring}
             >
-              <Text style={[styles.modalSendText, isSubmittingRecurring && styles.modalSendTextDisabled]}>
+              <Text style={[styles.modalSendText, { color: Colors.white }, isSubmittingRecurring && styles.modalSendTextDisabled]}>
                 {isSubmittingRecurring ? 'Saving...' : 'Save'}
               </Text>
             </TouchableOpacity>
           </View>
 
           <ScrollView 
-            style={styles.modalContent} 
+            style={[styles.modalContent, { padding: 20 }]} 
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             nestedScrollEnabled={true}
@@ -2589,7 +2649,7 @@ export default function SettingsScreen() {
               >
                 <View style={styles.dropdownHeader}>
                   <Text style={[styles.dropdownText, !selectedTime && styles.dropdownPlaceholder, { textAlign: 'left' }]}>
-                    {selectedTime || (isLoadingTimes ? 'Loading times...' : 'Select time...')}
+                    {selectedTime ? formatTime12Hour(selectedTime) : (isLoadingTimes ? 'Loading times...' : 'Select time...')}
                   </Text>
                   {showTimeDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
                 </View>
@@ -2622,7 +2682,7 @@ export default function SettingsScreen() {
                           }}
                         >
                           <View style={styles.dropdownOptionContent}>
-                            <Text style={styles.dropdownOptionTitle}>{t}</Text>
+                            <Text style={styles.dropdownOptionTitle}>{formatTime12Hour(t)}</Text>
                           </View>
                         </Pressable>
                       ))}
@@ -2656,16 +2716,16 @@ export default function SettingsScreen() {
                 <View style={styles.sheetGrabber} />
               </View>
             </View>
-            <View style={styles.modalHeader}>
+            <View style={styles.servicesModalHeader}>
               <TouchableOpacity 
-                style={styles.modalCloseButton}
+                style={styles.servicesModalCloseButton}
                 onPress={closeServicesModal}
                 accessibilityRole="button"
                 accessibilityLabel="Close"
               >
                 <X size={20} color={Colors.text} />
               </TouchableOpacity>
-              <Text style={[styles.modalTitle, { textAlign: 'center', alignSelf: 'center', flex: 1 }]}>Edit services</Text>
+              <Text style={styles.servicesModalTitle}>Edit services</Text>
               <TouchableOpacity 
                 style={styles.modalActionButton}
                 onPress={handleOpenAddService}
@@ -3041,7 +3101,16 @@ export default function SettingsScreen() {
           <View style={styles.imagePreviewHeader}>
             <TouchableOpacity 
               style={styles.modalCloseButton}
-              onPress={() => setShowImagePreviewModal(false)}
+              onPress={() => {
+                setShowImagePreviewModal(false);
+                setIsImageLoading(false);
+                setImageLoadError(false);
+                if (imageLoadTimeout) {
+                  clearTimeout(imageLoadTimeout);
+                  setImageLoadTimeout(null);
+                }
+                progressAnimation.stopAnimation();
+              }}
             >
               <X size={24} color="#000000" />
             </TouchableOpacity>
@@ -3065,18 +3134,80 @@ export default function SettingsScreen() {
           </View>
           
           <View style={styles.imagePreviewContainer}>
+            {isImageLoading && (
+              <View style={styles.imageLoadingContainer}>
+                <Image
+                  source={require('../../assets/images/icon.png')}
+                  style={styles.placeholderImage}
+                  resizeMode="contain"
+                />
+                <ActivityIndicator size="large" color={businessColors.primary} style={styles.loadingSpinner} />
+                <Text style={[styles.imageLoadingText, { color: businessColors.primary }]}>
+                  Loading image...
+                </Text>
+                <Text style={[styles.imageLoadingSubtext, { color: Colors.subtext }]}>
+                  This may take a few seconds
+                </Text>
+                <View style={styles.progressBarContainer}>
+                  <Animated.View 
+                    style={[
+                      styles.progressBar, 
+                      { 
+                        backgroundColor: businessColors.primary,
+                        width: progressAnimation.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ['0%', '100%'],
+                        })
+                      }
+                    ]} 
+                  />
+                </View>
+              </View>
+            )}
+            
+            {imageLoadError && (
+              <View style={styles.imageErrorContainer}>
+                <Ionicons name="image-outline" size={48} color={Colors.subtext} />
+                <Text style={[styles.imageErrorText, { color: Colors.subtext }]}>
+                  Failed to load image
+                </Text>
+                <TouchableOpacity 
+                  style={[styles.retryButton, { backgroundColor: businessColors.primary }]}
+                  onPress={() => {
+                    setIsImageLoading(true);
+                    setImageLoadError(false);
+                    progressAnimation.setValue(0);
+                    Animated.timing(progressAnimation, {
+                      toValue: 1,
+                      duration: 15000,
+                      useNativeDriver: false,
+                    }).start();
+                    
+                    // Set new timeout for retry
+                    const timeout = setTimeout(() => {
+                      if (isImageLoading) {
+                        setIsImageLoading(false);
+                        setImageLoadError(true);
+                      }
+                    }, 15000);
+                    
+                    setImageLoadTimeout(timeout);
+                  }}
+                >
+                  <Text style={styles.retryButtonText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            
             <ScrollView
-              contentContainerStyle={styles.imagePreviewScrollContent}
-              maximumZoomScale={3}
-              minimumZoomScale={0.5}
+              contentContainerStyle={previewImageType === 'login' ? styles.loginImagePreviewScrollContent : styles.imagePreviewScrollContent}
+              maximumZoomScale={1}
+              minimumZoomScale={1}
               showsHorizontalScrollIndicator={false}
               showsVerticalScrollIndicator={false}
-              onScroll={(event) => {
-                const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-                const scale = Math.max(contentSize.width / layoutMeasurement.width, contentSize.height / layoutMeasurement.height);
-                setImageScale(scale);
-              }}
-              scrollEventThrottle={16}
+              scrollEnabled={false}
+              pinchGestureEnabled={false}
+              style={isImageLoading || imageLoadError ? styles.hiddenScrollView : undefined}
             >
               <Image
                 source={{
@@ -3085,16 +3216,42 @@ export default function SettingsScreen() {
                         previewImageType === 'page3' ? profileImageOnPage3 :
                         profileLoginImg
                 }}
-                style={styles.imagePreviewImage}
-                resizeMode="contain"
+                style={previewImageType === 'login' ? styles.loginImagePreview : styles.imagePreviewImage}
+                resizeMode={previewImageType === 'login' ? "cover" : "contain"}
+                onLoadStart={() => setIsImageLoading(true)}
+                onLoad={() => {
+                  setIsImageLoading(false);
+                  setImageLoadError(false);
+                  progressAnimation.stopAnimation();
+                  // Clear timeout since image loaded successfully
+                  if (imageLoadTimeout) {
+                    clearTimeout(imageLoadTimeout);
+                    setImageLoadTimeout(null);
+                  }
+                }}
+                onError={() => {
+                  setIsImageLoading(false);
+                  setImageLoadError(true);
+                  progressAnimation.stopAnimation();
+                  // Clear timeout since we got an error
+                  if (imageLoadTimeout) {
+                    clearTimeout(imageLoadTimeout);
+                    setImageLoadTimeout(null);
+                  }
+                }}
               />
             </ScrollView>
           </View>
           
           <View style={styles.imagePreviewFooter}>
             <Text style={styles.imagePreviewInstructions}>
-              Pinch to zoom • Drag to pan • Tap "Change" to replace
+              Tap "Change" to replace image
             </Text>
+            {previewImageType === 'login' && (
+              <Text style={styles.loginImageFormatNote}>
+                📱 Login page images are displayed in (9:16 ratio)
+              </Text>
+            )}
           </View>
         </SafeAreaView>
       </Modal>
@@ -3437,6 +3594,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 10,
   },
+  cancellationModalCloseButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: -4,
+    zIndex: 10,
+  },
   modalActionButton: {
     width: 44,
     height: 44,
@@ -3444,6 +3610,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F2F2F7',
+    zIndex: 10,
   },
   modalActionText: {
     fontSize: 22,
@@ -3471,6 +3638,36 @@ const styles = StyleSheet.create({
     color: Colors.text,
     flex: 1,
     textAlign: 'left',
+  },
+  servicesModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 0,
+    borderBottomColor: 'transparent',
+    backgroundColor: Colors.white,
+  },
+  servicesModalCloseButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: -4,
+    zIndex: 10,
+  },
+  servicesModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.text,
+    flex: 1,
+    textAlign: 'center',
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 1,
   },
   modalSendButton: {
     backgroundColor: Colors.primary,
@@ -3867,6 +4064,18 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
+  groupCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    padding: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
   sectionHeaderRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
@@ -4055,14 +4264,125 @@ const styles = StyleSheet.create({
   },
   imagePreviewScrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     minHeight: '100%',
+    paddingTop: 30,
+    paddingBottom: 100,
+    paddingHorizontal: 20,
+  },
+  loginImagePreviewScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    minHeight: '100%',
+    paddingTop: 30,
+    paddingBottom: 100,
+    paddingHorizontal: 20,
   },
   imagePreviewImage: {
     width: '100%',
     height: '100%',
     minHeight: 400,
+    maxHeight: '85%',
+  },
+  loginImagePreview: {
+    width: '100%',
+    height: '100%',
+    minHeight: 400,
+    aspectRatio: 9/16, // Instagram Story ratio (vertical rectangle)
+    maxHeight: '85%',
+    alignSelf: 'center',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  imageLoadingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    zIndex: 10,
+  },
+  imageLoadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  imageLoadingSubtext: {
+    marginTop: 4,
+    fontSize: 14,
+    fontWeight: '400',
+    textAlign: 'center',
+  },
+  progressBarContainer: {
+    width: 200,
+    height: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    borderRadius: 2,
+    marginTop: 16,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  placeholderImage: {
+    width: 80,
+    height: 80,
+    opacity: 0.3,
+    marginBottom: 16,
+  },
+  loadingSpinner: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    marginTop: -10,
+    marginLeft: -10,
+  },
+  imageErrorContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    zIndex: 10,
+    paddingHorizontal: 20,
+  },
+  imageErrorText: {
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  hiddenScrollView: {
+    opacity: 0,
   },
   imagePreviewFooter: {
     paddingHorizontal: 20,
@@ -4075,6 +4395,13 @@ const styles = StyleSheet.create({
     color: 'rgba(0, 0, 0, 0.6)',
     fontSize: 14,
     textAlign: 'center',
+  },
+  loginImageFormatNote: {
+    fontSize: 12,
+    color: 'rgba(0, 0, 0, 0.5)',
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
   },
   modalOverlay: {
     flex: 1,

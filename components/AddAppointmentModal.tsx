@@ -20,6 +20,7 @@ import { supabase } from '@/lib/supabase';
 import { servicesApi } from '@/lib/api/services';
 import type { Service } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
+import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 
 const { width } = Dimensions.get('window');
 
@@ -42,6 +43,15 @@ function formatDateToLocalString(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+// Helper function to convert 24-hour format to 12-hour AM/PM format
+function formatTimeToAMPM(time24: string): string {
+  const [hours, minutes] = time24.split(':');
+  const hour24 = parseInt(hours, 10);
+  const hour12 = hour24 === 0 ? 12 : hour24 > 12 ? hour24 - 12 : hour24;
+  const ampm = hour24 >= 12 ? 'PM' : 'AM';
+  return `${hour12}:${minutes} ${ampm}`;
+}
+
 interface AddAppointmentModalProps {
   visible: boolean;
   onClose: () => void;
@@ -50,6 +60,7 @@ interface AddAppointmentModalProps {
 
 export default function AddAppointmentModal({ visible, onClose, onSuccess }: AddAppointmentModalProps) {
   const user = useAuthStore((state) => state.user);
+  const { colors: businessColors } = useBusinessColors();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedClient, setSelectedClient] = useState<{ name: string; phone: string } | null>(null);
@@ -535,7 +546,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
             onPress={() => setSelectedClient(null)}
             style={styles.changeButton}
           >
-            <Text style={styles.changeButtonText}>Change</Text>
+            <Text style={[styles.changeButtonText, { color: businessColors.primary }]}>Change</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -615,7 +626,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       >
         <View style={styles.selectorContent}>
           <Text style={selectedTime ? styles.selectorText : styles.selectorPlaceholder}>
-            {selectedTime || (isLoadingTimes ? 'Loading times...' : 'Select time...')}
+            {selectedTime ? formatTimeToAMPM(selectedTime) : (isLoadingTimes ? 'Loading times...' : 'Select time...')}
           </Text>
           <View style={styles.selectorIcon}>
             <Clock size={16} color={Colors.subtext} />
@@ -648,7 +659,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
                     setShowTimeDropdown(false);
                   }}
                 >
-                  <Text style={styles.timeText}>{time}</Text>
+                  <Text style={styles.timeText}>{formatTimeToAMPM(time)}</Text>
                 </Pressable>
               ))
             )}
@@ -669,15 +680,19 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-            <Text style={[styles.closeButtonText, { color: '#000000' }]}>Cancel</Text>
+            <X size={20} color={Colors.text} />
           </TouchableOpacity>
           <Text style={styles.title}>Add Appointment for Client</Text>
           <TouchableOpacity 
-            style={[styles.submitButton, { backgroundColor: '#000000' }, isSubmitting && styles.submitButtonDisabled]}
+            style={[
+              styles.submitButton, 
+              isSubmitting && styles.submitButtonDisabled,
+              { backgroundColor: businessColors.primary }
+            ]}
             onPress={handleSubmit}
             disabled={isSubmitting}
           >
-            <Text style={[styles.submitButtonText, isSubmitting && styles.submitButtonTextDisabled]}>
+            <Text style={[styles.submitButtonText, { color: Colors.white }, isSubmitting && styles.submitButtonTextDisabled]}>
               {isSubmitting ? 'Saving...' : 'Save'}
             </Text>
           </TouchableOpacity>
@@ -716,7 +731,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
                   <Text style={styles.summaryLabel}>Date:</Text>
                 </View>
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryValue}>{selectedTime}</Text>
+                  <Text style={styles.summaryValue}>{formatTimeToAMPM(selectedTime)}</Text>
                   <Text style={styles.summaryLabel}>Time:</Text>
                 </View>
               </View>
@@ -746,8 +761,13 @@ const styles = StyleSheet.create({
     borderBottomColor: '#C6C6C8',
   },
   closeButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: -4,
+    zIndex: 10,
   },
   closeButtonText: {
     fontSize: 17,
@@ -762,13 +782,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   submitButton: {
-    backgroundColor: '#7B61FF',
     borderRadius: 20,
     paddingVertical: 8,
     paddingHorizontal: 16,
+    minWidth: 60,
+    minHeight: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   submitButtonDisabled: {
-    backgroundColor: '#C6C6C8',
+    opacity: 0.6,
   },
   submitButtonText: {
     fontSize: 17,
@@ -1053,6 +1076,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     marginTop: 16,
+    marginBottom: 32,
     borderWidth: 1,
     borderColor: '#E5E5EA',
     shadowColor: '#000000',

@@ -57,13 +57,24 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
       return false;
     }
     
-    // Phone validation (US and Israeli formats)
+    // Phone validation (US format only)
     const cleanPhone = phone.replace(/[\s\-\(\)\.]/g, '');
     const usPhoneRegex = /^[0-9]{10}$/; // 10 digits for US
-    const israeliPhoneRegex = /^0[0-9]{8,9}$/; // Israeli format: 0XX-XXXXXXX or 0XXX-XXXXXX
     
-    if (!usPhoneRegex.test(cleanPhone) && !israeliPhoneRegex.test(cleanPhone)) {
-      Alert.alert('Error', 'Please enter a valid phone number (US: (555) 123-4567 or Israeli: 050-1234567)');
+    if (!usPhoneRegex.test(cleanPhone)) {
+      Alert.alert('Error', 'Please enter a valid phone number (US: (555) 123-4567)');
+      return false;
+    }
+    
+    if (!email.trim()) {
+      Alert.alert('Error', 'Please enter an email address');
+      return false;
+    }
+    
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      Alert.alert('Error', 'Please enter a valid email address');
       return false;
     }
     
@@ -138,14 +149,25 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Add Admin User</Text>
           <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
             <X size={24} color="#666" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Add Employee User</Text>
+          <TouchableOpacity
+            style={[styles.submitButton, { backgroundColor: businessColors.primary }]}
+            onPress={handleSubmit}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <Text style={styles.submitButtonText}>Add User</Text>
+            )}
           </TouchableOpacity>
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          <View style={styles.form}>
+          <View style={styles.groupCard}>
             {/* Name Field */}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Full Name *</Text>
@@ -171,7 +193,7 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
                   style={styles.input}
                   value={phone}
                   onChangeText={setPhone}
-                  placeholder="(555) 123-4567 or 050-1234567"
+                  placeholder="(555) 123-4567"
                   placeholderTextColor="#999"
                   keyboardType="phone-pad"
                   textAlign="left"
@@ -181,7 +203,7 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
 
             {/* Email Field */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email Address (Optional)</Text>
+              <Text style={styles.label}>Email Address *</Text>
               <View style={styles.inputContainer}>
                 <Mail size={20} color="#666" style={styles.inputIcon} />
                 <TextInput
@@ -206,12 +228,13 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
                   style={styles.input}
                   value={password}
                   onChangeText={setPassword}
-                  placeholder="Enter password (at least 6 characters)"
+                  placeholder="Enter password"
                   placeholderTextColor="#999"
                   secureTextEntry
                   textAlign="left"
                 />
               </View>
+              <Text style={styles.helperText}>* Minimum 6 characters</Text>
             </View>
 
             {/* Confirm Password Field */}
@@ -232,30 +255,6 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
             </View>
           </View>
         </ScrollView>
-
-        <View style={styles.footer}>
-          <TouchableOpacity
-            style={[styles.cancelButton, { borderColor: businessColors.primary }]}
-            onPress={handleClose}
-            disabled={isLoading}
-          >
-            <Text style={[styles.cancelButtonText, { color: businessColors.primary }]}>
-              Cancel
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.submitButton, { backgroundColor: businessColors.primary }]}
-            onPress={handleSubmit}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="white" />
-            ) : (
-              <Text style={styles.submitButtonText}>Add User</Text>
-            )}
-          </TouchableOpacity>
-        </View>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -264,7 +263,7 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F2F2F7',
   },
   header: {
     flexDirection: 'row',
@@ -272,24 +271,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#C6C6C8',
   },
   title: {
     fontSize: 18,
     fontWeight: '600',
     color: '#1C1C1E',
+    flex: 1,
+    textAlign: 'center',
   },
   closeButton: {
     padding: 4,
+    width: 32,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
+    padding: 20,
   },
-  form: {
-    paddingVertical: 20,
+  groupCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    padding: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   inputGroup: {
     marginBottom: 20,
@@ -304,46 +315,34 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E5E5EA',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
   },
   inputIcon: {
-    marginLeft: 12,
+    marginLeft: 4,
+    marginRight: 12,
   },
   input: {
     flex: 1,
     fontSize: 16,
     color: '#1C1C1E',
   },
-  footer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E5EA',
-    gap: 12,
-  },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
+  helperText: {
+    fontSize: 14,
+    color: '#8E8E93',
+    marginTop: 4,
+    marginLeft: 4,
   },
   submitButton: {
-    flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderRadius: 12,
     alignItems: 'center',
+    minWidth: 80,
   },
   submitButtonText: {
     fontSize: 16,

@@ -81,15 +81,16 @@ const PRESET_IMAGES = {
     ],
   },
   loginPage: [
-    require('../assets/images/default/LoginPage/1.jpg'),
-    require('../assets/images/default/LoginPage/2.jpg'),
-    require('../assets/images/default/LoginPage/3.jpg'),
-    require('../assets/images/default/LoginPage/4.jpg'),
-    require('../assets/images/default/LoginPage/5.jpg'),
-    require('../assets/images/default/LoginPage/6.jpg'),
-    require('../assets/images/default/LoginPage/7.jpg'),
-    require('../assets/images/default/LoginPage/8.jpg'),
-    require('../assets/images/default/LoginPage/9.jpg'),
+    require('../assets/images/default/LoginPage/11.png'),
+    require('../assets/images/default/LoginPage/12.png'),
+    require('../assets/images/default/LoginPage/13.png'),
+    require('../assets/images/default/LoginPage/14.png'),
+    require('../assets/images/default/LoginPage/15.png'),
+    require('../assets/images/default/LoginPage/16.png'),
+    require('../assets/images/default/LoginPage/17.png'),
+    require('../assets/images/default/LoginPage/18.png'),
+    require('../assets/images/default/LoginPage/19.png'),
+    require('../assets/images/default/LoginPage/20.png'),
   ],
 };
 
@@ -115,8 +116,8 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
   const previewFadeAnim = useRef(new Animated.Value(0)).current;
   const colors = useColors();
 
-  // Preload images for better performance
-  const preloadImages = React.useCallback(() => {
+  // Simplified preload - only for current category
+  const preloadCurrentImages = React.useCallback(() => {
     let currentImages;
     if (mainCategory === 'loginPage') {
       currentImages = PRESET_IMAGES[mainCategory];
@@ -125,42 +126,35 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
     }
     
     if (currentImages) {
+      // Clear previous loading states
+      setLoadingImages({});
+      
       currentImages.forEach((imageSource, index) => {
         const imageKey = mainCategory === 'loginPage' 
           ? `${mainCategory}-${index}` 
           : `${mainCategory}-${selectedSubCategory}-${index}`;
         
-        // Preload the image
+        // Set loading state immediately
+        setLoadingImages(prev => ({ ...prev, [imageKey]: true }));
+        
+        // Preload the image with better caching and timeout
         const imageUri = Image.resolveAssetSource(imageSource).uri;
+        
+        // Set a timeout to prevent infinite loading
+        const timeoutId = setTimeout(() => {
+          setLoadingImages(prev => ({ ...prev, [imageKey]: false }));
+        }, 5000); // 5 second timeout
+        
         Image.prefetch(imageUri).then(() => {
+          clearTimeout(timeoutId);
           setLoadingImages(prev => ({ ...prev, [imageKey]: false }));
         }).catch(() => {
+          clearTimeout(timeoutId);
           setLoadingImages(prev => ({ ...prev, [imageKey]: false }));
         });
-        
-        setLoadingImages(prev => ({ ...prev, [imageKey]: true }));
       });
     }
   }, [mainCategory, selectedSubCategory]);
-
-  // Preload all images when modal opens for faster preview
-  const preloadAllImages = React.useCallback(() => {
-    Object.keys(PRESET_IMAGES).forEach(category => {
-      if (category === 'loginPage') {
-        PRESET_IMAGES[category].forEach((imageSource) => {
-          const imageUri = Image.resolveAssetSource(imageSource).uri;
-          Image.prefetch(imageUri);
-        });
-      } else {
-        Object.keys(PRESET_IMAGES[category]).forEach(subCategory => {
-          PRESET_IMAGES[category][subCategory].forEach((imageSource) => {
-            const imageUri = Image.resolveAssetSource(imageSource).uri;
-            Image.prefetch(imageUri);
-          });
-        });
-      }
-    });
-  }, []);
 
   React.useEffect(() => {
     if (visible) {
@@ -182,10 +176,8 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
         }),
       ]).start();
       
-      // Preload images for better performance
-      preloadImages();
-      // Preload all images in background for faster preview
-      preloadAllImages();
+      // Preload current images for better performance
+      preloadCurrentImages();
     } else {
       Animated.parallel([
         Animated.timing(fadeAnim, {
@@ -224,10 +216,10 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
 
   // Preload images when subcategory changes
   React.useEffect(() => {
-    if (visible && mainCategory !== 'loginPage') {
-      preloadImages();
+    if (visible) {
+      preloadCurrentImages();
     }
-  }, [selectedSubCategory, preloadImages, visible, mainCategory]);
+  }, [selectedSubCategory, preloadCurrentImages, visible, mainCategory]);
 
   const handlePickFromGallery = async () => {
     try {
@@ -275,10 +267,10 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
     
     // For preset images, they should already be preloaded
     if (isPreset) {
-      // Since we preload all images, this should be instant
+      // Since we preload images, this should be fast
       setTimeout(() => {
         setPreviewImageLoading(false);
-      }, 100);
+      }, 50); // Reduced delay for better performance
     } else {
       // For gallery images, we need to load them
       setPreviewImageLoading(true);
@@ -311,10 +303,8 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
   };
 
   const handleImageLoadEnd = (imageKey: string) => {
-    // Add a small delay to prevent flickering for very fast loads
-    setTimeout(() => {
-      setLoadingImages(prev => ({ ...prev, [imageKey]: false }));
-    }, 100);
+    // Immediate update for better performance
+    setLoadingImages(prev => ({ ...prev, [imageKey]: false }));
   };
 
   return (
@@ -358,13 +348,26 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
               
               <Image 
                 source={selectedImage.isPreset ? selectedImage.source : { uri: selectedImage.uri }}
-                style={[styles.previewImage, previewImageLoading && styles.hiddenPreviewImage]}
-                resizeMode="contain"
+                style={[
+                  mainCategory === 'loginPage' ? styles.loginPagePreviewImage : styles.previewImage, 
+                  previewImageLoading && styles.hiddenPreviewImage
+                ]}
+                resizeMode={mainCategory === 'loginPage' ? "cover" : "contain"}
                 onLoadStart={() => setPreviewImageLoading(true)}
                 onLoadEnd={() => setPreviewImageLoading(false)}
                 onError={() => setPreviewImageLoading(false)}
                 fadeDuration={0}
+                cache="force-cache"
+                loadingIndicatorSource={require('../assets/images/icon.png')}
               />
+              
+              {mainCategory === 'loginPage' && (
+                <View style={styles.loginPageFormatNote}>
+                  <Text style={styles.loginPageFormatText}>
+                    📱 Login page images are displayed in (9:16 ratio)
+                  </Text>
+                </View>
+              )}
             </View>
           </Animated.View>
         )}
@@ -477,7 +480,7 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
               return (
                 <TouchableOpacity
                   key={index}
-                  style={styles.imageCard}
+                  style={mainCategory === 'loginPage' ? styles.loginPageImageCard : styles.imageCard}
                   onPress={() => handleImagePress(imageSource, true)}
                   activeOpacity={0.9}
                 >
@@ -498,6 +501,8 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
                       onLoadStart={() => handleImageLoadStart(imageKey)}
                       onLoadEnd={() => handleImageLoadEnd(imageKey)}
                       onError={() => handleImageLoadEnd(imageKey)}
+                      cache="force-cache"
+                      loadingIndicatorSource={require('../assets/images/icon.png')}
                     />
                     
                     <View style={[styles.imageOverlay, { opacity: 0 }]}>
@@ -650,6 +655,11 @@ const styles = StyleSheet.create({
     height: imageCardHeight,
     marginBottom: 20,
   },
+  loginPageImageCard: {
+    width: imageSize,
+    height: imageSize * (16/9), // Instagram Story ratio (9:16, but we want 16:9 for landscape)
+    marginBottom: 20,
+  },
   imageContainer: {
     flex: 1,
     borderRadius: 16,
@@ -777,17 +787,36 @@ const styles = StyleSheet.create({
   },
   previewImageContainer: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     paddingTop: Platform.OS === 'ios' ? 120 : 100,
     paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingBottom: 100,
   },
   previewImage: {
     width: '100%',
     height: '100%',
     maxWidth: width - 40,
     maxHeight: height - 200,
+  },
+  loginPagePreviewImage: {
+    width: '100%',
+    height: '100%',
+    minHeight: 400,
+    aspectRatio: 9/16, // Instagram Story ratio (vertical rectangle)
+    maxHeight: '85%',
+    alignSelf: 'center',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
   },
   hiddenPreviewImage: {
     opacity: 0,
@@ -806,6 +835,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#999999',
     marginTop: 16,
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+  },
+  loginPageFormatNote: {
+    position: 'absolute',
+    bottom: 60,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  loginPageFormatText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    textAlign: 'center',
     fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
   },
 });

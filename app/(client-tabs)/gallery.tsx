@@ -30,6 +30,7 @@ type DesignItem = {
   image_urls?: string[];
   popularity?: number;
   categories?: string[];
+  user_id?: string;
 };
 
 type GalleryItem = DesignItem | Product;
@@ -53,7 +54,7 @@ const SkeletonTile = memo(() => {
   );
 });
 
-const DesignTile = memo(({ item, onOpen, adminUser, businessColors, isProduct = false }: { item: GalleryItem; onOpen: (images: string[]) => void; adminUser: AdminUser | null; businessColors: any; isProduct?: boolean }) => {
+const DesignTile = memo(({ item, onOpen, uploaderUser, businessColors, isProduct = false }: { item: GalleryItem; onOpen: (images: string[]) => void; uploaderUser: AdminUser | null; businessColors: any; isProduct?: boolean }) => {
   const scale = useRef(new Animated.Value(1)).current;
   const imageOpacity = useRef(new Animated.Value(0)).current;
   const onPressIn = () => {
@@ -108,7 +109,7 @@ const DesignTile = memo(({ item, onOpen, adminUser, businessColors, isProduct = 
           )}
           
           {/* Manager Profile Circle - Only show for designs */}
-          {adminUser && !isProduct && (
+          {uploaderUser && !isProduct && (
             <View style={styles.managerProfileContainer}>
               <LinearGradient
                 colors={['#000000', '#333333', '#666666']}
@@ -119,8 +120,8 @@ const DesignTile = memo(({ item, onOpen, adminUser, businessColors, isProduct = 
                 <View style={styles.managerProfileInner}>
                   <Image
                     source={
-                      adminUser.image_url 
-                        ? { uri: adminUser.image_url }
+                      uploaderUser.image_url 
+                        ? { uri: uploaderUser.image_url }
                         : require('@/assets/images/user.png')
                     }
                     style={styles.managerProfileImage}
@@ -149,7 +150,7 @@ export default function GalleryScreen() {
   const [viewerImages, setViewerImages] = useState<string[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
-  const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
+  const [uploaderById, setUploaderById] = useState<Record<string, AdminUser>>({});
   const [activeTab, setActiveTab] = useState<'designs' | 'products'>('designs');
   const panY = useRef(new Animated.Value(0)).current;
   const { colors: businessColors } = useBusinessColors();
@@ -191,30 +192,45 @@ export default function GalleryScreen() {
     fetchProducts();
   }, []);
 
-  // Load admin user profile
+  // Load uploader profiles per design
   useEffect(() => {
-    const loadAdminUser = async () => {
+    const loadUploaders = async () => {
       try {
+        const ids = Array.from(
+          new Set(
+            (designs as any[])
+              .map(d => (d && 'user_id' in d ? (d as any).user_id : null))
+              .filter(Boolean)
+          )
+        ) as string[];
+
+        if (ids.length === 0) {
+          setUploaderById({});
+          return;
+        }
+
         const businessId = getBusinessId();
-        
         const { data, error } = await supabase
           .from('users')
           .select('id, name, image_url')
-          .eq('user_type', 'admin')
-          .eq('business_id', businessId) // Filter by current business
-          .limit(1)
-          .maybeSingle();
+          .in('id', ids)
+          .eq('business_id', businessId);
 
-        if (!error && data) {
-          setAdminUser(data);
+        if (error) {
+          console.error('Error loading uploader profiles:', error);
+          return;
         }
+
+        const map: Record<string, AdminUser> = {};
+        (data || []).forEach(u => { map[u.id] = u as AdminUser; });
+        setUploaderById(map);
       } catch (e) {
-        console.error('Error loading admin user:', e);
+        console.error('Error loading uploader profiles:', e);
       }
     };
 
-    loadAdminUser();
-  }, []);
+    loadUploaders();
+  }, [designs]);
   const onRefresh = async () => {
     setRefreshing(true);
     try {
@@ -348,7 +364,10 @@ export default function GalleryScreen() {
             renderItem={({ item }) => (
               <DesignTile
                 item={item}
-                adminUser={adminUser}
+                uploaderUser={(() => {
+                  const userId = (item as any).user_id as string | undefined;
+                  return userId ? uploaderById[userId] || null : null;
+                })()}
                 businessColors={businessColors}
                 isProduct={activeTab === 'products'}
                 onOpen={(urls) => {

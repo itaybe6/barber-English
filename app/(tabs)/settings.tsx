@@ -1079,6 +1079,12 @@ export default function SettingsScreen() {
   
   // Recurring appointment modal state
   const isAdmin = useAuthStore((s) => s.isAdmin);
+  // Show Add employee button only if current user's phone equals business profile phone
+  const canSeeAddEmployee = React.useMemo(() => {
+    const userPhone = String(user?.phone || '').trim();
+    const businessPhone = String((profile as any)?.phone || '').trim();
+    return userPhone !== '' && businessPhone !== '' && userPhone === businessPhone;
+  }, [user?.phone, (profile as any)?.phone]);
   const [showRecurringModal, setShowRecurringModal] = useState(false);
   const [isSubmittingRecurring, setIsSubmittingRecurring] = useState(false);
   const [showManageRecurringModal, setShowManageRecurringModal] = useState(false);
@@ -1101,6 +1107,11 @@ export default function SettingsScreen() {
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [repeatWeeks, setRepeatWeeks] = useState<number>(1);
   const [showRepeatDropdown, setShowRepeatDropdown] = useState(false);
+
+  // Employees management modal state
+  const [showManageEmployeesModal, setShowManageEmployeesModal] = useState(false);
+  const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
+  const [adminUsers, setAdminUsers] = useState<any[]>([]);
 
   const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const timeOptions = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2,'0')}:00`);
@@ -1809,13 +1820,32 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitleNew}>Security & support</Text>
         
         <View style={[styles.cardNew, shadowStyle]}>
-          {isAdmin && (
+          {canSeeAddEmployee && (
             renderSettingItem(
               <User size={20} color={businessColors.primary} />,
               'Add employee user',
               'Add another employee to the system',
               undefined,
               () => setShowAddAdminModal(true)
+            )
+          )}
+          {canSeeAddEmployee && (
+            renderSettingItem(
+              <Trash2 size={20} color="#FF3B30" />,
+              'Manage employees',
+              'Remove employees from this business',
+              undefined,
+              async () => {
+                setShowManageEmployeesModal(true);
+                setIsLoadingEmployees(true);
+                try {
+                  const list = await usersApi.getAdminUsers();
+                  const filtered = (list || []).filter((u: any) => u.id !== (user as any)?.id);
+                  setAdminUsers(filtered);
+                } finally {
+                  setIsLoadingEmployees(false);
+                }
+              }
             )
           )}
           {renderSettingItem(
@@ -2454,6 +2484,97 @@ export default function SettingsScreen() {
                           </View>
                         </View>
                         {idx < recurringList.length - 1 && <View style={styles.manageDivider} />}
+                      </View>
+                    ))
+                  )}
+                </View>
+              )}
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+      {/* Manage Employees Modal */}
+      <Modal
+        visible={showManageEmployeesModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowManageEmployeesModal(false)}
+      >
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#F8F9FA' }]}> 
+          <View style={styles.modalHeader}>
+            <TouchableOpacity 
+              style={styles.modalCloseButton}
+              onPress={() => setShowManageEmployeesModal(false)}
+            >
+              <Text style={styles.modalCloseText}>Close</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Manage employees</Text>
+            <View style={{ width: 44 }} />
+          </View>
+          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+            <View style={styles.recurringCard}>
+              <View style={{ marginBottom: 8 }}>
+                <Text style={styles.previewNotificationTitle}>Employees list</Text>
+                <Text style={styles.previewNotificationContent}>Remove admins from your business</Text>
+              </View>
+              {isLoadingEmployees ? (
+                <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                  <ActivityIndicator size="large" color={businessColors.primary} />
+                  <Text style={{ marginTop: 12, color: Colors.subtext }}>Loading...</Text>
+                </View>
+              ) : (
+                <View>
+                  {adminUsers.length === 0 ? (
+                    <Text style={{ textAlign: 'center', color: Colors.subtext }}>No employees</Text>
+                  ) : (
+                    adminUsers.map((adm: any, idx: number) => (
+                      <View key={adm.id}>
+                        <View style={[styles.manageItemRow, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+                            <View style={[styles.accordionThumb, { width: 40, height: 40, borderRadius: 20, marginLeft: 0 }]}>
+                              <Image source={adm.image_url ? { uri: adm.image_url } : require('@/assets/images/logo-03.png')} style={{ width: 40, height: 40, borderRadius: 20 }} />
+                            </View>
+                            <View style={{ alignItems: 'flex-start', flex: 1 }}>
+                              <Text style={styles.previewNotificationTitle}>{adm.name || 'Admin'}</Text>
+                              {!!adm.phone && <Text style={styles.previewNotificationContent}>{adm.phone}</Text>}
+                              {!!adm.email && <Text style={styles.previewNotificationContent}>{adm.email}</Text>}
+                            </View>
+                          </View>
+                          <TouchableOpacity
+                              style={[styles.deleteIconButton, { backgroundColor: '#FFECEC', borderWidth: 1, borderColor: '#FFD1D1' }]}
+                              onPress={() => {
+                                if (adm.id === user?.id) {
+                                  Alert.alert('Action not allowed', 'You cannot remove yourself.');
+                                  return;
+                                }
+                                Alert.alert(
+                                  'Remove employee',
+                                  `Are you sure you want to remove ${adm.name || 'this employee'}?`,
+                                  [
+                                    { text: 'Cancel', style: 'cancel' },
+                                    {
+                                      text: 'Remove',
+                                      style: 'destructive',
+                                      onPress: async () => {
+                                        const ok = await usersApi.deleteUserAndAllDataById(adm.id);
+                                        if (ok) {
+                                          setAdminUsers((prev) => prev.filter((u) => u.id !== adm.id));
+                                          Alert.alert('Success', 'Employee deleted successfully');
+                                        } else {
+                                          Alert.alert('Error', 'Failed to remove employee');
+                                        }
+                                      }
+                                    }
+                                  ]
+                                );
+                              }}
+                              accessibilityRole="button"
+                              accessibilityLabel="Delete"
+                            >
+                              <Trash2 size={20} color="#FF3B30" />
+                            </TouchableOpacity>
+                        </View>
+                        {idx < adminUsers.length - 1 && <View style={styles.manageDivider} />}
                       </View>
                     ))
                   )}

@@ -15,6 +15,7 @@ import {
   Platform,
 } from 'react-native';
 import Colors from '@/constants/colors';
+import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import DaySelector from '@/components/DaySelector';
 import { AvailableTimeSlot, supabase } from '@/lib/supabase';
 import { businessHoursApi } from '@/lib/api/businessHours';
@@ -78,6 +79,7 @@ const PressableScale = ({ onPress, style, children, disabled, hitSlop, pressRete
 
 export default function AdminAppointmentsScreen() {
   const user = useAuthStore((state) => state.user);
+  const { colors: businessColors } = useBusinessColors();
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -415,11 +417,9 @@ export default function AdminAppointmentsScreen() {
                 // Calculate the exact offset in minutes from day start
                 const offsetMinutes = aptMinutes - dayStartMinutes;
                 
-                // Convert to grid position (each grid row is 30 minutes)
-                const gridRowIndex = Math.floor(offsetMinutes / 30);
-                
-                // Position the card at the exact grid row start
-                const top = gridRowIndex * HALF_HOUR_BLOCK_HEIGHT;
+                // Convert to precise grid position (30-min per row)
+                // Grid line is centered in each row, so add half-row to align to the line
+                const top = (offsetMinutes / 30) * HALF_HOUR_BLOCK_HEIGHT + (HALF_HOUR_BLOCK_HEIGHT / 2);
                 
                 // Calculate height based on duration
                 const durationMinutes = apt.duration_minutes || 30;
@@ -444,7 +444,7 @@ export default function AdminAppointmentsScreen() {
                     <View style={styles.appointmentActions}>
                       <PressableScale
                         onPress={() => openActionsMenu(apt)}
-                        style={styles.moreButton}
+                        style={[styles.moreButton, { backgroundColor: businessColors.primary }]}
                         accessibilityLabel="Options"
                         hitSlop={{ top: 24, bottom: 24, left: 24, right: 24 }}
                         pressRetentionOffset={{ top: 24, bottom: 24, left: 24, right: 24 }}

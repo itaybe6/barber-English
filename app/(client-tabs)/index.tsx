@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Linking, Alert, Animated, Easing, InteractionManager, AppState, Dimensions, RefreshControl, Modal } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Linking, Alert, Animated, Easing, InteractionManager, AppState, Dimensions, RefreshControl, Modal, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -981,9 +981,13 @@ export default function ClientHomeScreen() {
             <TouchableOpacity
               style={[styles.socialButton, styles.locationCircleButton]}
               onPress={async () => {
-                const address = businessProfile?.address || 'Tel Aviv, Herzl St 123';
-                const appUrl = `waze://?q=${encodeURIComponent(address)}&navigate=yes`;
-                const webUrl = `https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`;
+                const address = businessProfile?.address?.trim();
+                if (!address) {
+                  Alert.alert('Error', 'Business address not available');
+                  return;
+                }
+                const appUrl = `comgooglemaps://?q=${encodeURIComponent(address)}`;
+                const webUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
                 try {
                   const canOpen = await Linking.canOpenURL(appUrl);
                   if (canOpen) {
@@ -992,13 +996,13 @@ export default function ClientHomeScreen() {
                     await Linking.openURL(webUrl);
                   }
                 } catch (e) {
-                  Alert.alert('Error', 'Waze cannot be opened on this device');
+                  Alert.alert('Error', 'Google Maps cannot be opened on this device');
                 }
               }}
               activeOpacity={0.8}
-              accessibilityLabel="Navigate with Waze"
+              accessibilityLabel="Navigate with Google Maps"
             >
-              <MaterialCommunityIcons name="waze" size={28} color="#FFFFFF" />
+              <MaterialCommunityIcons name="google-maps" size={28} color="#FFFFFF" />
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.socialButton, styles.whatsappCircleButton]}
@@ -1009,23 +1013,24 @@ export default function ClientHomeScreen() {
                   return;
                 }
                 const message = 'Hi';
-                const appUrl = `whatsapp://send?phone=${phoneToUse}&text=${message}`;
-                const webUrl = `https://wa.me/${phoneToUse}?text=${message}`;
+                const smsUrl = Platform.OS === 'ios'
+                  ? `sms:${phoneToUse}&body=${encodeURIComponent(message)}`
+                  : `sms:${phoneToUse}?body=${encodeURIComponent(message)}`;
                 try {
-                  const canOpen = await Linking.canOpenURL(appUrl);
+                  const canOpen = await Linking.canOpenURL(smsUrl);
                   if (canOpen) {
-                    await Linking.openURL(appUrl);
+                    await Linking.openURL(smsUrl);
                   } else {
-                    await Linking.openURL(webUrl);
+                    Alert.alert('Error', 'SMS app cannot be opened on this device');
                   }
                 } catch (e) {
-                  Alert.alert('Error', 'WhatsApp cannot be opened on this device');
+                  Alert.alert('Error', 'SMS app cannot be opened on this device');
                 }
               }}
               activeOpacity={0.8}
-              accessibilityLabel="Contact us on WhatsApp"
+              accessibilityLabel="Contact us via SMS"
             >
-              <Ionicons name="logo-whatsapp" size={24} color="#FFFFFF" />
+              <Ionicons name="chatbubble-ellipses-outline" size={24} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         </View>
@@ -1675,10 +1680,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   locationCircleButton: {
-    backgroundColor: '#33CCFF',
+    backgroundColor: '#4285F4',
   },
   whatsappCircleButton: {
-    backgroundColor: '#25D366',
+    backgroundColor: '#1C1C1E',
   },
   // Footer developer logo
   footerContainer: {

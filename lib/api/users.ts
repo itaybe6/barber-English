@@ -9,6 +9,132 @@ export const usersApi = {
     return password === '123456' ? 'default_hash' : `hash_${password}`;
   },
 
+  // Delete a specific user (by ID) and all related data across tables
+  async deleteUserAndAllDataById(targetUserId: string): Promise<boolean> {
+    try {
+      const businessId = getBusinessId();
+
+      // Helper to detect if a column exists on a table by probing a select
+      const columnExists = async (table: string, column: string): Promise<boolean> => {
+        try {
+          const { error } = await supabase
+            .from(table)
+            .select(`id, ${column}` as any)
+            .limit(1);
+          return !error;
+        } catch {
+          return false;
+        }
+      };
+
+      // 1) Delete appointments owned by or assigned to this user (handles FK on appointments.barber_id)
+      {
+        const { error: apptErr } = await supabase
+          .from('appointments')
+          .delete()
+          .eq('business_id', businessId)
+          .or(`user_id.eq.${targetUserId},barber_id.eq.${targetUserId}`);
+        if (apptErr) {
+          console.error('Failed to delete appointments for user:', apptErr);
+          return false;
+        }
+      }
+
+      // 2) Delete business constraints created by this user
+      {
+        const { error } = await supabase
+          .from('business_constraints')
+          .delete()
+          .eq('user_id', targetUserId)
+          .eq('business_id', businessId);
+        if (error) {
+          console.error('Failed to delete business_constraints for user:', error);
+          return false;
+        }
+      }
+
+      // 3) Delete business hours created for this user
+      {
+        const { error } = await supabase
+          .from('business_hours')
+          .delete()
+          .eq('user_id', targetUserId)
+          .eq('business_id', businessId);
+        if (error) {
+          console.error('Failed to delete business_hours for user:', error);
+          return false;
+        }
+      }
+
+      // 4) Delete designs created by this user
+      {
+        const { error } = await supabase
+          .from('designs')
+          .delete()
+          .eq('user_id', targetUserId)
+          .eq('business_id', businessId);
+        if (error) {
+          console.error('Failed to delete designs for user:', error);
+          return false;
+        }
+      }
+
+      // 5) Delete recurring appointments that reference this user (support user_id or admin_id column)
+      {
+        let deleted = false;
+        if (await columnExists('recurring_appointments', 'user_id')) {
+          const { error } = await supabase
+            .from('recurring_appointments')
+            .delete()
+            .eq('business_id', businessId)
+            .eq('user_id', targetUserId);
+          if (!error) deleted = true; else console.warn('recurring_appointments delete by user_id failed:', error);
+        }
+        if (!deleted && (await columnExists('recurring_appointments', 'admin_id'))) {
+          const { error } = await supabase
+            .from('recurring_appointments')
+            .delete()
+            .eq('business_id', businessId)
+            .eq('admin_id', targetUserId);
+          if (error) {
+            console.error('Failed to delete recurring_appointments for user:', error);
+            return false;
+          }
+        }
+      }
+
+      // 6) Delete waitlist entries created by this user
+      {
+        const { error } = await supabase
+          .from('waitlist_entries')
+          .delete()
+          .eq('user_id', targetUserId)
+          .eq('business_id', businessId);
+        if (error) {
+          console.error('Failed to delete waitlist_entries for user:', error);
+          return false;
+        }
+      }
+
+      // 7) Finally delete the user
+      {
+        const { error } = await supabase
+          .from('users')
+          .delete()
+          .eq('id', targetUserId)
+          .eq('business_id', businessId);
+        if (error) {
+          console.error('Failed to delete user:', error);
+          return false;
+        }
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error deleting user and all data by id:', error);
+      return false;
+    }
+  },
 
 
   // Get user by phone and password (for login)
@@ -215,72 +341,131 @@ export const usersApi = {
 
       const userId = currentUser.id;
 
-      // Delete all data associated with this user
-      const deletePromises = [
-        // Delete appointments
-        supabase
+      // Helper to detect if a column exists on a table by probing a select
+      const columnExists = async (table: string, column: string): Promise<boolean> => {
+        try {
+          const { error } = await supabase
+            .from(table)
+            .select(`id, ${column}` as any)
+            .limit(1);
+          return !error;
+        } catch {
+          return false;
+        }
+      };
+
+      // 1) Delete appointments owned by or assigned to this user (handles FK on appointments.barber_id)
+      {
+        const { error: apptErr } = await supabase
           .from('appointments')
           .delete()
-          .eq('user_id', userId)
-          .eq('business_id', businessId),
-        
-        // Delete business constraints
-        supabase
+          .eq('business_id', businessId)
+          .or(`user_id.eq.${userId},barber_id.eq.${userId}`);
+        if (apptErr) {
+          console.error('Failed to delete appointments for user:', apptErr);
+          return false;
+        }
+      }
+
+      // 2) Delete business constraints created by this user
+      {
+        const { error } = await supabase
           .from('business_constraints')
           .delete()
           .eq('user_id', userId)
-          .eq('business_id', businessId),
-        
-        // Delete business hours
-        supabase
+          .eq('business_id', businessId);
+        if (error) {
+          console.error('Failed to delete business_constraints for user:', error);
+          return false;
+        }
+      }
+
+      // 3) Delete business hours created for this user
+      {
+        const { error } = await supabase
           .from('business_hours')
           .delete()
           .eq('user_id', userId)
-          .eq('business_id', businessId),
-        
-        // Delete designs
-        supabase
+          .eq('business_id', businessId);
+        if (error) {
+          console.error('Failed to delete business_hours for user:', error);
+          return false;
+        }
+      }
+
+      // 4) Delete designs created by this user
+      {
+        const { error } = await supabase
           .from('designs')
           .delete()
           .eq('user_id', userId)
-          .eq('business_id', businessId),
-        
-        // Delete notifications
-        supabase
+          .eq('business_id', businessId);
+        if (error) {
+          console.error('Failed to delete designs for user:', error);
+          return false;
+        }
+      }
+
+      // 5) Delete notifications for this business (existing behavior)
+      {
+        const { error } = await supabase
           .from('notifications')
           .delete()
-          .eq('business_id', businessId), // Delete all notifications for this business
-        
-        // Delete recurring appointments
-        supabase
-          .from('recurring_appointments')
-          .delete()
-          .eq('user_id', userId)
-          .eq('business_id', businessId),
-        
-        // Delete waitlist entries
-        supabase
+          .eq('business_id', businessId);
+        if (error) {
+          console.error('Failed to delete notifications for business:', error);
+          return false;
+        }
+      }
+
+      // 6) Delete recurring appointments that reference this user (support user_id or admin_id column)
+      {
+        let deleted = false;
+        if (await columnExists('recurring_appointments', 'user_id')) {
+          const { error } = await supabase
+            .from('recurring_appointments')
+            .delete()
+            .eq('business_id', businessId)
+            .eq('user_id', userId);
+          if (!error) deleted = true; else console.warn('recurring_appointments delete by user_id failed:', error);
+        }
+        if (!deleted && (await columnExists('recurring_appointments', 'admin_id'))) {
+          const { error } = await supabase
+            .from('recurring_appointments')
+            .delete()
+            .eq('business_id', businessId)
+            .eq('admin_id', userId);
+          if (error) {
+            console.error('Failed to delete recurring_appointments for user:', error);
+            return false;
+          }
+        }
+      }
+
+      // 7) Delete waitlist entries created by this user
+      {
+        const { error } = await supabase
           .from('waitlist_entries')
           .delete()
           .eq('user_id', userId)
-          .eq('business_id', businessId),
-        
-        // Finally delete the user
-        supabase
+          .eq('business_id', businessId);
+        if (error) {
+          console.error('Failed to delete waitlist_entries for user:', error);
+          return false;
+        }
+      }
+
+      // 8) Finally delete the user
+      {
+        const { error } = await supabase
           .from('users')
           .delete()
           .eq('id', userId)
-          .eq('business_id', businessId)
-      ];
-
-      const results = await Promise.all(deletePromises);
-      
-      // Check if any deletion failed
-      const hasErrors = results.some(result => result.error);
-      
-      if (hasErrors) {
-        console.error('Error deleting user data:', results.filter(r => r.error));
-        return false;
+          .eq('business_id', businessId);
+        if (error) {
+          console.error('Failed to delete user:', error);
+          return false;
+        }
       }
 
       return true;

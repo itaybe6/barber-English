@@ -436,7 +436,7 @@ export default function EditGalleryScreen() {
                       />
                       <View style={styles.replaceOverlay}>
                         <Ionicons name="image-outline" size={18} color="#fff" />
-                        <Text style={styles.replaceText}>תמונת שער</Text>
+                        <Text style={styles.replaceText}>Cover Image</Text>
                       </View>
                     </TouchableOpacity>
 

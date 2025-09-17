@@ -408,15 +408,39 @@ export default function AdminAppointmentsScreen() {
               style={[styles.overlayContainer, { height: halfHourLabels.length * HALF_HOUR_BLOCK_HEIGHT }]}
             >
               {appointments.map((apt) => {
-                // Align precisely on the grid: subtract dayStart and anchor to the top of the first row
-                const offsetMinutes = minutesFromMidnight(apt.slot_time) - minutesFromMidnight(dayStart);
-                const top = Math.max(0, (offsetMinutes / 30) * HALF_HOUR_BLOCK_HEIGHT);
-                const proportionalHeight = (apt.duration_minutes || 60) / 30 * HALF_HOUR_BLOCK_HEIGHT;
-                const cardHeight = Math.max(64, proportionalHeight);
+                // Calculate exact position using minutes from midnight
+                const aptMinutes = minutesFromMidnight(apt.slot_time);
+                const dayStartMinutes = minutesFromMidnight(dayStart);
+                
+                // Calculate the exact offset in minutes from day start
+                const offsetMinutes = aptMinutes - dayStartMinutes;
+                
+                // Convert to grid position (each grid row is 30 minutes)
+                const gridRowIndex = Math.floor(offsetMinutes / 30);
+                
+                // Position the card at the exact grid row start
+                const top = gridRowIndex * HALF_HOUR_BLOCK_HEIGHT;
+                
+                // Calculate height based on duration
+                const durationMinutes = apt.duration_minutes || 30;
+                const height = (durationMinutes / 30) * HALF_HOUR_BLOCK_HEIGHT;
+                
                 const startTime = formatTime(apt.slot_time);
-                const endTime = formatTime(addMinutes(apt.slot_time, apt.duration_minutes || 60));
+                const endTime = formatTime(addMinutes(apt.slot_time, durationMinutes));
+                
                 return (
-                  <View key={`${apt.id}-${apt.slot_time}`} style={[styles.appointmentCard, { top, height: cardHeight, paddingTop: 16 }]}> 
+                  <View 
+                    key={`${apt.id}-${apt.slot_time}`} 
+                    style={[
+                      styles.appointmentCard, 
+                      { 
+                        top, 
+                        height,
+                        left: LABELS_WIDTH + 8,
+                        right: 8,
+                      }
+                    ]}
+                  > 
                     <View style={styles.appointmentActions}>
                       <PressableScale
                         onPress={() => openActionsMenu(apt)}
@@ -662,20 +686,27 @@ const styles = StyleSheet.create({
   },
   appointmentCard: {
     position: 'absolute',
-    left: LABELS_WIDTH + 12,
-    right: 12,
     backgroundColor: '#FFFFFF',
     borderColor: '#E5E5EA',
     borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     justifyContent: 'flex-start',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+    minHeight: 50,
   },
   appointmentActions: {
     position: 'absolute',
-    top: 6,
-    right: 8,
+    top: 4,
+    right: 4,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -797,10 +828,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   moreButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#000000',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },

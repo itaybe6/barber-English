@@ -346,15 +346,6 @@ export default function ClientProfileScreen() {
 
   return (
     <View style={styles.container}>
-      <SafeAreaView edges={['top']} style={{ backgroundColor: '#FFFFFF' }}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="arrow-forward" size={24} color={Colors.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Profile</Text>
-          <View style={{ width: 24 }} />
-        </View>
-      </SafeAreaView>
 
       <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1 }}>
         <View style={styles.contentWrapper}>

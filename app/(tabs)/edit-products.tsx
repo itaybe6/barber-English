@@ -20,6 +20,7 @@ import { useColors } from '@/src/theme/ThemeProvider';
 import { productsApi, Product, CreateProductData } from '@/lib/api/products';
 import { useProductsStore } from '@/stores/productsStore';
 import * as ImagePicker from 'expo-image-picker';
+import { compressImage } from '@/lib/utils/imageCompression';
 
 export default function EditProductsScreen() {
   const router = useRouter();
@@ -81,8 +82,16 @@ export default function EditProductsScreen() {
       let finalImageUrl = imageUri;
       
       if (!isPreset) {
-        // Upload custom image
-        finalImageUrl = await productsApi.uploadProductImage(imageUri);
+        // Compress the image before uploading
+        const compressedImage = await compressImage(imageUri, {
+          quality: 0.7,
+          maxWidth: 800,
+          maxHeight: 800,
+          format: 'jpeg'
+        });
+        
+        // Upload compressed image
+        finalImageUrl = await productsApi.uploadProductImage(compressedImage.uri);
       }
       
       setProductForm(prev => ({ ...prev, image_url: finalImageUrl }));
@@ -131,7 +140,7 @@ export default function EditProductsScreen() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.8,
+        quality: 1.0, // Use highest quality for initial capture, we'll compress later
       });
 
       if (!result.canceled && result.assets[0]) {
@@ -149,7 +158,7 @@ export default function EditProductsScreen() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.8,
+        quality: 1.0, // Use highest quality for initial selection, we'll compress later
       });
 
       if (!result.canceled && result.assets[0]) {

@@ -866,19 +866,19 @@ export default function HomeScreen() {
                          <Text style={styles.clientPhone}>{item.phone}</Text>
                        )}
                      </View>
-                     <View style={{ flexDirection: 'row-reverse', alignItems: 'center' }}>
+                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                       <TouchableOpacity
+                         style={styles.phoneButton}
+                         onPress={() => handlePhoneCall(item.phone)}
+                       >
+                         <Ionicons name="call" size={20} color={colors.primary} />
+                       </TouchableOpacity>
                        <TouchableOpacity
                          style={styles.blockButton}
                          onPress={() => (item.block ? handleUnblockClient(item) : handleBlockClient(item))}
                          activeOpacity={0.85}
                        >
                          <Text style={styles.blockButtonText}>{item.block ? 'Unblock' : 'Block'}</Text>
-                       </TouchableOpacity>
-                       <TouchableOpacity
-                         style={[styles.phoneButton, { marginRight: 16 }]}
-                         onPress={() => handlePhoneCall(item.phone)}
-                       >
-                         <Ionicons name="call" size={20} color={colors.primary} />
                        </TouchableOpacity>
                      </View>
                    </View>
@@ -1050,7 +1050,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 15,
     color: '#222',
     fontWeight: '500',
-    marginLeft: 8,
     textAlign: 'left',
     flex: 1,
   },
@@ -1494,7 +1493,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     }),
   },
   modalHeader: {
-    flexDirection: 'row-reverse', // RTL
+    flexDirection: 'row', // LTR
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
@@ -1510,7 +1509,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     flex: 1,
   },
   searchContainer: {
-    flexDirection: 'row-reverse', // RTL
+    flexDirection: 'row', // LTR
     alignItems: 'center',
     backgroundColor: '#f2f2f7',
     borderRadius: 12,
@@ -1521,13 +1520,13 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingVertical: 12,
   },
   searchIcon: {
-    marginLeft: 12, // RTL - icon should be on the left in RTL layout
+    marginRight: 12, // LTR - icon should be on the left in LTR layout
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
     color: colors.text,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   loadingContainer: {
     flex: 1,
@@ -1544,7 +1543,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingTop: 10,
   },
   filterRow: {
-    flexDirection: 'row-reverse', // RTL
+    flexDirection: 'row', // LTR
     alignItems: 'center',
     justifyContent: 'flex-start',
     gap: 8,
@@ -1558,7 +1557,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    marginLeft: 8,
+    marginRight: 8,
   },
   filterButtonActive: {
     backgroundColor: `${colors.primary}20`,
@@ -1573,7 +1572,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontWeight: '600',
   },
   clientItem: {
-    flexDirection: 'row-reverse', // RTL
+    flexDirection: 'row', // LTR
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 16,
@@ -1599,16 +1598,17 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: colors.text,
-    textAlign: 'right',
+    textAlign: 'left',
   },
   clientInfo: {
     flex: 1,
-    marginRight: 16,
+    marginLeft: 16,
+    alignItems: 'flex-start',
   },
   clientPhone: {
     fontSize: 14,
     color: colors.textSecondary,
-    textAlign: 'right',
+    textAlign: 'left',
     marginTop: 4,
   },
   phoneButton: {
@@ -1618,7 +1618,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     backgroundColor: '#f2f2f7',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16, // RTL
   },
   iconCircleButton: {
     width: 36,

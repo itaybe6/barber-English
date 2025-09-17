@@ -23,6 +23,7 @@ import { findUserByCredentials, isValidUserType } from '@/constants/auth';
 import { getCurrentClientLogo } from '@/src/theme/assets';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
+import GradientBackground from '@/components/GradientBackground';
 
 // Static colors for UI elements that don't change with business theme
 const staticColors = {
@@ -220,11 +221,31 @@ export default function LoginScreen() {
     <View style={styles.container}>
       {/* Custom login background image */}
       {businessProfile?.login_img && !isLoadingProfile ? (
-        <Image 
-          source={{ uri: businessProfile.login_img }} 
-          style={styles.backgroundImage}
-          resizeMode="cover"
-        />
+        (businessProfile.login_img === 'gradient-background' || 
+         businessProfile.login_img === 'solid-blue-background' ||
+         businessProfile.login_img === 'solid-purple-background' ||
+         businessProfile.login_img === 'solid-green-background' ||
+         businessProfile.login_img === 'solid-orange-background' ||
+         businessProfile.login_img === 'light-silver-background' ||
+         businessProfile.login_img === 'light-white-background' ||
+         businessProfile.login_img === 'light-gray-background' ||
+         businessProfile.login_img === 'light-pink-background' ||
+         businessProfile.login_img === 'light-cyan-background' ||
+         businessProfile.login_img === 'light-lavender-background' ||
+         businessProfile.login_img === 'light-coral-background' ||
+         businessProfile.login_img === 'dark-black-background' ||
+         businessProfile.login_img === 'dark-charcoal-background') ? (
+          <GradientBackground 
+            style={styles.backgroundImage}
+            backgroundType={businessProfile.login_img}
+          />
+        ) : (
+          <Image 
+            source={{ uri: businessProfile.login_img }} 
+            style={styles.backgroundImage}
+            resizeMode="cover"
+          />
+        )
       ) : (
         <LinearGradient
           colors={[ '#FFFFFF', '#F6F6F6', '#EFEFEF' ]}
@@ -392,6 +413,7 @@ const styles = StyleSheet.create({
     bottom: -20, // Extend beyond safe area
     width: '100%',
     height: '110%', // Slightly taller
+    flex: 1, // Ensure it takes full available space
   },
   darkOverlay: {
     position: 'absolute',
@@ -504,7 +526,7 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 20,
     height: 52,
     paddingHorizontal: 12,
     borderWidth: 1,

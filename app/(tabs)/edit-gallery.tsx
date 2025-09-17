@@ -11,6 +11,7 @@ import * as ImagePicker from 'expo-image-picker';
 // Using base64 (from ImagePicker) or fetch(uri).blob() as fallback
 import { supabase } from '@/lib/supabase';
 import { usersApi } from '@/lib/api/users';
+import { compressImage, compressImages } from '@/lib/utils/imageCompression';
 
 const { width } = Dimensions.get('window');
 const numColumns = 2;
@@ -69,19 +70,33 @@ export default function EditGalleryScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: 'images',
       allowsMultipleSelection: true,
-      quality: 0.9,
+      quality: 1.0, // Use highest quality for initial selection, we'll compress later
       selectionLimit: 10,
-      base64: true,
+      base64: false, // We don't need base64 since we'll compress
     });
     if (!result.canceled) {
-      setPickedAssets(
-        result.assets.map(a => ({
-          uri: a.uri,
-          base64: (a as any).base64 ?? null,
-          mimeType: (a as any).mimeType ?? null,
-          fileName: (a as any).fileName ?? null,
-        }))
-      );
+      try {
+        // Compress all selected images
+        const imageUris = result.assets.map(a => a.uri);
+        const compressedImages = await compressImages(imageUris, {
+          quality: 0.7,
+          maxWidth: 1200,
+          maxHeight: 1200,
+          format: 'jpeg'
+        });
+        
+        setPickedAssets(
+          compressedImages.map((compressed, index) => ({
+            uri: compressed.uri,
+            base64: null,
+            mimeType: 'image/jpeg',
+            fileName: `compressed_${Date.now()}_${index}.jpg`,
+          }))
+        );
+      } catch (error) {
+        console.error('Error compressing images:', error);
+        Alert.alert('Error', 'Failed to process selected images');
+      }
     }
   };
 
@@ -126,10 +141,11 @@ export default function EditGalleryScreen() {
         const bytes = base64ToUint8Array(asset.base64);
         fileBody = bytes; // pass Uint8Array; supabase-js accepts ArrayBufferView as Body
       } else {
+        // For Expo, we need to use a different approach
         const response = await fetch(asset.uri, { cache: 'no-store' });
-        const fetched = await response.blob();
-        fileBody = fetched;
-        contentType = fetched.type || contentType;
+        const arrayBuffer = await response.arrayBuffer();
+        fileBody = new Uint8Array(arrayBuffer);
+        contentType = response.headers.get('content-type') || contentType;
       }
 
       const extGuess = (contentType.split('/')[1] || 'jpg').toLowerCase();
@@ -188,20 +204,34 @@ export default function EditGalleryScreen() {
       mediaTypes: 'images',
       allowsMultipleSelection: true,
       selectionLimit: 10,
-      quality: 0.9,
-      base64: true,
+      quality: 1.0, // Use highest quality for initial selection, we'll compress later
+      base64: false, // We don't need base64 since we'll compress
     });
     if (!result.canceled && result.assets.length > 0) {
-      const newItems: EditImage[] = result.assets.map(a => ({
-        kind: 'local',
-        asset: {
-          uri: (a as any).uri,
-          base64: (a as any).base64 ?? null,
-          mimeType: (a as any).mimeType ?? null,
-          fileName: (a as any).fileName ?? null,
-        }
-      }));
-      setEditImages(prev => [...prev, ...newItems]);
+      try {
+        // Compress all selected images
+        const imageUris = result.assets.map(a => a.uri);
+        const compressedImages = await compressImages(imageUris, {
+          quality: 0.7,
+          maxWidth: 1200,
+          maxHeight: 1200,
+          format: 'jpeg'
+        });
+        
+        const newItems: EditImage[] = compressedImages.map((compressed, index) => ({
+          kind: 'local',
+          asset: {
+            uri: compressed.uri,
+            base64: null,
+            mimeType: 'image/jpeg',
+            fileName: `compressed_${Date.now()}_${index}.jpg`,
+          }
+        }));
+        setEditImages(prev => [...prev, ...newItems]);
+      } catch (error) {
+        console.error('Error compressing images:', error);
+        Alert.alert('Error', 'Failed to process selected images');
+      }
     }
   };
 

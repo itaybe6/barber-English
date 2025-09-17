@@ -186,7 +186,7 @@ export default function ProductCarousel({
               source={
                 product.image_url
                   ? { uri: product.image_url }
-                  : require('@/assets/images/default/HomePage/barber/1.jpg')
+                  : require('@/assets/images/default/HomePage/barber/101-min.png')
               }
               style={styles.productImage}
               resizeMode="cover"
@@ -300,7 +300,7 @@ export default function ProductCarousel({
                     source={
                       selectedProduct.image_url
                         ? { uri: selectedProduct.image_url }
-                        : require('@/assets/images/default/HomePage/barber/1.jpg')
+                        : require('@/assets/images/default/HomePage/barber/101-min.png')
                     }
                     style={styles.modalImage}
                     resizeMode="cover"

@@ -147,6 +147,7 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
       <KeyboardAvoidingView 
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <View style={styles.header}>
           <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
@@ -166,7 +167,12 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          style={styles.content} 
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.scrollContent}
+        >
           <View style={styles.groupCard}>
             {/* Name Field */}
             <View style={styles.inputGroup}>
@@ -250,9 +256,13 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
                   placeholderTextColor="#999"
                   secureTextEntry
                   textAlign="left"
+                  returnKeyType="done"
                 />
               </View>
             </View>
+            
+            {/* Extra spacing for keyboard */}
+            <View style={styles.keyboardSpacer} />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -289,6 +299,10 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 50,
   },
   groupCard: {
     backgroundColor: '#FFFFFF',
@@ -348,5 +362,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: 'white',
+  },
+  keyboardSpacer: {
+    height: 100,
   },
 });

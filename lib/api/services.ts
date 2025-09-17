@@ -11,7 +11,7 @@ export const servicesApi = {
         .select('*')
         .eq('business_id', businessId)
         .eq('is_active', true)
-        .order('name');
+        .order('name', { ascending: true });
 
       if (error) {
         console.error('Error fetching services:', error);

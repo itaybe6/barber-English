@@ -20,6 +20,7 @@ import { Plus, Check } from 'lucide-react-native';
 import Colors from '../constants/colors';
 import { useColors } from '../src/theme/ThemeProvider';
 import * as ImagePicker from 'expo-image-picker';
+import GradientBackground from './GradientBackground';
 
 interface ImageSelectionModalProps {
   visible: boolean;
@@ -39,48 +40,117 @@ interface SelectedImage {
 const PRESET_IMAGES = {
   existingBooking: {
     barber: [
-      require('../assets/images/default/ExistingBooking/barber/1.jpg'),
-      require('../assets/images/default/ExistingBooking/barber/2.jpg'),
-      require('../assets/images/default/ExistingBooking/barber/3.jpg'),
-      require('../assets/images/default/ExistingBooking/barber/4.jpg'),
-      require('../assets/images/default/ExistingBooking/barber/10.png'),
+      require('../assets/images/default/ExistingBooking/barber/46-min.png'),
+      require('../assets/images/default/ExistingBooking/barber/47-min.png'),
+      require('../assets/images/default/ExistingBooking/barber/48-min.png'),
+      require('../assets/images/default/ExistingBooking/barber/49-min.png'),
+      require('../assets/images/default/ExistingBooking/barber/50-min.png'),
+      require('../assets/images/default/ExistingBooking/barber/51-min.png'),
+      require('../assets/images/default/ExistingBooking/barber/52-min.png'),
+      require('../assets/images/default/ExistingBooking/barber/53-min.png'),
+      require('../assets/images/default/ExistingBooking/barber/54-min.png'),
+      require('../assets/images/default/ExistingBooking/barber/55-min.png'),
+      require('../assets/images/default/ExistingBooking/barber/56-min.png'),
+      require('../assets/images/default/ExistingBooking/barber/57-min.png'),
+      require('../assets/images/default/ExistingBooking/barber/58-min.png'),
+      require('../assets/images/default/ExistingBooking/barber/59-min.png'),
+      require('../assets/images/default/ExistingBooking/barber/60-min.png'),
+      require('../assets/images/default/ExistingBooking/barber/61-min.png'),
     ],
     nails: [
-      require('../assets/images/default/ExistingBooking/nails/1.jpg'),
-      require('../assets/images/default/ExistingBooking/nails/2.jpg'),
-      require('../assets/images/default/ExistingBooking/nails/3.jpg'),
-      require('../assets/images/default/ExistingBooking/nails/4.jpg'),
+      require('../assets/images/default/ExistingBooking/nails/132-min.jpg'),
+      require('../assets/images/default/ExistingBooking/nails/133-min.jpg'),
+      require('../assets/images/default/ExistingBooking/nails/134-min.jpg'),
+      require('../assets/images/default/ExistingBooking/nails/135-min.jpg'),
+      require('../assets/images/default/ExistingBooking/nails/136-min.jpg'),
+      require('../assets/images/default/ExistingBooking/nails/137-min.jpg'),
+      require('../assets/images/default/ExistingBooking/nails/138-min.jpg'),
+      require('../assets/images/default/ExistingBooking/nails/139-min.jpg'),
+      require('../assets/images/default/ExistingBooking/nails/140-min.jpg'),
+      require('../assets/images/default/ExistingBooking/nails/143-min.jpg'),
+      require('../assets/images/default/ExistingBooking/nails/144-min.jpg'),
+      require('../assets/images/default/ExistingBooking/nails/145-min.jpg'),
     ],
   },
   bookingPage: {
     barber: [
-      require('../assets/images/default/BookingPage/barber/1.jpg'),
-      require('../assets/images/default/BookingPage/barber/2.jpg'),
-      require('../assets/images/default/BookingPage/barber/3.jpg'),
-      require('../assets/images/default/BookingPage/barber/4.jpg'),
+      require('../assets/images/default/BookingPage/barber/30-min.png'),
+      require('../assets/images/default/BookingPage/barber/31-min.png'),
+      require('../assets/images/default/BookingPage/barber/32-min.png'),
+      require('../assets/images/default/BookingPage/barber/33-min.png'),
+      require('../assets/images/default/BookingPage/barber/34-min.png'),
+      require('../assets/images/default/BookingPage/barber/35-min.png'),
+      require('../assets/images/default/BookingPage/barber/36-min.png'),
+      require('../assets/images/default/BookingPage/barber/37-min.png'),
+      require('../assets/images/default/BookingPage/barber/38-min.png'),
+      require('../assets/images/default/BookingPage/barber/39-min.png'),
+      require('../assets/images/default/BookingPage/barber/40-min.png'),
+      require('../assets/images/default/BookingPage/barber/41-min.png'),
+      require('../assets/images/default/BookingPage/barber/42-min.png'),
+      require('../assets/images/default/BookingPage/barber/43-min.png'),
+      require('../assets/images/default/BookingPage/barber/44-min.png'),
+      require('../assets/images/default/BookingPage/barber/45-min.png'),
     ],
     nails: [
-      require('../assets/images/default/BookingPage/nails/1.jpg'),
-      require('../assets/images/default/BookingPage/nails/2.jpg'),
-      require('../assets/images/default/BookingPage/nails/3.jpg'),
-      require('../assets/images/default/BookingPage/nails/4.jpg'),
+      require('../assets/images/default/BookingPage/nails/120-min.jpg'),
+      require('../assets/images/default/BookingPage/nails/121-min.jpg'),
+      require('../assets/images/default/BookingPage/nails/122-min.jpg'),
+      require('../assets/images/default/BookingPage/nails/123-min.jpg'),
+      require('../assets/images/default/BookingPage/nails/124-min.jpg'),
+      require('../assets/images/default/BookingPage/nails/125-min.jpg'),
+      require('../assets/images/default/BookingPage/nails/126-min.jpg'),
+      require('../assets/images/default/BookingPage/nails/127-min.jpg'),
+      require('../assets/images/default/BookingPage/nails/128-min.jpg'),
+      require('../assets/images/default/BookingPage/nails/129-min.jpg'),
+      require('../assets/images/default/BookingPage/nails/130-min.jpg'),
+      require('../assets/images/default/BookingPage/nails/131-min.jpg'),
     ],
   },
   homePage: {
     barber: [
-      require('../assets/images/default/HomePage/barber/1.jpg'),
-      require('../assets/images/default/HomePage/barber/2.jpg'),
-      require('../assets/images/default/HomePage/barber/3.jpg'),
-      require('../assets/images/default/HomePage/barber/4.jpg'),
+      require('../assets/images/default/HomePage/barber/101-min.png'),
+      require('../assets/images/default/HomePage/barber/102-min.png'),
+      require('../assets/images/default/HomePage/barber/103-min.png'),
+      require('../assets/images/default/HomePage/barber/104-min.png'),
+      require('../assets/images/default/HomePage/barber/105-min.png'),
+      require('../assets/images/default/HomePage/barber/106-min.png'),
+      require('../assets/images/default/HomePage/barber/107-min.png'),
+      require('../assets/images/default/HomePage/barber/108-min.png'),
+      require('../assets/images/default/HomePage/barber/109-min.png'),
+      require('../assets/images/default/HomePage/barber/111-min.png'),
+      require('../assets/images/default/HomePage/barber/112-min.png'),
+      require('../assets/images/default/HomePage/barber/113-min.jpg'),
     ],
     nails: [
-      require('../assets/images/default/HomePage/nails/1.jpg'),
-      require('../assets/images/default/HomePage/nails/2.jpg'),
-      require('../assets/images/default/HomePage/nails/3.jpg'),
-      require('../assets/images/default/HomePage/nails/4.jpg'),
+      require('../assets/images/default/HomePage/nails/150-min.jpg'),
+      require('../assets/images/default/HomePage/nails/151-min.jpg'),
+      require('../assets/images/default/HomePage/nails/152-min.jpg'),
+      require('../assets/images/default/HomePage/nails/153-min.jpg'),
+      require('../assets/images/default/HomePage/nails/154-min.jpg'),
+      require('../assets/images/default/HomePage/nails/155-min.jpg'),
+      require('../assets/images/default/HomePage/nails/156-min.jpg'),
+      require('../assets/images/default/HomePage/nails/157-min.jpg'),
+      require('../assets/images/default/HomePage/nails/158-min.jpg'),
+      require('../assets/images/default/HomePage/nails/159-min.jpg'),
+      require('../assets/images/default/HomePage/nails/160-min.jpg'),
+      require('../assets/images/default/HomePage/nails/161-min.jpg'),
     ],
   },
   loginPage: [
+    'gradient-background', // Special gradient background
+    'solid-blue-background', // Solid blue with subtle gradient
+    'solid-purple-background', // Solid purple with subtle gradient
+    'solid-green-background', // Solid green with subtle gradient
+    'solid-orange-background', // Solid orange with subtle gradient
+    'light-silver-background', // Light silver with subtle gradient
+    'light-white-background', // Light white with subtle gradient
+    'light-gray-background', // Light gray with subtle gradient
+    'light-pink-background', // Light pink with subtle gradient
+    'light-cyan-background', // Light cyan with subtle gradient
+    'light-lavender-background', // Light lavender with subtle gradient
+    'light-coral-background', // Light coral with subtle gradient
+    'dark-black-background', // Dark black with subtle gradient
+    'dark-charcoal-background', // Dark charcoal with subtle gradient
     require('../assets/images/default/LoginPage/11.png'),
     require('../assets/images/default/LoginPage/12.png'),
     require('../assets/images/default/LoginPage/13.png'),
@@ -91,6 +161,22 @@ const PRESET_IMAGES = {
     require('../assets/images/default/LoginPage/18.png'),
     require('../assets/images/default/LoginPage/19.png'),
     require('../assets/images/default/LoginPage/20.png'),
+    require('../assets/images/default/LoginPage/46921-min.jpg'),
+    require('../assets/images/default/LoginPage/52822-min.jpg'),
+    require('../assets/images/default/LoginPage/66981-min.jpg'),
+    require('../assets/images/default/LoginPage/97390-min.jpg'),
+    require('../assets/images/default/LoginPage/102501-min.jpg'),
+    require('../assets/images/default/LoginPage/121784-min.jpg'),
+    require('../assets/images/default/LoginPage/141733-min.jpg'),
+    require('../assets/images/default/LoginPage/157745-min.jpg'),
+    require('../assets/images/default/LoginPage/16237-min.jpg'),
+    require('../assets/images/default/LoginPage/328398-min.jpg'),
+    require('../assets/images/default/LoginPage/528-min.jpg'),
+    require('../assets/images/default/LoginPage/8128-min.jpg'),
+    require('../assets/images/default/LoginPage/11788897-min.jpg'),
+    require('../assets/images/default/LoginPage/23337-min.jpg'),
+    require('../assets/images/default/LoginPage/23999-min.jpg'),
+    require('../assets/images/default/LoginPage/30869040-min.jpg'),
   ],
 };
 
@@ -133,6 +219,25 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
         const imageKey = mainCategory === 'loginPage' 
           ? `${mainCategory}-${index}` 
           : `${mainCategory}-${selectedSubCategory}-${index}`;
+        
+        // Skip preloading for special backgrounds
+        if (imageSource === 'gradient-background' || 
+            imageSource === 'solid-blue-background' ||
+            imageSource === 'solid-purple-background' ||
+            imageSource === 'solid-green-background' ||
+            imageSource === 'solid-orange-background' ||
+            imageSource === 'light-silver-background' ||
+            imageSource === 'light-white-background' ||
+            imageSource === 'light-gray-background' ||
+            imageSource === 'light-pink-background' ||
+            imageSource === 'light-cyan-background' ||
+            imageSource === 'light-lavender-background' ||
+            imageSource === 'light-coral-background' ||
+            imageSource === 'dark-black-background' ||
+            imageSource === 'dark-charcoal-background') {
+          setLoadingImages(prev => ({ ...prev, [imageKey]: false }));
+          return;
+        }
         
         // Set loading state immediately
         setLoadingImages(prev => ({ ...prev, [imageKey]: true }));
@@ -260,6 +365,31 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
   };
 
   const handleImagePress = (imageSource: any, isPreset: boolean) => {
+    // Handle special backgrounds
+    if (imageSource === 'gradient-background' || 
+        imageSource === 'solid-blue-background' ||
+        imageSource === 'solid-purple-background' ||
+        imageSource === 'solid-green-background' ||
+        imageSource === 'solid-orange-background' ||
+        imageSource === 'light-silver-background' ||
+        imageSource === 'light-white-background' ||
+        imageSource === 'light-gray-background' ||
+        imageSource === 'light-pink-background' ||
+        imageSource === 'light-cyan-background' ||
+        imageSource === 'light-lavender-background' ||
+        imageSource === 'light-coral-background' ||
+        imageSource === 'dark-black-background' ||
+        imageSource === 'dark-charcoal-background') {
+      setPreviewImageLoading(false);
+      setSelectedImage({
+        uri: imageSource,
+        isPreset: true,
+        source: imageSource,
+      });
+      setShowPreview(true);
+      return;
+    }
+    
     const imageUri = Image.resolveAssetSource(imageSource).uri;
     
     // Start loading the preview image immediately
@@ -338,28 +468,54 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
             </BlurView>
             
             <View style={styles.previewImageContainer}>
-              {/* Loading indicator for preview image */}
-              {previewImageLoading && (
-                <View style={styles.previewLoadingContainer}>
-                  <Ionicons name="image-outline" size={60} color="#CCCCCC" />
-                  <Text style={styles.previewLoadingText}>Loading image...</Text>
-                </View>
+              {/* Special backgrounds preview */}
+              {selectedImage.uri === 'gradient-background' || 
+               selectedImage.uri === 'solid-blue-background' ||
+               selectedImage.uri === 'solid-purple-background' ||
+               selectedImage.uri === 'solid-green-background' ||
+               selectedImage.uri === 'solid-orange-background' ||
+               selectedImage.uri === 'light-silver-background' ||
+               selectedImage.uri === 'light-white-background' ||
+               selectedImage.uri === 'light-gray-background' ||
+               selectedImage.uri === 'light-pink-background' ||
+               selectedImage.uri === 'light-cyan-background' ||
+               selectedImage.uri === 'light-lavender-background' ||
+               selectedImage.uri === 'light-coral-background' ||
+               selectedImage.uri === 'dark-black-background' ||
+               selectedImage.uri === 'dark-charcoal-background' ? (
+                <GradientBackground 
+                  style={[
+                    mainCategory === 'loginPage' ? styles.loginPagePreviewImage : styles.previewImage,
+                    styles.gradientBackground
+                  ]}
+                  backgroundType={selectedImage.uri}
+                />
+              ) : (
+                <>
+                  {/* Loading indicator for preview image */}
+                  {previewImageLoading && (
+                    <View style={styles.previewLoadingContainer}>
+                      <Ionicons name="image-outline" size={60} color="#CCCCCC" />
+                      <Text style={styles.previewLoadingText}>Loading image...</Text>
+                    </View>
+                  )}
+                  
+                  <Image 
+                    source={selectedImage.isPreset ? selectedImage.source : { uri: selectedImage.uri }}
+                    style={[
+                      mainCategory === 'loginPage' ? styles.loginPagePreviewImage : styles.previewImage, 
+                      previewImageLoading && styles.hiddenPreviewImage
+                    ]}
+                    resizeMode={mainCategory === 'loginPage' ? "cover" : "contain"}
+                    onLoadStart={() => setPreviewImageLoading(true)}
+                    onLoadEnd={() => setPreviewImageLoading(false)}
+                    onError={() => setPreviewImageLoading(false)}
+                    fadeDuration={0}
+                    cache="force-cache"
+                    loadingIndicatorSource={require('../assets/images/icon.png')}
+                  />
+                </>
               )}
-              
-              <Image 
-                source={selectedImage.isPreset ? selectedImage.source : { uri: selectedImage.uri }}
-                style={[
-                  mainCategory === 'loginPage' ? styles.loginPagePreviewImage : styles.previewImage, 
-                  previewImageLoading && styles.hiddenPreviewImage
-                ]}
-                resizeMode={mainCategory === 'loginPage' ? "cover" : "contain"}
-                onLoadStart={() => setPreviewImageLoading(true)}
-                onLoadEnd={() => setPreviewImageLoading(false)}
-                onError={() => setPreviewImageLoading(false)}
-                fadeDuration={0}
-                cache="force-cache"
-                loadingIndicatorSource={require('../assets/images/icon.png')}
-              />
               
               {mainCategory === 'loginPage' && (
                 <View style={styles.loginPageFormatNote}>
@@ -446,7 +602,11 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
         {/* Images Grid with Apple-style Cards */}
         <ScrollView 
           style={[styles.imagesContainer, mainCategory === 'loginPage' && styles.imagesContainerLoginPage]} 
-          contentContainerStyle={styles.imagesGrid}
+          contentContainerStyle={
+            mainCategory === 'bookingPage' || mainCategory === 'existingBooking' 
+              ? styles.imagesGridBookingPage 
+              : styles.imagesGrid
+          }
           showsVerticalScrollIndicator={false}
         >
           {(() => {
@@ -476,34 +636,64 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
                 ? `${mainCategory}-${index}` 
                 : `${mainCategory}-${selectedSubCategory}-${index}`;
               const isLoading = loadingImages[imageKey];
+              const isSpecialBackground = imageSource === 'gradient-background' || 
+                                          imageSource === 'solid-blue-background' ||
+                                          imageSource === 'solid-purple-background' ||
+                                          imageSource === 'solid-green-background' ||
+                                          imageSource === 'solid-orange-background' ||
+                                          imageSource === 'light-silver-background' ||
+                                          imageSource === 'light-white-background' ||
+                                          imageSource === 'light-gray-background' ||
+                                          imageSource === 'light-pink-background' ||
+                                          imageSource === 'light-cyan-background' ||
+                                          imageSource === 'light-lavender-background' ||
+                                          imageSource === 'light-coral-background' ||
+                                          imageSource === 'dark-black-background' ||
+                                          imageSource === 'dark-charcoal-background';
               
               return (
                 <TouchableOpacity
                   key={index}
-                  style={mainCategory === 'loginPage' ? styles.loginPageImageCard : styles.imageCard}
+                  style={
+                    mainCategory === 'loginPage' 
+                      ? styles.loginPageImageCard 
+                      : mainCategory === 'bookingPage' || mainCategory === 'existingBooking'
+                        ? styles.bookingPageImageCard 
+                        : styles.imageCard
+                  }
                   onPress={() => handleImagePress(imageSource, true)}
                   activeOpacity={0.9}
                 >
                   <View style={styles.imageContainer}>
-                    {/* Loading Placeholder */}
-                    {isLoading && (
-                      <View style={styles.imagePlaceholder}>
-                        <Ionicons name="image-outline" size={40} color="#CCCCCC" />
-                        <Text style={styles.loadingText}>Loading...</Text>
-                      </View>
+                    {/* Special backgrounds */}
+                    {isSpecialBackground ? (
+                      <GradientBackground 
+                        style={styles.gradientBackground}
+                        backgroundType={imageSource}
+                      />
+                    ) : (
+                      <>
+                        {/* Loading Placeholder */}
+                        {isLoading && (
+                          <View style={styles.imagePlaceholder}>
+                            <Ionicons name="image-outline" size={40} color="#CCCCCC" />
+                            <Text style={styles.loadingText}>Loading...</Text>
+                          </View>
+                        )}
+                        
+                        <Image 
+                          source={imageSource} 
+                          style={[styles.presetImage, isLoading && styles.hiddenImage]} 
+                          resizeMode="cover"
+                          fadeDuration={0}
+                          onLoadStart={() => handleImageLoadStart(imageKey)}
+                          onLoadEnd={() => handleImageLoadEnd(imageKey)}
+                          onError={() => handleImageLoadEnd(imageKey)}
+                          cache="force-cache"
+                          loadingIndicatorSource={require('../assets/images/icon.png')}
+                        />
+                      </>
                     )}
-                    
-                    <Image 
-                      source={imageSource} 
-                      style={[styles.presetImage, isLoading && styles.hiddenImage]} 
-                      resizeMode="cover"
-                      fadeDuration={0}
-                      onLoadStart={() => handleImageLoadStart(imageKey)}
-                      onLoadEnd={() => handleImageLoadEnd(imageKey)}
-                      onError={() => handleImageLoadEnd(imageKey)}
-                      cache="force-cache"
-                      loadingIndicatorSource={require('../assets/images/icon.png')}
-                    />
                     
                     <View style={[styles.imageOverlay, { opacity: 0 }]}>
                       <View style={styles.selectButton}>
@@ -650,6 +840,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingBottom: 100,
   },
+  imagesGridBookingPage: {
+    flexDirection: 'column',
+    paddingBottom: 100,
+  },
   imageCard: {
     width: imageSize,
     height: imageCardHeight,
@@ -659,6 +853,11 @@ const styles = StyleSheet.create({
     width: imageSize,
     height: imageSize * (16/9), // Instagram Story ratio (9:16, but we want 16:9 for landscape)
     marginBottom: 20,
+  },
+  bookingPageImageCard: {
+    width: '100%',
+    height: 200, // Fixed height for rectangular format
+    marginBottom: 16,
   },
   imageContainer: {
     flex: 1,
@@ -852,6 +1051,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+  },
+  gradientBackground: {
+    borderRadius: 16,
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    minHeight: 200, // Ensure minimum height for visibility
   },
 });
 

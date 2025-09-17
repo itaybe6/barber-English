@@ -47,6 +47,7 @@ import ImageSelectionModal from '@/components/ImageSelectionModal';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import AddAdminModal from '@/components/AddAdminModal';
 import DeleteAccountModal from '@/components/DeleteAccountModal';
+import GradientBackground from '@/components/GradientBackground';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 
 // Helper for shadow style
@@ -543,7 +544,14 @@ export default function SettingsScreen() {
     setServicesError(null);
     try {
       const data = await servicesApi.getAllServices();
-      setEditableServices(data);
+      // Sort services by order_index if available, otherwise by name
+      const sortedServices = (data || []).sort((a, b) => {
+        if (a.order_index !== undefined && b.order_index !== undefined) {
+          return a.order_index - b.order_index;
+        }
+        return a.name.localeCompare(b.name);
+      });
+      setEditableServices(sortedServices);
     } catch (e) {
       setServicesError('Error loading services');
     } finally {
@@ -575,9 +583,7 @@ export default function SettingsScreen() {
   const [addSvcIsSaving, setAddSvcIsSaving] = useState(false);
   // category removed
   const [showDurationDropdown, setShowDurationDropdown] = useState(false);
-  const [addSvcImage, setAddSvcImage] = useState<{ uri: string; base64?: string | null; mimeType?: string | null; fileName?: string | null } | null>(null);
-  const [addSvcUploading, setAddSvcUploading] = useState(false);
-  const [editImageUploading, setEditImageUploading] = useState<Record<string, boolean>>({});
+
 
   const durationOptions: number[] = Array.from({ length: ((180 - 10) / 5) + 1 }, (_, i) => 10 + i * 5);
 
@@ -755,28 +761,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const handlePickServiceImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Please allow gallery access to pick an image');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images',
-      allowsMultipleSelection: false,
-      quality: 0.9,
-      base64: true,
-    });
-    if (!result.canceled && result.assets.length > 0) {
-      const a: any = result.assets[0];
-      setAddSvcImage({
-        uri: a.uri,
-        base64: a.base64 ?? null,
-        mimeType: a.mimeType ?? null,
-        fileName: a.fileName ?? null,
-      });
-    }
-  };
 
   const openImagePreview = (imageType: 'page1' | 'page2' | 'page3' | 'login') => {
     // Clear any existing timeout
@@ -787,6 +771,28 @@ export default function SettingsScreen() {
     setPreviewImageType(imageType);
     setImageTranslateX(0);
     setImageTranslateY(0);
+    
+    // Special handling for special backgrounds - no loading needed
+    if (imageType === 'login' && (profileLoginImg === 'gradient-background' || 
+                                 profileLoginImg === 'solid-blue-background' ||
+                                 profileLoginImg === 'solid-purple-background' ||
+                                 profileLoginImg === 'solid-green-background' ||
+                                 profileLoginImg === 'solid-orange-background' ||
+                                 profileLoginImg === 'light-silver-background' ||
+                                 profileLoginImg === 'light-white-background' ||
+                                 profileLoginImg === 'light-gray-background' ||
+                                 profileLoginImg === 'light-pink-background' ||
+                                 profileLoginImg === 'light-cyan-background' ||
+                                 profileLoginImg === 'light-lavender-background' ||
+                                 profileLoginImg === 'light-coral-background' ||
+                                 profileLoginImg === 'dark-black-background' ||
+                                 profileLoginImg === 'dark-charcoal-background')) {
+      setIsImageLoading(false);
+      setImageLoadError(false);
+      setShowImagePreviewModal(true);
+      return;
+    }
+    
     setIsImageLoading(true);
     setImageLoadError(false);
     setShowImagePreviewModal(true);
@@ -835,6 +841,7 @@ export default function SettingsScreen() {
 
       if (isPreset) {
         // For preset images, we'll use the URL directly since they're external URLs
+        // Special case for gradient background - save as special identifier
         uploadedUrl = imageUri;
       } else {
         // For gallery images, parse the asset data
@@ -930,38 +937,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const handlePickServiceImageForEdit = async (serviceId: string) => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Please allow gallery access to pick an image');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images',
-      allowsMultipleSelection: false,
-      quality: 0.9,
-      base64: true,
-    });
-    if (!result.canceled && result.assets.length > 0) {
-      const a: any = result.assets[0];
-      setEditImageUploading((prev) => ({ ...prev, [serviceId]: true }));
-      try {
-        const uploadedUrl = await uploadServiceImage({
-          uri: a.uri,
-          base64: a.base64 ?? null,
-          mimeType: a.mimeType ?? null,
-          fileName: a.fileName ?? null,
-        });
-        if (!uploadedUrl) {
-          Alert.alert('Error', 'Image upload failed');
-          return;
-        }
-        updateLocalServiceField(serviceId, 'image_url', uploadedUrl as any);
-      } finally {
-        setEditImageUploading((prev) => ({ ...prev, [serviceId]: false }));
-      }
-    }
-  };
 
   const handleOpenAddService = async () => {
     // Close the services bottom sheet first to avoid overlay blocking touches
@@ -982,21 +957,10 @@ export default function SettingsScreen() {
     }
     setAddSvcIsSaving(true);
     try {
-      let imageUrl: string | null = null;
-      if (addSvcImage) {
-        setAddSvcUploading(true);
-        imageUrl = await uploadServiceImage(addSvcImage);
-        setAddSvcUploading(false);
-        if (!imageUrl) {
-          Alert.alert('Error', 'Image upload failed');
-          return;
-        }
-      }
       const created = await createService({
         name: addSvcName.trim(),
         price: parseFloat(addSvcPrice) || 0,
         duration_minutes: parseInt(addSvcDuration, 10) || 60,
-        image_url: imageUrl || undefined,
         is_active: true,
       } as any);
       if (created) {
@@ -1006,7 +970,6 @@ export default function SettingsScreen() {
         setAddSvcName('New Service');
         setAddSvcPrice('0');
         setAddSvcDuration('60');
-        setAddSvcImage(null);
       } else {
         Alert.alert('Error', 'Failed to create service');
       }
@@ -1035,6 +998,40 @@ export default function SettingsScreen() {
       }
     ]);
   };
+
+  // Drag and drop functions
+  const reorderServicesList = (fromIndex: number, toIndex: number) => {
+    const newServices = [...editableServices];
+    const [movedService] = newServices.splice(fromIndex, 1);
+    newServices.splice(toIndex, 0, movedService);
+    setEditableServices(newServices);
+    
+    // Update order in database
+    updateServicesOrder(newServices);
+  };
+
+  const updateServicesOrder = async (services: Service[]) => {
+    try {
+      // For now, just update the local state since order_index column doesn't exist
+      // The order will be maintained in the local state
+      console.log('Services reordered locally:', services.map(s => s.name));
+      
+      // TODO: Once order_index column is added to database, uncomment this:
+      // for (let i = 0; i < services.length; i++) {
+      //   try {
+      //     await updateService(services[i].id, {
+      //       order_index: i,
+      //     });
+      //   } catch (error) {
+      //     console.warn('Could not update order_index for service:', services[i].name, error);
+      //   }
+      // }
+    } catch (error) {
+      console.error('Failed to update services order:', error);
+    }
+  };
+
+
 
   const handleSaveService = async (service: Service) => {
     setSavingServiceId(service.id);
@@ -1955,14 +1952,19 @@ export default function SettingsScreen() {
         presentationStyle="pageSheet"
         onRequestClose={() => setShowEditAdminModal(false)}
       >
-        <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#F8F9FA' }]}>
+        <KeyboardAvoidingView 
+          style={{ flex: 1 }} 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 50}
+        >
+          <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#F8F9FA' }]}>
           <View style={styles.modalHeader}>
             <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowEditAdminModal(false)}>
               <Text style={styles.modalCloseText}>Cancel</Text>
             </TouchableOpacity>
             <Text style={styles.modalTitle}>Edit admin</Text>
             <TouchableOpacity
-              style={[styles.modalSendButton, (isSavingAdmin) && styles.modalSendButtonDisabled]}
+              style={[styles.modalSendButton, { backgroundColor: businessColors.primary }, (isSavingAdmin) && styles.modalSendButtonDisabled]}
               onPress={async () => {
                 if (!user?.id) { setShowEditAdminModal(false); return; }
                 if (!adminNameDraft.trim() || !adminPhoneDraft.trim()) { Alert.alert('Error', 'Please fill in name and phone number'); return; }
@@ -1989,10 +1991,17 @@ export default function SettingsScreen() {
               }}
               disabled={isSavingAdmin}
             >
-              <Text style={[styles.modalSendText, isSavingAdmin && styles.modalSendTextDisabled]}>{isSavingAdmin ? 'Saving...' : 'Save'}</Text>
+              <Text style={[styles.modalSendText, { color: Colors.white }, isSavingAdmin && styles.modalSendTextDisabled]}>{isSavingAdmin ? 'Saving...' : 'Save'}</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+          <ScrollView 
+            style={styles.modalContent} 
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+            contentInsetAdjustmentBehavior="automatic"
+            automaticallyAdjustKeyboardInsets={true}
+          >
             <View style={{ alignItems: 'center', marginBottom: 12 }}>
               <View style={styles.modalAvatarWrap}>
                 <LinearGradient
@@ -2041,7 +2050,7 @@ export default function SettingsScreen() {
                   style={styles.textInput}
                   value={adminPhoneDraft}
                   onChangeText={setAdminPhoneDraft}
-                  placeholder="050-0000000"
+                  placeholder="(555) 123-4567"
                   placeholderTextColor={Colors.subtext}
                   keyboardType="phone-pad"
                   textAlign="left"
@@ -2059,11 +2068,19 @@ export default function SettingsScreen() {
                   autoCapitalize="none"
                   autoCorrect={false}
                   textAlign="left"
+                  onFocus={() => {
+                    // Scroll to bottom when email field is focused
+                    setTimeout(() => {
+                      // This will help ensure the field is visible
+                    }, 100);
+                  }}
                 />
               </View>
             </View>
+            <View style={{ height: 100 }} />
           </ScrollView>
         </SafeAreaView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Edit Address Modal */}
@@ -2726,13 +2743,18 @@ export default function SettingsScreen() {
         animationType="fade"
         onRequestClose={closeServicesModal}
       >
-        <View style={styles.sheetRoot}>
-          <TouchableWithoutFeedback onPress={closeServicesModal}>
-            <Animated.View style={[styles.sheetOverlay, { opacity: overlayOpacity }]} />
-          </TouchableWithoutFeedback>
-          <Animated.View
-            style={[styles.sheetContainer, { transform: [{ translateY: combinedTranslateY }] } ] }
-          >
+        <KeyboardAvoidingView 
+          style={{ flex: 1 }} 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        >
+          <View style={styles.sheetRoot}>
+            <TouchableWithoutFeedback onPress={closeServicesModal}>
+              <Animated.View style={[styles.sheetOverlay, { opacity: overlayOpacity }]} />
+            </TouchableWithoutFeedback>
+            <Animated.View
+              style={[styles.sheetContainer, { transform: [{ translateY: combinedTranslateY }] } ] }
+            >
             <View style={styles.dragHandleArea}>
               <View style={styles.sheetGrabberWrapper} {...panResponder.panHandlers}>
                 <View style={styles.sheetGrabber} />
@@ -2778,7 +2800,7 @@ export default function SettingsScreen() {
                   <Text style={{ color: 'red', textAlign: 'center', marginVertical: 12 }}>{servicesError}</Text>
                 )}
 
-                {!isLoadingServices && !servicesError && editableServices.map((svc) => (
+                {!isLoadingServices && !servicesError && editableServices.map((svc, index) => (
                   <Swipeable
                     key={svc.id}
                     friction={2}
@@ -2795,62 +2817,40 @@ export default function SettingsScreen() {
                     )}
                   >
                     <View style={styles.iosCard}>
-                    <TouchableOpacity
-                      style={[styles.accordionHeader, { flexDirection: 'row' }]}
-                      activeOpacity={0.85}
-                      onPress={() => setExpandedServiceId(prev => prev === svc.id ? null : svc.id)}
-                    >
-                      {/* Right: thumbnail */}
-                      {svc.image_url ? (
-                        <Image source={{ uri: svc.image_url }} style={[styles.accordionThumb, { marginLeft: 0, marginRight: 12 }]} />
-                      ) : (
-                        <View style={[styles.accordionThumbPlaceholder, { marginLeft: 0, marginRight: 12 }]}>
-                          <Text style={styles.accordionThumbPlaceholderText}>
-                            {(svc.name || '').slice(0, 1)}
-                          </Text>
-                        </View>
-                      )}
-                      {/* Middle: title and subtitle */}
-                      <View style={{ flex: 1, alignItems: 'flex-start' }}>
-                        <Text style={styles.accordionTitle}>{svc.name || 'No name'}</Text>
-                        <Text style={styles.accordionSubtitle}>
-                          {typeof svc.price === 'number' ? `$${svc.price}` : 'No price'}
-                        </Text>
-                      </View>
-                      {/* Left: chevron */}
-                      <View style={styles.accordionChevron}>
-                        {expandedServiceId === svc.id ? (
-                          <ChevronUp size={18} color={businessColors.primary} />
-                        ) : (
-                          <ChevronDown size={18} color={businessColors.primary} />
-                        )}
-                      </View>
-                    </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.accordionHeader, { flexDirection: 'row' }]}
+                        activeOpacity={0.85}
+                        onPress={() => setExpandedServiceId(prev => prev === svc.id ? null : svc.id)}
+                      >
+                          {/* Right: thumbnail */}
+                          {svc.image_url ? (
+                            <Image source={{ uri: svc.image_url }} style={[styles.accordionThumb, { marginLeft: 0, marginRight: 12 }]} />
+                          ) : (
+                            <View style={[styles.accordionThumbPlaceholder, { marginLeft: 0, marginRight: 12 }]}>
+                              <Text style={styles.accordionThumbPlaceholderText}>
+                                {(svc.name || '').slice(0, 1)}
+                              </Text>
+                            </View>
+                          )}
+                          {/* Middle: title and subtitle */}
+                          <View style={{ flex: 1, alignItems: 'flex-start' }}>
+                            <Text style={styles.accordionTitle}>{svc.name || 'No name'}</Text>
+                            <Text style={styles.accordionSubtitle}>
+                              {typeof svc.price === 'number' ? `$${svc.price}` : 'No price'}
+                            </Text>
+                          </View>
+                          {/* Left: chevron */}
+                          <View style={styles.accordionChevron}>
+                            {expandedServiceId === svc.id ? (
+                              <ChevronUp size={18} color={businessColors.primary} />
+                            ) : (
+                              <ChevronDown size={18} color={businessColors.primary} />
+                            )}
+                          </View>
+                        </TouchableOpacity>
 
                     {expandedServiceId === svc.id && (
                       <View>
-                        <View style={styles.imageHeaderContainer}>
-                          <TouchableOpacity
-                            onPress={() => handlePickServiceImageForEdit(svc.id)}
-                            activeOpacity={0.9}
-                            style={{ position: 'relative' }}
-                          >
-                            {!!svc.image_url ? (
-                              <Image source={{ uri: svc.image_url }} style={styles.serviceImagePreview} />
-                            ) : (
-                              <View style={[styles.serviceImagePreview, { alignItems: 'center', justifyContent: 'center' }]}>
-                                <Text style={{ color: Colors.subtext }}>Tap to select an image</Text>
-                              </View>
-                            )}
-                            {editImageUploading[svc.id] && (
-                              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 16 }}>
-                                <ActivityIndicator size="large" color={businessColors.primary} />
-                              </View>
-                            )}
-                          </TouchableOpacity>
-                        </View>
-
-                        {/* Removed separate replace button; image is now tappable to replace */}
 
                         <View style={styles.formGroup}>
                           <Text style={styles.formLabel}>Service name</Text>
@@ -2938,13 +2938,14 @@ export default function SettingsScreen() {
                         </View>
                       </View>
                     )}
-                  </View>
-                </Swipeable>
+                      </View>
+                    </Swipeable>
                 ))}
               </ScrollView>
             </View>
           </Animated.View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Add Service Modal */}
@@ -2972,14 +2973,14 @@ export default function SettingsScreen() {
             </View>
             <View style={styles.modalHeader}>
               <TouchableOpacity 
-                style={styles.modalCloseButton}
+                style={[styles.modalCloseButton, { marginLeft: -10, paddingLeft: 0 }]}
                 onPress={() => setShowAddServiceModal(false)}
                 accessibilityRole="button"
                 accessibilityLabel="Close"
               >
                 <X size={20} color={Colors.text} />
               </TouchableOpacity>
-              <Text style={[styles.modalTitle, { textAlign: 'center', alignSelf: 'center', flex: 1 }]}>
+              <Text style={[styles.modalTitle, { textAlign: 'center', flex: 1, marginLeft: -44 }]}>
                 Add Service
               </Text>
               <View style={{ width: 44 }} />
@@ -2990,29 +2991,6 @@ export default function SettingsScreen() {
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.modalFormContent}>
-                <View style={styles.formSection}>
-                  <Text style={styles.inputLabel}>Service Image</Text>
-                  <TouchableOpacity 
-                    style={styles.imagePickerButton}
-                    onPress={handlePickServiceImage}
-                    disabled={addSvcUploading}
-                  >
-                    {addSvcImage ? (
-                      <Image source={{ uri: addSvcImage.uri }} style={styles.previewImage} />
-                    ) : (
-                      <View style={styles.imagePickerPlaceholder}>
-                        {addSvcUploading ? (
-                          <ActivityIndicator size="small" color={businessColors.primary} />
-                        ) : (
-                          <>
-                            <ImageIcon size={24} color={businessColors.primary} />
-                            <Text style={styles.imagePickerText}>Tap to add image</Text>
-                          </>
-                        )}
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                </View>
                 <View style={styles.formSection}>
                   <Text style={styles.inputLabel}>Service Name *</Text>
                   <TextInput
@@ -3072,7 +3050,7 @@ export default function SettingsScreen() {
             {/* Save Button */}
             <View style={styles.saveButtonContainer}>
               <TouchableOpacity 
-                style={[styles.saveButton, { opacity: addSvcIsSaving ? 0.7 : 1 }]}
+                style={[styles.saveButton, { backgroundColor: businessColors.primary, opacity: addSvcIsSaving ? 0.7 : 1 }]}
                 onPress={handleCreateService}
                 disabled={addSvcIsSaving}
                 activeOpacity={0.8}
@@ -3156,7 +3134,20 @@ export default function SettingsScreen() {
           </View>
           
           <View style={styles.imagePreviewContainer}>
-            {isImageLoading && (
+            {isImageLoading && !(previewImageType === 'login' && (profileLoginImg === 'gradient-background' || 
+                                                                  profileLoginImg === 'solid-blue-background' ||
+                                                                  profileLoginImg === 'solid-purple-background' ||
+                                                                  profileLoginImg === 'solid-green-background' ||
+                                                                  profileLoginImg === 'solid-orange-background' ||
+                                                                  profileLoginImg === 'light-silver-background' ||
+                                                                  profileLoginImg === 'light-white-background' ||
+                                                                  profileLoginImg === 'light-gray-background' ||
+                                                                  profileLoginImg === 'light-pink-background' ||
+                                                                  profileLoginImg === 'light-cyan-background' ||
+                                                                  profileLoginImg === 'light-lavender-background' ||
+                                                                  profileLoginImg === 'light-coral-background' ||
+                                                                  profileLoginImg === 'dark-black-background' ||
+                                                                  profileLoginImg === 'dark-charcoal-background')) && (
               <View style={styles.imageLoadingContainer}>
                 <Image
                   source={require('../../assets/images/icon.png')}
@@ -3187,7 +3178,20 @@ export default function SettingsScreen() {
               </View>
             )}
             
-            {imageLoadError && (
+            {imageLoadError && !(previewImageType === 'login' && (profileLoginImg === 'gradient-background' || 
+                                                                  profileLoginImg === 'solid-blue-background' ||
+                                                                  profileLoginImg === 'solid-purple-background' ||
+                                                                  profileLoginImg === 'solid-green-background' ||
+                                                                  profileLoginImg === 'solid-orange-background' ||
+                                                                  profileLoginImg === 'light-silver-background' ||
+                                                                  profileLoginImg === 'light-white-background' ||
+                                                                  profileLoginImg === 'light-gray-background' ||
+                                                                  profileLoginImg === 'light-pink-background' ||
+                                                                  profileLoginImg === 'light-cyan-background' ||
+                                                                  profileLoginImg === 'light-lavender-background' ||
+                                                                  profileLoginImg === 'light-coral-background' ||
+                                                                  profileLoginImg === 'dark-black-background' ||
+                                                                  profileLoginImg === 'dark-charcoal-background')) && (
               <View style={styles.imageErrorContainer}>
                 <Ionicons name="image-outline" size={48} color={Colors.subtext} />
                 <Text style={[styles.imageErrorText, { color: Colors.subtext }]}>
@@ -3229,19 +3233,52 @@ export default function SettingsScreen() {
               showsVerticalScrollIndicator={false}
               scrollEnabled={false}
               pinchGestureEnabled={false}
-              style={isImageLoading || imageLoadError ? styles.hiddenScrollView : undefined}
+              style={(isImageLoading || imageLoadError) && !(previewImageType === 'login' && (profileLoginImg === 'gradient-background' || 
+                                                                                              profileLoginImg === 'solid-blue-background' ||
+                                                                                              profileLoginImg === 'solid-purple-background' ||
+                                                                                              profileLoginImg === 'solid-green-background' ||
+                                                                                              profileLoginImg === 'solid-orange-background' ||
+                                                                                              profileLoginImg === 'light-silver-background' ||
+                                                                                              profileLoginImg === 'light-white-background' ||
+                                                                                              profileLoginImg === 'light-gray-background' ||
+                                                                                              profileLoginImg === 'light-pink-background' ||
+                                                                                              profileLoginImg === 'light-cyan-background' ||
+                                                                                              profileLoginImg === 'light-lavender-background' ||
+                                                                                              profileLoginImg === 'light-coral-background' ||
+                                                                                              profileLoginImg === 'dark-black-background' ||
+                                                                                              profileLoginImg === 'dark-charcoal-background')) ? styles.hiddenScrollView : undefined}
             >
-              <Image
-                source={{
-                  uri: previewImageType === 'page1' ? profileImageOnPage1 : 
-                        previewImageType === 'page2' ? profileImageOnPage2 : 
-                        previewImageType === 'page3' ? profileImageOnPage3 :
-                        profileLoginImg
-                }}
-                style={previewImageType === 'login' ? styles.loginImagePreview : styles.imagePreviewImage}
-                resizeMode={previewImageType === 'login' ? "cover" : "contain"}
-                onLoadStart={() => setIsImageLoading(true)}
-                onLoad={() => {
+              {/* Special handling for gradient background */}
+              {previewImageType === 'login' && (profileLoginImg === 'gradient-background' || 
+                                               profileLoginImg === 'solid-blue-background' ||
+                                               profileLoginImg === 'solid-purple-background' ||
+                                               profileLoginImg === 'solid-green-background' ||
+                                               profileLoginImg === 'solid-orange-background' ||
+                                               profileLoginImg === 'light-silver-background' ||
+                                               profileLoginImg === 'light-white-background' ||
+                                               profileLoginImg === 'light-gray-background' ||
+                                               profileLoginImg === 'light-pink-background' ||
+                                               profileLoginImg === 'light-cyan-background' ||
+                                               profileLoginImg === 'light-lavender-background' ||
+                                               profileLoginImg === 'light-coral-background' ||
+                                               profileLoginImg === 'dark-black-background' ||
+                                               profileLoginImg === 'dark-charcoal-background') ? (
+                <GradientBackground 
+                  style={styles.loginImagePreview}
+                  backgroundType={profileLoginImg}
+                />
+              ) : (
+                <Image
+                  source={{
+                    uri: previewImageType === 'page1' ? profileImageOnPage1 : 
+                          previewImageType === 'page2' ? profileImageOnPage2 : 
+                          previewImageType === 'page3' ? profileImageOnPage3 :
+                          profileLoginImg
+                  }}
+                  style={previewImageType === 'login' ? styles.loginImagePreview : styles.imagePreviewImage}
+                  resizeMode={previewImageType === 'login' ? "cover" : "contain"}
+                  onLoadStart={() => setIsImageLoading(true)}
+                  onLoad={() => {
                   setIsImageLoading(false);
                   setImageLoadError(false);
                   progressAnimation.stopAnimation();
@@ -3261,7 +3298,8 @@ export default function SettingsScreen() {
                     setImageLoadTimeout(null);
                   }
                 }}
-              />
+                />
+              )}
             </ScrollView>
           </View>
           
@@ -3297,6 +3335,7 @@ export default function SettingsScreen() {
                      currentImageType === 'page3' ? 'existingBooking' :
                      'loginPage'}
       />
+
     </SafeAreaView>
   );
 }
@@ -4318,6 +4357,7 @@ const styles = StyleSheet.create({
     aspectRatio: 9/16, // Instagram Story ratio (vertical rectangle)
     maxHeight: '85%',
     alignSelf: 'center',
+    flex: 1, // Ensure it takes full available space
     borderRadius: 12,
     borderWidth: 2,
     borderColor: 'rgba(0, 0, 0, 0.1)',

@@ -83,6 +83,7 @@ export interface Service {
   image_url?: string;
   is_active: boolean;
   business_id: string;
+  order_index?: number;
   created_at: string;
   updated_at: string;
 }

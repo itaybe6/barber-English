@@ -529,6 +529,16 @@ export default function ClientHomeScreen() {
       fetchUserAppointments();
       fetchWaitlistEntries();
       fetchUnreadNotificationsCount();
+      // Reload business profile to get updated images
+      const loadProfile = async () => {
+        try {
+          const p = await businessProfileApi.getProfile();
+          setBusinessProfile(p);
+        } catch (error) {
+          console.error('Error loading business profile on focus:', error);
+        }
+      };
+      loadProfile();
     }, [fetchUserAppointments, fetchWaitlistEntries, fetchUnreadNotificationsCount])
   );
 
@@ -792,7 +802,7 @@ export default function ClientHomeScreen() {
               style={styles.nextAppointmentContainer}
             >
               <Image 
-                source={require('@/assets/images/nextApp.jpg')} 
+                source={businessProfile?.image_on_page_3 ? { uri: businessProfile.image_on_page_3 } : require('@/assets/images/nextApp.jpg')} 
                 style={styles.nextAppointmentImage}
                 resizeMode="cover"
               />

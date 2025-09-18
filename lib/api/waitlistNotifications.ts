@@ -218,8 +218,8 @@ export const checkWaitlistAndNotify = async (cancelledAppointment: AvailableTime
         continue;
       }
 
-      const notificationTitle = '🎉 מקום התפנה!';
-      const notificationContent = `שלום ${entry.client_name}! מקום התפנה עבור ${entry.service_name} בתאריך ${formatDateForNotification(cancelledAppointment.slot_date)} בשעה ${cancelledAppointment.slot_time}. מהרי להזמין תור!`;
+      const notificationTitle = '🎉 A spot opened up!';
+      const notificationContent = `Hi ${entry.client_name}! A spot opened up for ${entry.service_name} on ${formatDateForNotification(cancelledAppointment.slot_date)} at ${cancelledAppointment.slot_time}. Book now!`;
 
       notifications.push({
         title: notificationTitle,
@@ -331,8 +331,8 @@ export const notifyServiceWaitlistClients = async (cancelledAppointment: Availab
         continue;
       }
 
-      const notificationTitle = '🎉 מקום התפנה!';
-      const notificationContent = `שלום ${entry.client_name}! מקום התפנה עבור ${entry.service_name} בתאריך ${formatDateForNotification(cancelledAppointment.slot_date)} בשעה ${cancelledAppointment.slot_time}. מהרי להזמין תור!`;
+      const notificationTitle = '🎉 A spot opened up!';
+      const notificationContent = `Hi ${entry.client_name}! A spot opened up for ${entry.service_name} on ${formatDateForNotification(cancelledAppointment.slot_date)} at ${cancelledAppointment.slot_time}. Book now!`;
 
       notifications.push({
         title: notificationTitle,
@@ -444,8 +444,8 @@ export const notifyAllWaitlistClients = async (cancelledAppointment: AvailableTi
         continue;
       }
 
-      const notificationTitle = '🎉 מקום התפנה!';
-      const notificationContent = `שלום ${entry.client_name}! מקום התפנה עבור ${cancelledAppointment.service_name} בתאריך ${formatDateForNotification(cancelledAppointment.slot_date)} בשעה ${cancelledAppointment.slot_time}. מהרי להזמין תור!`;
+      const notificationTitle = '🎉 A spot opened up!';
+      const notificationContent = `Hi ${entry.client_name}! A spot opened up for ${cancelledAppointment.service_name} on ${formatDateForNotification(cancelledAppointment.slot_date)} at ${cancelledAppointment.slot_time}. Book now!`;
 
       notifications.push({
         title: notificationTitle,
@@ -493,7 +493,7 @@ export const notifyAllWaitlistClients = async (cancelledAppointment: AvailableTi
 // Helper function to format date for notification
 const formatDateForNotification = (dateString: string) => {
   const date = new Date(dateString);
-  return date.toLocaleDateString('he-IL', {
+  return date.toLocaleDateString('en-US', {
     weekday: 'long',
     year: 'numeric',
     month: 'long',

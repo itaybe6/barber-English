@@ -459,8 +459,10 @@ export default function AdminAppointmentsScreen() {
                         <Ionicons name="ellipsis-vertical" size={18} color="#FFFFFF" />
                       </PressableScale>
                     </View>
-                    <Text style={styles.appointmentTime}>{`${startTime} - ${endTime}`}</Text>
-                    <Text numberOfLines={1} style={styles.appointmentTitle}>{apt.service_name || 'Service'}</Text>
+                    <View style={styles.appointmentHeader}>
+                      <Text style={[styles.appointmentTime, styles.appointmentTimeInline]}>{`${startTime} - ${endTime}`}</Text>
+                      <Text numberOfLines={1} style={styles.appointmentTitleInline}>{apt.service_name || 'Service'}</Text>
+                    </View>
                     {!!apt.client_name && (
                       <Text numberOfLines={1} style={styles.appointmentClient}>{apt.client_name}</Text>
                     )}
@@ -744,11 +746,27 @@ const styles = StyleSheet.create({
     marginBottom: 2,
     textAlign: 'left',
   },
+  appointmentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
+  },
+  appointmentTimeInline: {
+    marginBottom: 0,
+  },
   appointmentTitle: {
     fontSize: 14,
     fontWeight: '700',
     color: Colors.text,
     textAlign: 'left',
+  },
+  appointmentTitleInline: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'left',
+    flexShrink: 1,
   },
   appointmentClient: {
     fontSize: 12,

@@ -181,12 +181,11 @@ export const checkWaitlistAndNotify = async (cancelledAppointment: AvailableTime
 
     // Filter entries to avoid duplicates and ensure relevance
     const relevantEntries = waitlistEntries.filter(entry => {
-      // Include if same time period or 'any' time period
+      // Must match the same time period (or 'any')
       const timeMatch = entry.time_period === timePeriod || entry.time_period === 'any';
-      // Include if same service
+      // Also require same service for precision
       const serviceMatch = entry.service_name === cancelledAppointment.service_name;
-      
-      return timeMatch || serviceMatch;
+      return timeMatch && serviceMatch;
     });
 
 
@@ -249,7 +248,7 @@ export const notifyServiceWaitlistClients = async (cancelledAppointment: Availab
     
     const businessId = getBusinessId();
     
-    // Find waitlist entries for the same service on any future date
+    // Find waitlist entries for the same service on any future date and matching time period
     const today = new Date().toISOString().split('T')[0];
     let query = supabase
       .from('waitlist_entries')
@@ -288,6 +287,12 @@ export const notifyServiceWaitlistClients = async (cancelledAppointment: Availab
     const notifiedEntryIds: string[] = [];
     
     for (const entry of waitlistEntries) {
+      // Only notify if the time period matches the cancelled slot (or 'any')
+      const appointmentTime = new Date(`2000-01-01T${cancelledAppointment.slot_time}`);
+      const hour = appointmentTime.getHours();
+      const cancelledPeriod = hour >= 7 && hour < 12 ? 'morning' : hour >= 12 && hour < 16 ? 'afternoon' : hour >= 16 && hour < 20 ? 'evening' : 'any';
+      const periodMatch = entry.time_period === 'any' || entry.time_period === cancelledPeriod;
+      if (!periodMatch) continue;
       const notificationTitle = '🎉 A spot opened up!';
       const notificationContent = `Hi ${entry.client_name}! A spot opened up for ${entry.service_name} on ${formatDateForNotification(cancelledAppointment.slot_date)} at ${cancelledAppointment.slot_time}. Book now!`;
 
@@ -341,7 +346,7 @@ export const notifyAllWaitlistClients = async (cancelledAppointment: AvailableTi
     
     const businessId = getBusinessId();
     
-    // Find all waitlist entries for any future date
+    // Find all waitlist entries for any future date and matching time period
     const today = new Date().toISOString().split('T')[0];
     let query = supabase
       .from('waitlist_entries')
@@ -380,6 +385,12 @@ export const notifyAllWaitlistClients = async (cancelledAppointment: AvailableTi
     const notifiedEntryIds: string[] = [];
     
     for (const entry of waitlistEntries) {
+      // Only notify if the time period matches the cancelled slot (or 'any')
+      const appointmentTime = new Date(`2000-01-01T${cancelledAppointment.slot_time}`);
+      const hour = appointmentTime.getHours();
+      const cancelledPeriod = hour >= 7 && hour < 12 ? 'morning' : hour >= 12 && hour < 16 ? 'afternoon' : hour >= 16 && hour < 20 ? 'evening' : 'any';
+      const periodMatch = entry.time_period === 'any' || entry.time_period === cancelledPeriod;
+      if (!periodMatch) continue;
       const notificationTitle = '🎉 A spot opened up!';
       const notificationContent = `Hi ${entry.client_name}! A spot opened up for ${cancelledAppointment.service_name} on ${formatDateForNotification(cancelledAppointment.slot_date)} at ${cancelledAppointment.slot_time}. Book now!`;
 

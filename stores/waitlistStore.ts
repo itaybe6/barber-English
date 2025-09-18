@@ -94,7 +94,13 @@ export const useWaitlistStore = create<WaitlistStore>((set, get) => ({
           };
           const title = 'New client joined the waitlist';
           const content = `${clientName} (${clientPhone}) joined the waitlist for "${serviceName}" on ${requestedDate} for ${periodLabel[timePeriod]} period.`;
-          notificationsApi.createAdminNotification(title, content, 'system').catch(() => {});
+          if (userId) {
+            notificationsApi
+              .createAdminNotificationForUserId(userId, title, content, 'system')
+              .catch(() => {});
+          } else {
+            notificationsApi.createAdminNotification(title, content, 'system').catch(() => {});
+          }
         } catch {}
         return true;
       }

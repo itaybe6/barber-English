@@ -541,7 +541,7 @@ export default function ClientAppointmentsScreen() {
         setShowCancelModal(false);
         setSelectedAppointment(null);
 
-        // Create admin notification about the cancellation
+        // Create admin notification about the cancellation (target specific assigned barber if available)
         const canceledBy = user?.name || selectedAppointment.client_name || 'Client';
         const canceledPhone = user?.phone || selectedAppointment.client_phone || '';
         const serviceName = selectedAppointment.service_name || 'Service';
@@ -549,8 +549,14 @@ export default function ClientAppointmentsScreen() {
         const time = selectedAppointment.slot_time;
         const title = 'Appointment Cancellation';
         const content = `${canceledBy} (${canceledPhone}) canceled an appointment for "${serviceName}" on ${date} at ${time}`;
-        // Ignore result; best-effort
-        notificationsApi.createAdminNotification(title, content, 'system').catch(() => {});
+        // If the appointment has a specific barber/admin, notify only them
+        const assignedAdminId = (selectedAppointment as any)?.barber_id || (selectedAppointment as any)?.user_id;
+        if (assignedAdminId) {
+          notificationsApi.createAdminNotificationForUserId(String(assignedAdminId), title, content, 'system').catch(() => {});
+        } else {
+          // Fallback: notify all admins
+          notificationsApi.createAdminNotification(title, content, 'system').catch(() => {});
+        }
       } else {
         Alert.alert('Cannot Cancel Appointment', result.error || 'Unable to cancel the appointment. Please try again.');
       }

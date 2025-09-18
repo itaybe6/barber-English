@@ -110,6 +110,58 @@ export const notificationsApi = {
     }
   },
 
+  // Create a notification for a specific admin by userId (targeted manager notification)
+  async createAdminNotificationForUserId(userId: string, title: string, content: string, type: Notification['type'] = 'system'): Promise<boolean> {
+    try {
+      if (!userId) return false;
+      const businessId = getBusinessId();
+
+      // Fetch the target admin's name and phone within current business
+      const { data: admin, error: adminError } = await supabase
+        .from('users')
+        .select('id, name, phone')
+        .eq('business_id', businessId)
+        .eq('id', userId)
+        .single();
+
+      if (adminError || !admin) {
+        console.error('Error fetching admin for targeted notification:', adminError);
+        return false;
+      }
+
+      const recipientPhone = (admin.phone || '').trim();
+      if (!recipientPhone) {
+        // No phone to deliver the in-app notification
+        return false;
+      }
+
+      const { error: insertError } = await supabase
+        .from('notifications')
+        .insert([
+          {
+            title,
+            content,
+            type,
+            recipient_name: admin.name || 'מנהל',
+            recipient_phone: recipientPhone,
+            business_id: businessId,
+            // Store target admin for traceability if the column exists
+            user_id: (admin as any).id || userId,
+          } as any,
+        ]);
+
+      if (insertError) {
+        console.error('Error inserting targeted admin notification:', insertError);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error in createAdminNotificationForUserId:', error);
+      return false;
+    }
+  },
+
   // Send notification to all clients
   async sendNotificationToAllClients(title: string, content: string, type: Notification['type'] = 'general'): Promise<boolean> {
     try {

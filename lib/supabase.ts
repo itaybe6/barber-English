@@ -189,6 +189,8 @@ export interface Notification {
   type: 'appointment_reminder' | 'promotion' | 'general' | 'system';
   recipient_name: string;
   recipient_phone: string;
+  // Target user for admin/manager notifications (optional)
+  user_id?: string | null;
   business_id: string;
   appointment_id?: string; // Optional reference to appointment for appointment-related notifications
   created_at: string;
@@ -229,6 +231,8 @@ export interface BusinessProfile {
   break?: number;
   // New per-barber break minutes map: { [userId: string]: number }
   break_by_user?: Record<string, number>;
+  // New per-barber reminder minutes map: { [userId: string]: number | null }
+  reminder_minutes_by_user?: Record<string, number | null>;
   min_cancellation_hours?: number;
   primary_color?: string; // Hex color code for primary UI color
   created_at: string;

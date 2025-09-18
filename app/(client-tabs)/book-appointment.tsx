@@ -1179,12 +1179,16 @@ export default function BookAppointment() {
         setSuccessMessage(message);
         setShowSuccessModal(true);
 
-        // Notify admins about the new booking
+        // Notify the assigned admin (barber) about the new booking
         try {
           const title = 'נקבע תור חדש';
           const dateString = selectedDate?.toISOString().split('T')[0];
           const content = `${user?.name || 'לקוח'} (${user?.phone || ''}) קבע/ה תור ל"${selectedService.name}" בתאריך ${dateString} בשעה ${selectedTime}`;
-          notificationsApi.createAdminNotification(title, content, 'system').catch(() => {});
+          if (selectedBarber?.id) {
+            notificationsApi.createAdminNotificationForUserId(selectedBarber.id, title, content, 'system').catch(() => {});
+          } else {
+            notificationsApi.createAdminNotification(title, content, 'system').catch(() => {});
+          }
         } catch {}
 
         // Create a notification for the client

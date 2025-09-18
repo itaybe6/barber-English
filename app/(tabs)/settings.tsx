@@ -176,6 +176,13 @@ export default function SettingsScreen() {
   const [isSavingAdmin, setIsSavingAdmin] = useState(false);
   const [isUploadingAdminAvatar, setIsUploadingAdminAvatar] = useState(false);
 
+  // Per-admin scheduling preferences: reminder before appointment
+  const [reminderMinutes, setReminderMinutes] = useState<number | null>(null);
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderMinutesDraft, setReminderMinutesDraft] = useState('30');
+  const [showEditReminderModal, setShowEditReminderModal] = useState(false);
+  const [showReminderDropdown, setShowReminderDropdown] = useState(false);
+
   // Animated bottom-sheet controls
   const sheetAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
   const sheetTranslateY = sheetAnim.interpolate({ inputRange: [0, 1], outputRange: [600, 0] });
@@ -250,6 +257,22 @@ export default function SettingsScreen() {
   useEffect(() => {
     loadBusinessProfile();
   }, []);
+
+  // Load per-user preferences (reminder)
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!user?.id) return;
+        // Reminder
+        const rem = await businessProfileApi.getReminderMinutesForUser(user.id);
+        setReminderMinutes(rem);
+        setReminderEnabled(rem !== null && Number(rem) > 0);
+        setReminderMinutesDraft(String(rem ?? 30));
+      } catch (e) {
+        // silent
+      }
+    })();
+  }, [user?.id]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -1652,6 +1675,28 @@ export default function SettingsScreen() {
             () => setShowBroadcast(true)
           )}
           
+          {renderSettingItem(
+            <Clock size={20} color={businessColors.primary} />,
+            'Reminder before appointment',
+            reminderEnabled && Number(reminderMinutes) > 0 ? `${reminderMinutes} minutes before` : 'Off',
+            <AppSwitch
+              value={reminderEnabled}
+              onValueChange={async (val) => {
+                try {
+                  setReminderEnabled(val);
+                  if (!user?.id) return;
+                  if (!val) {
+                    await businessProfileApi.setReminderMinutesForUser(user.id, null);
+                    setReminderMinutes(null);
+                  } else {
+                    setShowEditReminderModal(true);
+                  }
+                } catch {}
+              }}
+              primaryColor={businessColors.primary}
+            />,
+            () => setShowEditReminderModal(true)
+          )}
 
         </View>
         
@@ -1990,6 +2035,62 @@ export default function SettingsScreen() {
                   onChangeText={setDisplayNameDraft}
                   placeholder="For example: The Studio of Hadas"
                   placeholderTextColor={Colors.subtext}
+                  textAlign="left"
+                />
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit Reminder Minutes Modal */}
+      <Modal
+        visible={showEditReminderModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowEditReminderModal(false)}
+      >
+        <View style={styles.smallModalOverlay}>
+          <View style={styles.smallModalCard}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowEditReminderModal(false)}>
+                <Text style={styles.modalCloseText}>Cancel</Text>
+              </TouchableOpacity>
+              <Text style={styles.modalTitleLTR}>Reminder before appointment</Text>
+              <TouchableOpacity
+                style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]}
+                onPress={async () => {
+                  if (!user?.id) { setShowEditReminderModal(false); return; }
+                  const mins = parseInt(reminderMinutesDraft);
+                  if (!Number.isFinite(mins) || mins < 1 || mins > 1440) {
+                    Alert.alert('Error', 'Enter a valid number between 1 and 1440 minutes');
+                    return;
+                  }
+                  try {
+                    setIsSavingProfile(true);
+                    await businessProfileApi.setReminderMinutesForUser(user.id, mins);
+                    setReminderMinutes(mins);
+                    setReminderEnabled(true);
+                    setShowEditReminderModal(false);
+                  } finally {
+                    setIsSavingProfile(false);
+                  }
+                }}
+                disabled={isSavingProfile}
+              >
+                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'Saving...' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabelLTR}>Minutes before</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={reminderMinutesDraft}
+                  onChangeText={setReminderMinutesDraft}
+                  placeholder="e.g. 30"
+                  placeholderTextColor={Colors.subtext}
+                  keyboardType="numeric"
                   textAlign="left"
                 />
               </View>

@@ -411,7 +411,12 @@ export default function SelectTimeScreen() {
         try {
           const title = 'New appointment booked';
           const content = `${user?.name || 'Client'} (${user?.phone || ''}) booked an appointment for "${serviceName}" on ${selectedDate} at ${formatTime12Hour(selectedTime)}`;
-          notificationsApi.createAdminNotification(title, content, 'system').catch(() => {});
+          const assignedAdminId = params.barberId as string | undefined;
+          if (assignedAdminId) {
+            notificationsApi.createAdminNotificationForUserId(assignedAdminId, title, content, 'system').catch(() => {});
+          } else {
+            notificationsApi.createAdminNotification(title, content, 'system').catch(() => {});
+          }
         } catch {}
         // Navigate safely without relying on multiple back actions
         // ניווט יקרה לאחר אישור חלון ההצלחה

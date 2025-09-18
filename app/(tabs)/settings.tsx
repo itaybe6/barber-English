@@ -293,6 +293,15 @@ export default function SettingsScreen() {
     }
   }, [showEditAddressModal, profileAddress]);
 
+  // Debug: print Google Places API key when address modal opens (dev only)
+  useEffect(() => {
+    if (showEditAddressModal && __DEV__) {
+      const placesKey = (Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_PLACES_KEY || process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY;
+      // eslint-disable-next-line no-console
+      console.log('[Places] Using API key:', placesKey);
+    }
+  }, [showEditAddressModal]);
+
   useEffect(() => {
     if (showEditInstagramModal) {
       setInstagramDraft(profileInstagram || '');

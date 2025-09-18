@@ -2272,19 +2272,21 @@ export default function SettingsScreen() {
                 <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'Saving...' : 'Save'}</Text>
               </TouchableOpacity>
             </View>
-            <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
+            <View style={styles.smallModalContent}>
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabelLTR}>Address</Text>
                 <GooglePlacesAutocomplete
                   placeholder="Business address"
                   fetchDetails
+                  debounce={200}
                   enablePoweredByContainer={false}
                   minLength={2}
                   predefinedPlaces={[]}
                   nearbyPlacesAPI={undefined as any}
                   query={{
                     key: (Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_PLACES_KEY || process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY,
-                    language: 'en',
+                    language: 'he',
+                    types: 'geocode',
                   }}
                   onPress={(data: any, details: any) => {
                     const formatted = details?.formatted_address || data?.description || '';
@@ -2299,12 +2301,34 @@ export default function SettingsScreen() {
                   }}
                   textInputProps={{
                     value: addressDraft,
-                    onChangeText: setAddressDraft,
+                    onChangeText: (t: string) => {
+                      setAddressDraft(t);
+                      // Clear selection so preview/map hides until a prediction is chosen
+                      if (placesPlaceId) {
+                        setPlacesPlaceId('');
+                        setPlacesFormattedAddress('');
+                        setPlacesLat(null);
+                        setPlacesLng(null);
+                      }
+                    },
                     placeholderTextColor: Colors.subtext,
+                    autoCorrect: false,
+                    autoCapitalize: 'none',
                   }}
                   styles={{
+                    container: { flex: 0 },
+                    textInputContainer: { padding: 0, borderWidth: 0 },
                     textInput: [styles.textInput as any, { height: 48 }],
-                    listView: { zIndex: 1000 },
+                    listView: {
+                      zIndex: 9999,
+                      elevation: 12,
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: 12,
+                      marginTop: 6,
+                      borderWidth: 1,
+                      borderColor: '#E5E5EA',
+                      maxHeight: 260,
+                    },
                   }}
                   onFail={(error) => {
                     console.log('[Places] onFail', error);
@@ -2315,7 +2339,7 @@ export default function SettingsScreen() {
                 />
               </View>
 
-              {(placesFormattedAddress || addressDraft) && (
+              {!!placesPlaceId && (
                 <View style={{ marginTop: 12 }}>
                   <Image
                     source={{ uri: `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent((placesFormattedAddress || addressDraft) as string)}&zoom=15&size=600x300&markers=color:red|${encodeURIComponent((placesFormattedAddress || addressDraft) as string)}&key=${(Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_PLACES_KEY || process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY}` }}
@@ -2346,7 +2370,7 @@ export default function SettingsScreen() {
                   </TouchableOpacity>
                 </View>
               )}
-            </ScrollView>
+            </View>
           </View>
         </View>
       </Modal>

@@ -21,6 +21,7 @@ import { AvailableTimeSlot, supabase, getBusinessId } from '@/lib/supabase';
 import { businessHoursApi } from '@/lib/api/businessHours';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -460,37 +461,55 @@ export default function AdminAppointmentsScreen() {
                 const endTime = formatTime(addMinutes(apt.slot_time, durationMinutes));
                 
                 return (
-                  <View 
-                    key={`${apt.id}-${apt.slot_time}`} 
+                  <PressableScale
+                    key={`${apt.id}-${apt.slot_time}`}
+                    onPress={() => openActionsMenu(apt)}
+                    accessibilityLabel="Open appointment actions"
                     style={[
-                      styles.appointmentCard, 
-                      { 
-                        top, 
+                      styles.appointmentCard,
+                      {
+                        top,
                         height,
                         left: LABELS_WIDTH + 8,
                         right: 8,
-                      }
+                      },
                     ]}
-                  > 
-                    <View style={styles.appointmentActions}>
-                      <PressableScale
-                        onPress={() => openActionsMenu(apt)}
-                        style={[styles.moreButton, { backgroundColor: businessColors.primary }]}
-                        accessibilityLabel="Options"
-                        hitSlop={{ top: 24, bottom: 24, left: 24, right: 24 }}
-                        pressRetentionOffset={{ top: 24, bottom: 24, left: 24, right: 24 }}
-                      >
-                        <Ionicons name="ellipsis-vertical" size={18} color="#FFFFFF" />
-                      </PressableScale>
+                  >
+                    {/* Light grey fill background */}
+                    <View style={[styles.appointmentFill, { backgroundColor: '#F2F2F7' }]} />
+                    {/* Accent bar removed per request */}
+
+                    {/* Content */}
+                    <View style={styles.appointmentInner}>
+                      <View style={styles.appointmentHeaderRow}>
+                        <View style={[styles.timePill, { borderColor: 'rgba(112, 107, 107, 0.58)' }]}>
+                          <BlurView intensity={24} tint="light" style={styles.pillBlur} />
+                          <View style={styles.pillTint} />
+                          <Ionicons name="time-outline" size={14} color="#000000" />
+                          <Text style={[styles.timePillText, { color: businessColors.primary }]} numberOfLines={1}>{`${startTime} - ${endTime}`}</Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.metaRow}>
+                        {!!apt.client_name && (
+                          <View style={[styles.clientPill, { borderColor: 'rgba(112, 107, 107, 0.58)' }]}>
+                            <BlurView intensity={28} tint="light" style={styles.pillBlur} />
+                            <View style={styles.pillTint} />
+                            <Ionicons name="person-outline" size={14} color="#000000" />
+                            <Text numberOfLines={1} style={[styles.clientPillText, { color: businessColors.primary }]}>{apt.client_name}</Text>
+                          </View>
+                        )}
+                        {!!apt.service_name && (
+                          <View style={[styles.servicePill, { borderColor: 'rgba(112, 107, 107, 0.58)' }]}>
+                            <BlurView intensity={28} tint="light" style={styles.pillBlur} />
+                            <View style={styles.pillTint} />
+                            <Ionicons name="pricetag-outline" size={14} color="#000000" />
+                            <Text numberOfLines={1} style={[styles.servicePillText, { color: businessColors.primary }]}>{apt.service_name}</Text>
+                          </View>
+                        )}
+                      </View>
                     </View>
-                    <View style={styles.appointmentHeader}>
-                      <Text style={[styles.appointmentTime, styles.appointmentTimeInline]}>{`${startTime} - ${endTime}`}</Text>
-                      <Text numberOfLines={1} style={styles.appointmentTitleInline}>{apt.service_name || 'Service'}</Text>
-                    </View>
-                    {!!apt.client_name && (
-                      <Text numberOfLines={1} style={styles.appointmentClient}>{apt.client_name}</Text>
-                    )}
-                  </View>
+                  </PressableScale>
                 );
               })}
             </View>
@@ -608,7 +627,7 @@ export default function AdminAppointmentsScreen() {
 }
 
 // Layout constants for the time grid
-const HOUR_BLOCK_HEIGHT = 120; // px per hour (expanded spacing)
+const HOUR_BLOCK_HEIGHT = 180; // Further increase spacing per hour for larger proportions
 const HALF_HOUR_BLOCK_HEIGHT = HOUR_BLOCK_HEIGHT / 2; // 30-min rows
 const LABELS_WIDTH = 64; // left column width for time labels
 
@@ -701,7 +720,8 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     paddingLeft: 8,
     color: Colors.subtext,
-    fontSize: 12,
+    fontSize: 14,
+    fontWeight: '700',
     minWidth: LABELS_WIDTH,
   },
   gridLine: {
@@ -719,22 +739,135 @@ const styles = StyleSheet.create({
   },
   appointmentCard: {
     position: 'absolute',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E5EA',
+    backgroundColor: 'transparent',
+    borderColor: 'rgba(255,255,255,0.35)',
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    borderRadius: 14,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
     justifyContent: 'flex-start',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 1,
+      height: 3,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-    minHeight: 50,
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    elevation: 4,
+    minHeight: 64,
+    overflow: 'hidden',
+  },
+  appointmentBlur: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  appointmentFill: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 14,
+  },
+  pillTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  appointmentAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    borderTopLeftRadius: 14,
+    borderBottomLeftRadius: 14,
+  },
+  appointmentInner: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingRight: 16,
+  },
+  appointmentHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+    gap: 8,
+  },
+  timePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  timePillText: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: -0.1,
+  },
+  serviceTitle: {
+    flex: 1,
+    textAlign: 'right',
+    fontSize: 13,
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  clientRowInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  appointmentClientText: {
+    fontSize: 11,
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+  clientPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  clientPillText: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: -0.1,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  servicePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  pillBlur: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  servicePillText: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: -0.1,
   },
   appointmentActions: {
     position: 'absolute',

@@ -156,9 +156,18 @@ export default function ClientHomeScreen() {
   const [businessPhone, setBusinessPhone] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [mapCoords, setMapCoords] = useState<{ lat: number; lon: number } | null>(null);
-  const GOOGLE_STATIC_MAPS_KEY = (Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY
-    || (process.env as any)?.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY
-    || 'AIzaSyA6uvjxcou7Drdw2OYyEAi4Y49u7PtBh8g';
+  const [osmFailed, setOsmFailed] = useState(false);
+  const [googleFailed, setGoogleFailed] = useState(false);
+  const GOOGLE_KEY_EXTRA = (Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY;
+  const GOOGLE_KEY_JSON = (() => {
+    try {
+      const cur = require('../../branding/current.json');
+      return cur?.config?.expo?.extra?.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY;
+    } catch { return undefined; }
+  })();
+  const GOOGLE_KEY_ENV = (process.env as any)?.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY;
+  const GOOGLE_KEY_FALLBACK = '';
+  const GOOGLE_STATIC_MAPS_KEY = GOOGLE_KEY_EXTRA || GOOGLE_KEY_JSON || GOOGLE_KEY_ENV || GOOGLE_KEY_FALLBACK;
 
   // Designs store
   const { designs, isLoading: isLoadingDesigns, fetchDesigns } = useDesignsStore();
@@ -331,6 +340,17 @@ export default function ClientHomeScreen() {
 
   // (removed) old perimeter animation
 
+  // Always use business profile address for map display (fallback to a safe default)
+  const DEFAULT_MAP = {
+    address: '386 East Shoreline Drive, Long Beach, CA',
+    coords: { lat: 33.7609, lon: -118.196 }
+  } as const;
+  const displayAddress = (
+    typeof businessProfile?.address === 'string' && (businessProfile.address as string).trim().length > 0
+      ? (businessProfile.address as string).trim()
+      : DEFAULT_MAP.address
+  );
+
   const fetchUserAppointments = useCallback(async () => {
     if (!user?.name && !user?.phone) {
       setNextAppointment(null);
@@ -496,18 +516,19 @@ export default function ClientHomeScreen() {
     loadProfile();
   }, []);
 
-  // Geocode business address to coordinates for static map (no API key needed)
+  // Geocode display address (client > business) to coordinates for static map (no API key needed)
   useEffect(() => {
     const geocode = async () => {
       try {
-        const address = businessProfile?.address?.trim();
-        if (!address) return;
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(address)}`, {
-          headers: {
-            'Accept': 'application/json',
-            'User-Agent': 'slotlys-app/1.0 (+support@slotlys.com)',
-          },
-        });
+        const address = displayAddress;
+        if (!address) { setMapCoords(DEFAULT_MAP.coords); return; }
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(address)}`,
+          {
+            headers: {
+              'User-Agent': 'SlotlysApp/1.0 (+https://slotlys.com)'
+            }
+          }
+        );
         const data: any[] = await res.json();
         if (Array.isArray(data) && data.length > 0) {
           const { lat, lon } = data[0];
@@ -515,14 +536,62 @@ export default function ClientHomeScreen() {
           const lonNum = Number(lon);
           if (!isNaN(latNum) && !isNaN(lonNum)) {
             setMapCoords({ lat: latNum, lon: lonNum });
+            return;
           }
         }
+        // If we got here, use default coords to ensure the map renders
+        setMapCoords(DEFAULT_MAP.coords);
       } catch (e) {
-        // Silent fail - map will just not render
+        // Fallback to default coords
+        setMapCoords(DEFAULT_MAP.coords);
       }
     };
     geocode();
-  }, [businessProfile?.address]);
+  }, [displayAddress]);
+
+  // Log which Google key source is being used (masked)
+  useEffect(() => {
+    try {
+      const key = GOOGLE_STATIC_MAPS_KEY;
+      const masked = typeof key === 'string' && key.length > 8
+        ? `${key.slice(0, 4)}***${key.slice(-4)}`
+        : '(missing)';
+      const source = GOOGLE_KEY_EXTRA ? 'expo.extra' : GOOGLE_KEY_JSON ? 'branding/current.json' : GOOGLE_KEY_ENV ? 'process.env' : 'missing';
+      console.log('[Maps] Google Static Maps key loaded:', masked, 'source:', source);
+    } catch {}
+  }, [GOOGLE_STATIC_MAPS_KEY]);
+
+  // Proactively verify Google Static Maps URL availability
+  useEffect(() => {
+    const test = async () => {
+      if (!GOOGLE_STATIC_MAPS_KEY) return;
+      try {
+        const url = `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(displayAddress)}&zoom=15&size=400x400&markers=color:red|${encodeURIComponent(displayAddress)}&key=${GOOGLE_STATIC_MAPS_KEY}`;
+        const res = await fetch(url, { method: 'GET' });
+        console.log('[Maps] Google Static Maps HTTP status:', res.status, 'content-type:', res.headers?.get?.('content-type'));
+      } catch (e) {
+        console.warn('[Maps] Google Static Maps fetch error:', (e as any)?.message || e);
+      }
+    };
+    test();
+  }, [displayAddress, GOOGLE_STATIC_MAPS_KEY]);
+
+  const handleOsmError = useCallback((e: any) => {
+    try { console.warn('[Maps] OSM static map failed', e?.nativeEvent?.error); } catch {}
+    setOsmFailed(true);
+  }, []);
+
+  const handleGoogleError = useCallback((e: any) => {
+    try { console.warn('[Maps] Google static map failed for address:', displayAddress, 'keyPresent:', Boolean(GOOGLE_STATIC_MAPS_KEY)); } catch {}
+    setGoogleFailed(true);
+  }, [displayAddress, GOOGLE_STATIC_MAPS_KEY]);
+
+  // Reset image fallback flags when address/coords change
+  useEffect(() => {
+    setOsmFailed(false);
+    setGoogleFailed(false);
+  }, [displayAddress, mapCoords?.lat, mapCoords?.lon]);
+
 
   // Load manager phone (first admin user)
   useEffect(() => {
@@ -979,7 +1048,7 @@ export default function ClientHomeScreen() {
         )}
 
         {/* Location / Map Section (moved above Follow us) */}
-        {businessProfile?.address && (
+        {displayAddress && (
           <View style={[styles.sectionContainer, { marginBottom: 24 }]}> 
             <View style={styles.sectionHeaderModernSimple}>
               <Text style={{ fontSize: 26, fontWeight: '700', color: '#1C1C1E', textAlign: 'center', letterSpacing: -0.3, marginBottom: 4 }}>How to get here</Text>
@@ -989,7 +1058,7 @@ export default function ClientHomeScreen() {
              <TouchableOpacity
                activeOpacity={0.9}
                onPress={async () => {
-                 const address = businessProfile?.address?.trim();
+                const address = displayAddress;
                  if (!address) return;
                  const appleUrl = `http://maps.apple.com/?q=${encodeURIComponent(address)}`;
                  const googleUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
@@ -1004,17 +1073,13 @@ export default function ClientHomeScreen() {
                }}
                style={styles.mapCard}
              >
-              {mapCoords ? (
+              {GOOGLE_STATIC_MAPS_KEY ? (
                 <Image
-                  source={{ uri: `https://staticmap.openstreetmap.de/staticmap.php?center=${mapCoords.lat},${mapCoords.lon}&zoom=15&size=600x600&maptype=mapnik&markers=${mapCoords.lat},${mapCoords.lon},lightblue1` }}
+                  source={{ uri: `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(displayAddress)}&zoom=16&scale=2&size=640x400&maptype=roadmap&markers=color:red|${encodeURIComponent(displayAddress)}&key=${GOOGLE_STATIC_MAPS_KEY}` }}
                   style={styles.mapImage}
                   resizeMode="cover"
-                />
-              ) : (GOOGLE_STATIC_MAPS_KEY ? (
-                <Image
-                  source={{ uri: `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(businessProfile?.address ?? '')}&zoom=15&size=600x600&markers=color:red|${encodeURIComponent(businessProfile?.address ?? '')}&key=${GOOGLE_STATIC_MAPS_KEY}` }}
-                  style={styles.mapImage}
-                  resizeMode="cover"
+                  onLoadStart={() => { try { console.log('[Maps] Loading Google Static Map for address:', displayAddress); } catch {} }}
+                  onError={handleGoogleError}
                 />
               ) : (
                 <LinearGradient
@@ -1023,7 +1088,7 @@ export default function ClientHomeScreen() {
                   end={{ x: 1, y: 1 }}
                   style={styles.mapImage}
                 />
-              ))}
+              )}
               <View style={styles.mapOverlay} />
               <View style={[styles.mapLogoCircle, { borderColor: colors.primary }]}>
                 <Image source={getCurrentClientLogo()} style={styles.mapLogoImage} resizeMode="cover" />
@@ -1032,7 +1097,7 @@ export default function ClientHomeScreen() {
                 <Text style={styles.mapAttributionText}>Maps</Text>
               </View>
               {/* Bottom dark bar with business name and address */}
-              {(businessProfile?.display_name || businessProfile?.address) && (
+              {(businessProfile?.display_name || displayAddress) && (
                 <LinearGradient
                   colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.45)", "rgba(0,0,0,0.75)"]}
                   start={{ x: 0, y: 0 }}
@@ -1042,8 +1107,8 @@ export default function ClientHomeScreen() {
                   {!!businessProfile?.display_name && (
                     <Text style={styles.mapBottomName}>{businessProfile.display_name}</Text>
                   )}
-                  {!!businessProfile?.address && (
-                    <Text style={styles.mapBottomAddress} numberOfLines={1}>{businessProfile.address}</Text>
+                  {!!displayAddress && (
+                    <Text style={styles.mapBottomAddress} numberOfLines={1}>{displayAddress}</Text>
                   )}
                 </LinearGradient>
               )}

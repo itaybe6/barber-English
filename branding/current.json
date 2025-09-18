@@ -24,7 +24,10 @@
           "CFBundleAllowMixedLocalizations": true,
           "NSPhotoLibraryUsageDescription": "The app needs access to photos to select and upload images to the gallery or profile.",
           "NSPhotoLibraryAddUsageDescription": "The app may save photos you've taken to your photo library.",
-          "NSCameraUsageDescription": "The app needs access to the camera to take photos for upload."
+          "NSCameraUsageDescription": "The app needs access to the camera to take photos for upload.",
+          "LSApplicationQueriesSchemes": [
+            "comgooglemaps"
+          ]
         },
         "jsEngine": "hermes"
       },
@@ -146,5 +149,5 @@
       "secondary": "System"
     }
   },
-  "timestamp": "2025-09-18T15:52:24.449Z"
+  "timestamp": "2025-09-18T17:10:41.475Z"
 }

@@ -432,7 +432,7 @@ export default function BusinessHoursScreen() {
           <View style={styles.breakHoursSection}>
             <View style={styles.sectionHeader}>
               <Ionicons name="cafe-outline" size={18} color={Colors.secondaryText} />
-              <Text style={styles.sectionTitle}>הפסקות</Text>
+              <Text style={styles.sectionTitle}>Breaks</Text>
             </View>
             <View style={{ gap: 12 }}>
               {tempBreaks.map((b, idx) => (
@@ -446,7 +446,7 @@ export default function BusinessHoursScreen() {
                       <Ionicons name="close" size={16} color={Colors.danger} />
                     </TouchableOpacity>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Text style={{ fontSize: 15, fontWeight: '700', color: Colors.text }}>Break #{idx + 1}</Text>
+                      <Text style={{ fontSize: 15, fontWeight: '700', color: Colors.text }}>Break  #{idx + 1}</Text>
                       <Ionicons name="cafe" size={14} color={Colors.secondaryText} />
                     </View>
                   </View>

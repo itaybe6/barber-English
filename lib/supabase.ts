@@ -159,6 +159,7 @@ export interface BusinessConstraint {
   start_time: string; // HH:MM or HH:MM:SS
   end_time: string;   // HH:MM or HH:MM:SS
   reason?: string | null;
+  user_id?: string | null;
   business_id: string;
   created_at: string;
   updated_at: string;
@@ -224,7 +225,10 @@ export interface BusinessProfile {
   image_on_page_2?: string;
   image_on_page_3?: string;
   login_img?: string; // Image URL for login page
-  break_minutes?: number;
+  // Legacy global break minutes (int column named "break" in DB)
+  break?: number;
+  // New per-barber break minutes map: { [userId: string]: number }
+  break_by_user?: Record<string, number>;
   min_cancellation_hours?: number;
   primary_color?: string; // Hex color code for primary UI color
   created_at: string;

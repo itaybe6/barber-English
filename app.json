@@ -22,7 +22,8 @@
         "CFBundleAllowMixedLocalizations": true,
         "NSPhotoLibraryUsageDescription": "האפליקציה זקוקה לגישה לתמונות כדי שתוכל לבחור ולהעלות תמונות לגלריה או לפרופיל.",
         "NSPhotoLibraryAddUsageDescription": "האפליקציה עשויה לשמור תמונות שצילמת לספריית התמונות שלך.",
-        "NSCameraUsageDescription": "האפליקציה זקוקה לגישה למצלמה כדי לצלם תמונות להעלאה."
+        "NSCameraUsageDescription": "האפליקציה זקוקה לגישה למצלמה כדי לצלם תמונות להעלאה.",
+        "NSCalendarsUsageDescription": "האפליקציה זקוקה לגישה ליומן כדי להוסיף תורים שנקבעו."
       },
       "jsEngine": "hermes"
     },

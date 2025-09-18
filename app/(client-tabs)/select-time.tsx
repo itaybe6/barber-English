@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, Linking, Platform } from 'react-native';
+import { BlurView } from 'expo-blur';
+import * as Calendar from 'expo-calendar';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { supabase, getBusinessId } from '@/lib/supabase';
 import { businessProfileApi } from '@/lib/api/businessProfile';
@@ -23,6 +26,7 @@ export default function SelectTimeScreen() {
     selectedDate?: string;
     serviceId?: string;
     barberId?: string;
+    breakMinutes?: string;
   }>();
 
   const serviceName = params.serviceName || '';
@@ -43,17 +47,27 @@ export default function SelectTimeScreen() {
   const [successMessage, setSuccessMessage] = useState('');
   const [globalBreakMinutes, setGlobalBreakMinutes] = useState<number>(0);
 
-  // Load global break (minutes) from business_profile on mount
+  // Load per-barber break (minutes): use param as initial hint, always fetch latest for the selected barber
   useEffect(() => {
     const loadBreak = async () => {
       try {
-        const p = await businessProfileApi.getProfile();
-        const br = Math.max(0, Math.min(180, Number((p as any)?.break ?? 0)));
-        setGlobalBreakMinutes(br);
+        // 1) Seed from navigation param, if present
+        if (typeof params.breakMinutes !== 'undefined') {
+          const hinted = Number(params.breakMinutes);
+          if (Number.isFinite(hinted)) {
+            const clamped = Math.max(0, Math.min(180, hinted));
+            setGlobalBreakMinutes((prev) => (prev !== clamped ? clamped : prev));
+          }
+        }
+        // 2) Always fetch authoritative value per barber and update if differs
+        const barberId = params.barberId as string | undefined;
+        const minutes = barberId ? await businessProfileApi.getBreakMinutesForUser(barberId) : 0;
+        const br = Math.max(0, Math.min(180, Number(minutes ?? 0)));
+        setGlobalBreakMinutes((prev) => (prev !== br ? br : prev));
       } catch {}
     };
     loadBreak();
-  }, []);
+  }, [params.barberId, params.breakMinutes]);
 
   const reloadTimes = async () => {
     if (!selectedDate) return;
@@ -62,12 +76,19 @@ export default function SelectTimeScreen() {
     try {
       // fetch existing appointments for that date
       const businessId = getBusinessId();
-      const { data: slots } = await supabase
+      let slotsQuery = supabase
         .from('appointments')
         .select('*')
         .eq('slot_date', selectedDate)
-        .eq('business_id', businessId)
-        .order('slot_time');
+        .eq('business_id', businessId);
+      if (params.barberId) {
+        const barber = params.barberId as string;
+        // Include legacy rows that used barber_id instead of user_id
+        slotsQuery = slotsQuery.or(`user_id.eq.${barber},barber_id.eq.${barber}`);
+      } else {
+        slotsQuery = slotsQuery.is('user_id', null);
+      }
+      const { data: slots } = await slotsQuery.order('slot_time');
 
       // Build busy intervals from booked appointments (respecting their duration)
       type Busy = { startMin: number; endMin: number };
@@ -87,13 +108,18 @@ export default function SelectTimeScreen() {
       // business hours for that date's day-of-week
       const dt = new Date(selectedDate);
       const dow = dt.getDay();
-      const { data: bhRow } = await supabase
+      let bhQuery = supabase
         .from('business_hours')
         .select('*')
         .eq('day_of_week', dow)
         .eq('is_active', true)
-        .eq('business_id', businessId)
-        .maybeSingle();
+        .eq('business_id', businessId);
+      if (params.barberId) {
+        bhQuery = bhQuery.eq('user_id', params.barberId as string);
+      } else {
+        bhQuery = bhQuery.is('user_id', null);
+      }
+      const { data: bhRow } = await bhQuery.maybeSingle();
 
       const toHHMM = (mins: number) => {
         const h = Math.floor(mins / 60);
@@ -121,12 +147,18 @@ export default function SelectTimeScreen() {
       }
 
       // Subtract date-specific constraints
-      const { data: constraintsRows } = await supabase
+      let constraintsQuery = supabase
         .from('business_constraints')
         .select('start_time, end_time')
         .eq('date', selectedDate)
         .eq('business_id', businessId)
         .order('start_time');
+      if (params.barberId) {
+        constraintsQuery = constraintsQuery.or(`user_id.is.null,user_id.eq.${params.barberId}`);
+      } else {
+        constraintsQuery = constraintsQuery.is('user_id', null);
+      }
+      const { data: constraintsRows } = await constraintsQuery;
 
       let windowsAfterConstraints = windows as Array<{ start: string; end: string }>;
       for (const c of (constraintsRows || []) as Array<{ start_time: string; end_time: string }>) {
@@ -541,12 +573,81 @@ export default function SelectTimeScreen() {
           onRequestClose={() => setShowSuccessModal(false)}
         >
           <View style={styles.modalOverlay}>
+            <BlurView style={StyleSheet.absoluteFill} intensity={24} tint="dark" />
             <View style={styles.modalContent}>
+              <View style={styles.modalIconWrapper}>
+                <Ionicons name="checkmark-circle" size={56} color="#34C759" />
+              </View>
               <Text style={styles.modalTitle}>Appointment Booked Successfully!</Text>
               <Text style={styles.modalMessage} numberOfLines={0} allowFontScaling={false}>
                 {successMessage}
               </Text>
+              <View style={styles.infoSection}>
+                <Text style={styles.infoTitle}>Your info</Text>
+                {!!serviceName && (
+                  <View style={styles.infoRow}>
+                    <Ionicons name="pricetag-outline" size={18} color="#8E8E93" style={styles.infoIcon} />
+                    <Text style={styles.infoText}><Text style={styles.infoLabel}>Service: </Text>{serviceName}</Text>
+                  </View>
+                )}
+                <View style={styles.infoRow}>
+                  <Ionicons name="calendar-outline" size={18} color="#8E8E93" style={styles.infoIcon} />
+                  <Text style={styles.infoText}><Text style={styles.infoLabel}>Date: </Text>{selectedDate ? new Date(selectedDate).toLocaleDateString() : '-'}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Ionicons name="time-outline" size={18} color="#8E8E93" style={styles.infoIcon} />
+                  <Text style={styles.infoText}><Text style={styles.infoLabel}>Time: </Text>{selectedTime || '-'}</Text>
+                </View>
+              </View>
               <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonCalendar]}
+                  onPress={async () => {
+                    try {
+                      const duration = durationMinutes;
+                      const timeStr = selectedTime || '00:00';
+                      const start = new Date(`${selectedDate}T${timeStr}:00`);
+                      const end = new Date(start.getTime() + duration * 60000);
+
+                      const perm = await Calendar.requestCalendarPermissionsAsync();
+                      if (perm.status !== 'granted') {
+                        Alert.alert('נדרש אישור', 'נדרש אישור גישה ליומן כדי להוסיף אירוע.');
+                        return;
+                      }
+
+                      let calendarId: string | undefined;
+                      if (Platform.OS === 'ios') {
+                        const defCal = await Calendar.getDefaultCalendarAsync();
+                        calendarId = defCal?.id;
+                      } else {
+                        const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+                        calendarId = cals.find((c: any) => (c.allowsModifications || c.accessLevel === Calendar.CalendarAccessLevel.OWNER))?.id || cals[0]?.id;
+                      }
+
+                      if (!calendarId) {
+                        Alert.alert('שגיאה', 'לא נמצא יומן שניתן לכתוב אליו.');
+                        return;
+                      }
+
+                      await Calendar.createEventAsync(calendarId, {
+                        title: serviceName || 'Appointment',
+                        startDate: start,
+                        endDate: end,
+                        notes: 'Booked via the app',
+                      });
+
+                      Alert.alert('נוסף', 'האירוע נוסף ליומן שלך.');
+                    } catch (e) {
+                      Alert.alert('שגיאה', 'לא ניתן להוסיף את האירוע ליומן.');
+                    }
+                  }}
+                  activeOpacity={0.9}
+                >
+                  <View style={styles.modalButtonRow}>
+                    <Ionicons name="calendar-outline" size={20} color="#FFFFFF" style={styles.modalButtonIcon} />
+                    <Text style={styles.modalButtonCalendarText}>Add to Calendar</Text>
+                  </View>
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.modalButtonReplace]}
                   onPress={() => {
@@ -822,6 +923,11 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderWidth: 1,
     borderColor: '#FF9500',
   },
+  modalButtonCalendar: {
+    backgroundColor: '#4285F4',
+    borderWidth: 1,
+    borderColor: '#4285F4',
+  },
   modalButtonBookAdditional: {
     backgroundColor: '#34C759',
     borderWidth: 1,
@@ -834,6 +940,56 @@ const createStyles = (colors: any) => StyleSheet.create({
     textAlign: 'center',
     letterSpacing: -0.2,
     writingDirection: 'ltr',
+  },
+  modalButtonCalendarText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+    letterSpacing: -0.2,
+    writingDirection: 'ltr',
+  },
+  modalButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalButtonIcon: {
+    marginRight: 8,
+  },
+  modalIconWrapper: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  infoSection: {
+    marginTop: 12,
+    marginBottom: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(118,118,128,0.08)',
+    borderRadius: 12,
+  },
+  infoTitle: {
+    fontSize: 13,
+    color: '#8E8E93',
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  infoIcon: {
+    marginRight: 8,
+  },
+  infoText: {
+    fontSize: 15,
+    color: '#1C1C1E',
+  },
+  infoLabel: {
+    color: '#3A3A3C',
+    fontWeight: '600',
   },
   modalButtonCancelText: {
     color: colors.primary,

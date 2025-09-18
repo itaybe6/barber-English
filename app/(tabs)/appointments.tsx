@@ -183,6 +183,12 @@ export default function AdminAppointmentsScreen() {
   useEffect(() => {
     const loadMonthMarks = async () => {
       try {
+        // If no logged-in user, do not show any marks
+        if (!user?.id) {
+          setMarkedDates(new Set());
+          return;
+        }
+
         const year = selectedDate.getFullYear();
         const month = selectedDate.getMonth();
         const firstOfMonth = new Date(year, month, 1);
@@ -201,6 +207,7 @@ export default function AdminAppointmentsScreen() {
           .from('appointments')
           .select('slot_date')
           .eq('is_available', false)
+          .eq('barber_id', user.id)
           .gte('slot_date', fmt(firstOfMonth))
           .lt('slot_date', fmt(firstOfNextMonth));
 
@@ -218,7 +225,7 @@ export default function AdminAppointmentsScreen() {
       }
     };
     loadMonthMarks();
-  }, [selectedDate.getFullYear(), selectedDate.getMonth()]);
+  }, [selectedDate.getFullYear(), selectedDate.getMonth(), user?.id]);
 
   // Scroll to morning by default for convenience
   useEffect(() => {

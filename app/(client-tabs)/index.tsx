@@ -659,7 +659,7 @@ export default function ClientHomeScreen() {
           <View style={styles.heroTextContainer}>
             <Text style={styles.heroWelcome}>Welcome</Text>
             <Text style={styles.heroTitle}>{user?.name || 'Valued Client'}</Text>
-            <Text style={styles.heroSubtitle} numberOfLines={2} ellipsizeMode="tail">
+            <Text style={styles.heroSubtitle}>
               Discover the art of perfect grooming.{'\n'}
               Where tradition meets modern style, and every visit{'\n'}
               becomes an experience you'll remember.
@@ -1148,7 +1148,7 @@ const styles = StyleSheet.create({
   },
   fullScreenHeroContent: {
     position: 'absolute',
-    bottom: 80,
+    bottom: 110,
     left: 0,
     right: 0,
     paddingHorizontal: 24,

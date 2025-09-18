@@ -30,11 +30,11 @@ export const businessConstraintsApi = {
     return (data || []) as BusinessConstraint[];
   },
 
-  async createConstraints(entries: Array<Omit<BusinessConstraint, 'id' | 'created_at' | 'updated_at'>>): Promise<number> {
+  async createConstraints(entries: Array<Omit<BusinessConstraint, 'id' | 'created_at' | 'updated_at'>>, userId?: string | null): Promise<number> {
     if (!entries || entries.length === 0) return 0;
     const businessId = getBusinessId();
     
-    const entriesWithBusinessId = entries.map(entry => ({ ...entry, business_id: businessId }));
+    const entriesWithBusinessId = entries.map(entry => ({ ...entry, business_id: businessId, user_id: userId || null }));
     
     const { data, error } = await supabase
       .from('business_constraints')

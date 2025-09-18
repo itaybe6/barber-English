@@ -199,16 +199,21 @@ export default function SettingsScreen() {
     try {
       const p = await businessProfileApi.getProfile();
       if (p) {
+        const isBadLocalAssetRef = (val: any): boolean => {
+          const s = String(val || '');
+          return s.includes('unstable_path=') || /(^\.?\/?assets\/images\/default)/i.test(s);
+        };
+
         setProfile(p);
         setProfileDisplayName(p?.display_name || '');
         setProfileAddress(p?.address || '');
         setProfileInstagram(p?.instagram_url || '');
         setProfileFacebook(p?.facebook_url || '');
         setProfileTiktok((p as any)?.tiktok_url || '');
-        setProfileImageOnPage1((p as any)?.image_on_page_1 || '');
-        setProfileImageOnPage2((p as any)?.image_on_page_2 || '');
-        setProfileImageOnPage3((p as any)?.image_on_page_3 || '');
-        setProfileLoginImg((p as any)?.login_img || '');
+        setProfileImageOnPage1(isBadLocalAssetRef((p as any)?.image_on_page_1) ? '' : ((p as any)?.image_on_page_1 || ''));
+        setProfileImageOnPage2(isBadLocalAssetRef((p as any)?.image_on_page_2) ? '' : ((p as any)?.image_on_page_2 || ''));
+        setProfileImageOnPage3(isBadLocalAssetRef((p as any)?.image_on_page_3) ? '' : ((p as any)?.image_on_page_3 || ''));
+        setProfileLoginImg(isBadLocalAssetRef((p as any)?.login_img) ? '' : ((p as any)?.login_img || ''));
         setProfileMinCancellationHours(p?.min_cancellation_hours || 24);
         
         // Preload images for better performance
@@ -230,9 +235,11 @@ export default function SettingsScreen() {
       profile?.login_img
     ].filter(Boolean);
     
-    images.forEach(imageUrl => {
-      if (imageUrl) {
-        Image.prefetch(imageUrl).catch(error => {
+    images.forEach((imageUrl) => {
+      // Only prefetch remote or file-based URLs. Avoid relative asset paths and Expo dev asset URLs
+      const isRemote = typeof imageUrl === 'string' && /^(https?:|data:|file:)/.test(imageUrl) && !String(imageUrl).includes('unstable_path=');
+      if (isRemote) {
+        Image.prefetch(imageUrl).catch((error) => {
           console.log('Failed to prefetch image:', error);
         });
       }
@@ -790,6 +797,22 @@ export default function SettingsScreen() {
       setIsImageLoading(false);
       setImageLoadError(false);
       setShowImagePreviewModal(true);
+      return;
+    }
+    
+    // If the stored image is a non-remote relative asset path (e.g. './assets/...'),
+    // skip preview and open the picker directly to let the user choose a valid image.
+    const currentUrl = imageType === 'page1'
+      ? profileImageOnPage1
+      : imageType === 'page2'
+        ? profileImageOnPage2
+        : imageType === 'page3'
+          ? profileImageOnPage3
+          : profileLoginImg;
+    const isRemote = typeof currentUrl === 'string' && /^(https?:|data:|file:)/.test(currentUrl) && !String(currentUrl).includes('unstable_path=');
+    if (!isRemote) {
+      setShowImagePreviewModal(false);
+      handlePickBusinessImage(imageType);
       return;
     }
     

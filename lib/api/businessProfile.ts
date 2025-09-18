@@ -44,7 +44,7 @@ export const businessProfileApi = {
         image_on_page_2: null,
         image_on_page_3: null,
         login_img: null,
-        break_minutes: 0,
+        break_by_user: {},
         min_cancellation_hours: 24, // Default 24 hours
         primary_color: '#000000', // Default black color
       };
@@ -86,7 +86,7 @@ export const businessProfileApi = {
         image_on_page_2: (updates as any).image_on_page_2,
         image_on_page_3: (updates as any).image_on_page_3,
         login_img: (updates as any).login_img,
-        break: (updates as any).break,
+        break_by_user: (updates as any).break_by_user,
         min_cancellation_hours: updates.min_cancellation_hours,
         primary_color: updates.primary_color,
           })
@@ -115,7 +115,7 @@ export const businessProfileApi = {
           image_on_page_2: (updates as any).image_on_page_2,
           image_on_page_3: (updates as any).image_on_page_3,
           login_img: (updates as any).login_img,
-          break: (updates as any).break,
+          break_by_user: (updates as any).break_by_user,
           min_cancellation_hours: updates.min_cancellation_hours,
           primary_color: updates.primary_color || '#000000',
         })
@@ -130,6 +130,61 @@ export const businessProfileApi = {
     } catch (err) {
       console.error('Error in upsertProfile:', err);
       return null;
+    }
+  },
+  
+  async getBreakMinutesForUser(userId?: string | null): Promise<number> {
+    try {
+      const businessId = getBusinessId();
+      if (userId) {
+        const { data, error } = await supabase.rpc('get_break_minutes_for_user', {
+          p_business_id: businessId,
+          p_user_id: userId,
+        });
+        if (error) {
+          console.error('Error fetching per-user break minutes (RPC):', error);
+          // fallback to profile read
+        } else if (typeof data === 'number') {
+          return Math.max(0, Math.min(180, data));
+        }
+      }
+
+      // Fallback: read profile and extract from JSON
+      const profile = await this.getProfile();
+      const minutes = (profile as any)?.break_by_user && userId
+        ? Number((profile as any).break_by_user?.[userId] ?? 0)
+        : 0;
+      return Math.max(0, Math.min(180, minutes));
+    } catch (e) {
+      console.error('Error in getBreakMinutesForUser:', e);
+      return 0;
+    }
+  },
+
+  async setBreakMinutesForUser(userId: string, minutes: number): Promise<void> {
+    const clamped = Math.max(0, Math.min(180, Math.floor(Number(minutes) || 0)));
+    const businessId = getBusinessId();
+    try {
+      // Prefer server-side JSON merge via RPC for concurrency safety
+      const { error } = await supabase.rpc('set_break_minutes_for_user', {
+        p_business_id: businessId,
+        p_user_id: userId,
+        p_minutes: clamped,
+      });
+      if (error) {
+        console.error('Error setting per-user break minutes (RPC):', error);
+        // Fallback: read-modify-write
+        const profile = await this.getProfile();
+        const currentMap = ((profile as any)?.break_by_user ?? {}) as Record<string, number>;
+        const nextMap = { ...currentMap, [userId]: clamped };
+        await supabase
+          .from('business_profile')
+          .update({ break_by_user: nextMap as any })
+          .eq('id', businessId);
+      }
+    } catch (e) {
+      console.error('Error in setBreakMinutesForUser:', e);
+      throw e;
     }
   },
 };

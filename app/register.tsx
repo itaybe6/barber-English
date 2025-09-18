@@ -125,7 +125,7 @@ export default function RegisterScreen() {
         .single();
 
       if (existingUser) {
-        Alert.alert('Error', 'A user with this phone number already exists');
+        Alert.alert('Phone number already exists', 'This phone number is already registered in the system. Please use a different phone number or sign in to your existing account.');
         return;
       }
 
@@ -163,8 +163,8 @@ export default function RegisterScreen() {
   };
 
   const getErrorMessage = (error: string) => {
-    if (error.includes('User already registered')) {
-      return 'This user is already registered';
+    if (error.includes('User already registered') || error.includes('phone number already exists')) {
+      return 'This phone number is already registered in the system';
     }
     if (error.includes('Invalid email')) {
       return 'Invalid email address';
@@ -172,7 +172,7 @@ export default function RegisterScreen() {
     if (error.includes('Password should be at least 6 characters')) {
       return 'Password must be at least 6 characters';
     }
-    return 'There was an error during registration. Please try again.';
+    return 'An error occurred during registration. Please try again.';
   };
 
   return (

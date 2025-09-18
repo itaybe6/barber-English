@@ -187,16 +187,18 @@ export default function BusinessHoursScreen() {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        const [hoursData, profile] = await Promise.all([
+        const [hoursData, profile, perUserBreak] = await Promise.all([
           // If user is admin (barber), get their specific hours, otherwise get general hours
           user?.user_type === 'admin' && user?.id 
             ? businessHoursApi.getBusinessHoursByUser(user.id)
             : businessHoursApi.getAllBusinessHours().then(data => data.filter(h => !h.user_id)),
           businessProfileApi.getProfile(),
+          user?.user_type === 'admin' && user?.id ? businessProfileApi.getBreakMinutesForUser(user.id) : Promise.resolve(0),
         ]);
         
         setBusinessHours(hoursData);
-        setGlobalBreakMinutes(Math.max(0, Math.min(180, Number((profile as any)?.break ?? 0))));
+        // Prefer per-barber setting; fallback to 0 if none
+        setGlobalBreakMinutes(Math.max(0, Math.min(180, Number(perUserBreak ?? 0))));
       } catch (err) {
         setError('Failed to fetch business hours');
         console.error(err);
@@ -641,7 +643,9 @@ export default function BusinessHoursScreen() {
                     try {
                       setIsSavingGlobalBreak(true);
                       setGlobalBreakMinutes(m);
-                      await businessProfileApi.upsertProfile({ break: m } as any);
+                      if (user?.user_type === 'admin' && user?.id) {
+                        await businessProfileApi.setBreakMinutesForUser(user.id, m);
+                      }
                       setIsBreakPickerOpen(false);
                     } catch (e) {
                       Alert.alert('שגיאה', 'נכשל בשמירת ההפסקה. נסו שוב.');

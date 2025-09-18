@@ -4,6 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
 import { businessConstraintsApi } from '@/lib/api/businessConstraints';
+import { useAuthStore } from '@/stores/authStore';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { Calendar as RNCalendar, LocaleConfig } from 'react-native-calendars';
 
@@ -49,6 +50,7 @@ const formatISOToMMDDYYYY = (iso: string) => {
 export default function BusinessConstraintsModal({ visible, onClose }: BusinessConstraintsModalProps) {
   const insets = useSafeAreaInsets();
   const { colors: businessColors } = useBusinessColors();
+  const { user } = useAuthStore();
   const today = useMemo(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -171,7 +173,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
       }
 
       if (entries.length === 0) return;
-      await businessConstraintsApi.createConstraints(entries as any);
+      await businessConstraintsApi.createConstraints(entries as any, (user as any)?.id || null);
       const start = toISODate(today);
       const end = toISODate(addDays(today, 365));
       const rows = await businessConstraintsApi.getConstraintsInRange(start, end);

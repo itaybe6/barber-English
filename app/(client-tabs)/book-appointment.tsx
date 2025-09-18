@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Image, Modal, RefreshControl } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Image, Modal, RefreshControl, Linking, Platform } from 'react-native';
+import { BlurView } from 'expo-blur';
+import * as Calendar from 'expo-calendar';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
+
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { Service } from '@/lib/supabase';
 import { servicesApi } from '@/lib/api/services';
@@ -402,17 +405,25 @@ export default function BookAppointment() {
       return () => {};
     }, [])
   );
-  // Load global break (minutes) from business_profile on mount
+  // Load per-barber break (minutes) from business_profile.break_by_user whenever barber changes
   useEffect(() => {
+    let isMounted = true;
     const loadBreak = async () => {
       try {
-        const p = await businessProfileApi.getProfile();
-        const br = Math.max(0, Math.min(180, Number((p as any)?.break ?? 0)));
-        setGlobalBreakMinutes(br);
-      } catch {}
+        const minutes = selectedBarber?.id
+          ? await businessProfileApi.getBreakMinutesForUser(selectedBarber.id)
+          : 0;
+        if (isMounted) {
+          const br = Math.max(0, Math.min(180, Number(minutes ?? 0)));
+          setGlobalBreakMinutes(br);
+        }
+      } catch {
+        if (isMounted) setGlobalBreakMinutes(0);
+      }
     };
     loadBreak();
-  }, []);
+    return () => { isMounted = false; };
+  }, [selectedBarber?.id]);
 
 
 
@@ -454,11 +465,13 @@ export default function BookAppointment() {
         .sort((a, b) => a.startMin - b.startMin);
     })();
 
-    // Business hour windows for the selected day of week
-    const dayWindows = (globalThis as any).__bh_windows__?.[dow] as Array<{ start: string; end: string }> | undefined;
-    const windows = (dayWindows && dayWindows.length > 0)
-      ? dayWindows
-      : [{ start: '09:00', end: '17:00' }];
+    // Business hour windows cached per barber and date
+    const cacheKey = `${selectedBarber?.id || 'global'}:${dateStr}`;
+    const windows = (globalThis as any).__bh_windows__?.[cacheKey] as Array<{ start: string; end: string }> | undefined;
+    if (!windows || windows.length === 0) {
+      // Avoid showing misleading availability until windows are fetched for this barber and date
+      return [];
+    }
 
     // Robust time helpers (support HH:MM or HH:MM:SS; compare numerically; never wrap over midnight)
     const toMinutes = (time: string) => {
@@ -676,12 +689,18 @@ export default function BookAppointment() {
           }
           // Subtract date-specific constraints
           try {
-            const { data: constraintsRows } = await supabase
+            let constraintsQuery = supabase
               .from('business_constraints')
               .select('start_time, end_time')
               .eq('date', dateString)
               .eq('business_id', businessId)
               .order('start_time');
+            if (selectedBarber?.id) {
+              constraintsQuery = constraintsQuery.or(`user_id.is.null,user_id.eq.${selectedBarber.id}`);
+            } else {
+              constraintsQuery = constraintsQuery.is('user_id', null);
+            }
+            const { data: constraintsRows } = await constraintsQuery;
             for (const c of (constraintsRows || []) as Array<{ start_time: string; end_time: string }>) {
               const next: Window[] = [];
               for (const w of windows) {
@@ -693,7 +712,8 @@ export default function BookAppointment() {
             }
           } catch {}
           (globalThis as any).__bh_windows__ = (globalThis as any).__bh_windows__ || {};
-          (globalThis as any).__bh_windows__[dayOfWeek] = windows;
+          const cacheKey = `${selectedBarber?.id || 'global'}:${dateString}`;
+          (globalThis as any).__bh_windows__[cacheKey] = windows;
         }
         if (!isStale) {
           setAvailableSlots(slots);
@@ -726,6 +746,19 @@ export default function BookAppointment() {
       setShowReplaceModal(false);
       setExistingAppointment(null);
       setDayAvailability({});
+      // Clear cached windows for previous barber to prevent stale constraints
+      try {
+        const cache = (globalThis as any).__bh_windows__ as Record<string, any> | undefined;
+        if (cache) {
+          const newCache: Record<string, any> = {};
+          const prefix = `${selectedBarber.id || 'global'}:`; // keep only current barber keys if any exist
+          // Actually, safest: clear all and let effects repopulate
+          for (const k of Object.keys(cache)) {
+            // no-op to drop all
+          }
+          (globalThis as any).__bh_windows__ = newCache;
+        }
+      } catch {}
     }
   }, [selectedBarber?.id]);
 
@@ -772,6 +805,8 @@ export default function BookAppointment() {
       // Auto-select first barber if only one exists
       if (list.length === 1) {
         setSelectedBarber(list[0]);
+        // Skip the barber selection step and go straight to service selection
+        setCurrentStep(2);
       }
     } catch (e) {
       setAvailableBarbers([]);
@@ -859,12 +894,18 @@ export default function BookAppointment() {
           }
           // Subtract date-specific constraints
           try {
-            const { data: constraintsRows } = await supabase
+            let constraintsQuery = supabase
               .from('business_constraints')
               .select('start_time, end_time')
               .eq('date', dateStr)
               .eq('business_id', businessId)
               .order('start_time');
+            if (selectedBarber?.id) {
+              constraintsQuery = constraintsQuery.or(`user_id.is.null,user_id.eq.${selectedBarber.id}`);
+            } else {
+              constraintsQuery = constraintsQuery.is('user_id', null);
+            }
+            const { data: constraintsRows } = await constraintsQuery;
             for (const c of (constraintsRows || []) as Array<{ start_time: string; end_time: string }>) {
               const next: Window[] = [];
               for (const w of windows) {
@@ -875,6 +916,10 @@ export default function BookAppointment() {
               windows = next.filter(w => w.start < w.end);
             }
           } catch {}
+          // Cache windows per barber & date for quick reuse
+          (globalThis as any).__bh_windows__ = (globalThis as any).__bh_windows__ || {};
+          const cacheKey = `${selectedBarber?.id || 'global'}:${dateStr}`;
+          (globalThis as any).__bh_windows__[cacheKey] = windows;
 
           const normalized = windows
             .map(w => ({ startMin: toMinutes(w.start), endMin: toMinutes(w.end) }))
@@ -940,7 +985,7 @@ export default function BookAppointment() {
     };
     prefetch();
     return () => { isStale = true; };
-  }, [currentStep, selectedService, selectedBarber, refreshTick]);
+  }, [currentStep, selectedService, selectedBarber, refreshTick, globalBreakMinutes]);
 
   // Explicitly refresh slots for the currently selected day (used by pull-to-refresh)
   const refreshSelectedDaySlots = async () => {
@@ -988,12 +1033,18 @@ export default function BookAppointment() {
         }
         // Subtract date-specific constraints as well
         try {
-          const { data: constraintsRows } = await supabase
+          let constraintsQuery = supabase
             .from('business_constraints')
             .select('start_time, end_time')
             .eq('date', dateString)
             .eq('business_id', businessId)
             .order('start_time');
+          if (selectedBarber?.id) {
+            constraintsQuery = constraintsQuery.or(`user_id.is.null,user_id.eq.${selectedBarber.id}`);
+          } else {
+            constraintsQuery = constraintsQuery.is('user_id', null);
+          }
+          const { data: constraintsRows } = await constraintsQuery;
           for (const c of (constraintsRows || []) as Array<{ start_time: string; end_time: string }>) {
             const next: Window[] = [];
             for (const w of windows) {
@@ -1005,7 +1056,8 @@ export default function BookAppointment() {
           }
         } catch {}
         (globalThis as any).__bh_windows__ = (globalThis as any).__bh_windows__ || {};
-        (globalThis as any).__bh_windows__[dayOfWeek] = windows;
+        const cacheKey = `${selectedBarber?.id || 'global'}:${dateString}`;
+        (globalThis as any).__bh_windows__[cacheKey] = windows;
       }
       setAvailableSlots(slots);
     } catch (error) {
@@ -1043,12 +1095,18 @@ export default function BookAppointment() {
     try {
       const businessId = getBusinessId();
       
-      const { data: constraintsRows } = await supabase
+      let constraintsQuery = supabase
         .from('business_constraints')
         .select('start_time, end_time')
         .eq('date', dateString)
         .eq('business_id', businessId)
         .order('start_time');
+      if (selectedBarber?.id) {
+        constraintsQuery = constraintsQuery.or(`user_id.is.null,user_id.eq.${selectedBarber.id}`);
+      } else {
+        constraintsQuery = constraintsQuery.is('user_id', null);
+      }
+      const { data: constraintsRows } = await constraintsQuery;
       const withinConstraint = (t: string) => {
         return (constraintsRows || []).some((c: any) => {
           const s = String(c.start_time).slice(0,5);
@@ -1255,7 +1313,6 @@ export default function BookAppointment() {
                     </View>
                     <View style={styles.barberListItemContent}>
                       <Text style={styles.barberListItemName}>{barber.name}</Text>
-                      <Text style={styles.barberListItemRole}>Professional Barber</Text>
                     </View>
                     {selectedBarber?.id === barber.id && (
                       <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
@@ -1472,6 +1529,7 @@ export default function BookAppointment() {
                     selectedDate: dateStr,
                     serviceId: selectedService?.id || '',
                     barberId: selectedBarber?.id || '',
+                    breakMinutes: String(globalBreakMinutes ?? 0),
                   } as any
                 });
               }}
@@ -1667,12 +1725,82 @@ export default function BookAppointment() {
           onRequestClose={() => setShowSuccessModal(false)}
         >
           <View style={styles.modalOverlay}>
+            <BlurView style={StyleSheet.absoluteFill} intensity={24} tint="dark" />
             <View style={styles.modalContent}>
+              <View style={styles.modalIconWrapper}>
+                <Ionicons name="checkmark-circle" size={56} color="#34C759" />
+              </View>
               <Text style={styles.modalTitle}>Appointment Successfully Booked!</Text>
               <Text style={styles.modalMessage} numberOfLines={0} allowFontScaling={false}>
                 {successMessage}
               </Text>
+              <View style={styles.modalInfoSection}>
+                <Text style={styles.modalInfoTitle}>Your info</Text>
+                {!!selectedService?.name && (
+                  <View style={styles.modalInfoRow}>
+                    <Ionicons name="pricetag-outline" size={18} color="#8E8E93" style={styles.modalInfoIcon} />
+                    <Text style={styles.modalInfoText}><Text style={styles.modalInfoLabel}>Service: </Text>{selectedService?.name}</Text>
+                  </View>
+                )}
+                <View style={styles.modalInfoRow}>
+                  <Ionicons name="calendar-outline" size={18} color="#8E8E93" style={styles.modalInfoIcon} />
+                  <Text style={styles.modalInfoText}><Text style={styles.modalInfoLabel}>Date: </Text>{selectedDate ? new Date(selectedDate).toLocaleDateString() : '-'}</Text>
+                </View>
+                <View style={styles.modalInfoRow}>
+                  <Ionicons name="time-outline" size={18} color="#8E8E93" style={styles.modalInfoIcon} />
+                  <Text style={styles.modalInfoText}><Text style={styles.modalInfoLabel}>Time: </Text>{selectedTime || '-'}</Text>
+                </View>
+              </View>
               <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonCalendar]}
+                  onPress={async () => {
+                    try {
+                      const duration = selectedService?.duration_minutes ?? 60;
+                      const dateStr = selectedDate?.toISOString().split('T')[0] || '';
+                      const timeStr = selectedTime || '00:00';
+                      const start = new Date(`${dateStr}T${timeStr}:00`);
+                      const end = new Date(start.getTime() + duration * 60000);
+
+                      const perm = await Calendar.requestCalendarPermissionsAsync();
+                      if (perm.status !== 'granted') {
+                        Alert.alert('נדרש אישור', 'נדרש אישור גישה ליומן כדי להוסיף אירוע.');
+                        return;
+                      }
+
+                      let calendarId: string | undefined;
+                      if (Platform.OS === 'ios') {
+                        const defCal = await Calendar.getDefaultCalendarAsync();
+                        calendarId = defCal?.id;
+                      } else {
+                        const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+                        calendarId = cals.find((c: any) => (c.allowsModifications || c.accessLevel === Calendar.CalendarAccessLevel.OWNER))?.id || cals[0]?.id;
+                      }
+
+                      if (!calendarId) {
+                        Alert.alert('שגיאה', 'לא נמצא יומן שניתן לכתוב אליו.');
+                        return;
+                      }
+
+                      await Calendar.createEventAsync(calendarId, {
+                        title: selectedService?.name || 'Appointment',
+                        startDate: start,
+                        endDate: end,
+                        notes: 'Booked via the app',
+                      });
+
+                      Alert.alert('נוסף', 'האירוע נוסף ליומן שלך.');
+                    } catch (e) {
+                      Alert.alert('שגיאה', 'לא ניתן להוסיף את האירוע ליומן.');
+                    }
+                  }}
+                  activeOpacity={0.9}
+                >
+                  <View style={styles.modalButtonRow}>
+                    <Ionicons name="calendar-outline" size={20} color="#FFFFFF" style={styles.modalButtonIcon} />
+                    <Text style={styles.modalButtonCalendarText}>Add to Calendar</Text>
+                  </View>
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.modalButtonConfirm]}
                   onPress={() => {
@@ -2366,6 +2494,11 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.primary,
   },
+  modalButtonCalendar: {
+    backgroundColor: '#4285F4',
+    borderWidth: 1,
+    borderColor: '#4285F4',
+  },
   modalButtonReplace: {
     backgroundColor: '#FF9500',
     borderWidth: 1,
@@ -2382,6 +2515,55 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
     letterSpacing: -0.2,
+  },
+  modalButtonCalendarText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+    textAlign: 'center',
+    letterSpacing: -0.2,
+  },
+  modalButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalButtonIcon: {
+    marginRight: 8,
+  },
+  modalIconWrapper: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modalInfoSection: {
+    marginTop: 12,
+    marginBottom: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(118,118,128,0.08)',
+    borderRadius: 12,
+  },
+  modalInfoTitle: {
+    fontSize: 13,
+    color: '#8E8E93',
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  modalInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  modalInfoIcon: {
+    marginRight: 8,
+  },
+  modalInfoText: {
+    fontSize: 15,
+    color: '#1C1C1E',
+  },
+  modalInfoLabel: {
+    color: '#3A3A3C',
+    fontWeight: '600',
   },
   modalButtonCancelText: {
     color: colors.primary,

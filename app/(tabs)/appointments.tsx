@@ -754,6 +754,7 @@ const styles = StyleSheet.create({
   },
   appointmentTimeInline: {
     marginBottom: 0,
+    marginRight: 8,
   },
   appointmentTitle: {
     fontSize: 14,

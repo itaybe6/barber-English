@@ -404,9 +404,8 @@ export default function SelectTimeScreen() {
       }
 
       if (success) {
-        const policyNote = '\n\nPlease note: You cannot cancel the appointment 48 hours before the appointment time. Cancellation during this period will be charged for the appointment.';
-        const message = `Your appointment for "${serviceName}" has been scheduled for ${selectedDate} at ${formatTime12Hour(selectedTime)}${policyNote}`;
-        setSuccessMessage(message);
+        const header = `Your appointment for\n"${serviceName}"`;
+        setSuccessMessage(header);
         setShowSuccessModal(true);
         try {
           const title = 'New appointment booked';
@@ -529,16 +528,16 @@ export default function SelectTimeScreen() {
                 {'\n'}
                 Would you like to replace the existing appointment with the new one at {selectedTime ? formatTime12Hour(selectedTime) : 'unknown time'} or book an additional appointment?
               </Text>
-              <View style={styles.modalButtons}>
+              <View style={[styles.modalButtons, styles.modalButtonsStacked]}>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonCancel]}
+                  style={[styles.modalButton, styles.modalButtonStacked, styles.modalButtonCancel]}
                   onPress={() => setShowReplaceModal(false)}
                   activeOpacity={0.9}
                 >
                   <Text style={styles.modalButtonCancelText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonReplace]}
+                  style={[styles.modalButton, styles.modalButtonStacked, styles.modalButtonReplace]}
                   onPress={async () => {
                     setShowReplaceModal(false);
                     if (existingAppointment?.id) {
@@ -555,7 +554,7 @@ export default function SelectTimeScreen() {
                   <Text style={styles.modalButtonText}>Replace Appointment</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonBookAdditional]}
+                  style={[styles.modalButton, styles.modalButtonStacked, styles.modalButtonBookAdditional]}
                   onPress={async () => {
                     setShowReplaceModal(false);
                     await handleBook();
@@ -581,32 +580,24 @@ export default function SelectTimeScreen() {
             <BlurView style={StyleSheet.absoluteFill} intensity={24} tint="dark" />
             <View style={styles.modalContent}>
               <View style={styles.modalIconWrapper}>
-                <Ionicons name="checkmark-circle" size={56} color="#34C759" />
+                <View style={styles.successIconCircle}>
+                  <Ionicons name="checkmark" size={32} color="#FFFFFF" />
+                </View>
               </View>
               <Text style={styles.modalTitle}>Appointment Booked Successfully!</Text>
               <Text style={styles.modalMessage} numberOfLines={0} allowFontScaling={false}>
                 {successMessage}
               </Text>
-              <View style={styles.infoSection}>
-                <Text style={styles.infoTitle}>Your info</Text>
-                {!!serviceName && (
-                  <View style={styles.infoRow}>
-                    <Ionicons name="pricetag-outline" size={18} color="#8E8E93" style={styles.infoIcon} />
-                    <Text style={styles.infoText}><Text style={styles.infoLabel}>Service: </Text>{serviceName}</Text>
-                  </View>
-                )}
-                <View style={styles.infoRow}>
-                  <Ionicons name="calendar-outline" size={18} color="#8E8E93" style={styles.infoIcon} />
-                  <Text style={styles.infoText}><Text style={styles.infoLabel}>Date: </Text>{selectedDate ? new Date(selectedDate).toLocaleDateString() : '-'}</Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Ionicons name="time-outline" size={18} color="#8E8E93" style={styles.infoIcon} />
-                  <Text style={styles.infoText}><Text style={styles.infoLabel}>Time: </Text>{selectedTime || '-'}</Text>
-                </View>
+              <View style={styles.scheduleBlock}>
+                <Text style={styles.scheduleLine}>has been scheduled for</Text>
+                <Text style={styles.scheduleDate}>
+                  {selectedDate ? new Date(selectedDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : ''}
+                </Text>
+                <Text style={styles.scheduleTime}>{selectedTime ? formatTime12Hour(selectedTime) : ''}</Text>
               </View>
-              <View style={styles.modalButtons}>
+              <View style={[styles.modalButtons, styles.modalButtonsStacked]}>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonCalendar]}
+                  style={[styles.modalButton, styles.modalButtonStacked, styles.modalButtonSecondary]}
                   onPress={async () => {
                     try {
                       const duration = durationMinutes;
@@ -649,12 +640,12 @@ export default function SelectTimeScreen() {
                   activeOpacity={0.9}
                 >
                   <View style={styles.modalButtonRow}>
-                    <Ionicons name="calendar-outline" size={20} color="#FFFFFF" style={styles.modalButtonIcon} />
-                    <Text style={styles.modalButtonCalendarText}>Add to Calendar</Text>
+                    <Ionicons name="calendar-outline" size={20} color={colors.primary} style={styles.modalButtonIcon} />
+                    <Text style={styles.modalButtonSecondaryText}>Add to Calendar</Text>
                   </View>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonReplace]}
+                  style={[styles.modalButton, styles.modalButtonStacked, styles.modalButtonPrimary]}
                   onPress={() => {
                     setShowSuccessModal(false);
                     try {
@@ -881,9 +872,9 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.2)',
   },
   modalTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '800',
-    color: '#000000',
+    color: '#0F172A',
     marginBottom: 12,
     textAlign: 'center',
     letterSpacing: -0.4,
@@ -891,7 +882,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   modalMessage: {
     fontSize: 16,
-    color: '#1C1C1E',
+    color: '#334155',
     textAlign: 'center',
     marginBottom: 22,
     lineHeight: 24,
@@ -899,11 +890,44 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontWeight: '500',
     writingDirection: 'ltr',
   },
+  scheduleBlock: {
+    width: '100%',
+    backgroundColor: 'rgba(118,118,128,0.12)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  scheduleLine: {
+    fontSize: 14,
+    color: '#475569',
+    marginBottom: 6,
+  },
+  scheduleDate: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  scheduleTime: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '100%',
     gap: 12,
+  },
+  // Stacked layout for long labels on small screens
+  modalButtonsStacked: {
+    flexDirection: 'column',
+    gap: 12,
+    justifyContent: 'flex-start',
+    alignItems: 'stretch',
+    width: '100%',
   },
   modalButton: {
     flex: 1,
@@ -917,6 +941,11 @@ const createStyles = (colors: any) => StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 6,
+  },
+  modalButtonStacked: {
+    width: '100%',
+    flex: 0,
+    minHeight: 50,
   },
   modalButtonCancel: {
     backgroundColor: '#F2F2F7',
@@ -933,6 +962,16 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderWidth: 1,
     borderColor: '#4285F4',
   },
+  modalButtonPrimary: {
+    backgroundColor: colors.primary,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  modalButtonSecondary: {
+    backgroundColor: 'rgba(0,122,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,122,255,0.12)',
+  },
   modalButtonBookAdditional: {
     backgroundColor: '#34C759',
     borderWidth: 1,
@@ -946,10 +985,10 @@ const createStyles = (colors: any) => StyleSheet.create({
     letterSpacing: -0.2,
     writingDirection: 'ltr',
   },
-  modalButtonCalendarText: {
-    color: '#FFFFFF',
+  modalButtonSecondaryText: {
+    color: colors.primary,
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
     textAlign: 'center',
     letterSpacing: -0.2,
     writingDirection: 'ltr',
@@ -965,6 +1004,19 @@ const createStyles = (colors: any) => StyleSheet.create({
   modalIconWrapper: {
     alignItems: 'center',
     marginBottom: 8,
+  },
+  successIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#22C55E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#22C55E',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 14,
+    elevation: 8,
   },
   infoSection: {
     marginTop: 12,
@@ -997,7 +1049,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontWeight: '600',
   },
   modalButtonCancelText: {
-    color: colors.primary,
+    color: '#111111',
     fontSize: 16,
     fontWeight: '700',
     textAlign: 'center',

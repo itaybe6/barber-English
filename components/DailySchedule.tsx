@@ -175,7 +175,8 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
                   )}
                 </View>
                 <Text style={styles.bigTimeText}>
-                  {formatTimeToHoursMinutes(nextAppointment.slot_time)}
+                  {formatTimeToHoursMinutes(nextAppointment.slot_time).split(' ')[0]}
+                  <Text style={styles.periodText}> {formatTimeToHoursMinutes(nextAppointment.slot_time).split(' ')[1]}</Text>
                 </Text>
               </View>
             </>
@@ -338,6 +339,12 @@ const createStyles = (colors: any) => StyleSheet.create({
     marginTop: -44,
     marginRight: 1,
     textAlign: 'right',
+  },
+  periodText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#000',
+    letterSpacing: 0.2,
   },
   nextInfoRow: {
     flexDirection: 'row',

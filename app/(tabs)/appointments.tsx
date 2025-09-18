@@ -17,7 +17,7 @@ import {
 import Colors from '@/constants/colors';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import DaySelector from '@/components/DaySelector';
-import { AvailableTimeSlot, supabase } from '@/lib/supabase';
+import { AvailableTimeSlot, supabase, getBusinessId } from '@/lib/supabase';
 import { businessHoursApi } from '@/lib/api/businessHours';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { Ionicons } from '@expo/vector-icons';
@@ -158,18 +158,42 @@ export default function AdminAppointmentsScreen() {
     const loadBH = async () => {
       try {
         const dow = selectedDate.getDay();
-        const { data } = await supabase
-          .from('business_hours')
-          .select('start_time,end_time,is_active')
-          .eq('day_of_week', dow)
-          .maybeSingle();
-        if (data && data.is_active) {
-          setDayStart(data.start_time || '07:00');
-          setDayEnd(data.end_time || '21:00');
-        } else {
-          setDayStart('07:00');
-          setDayEnd('21:00');
+        const businessId = getBusinessId();
+
+        // Prefer user-specific hours for this day, then fallback to business default (user_id null)
+        let start: string | null = null;
+        let end: string | null = null;
+
+        if (user?.id) {
+          const { data: bhUser, error: eUser } = await supabase
+            .from('business_hours')
+            .select('start_time,end_time,is_active')
+            .eq('business_id', businessId)
+            .eq('day_of_week', dow)
+            .eq('user_id', user.id)
+            .maybeSingle();
+          if (!eUser && bhUser && bhUser.is_active) {
+            start = (bhUser.start_time as any) ?? null;
+            end = (bhUser.end_time as any) ?? null;
+          }
         }
+
+        if (!start || !end) {
+          const { data: bhGlobal } = await supabase
+            .from('business_hours')
+            .select('start_time,end_time,is_active')
+            .eq('business_id', businessId)
+            .eq('day_of_week', dow)
+            .is('user_id', null)
+            .maybeSingle();
+          if (bhGlobal && bhGlobal.is_active) {
+            start = (start ?? (bhGlobal.start_time as any)) ?? null;
+            end = (end ?? (bhGlobal.end_time as any)) ?? null;
+          }
+        }
+
+        setDayStart((start as string) || '07:00');
+        setDayEnd((end as string) || '21:00');
       } catch (e) {
         setDayStart('07:00');
         setDayEnd('21:00');

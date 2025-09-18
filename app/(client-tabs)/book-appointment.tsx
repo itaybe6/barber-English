@@ -21,7 +21,7 @@ import { User } from '@/lib/supabase';
 // API functions for booking appointments
 const bookingApi = {
   // Get available time slots for a specific date and barber
-  async getAvailableSlots(date: string, userId?: string): Promise<Appointment[]> {
+  async getAvailableSlots(date: string, barberId?: string): Promise<Appointment[]> {
     try {
       const businessId = getBusinessId();
       
@@ -31,8 +31,8 @@ const bookingApi = {
         .eq('slot_date', date)
         .eq('business_id', businessId);
 
-      if (userId) {
-        query = query.eq('user_id', userId);
+      if (barberId) {
+        query = query.eq('barber_id', barberId);
       }
 
       const { data, error } = await query.order('slot_time');
@@ -602,7 +602,7 @@ export default function BookAppointment() {
           .in('client_phone', phoneVariants);
 
         if (selectedBarber?.id) {
-          query = query.eq('user_id', selectedBarber.id);
+          query = query.eq('barber_id', selectedBarber.id);
         }
 
         const res = await query.order('slot_time');
@@ -618,7 +618,7 @@ export default function BookAppointment() {
           .ilike('client_name', `%${nameRaw}%`);
 
         if (selectedBarber?.id) {
-          query = query.eq('user_id', selectedBarber.id);
+          query = query.eq('barber_id', selectedBarber.id);
         }
 
         const res = await query.order('slot_time');
@@ -1127,7 +1127,7 @@ export default function BookAppointment() {
       slot => slot.slot_date === dateString && 
               slot.slot_time === selectedTime && 
               slot.is_available &&
-              (selectedBarber?.id ? slot.user_id === selectedBarber.id : !slot.user_id)
+              (selectedBarber?.id ? slot.barber_id === selectedBarber.id : !slot.barber_id)
     );
 
 
@@ -1232,7 +1232,7 @@ export default function BookAppointment() {
       slot => slot.slot_date === dateString && 
               slot.slot_time === selectedTime && 
               slot.is_available &&
-              (selectedBarber?.id ? slot.user_id === selectedBarber.id : !slot.user_id)
+              (selectedBarber?.id ? slot.barber_id === selectedBarber.id : !slot.barber_id)
     );
 
     setIsCheckingAppointments(true);
@@ -1280,10 +1280,10 @@ export default function BookAppointment() {
         {/* Step 1: Barber Selection */}
         {currentStep === 1 && (
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>Select Barber</Text>
+            <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>Select Employee</Text>
             {isLoadingBarbers ? (
               <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>Loading barbers...</Text>
+                <Text style={styles.loadingText}>Loading Employees...</Text>
               </View>
             ) : (
               <View style={styles.barbersList}>

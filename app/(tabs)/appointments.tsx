@@ -359,7 +359,7 @@ export default function AdminAppointmentsScreen() {
             d.setHours(0,0,0,0);
             setSelectedDate(d);
           }} style={styles.monthNavBtn} activeOpacity={0.7}>
-            <ChevronRight size={16} color={'#1C1C1E'} />
+            <ChevronLeft size={16} color={'#1C1C1E'} />
           </TouchableOpacity>
           <Text style={styles.monthText}>{(() => {
             const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -372,7 +372,7 @@ export default function AdminAppointmentsScreen() {
             d.setHours(0,0,0,0);
             setSelectedDate(d);
           }} style={styles.monthNavBtn} activeOpacity={0.7}>
-            <ChevronLeft size={16} color={'#1C1C1E'} />
+            <ChevronRight size={16} color={'#1C1C1E'} />
           </TouchableOpacity>
         </View>
       </View>

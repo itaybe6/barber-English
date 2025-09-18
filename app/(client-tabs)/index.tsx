@@ -1148,7 +1148,7 @@ const styles = StyleSheet.create({
   },
   fullScreenHeroContent: {
     position: 'absolute',
-    bottom: 110,
+    bottom: 80,
     left: 0,
     right: 0,
     paddingHorizontal: 24,

@@ -43,7 +43,8 @@ const defaultConfig = {
         CFBundleAllowMixedLocalizations: true,
         NSPhotoLibraryUsageDescription: "The app needs access to photos to select and upload images to the gallery or profile.",
         NSPhotoLibraryAddUsageDescription: "The app may save photos you've taken to your photo library.",
-        NSCameraUsageDescription: "The app needs access to the camera to take photos for upload."
+        NSCameraUsageDescription: "The app needs access to the camera to take photos for upload.",
+        LSApplicationQueriesSchemes: ["comgooglemaps"]
       },
       jsEngine: "hermes"
     },
@@ -106,7 +107,8 @@ const defaultConfig = {
         locale: "en",
         CLIENT: CLIENT, // Add the current client to extra
         BUSINESS_ID: process.env.BUSINESS_ID, // Add the business ID to extra
-        EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY: process.env.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY || process.env.GOOGLE_STATIC_MAPS_KEY
+        EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY: process.env.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY || process.env.GOOGLE_STATIC_MAPS_KEY,
+        EXPO_PUBLIC_GOOGLE_PLACES_KEY: process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY || "AIzaSyAVHoNZSAuWDnCArgFn1gAqA9bxkSuhdJ8"
       }
   }
 };
@@ -175,6 +177,14 @@ try {
 // Add theme and business ID to appConfig extra
 appConfig.expo.extra.theme = themeConfig;
 appConfig.expo.extra.BUSINESS_ID = process.env.BUSINESS_ID;
+
+// Ensure iOS LSApplicationQueriesSchemes contains comgooglemaps for Google Maps deep linking
+try {
+  appConfig.expo.ios = appConfig.expo.ios || {};
+  appConfig.expo.ios.infoPlist = appConfig.expo.ios.infoPlist || {};
+  const schemes = new Set([...(appConfig.expo.ios.infoPlist.LSApplicationQueriesSchemes || []), 'comgooglemaps']);
+  appConfig.expo.ios.infoPlist.LSApplicationQueriesSchemes = Array.from(schemes);
+} catch {}
 
 // Create current.json with both config and theme
 const currentConfig = {

@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Switch, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking } from 'react-native';
+import Constants from 'expo-constants';
+import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import * as ImagePicker from 'expo-image-picker';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import { useRouter } from 'expo-router';
@@ -396,6 +398,21 @@ export default function SettingsScreen() {
     } finally {
       setIsSavingProfile(false);
     }
+  };
+
+  // Google Places state for Admin address editing
+  const [placesFormattedAddress, setPlacesFormattedAddress] = useState<string>('');
+  const [placesPlaceId, setPlacesPlaceId] = useState<string>('');
+  const [placesLat, setPlacesLat] = useState<number | null>(null);
+  const [placesLng, setPlacesLng] = useState<number | null>(null);
+
+  const saveBusinessAddress = async () => {
+    if (!placesFormattedAddress) {
+      Alert.alert('Error', 'Please select an address');
+      return;
+    }
+    setAddressDraft(placesFormattedAddress);
+    await saveAddress();
   };
 
   const saveInstagram = async () => {
@@ -2258,15 +2275,77 @@ export default function SettingsScreen() {
             <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabelLTR}>Address</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={addressDraft}
-                  onChangeText={setAddressDraft}
+                <GooglePlacesAutocomplete
                   placeholder="Business address"
-                  placeholderTextColor={Colors.subtext}
-                  textAlign="left"
+                  fetchDetails
+                  enablePoweredByContainer={false}
+                  minLength={2}
+                  predefinedPlaces={[]}
+                  nearbyPlacesAPI={undefined as any}
+                  query={{
+                    key: (Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_PLACES_KEY || process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY,
+                    language: 'en',
+                  }}
+                  onPress={(data: any, details: any) => {
+                    const formatted = details?.formatted_address || data?.description || '';
+                    const placeId = data?.place_id || details?.place_id || '';
+                    const lat = details?.geometry?.location?.lat ?? null;
+                    const lng = details?.geometry?.location?.lng ?? null;
+                    setPlacesFormattedAddress(formatted);
+                    setPlacesPlaceId(placeId);
+                    setPlacesLat(lat);
+                    setPlacesLng(lng);
+                    setAddressDraft(formatted);
+                  }}
+                  textInputProps={{
+                    value: addressDraft,
+                    onChangeText: setAddressDraft,
+                    placeholderTextColor: Colors.subtext,
+                  }}
+                  styles={{
+                    textInput: [styles.textInput as any, { height: 48 }],
+                    listView: { zIndex: 1000 },
+                  }}
+                  onFail={(error) => {
+                    console.log('[Places] onFail', error);
+                  }}
+                  onNotFound={() => {
+                    // No results found; ensure component doesn't crash
+                  }}
                 />
               </View>
+
+              {(placesFormattedAddress || addressDraft) && (
+                <View style={{ marginTop: 12 }}>
+                  <Image
+                    source={{ uri: `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent((placesFormattedAddress || addressDraft) as string)}&zoom=15&size=600x300&markers=color:red|${encodeURIComponent((placesFormattedAddress || addressDraft) as string)}&key=${(Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_PLACES_KEY || process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY}` }}
+                    style={{ width: '100%', height: 160, borderRadius: 12 }}
+                    resizeMode="cover"
+                  />
+                  <TouchableOpacity
+                    onPress={async () => {
+                      const addr = (placesFormattedAddress || addressDraft || '').trim();
+                      if (!addr) return;
+                      const appUrl = `comgooglemaps://?q=${encodeURIComponent(addr)}`;
+                      const webUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
+                      try {
+                        const canOpen = await Linking.canOpenURL(appUrl);
+                        if (canOpen) {
+                          await Linking.openURL(appUrl);
+                        } else if (Platform.OS === 'ios') {
+                          await Linking.openURL(`http://maps.apple.com/?q=${encodeURIComponent(addr)}`);
+                        } else {
+                          await Linking.openURL(webUrl);
+                        }
+                      } catch {}
+                    }}
+                    style={{ marginTop: 10, alignSelf: 'flex-start', backgroundColor: businessColors.primary, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10 }}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Open Directions</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </ScrollView>
           </View>
         </View>

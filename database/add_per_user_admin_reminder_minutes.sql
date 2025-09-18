@@ -20,6 +20,28 @@ AS $$
   WHERE id = p_business_id;
 $$;
 
+-- 1.2) Ensure notifications table has columns used below (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' AND table_name = 'notifications' AND column_name = 'appointment_id'
+  ) THEN
+    ALTER TABLE public.notifications ADD COLUMN appointment_id UUID;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' AND table_name = 'notifications' AND column_name = 'user_id'
+  ) THEN
+    ALTER TABLE public.notifications ADD COLUMN user_id UUID REFERENCES public.users(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+-- Optional indexes
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON public.notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_appointment_id ON public.notifications(appointment_id);
+
 CREATE OR REPLACE FUNCTION public.get_reminder_minutes_for_user(p_business_id uuid, p_user_id uuid)
 RETURNS int
 LANGUAGE sql
@@ -45,7 +67,7 @@ END $$;
 
 -- 3) Create or replace the admin reminders processor to honor per-user settings
 --    Sends a notification to the assigned admin only, at (appointment_time - minutes) when minutes is set > 0
-CREATE OR REPLACE FUNCTION public.process_due_admin_reminders()
+CREATE OR REPLACE FUNCTION public.process_due_admin_reminders_by_user()
 RETURNS INTEGER
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -121,6 +143,17 @@ $$;
 -- 4) Schedule the processor to run frequently (every 5 minutes)
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 
+-- 4.1) Unschedule legacy fixed-30m admin reminders job if it exists
+DO $$
+DECLARE
+  v_job_id INT;
+BEGIN
+  SELECT jobid INTO v_job_id FROM cron.job WHERE jobname = 'admin_reminders_processor_30m';
+  IF v_job_id IS NOT NULL THEN
+    PERFORM cron.unschedule(v_job_id);
+  END IF;
+END $$;
+
 DO $$
 DECLARE
   v_job_id INT;
@@ -133,7 +166,7 @@ BEGIN
   PERFORM cron.schedule(
     'admin_reminders_processor_by_user_minutes',
     '*/5 * * * *',
-    $cron$SELECT public.process_due_admin_reminders();$cron$
+    $cron$SELECT public.process_due_admin_reminders_by_user();$cron$
   );
 END $$;
 

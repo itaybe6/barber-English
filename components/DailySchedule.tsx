@@ -55,7 +55,11 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
     if (!time) return '';
     const parts = time.split(':');
     if (parts.length >= 2) {
-      return `${parts[0]}:${parts[1]}`;
+      const hour24 = parseInt(parts[0], 10);
+      const minutes = parts[1].padStart(2, '0');
+      const period = hour24 >= 12 ? 'PM' : 'AM';
+      const hour12 = ((hour24 % 12) || 12).toString();
+      return `${hour12}:${minutes} ${period}`;
     }
     return time;
   };
@@ -327,12 +331,13 @@ const createStyles = (colors: any) => StyleSheet.create({
     textAlign: 'left',
   },
   bigTimeText: {
-    fontSize: 42,
+    fontSize: 30,
     fontWeight: '900',
     color: '#000',
     letterSpacing: 0.5,
     marginTop: -44,
-    marginRight: 28,
+    marginRight: 1,
+    textAlign: 'right',
   },
   nextInfoRow: {
     flexDirection: 'row',

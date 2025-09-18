@@ -11,6 +11,7 @@ import {
   Animated,
   Modal,
   Pressable,
+  InteractionManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -97,6 +98,15 @@ const formatRangeLtrDisplay = (a?: string | null, b?: string | null, useAmPm?: b
   return `${LRM}${first}${LRM} - ${LRM}${second}${LRM}`;
 };
 
+// Build HH:MM options for every 10 minutes across the day
+const generateTenMinuteOptions = (): string[] => {
+  return Array.from({ length: 24 * 6 }, (_, i) => {
+    const hours = Math.floor(i / 6).toString().padStart(2, '0');
+    const minutes = ((i % 6) * 10).toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
+  });
+};
+
 // Modern dropdown time picker component
 interface TimePickerProps {
   value: string;
@@ -118,6 +128,13 @@ const TimePicker: React.FC<TimePickerProps & { primaryColor?: string; useAmPm?: 
   const [isOpen, setIsOpen] = useState(false);
   const wheelRef = useRef<ScrollView | null>(null);
   const [tempValue, setTempValue] = useState<string>(value);
+  const [openTick, setOpenTick] = useState<number>(0);
+
+  useEffect(() => {
+    if (isOpen) {
+      setOpenTick((t) => t + 1);
+    }
+  }, [isOpen]);
 
   const handleConfirm = () => {
     onValueChange(tempValue);
@@ -188,7 +205,14 @@ const TimePicker: React.FC<TimePickerProps & { primaryColor?: string; useAmPm?: 
               </TouchableOpacity>
             </View>
           </View>
-          <WheelPicker options={options} value={tempValue} onChange={setTempValue} accentColor={selectedColor} useAmPm={useAmPm} />
+          <WheelPicker 
+            options={options} 
+            value={tempValue} 
+            onChange={setTempValue} 
+            accentColor={selectedColor} 
+            useAmPm={useAmPm}
+            openKey={`${openTick}-${tempValue}`}
+          />
         </View>
       </Modal>
     </View>
@@ -224,6 +248,17 @@ export default function BusinessHoursScreen() {
   const [tempSlotDuration, setTempSlotDuration] = useState<string>('60');
   const [useBreaks, setUseBreaks] = useState<boolean>(false);
   const [tempBreaks, setTempBreaks] = useState<Array<{ start_time: string; end_time: string }>>([]);
+
+  // Ensure End Time is always after Start Time while editing
+  useEffect(() => {
+    if (editingDay !== null) {
+      if (!(tempEndTime > tempStartTime)) {
+        const options = generateTenMinuteOptions();
+        const next = options.find(t => t > tempStartTime) || '23:50';
+        setTempEndTime(next);
+      }
+    }
+  }, [tempStartTime, editingDay]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -276,12 +311,13 @@ export default function BusinessHoursScreen() {
   const handleEditDay = (dayOfWeek: number) => {
     const dayHours = businessHours.find(h => h.day_of_week === dayOfWeek);
     if (dayHours) {
-      setTempStartTime(dayHours.start_time);
-      setTempEndTime(dayHours.end_time);
-      setTempBreakStartTime(dayHours.break_start_time || '12:00');
-      setTempBreakEndTime(dayHours.break_end_time || '13:00');
+      setTempStartTime(formatHHMM(dayHours.start_time));
+      setTempEndTime(formatHHMM(dayHours.end_time));
+      setTempBreakStartTime(formatHHMM(dayHours.break_start_time) || '12:00');
+      setTempBreakEndTime(formatHHMM(dayHours.break_end_time) || '13:00');
       setTempSlotDuration(String(dayHours.slot_duration_minutes || 60));
-      const loadedBreaks = ((dayHours as any).breaks || []) as Array<{ start_time: string; end_time: string }>;
+      const loadedBreaksRaw = ((dayHours as any).breaks || []) as Array<{ start_time: string; end_time: string }>;
+      const loadedBreaks = loadedBreaksRaw.map(b => ({ start_time: formatHHMM(b.start_time), end_time: formatHHMM(b.end_time) }));
       setUseBreaks(loadedBreaks.length > 0 || (!!dayHours.break_start_time && !!dayHours.break_end_time));
       setTempBreaks(loadedBreaks);
       setEditingDay(dayOfWeek);
@@ -352,10 +388,11 @@ export default function BusinessHoursScreen() {
     const dayHours = businessHours.find(h => h.day_of_week === dayOfWeek);
     const isEditing = editingDay === dayOfWeek;
 
-    // Unified time options for all pickers (every שעה עגולה של היום)
-    const allHourOptions = Array.from({ length: 24 }, (_, h) => `${h.toString().padStart(2, '0')}:00`);
-    const startTimeOptions = allHourOptions;
-    const endTimeOptions = allHourOptions;
+    // Unified time options for all pickers (every 10 minutes)
+    const allTenMinuteOptions = generateTenMinuteOptions();
+    const startTimeOptions = allTenMinuteOptions;
+    // End time must be strictly after the selected start time
+    const endTimeOptions = allTenMinuteOptions.filter(t => t > tempStartTime);
 
     return (
       <TouchableOpacity key={dayOfWeek} style={styles.dayCard} activeOpacity={0.9} onPress={() => { if (!isEditing) { handleEditDay(dayOfWeek); } }} disabled={isEditing}>
@@ -460,7 +497,16 @@ export default function BusinessHoursScreen() {
               <View style={styles.timeColumn}>
                 <TimePicker
                   value={tempEndTime}
-                  onValueChange={setTempEndTime}
+                  onValueChange={(v) => {
+                    // Ensure end > start
+                    if (v <= tempStartTime) {
+                      const options = generateTenMinuteOptions();
+                      const next = options.find(t => t > tempStartTime) || v;
+                      setTempEndTime(next);
+                    } else {
+                      setTempEndTime(v);
+                    }
+                  }}
                   label="End time"
                   options={endTimeOptions}
                   isBreakTime={false}
@@ -707,6 +753,7 @@ export default function BusinessHoursScreen() {
               value={tempBreakMinutesStr}
               onChange={setTempBreakMinutesStr}
               accentColor={businessColors.primary}
+              openKey={`${isBreakPickerOpen}-${tempBreakMinutesStr}`}
             />
           </View>
         </Modal>
@@ -736,17 +783,29 @@ export default function BusinessHoursScreen() {
 }
 
 // Simple iOS-like wheel picker (single column)
-const WheelPicker: React.FC<{ options: string[]; value: string; onChange: (v: string) => void; accentColor?: string; useAmPm?: boolean }> = ({ options, value, onChange, accentColor = Colors.primary, useAmPm = false }) => {
+const WheelPicker: React.FC<{ options: string[]; value: string; onChange: (v: string) => void; accentColor?: string; useAmPm?: boolean; openKey?: string }> = ({ options, value, onChange, accentColor = Colors.primary, useAmPm = false, openKey }) => {
   const listRef = useRef<ScrollView | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(() => Math.max(0, options.findIndex(o => o === value)));
 
   useEffect(() => {
     const idx = Math.max(0, options.findIndex(o => o === value));
     setSelectedIndex(idx);
-    requestAnimationFrame(() => {
-      listRef.current?.scrollTo({ y: idx * 44, animated: false });
-    });
-  }, [value, options]);
+    const doScroll = (animated: boolean) => {
+      listRef.current?.scrollTo({ y: idx * 44, animated });
+    };
+    // Try immediate frame (after mount/prop change)
+    const rafId = requestAnimationFrame(() => doScroll(false));
+    // Ensure after animations/interactions (modal open animation)
+    const interactionHandle = InteractionManager.runAfterInteractions(() => doScroll(false));
+    // Fallback small timeout for slower devices
+    const timerId = setTimeout(() => doScroll(false), 80);
+    return () => {
+      cancelAnimationFrame(rafId);
+      // @ts-ignore - cancel may not exist on web
+      interactionHandle?.cancel?.();
+      clearTimeout(timerId);
+    };
+  }, [value, options, openKey]);
 
   const handleMomentumEnd = (e: any) => {
     const offsetY = e.nativeEvent.contentOffset.y as number;
@@ -763,11 +822,21 @@ const WheelPicker: React.FC<{ options: string[]; value: string; onChange: (v: st
     <View style={styles.wheelContainer}>
       <View style={{ position: 'absolute', left: 16, right: 16, top: (220/2 - 22), height: 44, borderRadius: 12, borderWidth: 1, borderColor: accentColor, backgroundColor: 'rgba(0,0,0,0.03)' }} />
       <ScrollView
+        key={openKey || value}
         ref={(ref) => { listRef.current = ref; }}
         showsVerticalScrollIndicator={false}
         snapToInterval={44}
         decelerationRate="fast"
         onMomentumScrollEnd={handleMomentumEnd}
+        contentOffset={{ x: 0, y: Math.max(0, options.findIndex(o => o === value)) * 44 }}
+        onLayout={() => {
+          const idx = Math.max(0, options.findIndex(o => o === value));
+          listRef.current?.scrollTo({ y: idx * 44, animated: false });
+        }}
+        onContentSizeChange={() => {
+          const idx = Math.max(0, options.findIndex(o => o === value));
+          listRef.current?.scrollTo({ y: idx * 44, animated: false });
+        }}
       >
         <View style={{ height: (220/2 - 22) }} />
         {options.map((opt, i) => {

@@ -61,9 +61,13 @@ export default function SelectTimeScreen() {
         }
         // 2) Always fetch authoritative value per barber and update if differs
         const barberId = params.barberId as string | undefined;
-        const minutes = barberId ? await businessProfileApi.getBreakMinutesForUser(barberId) : 0;
-        const br = Math.max(0, Math.min(180, Number(minutes ?? 0)));
-        setGlobalBreakMinutes((prev) => (prev !== br ? br : prev));
+        // Only override from server when a specific barber is provided.
+        // If no barberId, keep the seeded value from params.breakMinutes.
+        if (barberId) {
+          const minutes = await businessProfileApi.getBreakMinutesForUser(barberId);
+          const br = Math.max(0, Math.min(180, Number(minutes ?? 0)));
+          setGlobalBreakMinutes((prev) => (prev !== br ? br : prev));
+        }
       } catch {}
     };
     loadBreak();

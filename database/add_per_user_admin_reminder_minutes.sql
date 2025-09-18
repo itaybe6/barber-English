@@ -92,15 +92,15 @@ BEGIN
   )
   INSERT INTO public.notifications (title, content, type, recipient_name, recipient_phone, appointment_id, business_id, user_id)
   SELECT
-    'תור מתקרב',
-    format('תזכורת: %s (%s) מוזמן/ת ל%s היום בשעה %s',
-           COALESCE(NULLIF(d.client_name, ''), 'לקוח'),
+    'Upcoming appointment',
+    format('Reminder: %s (%s) has an appointment for %s today at %s',
+           COALESCE(NULLIF(d.client_name, ''), 'Client'),
            COALESCE(TRIM(d.client_phone), ''),
-           COALESCE(NULLIF(d.service_name, ''), 'הטיפול'),
+           COALESCE(NULLIF(d.service_name, ''), 'the service'),
            to_char(d.slot_time, 'HH24:MI')
     )::text,
     'system',
-    COALESCE(NULLIF(d.admin_name, ''), 'מנהל'),
+    COALESCE(NULLIF(d.admin_name, ''), 'Manager'),
     d.admin_phone,
     d.appointment_id,
     d.business_id,

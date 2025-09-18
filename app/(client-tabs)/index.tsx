@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import Colors from '@/constants/colors';
+import Constants from 'expo-constants';
 import { useAuthStore } from '@/stores/authStore';
 import { supabase, getBusinessId } from '@/lib/supabase';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -154,6 +155,10 @@ export default function ClientHomeScreen() {
   const [managerPhone, setManagerPhone] = useState<string | null>(null);
   const [businessPhone, setBusinessPhone] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [mapCoords, setMapCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const GOOGLE_STATIC_MAPS_KEY = (Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY
+    || (process.env as any)?.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY
+    || 'AIzaSyA6uvjxcou7Drdw2OYyEAi4Y49u7PtBh8g';
 
   // Designs store
   const { designs, isLoading: isLoadingDesigns, fetchDesigns } = useDesignsStore();
@@ -491,6 +496,34 @@ export default function ClientHomeScreen() {
     loadProfile();
   }, []);
 
+  // Geocode business address to coordinates for static map (no API key needed)
+  useEffect(() => {
+    const geocode = async () => {
+      try {
+        const address = businessProfile?.address?.trim();
+        if (!address) return;
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(address)}`, {
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'slotlys-app/1.0 (+support@slotlys.com)',
+          },
+        });
+        const data: any[] = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const { lat, lon } = data[0];
+          const latNum = Number(lat);
+          const lonNum = Number(lon);
+          if (!isNaN(latNum) && !isNaN(lonNum)) {
+            setMapCoords({ lat: latNum, lon: lonNum });
+          }
+        }
+      } catch (e) {
+        // Silent fail - map will just not render
+      }
+    };
+    geocode();
+  }, [businessProfile?.address]);
+
   // Load manager phone (first admin user)
   useEffect(() => {
     const loadManagerPhone = async () => {
@@ -774,7 +807,7 @@ export default function ClientHomeScreen() {
         )}
 
         {/* Appointments Section */}
-        <View style={styles.sectionContainer}>
+        <View style={[styles.sectionContainer, { marginTop: 16 }]}> 
           <View style={styles.appointmentsHeader}>
             <View style={styles.appointmentsHeaderContent}>
               <View style={{ width: 22 }} />
@@ -945,7 +978,78 @@ export default function ClientHomeScreen() {
           />
         )}
 
- 
+        {/* Location / Map Section (moved above Follow us) */}
+        {businessProfile?.address && (
+          <View style={[styles.sectionContainer, { marginBottom: 24 }]}> 
+            <View style={styles.sectionHeaderModernSimple}>
+              <Text style={{ fontSize: 26, fontWeight: '700', color: '#1C1C1E', textAlign: 'center', letterSpacing: -0.3, marginBottom: 4 }}>How to get here</Text>
+              <Text style={{ fontSize: 14, fontWeight: '400', color: '#8E8E93', textAlign: 'center', letterSpacing: 0.2 }}>Tap the map to open directions</Text>
+            </View>
+             
+             <TouchableOpacity
+               activeOpacity={0.9}
+               onPress={async () => {
+                 const address = businessProfile?.address?.trim();
+                 if (!address) return;
+                 const appleUrl = `http://maps.apple.com/?q=${encodeURIComponent(address)}`;
+                 const googleUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+                 try {
+                   const canOpen = await Linking.canOpenURL(appleUrl);
+                   if (canOpen) {
+                     await Linking.openURL(appleUrl);
+                   } else {
+                     await Linking.openURL(googleUrl);
+                   }
+                 } catch {}
+               }}
+               style={styles.mapCard}
+             >
+              {mapCoords ? (
+                <Image
+                  source={{ uri: `https://staticmap.openstreetmap.de/staticmap.php?center=${mapCoords.lat},${mapCoords.lon}&zoom=15&size=600x600&maptype=mapnik&markers=${mapCoords.lat},${mapCoords.lon},lightblue1` }}
+                  style={styles.mapImage}
+                  resizeMode="cover"
+                />
+              ) : (GOOGLE_STATIC_MAPS_KEY ? (
+                <Image
+                  source={{ uri: `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(businessProfile?.address ?? '')}&zoom=15&size=600x600&markers=color:red|${encodeURIComponent(businessProfile?.address ?? '')}&key=${GOOGLE_STATIC_MAPS_KEY}` }}
+                  style={styles.mapImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <LinearGradient
+                  colors={[`rgba(0,0,0,0.35)`, `rgba(0,0,0,0.55)`]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.mapImage}
+                />
+              ))}
+              <View style={styles.mapOverlay} />
+              <View style={[styles.mapLogoCircle, { borderColor: colors.primary }]}>
+                <Image source={getCurrentClientLogo()} style={styles.mapLogoImage} resizeMode="cover" />
+              </View>
+              <View style={styles.mapAttribution}>
+                <Text style={styles.mapAttributionText}>Maps</Text>
+              </View>
+              {/* Bottom dark bar with business name and address */}
+              {(businessProfile?.display_name || businessProfile?.address) && (
+                <LinearGradient
+                  colors={["rgba(0,0,0,0)", "rgba(0,0,0,0.45)", "rgba(0,0,0,0.75)"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={styles.mapBottomBar}
+                >
+                  {!!businessProfile?.display_name && (
+                    <Text style={styles.mapBottomName}>{businessProfile.display_name}</Text>
+                  )}
+                  {!!businessProfile?.address && (
+                    <Text style={styles.mapBottomAddress} numberOfLines={1}>{businessProfile.address}</Text>
+                  )}
+                </LinearGradient>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
 
 
         {/* Social Section */}
@@ -978,36 +1082,7 @@ export default function ClientHomeScreen() {
                 <Ionicons name={social.icon as any} size={social.name === 'Instagram' ? 28 : 24} color="#FFFFFF" />
               </TouchableOpacity>
             ))}
-            <TouchableOpacity
-              style={[styles.socialButton, styles.locationCircleButton]}
-              onPress={async () => {
-                const address = businessProfile?.address?.trim();
-                if (!address) {
-                  Alert.alert('Error', 'Business address not available');
-                  return;
-                }
-                const appUrl = `comgooglemaps://?q=${encodeURIComponent(address)}`;
-                const webUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-                try {
-                  const canOpen = await Linking.canOpenURL(appUrl);
-                  if (canOpen) {
-                    await Linking.openURL(appUrl);
-                  } else {
-                    await Linking.openURL(webUrl);
-                  }
-                } catch (e) {
-                  Alert.alert('Error', 'Google Maps cannot be opened on this device');
-                }
-              }}
-              activeOpacity={0.8}
-              accessibilityLabel="Navigate with Google Maps"
-            >
-              <Image
-                source={{ uri: 'https://maps.gstatic.com/mapfiles/api-3/images/spotlight-poi2_hdpi.png' }}
-                style={styles.googleMapsLogo}
-                resizeMode="contain"
-              />
-            </TouchableOpacity>
+            {/* Location button removed – map shown below */}
             <TouchableOpacity
               style={[styles.socialButton, styles.whatsappCircleButton]}
               onPress={async () => {
@@ -1038,6 +1113,8 @@ export default function ClientHomeScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Static Map Section under Follow us – removed (moved above) */}
         
         {/* Social section merged above with Location */}
         
@@ -1075,7 +1152,7 @@ export default function ClientHomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create<any>({
   container: {
     flex: 1,
     backgroundColor: '#F8F9FA', // Same color as contentWrapper to hide the bottom section
@@ -1682,6 +1759,103 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
   },
+  mapCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    height: 220,
+    marginTop: 16,
+    backgroundColor: '#E5E5EA',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  mapImage: {
+    width: '100%',
+    height: '100%',
+  },
+  mapOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
+  mapLogoCircle: {
+    position: 'absolute',
+    top: '40%',
+    left: '50%',
+    transform: [{ translateX: -28 }, { translateY: -28 }],
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 8,
+    borderWidth: 3,
+    borderColor: '#000000',
+  },
+  mapLogoImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  mapAttribution: {
+    position: 'absolute',
+    left: 8,
+    top: 8,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderRadius: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  mapAttributionText: {
+    fontSize: 12,
+    color: '#1C1C1E',
+    fontWeight: '600',
+  },
+  mapBottomBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 12,
+    paddingTop: 20,
+    paddingBottom: 14,
+  },
+  mapBottomName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  mapBottomAddress: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#F2F2F7',
+  },
+  mapDetailsContainer: {
+    paddingHorizontal: 8,
+    paddingTop: 10,
+  },
+  mapBusinessName: {
+    fontSize: 18,
+    color: '#1C1C1E',
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  mapBusinessAddress: {
+    fontSize: 14,
+    color: '#8E8E93',
+    fontWeight: '500',
+  },
   // Removed socialText as per new design (no caption under icons)
   locationCircleContainer: {
     alignItems: 'center',
@@ -1949,6 +2123,11 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     paddingHorizontal: 16,
   },
+  sectionHeaderModernSimple: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
   headerDecorationLeft: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2071,5 +2250,6 @@ const styles = StyleSheet.create({
     height: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
   },
+  // sectionHeaderModernSimple and sectionSubtitle defined earlier
 });
 

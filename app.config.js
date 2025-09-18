@@ -105,7 +105,8 @@ const defaultConfig = {
         },
         locale: "en",
         CLIENT: CLIENT, // Add the current client to extra
-        BUSINESS_ID: process.env.BUSINESS_ID // Add the business ID to extra
+        BUSINESS_ID: process.env.BUSINESS_ID, // Add the business ID to extra
+        EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY: process.env.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY || process.env.GOOGLE_STATIC_MAPS_KEY
       }
   }
 };

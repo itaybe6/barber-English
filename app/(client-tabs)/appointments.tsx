@@ -146,6 +146,7 @@ export default function ClientAppointmentsScreen() {
   const [managerPhone, setManagerPhone] = useState<string | null>(null);
   const [businessAddress, setBusinessAddress] = useState<string>('');
   const [barberImages, setBarberImages] = useState<Record<string, string>>({});
+  const [barberNames, setBarberNames] = useState<Record<string, string>>({});
   const [minCancellationHours, setMinCancellationHours] = useState<number>(24);
   const { user } = useAuthStore();
   const { colors } = useBusinessColors();
@@ -226,6 +227,21 @@ export default function ClientAppointmentsScreen() {
       Alert.alert('Error', 'WhatsApp cannot be opened on this device');
     }
   }, [managerPhone]);
+
+  // Open business location in maps
+  const openBusinessLocation = useCallback(async () => {
+    if (!businessAddress) {
+      Alert.alert('Address unavailable', 'Business address is not available right now.');
+      return;
+    }
+    const encoded = encodeURIComponent(businessAddress);
+    const url = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
+    try {
+      await Linking.openURL(url);
+    } catch (e) {
+      Alert.alert('Error', 'Unable to open maps on this device');
+    }
+  }, [businessAddress]);
 
   const loadUserAppointments = useCallback(async (isRefresh = false) => {
     const isAdminUser = user?.user_type === 'admin';
@@ -360,13 +376,14 @@ export default function ClientAppointmentsScreen() {
     }
   }, [userAppointments, user?.id, user?.name, user?.phone, user?.user_type]);
 
-  // Load barber images for appointments
+  // Load barber images and names for appointments
   useEffect(() => {
     const loadBarberImages = async () => {
       const barberIds = Array.from(new Set(verifiedUserAppointments.map(apt => apt.barber_id).filter(Boolean)));
       if (barberIds.length === 0) return;
 
       const images: Record<string, string> = {};
+      const names: Record<string, string> = {};
       await Promise.all(
         barberIds.map(async (barberId) => {
           try {
@@ -374,32 +391,43 @@ export default function ClientAppointmentsScreen() {
             if (userData?.image_url) {
               images[barberId] = userData.image_url;
             }
+            if (userData?.name) {
+              names[barberId] = String(userData.name);
+            }
           } catch (error) {
             console.error('Error loading barber image:', error);
           }
         })
       );
       setBarberImages(images);
+      setBarberNames(names);
     };
 
     loadBarberImages();
   }, [verifiedUserAppointments]);
+
+  const getBarberName = React.useCallback((barberId?: string) => {
+    if (!barberId) return '';
+    return barberNames[barberId] || '';
+  }, [barberNames]);
   
   const upcomingAppointments = React.useMemo(() => {
     return verifiedUserAppointments.filter(slot => {
-      const appointmentDate = new Date(slot.slot_date);
-      appointmentDate.setHours(0, 0, 0, 0);
-      return appointmentDate >= today;
+      const timeString = slot.slot_time ? String(slot.slot_time) : '00:00';
+      const [hh = '00', mm = '00'] = timeString.split(':');
+      const appointmentDateTime = new Date(`${slot.slot_date}T${hh.padStart(2, '0')}:${mm.padStart(2, '0')}`);
+      return appointmentDateTime.getTime() >= Date.now();
     });
-  }, [verifiedUserAppointments, today]);
+  }, [verifiedUserAppointments]);
   
   const pastAppointments = React.useMemo(() => {
     return verifiedUserAppointments.filter(slot => {
-      const appointmentDate = new Date(slot.slot_date);
-      appointmentDate.setHours(0, 0, 0, 0);
-      return appointmentDate < today;
+      const timeString = slot.slot_time ? String(slot.slot_time) : '00:00';
+      const [hh = '00', mm = '00'] = timeString.split(':');
+      const appointmentDateTime = new Date(`${slot.slot_date}T${hh.padStart(2, '0')}:${mm.padStart(2, '0')}`);
+      return appointmentDateTime.getTime() < Date.now();
     });
-  }, [verifiedUserAppointments, today]);
+  }, [verifiedUserAppointments]);
 
   // Determine next (closest) upcoming appointment
   const nextAppointment = React.useMemo(() => {
@@ -418,7 +446,82 @@ export default function ClientAppointmentsScreen() {
     return upcomingAppointments.filter(a => a.id !== nextAppointment.id);
   }, [upcomingAppointments, nextAppointment]);
 
+  // Group appointments by date
+  const groupAppointmentsByDate = React.useCallback((appointments: AvailableTimeSlot[]) => {
+    const grouped: { [key: string]: AvailableTimeSlot[] } = {};
+    
+    appointments.forEach(appointment => {
+      const dateKey = appointment.slot_date;
+      if (!grouped[dateKey]) {
+        grouped[dateKey] = [];
+      }
+      grouped[dateKey].push(appointment);
+    });
+    
+    // Sort dates and appointments within each date
+    const sortedDates = Object.keys(grouped).sort();
+    const sortedGroups: { date: string; appointments: AvailableTimeSlot[] }[] = [];
+    
+    sortedDates.forEach(date => {
+      const sortedAppointments = grouped[date].sort((a, b) => {
+        const timeA = a.slot_time || '00:00';
+        const timeB = b.slot_time || '00:00';
+        return timeA.localeCompare(timeB);
+      });
+      sortedGroups.push({ date, appointments: sortedAppointments });
+    });
+    
+    return sortedGroups;
+  }, []);
+
   const currentAppointments = activeTab === 'upcoming' ? displayedUpcomingAppointments : pastAppointments;
+  const groupedAppointments = groupAppointmentsByDate(currentAppointments);
+
+  // Date Header Component
+  const DateHeader: React.FC<{ date: string; forceFull?: boolean }> = React.useCallback(({ date, forceFull = false }) => {
+    const dateObj = new Date(date);
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    const isToday = dateObj.toDateString() === today.toDateString();
+    const isTomorrow = dateObj.toDateString() === tomorrow.toDateString();
+
+    let dateText = '';
+    if (!forceFull && isToday) {
+      dateText = 'Today';
+    } else if (!forceFull && isTomorrow) {
+      dateText = 'Tomorrow';
+    } else {
+      dateText = dateObj.toLocaleDateString('en-US', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+    }
+
+    return (
+      <View style={styles.dateHeaderContainer}>
+        <Text style={styles.dateHeaderText}>{dateText}</Text>
+        <View style={styles.dateHeaderLine} />
+      </View>
+    );
+  }, []);
+
+  // Small calendar-like date pill (e.g., JUN / 20)
+  const DatePill: React.FC<{ date: string }> = React.useCallback(({ date }) => {
+    const d = new Date(date);
+    const month = d.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+    const day = String(d.getDate());
+    return (
+      <View style={styles.datePill}>
+        <Text style={styles.datePillMonth}>{month}</Text>
+        <View style={styles.datePillDivider} />
+        <Text style={styles.datePillDay}>{day}</Text>
+      </View>
+    );
+  }, []);
 
   // Barber Avatar Component
   const BarberAvatar: React.FC<{ barberId?: string; size?: number }> = React.useCallback(({ barberId, size = 36 }) => {
@@ -477,9 +580,11 @@ export default function ClientAppointmentsScreen() {
               <Text style={styles.heroCancelButtonText}>Cancel</Text>
             </TouchableOpacity>
 
+            {/* Location removed for client cards per request */}
+
             <Text style={styles.heroServiceNameNext}>{nextAppointment!.service_name || 'Service'}</Text>
-            
-            {/* Show client info for admin users (barbers) */}
+
+            {/* Admin: client info remains */}
             {user?.user_type === 'admin' && nextAppointment!.client_name && (
               <View style={styles.heroLocationRow}>
                 <Text style={styles.heroLocationText}>
@@ -491,28 +596,33 @@ export default function ClientAppointmentsScreen() {
                 </View>
               </View>
             )}
-            
-            {/* Show business address for clients */}
-            {user?.user_type !== 'admin' && businessAddress ? (
+
+            {/* Worker under service for clients */}
+            {user?.user_type !== 'admin' && nextAppointment?.barber_id ? (
               <View style={styles.heroLocationRow}>
-                <Text style={styles.heroLocationText}>{businessAddress}</Text>
                 <View style={styles.heroLocationIcon}>
-                  <Ionicons name="location" size={12} color="#000000" />
+                  <Ionicons name="person" size={12} color="#000000" />
                 </View>
+                <Text style={styles.heroLocationText}>{getBarberName(nextAppointment.barber_id)}</Text>
               </View>
             ) : null}
 
-            <View style={styles.heroDetailsContainer}>
-              <View style={styles.heroDetailCard}>
-                <Ionicons name="calendar" size={16} color={colors.primary} />
-                <Text style={styles.heroDetailValue}>{formatDate(nextAppointment!.slot_date)}</Text>
+              <View style={styles.heroDetailsContainer}>
+                <View style={styles.timeRowAligned}>
+                  <View style={styles.timeLeftGroup}>
+                    <View style={styles.heroDetailCard}>
+                      <Ionicons name="time" size={16} color={colors.primary} />
+                      <Text style={styles.heroDetailValue}>{formatTime(nextAppointment!.slot_time)}</Text>
+                    </View>
+                    {businessAddress ? (
+                      <TouchableOpacity style={styles.mapIconButton} onPress={openBusinessLocation} activeOpacity={0.8}>
+                        <Ionicons name="location" size={16} color={colors.primary} />
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                  <DatePill date={nextAppointment!.slot_date} />
+                </View>
               </View>
-
-              <View style={styles.heroDetailCard}>
-                <Ionicons name="time" size={16} color={colors.primary} />
-                <Text style={styles.heroDetailValue}>{formatTime(nextAppointment!.slot_time)}</Text>
-              </View>
-            </View>
           </View>
         </LinearGradient>
       </View>
@@ -574,19 +684,23 @@ export default function ClientAppointmentsScreen() {
             <View style={styles.heroCardOverlay} />
             
             <View style={styles.heroContent}>
+              {/* Barber Avatar in top right corner for history cards */}
+              <View style={styles.heroBarberAvatarContainer}>
+                <BarberAvatar barberId={item.barber_id} size={48} />
+              </View>
               <View style={styles.regularHeader}>
                 <View style={styles.pastBadge}>
                   <Ionicons name="checkmark-circle" size={16} color="#34C759" />
                   <Text style={styles.pastBadgeText}>Completed</Text>
                 </View>
-                <View style={styles.regularHeaderRight}>
-                  <BarberAvatar barberId={item.barber_id} size={44} />
-                </View>
+                <View style={styles.regularHeaderRight} />
               </View>
 
+              {/* Location removed for client cards per request */}
+
               <Text style={styles.heroServiceName}>{item.service_name || 'Service'}</Text>
-              
-              {/* Show client info for admin users (barbers) */}
+
+              {/* Admin: client info remains */}
               {user?.user_type === 'admin' && item.client_name && (
                 <View style={styles.heroLocationRow}>
                   <Text style={styles.heroLocationText}>
@@ -598,25 +712,31 @@ export default function ClientAppointmentsScreen() {
                   </View>
                 </View>
               )}
-              
-              {/* Show business address for clients */}
-              {user?.user_type !== 'admin' && businessAddress ? (
+
+              {/* Worker under service (client view) */}
+              {user?.user_type !== 'admin' && item?.barber_id ? (
                 <View style={styles.heroLocationRow}>
-                  <Text style={styles.heroLocationText}>{businessAddress}</Text>
                   <View style={styles.heroLocationIcon}>
-                    <Ionicons name="location" size={12} color="#000000" />
+                    <Ionicons name="person" size={12} color="#000000" />
                   </View>
+                  <Text style={styles.heroLocationText}>{getBarberName(item.barber_id)}</Text>
                 </View>
               ) : null}
 
               <View style={styles.heroDetailsContainer}>
-                <View style={styles.heroDetailCard}>
-                  <Ionicons name="calendar" size={16} color={colors.primary} />
-                  <Text style={styles.heroDetailValue}>{formatDate(item.slot_date)}</Text>
-                </View>
-                <View style={styles.heroDetailCard}>
-                  <Ionicons name="time" size={16} color={colors.primary} />
-                  <Text style={styles.heroDetailValue}>{formatTime(item.slot_time)}</Text>
+                <View style={styles.timeRowAligned}>
+                  <View style={styles.timeLeftGroup}>
+                    <View style={styles.heroDetailCard}>
+                      <Ionicons name="time" size={16} color={colors.primary} />
+                      <Text style={styles.heroDetailValue}>{formatTime(item.slot_time)}</Text>
+                    </View>
+                    {businessAddress ? (
+                      <TouchableOpacity style={styles.mapIconButton} onPress={openBusinessLocation} activeOpacity={0.8}>
+                        <Ionicons name="location" size={16} color={colors.primary} />
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                  <DatePill date={item.slot_date} />
                 </View>
               </View>
             </View>
@@ -652,9 +772,11 @@ export default function ClientAppointmentsScreen() {
               <Text style={styles.heroCancelButtonText}>Cancel</Text>
             </TouchableOpacity>
 
+            {/* Location removed for client cards per request */}
+
             <Text style={styles.heroServiceNameNext}>{item.service_name || 'Service'}</Text>
-            
-            {/* Show client info for admin users (barbers) */}
+
+            {/* Admin: client info remains */}
             {user?.user_type === 'admin' && item.client_name && (
               <View style={styles.heroLocationRow}>
                 <Text style={styles.heroLocationText}>
@@ -666,25 +788,31 @@ export default function ClientAppointmentsScreen() {
                 </View>
               </View>
             )}
-            
-            {/* Show business address for clients */}
-            {user?.user_type !== 'admin' && businessAddress ? (
+
+            {/* Worker under service for clients */}
+            {user?.user_type !== 'admin' && item?.barber_id ? (
               <View style={styles.heroLocationRow}>
-                <Text style={styles.heroLocationText}>{businessAddress}</Text>
                 <View style={styles.heroLocationIcon}>
-                  <Ionicons name="location" size={12} color="#000000" />
+                  <Ionicons name="person" size={12} color="#000000" />
                 </View>
+                <Text style={styles.heroLocationText}>{getBarberName(item.barber_id)}</Text>
               </View>
             ) : null}
 
             <View style={styles.heroDetailsContainer}>
-              <View style={styles.heroDetailCard}>
-                <Ionicons name="calendar" size={16} color={colors.primary} />
-                <Text style={styles.heroDetailValue}>{formatDate(item.slot_date)}</Text>
-              </View>
-              <View style={styles.heroDetailCard}>
-                <Ionicons name="time" size={16} color={colors.primary} />
-                <Text style={styles.heroDetailValue}>{formatTime(item.slot_time)}</Text>
+              <View style={styles.timeRowAligned}>
+                <View style={styles.timeLeftGroup}>
+                  <View style={styles.heroDetailCard}>
+                    <Ionicons name="time" size={16} color={colors.primary} />
+                    <Text style={styles.heroDetailValue}>{formatTime(item.slot_time)}</Text>
+                  </View>
+                  {businessAddress ? (
+                    <TouchableOpacity style={styles.mapIconButton} onPress={openBusinessLocation} activeOpacity={0.8}>
+                      <Ionicons name="location" size={16} color={colors.primary} />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+                <DatePill date={item.slot_date} />
               </View>
             </View>
           </View>
@@ -815,13 +943,34 @@ export default function ClientAppointmentsScreen() {
               }
             </Text>
           </ScrollView>
-        ) : currentAppointments.length > 0 ? (
+        ) : groupedAppointments.length > 0 ? (
           <FlatList
-            data={currentAppointments}
-            renderItem={renderAppointment}
-            keyExtractor={(item) => `${item.id}-${item.slot_date}-${item.slot_time}`}
+            data={groupedAppointments}
+            renderItem={({ item: group }) => {
+              const omitHeader = activeTab === 'upcoming' && nextAppointment && group.date === nextAppointment.slot_date;
+              return (
+                <View>
+                  {!omitHeader && <DateHeader date={group.date} forceFull={activeTab === 'past'} />}
+                  {group.appointments.map((appointment) => (
+                    <View key={`${appointment.id}-${appointment.slot_date}-${appointment.slot_time}`}>
+                      {renderAppointment({ item: appointment })}
+                    </View>
+                  ))}
+                </View>
+              );
+            }}
+            keyExtractor={(item) => item.date}
             contentContainerStyle={styles.appointmentsList}
-            ListHeaderComponent={<NextAppointmentHero />}
+            ListHeaderComponent={(
+              activeTab === 'upcoming' && nextAppointment ? (
+                <View>
+                  <DateHeader date={nextAppointment.slot_date} />
+                  <NextAppointmentHero />
+                </View>
+              ) : (
+                <NextAppointmentHero />
+              )
+            )}
             showsVerticalScrollIndicator={false}
             removeClippedSubviews={true}
             maxToRenderPerBatch={3}
@@ -1016,7 +1165,7 @@ export default function ClientAppointmentsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create<any>({
   safeArea: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -1380,6 +1529,7 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
     textAlign: 'left',
     letterSpacing: -0.4,
+    marginTop: 8,
     marginBottom: 4,
   },
   heroServiceNameNext: {
@@ -1389,27 +1539,30 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     letterSpacing: -0.4,
     marginBottom: 4,
-    marginTop: 50,
+    marginTop: 36,
   },
   heroLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    marginBottom: 16,
-    gap: 6,
+    marginBottom: 6,
+    gap: 8,
   },
   heroLocationIcon: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0, 0, 0, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   heroLocationText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '500',
     color: '#8E8E93',
+    lineHeight: 18,
     textAlign: 'left',
   },
   heroDetailsContainer: {
@@ -1417,6 +1570,27 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     alignItems: 'flex-start',
     gap: 8,
+  },
+  timeRowAligned: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  timeLeftGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mapIconButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
   },
   heroDetailCard: {
     flexShrink: 0,
@@ -1434,6 +1608,36 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1C1C1E',
     textAlign: 'left',
+  },
+
+  // Date pill styles
+  datePill: {
+    width: 56,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  datePillDivider: {
+    width: '85%',
+    height: 1,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+    marginVertical: 5,
+  },
+  datePillMonth: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2C2C2E',
+    opacity: 0.9,
+  },
+  datePillDay: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#2C2C2E',
+    marginTop: 2,
   },
 
   // Regular appointment card styles
@@ -1728,5 +1932,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     position: 'relative',
+  },
+  // Date Header Styles
+  dateHeaderContainer: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    marginHorizontal: 16,
+    marginVertical: 16,
+    marginBottom: 8,
+  },
+  dateHeaderText: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: '#1C1C1E',
+    marginRight: 12,
+    letterSpacing: -0.3,
+  },
+  dateHeaderLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
   },
 });

@@ -1002,7 +1002,11 @@ export default function ClientHomeScreen() {
               activeOpacity={0.8}
               accessibilityLabel="Navigate with Google Maps"
             >
-              <MaterialCommunityIcons name="google-maps" size={28} color="#FFFFFF" />
+              <Image
+                source={{ uri: 'https://maps.gstatic.com/mapfiles/api-3/images/spotlight-poi2_hdpi.png' }}
+                style={styles.googleMapsLogo}
+                resizeMode="contain"
+              />
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.socialButton, styles.whatsappCircleButton]}
@@ -1674,16 +1678,22 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 4,
   },
+  googleMapsLogo: {
+    width: 28,
+    height: 28,
+  },
   // Removed socialText as per new design (no caption under icons)
   locationCircleContainer: {
     alignItems: 'center',
     justifyContent: 'center',
   },
   locationCircleButton: {
-    backgroundColor: '#4285F4',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
   },
   whatsappCircleButton: {
-    backgroundColor: '#1C1C1E',
+    backgroundColor: '#30D158',
   },
   // Footer developer logo
   footerContainer: {

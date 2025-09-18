@@ -512,7 +512,7 @@ export default function BusinessHoursScreen() {
                   <View style={{ gap: 4 }}>
                     {tempBreaks.map((b, i) => (
                       <Text key={`${b.start_time}-${b.end_time}-${i}`} style={styles.summaryBreak}>
-                        {`הפסקה ${tempBreaks.length > 1 ? '#' + (i + 1) + ': ' : ''}`}<Text style={styles.ltrText}>{formatRangeLtr(b.start_time, b.end_time)}</Text>
+                        {`Break ${tempBreaks.length > 1 ? '#' + (i + 1) + ': ' : ''}`}<Text style={styles.ltrText}>{formatRangeLtr(b.start_time, b.end_time)}</Text>
                       </Text>
                     ))}
                   </View>
@@ -520,7 +520,7 @@ export default function BusinessHoursScreen() {
               ) : (
                 tempBreakStartTime && tempBreakEndTime ? (
                   <Text style={styles.summaryBreak}>
-                    הפסקה: <Text style={styles.ltrText}>{formatRangeLtr(tempBreakStartTime, tempBreakEndTime)}</Text>
+                    Break: <Text style={styles.ltrText}>{formatRangeLtr(tempBreakStartTime, tempBreakEndTime)}</Text>
                   </Text>
                 ) : null
               )}

@@ -159,11 +159,12 @@ export const checkWaitlistAndNotify = async (cancelledAppointment: AvailableTime
       .eq('business_id', businessId)
       .eq('requested_date', cancelledAppointment.slot_date)
       .eq('status', 'waiting')
-      .or(`time_period.eq.${timePeriod},time_period.eq.any,service_name.eq.${cancelledAppointment.service_name}`);
+      .or(`time_period.eq.${timePeriod},time_period.eq.any`);
 
-    // Filter by user_id if the cancelled appointment is for a specific barber
-    if (cancelledAppointment.user_id) {
-      query = query.eq('user_id', cancelledAppointment.user_id);
+    // Filter by provider (user_id or barber_id) if the cancelled appointment is for a specific provider
+    const providerIdForCancellation = (cancelledAppointment as any).barber_id || (cancelledAppointment as any).user_id;
+    if (providerIdForCancellation) {
+      query = query.eq('user_id', providerIdForCancellation);
     }
 
     const { data: waitlistEntries, error: waitlistError } = await query.order('created_at', { ascending: true });
@@ -190,34 +191,11 @@ export const checkWaitlistAndNotify = async (cancelledAppointment: AvailableTime
 
 
 
-    // Get user data for notification
-    const clientPhones = relevantEntries.map(entry => entry.client_phone);
-    const { data: users, error: usersError } = await supabase
-      .from('users')
-      .select('name, phone')
-      .in('phone', clientPhones);
-
-    if (usersError) {
-      console.error('❌ Error fetching users:', usersError);
-      return;
-    }
-
-    // Create a map of phone to user data
-    const userMap = new Map();
-    users?.forEach(user => {
-      userMap.set(user.phone, user);
-    });
-
-    // Create notifications for waiting clients
+    // Create notifications for waiting clients (skip user lookup; use waitlist entry directly)
     const notifications = [];
     const notifiedEntryIds: string[] = [];
     
     for (const entry of relevantEntries) {
-      const user = userMap.get(entry.client_phone);
-      if (!user) {
-        continue;
-      }
-
       const notificationTitle = '🎉 A spot opened up!';
       const notificationContent = `Hi ${entry.client_name}! A spot opened up for ${entry.service_name} on ${formatDateForNotification(cancelledAppointment.slot_date)} at ${cancelledAppointment.slot_time}. Book now!`;
 
@@ -227,6 +205,7 @@ export const checkWaitlistAndNotify = async (cancelledAppointment: AvailableTime
         type: 'appointment_reminder' as const,
         recipient_name: entry.client_name,
         recipient_phone: entry.client_phone,
+        business_id: businessId,
       });
 
       notifiedEntryIds.push(entry.id);
@@ -280,9 +259,10 @@ export const notifyServiceWaitlistClients = async (cancelledAppointment: Availab
       .eq('status', 'waiting')
       .gte('requested_date', today);
 
-    // Filter by user_id if the cancelled appointment is for a specific barber
-    if (cancelledAppointment.user_id) {
-      query = query.eq('user_id', cancelledAppointment.user_id);
+    // Filter by provider (user_id or barber_id) if the cancelled appointment is for a specific provider
+    const providerIdForService = (cancelledAppointment as any).barber_id || (cancelledAppointment as any).user_id;
+    if (providerIdForService) {
+      query = query.eq('user_id', providerIdForService);
     }
 
     const { data: waitlistEntries, error: waitlistError } = await query
@@ -303,34 +283,11 @@ export const notifyServiceWaitlistClients = async (cancelledAppointment: Availab
     waitlistEntries.forEach((entry, index) => {
     });
 
-    // Get user data for notification
-    const clientPhones = waitlistEntries.map(entry => entry.client_phone);
-    const { data: users, error: usersError } = await supabase
-      .from('users')
-      .select('name, phone')
-      .in('phone', clientPhones);
-
-    if (usersError) {
-      console.error('❌ Error fetching users:', usersError);
-      return;
-    }
-
-    // Create a map of phone to user data
-    const userMap = new Map();
-    users?.forEach(user => {
-      userMap.set(user.phone, user);
-    });
-
-    // Create notifications for waiting clients
+    // Create notifications for waiting clients (skip user lookup; use waitlist entry directly)
     const notifications = [];
     const notifiedEntryIds: string[] = [];
     
     for (const entry of waitlistEntries) {
-      const user = userMap.get(entry.client_phone);
-      if (!user) {
-        continue;
-      }
-
       const notificationTitle = '🎉 A spot opened up!';
       const notificationContent = `Hi ${entry.client_name}! A spot opened up for ${entry.service_name} on ${formatDateForNotification(cancelledAppointment.slot_date)} at ${cancelledAppointment.slot_time}. Book now!`;
 
@@ -340,6 +297,7 @@ export const notifyServiceWaitlistClients = async (cancelledAppointment: Availab
         type: 'appointment_reminder' as const,
         recipient_name: entry.client_name,
         recipient_phone: entry.client_phone,
+        business_id: businessId,
       });
 
       notifiedEntryIds.push(entry.id);
@@ -392,9 +350,10 @@ export const notifyAllWaitlistClients = async (cancelledAppointment: AvailableTi
       .eq('status', 'waiting')
       .gte('requested_date', today);
 
-    // Filter by user_id if the cancelled appointment is for a specific barber
-    if (cancelledAppointment.user_id) {
-      query = query.eq('user_id', cancelledAppointment.user_id);
+    // Filter by provider (user_id or barber_id) if the cancelled appointment is for a specific provider
+    const providerIdForAll = (cancelledAppointment as any).barber_id || (cancelledAppointment as any).user_id;
+    if (providerIdForAll) {
+      query = query.eq('user_id', providerIdForAll);
     }
 
     const { data: waitlistEntries, error: waitlistError } = await query
@@ -416,34 +375,11 @@ export const notifyAllWaitlistClients = async (cancelledAppointment: AvailableTi
     waitlistEntries.forEach((entry, index) => {
     });
 
-    // Get user data for notification
-    const clientPhones = waitlistEntries.map(entry => entry.client_phone);
-    const { data: users, error: usersError } = await supabase
-      .from('users')
-      .select('name, phone')
-      .in('phone', clientPhones);
-
-    if (usersError) {
-      console.error('❌ Error fetching users:', usersError);
-      return;
-    }
-
-    // Create a map of phone to user data
-    const userMap = new Map();
-    users?.forEach(user => {
-      userMap.set(user.phone, user);
-    });
-
-    // Create notifications for waiting clients
+    // Create notifications for waiting clients (skip user lookup; use waitlist entry directly)
     const notifications = [];
     const notifiedEntryIds: string[] = [];
     
     for (const entry of waitlistEntries) {
-      const user = userMap.get(entry.client_phone);
-      if (!user) {
-        continue;
-      }
-
       const notificationTitle = '🎉 A spot opened up!';
       const notificationContent = `Hi ${entry.client_name}! A spot opened up for ${cancelledAppointment.service_name} on ${formatDateForNotification(cancelledAppointment.slot_date)} at ${cancelledAppointment.slot_time}. Book now!`;
 
@@ -453,6 +389,7 @@ export const notifyAllWaitlistClients = async (cancelledAppointment: AvailableTi
         type: 'appointment_reminder' as const,
         recipient_name: entry.client_name,
         recipient_phone: entry.client_phone,
+        business_id: businessId,
       });
 
       notifiedEntryIds.push(entry.id);

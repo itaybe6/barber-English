@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Switch, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking } from 'react-native';
 import Constants from 'expo-constants';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
@@ -42,6 +42,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usersApi } from '@/lib/api/users';
 import AdminBroadcastComposer from '@/components/AdminBroadcastComposer';
+import InlineEditableRow from '@/components/InlineEditableRow';
 import AddAppointmentModal from '@/components/AddAppointmentModal';
 import { ColorPicker } from '@/components/ColorPicker';
 import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
@@ -142,6 +143,7 @@ export default function SettingsScreen() {
   const [profileMinCancellationHours, setProfileMinCancellationHours] = useState(24);
   const [showEditDisplayNameModal, setShowEditDisplayNameModal] = useState(false);
   const [showEditAddressModal, setShowEditAddressModal] = useState(false);
+  const [showAddressSheet, setShowAddressSheet] = useState(false);
   const [showEditInstagramModal, setShowEditInstagramModal] = useState(false);
   const [showEditFacebookModal, setShowEditFacebookModal] = useState(false);
   const [showEditTiktokModal, setShowEditTiktokModal] = useState(false);
@@ -164,6 +166,12 @@ export default function SettingsScreen() {
   const [imageLoadError, setImageLoadError] = useState(false);
   const [imageLoadTimeout, setImageLoadTimeout] = useState<number | null>(null);
   const [progressAnimation] = useState(new Animated.Value(0));
+  // Address bottom sheet animation
+  const addressSheetAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
+  const addressOverlayOpacity = addressSheetAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
+  const addressSheetTranslateY = addressSheetAnim.interpolate({ inputRange: [0, 1], outputRange: [600, 0] });
+  const addressDragY = useRef(new Animated.Value(0)).current;
+  const addressCombinedTranslateY = Animated.add(addressSheetTranslateY as any, addressDragY as any);
   const [displayNameDraft, setDisplayNameDraft] = useState('');
   const [addressDraft, setAddressDraft] = useState('');
   const [instagramDraft, setInstagramDraft] = useState('');
@@ -361,7 +369,19 @@ export default function SettingsScreen() {
   // Open editors with current values
   const openEditAddress = () => {
     setAddressDraft(profileAddress || '');
-    setShowEditAddressModal(true);
+    setShowAddressSheet(true);
+    addressSheetAnim.setValue(0);
+    Animated.timing(addressSheetAnim, {
+      toValue: 1,
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+    try {
+      if (placesInputRef.current && (profileAddress || '')) {
+        placesInputRef.current.setAddressText(profileAddress);
+      }
+    } catch {}
   };
   const openEditInstagram = () => {
     setInstagramDraft(profileInstagram || '');
@@ -374,6 +394,134 @@ export default function SettingsScreen() {
   const openEditTiktok = () => {
     setTiktokDraft(profileTiktok || '');
     setShowEditTiktokModal(true);
+  };
+
+  const handleSaveDisplayNameInline = async (next: string) => {
+    setIsSavingProfile(true);
+    try {
+      const updated = await businessProfileApi.upsertProfile({
+        display_name: (next || '').trim() || null as any,
+        address: (profileAddress || '').trim() || null as any,
+        instagram_url: (profileInstagram || '').trim() || null as any,
+        facebook_url: (profileFacebook || '').trim() || null as any,
+        tiktok_url: (profileTiktok || '').trim() || null as any,
+      });
+      if (!updated) {
+        Alert.alert('Error', 'Failed to save business name');
+        return;
+      }
+      setProfile(updated);
+      setProfileDisplayName(updated.display_name || '');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  // Inline save handlers for social links (used by InlineEditableRow)
+  const handleSaveInstagramInline = async (next: string) => {
+    setIsSavingProfile(true);
+    try {
+      const updated = await businessProfileApi.upsertProfile({
+        address: (profileAddress || '').trim() || null as any,
+        instagram_url: (next || '').trim() || null as any,
+        facebook_url: (profileFacebook || '').trim() || null as any,
+        tiktok_url: (profileTiktok || '').trim() || null as any,
+      });
+      if (!updated) {
+        Alert.alert('Error', 'Failed to save Instagram link');
+        return;
+      }
+      setProfile(updated);
+      setProfileInstagram(updated.instagram_url || '');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleSaveFacebookInline = async (next: string) => {
+    setIsSavingProfile(true);
+    try {
+      const updated = await businessProfileApi.upsertProfile({
+        address: (profileAddress || '').trim() || null as any,
+        instagram_url: (profileInstagram || '').trim() || null as any,
+        facebook_url: (next || '').trim() || null as any,
+        tiktok_url: (profileTiktok || '').trim() || null as any,
+      });
+      if (!updated) {
+        Alert.alert('Error', 'Failed to save Facebook link');
+        return;
+      }
+      setProfile(updated);
+      setProfileFacebook(updated.facebook_url || '');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleSaveTiktokInline = async (next: string) => {
+    setIsSavingProfile(true);
+    try {
+      const updated = await businessProfileApi.upsertProfile({
+        address: (profileAddress || '').trim() || null as any,
+        instagram_url: (profileInstagram || '').trim() || null as any,
+        facebook_url: (profileFacebook || '').trim() || null as any,
+        tiktok_url: (next || '').trim() || null as any,
+      });
+      if (!updated) {
+        Alert.alert('Error', 'Failed to save TikTok link');
+        return;
+      }
+      setProfile(updated);
+      setProfileTiktok(updated.tiktok_url || '');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleSaveCancellationInline = async (next: string) => {
+    const trimmed = (next || '').trim();
+    const hours = parseInt(trimmed, 10);
+    if (isNaN(hours) || hours < 0 || hours > 168) {
+      Alert.alert('Error', 'Please enter a valid number between 0 and 168 hours');
+      return;
+    }
+    setIsSavingProfile(true);
+    try {
+      const updated = await businessProfileApi.upsertProfile({
+        display_name: (profileDisplayName || '').trim() || null as any,
+        address: (profileAddress || '').trim() || null as any,
+        instagram_url: (profileInstagram || '').trim() || null as any,
+        facebook_url: (profileFacebook || '').trim() || null as any,
+        tiktok_url: (profileTiktok || '').trim() || null as any,
+        min_cancellation_hours: hours,
+      });
+      if (!updated) {
+        Alert.alert('Error', 'Failed to save cancellation policy');
+        return;
+      }
+      setProfile(updated);
+      setProfileMinCancellationHours(updated.min_cancellation_hours || 24);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleSaveReminderInline = async (next: string) => {
+    if (!user?.id) return;
+    const trimmed = (next || '').trim();
+    const mins = parseInt(trimmed, 10);
+    if (!Number.isFinite(mins) || mins < 1 || mins > 1440) {
+      Alert.alert('Error', 'Enter a valid number between 1 and 1440 minutes');
+      return;
+    }
+    try {
+      setIsSavingProfile(true);
+      await businessProfileApi.setReminderMinutesForUser(user.id, mins);
+      setReminderMinutes(mins);
+      setReminderEnabled(true);
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
   const openEditCancellation = () => {
@@ -407,6 +555,88 @@ export default function SettingsScreen() {
   const [placesPlaceId, setPlacesPlaceId] = useState<string>('');
   const [placesLat, setPlacesLat] = useState<number | null>(null);
   const [placesLng, setPlacesLng] = useState<number | null>(null);
+  const justSelectedPlaceRef = useRef(false);
+  const placesInputRef = useRef<any>(null);
+
+  // Format a concise address like: "2319 E 3rd St Dayton, OH"
+  const formatShortAddress = (details: any, fallbackDescription?: string): string => {
+    try {
+      const comps = details?.address_components as any[] | undefined;
+      if (Array.isArray(comps) && comps.length > 0) {
+        const get = (type: string) => comps.find((c) => Array.isArray(c.types) && c.types.includes(type));
+        const streetNum = get('street_number')?.short_name || '';
+        const route = get('route')?.long_name || '';
+        const locality = get('locality')?.long_name || get('sublocality')?.long_name || get('administrative_area_level_2')?.long_name || '';
+        const stateShort = get('administrative_area_level_1')?.short_name || '';
+        const stateLong = get('administrative_area_level_1')?.long_name || '';
+        const state = stateShort || usStateToAbbrev(stateLong) || '';
+        const street = `${streetNum} ${route}`.trim();
+        const cityState = `${locality}${locality && state ? ', ' : ''}${state}`.trim();
+        const shortAddr = [street, cityState].filter(Boolean).join(' ').trim();
+        if (shortAddr) return shortAddr.replace(/,\s*,/g, ', ').replace(/[,\s]+$/, '');
+      }
+      const desc = (fallbackDescription || details?.formatted_address || '').trim();
+      if (!desc) return '';
+      const parts = desc.split(',').map((p: string) => p.trim()).filter(Boolean);
+      if (parts.length >= 3) {
+        const street = parts[0];
+        const city = parts[1];
+        const stateCandidate = parts[2];
+        const state = usStateToAbbrev(stateCandidate) || stateCandidate.split(' ')[0];
+        return `${street} ${city}${city && state ? ', ' : ''}${state}`.trim().replace(/,\s*,/g, ', ').replace(/[,\s]+$/, '');
+      }
+      return parts.join(', ').replace(/,\s*,/g, ', ').replace(/[,\s]+$/, '');
+    } catch {
+      return (details?.formatted_address || fallbackDescription || '').trim();
+    }
+  };
+
+  // Force English short address for display (parse formatted_address to English if available)
+  const toEnglishShortAddress = (full: string): string => {
+    const ascii = full.normalize('NFKD').replace(/[\u0590-\u05FF]/g, '').trim();
+    const compressed = compressUsState(ascii || full);
+    const withoutCountry = stripCountryNames(compressed || full);
+    return (withoutCountry || full).replace(/,\s*,/g, ', ').replace(/[,\s]+$/, '');
+  };
+
+  // US state mapping (long -> abbrev)
+  const US_STATES: Record<string, string> = {
+    Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA', Colorado: 'CO', Connecticut: 'CT', Delaware: 'DE', Florida: 'FL', Georgia: 'GA', Hawaii: 'HI', Idaho: 'ID', Illinois: 'IL', Indiana: 'IN', Iowa: 'IA', Kansas: 'KS', Kentucky: 'KY', Louisiana: 'LA', Maine: 'ME', Maryland: 'MD', Massachusetts: 'MA', Michigan: 'MI', Minnesota: 'MN', Mississippi: 'MS', Missouri: 'MO', Montana: 'MT', Nebraska: 'NE', Nevada: 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND', Ohio: 'OH', Oklahoma: 'OK', Oregon: 'OR', Pennsylvania: 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC', 'South Dakota': 'SD', Tennessee: 'TN', Texas: 'TX', Utah: 'UT', Vermont: 'VT', Virginia: 'VA', Washington: 'WA', 'West Virginia': 'WV', Wisconsin: 'WI', Wyoming: 'WY', 'District of Columbia': 'DC'
+  };
+
+  const usStateToAbbrev = (nameOrAbbrev?: string): string | '' => {
+    if (!nameOrAbbrev) return '';
+    const s = String(nameOrAbbrev).trim();
+    if (s.length === 2 && /^[A-Z]{2}$/.test(s)) return s;
+    const mapped = US_STATES[s] || US_STATES[capitalizeWords(s)];
+    return mapped || '';
+  };
+
+  const capitalizeWords = (str: string): string => str.replace(/\b\w/g, (m) => m.toUpperCase());
+
+  const compressUsState = (input: string): string => {
+    let out = input;
+    Object.keys(US_STATES).forEach((long) => {
+      const abbr = US_STATES[long];
+      const re = new RegExp(`(^|,\s*)${long}(?=\s|,|$)`, 'gi');
+      out = out.replace(re, (match, p1) => `${p1}${abbr}`);
+    });
+    return out;
+  };
+
+  const stripCountryNames = (input: string): string => {
+    // Remove common country suffixes like ", USA" / ", United States" / ", US" and Hebrew variant
+    let out = input.replace(/,\s*(United States(?: of America)?|USA|U\.S\.A\.|US|ארצות הברית)\b/gi, '');
+    // Also remove standalone country names at end without comma
+    out = out.replace(/\s*(United States(?: of America)?|USA|U\.S\.A\.|US|ארצות הברית)\s*$/gi, '');
+    return out;
+  };
+
+  const businessAddressDisplay = useMemo(() => {
+    const source = (profileAddress || '').trim();
+    if (!source) return '';
+    return toEnglishShortAddress(source);
+  }, [profileAddress]);
 
   const saveBusinessAddress = async () => {
     if (!placesFormattedAddress) {
@@ -523,7 +753,7 @@ export default function SettingsScreen() {
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponder: () => true,
       onStartShouldSetPanResponderCapture: () => false,
       onMoveShouldSetPanResponder: (_: GestureResponderEvent, g: PanResponderGestureState) => {
         return g.dy > 4 && Math.abs(g.dy) > Math.abs(g.dx);
@@ -1694,28 +1924,22 @@ export default function SettingsScreen() {
             () => setShowBroadcast(true)
           )}
           
-          {renderSettingItem(
-            <Clock size={20} color={businessColors.primary} />,
-            'Reminder before appointment',
-            reminderEnabled && Number(reminderMinutes) > 0 ? `${reminderMinutes} minutes before` : 'Off',
-            <AppSwitch
-              value={reminderEnabled}
-              onValueChange={async (val) => {
-                try {
-                  setReminderEnabled(val);
-                  if (!user?.id) return;
-                  if (!val) {
-                    await businessProfileApi.setReminderMinutesForUser(user.id, null);
-                    setReminderMinutes(null);
-                  } else {
-                    setShowEditReminderModal(true);
-                  }
-                } catch {}
-              }}
-              primaryColor={businessColors.primary}
-            />,
-            () => setShowEditReminderModal(true)
-          )}
+          <View style={styles.settingItemLTR}>
+            <View style={styles.settingIconLTR}><Clock size={20} color={businessColors.primary} /></View>
+            <View style={{ flex: 1 }}>
+              <InlineEditableRow
+                title="Reminder before appointment (minutes)"
+                value={reminderEnabled && Number(reminderMinutes) > 0 ? String(reminderMinutes) : ''}
+                placeholder="e.g. 30"
+                keyboardType="default"
+                onSave={handleSaveReminderInline}
+                validate={(v) => {
+                  const n = parseInt((v || '').trim(), 10);
+                  return Number.isFinite(n) && n >= 1 && n <= 1440;
+                }}
+              />
+            </View>
+          </View>
 
         </View>
         
@@ -1733,41 +1957,66 @@ export default function SettingsScreen() {
 
         <Text style={styles.sectionTitleNew}>Business details</Text>
         <View style={[styles.cardNew, shadowStyle]}>
-          {renderSettingItemLTR(
-            <Pencil size={20} color={businessColors.primary} />, 
-            'Business name',
-            profileDisplayName || 'Add business name',
-            undefined,
-            () => { setDisplayNameDraft(profileDisplayName || ''); setShowEditDisplayNameModal(true); }
-          )}
+          <View style={styles.settingItemLTR}>
+            <View style={styles.settingIconLTR}><Pencil size={20} color={businessColors.primary} /></View>
+            <View style={{ flex: 1 }}>
+              <InlineEditableRow
+                title="Business name"
+                value={profileDisplayName || ''}
+                placeholder="Business name"
+                keyboardType="default"
+                onSave={handleSaveDisplayNameInline}
+                validate={(v) => v.trim().length > 0}
+              />
+            </View>
+          </View>
           {renderSettingItemLTR(
             <MapPin size={20} color="#FF3B30" />, 
             'Business address',
-            profileAddress || 'Add address',
+            businessAddressDisplay || 'Add address',
             undefined,
             openEditAddress
           )}
-          {renderSettingItemLTR(
-            <Instagram size={20} color="#E4405F" />, 
-            'Instagram',
-            profileInstagram ? undefined : 'Add Instagram link',
-            undefined,
-            openEditInstagram
-          )}
-          {renderSettingItemLTR(
-            <Facebook size={20} color="#1877F2" />, 
-            'Facebook',
-            profileFacebook ? undefined : 'Add Facebook link',
-            undefined,
-            openEditFacebook
-          )}
-          {renderSettingItemLTR(
-            <Ionicons name="logo-tiktok" size={20} color="#000000" />, 
-            'TikTok',
-            profileTiktok ? undefined : 'Add TikTok link',
-            undefined,
-            openEditTiktok
-          )}
+          {/* Inline editable social links */}
+          <View style={styles.settingItemLTR}>
+            <View style={styles.settingIconLTR}><Instagram size={20} color="#E4405F" /></View>
+            <View style={{ flex: 1 }}>
+              <InlineEditableRow
+                title="Instagram"
+                value={profileInstagram || ''}
+                placeholder="https://instagram.com/yourpage"
+                keyboardType="url"
+                onSave={handleSaveInstagramInline}
+                validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
+              />
+            </View>
+          </View>
+          <View style={styles.settingItemLTR}>
+            <View style={styles.settingIconLTR}><Facebook size={20} color="#1877F2" /></View>
+            <View style={{ flex: 1 }}>
+              <InlineEditableRow
+                title="Facebook"
+                value={profileFacebook || ''}
+                placeholder="https://facebook.com/yourpage"
+                keyboardType="url"
+                onSave={handleSaveFacebookInline}
+                validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
+              />
+            </View>
+          </View>
+          <View style={styles.settingItemLTR}>
+            <View style={styles.settingIconLTR}><Ionicons name="logo-tiktok" size={20} color="#000000" /></View>
+            <View style={{ flex: 1 }}>
+              <InlineEditableRow
+                title="TikTok"
+                value={profileTiktok || ''}
+                placeholder="https://www.tiktok.com/@yourpage"
+                keyboardType="url"
+                onSave={handleSaveTiktokInline}
+                validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
+              />
+            </View>
+          </View>
         </View>
 
         <Text style={styles.sectionTitleNew}>Design Application</Text>
@@ -1850,13 +2099,22 @@ export default function SettingsScreen() {
 
         <Text style={styles.sectionTitleNew}>Appointment policies</Text>
         <View style={[styles.cardNew, shadowStyle]}>
-          {renderSettingItemLTR(
-            <Clock size={20} color={businessColors.primary} />, 
-            'Minimum cancellation time',
-            `${profileMinCancellationHours} hours before appointment`,
-            undefined,
-            openEditCancellation
-          )}
+          <View style={styles.settingItemLTR}>
+            <View style={styles.settingIconLTR}><Clock size={20} color={businessColors.primary} /></View>
+            <View style={{ flex: 1 }}>
+              <InlineEditableRow
+                title="Minimum cancellation time (hours)"
+                value={String(profileMinCancellationHours || 24)}
+                placeholder="e.g. 24"
+                keyboardType="default"
+                onSave={handleSaveCancellationInline}
+                validate={(v) => {
+                  const n = parseInt((v || '').trim(), 10);
+                  return !isNaN(n) && n >= 0 && n <= 168;
+                }}
+              />
+            </View>
+          </View>
         </View>
 
 
@@ -1889,6 +2147,7 @@ export default function SettingsScreen() {
                 undefined,
                 async () => {
                   setShowManageRecurringModal(true);
+                  animateOpenSheet();
                   setIsLoadingRecurring(true);
                   try {
                     const items = await recurringAppointmentsApi.listAll();
@@ -2256,28 +2515,48 @@ export default function SettingsScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Edit Address Modal */}
-      <Modal
-        visible={showEditAddressModal}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setShowEditAddressModal(false)}
-      >
-        <View style={styles.smallModalOverlay}>
-          <View style={styles.smallModalCard}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowEditAddressModal(false)}>
-                <Text style={styles.modalCloseText}>Cancel</Text>
-              </TouchableOpacity>
-              <Text style={styles.modalTitleLTR}>Edit address</Text>
-              <TouchableOpacity style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]} onPress={saveAddress} disabled={isSavingProfile}>
-                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'Saving...' : 'Save'}</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.smallModalContent}>
-              <View style={styles.inputContainer}>
+      {/* Address bottom sheet (2/3 screen) */}
+      <Modal visible={showAddressSheet} transparent animationType="none" onRequestClose={() => setShowAddressSheet(false)}>
+        <TouchableWithoutFeedback onPress={() => {
+          Animated.timing(addressSheetAnim, { toValue: 0, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => setShowAddressSheet(false));
+        }}>
+          <Animated.View style={[styles.sheetOverlay, { opacity: addressOverlayOpacity }]} />
+        </TouchableWithoutFeedback>
+        <Animated.View style={[styles.addressSheetContainer, { transform: [{ translateY: addressCombinedTranslateY }] }]}>
+          <View style={styles.dragHandleArea}>
+            <View style={styles.sheetGrabberWrapper} {...(PanResponder.create({
+              onStartShouldSetPanResponder: () => true,
+              onMoveShouldSetPanResponder: (_: any, g: any) => g.dy > 4 && Math.abs(g.dy) > Math.abs(g.dx),
+              onPanResponderMove: (_: any, g: any) => {
+                addressDragY.setValue(Math.max(0, g.dy));
+              },
+              onPanResponderRelease: (_: any, g: any) => {
+                const shouldClose = g.dy > 140 || g.vy > 0.9;
+                if (shouldClose) {
+                  Animated.timing(addressSheetAnim, { toValue: 0, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => {
+                    addressDragY.setValue(0);
+                    setShowAddressSheet(false);
+                  });
+                } else {
+                  Animated.timing(addressDragY, { toValue: 0, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+                }
+              },
+              onPanResponderTerminate: () => {
+                Animated.timing(addressDragY, { toValue: 0, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+              },
+            }).panHandlers)}><View style={styles.sheetGrabber} /></View>
+          </View>
+          <View style={styles.addressHeaderRow}>
+            <MapPin size={18} color={businessColors.primary} style={styles.addressHeaderIcon} />
+            <Text style={styles.addressSheetTitle}>Choose business address</Text>
+          </View>
+          <Text style={styles.addressSheetSubtitle}>Pick the exact business location from the list. Clients will navigate here.</Text>
+          <KeyboardAvoidingView behavior={Platform.select({ ios: 'padding', android: undefined })} style={styles.addressSheetBody}>
+            <View style={{ flex: 1, padding: 16, paddingBottom: insets.bottom + 16 }}>
+              <View style={styles.addressInfoCard}>
                 <Text style={styles.inputLabelLTR}>Address</Text>
                 <GooglePlacesAutocomplete
+                  keyboardShouldPersistTaps="handled"
                   placeholder="Business address"
                   fetchDetails
                   debounce={200}
@@ -2287,25 +2566,33 @@ export default function SettingsScreen() {
                   nearbyPlacesAPI={undefined as any}
                   query={{
                     key: (Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_PLACES_KEY || process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY,
-                    language: 'he',
+                    language: 'en',
                     types: 'geocode',
                   }}
+                  ref={placesInputRef}
                   onPress={(data: any, details: any) => {
                     const formatted = details?.formatted_address || data?.description || '';
                     const placeId = data?.place_id || details?.place_id || '';
                     const lat = details?.geometry?.location?.lat ?? null;
                     const lng = details?.geometry?.location?.lng ?? null;
-                    setPlacesFormattedAddress(formatted);
+                    const shortAddress = formatShortAddress(details, data?.description || formatted);
+                    setPlacesFormattedAddress(shortAddress);
                     setPlacesPlaceId(placeId);
                     setPlacesLat(lat);
                     setPlacesLng(lng);
-                    setAddressDraft(formatted);
+                    setAddressDraft(shortAddress);
+                    justSelectedPlaceRef.current = true;
                   }}
                   textInputProps={{
                     value: addressDraft,
                     onChangeText: (t: string) => {
+                      if (justSelectedPlaceRef.current) {
+                        // Ignore the immediate programmatic change triggered by selection
+                        justSelectedPlaceRef.current = false;
+                        setAddressDraft(t);
+                        return;
+                      }
                       setAddressDraft(t);
-                      // Clear selection so preview/map hides until a prediction is chosen
                       if (placesPlaceId) {
                         setPlacesPlaceId('');
                         setPlacesFormattedAddress('');
@@ -2320,8 +2607,12 @@ export default function SettingsScreen() {
                   styles={{
                     container: { flex: 0 },
                     textInputContainer: { padding: 0, borderWidth: 0 },
-                    textInput: [styles.textInput as any, { height: 48 }],
+                    textInput: [styles.addressInputBox as any],
                     listView: {
+                      position: 'absolute',
+                      top: 48,
+                      left: 0,
+                      right: 0,
                       zIndex: 9999,
                       elevation: 12,
                       backgroundColor: '#FFFFFF',
@@ -2332,15 +2623,8 @@ export default function SettingsScreen() {
                       maxHeight: 260,
                     },
                   }}
-                  onFail={(error) => {
-                    console.log('[Places] onFail', error);
-                  }}
-                  onNotFound={() => {
-                    // No results found; ensure component doesn't crash
-                  }}
                 />
               </View>
-
               {!!placesPlaceId && (
                 <View style={{ marginTop: 12 }}>
                   <Image
@@ -2348,33 +2632,28 @@ export default function SettingsScreen() {
                     style={{ width: '100%', height: 160, borderRadius: 12 }}
                     resizeMode="cover"
                   />
-                  <TouchableOpacity
-                    onPress={async () => {
-                      const addr = (placesFormattedAddress || addressDraft || '').trim();
-                      if (!addr) return;
-                      const appUrl = `comgooglemaps://?q=${encodeURIComponent(addr)}`;
-                      const webUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
-                      try {
-                        const canOpen = await Linking.canOpenURL(appUrl);
-                        if (canOpen) {
-                          await Linking.openURL(appUrl);
-                        } else if (Platform.OS === 'ios') {
-                          await Linking.openURL(`http://maps.apple.com/?q=${encodeURIComponent(addr)}`);
-                        } else {
-                          await Linking.openURL(webUrl);
-                        }
-                      } catch {}
-                    }}
-                    style={{ marginTop: 10, alignSelf: 'flex-start', backgroundColor: businessColors.primary, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10 }}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Open Directions</Text>
-                  </TouchableOpacity>
                 </View>
               )}
+              {(() => { const canSave = ((placesFormattedAddress || addressDraft || '').trim().length > 0); return (
+              <View style={styles.addressSaveRow}>
+                <TouchableOpacity
+                  onPress={async () => {
+                    const selected = (placesFormattedAddress || addressDraft || '').trim();
+                    if (!selected) { Alert.alert('Error', 'Please select an address'); return; }
+                    setAddressDraft(selected);
+                    await saveAddress();
+                    Animated.timing(addressSheetAnim, { toValue: 0, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => setShowAddressSheet(false));
+                  }}
+                  style={[styles.addressSaveButton, { backgroundColor: businessColors.primary }, !canSave && styles.addressSaveButtonDisabled]}
+                  disabled={!canSave}
+                >
+                  <Text style={styles.addressSaveText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+              ); })()}
             </View>
-          </View>
-        </View>
+          </KeyboardAvoidingView>
+        </Animated.View>
       </Modal>
 
       {/* Edit Instagram Modal */}
@@ -2658,69 +2937,80 @@ export default function SettingsScreen() {
       {/* Manage Recurring Appointments Modal */}
       <Modal
         visible={showManageRecurringModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
+        transparent
+        animationType="none"
         onRequestClose={() => setShowManageRecurringModal(false)}
       >
-        <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#F8F9FA' }]}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity 
-              style={styles.modalCloseButton}
-              onPress={() => setShowManageRecurringModal(false)}
-            >
-              <Text style={styles.modalCloseText}>Close</Text>
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Manage recurring appointments</Text>
-            <View style={{ width: 44 }} />
-          </View>
-
-          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-            <View style={styles.recurringCard}>
-              {isLoadingRecurring ? (
-                <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-                  <ActivityIndicator size="large" color={businessColors.primary} />
-                  <Text style={{ marginTop: 12, color: Colors.subtext }}>Loading...</Text>
-                </View>
-              ) : (
-                <View>
-                  {recurringList.length === 0 ? (
-                    <Text style={{ textAlign: 'center', color: Colors.subtext }}>No recurring appointments</Text>
+        <View style={styles.sheetRoot}>
+          <TouchableWithoutFeedback onPress={() => animateCloseSheet(() => setShowManageRecurringModal(false))}>
+            <Animated.View style={[styles.sheetOverlay, { opacity: overlayOpacity }]} />
+          </TouchableWithoutFeedback>
+          <Animated.View style={[styles.sheetContainer, { transform: [{ translateY: combinedTranslateY }] } ] }>
+            <View style={styles.dragHandleArea}>
+              <View style={styles.sheetGrabberWrapper} {...panResponder.panHandlers}>
+                <View style={styles.sheetGrabber} />
+              </View>
+            </View>
+            <View style={[styles.servicesModalHeader, { paddingHorizontal: 12 }]}>
+              <TouchableOpacity style={[styles.servicesModalCloseButton, { marginLeft: 0 }]} onPress={() => animateCloseSheet(() => setShowManageRecurringModal(false))}>
+                <X size={20} color={Colors.text} />
+              </TouchableOpacity>
+              <Text style={[styles.modalTitle, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>
+                Manage recurring appointments
+              </Text>
+              <View style={{ width: 44 }} />
+            </View>
+            <View style={styles.sheetBody}>
+              <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.modalContentContainer, { paddingBottom: insets.bottom + 8 }]}
+                showsVerticalScrollIndicator={false}>
+                <View style={styles.recurringCard}>
+                  {isLoadingRecurring ? (
+                    <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                      <ActivityIndicator size="large" color={businessColors.primary} />
+                      <Text style={{ marginTop: 12, color: Colors.subtext }}>Loading...</Text>
+                    </View>
                   ) : (
-                    recurringList.map((item, idx) => (
-                      <View key={item.id}>
-                        <View style={styles.manageItemRow}>
-                          <View style={styles.itemActions}>
-                            <TouchableOpacity
-                              style={styles.iconActionButton}
-                              onPress={async () => {
-                                const ok = await recurringAppointmentsApi.delete(item.id);
-                                if (ok) setRecurringList((prev) => prev.filter((x) => x.id !== item.id));
-                                else Alert.alert('Error', 'Failed to delete appointment');
-                              }}
-                              accessibilityRole="button"
-                              accessibilityLabel="Delete"
-                            >
-                              <Trash2 size={18} color="#FF3B30" />
-                            </TouchableOpacity>
-                          </View>
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <View style={{ alignItems: 'flex-start', flex: 1 }}>
-                              <Text style={styles.previewNotificationTitle}>{item.client_name}</Text>
-                              <Text style={styles.previewNotificationContent}>{item.client_phone}</Text>
-                              <Text style={styles.previewNotificationContent}>{item.service_name}</Text>
-                              <Text style={styles.previewNotificationContent}>{['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][item.day_of_week]} · {String(item.slot_time).slice(0,5)}</Text>
+                    <View>
+                      {recurringList.length === 0 ? (
+                        <Text style={{ textAlign: 'center', color: Colors.subtext }}>No recurring appointments</Text>
+                      ) : (
+                        recurringList.map((item, idx) => (
+                          <View key={item.id}>
+                        <View style={[styles.manageItemRow]}> 
+                          <View style={{ backgroundColor: Colors.white, borderRadius: 16, padding: 18, ...shadowStyle }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                              <View style={{ flex: 1, alignItems: 'flex-start' }}>
+                                <Text style={styles.previewNotificationTitle}>{item.client_name}</Text>
+                                <Text style={styles.previewNotificationContent}>{item.client_phone}</Text>
+                                <Text style={styles.previewNotificationContent}>{item.service_name}</Text>
+                                <Text style={styles.previewNotificationContent}>{['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][item.day_of_week]} · {String(item.slot_time).slice(0,5)}</Text>
+                              </View>
+                              <TouchableOpacity
+                                style={[styles.iconActionButton, { backgroundColor: '#FFECEC', borderColor: '#FFD1D1' }]}
+                                onPress={async () => {
+                                  const ok = await recurringAppointmentsApi.delete(item.id);
+                                  if (ok) setRecurringList((prev) => prev.filter((x) => x.id !== item.id));
+                                  else Alert.alert('Error', 'Failed to delete appointment');
+                                }}
+                                accessibilityRole="button"
+                                accessibilityLabel="Delete"
+                              >
+                                <Trash2 size={18} color="#FF3B30" />
+                              </TouchableOpacity>
                             </View>
                           </View>
                         </View>
-                        {idx < recurringList.length - 1 && <View style={styles.manageDivider} />}
-                      </View>
-                    ))
+                            {idx < recurringList.length - 1 && <View style={styles.manageDivider} />}
+                          </View>
+                        ))
+                      )}
+                    </View>
                   )}
                 </View>
-              )}
+              </ScrollView>
             </View>
-          </ScrollView>
-        </SafeAreaView>
+          </Animated.View>
+        </View>
       </Modal>
       {/* Manage Employees Modal */}
       <Modal
@@ -3710,6 +4000,7 @@ const styles = StyleSheet.create({
   sheetOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.35)',
+    zIndex: 1,
   },
   sheetContainer: {
     position: 'absolute',
@@ -3721,6 +4012,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     height: '85%',
     width: '100%',
+    zIndex: 2,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -3867,6 +4159,91 @@ const styles = StyleSheet.create({
     marginBottom: 18,
     padding: 18,
     ...shadowStyle,
+  },
+  addressSheetContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    height: '75%',
+    width: '100%',
+    zIndex: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 20,
+      },
+      android: { elevation: 14 },
+    }),
+  },
+  addressHeaderRow: {
+    paddingHorizontal: 16,
+    paddingBottom: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  addressHeaderIcon: {
+    marginRight: 8,
+  },
+  addressSheetTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'left',
+    marginTop: 8,
+  },
+  addressSheetSubtitle: {
+    fontSize: 14,
+    color: Colors.subtext,
+    textAlign: 'left',
+    marginTop: 4,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  addressSheetBody: {
+    flex: 1,
+    backgroundColor: '#F7F8FA',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  addressInfoCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    padding: 12,
+    ...shadowStyle,
+  },
+  addressInputBox: {
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    backgroundColor: Colors.white,
+    color: Colors.text,
+  },
+  addressSaveRow: {
+    marginTop: 16,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  addressSaveButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+  },
+  addressSaveButtonDisabled: {
+    opacity: 0.5,
+  },
+  addressSaveText: {
+    color: Colors.white,
+    fontWeight: '700',
+    fontSize: 16,
   },
   settingItem: {
     flexDirection: 'row',
@@ -4156,6 +4533,8 @@ const styles = StyleSheet.create({
   sheetBody: {
     flex: 1,
     backgroundColor: '#F2F2F7',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
   },
   inputContainer: {
     marginBottom: 24,
@@ -4227,7 +4606,12 @@ const styles = StyleSheet.create({
     ...shadowStyle,
   },
   manageItemRow: {
-    paddingVertical: 8,
+    padding: 0,
+    marginBottom: 10,
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    borderWidth: 0,
+    borderColor: 'transparent',
   },
   manageDivider: {
     height: 0,
@@ -4466,8 +4850,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   recurringCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: 'transparent',
+    borderRadius: 0,
     borderWidth: 1,
     borderColor: '#E5E5EA',
     padding: 16,

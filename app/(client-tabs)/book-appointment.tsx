@@ -1171,11 +1171,12 @@ export default function BookAppointment() {
 
 
       if (success) {
-        const policyNote = '\n\nלתשומת לבך: אי אפשר לבטל את התור 48 שעות לפני מועד התור. ביטול בתקופה זו יחויב בתשלום על התור.';
-        const message = existingAppointmentToCancel 
-          ? `התור הקודם בוטל והתור החדש נקבע בהצלחה!\nהתור החדש ל${selectedService.name} נקבע ליום ${days[selectedDay].dayName} ${days[selectedDay].date} בשעה ${selectedTime}${policyNote}`
-          : `התור שלך ל${selectedService.name} נקבע ליום ${days[selectedDay].dayName} ${days[selectedDay].date} בשעה ${selectedTime}${policyNote}`;
-
+        const dateUs = selectedDate ? new Date(selectedDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '';
+        const baseMessage = `Your appointment for\n"${selectedService.name}"\n\nhas been scheduled for\n${dateUs}\n${selectedTime}`;
+        const message = existingAppointmentToCancel
+          ? `התור הקודם בוטל והתור החדש נקבע בהצלחה!\n\n${baseMessage}`
+          : baseMessage;
+         
         setSuccessMessage(message);
         setShowSuccessModal(true);
 
@@ -1687,15 +1688,15 @@ export default function BookAppointment() {
                 {'\n'}
                 Do you want to cancel the existing appointment and book a new one on {selectedDay !== null ? `${days[selectedDay].dayName} ${days[selectedDay].date}` : ''} at {selectedTime}?
               </Text>
-              <View style={styles.modalButtons}>
+              <View style={[styles.modalButtons, styles.modalButtonsStacked]}>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonCancel]}
+                  style={[styles.modalButton, styles.modalButtonStacked, styles.modalButtonCancel]}
                   onPress={() => setShowReplaceModal(false)}
                 >
                   <Text style={styles.modalButtonCancelText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonReplace]}
+                  style={[styles.modalButton, styles.modalButtonStacked, styles.modalButtonReplace]}
                   onPress={() => {
                     setShowReplaceModal(false);
                     if (existingAppointment) {
@@ -1706,7 +1707,7 @@ export default function BookAppointment() {
                   <Text style={styles.modalButtonText}>Replace Appointment</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonBookAdditional]}
+                  style={[styles.modalButton, styles.modalButtonStacked, styles.modalButtonBookAdditional]}
                   onPress={() => {
                     setShowReplaceModal(false);
                     proceedWithBooking();
@@ -1738,6 +1739,13 @@ export default function BookAppointment() {
               <Text style={styles.modalMessage} numberOfLines={0} allowFontScaling={false}>
                 {successMessage}
               </Text>
+              <View style={styles.scheduleBlock}>
+                <Text style={styles.scheduleLine}>has been scheduled for</Text>
+                <Text style={styles.scheduleDate}>
+                  {selectedDate ? new Date(selectedDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : ''}
+                </Text>
+                <Text style={styles.scheduleTime}>{selectedTime || ''}</Text>
+              </View>
               <View style={styles.modalInfoSection}>
                 <Text style={styles.modalInfoTitle}>Your info</Text>
                 {!!selectedService?.name && (
@@ -2464,16 +2472,49 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 17,
     color: '#1C1C1E',
     textAlign: 'center',
-    marginBottom: 32,
+    marginBottom: 16,
     lineHeight: 24,
     letterSpacing: -0.2,
     fontWeight: '500',
+  },
+  scheduleBlock: {
+    width: '100%',
+    backgroundColor: 'rgba(118,118,128,0.12)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  scheduleLine: {
+    fontSize: 14,
+    color: '#475569',
+    marginBottom: 6,
+  },
+  scheduleDate: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  scheduleTime: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
   },
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '100%',
     gap: 12,
+  },
+  // Stacked layout for long labels on compact screens
+  modalButtonsStacked: {
+    flexDirection: 'column',
+    gap: 12,
+    justifyContent: 'flex-start',
+    alignItems: 'stretch',
+    width: '100%',
   },
   modalButton: {
     flex: 1,
@@ -2487,6 +2528,11 @@ const createStyles = (colors: any) => StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 6,
+  },
+  modalButtonStacked: {
+    width: '100%',
+    flex: 0,
+    minHeight: 52,
   },
   modalButtonCancel: {
     backgroundColor: '#F2F2F7',

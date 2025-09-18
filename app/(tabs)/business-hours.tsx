@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import BusinessConstraintsModal from '@/components/BusinessConstraintsModal';
 
 import { businessHoursApi } from '@/lib/api/businessHours';
@@ -52,6 +53,26 @@ const formatHHMM = (time?: string | null): string => {
   return String(time);
 };
 
+// Format 24h time string (HH:MM or HH:MM:SS) to 12h American format, e.g. 13:00 -> 1:00 PM
+const formatAMPM = (time?: string | null): string => {
+  if (!time) return '';
+  const parts = String(time).split(':');
+  if (parts.length >= 2) {
+    const hours24 = Number(parts[0]);
+    const minutes = (parts[1] ?? '00').padStart(2, '0');
+    if (Number.isNaN(hours24)) return formatHHMM(time);
+    const isPM = hours24 >= 12;
+    const hours12 = hours24 % 12 === 0 ? 12 : hours24 % 12;
+    return `${hours12}:${minutes} ${isPM ? 'PM' : 'AM'}`;
+  }
+  return String(time);
+};
+
+// Choose display format based on flag
+const formatDisplayTime = (time?: string | null, useAmPm?: boolean): string => {
+  return useAmPm ? formatAMPM(time) : formatHHMM(time);
+};
+
 // Ensure HH:MM range displayed left-to-right with smaller time first
 const formatRangeLtr = (a?: string | null, b?: string | null): string => {
   if (!a || !b) return '';
@@ -60,6 +81,19 @@ const formatRangeLtr = (a?: string | null, b?: string | null): string => {
   const first = A.localeCompare(B) <= 0 ? A : B;
   const second = A.localeCompare(B) <= 0 ? B : A;
   const LRM = '\u200E'; // Left-to-right mark to enforce visual order in RTL
+  return `${LRM}${first}${LRM} - ${LRM}${second}${LRM}`;
+};
+
+// Respect AM/PM display while preserving order
+const formatRangeLtrDisplay = (a?: string | null, b?: string | null, useAmPm?: boolean): string => {
+  if (!a || !b) return '';
+  const A = formatHHMM(a);
+  const B = formatHHMM(b);
+  const firstRaw = A.localeCompare(B) <= 0 ? a : b;
+  const secondRaw = A.localeCompare(B) <= 0 ? b : a;
+  const first = formatDisplayTime(firstRaw, useAmPm);
+  const second = formatDisplayTime(secondRaw, useAmPm);
+  const LRM = '\u200E';
   return `${LRM}${first}${LRM} - ${LRM}${second}${LRM}`;
 };
 
@@ -72,13 +106,14 @@ interface TimePickerProps {
   isBreakTime?: boolean;
 }
 
-const TimePicker: React.FC<TimePickerProps & { primaryColor?: string }> = ({ 
+const TimePicker: React.FC<TimePickerProps & { primaryColor?: string; useAmPm?: boolean }> = ({ 
   value, 
   onValueChange, 
   label, 
   options, 
   isBreakTime = false,
-  primaryColor = Colors.primary
+  primaryColor = Colors.primary,
+  useAmPm = false
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const wheelRef = useRef<ScrollView | null>(null);
@@ -98,6 +133,7 @@ const TimePicker: React.FC<TimePickerProps & { primaryColor?: string }> = ({
     : 'rgba(0, 122, 255, 0.3)';
     
   const selectedColor = isBreakTime ? Colors.warning : primaryColor;
+  const displayTextColor = isBreakTime ? Colors.warning : Colors.text;
 
   return (
     <View style={[styles.timePickerContainer, { zIndex: isOpen ? 10000 : 1 }]}> 
@@ -117,13 +153,17 @@ const TimePicker: React.FC<TimePickerProps & { primaryColor?: string }> = ({
         onPress={() => { setTempValue(value); setIsOpen(true); }}
         activeOpacity={0.8}
       >
-        <Text numberOfLines={1} ellipsizeMode="clip" style={[styles.dropdownButtonText, isBreakTime && styles.dropdownButtonTextSmall, { color: selectedColor, flex: 1, textAlign: 'center' }]}> 
-          {formatHHMM(value)}
+        <Text numberOfLines={1} ellipsizeMode="clip" style={[
+          styles.dropdownButtonText,
+          isBreakTime && styles.dropdownButtonTextSmall,
+          { color: displayTextColor, flex: 1, textAlign: 'center', fontSize: isBreakTime ? undefined : 12 }
+        ]}> 
+          {formatDisplayTime(value, useAmPm)}
         </Text>
         <Ionicons 
           name={isOpen ? "chevron-up" : "chevron-down"} 
           size={16} 
-          color={selectedColor} 
+          color={displayTextColor} 
         />
       </TouchableOpacity>
 
@@ -148,7 +188,7 @@ const TimePicker: React.FC<TimePickerProps & { primaryColor?: string }> = ({
               </TouchableOpacity>
             </View>
           </View>
-          <WheelPicker options={options} value={tempValue} onChange={setTempValue} accentColor={selectedColor} />
+          <WheelPicker options={options} value={tempValue} onChange={setTempValue} accentColor={selectedColor} useAmPm={useAmPm} />
         </View>
       </Modal>
     </View>
@@ -168,6 +208,8 @@ export default function BusinessHoursScreen() {
   const [isSavingGlobalBreak, setIsSavingGlobalBreak] = useState<boolean>(false);
   const [isBreakPickerOpen, setIsBreakPickerOpen] = useState<boolean>(false);
   const [isConstraintsOpen, setIsConstraintsOpen] = useState<boolean>(false);
+  const [tempBreakMinutesStr, setTempBreakMinutesStr] = useState<string>('0');
+  const useAmPm = user?.user_type === 'admin';
 
   const getDayName = (dayOfWeek: number) => {
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -325,7 +367,7 @@ export default function BusinessHoursScreen() {
               <View style={styles.timeContainer}>
                 <Ionicons name="time-outline" size={16} color={Colors.secondaryText} />
                 <Text style={styles.dayTime}>
-                  <Text style={styles.ltrText}>{formatRangeLtr(dayHours.start_time, dayHours.end_time)}</Text>
+                  <Text style={styles.ltrText}>{formatRangeLtrDisplay(dayHours.start_time, dayHours.end_time, useAmPm)}</Text>
                 </Text>
               </View>
               {/* Breaks summary: show all configured breaks if present, otherwise show single break fields */}
@@ -338,7 +380,7 @@ export default function BusinessHoursScreen() {
                         <View key={`${b.start_time}-${b.end_time}-${i}`} style={styles.timeContainer}>
                           <Ionicons name="cafe-outline" size={14} color={Colors.secondaryText} />
                           <Text style={[styles.dayTime, { color: Colors.secondaryText, fontSize: 13 }]}> 
-                            {dayBreaks.length > 1 ? `Break #${i + 1}: ` : 'Break: '}<Text style={styles.ltrText}>{formatRangeLtr(b.start_time, b.end_time)}</Text>
+                            {dayBreaks.length > 1 ? `Break #${i + 1}: ` : 'Break: '}<Text style={styles.ltrText}>{formatRangeLtrDisplay(b.start_time, b.end_time, useAmPm)}</Text>
                           </Text>
                         </View>
                       ))}
@@ -350,7 +392,7 @@ export default function BusinessHoursScreen() {
                     <View style={[styles.timeContainer, { marginTop: 4 }]}>
                       <Ionicons name="cafe-outline" size={14} color={Colors.secondaryText} />
                       <Text style={[styles.dayTime, { color: Colors.secondaryText, fontSize: 13 }]}> 
-                        הפסקה: <Text style={styles.ltrText}>{formatRangeLtr(dayHours.break_start_time, dayHours.break_end_time)}</Text>
+                        הפסקה: <Text style={styles.ltrText}>{formatRangeLtrDisplay(dayHours.break_start_time, dayHours.break_end_time, useAmPm)}</Text>
                       </Text>
                     </View>
                   );
@@ -407,6 +449,7 @@ export default function BusinessHoursScreen() {
                   options={startTimeOptions}
                   isBreakTime={false}
                   primaryColor={businessColors.primary}
+                  useAmPm={useAmPm}
                 />
               </View>
               
@@ -422,6 +465,7 @@ export default function BusinessHoursScreen() {
                   options={endTimeOptions}
                   isBreakTime={false}
                   primaryColor={businessColors.primary}
+                  useAmPm={useAmPm}
                 />
               </View>
             </View>
@@ -463,6 +507,7 @@ export default function BusinessHoursScreen() {
                         options={startTimeOptions}
                         isBreakTime
                         primaryColor={businessColors.primary}
+                        useAmPm={useAmPm}
                       />
                     </View>
                     <View style={styles.timeSeparator}>
@@ -480,6 +525,7 @@ export default function BusinessHoursScreen() {
                         options={endTimeOptions}
                         isBreakTime
                         primaryColor={businessColors.primary}
+                        useAmPm={useAmPm}
                       />
                     </View>
                   </View>
@@ -506,13 +552,13 @@ export default function BusinessHoursScreen() {
               <Text style={styles.summaryTitle}>Day summary</Text>
             </View>
             <View style={styles.summaryContent}>
-              <Text style={styles.summaryText}>Work: <Text style={styles.ltrText}>{formatRangeLtr(tempStartTime, tempEndTime)}</Text></Text>
+              <Text style={styles.summaryText}>Work: <Text style={styles.ltrText}>{formatRangeLtrDisplay(tempStartTime, tempEndTime, useAmPm)}</Text></Text>
               {useBreaks ? (
                 tempBreaks.length > 0 ? (
                   <View style={{ gap: 4 }}>
                     {tempBreaks.map((b, i) => (
                       <Text key={`${b.start_time}-${b.end_time}-${i}`} style={styles.summaryBreak}>
-                        {`Break ${tempBreaks.length > 1 ? '#' + (i + 1) + ': ' : ''}`}<Text style={styles.ltrText}>{formatRangeLtr(b.start_time, b.end_time)}</Text>
+                        {`Break ${tempBreaks.length > 1 ? '#' + (i + 1) + ': ' : ''}`}<Text style={styles.ltrText}>{formatRangeLtrDisplay(b.start_time, b.end_time, useAmPm)}</Text>
                       </Text>
                     ))}
                   </View>
@@ -520,7 +566,7 @@ export default function BusinessHoursScreen() {
               ) : (
                 tempBreakStartTime && tempBreakEndTime ? (
                   <Text style={styles.summaryBreak}>
-                    Break: <Text style={styles.ltrText}>{formatRangeLtr(tempBreakStartTime, tempBreakEndTime)}</Text>
+                    Break: <Text style={styles.ltrText}>{formatRangeLtrDisplay(tempBreakStartTime, tempBreakEndTime, useAmPm)}</Text>
                   </Text>
                 ) : null
               )}
@@ -595,22 +641,24 @@ export default function BusinessHoursScreen() {
           <View style={styles.globalBreakCard}>
             <View style={styles.sectionHeader}>
               <Ionicons name="timer-outline" size={18} color={businessColors.primary} />
-              <Text style={[styles.sectionTitle, { color: businessColors.primary }]}>Fixed break between appointments</Text>
+              <Text style={[styles.sectionTitle, { color: businessColors.primary }]}>Break minutes</Text>
             </View>
             <Text style={{ color: Colors.secondaryText, textAlign: 'left', marginBottom: 12 }}>
               Choose the number of minutes to add between appointments. 0 keeps no fixed break.
             </Text>
             <TouchableOpacity
-              style={[styles.dropdownButton, isBreakPickerOpen && styles.dropdownButtonOpen]}
-              onPress={() => setIsBreakPickerOpen(true)}
-              activeOpacity={0.8}
+              style={styles.breakPickerButton}
+              onPress={() => { setTempBreakMinutesStr(String(globalBreakMinutes)); setIsBreakPickerOpen(true); }}
+              activeOpacity={0.85}
             >
-              <Text style={[styles.dropdownButtonText, { color: businessColors.primary }]}> {globalBreakMinutes} min</Text>
-              {isSavingGlobalBreak ? (
-                <ActivityIndicator size="small" color={businessColors.primary} />
-              ) : (
-                <Ionicons name={isBreakPickerOpen ? 'chevron-up' : 'chevron-down'} size={16} color={businessColors.primary} />
-              )}
+              <BlurView intensity={30} tint="light" style={styles.breakPickerInner}>
+                <Text style={[styles.dropdownButtonText, { color: Colors.text }]}> {globalBreakMinutes} min</Text>
+                {isSavingGlobalBreak ? (
+                  <ActivityIndicator size="small" color={Colors.text} />
+                ) : (
+                  <Ionicons name={isBreakPickerOpen ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.text} />
+                )}
+              </BlurView>
             </TouchableOpacity>
           </View>
         </View>
@@ -626,22 +674,16 @@ export default function BusinessHoursScreen() {
           <View style={[styles.bottomSheet, { backgroundColor: Colors.card }]}>
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
-              <Text style={[styles.sheetTitle, { color: businessColors.primary, flex: 1 }]} numberOfLines={2}>
-                Select break between appointments (minutes)
-              </Text>
-              <TouchableOpacity onPress={() => setIsBreakPickerOpen(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                <Ionicons name="close" size={20} color={Colors.secondaryText} />
-              </TouchableOpacity>
-            </View>
-            <View style={{ paddingHorizontal: 8 }}>
-              {([0,5,10,15,20,25,30] as number[]).map((m) => (
+              <Text style={[styles.sheetTitle, { color: businessColors.primary }]}>Break between appointments</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <TouchableOpacity onPress={() => setIsBreakPickerOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Ionicons name="close" size={20} color={Colors.secondaryText} />
+                </TouchableOpacity>
                 <TouchableOpacity
-                  key={m}
-                  style={[styles.sheetOption, m === globalBreakMinutes && styles.sheetOptionSelected]}
-                  activeOpacity={0.7}
                   onPress={async () => {
                     try {
                       setIsSavingGlobalBreak(true);
+                      const m = Math.max(0, Math.min(180, Number(tempBreakMinutesStr) || 0));
                       setGlobalBreakMinutes(m);
                       if (user?.user_type === 'admin' && user?.id) {
                         await businessProfileApi.setBreakMinutesForUser(user.id, m);
@@ -653,14 +695,19 @@ export default function BusinessHoursScreen() {
                       setIsSavingGlobalBreak(false);
                     }
                   }}
+                  style={[styles.confirmButton, { backgroundColor: businessColors.primary }]}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <Text style={[styles.sheetOptionText, m === globalBreakMinutes && { color: businessColors.primary }]}>
-                    {m} min
-                  </Text>
-                  {m === globalBreakMinutes && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
+                  <Ionicons name="checkmark" size={20} color={'#FFFFFF'} />
                 </TouchableOpacity>
-              ))}
+              </View>
             </View>
+            <WheelPicker
+              options={[0,5,10,15,20,25,30].map(n => String(n))}
+              value={tempBreakMinutesStr}
+              onChange={setTempBreakMinutesStr}
+              accentColor={businessColors.primary}
+            />
           </View>
         </Modal>
 
@@ -689,7 +736,7 @@ export default function BusinessHoursScreen() {
 }
 
 // Simple iOS-like wheel picker (single column)
-const WheelPicker: React.FC<{ options: string[]; value: string; onChange: (v: string) => void; accentColor?: string }> = ({ options, value, onChange, accentColor = Colors.primary }) => {
+const WheelPicker: React.FC<{ options: string[]; value: string; onChange: (v: string) => void; accentColor?: string; useAmPm?: boolean }> = ({ options, value, onChange, accentColor = Colors.primary, useAmPm = false }) => {
   const listRef = useRef<ScrollView | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(() => Math.max(0, options.findIndex(o => o === value)));
 
@@ -727,7 +774,7 @@ const WheelPicker: React.FC<{ options: string[]; value: string; onChange: (v: st
           const active = i === selectedIndex;
           return (
             <View key={opt} style={styles.wheelItem}>
-              <Text style={[styles.wheelText, active && { color: accentColor }]}>{formatHHMM(opt)}</Text>
+              <Text style={[styles.wheelText, active && { color: accentColor }]}>{formatDisplayTime(opt, useAmPm)}</Text>
             </View>
           );
         })}
@@ -1217,6 +1264,21 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(0, 0, 0, 0.12)',
+  },
+  breakPickerButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  breakPickerInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    minHeight: 50,
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.55)',
+    borderWidth: 0,
   },
   // Work Hours Section
   workHoursSection: {

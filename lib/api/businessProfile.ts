@@ -87,6 +87,7 @@ export const businessProfileApi = {
         image_on_page_3: (updates as any).image_on_page_3,
         login_img: (updates as any).login_img,
         break_by_user: (updates as any).break_by_user,
+        reminder_minutes_by_user: (updates as any).reminder_minutes_by_user,
         min_cancellation_hours: updates.min_cancellation_hours,
         primary_color: updates.primary_color,
           })
@@ -116,6 +117,7 @@ export const businessProfileApi = {
           image_on_page_3: (updates as any).image_on_page_3,
           login_img: (updates as any).login_img,
           break_by_user: (updates as any).break_by_user,
+          reminder_minutes_by_user: (updates as any).reminder_minutes_by_user,
           min_cancellation_hours: updates.min_cancellation_hours,
           primary_color: updates.primary_color || '#000000',
         })
@@ -184,6 +186,57 @@ export const businessProfileApi = {
       }
     } catch (e) {
       console.error('Error in setBreakMinutesForUser:', e);
+      throw e;
+    }
+  },
+  
+  async getReminderMinutesForUser(userId?: string | null): Promise<number | null> {
+    try {
+      const businessId = getBusinessId();
+      if (userId) {
+        const { data, error } = await supabase.rpc('get_reminder_minutes_for_user', {
+          p_business_id: businessId,
+          p_user_id: userId,
+        });
+        if (!error && (data === null || typeof data === 'number')) {
+          return data as number | null;
+        }
+      }
+      const profile = await this.getProfile();
+      const val = (profile as any)?.reminder_minutes_by_user && userId
+        ? ((profile as any).reminder_minutes_by_user?.[userId] ?? null)
+        : null;
+      return (val === null || typeof val === 'undefined') ? null : Number(val);
+    } catch (e) {
+      console.error('Error in getReminderMinutesForUser:', e);
+      return null;
+    }
+  },
+
+  async setReminderMinutesForUser(userId: string, minutes: number | null): Promise<void> {
+    const clamped = (minutes === null || typeof minutes === 'undefined')
+      ? null
+      : Math.max(0, Math.min(1440, Math.floor(Number(minutes) || 0)));
+    const businessId = getBusinessId();
+    try {
+      const { error } = await supabase.rpc('set_reminder_minutes_for_user', {
+        p_business_id: businessId,
+        p_user_id: userId,
+        p_minutes: clamped as any,
+      });
+      if (error) {
+        console.error('Error setting per-user reminder minutes (RPC):', error);
+        // Fallback read-modify-write
+        const profile = await this.getProfile();
+        const currentMap = ((profile as any)?.reminder_minutes_by_user ?? {}) as Record<string, number | null>;
+        const nextMap = { ...currentMap, [userId]: clamped };
+        await supabase
+          .from('business_profile')
+          .update({ reminder_minutes_by_user: nextMap as any })
+          .eq('id', businessId);
+      }
+    } catch (e) {
+      console.error('Error in setReminderMinutesForUser:', e);
       throw e;
     }
   },

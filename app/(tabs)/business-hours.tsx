@@ -338,7 +338,7 @@ export default function BusinessHoursScreen() {
                         <View key={`${b.start_time}-${b.end_time}-${i}`} style={styles.timeContainer}>
                           <Ionicons name="cafe-outline" size={14} color={Colors.secondaryText} />
                           <Text style={[styles.dayTime, { color: Colors.secondaryText, fontSize: 13 }]}> 
-                            {dayBreaks.length > 1 ? `הפסקה #${i + 1}: ` : 'הפסקה: '}<Text style={styles.ltrText}>{formatRangeLtr(b.start_time, b.end_time)}</Text>
+                            {dayBreaks.length > 1 ? `Break #${i + 1}: ` : 'Break: '}<Text style={styles.ltrText}>{formatRangeLtr(b.start_time, b.end_time)}</Text>
                           </Text>
                         </View>
                       ))}

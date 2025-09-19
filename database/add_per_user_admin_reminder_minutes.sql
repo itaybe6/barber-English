@@ -20,16 +20,9 @@ AS $$
   WHERE id = p_business_id;
 $$;
 
--- 1.2) Ensure notifications table has columns used below (idempotent)
+-- 1.2) Ensure notifications table has required columns (no appointment_id needed)
 DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_schema = 'public' AND table_name = 'notifications' AND column_name = 'appointment_id'
-  ) THEN
-    ALTER TABLE public.notifications ADD COLUMN appointment_id UUID;
-  END IF;
-
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_schema = 'public' AND table_name = 'notifications' AND column_name = 'user_id'
@@ -40,7 +33,6 @@ END $$;
 
 -- Optional indexes
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON public.notifications(user_id);
-CREATE INDEX IF NOT EXISTS idx_notifications_appointment_id ON public.notifications(appointment_id);
 
 CREATE OR REPLACE FUNCTION public.get_reminder_minutes_for_user(p_business_id uuid, p_user_id uuid)
 RETURNS int
@@ -85,7 +77,7 @@ BEGIN
       a.service_name,
       a.slot_date,
       a.slot_time,
-      COALESCE(a.user_id, a.barber_id) AS admin_id,
+      COALESCE(a.barber_id, a.user_id) AS admin_id,
       public.make_appointment_timestamptz(a.slot_date, a.slot_time) AS appt_at
     FROM public.appointments a
     WHERE a.is_available = FALSE
@@ -101,6 +93,7 @@ BEGIN
     JOIN public.users u
       ON u.id = ap.admin_id
      AND u.user_type = 'admin'
+     AND (u.business_id IS NULL OR u.business_id = ap.business_id)
      AND u.phone IS NOT NULL AND TRIM(u.phone) <> ''
     JOIN public.business_profile bp
       ON bp.id = ap.business_id
@@ -112,27 +105,31 @@ BEGIN
       AND c.appt_at - make_interval(mins => c.minutes) <= NOW()
       AND c.appt_at > NOW()
   )
-  INSERT INTO public.notifications (title, content, type, recipient_name, recipient_phone, appointment_id, business_id, user_id)
+  , msg AS (
+    SELECT d.*, 
+      format('Reminder: %s (%s) has an appointment for %s today at %s',
+             COALESCE(NULLIF(d.client_name, ''), 'Client'),
+             COALESCE(TRIM(d.client_phone), ''),
+             COALESCE(NULLIF(d.service_name, ''), 'the service'),
+             to_char(d.slot_time, 'HH24:MI')
+      )::text AS msg_content
+    FROM due d
+  )
+  INSERT INTO public.notifications (title, content, type, recipient_name, recipient_phone, business_id, user_id)
   SELECT
     'Upcoming appointment',
-    format('Reminder: %s (%s) has an appointment for %s today at %s',
-           COALESCE(NULLIF(d.client_name, ''), 'Client'),
-           COALESCE(TRIM(d.client_phone), ''),
-           COALESCE(NULLIF(d.service_name, ''), 'the service'),
-           to_char(d.slot_time, 'HH24:MI')
-    )::text,
+    m.msg_content,
     'system',
-    COALESCE(NULLIF(d.admin_name, ''), 'Manager'),
-    d.admin_phone,
-    d.appointment_id,
-    d.business_id,
-    d.admin_id
-  FROM due d
+    COALESCE(NULLIF(m.admin_name, ''), 'Manager'),
+    m.admin_phone,
+    m.business_id,
+    m.admin_id
+  FROM msg m
   WHERE NOT EXISTS (
     SELECT 1 FROM public.notifications n
-    WHERE n.appointment_id = d.appointment_id
-      AND n.type = 'system'
-      AND n.recipient_phone = d.admin_phone
+    WHERE n.type = 'system'
+      AND n.recipient_phone = m.admin_phone
+      AND n.content = m.msg_content
   );
 
   GET DIAGNOSTICS v_count = ROW_COUNT;

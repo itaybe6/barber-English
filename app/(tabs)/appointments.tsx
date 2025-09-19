@@ -22,7 +22,7 @@ import { businessHoursApi } from '@/lib/api/businessHours';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react-native';
 import { useAuthStore } from '@/stores/authStore';
 
 // Press feedback: scale-on-press animated touchable
@@ -475,8 +475,9 @@ export default function AdminAppointmentsScreen() {
                       },
                     ]}
                   >
-                    {/* Light grey fill background */}
-                    <View style={[styles.appointmentFill, { backgroundColor: '#F2F2F7' }]} />
+                    {/* Strong blur background */}
+                    <BlurView intensity={95} tint="light" style={styles.appointmentBlur} />
+                    <View style={styles.appointmentBlurTint} />
                     {/* Accent bar removed per request */}
 
                     {/* Content */}
@@ -485,23 +486,27 @@ export default function AdminAppointmentsScreen() {
                         <BlurView intensity={28} tint="light" style={styles.pillBlur} />
                         <View style={styles.pillTint} />
 
-                        {/* Title: Client - Service (no icons) */}
-                        <Text
-                          numberOfLines={1}
-                          style={[styles.titleText, { color: businessColors.primary }]}
-                        >
-                          {[
-                            apt.client_name || 'לקוח',
-                            apt.service_name || 'שירות'
-                          ].filter(Boolean).join(' - ')}
-                        </Text>
+                        {/* Title row with green check icon on the right */}
+                        <View style={styles.titleRow}>
+                          <Text
+                            numberOfLines={2}
+                            ellipsizeMode="tail"
+                            style={[styles.titleText, styles.titleTextFlex]}
+                          >
+                            {[
+                              apt.client_name || 'לקוח',
+                              apt.service_name || 'שירות'
+                            ].filter(Boolean).join(' - ')}
+                          </Text>
+                          <CheckCircle size={18} color="#34C759" />
+                        </View>
 
-                        {/* Time range row with clock icon */}
+                        {/* Time range row with grey rounded background */}
                         <View style={styles.durationRow}>
-                          <Ionicons name="time-outline" size={14} color="#000000" />
                           <Text numberOfLines={1} style={styles.durationText}>
                             {`${startTime} - ${endTime}`}
                           </Text>
+                          <Ionicons name="time-outline" size={16} color="#8E8E93" />
                         </View>
                       </View>
                     </View>
@@ -758,6 +763,11 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     overflow: 'hidden',
   },
+  appointmentBlurTint: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.45)',
+  },
   appointmentFill: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: 14,
@@ -871,7 +881,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    gap: 6,
+    gap: 3,
     overflow: 'hidden',
     position: 'relative',
     marginBottom: 2,
@@ -879,16 +889,35 @@ const styles = StyleSheet.create({
   titleText: {
     fontSize: 13,
     fontWeight: '800',
+    color: '#000000',
+  },
+  titleTextFlex: {
+    flex: 1,
+    minWidth: 0,
+    marginRight: 8,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
   durationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    backgroundColor: '#F2F2F7',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 0,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
   },
   durationText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#000000',
+    color: '#1C1C1E',
   },
   appointmentActions: {
     position: 'absolute',

@@ -201,7 +201,12 @@ export default function AdminBroadcastComposer({
           accessibilityLabel={t.accessibilitySend}
           style={[styles.iconButton, iconContainerStyle]}
         >
-          <Ionicons name="paper-plane-outline" size={22} color={colors.primary} />
+          <Ionicons
+  name="paper-plane-outline"
+  size={22}
+  color={colors.primary}
+  style={{ transform: [{ scaleX: -1 }] }}
+/>
         </TouchableOpacity>
       ))}
 
@@ -474,8 +479,8 @@ const createStyles = (colors: any) => StyleSheet.create({
     height: 44,
     borderRadius: 22,
     backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
+    borderWidth: 0,
+    borderColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     ...Platform.select({

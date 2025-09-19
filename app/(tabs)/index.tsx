@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Platform, Modal, ActivityIndicator, TextInput, FlatList, Alert, Linking, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Platform, Modal, ActivityIndicator, TextInput, FlatList, Alert, Linking, RefreshControl, Animated, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -13,6 +13,7 @@ import Card from '@/components/Card';
 import { Calendar, Clock, ChevronLeft, ChevronRight, Star } from 'lucide-react-native';
 import DaySelector from '@/components/DaySelector';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { ScrollView as RNScrollView } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import AdminBroadcastComposer from '@/components/AdminBroadcastComposer';
@@ -29,6 +30,8 @@ import { useNotificationsStore } from '@/stores/notificationsStore';
 import { getCurrentClientLogo } from '@/src/theme/assets';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { useProductsStore } from '@/stores/productsStore';
+import { businessProfileApi } from '@/lib/api/businessProfile';
+import type { BusinessProfile } from '@/lib/supabase';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -91,6 +94,49 @@ export default function HomeScreen() {
       icon: (color: string) => <MaterialCommunityIcons name="spa" size={22} color={color} />,
     },
   ];
+
+  // Animated background (match client home behavior)
+  const backgroundTranslateYAnim = useRef(new Animated.Value(0)).current;
+  const [isBackgroundExpanded, setIsBackgroundExpanded] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  const handleScroll = useCallback((event: any) => {
+    const scrollY = event?.nativeEvent?.contentOffset?.y ?? 0;
+    if (!isBackgroundExpanded && !isAnimating && scrollY > 5) {
+      setIsBackgroundExpanded(true);
+      setIsAnimating(true);
+      Animated.timing(backgroundTranslateYAnim, {
+        toValue: -180,
+        duration: 1000,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start(() => setIsAnimating(false));
+    }
+    if (isBackgroundExpanded && !isAnimating && scrollY <= 5) {
+      setIsBackgroundExpanded(false);
+      setIsAnimating(true);
+      Animated.timing(backgroundTranslateYAnim, {
+        toValue: 0,
+        duration: 800,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start(() => setIsAnimating(false));
+    }
+  }, [isBackgroundExpanded, isAnimating, backgroundTranslateYAnim]);
+
+  // Business profile for hero image
+  const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const p = await businessProfileApi.getProfile();
+        setBusinessProfile(p);
+      } catch {
+        setBusinessProfile(null);
+      }
+    };
+    loadProfile();
+  }, []);
   
   // Get today's appointments
   const today = new Date();
@@ -562,58 +608,93 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <SafeAreaView edges={['top']} style={{ backgroundColor: '#fff' }}>
-      {/* Header */}
-      <View style={styles.header}>
-        {/* Left side: Notifications bell */}
-        <View style={styles.headerSide}>
-          <TouchableOpacity
-            style={styles.bellButton}
-            onPress={() => {
-              router.push('/(tabs)/notifications');
-            }}
-            activeOpacity={0.85}
-          >
-            <View style={styles.bellIconWrapper}>
-              <Ionicons name="notifications-outline" size={24} color={colors.primary} />
-            </View>
-            {unreadCount > 0 && (
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationBadgeText}>
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </Text>
+      {/* Hero with overlay header (like client home) */}
+      <View style={styles.fullScreenHero}>
+        <Image
+          source={businessProfile?.image_on_page_1 ? { uri: businessProfile.image_on_page_1 } : require('@/assets/images/1homePage.jpg')}
+          style={styles.fullScreenHeroImage}
+          resizeMode="cover"
+        />
+        <LinearGradient
+          colors={['rgba(0,0,0,0.6)', 'rgba(0,0,0,0.6)', 'rgba(0,0,0,0.6)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.fullScreenHeroOverlay}
+        />
+
+        {/* Overlay Header */}
+        <SafeAreaView edges={['top']} style={styles.overlayHeader}>
+          <View style={styles.overlayHeaderContent}>
+            {/* Left: Broadcast */}
+            <View style={styles.headerSide}>
+              <View style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}> 
+                <AdminBroadcastComposer variant="icon" language="en" />
               </View>
-            )}
-          </TouchableOpacity>
-        </View>
-        {/* Center: Logo */}
-        <View style={styles.headerCenter}>
-          <Image source={getCurrentClientLogo()} style={styles.logo} resizeMode="contain" />
-        </View>
-        {/* Right side: Broadcast icon */}
-        <View style={styles.headerSide}>
-          <AdminBroadcastComposer variant="icon" language="en" />
+            </View>
+            {/* Center: Logo */}
+            <View style={styles.headerCenter}>
+              <Image source={getCurrentClientLogo()} style={styles.overlayLogo} resizeMode="contain" />
+            </View>
+            {/* Right: Notifications */}
+            <View style={styles.headerSide}>
+              <TouchableOpacity
+                style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}
+                onPress={() => {
+                  router.push('/(tabs)/notifications');
+                }}
+                activeOpacity={0.85}
+                accessibilityLabel="Notifications"
+              >
+                <Ionicons name="notifications-outline" size={24} color={colors.primary} />
+                {unreadCount > 0 && (
+                  <View style={[styles.overlayNotificationBadge, { backgroundColor: colors.primary }]}>
+                    <Text style={styles.notificationBadgeText}>
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </SafeAreaView>
+
+        {/* Place DailySchedule over hero with blur */}
+        <View style={styles.fullScreenHeroContent}>
+          <View style={{ width: '100%', alignItems: 'center' }}>
+            <BlurView intensity={40} tint="light" style={[styles.dailyBlurCard, { marginBottom: 6 }]}>
+              <DailySchedule
+                nextAppointment={nextAppointment}
+                loading={loadingNextAppointment}
+                onRefresh={fetchNextAppointment}
+                todayAppointmentsCount={todayAppointmentsCount}
+                loadingTodayCount={loadingTodayCount}
+                variant="frosted"
+              />
+            </BlurView>
+          </View>
         </View>
       </View>
-    </SafeAreaView>
-    <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1 }}>
-      <View style={styles.contentWrapper}>
-        <ScrollView 
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: insets.bottom + 20 }
-        ]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-      >
-        
-                 <DailySchedule 
-           nextAppointment={nextAppointment}
-           loading={loadingNextAppointment}
-           onRefresh={fetchNextAppointment}
-           todayAppointmentsCount={todayAppointmentsCount}
-           loadingTodayCount={loadingTodayCount}
-         />
+
+      {/* Content wrapper with scroll animation */}
+      <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1 }}>
+        <Animated.View
+          style={[
+            styles.contentWrapper,
+            { transform: [{ translateY: backgroundTranslateYAnim }] }
+          ]}
+        >
+          <ScrollView
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: insets.bottom + 320 }
+            ]}
+            showsVerticalScrollIndicator={false}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+          >
+        {/* Spacer for bottom reachability */}
+        <View style={{ height: 0 }} />
 
         <View style={styles.statsBox}>
           <View style={styles.statsButtonsRow}>
@@ -667,7 +748,7 @@ export default function HomeScreen() {
                 activeOpacity={0.85}
                 style={styles.editGalleryButton}
               >
-                <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20`, width: 28, height: 28, borderRadius: 14, marginRight: 12 }]}> 
+                <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20`, width: 28, height: 28, borderRadius: 14, marginRight: 0 }]}> 
                   <Ionicons name="create-outline" size={18} color={colors.primary} />
                 </View>
                 <Text style={styles.editGalleryButtonText}>Edit Gallery</Text>
@@ -708,7 +789,7 @@ export default function HomeScreen() {
                 style={styles.editGalleryButton}
               >
                 <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20`, width: 28, height: 28, borderRadius: 14, marginRight: 12 }]}> 
-                  <Ionicons name="bag-outline" size={18} color={colors.primary} />
+                  <Ionicons name="create-outline" size={18} color={colors.primary} />
                 </View>
                 <Text style={styles.editGalleryButtonText}>Edit Products</Text>
               </TouchableOpacity>
@@ -719,8 +800,8 @@ export default function HomeScreen() {
         {/* Products Section */}
         <ProductsSection />
         {/* Close outer vertical ScrollView */}
-        </ScrollView>
-      </View>
+          </ScrollView>
+        </Animated.View>
 
 
 
@@ -854,23 +935,115 @@ export default function HomeScreen() {
 
       {/* Removed floating composer */}
  
-    </SafeAreaView>
+      </SafeAreaView>
     </View>
-   );
+  );
  }
 
 const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#F8F9FA',
   },
+  // Grey rounded container like client home
   contentWrapper: {
     flex: 1,
     backgroundColor: '#F8F9FA',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: -30,
+    paddingTop: 8,
+    paddingBottom: 0,
+    minHeight: '100%',
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  // Hero styles (aligned with client home)
+  fullScreenHero: {
+    position: 'relative',
+    height: '50%',
+    width: '100%',
+    zIndex: 0,
+  },
+  fullScreenHeroImage: {
+    width: '100%',
+    height: '100%',
+  },
+  fullScreenHeroOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 0,
+  },
+  overlayHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 2,
+  },
+  overlayHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+  },
+  overlayButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    shadowColor: 'rgba(0, 0, 0, 0.3)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  overlayLogo: {
+    width: 170,
+    height: 60,
+    tintColor: '#FFFFFF',
+  },
+  overlayNotificationBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#000000',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  fullScreenHeroContent: {
+    position: 'absolute',
+    bottom: 40,
+    left: 16,
+    right: 16,
+    zIndex: 1,
+  },
+  dailyBlurCard: {
+    width: '100%',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    overflow: 'hidden',
+    padding: 6,
   },
   header: {
     flexDirection: 'row',
@@ -882,18 +1055,19 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderBottomWidth: 0,
     borderBottomColor: 'transparent',
   },
-  headerCenter: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   headerSide: {
     width: 56,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   scrollContent: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 6,
   },
   featuredImageContainer: {
     position: 'relative',
@@ -1250,7 +1424,8 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderRadius: 24,
     marginHorizontal: 0,
     marginBottom: 24,
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -1669,12 +1844,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     height: '80%',
     borderRadius: 16,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.text,
-    textAlign: 'left',
-  },
+  // sectionTitle defined earlier
   productTile: {
     width: 160,
     height: 160,

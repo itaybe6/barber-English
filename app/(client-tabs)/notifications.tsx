@@ -141,6 +141,13 @@ export default function ClientNotificationsScreen() {
     }
   };
 
+  // Detect admin reminder (our per-user pre-appointment reminder inserted as type 'system')
+  const isAdminReminder = (n: Notification): boolean => {
+    if (!n) return false;
+    // Our SQL builds content starting with "Reminder:" in English
+    return n.type === 'system' && typeof n.content === 'string' && /\bReminder:\b/i.test(n.content);
+  };
+
   const getNotificationTypeText = (type: Notification['type']) => {
     switch (type) {
       case 'appointment_reminder':
@@ -299,24 +306,15 @@ export default function ClientNotificationsScreen() {
                     onPress={() => handleNotificationPress(notification)}
                     activeOpacity={0.7}
                   >
-                    <View style={styles.notificationHeader}>
-                      <View style={styles.notificationIconWrapper}>
-                        {getNotificationIcon(notification.type)}
-                      </View>
-                      <View style={styles.notificationInfo}>
-                        <Text style={styles.notificationType}>
-                          {getNotificationTypeText(notification.type)}
-                        </Text>
-                        <Text style={styles.notificationTime}>
-                          {formatDate(notification.created_at)}
-                        </Text>
-                      </View>
-                      {!notification.is_read && <View style={styles.unreadDot} />}
-                    </View>
                     
-                    <View style={styles.titleWithIcon}>
-                      {getTitleStatusIcon(notification.title)}
-                      <Text style={styles.notificationTitle}>{notification.title}</Text>
+                    <View style={styles.titleRow}>
+                      <View style={styles.titleWithIcon}>
+                        {getTitleStatusIcon(notification.title)}
+                        <Text style={styles.notificationTitle}>{notification.title}</Text>
+                      </View>
+                      {isAdminReminder(notification) ? (
+                        <Clock size={18} color={Colors.primary} />
+                      ) : null}
                     </View>
                     {(() => {
                       const parsed = parseNotificationContent(notification.title, notification.content);
@@ -498,6 +496,11 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
     marginBottom: 8,
     textAlign: 'left',
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   titleWithIcon: {
     flexDirection: 'row',

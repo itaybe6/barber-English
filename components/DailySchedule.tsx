@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 // import { useFonts } from 'expo-font';
 import { AvailableTimeSlot, supabase } from '@/lib/supabase';
@@ -13,9 +14,10 @@ interface DailyScheduleProps {
   onRefresh: () => void;
   todayAppointmentsCount: number;
   loadingTodayCount: boolean;
+  variant?: 'card' | 'frosted';
 }
 
-export default function DailySchedule({ nextAppointment, loading, onRefresh, todayAppointmentsCount, loadingTodayCount }: DailyScheduleProps) {
+export default function DailySchedule({ nextAppointment, loading, onRefresh, todayAppointmentsCount, loadingTodayCount, variant = 'card' }: DailyScheduleProps) {
   const router = useRouter();
   const colors = useColors();
   const [clientImageUrl, setClientImageUrl] = useState<string | undefined>(undefined);
@@ -99,95 +101,165 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
     };
   }, [nextAppointment?.client_phone]);
 
+  const isFrosted = variant === 'frosted';
+
   return (
-    <View style={styles.container}>
+    <View style={isFrosted ? styles.frostedContainer : styles.container}>
       <View style={styles.dailyTitleWrapper}>
-        <Text style={styles.dailyTitle}>Daily schedule</Text>
+        <Text style={[styles.dailyTitle, { color: colors.primary }]}>Daily schedule</Text>
         <View style={styles.dailyTitleAccent} />
       </View>
       <View style={styles.cardsRow}>
         {/* Appointments Today Card (top) */}
         <TouchableOpacity 
-          style={[styles.card, styles.cardAppointments]} 
+          style={[isFrosted ? styles.frostedCard : styles.card, styles.cardAppointments]} 
           activeOpacity={0.85}
           onPress={() => router.push('/appointments')}
         >
-          <View style={styles.cardHeaderRow}>
-            <View style={styles.headerIconCircle}>
-              <Ionicons name="calendar-outline" size={18} color={colors.primary} />
-            </View>
-            <Text style={styles.dateText}>
-              {new Date().toLocaleDateString('en-US', {
-                month: '2-digit',
-                day: '2-digit'
-              })} {new Date().toLocaleDateString('en-US', { weekday: 'short' })}
-            </Text>
-            {loadingTodayCount ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <View style={styles.timePillHeader}>
-                <Text style={styles.timeTextPill}>
-                  {todayAppointmentsCount} today
+          {isFrosted ? (
+            <BlurView intensity={30} tint="light" style={styles.frostedInnerBlur}>
+              <View style={styles.cardHeaderRow}>
+                <View style={styles.headerIconCircle}>
+                  <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+                </View>
+            <Text style={[styles.dateText, { color: colors.primary }]}>
+                  {new Date().toLocaleDateString('en-US', {
+                    month: '2-digit',
+                    day: '2-digit'
+                  })} {new Date().toLocaleDateString('en-US', { weekday: 'short' })}
                 </Text>
+                {loadingTodayCount ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+              <View style={[styles.timePillHeader, { backgroundColor: `${colors.primary}20` }] }>
+                <Text style={[styles.timeTextPill, { color: colors.primary }]}>
+                      {todayAppointmentsCount} today
+                    </Text>
+                  </View>
+                )}
               </View>
-            )}
-          </View>
+            </BlurView>
+          ) : (
+            <View style={styles.cardHeaderRow}>
+              <View style={styles.headerIconCircle}>
+                <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+              </View>
+              <Text style={styles.dateText}>
+                {new Date().toLocaleDateString('en-US', {
+                  month: '2-digit',
+                  day: '2-digit'
+                })} {new Date().toLocaleDateString('en-US', { weekday: 'short' })}
+              </Text>
+              {loadingTodayCount ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <View style={styles.timePillHeader}>
+                  <Text style={styles.timeTextPill}>
+                    {todayAppointmentsCount} today
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
         </TouchableOpacity>
 
         {/* Time Card (bottom) */}
         <TouchableOpacity
-          style={styles.card}
+          style={isFrosted ? styles.frostedCard : styles.card}
           activeOpacity={0.85}
           onPress={onRefresh}
         >
-          <View style={styles.cardHeaderRow}>
-            <View style={styles.headerIconCircle}>
-              <Ionicons name="time-outline" size={18} color={colors.primary} />
-            </View>
-            <Text style={styles.nextTitle}>Next appointment</Text>
-          </View>
-          
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={styles.loadingText}>Loading...</Text>
-            </View>
-          ) : nextAppointment ? (
-            <>
-              <View style={styles.nextInfoRow}>
-                <View style={styles.nextInfoRightColumn}>
-                  <View style={styles.clientRow}>
-                    <View style={styles.clientAvatar}>
-                      {clientImageUrl ? (
-                        <Image source={{ uri: clientImageUrl }} style={styles.clientAvatarImage} />
-                      ) : (
-                        <Image source={require('@/assets/images/user.png')} style={styles.clientAvatarImage} />
-                      )}
+          {isFrosted ? (
+            <BlurView intensity={30} tint="light" style={styles.frostedInnerBlur}>
+              <View style={styles.cardHeaderRow}>
+                <View style={styles.headerIconCircle}>
+                  <Ionicons name="time-outline" size={18} color={colors.primary} />
+                </View>
+            <Text style={[styles.nextTitle, { color: colors.primary }]}>Next appointment</Text>
+              </View>
+              {loading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={styles.loadingText}>Loading...</Text>
+                </View>
+              ) : nextAppointment ? (
+                <>
+                  <View style={styles.nextInfoRow}>
+                    <View style={styles.nextInfoRightColumn}>
+                      <View style={styles.clientRow}>
+                        <View style={styles.clientAvatar}>
+                          {clientImageUrl ? (
+                            <Image source={{ uri: clientImageUrl }} style={styles.clientAvatarImage} />
+                          ) : (
+                            <Image source={require('@/assets/images/user.png')} style={styles.clientAvatarImage} />
+                          )}
+                        </View>
+                    <Text style={[styles.clientNameBlack, { color: colors.primary }]}>
+                          {nextAppointment.client_name || 'Unknown client'} {nextAppointment.service_name && ` - ${nextAppointment.service_name}`}
+                        </Text>
+                      </View>
+                      
                     </View>
-                    <Text style={styles.clientNameBlack}>
-                      {nextAppointment.client_name || 'Unknown client'}
+                <Text style={[styles.bigTimeText, { color: colors.primary }]}>
+                      {formatTimeToHoursMinutes(nextAppointment.slot_time).split(' ')[0]}
+                  <Text style={[styles.periodText, { color: colors.primary }]}> {formatTimeToHoursMinutes(nextAppointment.slot_time).split(' ')[1]}</Text>
                     </Text>
                   </View>
-                  {nextAppointment.service_name && (
-                    <Text style={styles.serviceText}>
-                      {nextAppointment.service_name}
-                    </Text>
-                  )}
+                </>
+              ) : (
+                <View style={styles.emptyStateContainer}>
+                  <Text style={styles.emptyTitle}>No upcoming appointments today</Text>
                 </View>
-                <Text style={styles.bigTimeText}>
-                  {formatTimeToHoursMinutes(nextAppointment.slot_time).split(' ')[0]}
-                  <Text style={styles.periodText}> {formatTimeToHoursMinutes(nextAppointment.slot_time).split(' ')[1]}</Text>
-                </Text>
-              </View>
-            </>
+              )}
+            </BlurView>
           ) : (
-            <View style={styles.emptyStateContainer}>
-              <View style={styles.emptyIconCircle}>
-                <Ionicons name="calendar-outline" size={20} color={colors.primary} />
+            <>
+              <View style={styles.cardHeaderRow}>
+                <View style={styles.headerIconCircle}>
+                  <Ionicons name="time-outline" size={18} color={colors.primary} />
+                </View>
+                <Text style={styles.nextTitle}>Next appointment</Text>
               </View>
-              <Text style={styles.emptyTitle}>No upcoming appointments today</Text>
-              <Text style={styles.emptySubtitle}>No appointments scheduled for today</Text>
-            </View>
+              {loading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={styles.loadingText}>Loading...</Text>
+                </View>
+              ) : nextAppointment ? (
+                <>
+                  <View style={styles.nextInfoRow}>
+                    <View style={styles.nextInfoRightColumn}>
+                      <View style={styles.clientRow}>
+                        <View style={styles.clientAvatar}>
+                          {clientImageUrl ? (
+                            <Image source={{ uri: clientImageUrl }} style={styles.clientAvatarImage} />
+                          ) : (
+                            <Image source={require('@/assets/images/user.png')} style={styles.clientAvatarImage} />
+                          )}
+                        </View>
+                        <Text style={styles.clientNameBlack}>
+                          {nextAppointment.client_name || 'Unknown client'}
+                        </Text>
+                      </View>
+                      {nextAppointment.service_name && (
+                        <Text style={styles.serviceText}>
+                          {nextAppointment.service_name}
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={styles.bigTimeText}>
+                      {formatTimeToHoursMinutes(nextAppointment.slot_time).split(' ')[0]}
+                      <Text style={styles.periodText}> {formatTimeToHoursMinutes(nextAppointment.slot_time).split(' ')[1]}</Text>
+                    </Text>
+                  </View>
+                </>
+              ) : (
+                <View style={styles.emptyStateContainer}>
+                  <Text style={styles.emptyTitle}>No upcoming appointments today</Text>
+                  <Text style={styles.emptySubtitle}>No appointments scheduled for today</Text>
+                </View>
+              )}
+            </>
           )}
         </TouchableOpacity>
       </View>
@@ -207,6 +279,13 @@ const createStyles = (colors: any) => StyleSheet.create({
     elevation: 3,
     marginBottom: 18,
     marginHorizontal: 8,
+  },
+  frostedContainer: {
+    backgroundColor: 'transparent',
+    borderRadius: 20,
+    padding: 6,
+    marginBottom: 12,
+    marginHorizontal: 0,
   },
   title: {
     fontSize: 17,
@@ -237,6 +316,27 @@ const createStyles = (colors: any) => StyleSheet.create({
     elevation: 1,
     borderWidth: 1,
     borderColor: '#E5E5EA',
+  },
+  frostedCard: {
+    alignSelf: 'stretch',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    minHeight: 72,
+    marginHorizontal: 0,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    shadowColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
+    overflow: 'hidden',
+  },
+  frostedInnerBlur: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
   },
   cardNext: {},
   cardAppointments: {
@@ -533,7 +633,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   emptyStateContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 22,
+    paddingVertical: 12,
     gap: 8,
     alignSelf: 'center',
     width: '100%',
@@ -549,12 +649,12 @@ const createStyles = (colors: any) => StyleSheet.create({
   emptyTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1d1d1f',
+    color: colors.primary,
     textAlign: 'center',
   },
   emptySubtitle: {
     fontSize: 12,
-    color: '#666',
+    color: colors.primary,
     textAlign: 'center',
   },
   serviceText: {

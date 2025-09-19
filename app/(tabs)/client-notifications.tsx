@@ -230,13 +230,8 @@ export default function ClientNotificationsScreen() {
           <View style={styles.previewCard}>
             <Text style={styles.previewTitle}>תצוגה מקדימה</Text>
             <View style={styles.notificationPreview}>
-              <View style={styles.notificationHeader}>
-                {(() => {
-                  const IconComponent = TITLE_TO_ICON[title as keyof typeof TITLE_TO_ICON];
-                  return IconComponent ? <IconComponent size={20} color="#1C1C1E" /> : null;
-                })()}
+              <View style={{ marginBottom: 12 }}>
                 <Text style={styles.notificationTitle}>{title}</Text>
-                <Text style={styles.notificationTime}>עכשיו</Text>
               </View>
               <Text style={styles.notificationContent}>{message}</Text>
             </View>

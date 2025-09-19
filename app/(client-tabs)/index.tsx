@@ -1055,7 +1055,6 @@ export default function ClientHomeScreen() {
                  ) }}
                  style={styles.mapImage}
                  resizeMode="cover"
-                 onLoadStart={() => { try { console.log('[Maps] Loading Google Static Map for address:', displayAddress); } catch {} }}
                  onError={handleGoogleError}
                />
              ) : mapCoords ? (
@@ -1064,10 +1063,6 @@ export default function ClientHomeScreen() {
                  style={styles.mapImage}
                  resizeMode="cover"
                  defaultSource={require('@/assets/images/1homePage.jpg')}
-                 onLoadStart={() => { try { console.log('[Maps] Loading MapTiler static map for coords:', mapCoords); } catch {} }}
-                 onError={() => {
-                   try { console.warn('[Maps] MapTiler failed, using fallback'); } catch {}
-                 }}
                />
              ) : (
                <View style={[styles.mapImage, { backgroundColor: '#E5E5EA', alignItems: 'center', justifyContent: 'center' }]}>

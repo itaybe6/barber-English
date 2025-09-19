@@ -177,7 +177,7 @@ export const usersApi = {
         .select('*')
         .eq('id', id)
         .eq('business_id', businessId) // רק משתמשים מאותו business
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('Error fetching user:', error);

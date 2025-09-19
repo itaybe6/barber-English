@@ -549,42 +549,15 @@ export default function ClientHomeScreen() {
     geocode();
   }, [displayAddress]);
 
-  // Log which Google key source is being used (masked)
-  useEffect(() => {
-    try {
-      const key = GOOGLE_STATIC_MAPS_KEY;
-      const masked = typeof key === 'string' && key.length > 8
-        ? `${key.slice(0, 4)}***${key.slice(-4)}`
-        : '(missing)';
-      const source = GOOGLE_KEY_EXTRA ? 'expo.extra' : GOOGLE_KEY_JSON ? 'branding/current.json' : GOOGLE_KEY_ENV ? 'process.env' : 'missing';
-      console.log('[Maps] Google Static Maps key loaded:', masked, 'source:', source);
-    } catch {}
-  }, [GOOGLE_STATIC_MAPS_KEY]);
+  // (removed) verbose key and HTTP status logging
 
-  // Proactively verify Google Static Maps URL availability
-  useEffect(() => {
-    const test = async () => {
-      if (!GOOGLE_STATIC_MAPS_KEY) return;
-      try {
-        const url = `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(displayAddress)}&zoom=15&size=400x400&markers=color:red|${encodeURIComponent(displayAddress)}&key=${GOOGLE_STATIC_MAPS_KEY}`;
-        const res = await fetch(url, { method: 'GET' });
-        console.log('[Maps] Google Static Maps HTTP status:', res.status, 'content-type:', res.headers?.get?.('content-type'));
-      } catch (e) {
-        console.warn('[Maps] Google Static Maps fetch error:', (e as any)?.message || e);
-      }
-    };
-    test();
-  }, [displayAddress, GOOGLE_STATIC_MAPS_KEY]);
-
-  const handleOsmError = useCallback((e: any) => {
-    try { console.warn('[Maps] OSM static map failed', e?.nativeEvent?.error); } catch {}
+  const handleOsmError = useCallback(() => {
     setOsmFailed(true);
   }, []);
 
-  const handleGoogleError = useCallback((e: any) => {
-    try { console.warn('[Maps] Google static map failed for address:', displayAddress, 'keyPresent:', Boolean(GOOGLE_STATIC_MAPS_KEY)); } catch {}
+  const handleGoogleError = useCallback(() => {
     setGoogleFailed(true);
-  }, [displayAddress, GOOGLE_STATIC_MAPS_KEY]);
+  }, []);
 
   // Reset image fallback flags when address/coords change
   useEffect(() => {
@@ -1073,22 +1046,40 @@ export default function ClientHomeScreen() {
                }}
                style={styles.mapCard}
              >
-              {GOOGLE_STATIC_MAPS_KEY ? (
-                <Image
-                  source={{ uri: `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(displayAddress)}&zoom=16&scale=2&size=640x400&maptype=roadmap&markers=color:red|${encodeURIComponent(displayAddress)}&key=${GOOGLE_STATIC_MAPS_KEY}` }}
-                  style={styles.mapImage}
-                  resizeMode="cover"
-                  onLoadStart={() => { try { console.log('[Maps] Loading Google Static Map for address:', displayAddress); } catch {} }}
-                  onError={handleGoogleError}
-                />
-              ) : (
-                <LinearGradient
-                  colors={[`rgba(0,0,0,0.35)`, `rgba(0,0,0,0.55)`]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.mapImage}
-                />
-              )}
+             {GOOGLE_STATIC_MAPS_KEY && !googleFailed ? (
+               <Image
+                 source={{ uri: (
+                   mapCoords
+                     ? `https://maps.googleapis.com/maps/api/staticmap?center=${mapCoords.lat},${mapCoords.lon}&zoom=15&scale=2&size=640x400&maptype=roadmap&markers=color:red|${mapCoords.lat},${mapCoords.lon}&key=${GOOGLE_STATIC_MAPS_KEY}`
+                     : `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(displayAddress)}&zoom=15&scale=2&size=640x400&maptype=roadmap&markers=color:red|${encodeURIComponent(displayAddress)}&key=${GOOGLE_STATIC_MAPS_KEY}`
+                 ) }}
+                 style={styles.mapImage}
+                 resizeMode="cover"
+                 onLoadStart={() => { try { console.log('[Maps] Loading Google Static Map for address:', displayAddress); } catch {} }}
+                 onError={handleGoogleError}
+               />
+             ) : mapCoords ? (
+               <Image
+                 source={{ uri: `https://api.maptiler.com/maps/streets/static/${mapCoords.lon},${mapCoords.lat},14/640x400.png?key=get_your_own_OpIi9ZULNHzrESv6T2vL` }}
+                 style={styles.mapImage}
+                 resizeMode="cover"
+                 defaultSource={require('@/assets/images/1homePage.jpg')}
+                 onLoadStart={() => { try { console.log('[Maps] Loading MapTiler static map for coords:', mapCoords); } catch {} }}
+                 onError={() => {
+                   try { console.warn('[Maps] MapTiler failed, using fallback'); } catch {}
+                 }}
+               />
+             ) : (
+               <View style={[styles.mapImage, { backgroundColor: '#E5E5EA', alignItems: 'center', justifyContent: 'center' }]}>
+                 <Ionicons name="location-outline" size={48} color="#8E8E93" />
+                 <Text style={{ fontSize: 16, fontWeight: '600', color: '#8E8E93', marginTop: 8, textAlign: 'center' }}>
+                   Map Preview
+                 </Text>
+                 <Text style={{ fontSize: 12, color: '#8E8E93', marginTop: 4, textAlign: 'center', paddingHorizontal: 20 }}>
+                   {displayAddress}
+                 </Text>
+               </View>
+             )}
               <View style={styles.mapOverlay} />
               <View style={[styles.mapLogoCircle, { borderColor: colors.primary }]}>
                 <Image source={getCurrentClientLogo()} style={styles.mapLogoImage} resizeMode="cover" />

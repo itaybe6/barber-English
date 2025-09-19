@@ -481,32 +481,28 @@ export default function AdminAppointmentsScreen() {
 
                     {/* Content */}
                     <View style={styles.appointmentInner}>
-                      <View style={styles.appointmentHeaderRow}>
-                        <View style={[styles.timePill, { borderColor: 'rgba(112, 107, 107, 0.58)' }]}>
-                          <BlurView intensity={24} tint="light" style={styles.pillBlur} />
-                          <View style={styles.pillTint} />
-                          <Ionicons name="time-outline" size={14} color="#000000" />
-                          <Text style={[styles.timePillText, { color: businessColors.primary }]} numberOfLines={1}>{`${startTime} - ${endTime}`}</Text>
-                        </View>
-                      </View>
+                      <View style={styles.infoContainer}> 
+                        <BlurView intensity={28} tint="light" style={styles.pillBlur} />
+                        <View style={styles.pillTint} />
 
-                      <View style={styles.metaRow}>
-                        {!!apt.client_name && (
-                          <View style={[styles.clientPill, { borderColor: 'rgba(112, 107, 107, 0.58)' }]}>
-                            <BlurView intensity={28} tint="light" style={styles.pillBlur} />
-                            <View style={styles.pillTint} />
-                            <Ionicons name="person-outline" size={14} color="#000000" />
-                            <Text numberOfLines={1} style={[styles.clientPillText, { color: businessColors.primary }]}>{apt.client_name}</Text>
-                          </View>
-                        )}
-                        {!!apt.service_name && (
-                          <View style={[styles.servicePill, { borderColor: 'rgba(112, 107, 107, 0.58)' }]}>
-                            <BlurView intensity={28} tint="light" style={styles.pillBlur} />
-                            <View style={styles.pillTint} />
-                            <Ionicons name="pricetag-outline" size={14} color="#000000" />
-                            <Text numberOfLines={1} style={[styles.servicePillText, { color: businessColors.primary }]}>{apt.service_name}</Text>
-                          </View>
-                        )}
+                        {/* Title: Client - Service (no icons) */}
+                        <Text
+                          numberOfLines={1}
+                          style={[styles.titleText, { color: businessColors.primary }]}
+                        >
+                          {[
+                            apt.client_name || 'לקוח',
+                            apt.service_name || 'שירות'
+                          ].filter(Boolean).join(' - ')}
+                        </Text>
+
+                        {/* Time range row with clock icon */}
+                        <View style={styles.durationRow}>
+                          <Ionicons name="time-outline" size={14} color="#000000" />
+                          <Text numberOfLines={1} style={styles.durationText}>
+                            {`${startTime} - ${endTime}`}
+                          </Text>
+                        </View>
                       </View>
                     </View>
                   </PressableScale>
@@ -740,7 +736,7 @@ const styles = StyleSheet.create({
   appointmentCard: {
     position: 'absolute',
     backgroundColor: 'transparent',
-    borderColor: 'rgba(255,255,255,0.35)',
+    borderColor: 'rgba(0,0,0,0.12)',
     borderWidth: 1,
     borderRadius: 14,
     paddingHorizontal: 0,
@@ -754,7 +750,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.14,
     shadowRadius: 8,
     elevation: 4,
-    minHeight: 64,
+    minHeight: 52,
     overflow: 'hidden',
   },
   appointmentBlur: {
@@ -780,30 +776,30 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 14,
   },
   appointmentInner: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     paddingRight: 16,
   },
   appointmentHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
-    gap: 8,
+    marginBottom: 4,
+    gap: 6,
   },
   timePill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 12,
     borderWidth: 1,
     overflow: 'hidden',
     position: 'relative',
   },
   timePillText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: -0.1,
   },
@@ -828,8 +824,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 12,
     borderWidth: 1,
     alignSelf: 'flex-start',
@@ -838,22 +834,22 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   clientPillText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: -0.1,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     flexWrap: 'wrap',
   },
   servicePill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 12,
     borderWidth: 1,
     alignSelf: 'flex-start',
@@ -865,9 +861,34 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   servicePillText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: -0.1,
+  },
+  // New compact info container: title and duration on blur background
+  infoContainer: {
+    borderWidth: 0,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 6,
+    overflow: 'hidden',
+    position: 'relative',
+    marginBottom: 2,
+  },
+  titleText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  durationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  durationText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#000000',
   },
   appointmentActions: {
     position: 'absolute',

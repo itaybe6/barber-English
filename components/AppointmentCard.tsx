@@ -118,6 +118,8 @@ const styles = StyleSheet.create({
   card: {
     padding: 16,
     marginVertical: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.12)',
   },
   header: {
     flexDirection: 'row',

@@ -30,6 +30,7 @@ interface DesignCarouselProps {
   onDesignPress?: (design: Design) => void;
   title?: string;
   subtitle?: string;
+  showHeader?: boolean;
 }
 
 interface AdminUser {
@@ -42,7 +43,8 @@ export default function DesignCarousel({
   designs, 
   onDesignPress, 
   title = "העיצובים החדשים שלנו",
-  subtitle = "גלו את הטרנדים האחרונים ותבחרו את העיצוב המושלם"
+  subtitle = "גלו את הטרנדים האחרונים ותבחרו את העיצוב המושלם",
+  showHeader = true,
 }: DesignCarouselProps) {
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
   const [userProfiles, setUserProfiles] = useState<{[key: string]: AdminUser}>({});
@@ -278,12 +280,14 @@ export default function DesignCarousel({
   return (
     <View style={styles.container}>
       {/* Elegant Header */}
-      <View style={styles.elegantHeader}>
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.elegantTitle}>Design Gallery</Text>
-          <Text style={styles.elegantSubtitle}>Discover our latest creations</Text>
+      {showHeader && (
+        <View style={styles.elegantHeader}>
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.elegantTitle}>Design Gallery</Text>
+            <Text style={styles.elegantSubtitle}>Discover our latest creations</Text>
+          </View>
         </View>
-      </View>
+      )}
 
       {/* Carousel */}
       <ScrollView

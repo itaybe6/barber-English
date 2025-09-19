@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // Using require for images to avoid TS module resolution issues for static assets
 import CategoryBar from '@/components/CategoryBar';
 import DesignCard from '@/components/DesignCard';
+import DesignCarousel from '@/components/DesignCarousel';
 import { useDesignsStore } from '@/stores/designsStore';
 import DailySchedule from '@/components/DailySchedule';
 import { useAuthStore } from '@/stores/authStore';
@@ -524,7 +525,6 @@ export default function HomeScreen() {
 
     return (
       <View style={{ marginBottom: 24 }}>
-        <Text style={[styles.sectionTitle, { paddingHorizontal: 8, marginBottom: 12 }]}>Our Products</Text>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -654,104 +654,65 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* כפתור עריכת גלריה למנהל מעל הגלריה */}
+        {/* Admin: Gallery header with title/subtext (left) and edit button (right) */}
         {isAdmin && (
-          <View style={{ paddingHorizontal: 8, marginBottom: 8, alignItems: 'flex-start' }}>
-            <TouchableOpacity
-              onPress={() => router.push('/(tabs)/edit-gallery')}
-              activeOpacity={0.85}
-              style={[styles.editGalleryButton, { alignSelf: 'flex-start' }]}
-            >
-              <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20`, width: 28, height: 28, borderRadius: 14, marginRight: 12 }]}> 
-                <Ionicons name="create-outline" size={18} color={colors.primary} />
+          <View style={{ paddingHorizontal: 8, marginBottom: 8 }}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={styles.sectionHeaderTexts}>
+                <Text style={styles.sectionHeaderTitle}>Gallery</Text>
+                <Text style={styles.sectionHeaderSubtitle}>manage your desings</Text>
               </View>
-              <Text style={styles.editGalleryButtonText}>Edit Gallery</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.push('/(tabs)/edit-gallery')}
+                activeOpacity={0.85}
+                style={styles.editGalleryButton}
+              >
+                <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20`, width: 28, height: 28, borderRadius: 14, marginRight: 12 }]}> 
+                  <Ionicons name="create-outline" size={18} color={colors.primary} />
+                </View>
+                <Text style={styles.editGalleryButtonText}>Edit Gallery</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
-        {/* Horizontal gallery */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={[{ marginTop: 0, marginBottom: 16 }]}
-          contentContainerStyle={{ flexDirection: 'row', gap: 12, paddingHorizontal: 8 }}
-        >
-          {isLoadingDesigns ? (
-            <View style={{ paddingHorizontal: 16, justifyContent: 'center' }}>
-              <ActivityIndicator size="small" color={colors.primary} />
-            </View>
-          ) : (
-            designsFromStore.map((item) => (
-              isAdmin ? (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[styles.galleryTile]}
-                  activeOpacity={0.85}
-                  onPress={() => setPreviewImageUrl(item.image_url)}
-                >
-                  <View style={styles.galleryImageContainer}>
-                    <Image
-                      source={{ uri: item.image_url }}
-                      style={styles.galleryImage}
-                      resizeMode="cover"
-                    />
-                    <LinearGradient
-                      colors={['transparent', 'rgba(0,0,0,0.7)']}
-                      style={styles.galleryGradient}
-                    >
-                      <Text style={styles.galleryDesignName}>{item.name}</Text>
-                      <View style={styles.galleryCategoryTags}>
-                        {(item.categories || []).slice(0, 2).map((cat, idx) => (
-                          <View key={idx} style={styles.galleryCategoryTag}>
-                            <Text style={styles.galleryCategoryTagText}>{cat}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    </LinearGradient>
-                  </View>
-                </TouchableOpacity>
-              ) : (
-                <View key={item.id} style={[styles.galleryTile]}>
-                  <View style={styles.galleryImageContainer}>
-                    <Image
-                      source={{ uri: item.image_url }}
-                      style={styles.galleryImage}
-                      resizeMode="cover"
-                    />
-                    <LinearGradient
-                      colors={['transparent', 'rgba(0,0,0,0.7)']}
-                      style={styles.galleryGradient}
-                    >
-                      <Text style={styles.galleryDesignName}>{item.name}</Text>
-                      <View style={styles.galleryCategoryTags}>
-                        {(item.categories || []).slice(0, 2).map((cat, idx) => (
-                          <View key={idx} style={styles.galleryCategoryTag}>
-                            <Text style={styles.galleryCategoryTagText}>{cat}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    </LinearGradient>
-                  </View>
-                </View>
-              )
-            ))
-          )}
-        </ScrollView>
+        {/* Admin: Story-style gallery like client home */}
+        {isLoadingDesigns ? (
+          <View style={{ paddingHorizontal: 16, justifyContent: 'center' }}>
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        ) : (
+          <DesignCarousel designs={designsFromStore as any} showHeader={false} />
+        )}
 
-        {/* כפתור עריכת מוצרים למנהל מעל המוצרים */}
+        {/* Spacing and divider between Gallery and Products sections for Admin */}
         {isAdmin && (
-          <View style={{ paddingHorizontal: 8, marginBottom: 8, alignItems: 'flex-start' }}>
-            <TouchableOpacity
-              onPress={() => router.push('/(tabs)/edit-products')}
-              activeOpacity={0.85}
-              style={[styles.editGalleryButton, { alignSelf: 'flex-start' }]}
-            >
-              <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20`, width: 28, height: 28, borderRadius: 14, marginRight: 12 }]}> 
-                <Ionicons name="bag-outline" size={18} color={colors.primary} />
+          <>
+            <View style={styles.sectionSpacerLarge} />
+            <View style={styles.sectionDivider} />
+            <View style={styles.sectionSpacerLarge} />
+          </>
+        )}
+
+        {/* Admin: Products header with title/subtext (left) and edit button (right) */}
+        {isAdmin && (
+          <View style={{ paddingHorizontal: 8, marginBottom: 8 }}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={styles.sectionHeaderTexts}>
+                <Text style={styles.sectionHeaderTitle}>Products</Text>
+                <Text style={styles.sectionHeaderSubtitle}>Manage your products</Text>
               </View>
-              <Text style={styles.editGalleryButtonText}>Edit Products</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.push('/(tabs)/edit-products')}
+                activeOpacity={0.85}
+                style={styles.editGalleryButton}
+              >
+                <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20`, width: 28, height: 28, borderRadius: 14, marginRight: 12 }]}> 
+                  <Ionicons name="bag-outline" size={18} color={colors.primary} />
+                </View>
+                <Text style={styles.editGalleryButtonText}>Edit Products</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -1402,6 +1363,37 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontWeight: '600',
     letterSpacing: -0.2,
     marginLeft: 8,
+  },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: '#E5E5EA',
+    marginHorizontal: 8,
+  },
+  sectionSpacerLarge: {
+    height: 16,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+  },
+  sectionHeaderTexts: {
+    flex: 1,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  sectionHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'left',
+  },
+  sectionHeaderSubtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'left',
   },
   cardTitleHebrew: {
     fontSize: 15,

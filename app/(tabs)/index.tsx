@@ -282,12 +282,15 @@ export default function HomeScreen() {
     try {
       setLoadingStats(true);
       const now = new Date();
+      const { getBusinessId } = await import('@/lib/supabase');
+      const businessId = getBusinessId();
       
       // Get all clients from users table
       const { data: clientsData, error: clientsError } = await supabase
         .from('users')
         .select('*')
-        .eq('user_type', 'client');
+        .eq('user_type', 'client')
+        .eq('business_id', businessId);
 
       if (clientsError) {
         console.error('Error fetching clients:', clientsError);

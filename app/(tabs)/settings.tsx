@@ -1175,18 +1175,19 @@ export default function SettingsScreen() {
         setProfileLoginImg(uploadedUrl);
       }
 
-      // Save to database
-      const updated = await businessProfileApi.upsertProfile({
-        display_name: (profileDisplayName || '').trim() || null as any,
-        address: (profileAddress || '').trim() || null as any,
-        instagram_url: (profileInstagram || '').trim() || null as any,
-        facebook_url: (profileFacebook || '').trim() || null as any,
-        tiktok_url: (profileTiktok || '').trim() || null as any,
-        image_on_page_1: currentImageType === 'page1' ? uploadedUrl : (profileImageOnPage1 || '').trim() || null as any,
-        image_on_page_2: currentImageType === 'page2' ? uploadedUrl : (profileImageOnPage2 || '').trim() || null as any,
-        image_on_page_3: currentImageType === 'page3' ? uploadedUrl : (profileImageOnPage3 || '').trim() || null as any,
-        login_img: currentImageType === 'login' ? uploadedUrl : (profileLoginImg || '').trim() || null as any,
-      });
+      // Save ONLY the changed image field to avoid overwriting others
+      const imagePayload: Partial<BusinessProfile> = {} as any;
+      if (currentImageType === 'page1') {
+        (imagePayload as any).image_on_page_1 = uploadedUrl;
+      } else if (currentImageType === 'page2') {
+        (imagePayload as any).image_on_page_2 = uploadedUrl;
+      } else if (currentImageType === 'page3') {
+        (imagePayload as any).image_on_page_3 = uploadedUrl;
+      } else if (currentImageType === 'login') {
+        (imagePayload as any).login_img = uploadedUrl;
+      }
+
+      const updated = await businessProfileApi.upsertProfile(imagePayload);
 
       if (updated) {
         setProfile(updated);

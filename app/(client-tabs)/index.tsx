@@ -1372,7 +1372,7 @@ const styles = StyleSheet.create<any>({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     marginTop: -20, // Overlap with hero image
-    paddingTop: 36, // Extra padding to account for overlap
+    paddingTop: 1, // Reduced to tighten space under hero
     paddingBottom: 0, // No bottom padding to allow full scrolling
     minHeight: '100%', // Fill the entire screen height
     overflow: 'hidden',
@@ -2141,8 +2141,8 @@ const styles = StyleSheet.create<any>({
   // Appointments Header (matching gallery design)
   appointmentsHeader: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
     backgroundColor: '#F8F9FA',
   },
   appointmentsHeaderContent: {

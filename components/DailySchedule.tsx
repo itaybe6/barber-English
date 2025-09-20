@@ -106,7 +106,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
   return (
     <View style={isFrosted ? styles.frostedContainer : styles.container}>
       <View style={styles.dailyTitleWrapper}>
-        <Text style={[styles.dailyTitle, { color: '#fff' }]}>Daily Schedule</Text>
+        <Text style={[styles.dailyTitle, { color: colors.primary }]}>Daily Schedule</Text>
         <View style={styles.dailyTitleAccent} />
       </View>
       <View style={styles.cardsRow}>
@@ -120,7 +120,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
             <BlurView intensity={30} tint="light" style={styles.frostedInnerBlur}>
               <View style={styles.cardHeaderRow}>
                 <View style={styles.headerIconCircle}>
-                  <Ionicons name="calendar-outline" size={18} color="#fff" />
+                  <Ionicons name="calendar-outline" size={18} color={colors.primary} />
                 </View>
             <Text style={[styles.dateText, { color: colors.primary }]}>
                   {new Date().toLocaleDateString('en-US', {
@@ -142,7 +142,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
           ) : (
             <View style={styles.cardHeaderRow}>
               <View style={styles.headerIconCircle}>
-                <Ionicons name="calendar-outline" size={18} color="#fff" />
+                <Ionicons name="calendar-outline" size={18} color={colors.primary} />
               </View>
               <Text style={styles.dateText}>
                 {new Date().toLocaleDateString('en-US', {
@@ -173,7 +173,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
             <BlurView intensity={30} tint="light" style={styles.frostedInnerBlur}>
               <View style={styles.cardHeaderRow}>
                 <View style={styles.headerIconCircle}>
-                  <Ionicons name="time-outline" size={18} color="#fff" />
+                  <Ionicons name="time-outline" size={18} color={colors.primary} />
                 </View>
             <Text style={[styles.nextTitle, { color: colors.primary }]}>Next appointment</Text>
               </View>
@@ -216,7 +216,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
             <>
               <View style={styles.cardHeaderRow}>
                 <View style={styles.headerIconCircle}>
-                  <Ionicons name="time-outline" size={18} color="#fff" />
+                  <Ionicons name="time-outline" size={18} color={colors.primary} />
                 </View>
                 <Text style={styles.nextTitle}>Next appointment</Text>
               </View>
@@ -649,12 +649,12 @@ const createStyles = (colors: any) => StyleSheet.create({
   emptyTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: colors.primary,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   emptySubtitle: {
     fontSize: 12,
-    color: colors.primary,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   serviceText: {

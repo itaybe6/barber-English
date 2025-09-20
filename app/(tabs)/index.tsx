@@ -661,21 +661,19 @@ export default function HomeScreen() {
           </View>
         </SafeAreaView>
 
-        {/* Place DailySchedule over hero with blur */}
+        {/* Hero Text Content */}
         <View style={styles.fullScreenHeroContent}>
-          <View style={{ width: '100%', alignItems: 'center' }}>
-            <BlurView intensity={40} tint="light" style={[styles.dailyBlurCard, { marginBottom: 6 }]}>
-              <DailySchedule
-                nextAppointment={nextAppointment}
-                loading={loadingNextAppointment}
-                onRefresh={fetchNextAppointment}
-                todayAppointmentsCount={todayAppointmentsCount}
-                loadingTodayCount={loadingTodayCount}
-                variant="frosted"
-              />
-            </BlurView>
+          <View style={styles.heroTextContainer}>
+            <Text style={styles.heroWelcome}>Welcome</Text>
+            <Text style={styles.heroTitle}>{user?.name || 'Admin'}</Text>
+            <Text style={styles.heroSubtitle} numberOfLines={2} ellipsizeMode="tail">
+              Manage your day with confidence{'\n'}
+              This app keeps your schedule sharp
+            </Text>
           </View>
         </View>
+
+        {/* DailySchedule moved to content area below hero */}
       </View>
 
       {/* Content wrapper with scroll animation */}
@@ -698,6 +696,18 @@ export default function HomeScreen() {
           >
         {/* Spacer for bottom reachability */}
         <View style={{ height: 0 }} />
+
+        {/* DailySchedule below hero, above stats */}
+        <View style={{ paddingHorizontal: 8, marginTop: 12, marginBottom: 8 }}>
+          <DailySchedule
+            nextAppointment={nextAppointment}
+            loading={loadingNextAppointment}
+            onRefresh={fetchNextAppointment}
+            todayAppointmentsCount={todayAppointmentsCount}
+            loadingTodayCount={loadingTodayCount}
+            variant="card"
+          />
+        </View>
 
         <View style={styles.statsBox}>
           <View style={styles.statsButtonsRow}>
@@ -954,7 +964,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     backgroundColor: '#F8F9FA',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    marginTop: -30,
+    marginTop: -80,
     paddingTop: 8,
     paddingBottom: 0,
     minHeight: '100%',
@@ -1035,10 +1045,50 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   fullScreenHeroContent: {
     position: 'absolute',
-    bottom: 40,
+    bottom: 160,
     left: 16,
     right: 16,
     zIndex: 1,
+  },
+  heroTextContainer: {
+    flex: 1,
+    alignItems: 'flex-start',
+    justifyContent: 'flex-end',
+   
+  },
+  heroWelcome: {
+    fontSize: 18,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '600',
+    textAlign: 'left',
+    marginBottom: 8,
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  heroTitle: {
+    fontSize: 32,
+    color: '#FFFFFF',
+    fontWeight: '900',
+    textAlign: 'left',
+    marginBottom: 16,
+    letterSpacing: -0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
+  },
+  heroSubtitle: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '500',
+    textAlign: 'left',
+    lineHeight: 24,
+    letterSpacing: 0.2,
+    textShadowColor: 'rgba(0, 0, 0, 0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+    maxWidth: '85%',
   },
   dailyBlurCard: {
     width: '100%',

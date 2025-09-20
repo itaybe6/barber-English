@@ -698,7 +698,7 @@ export default function ClientHomeScreen() {
                 activeOpacity={0.85}
                 accessibilityLabel="Settings and Profile"
               >
-                <Ionicons name="settings-outline" size={24} color={colors.primary} />
+                <Ionicons name="settings-outline" size={24} color="#fff" />
               </TouchableOpacity>
             </View>
             <View style={styles.headerCenter}>
@@ -716,7 +716,7 @@ export default function ClientHomeScreen() {
                 activeOpacity={0.85}
                 accessibilityLabel="Notifications"
               >
-                <Ionicons name="notifications-outline" size={24} color={colors.primary} />
+                <Ionicons name="notifications-outline" size={24} color="#fff" />
                 {unreadNotificationsCount > 0 && (
                   <View style={[styles.overlayNotificationBadge, { backgroundColor: colors.primary }]}>
                     <Text style={styles.notificationBadgeText}>
@@ -735,8 +735,8 @@ export default function ClientHomeScreen() {
             <Text style={styles.heroWelcome}>Welcome</Text>
             <Text style={styles.heroTitle}>{user?.name || 'Valued Client'}</Text>
             <Text style={styles.heroSubtitle} numberOfLines={2} ellipsizeMode="tail">
-              Discover the art of perfect grooming.{'\n'}
-              Where tradition meets modern style, and every visit{'\n'}
+            Book your appointment quickly and easily{'\n'}
+            Your time matters 
               
             </Text>
           </View>

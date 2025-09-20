@@ -631,7 +631,7 @@ export default function HomeScreen() {
             {/* Left: Broadcast */}
             <View style={styles.headerSide}>
               <View style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}> 
-                <AdminBroadcastComposer variant="icon" language="en" />
+                <AdminBroadcastComposer variant="icon" language="en" iconColor="#fff" />
               </View>
             </View>
             {/* Center: Logo */}
@@ -648,7 +648,7 @@ export default function HomeScreen() {
                 activeOpacity={0.85}
                 accessibilityLabel="Notifications"
               >
-                <Ionicons name="notifications-outline" size={24} color={colors.primary} />
+                <Ionicons name="notifications-outline" size={24} color="#fff" />
                 {unreadCount > 0 && (
                   <View style={[styles.overlayNotificationBadge, { backgroundColor: colors.primary }]}>
                     <Text style={styles.notificationBadgeText}>

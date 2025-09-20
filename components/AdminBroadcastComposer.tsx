@@ -12,6 +12,7 @@ type TitleType = 'custom' | 'preset';
 type AdminBroadcastComposerProps = {
   variant?: 'floating' | 'icon';
   iconContainerStyle?: ViewStyle;
+  iconColor?: string;
   // When provided, the modal acts in controlled mode
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -24,6 +25,7 @@ type AdminBroadcastComposerProps = {
 export default function AdminBroadcastComposer({
   variant = 'floating',
   iconContainerStyle,
+  iconColor,
   open,
   onOpenChange,
   renderTrigger = true,
@@ -32,6 +34,7 @@ export default function AdminBroadcastComposer({
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const styles = createStyles(colors);
+  const effectiveIconColor = iconColor ?? colors.primary;
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = typeof open === 'boolean';
   const isOpen = isControlled ? !!open : internalOpen;
@@ -204,7 +207,7 @@ export default function AdminBroadcastComposer({
           <Ionicons
   name="paper-plane-outline"
   size={22}
-  color={colors.primary}
+  color={effectiveIconColor}
   style={{ transform: [{ scaleX: -1 }] }}
 />
         </TouchableOpacity>

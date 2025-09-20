@@ -204,7 +204,9 @@ export default function ClientAppointmentsScreen() {
     const dateTime = new Date(`${appointment.slot_date}T${hh.padStart(2, '0')}:${mm.padStart(2, '0')}`);
     const diffMs = dateTime.getTime() - Date.now();
     const hours = diffMs / (1000 * 60 * 60);
-    return hours < (minCancellationHours || 24);
+    // Use the configured value as-is; only default to 24 if it's undefined/null
+    const minHours = (minCancellationHours ?? 24);
+    return hours < minHours;
   }, [minCancellationHours]);
 
   // Open WhatsApp chat with manager
@@ -442,8 +444,8 @@ export default function ClientAppointmentsScreen() {
 
   // Exclude next appointment from the list to avoid duplication in the card + list
   const displayedUpcomingAppointments = React.useMemo(() => {
-    if (!nextAppointment) return upcomingAppointments;
-    return upcomingAppointments.filter(a => a.id !== nextAppointment.id);
+    // Always use the same narrow list style; do not exclude any appointment
+    return upcomingAppointments;
   }, [upcomingAppointments, nextAppointment]);
 
   // Group appointments by date
@@ -925,7 +927,7 @@ export default function ClientAppointmentsScreen() {
 
         {isLoading ? (
           <ScrollView
-            contentContainerStyle={activeTab === 'upcoming' && nextAppointment ? styles.loadingContainerWithHero : styles.loadingContainer}
+            contentContainerStyle={styles.loadingContainer}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -937,7 +939,6 @@ export default function ClientAppointmentsScreen() {
               />
             }
           >
-            <NextAppointmentHero />
             <ActivityIndicator size="large" color={Colors.primary} style={{ alignSelf: 'center' }} />
             <Text style={styles.loadingText}>
               {user?.user_type === 'admin' ? 'Loading your schedule...' : 'Loading your appointments...'}
@@ -953,7 +954,7 @@ export default function ClientAppointmentsScreen() {
           <FlatList
             data={groupedAppointments}
             renderItem={({ item: group }) => {
-              const omitHeader = activeTab === 'upcoming' && nextAppointment && group.date === nextAppointment.slot_date;
+              const omitHeader = false;
               return (
                 <View>
                   {!omitHeader && <DateHeader date={group.date} forceFull={activeTab === 'past'} />}
@@ -967,16 +968,7 @@ export default function ClientAppointmentsScreen() {
             }}
             keyExtractor={(item) => item.date}
             contentContainerStyle={styles.appointmentsList}
-            ListHeaderComponent={(
-              activeTab === 'upcoming' && nextAppointment ? (
-                <View>
-                  <DateHeader date={nextAppointment.slot_date} />
-                  <NextAppointmentHero />
-                </View>
-              ) : (
-                <NextAppointmentHero />
-              )
-            )}
+            ListHeaderComponent={undefined}
             showsVerticalScrollIndicator={false}
             removeClippedSubviews={true}
             maxToRenderPerBatch={3}
@@ -995,23 +987,6 @@ export default function ClientAppointmentsScreen() {
             }
           />
         ) : (
-          activeTab === 'upcoming' && nextAppointment ? (
-            <ScrollView
-              contentContainerStyle={styles.emptyStateWithHero}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={onRefresh}
-                  colors={[Colors.primary]}
-                  tintColor={Colors.primary}
-                  title="Updating appointments..."
-                  titleColor={Colors.primary}
-                />
-              }
-            >
-              <NextAppointmentHero />
-            </ScrollView>
-          ) : (
             <ScrollView
               contentContainerStyle={styles.emptyState}
               refreshControl={
@@ -1042,7 +1017,6 @@ export default function ClientAppointmentsScreen() {
                   : (user?.user_type === 'admin' ? 'Appointments you handled will appear here' : 'Your past appointments will appear here')}
               </Text>
             </ScrollView>
-          )
         )}
       </View>
 
@@ -1056,16 +1030,28 @@ export default function ClientAppointmentsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.cancelModal}>
             <View style={styles.modalHeader}>
-              <Ionicons name="warning" size={48} color="#FF9500" />
               <Text style={styles.modalTitle}>Cancel Appointment</Text>
               <Text style={styles.modalMessage}>
                 Would you like to cancel your appointment?
               </Text>
               {selectedAppointment && (
-                <View style={styles.appointmentSummary}>
-                  <Text style={styles.summaryText}>
-                    {selectedAppointment.service_name} - {formatDate(selectedAppointment.slot_date)} {formatTime(selectedAppointment.slot_time)}
-                  </Text>
+                <View style={styles.appointmentChips}>
+                  <View style={styles.chip}>
+                    <Ionicons name="calendar" size={14} color={colors.primary} style={styles.chipIcon} />
+                    <Text style={styles.chipText}>{formatDate(selectedAppointment.slot_date)}</Text>
+                  </View>
+                  {Boolean(selectedAppointment.slot_time) && (
+                    <View style={styles.chip}>
+                      <Ionicons name="time-outline" size={14} color={colors.primary} style={styles.chipIcon} />
+                      <Text style={styles.chipText}>{formatTime(selectedAppointment.slot_time)}</Text>
+                    </View>
+                  )}
+                  {Boolean(selectedAppointment.service_name) && (
+                    <View style={styles.chip}>
+                      <Ionicons name="pricetag" size={14} color={colors.primary} style={styles.chipIcon} />
+                      <Text style={styles.chipText}>{selectedAppointment.service_name}</Text>
+                    </View>
+                  )}
                 </View>
               )}
             </View>
@@ -1105,12 +1091,6 @@ export default function ClientAppointmentsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.iosModalCard}>
             <View style={styles.modalHeader}>
-              <View style={styles.policyBadge}>
-                <Text style={styles.policyBadgeText}>Cancellation Policy</Text>
-              </View>
-              <View style={styles.modalIconCircle}>
-                <Ionicons name="alert" size={28} color="#FF3B30" />
-              </View>
               <Text style={styles.modalTitle}>Cannot Cancel Appointment</Text>
               <Text style={styles.modalMessage}>
                 Appointments can be canceled up to {minCancellationHours} hours before the time. For short notice cancellations, please contact the manager.

@@ -583,21 +583,26 @@ export default function SelectTimeScreen() {
           <View style={styles.modalOverlay}>
             <BlurView style={StyleSheet.absoluteFill} intensity={24} tint="dark" />
             <View style={styles.modalContent}>
-              <View style={styles.modalIconWrapper}>
-                <View style={styles.successIconCircle}>
-                  <Ionicons name="checkmark" size={32} color="#FFFFFF" />
-                </View>
-              </View>
-              <Text style={styles.modalTitle}>Appointment Booked Successfully!</Text>
-              <Text style={styles.modalMessage} numberOfLines={0} allowFontScaling={false}>
-                {successMessage}
-              </Text>
-              <View style={styles.scheduleBlock}>
-                <Text style={styles.scheduleLine}>has been scheduled for</Text>
-                <Text style={styles.scheduleDate}>
-                  {selectedDate ? new Date(selectedDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : ''}
-                </Text>
-                <Text style={styles.scheduleTime}>{selectedTime ? formatTime12Hour(selectedTime) : ''}</Text>
+              <Text style={styles.modalTitle}>Appointment Booked</Text>
+              <View style={styles.appointmentChips}>
+                {selectedDate ? (
+                  <View style={styles.chip}>
+                    <Ionicons name="calendar" size={14} color={colors.primary} style={styles.chipIcon} />
+                    <Text style={styles.chipText}>{new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</Text>
+                  </View>
+                ) : null}
+                {selectedTime ? (
+                  <View style={styles.chip}>
+                    <Ionicons name="time-outline" size={14} color={colors.primary} style={styles.chipIcon} />
+                    <Text style={styles.chipText}>{formatTime12Hour(selectedTime)}</Text>
+                  </View>
+                ) : null}
+                {serviceName ? (
+                  <View style={styles.chip}>
+                    <Ionicons name="pricetag" size={14} color={colors.primary} style={styles.chipIcon} />
+                    <Text style={styles.chipText}>{serviceName}</Text>
+                  </View>
+                ) : null}
               </View>
               <View style={[styles.modalButtons, styles.modalButtonsStacked]}>
                 <TouchableOpacity
@@ -644,7 +649,7 @@ export default function SelectTimeScreen() {
                   activeOpacity={0.9}
                 >
                   <View style={styles.modalButtonRow}>
-                    <Ionicons name="calendar-outline" size={20} color={colors.primary} style={styles.modalButtonIcon} />
+                    <Ionicons name="calendar-outline" size={20} color="#000000" style={styles.modalButtonIcon} />
                     <Text style={styles.modalButtonSecondaryText}>Add to Calendar</Text>
                   </View>
                 </TouchableOpacity>
@@ -990,7 +995,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     writingDirection: 'ltr',
   },
   modalButtonSecondaryText: {
-    color: colors.primary,
+    color: '#000000',
     fontSize: 16,
     fontWeight: '800',
     textAlign: 'center',
@@ -1051,6 +1056,30 @@ const createStyles = (colors: any) => StyleSheet.create({
   infoLabel: {
     color: '#3A3A3C',
     fontWeight: '600',
+  },
+  // Chips for success modal (date, time, service)
+  appointmentChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F2F2F7',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  chipIcon: {
+    marginRight: 6,
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1C1C1E',
   },
   modalButtonCancelText: {
     color: '#111111',

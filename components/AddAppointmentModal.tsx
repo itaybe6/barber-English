@@ -423,8 +423,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
 
       if (error) throw error;
 
-      const policyNote = '\n\nNote: Appointments cannot be cancelled 48 hours before the scheduled time. Cancellation during this period will be charged for the appointment.';
-      Alert.alert('Success', `Appointment scheduled successfully${policyNote}`, [
+      Alert.alert('Success', 'Appointment scheduled successfully', [
         { text: 'OK', onPress: () => {
           onSuccess?.();
           onClose();
@@ -730,19 +729,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
             <X size={20} color={Colors.text} />
           </TouchableOpacity>
           <Text style={[styles.title, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>add appointment</Text>
-          <TouchableOpacity 
-            style={[
-              styles.submitButton, 
-              isSubmitting && styles.submitButtonDisabled,
-              { backgroundColor: businessColors.primary }
-            ]}
-            onPress={handleSubmit}
-            disabled={isSubmitting}
-          >
-            <Text style={[styles.submitButtonText, { color: Colors.white }, isSubmitting && styles.submitButtonTextDisabled]}>
-              {isSubmitting ? 'Saving...' : 'Save'}
-            </Text>
-          </TouchableOpacity>
+          <View style={{ width: 60 }} />
         </View>
 
         <View style={styles.bodyWrapper}>
@@ -795,18 +782,18 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
                 <Text style={[styles.stepNavText, currentStep === 0 && styles.stepNavTextDisabled]}>Back</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={goNext}
+                onPress={currentStep < 3 ? goNext : handleSubmit}
                 disabled={
                   (currentStep === 0 && !selectedClient) ||
                   (currentStep === 1 && !selectedService) ||
                   (currentStep === 2 && !selectedDate) ||
-                  (currentStep === 3 && !selectedTime)
+                  (currentStep === 3 && (!selectedTime || isSubmitting))
                 }
                 style={[styles.stepNavPrimary, { backgroundColor: businessColors.primary },
-                  ((currentStep === 0 && !selectedClient) || (currentStep === 1 && !selectedService) || (currentStep === 2 && !selectedDate) || (currentStep === 3 && !selectedTime)) && { opacity: 0.6 }
+                  ((currentStep === 0 && !selectedClient) || (currentStep === 1 && !selectedService) || (currentStep === 2 && !selectedDate) || (currentStep === 3 && (!selectedTime || isSubmitting))) && { opacity: 0.6 }
                 ]}
               >
-                <Text style={styles.stepNavPrimaryText}>{currentStep < 3 ? 'Next' : 'Done'}</Text>
+                <Text style={styles.stepNavPrimaryText}>{currentStep < 3 ? 'Next' : (isSubmitting ? 'Saving...' : 'Done')}</Text>
               </TouchableOpacity>
             </View>
           </View>

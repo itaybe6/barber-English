@@ -682,7 +682,7 @@ export default function HomeScreen() {
         </SafeAreaView>
 
         {/* Hero Text Content */}
-        <View style={styles.fullScreenHeroContent}>
+        <View style={[styles.fullScreenHeroContent, { top: insets.top + 110 }]}>
           <View style={styles.heroTextContainer}>
             <Text style={styles.heroWelcome}>Welcome</Text>
             <Text style={styles.heroTitle}>{user?.name || 'Admin'}</Text>
@@ -1065,7 +1065,6 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   fullScreenHeroContent: {
     position: 'absolute',
-    bottom: 160,
     left: 16,
     right: 16,
     zIndex: 1,

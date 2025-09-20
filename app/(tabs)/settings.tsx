@@ -38,6 +38,7 @@ import {
   User,
   Repeat
 } from 'lucide-react-native';
+import { Users } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -1444,6 +1445,17 @@ export default function SettingsScreen() {
   const [showManageEmployeesModal, setShowManageEmployeesModal] = useState(false);
   const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
+  const [manageEmpSearch, setManageEmpSearch] = useState('');
+  const filteredAdmins = useMemo(() => {
+    const q = (manageEmpSearch || '').trim().toLowerCase();
+    if (!q) return adminUsers;
+    return (adminUsers || []).filter((u: any) => {
+      const name = String(u?.name || '').toLowerCase();
+      const phone = String(u?.phone || '').toLowerCase();
+      const email = String(u?.email || '').toLowerCase();
+      return name.includes(q) || phone.includes(q) || email.includes(q);
+    });
+  }, [adminUsers, manageEmpSearch]);
 
   const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const timeOptions = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2,'0')}:00`);
@@ -2227,7 +2239,7 @@ export default function SettingsScreen() {
           )}
           {canSeeAddEmployee && (
             renderSettingItem(
-              <Trash2 size={20} color="#FF3B30" />,
+              <Users size={20} color={businessColors.primary} />,
               'Manage employees',
               'Remove employees from this business',
               undefined,
@@ -3082,22 +3094,36 @@ export default function SettingsScreen() {
         presentationStyle="pageSheet"
         onRequestClose={() => setShowManageEmployeesModal(false)}
       >
-        <SafeAreaView edges={['top']} style={[styles.modalContainer, { backgroundColor: '#F8F9FA' }]}> 
+        <SafeAreaView edges={['top']} style={[styles.modalContainer, { backgroundColor: Colors.white }]}> 
           <View style={styles.modalHeader}>
             <TouchableOpacity 
-              style={styles.modalCloseButton}
+              style={[styles.cancellationModalCloseButton, { marginLeft: -10 }]}
               onPress={() => setShowManageEmployeesModal(false)}
             >
-              <Text style={styles.modalCloseText}>Close</Text>
+              <X size={20} color={Colors.text} />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Manage employees</Text>
+            <Text style={[styles.modalTitle, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>Manage employees</Text>
             <View style={{ width: 44 }} />
           </View>
+          <View style={styles.modalBodyRounded}>
           <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
             <View style={styles.recurringCard}>
-              <View style={{ marginBottom: 8 }}>
-                <Text style={styles.previewNotificationTitle}>Employees list</Text>
-                <Text style={styles.previewNotificationContent}>Remove admins from your business</Text>
+              {/* Title and subtitle removed as requested */}
+              <View style={[styles.inputContainer, { marginTop: 8 }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white, borderRadius: 12, borderWidth: 0, paddingHorizontal: 12, paddingVertical: 10 }}>
+                  <Ionicons name="search-outline" size={18} color={Colors.subtext} style={{ marginRight: 8 }} />
+                  <TextInput
+                    style={[styles.textInput, { borderWidth: 0, backgroundColor: 'transparent', paddingVertical: 0, flex: 1 }]}
+                    value={manageEmpSearch}
+                    onChangeText={setManageEmpSearch}
+                    placeholder="Search by name, phone, or email"
+                    placeholderTextColor={Colors.subtext}
+                    textAlign="left"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    underlineColorAndroid="transparent"
+                  />
+                </View>
               </View>
               {isLoadingEmployees ? (
                 <View style={{ paddingVertical: 24, alignItems: 'center' }}>
@@ -3106,24 +3132,65 @@ export default function SettingsScreen() {
                 </View>
               ) : (
                 <View>
-                  {adminUsers.length === 0 ? (
-                    <Text style={{ textAlign: 'center', color: Colors.subtext }}>No employees</Text>
+                  {filteredAdmins.length === 0 ? (
+                    <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                      <Ionicons name="people-outline" size={36} color={Colors.subtext} />
+                      <Text style={{ marginTop: 8, color: Colors.subtext }}>No employees found</Text>
+                    </View>
                   ) : (
-                    adminUsers.map((adm: any, idx: number) => (
-                      <View key={adm.id}>
-                        <View style={[styles.manageItemRow, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
-                            <View style={[styles.accordionThumb, { width: 40, height: 40, borderRadius: 20, marginLeft: 0 }]}>
-                              <Image source={adm.image_url ? { uri: adm.image_url } : require('@/assets/images/logo-03.png')} style={{ width: 40, height: 40, borderRadius: 20 }} />
-                            </View>
+                    filteredAdmins.map((adm: any) => (
+                      <Swipeable
+                        key={adm.id}
+                        friction={2}
+                        rightThreshold={28}
+                        renderRightActions={() => (
+                          <TouchableOpacity
+                            style={styles.swipeDeleteAction}
+                            activeOpacity={0.85}
+                            onPress={() => {
+                              if (adm.id === user?.id) {
+                                Alert.alert('Action not allowed', 'You cannot remove yourself.');
+                                return;
+                              }
+                              Alert.alert(
+                                'Remove employee',
+                                `Are you sure you want to remove ${adm.name || 'this employee'}?`,
+                                [
+                                  { text: 'Cancel', style: 'cancel' },
+                                  {
+                                    text: 'Remove',
+                                    style: 'destructive',
+                                    onPress: async () => {
+                                      const ok = await usersApi.deleteUserAndAllDataById(adm.id);
+                                      if (ok) {
+                                        setAdminUsers((prev) => prev.filter((u) => u.id !== adm.id));
+                                        Alert.alert('Success', 'Employee deleted successfully');
+                                      } else {
+                                        Alert.alert('Error', 'Failed to remove employee');
+                                      }
+                                    }
+                                  }
+                                ]
+                              );
+                            }}
+                            accessibilityRole="button"
+                            accessibilityLabel="Delete"
+                          >
+                            <Trash2 size={20} color={'#fff'} />
+                            <Text style={styles.swipeDeleteText}>Delete</Text>
+                          </TouchableOpacity>
+                        )}
+                      >
+                        <View style={styles.iosCard}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Image source={adm.image_url ? { uri: adm.image_url } : require('@/assets/images/logo-03.png')} style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12 }} />
                             <View style={{ alignItems: 'flex-start', flex: 1 }}>
                               <Text style={styles.previewNotificationTitle}>{adm.name || 'Admin'}</Text>
                               {!!adm.phone && <Text style={styles.previewNotificationContent}>{adm.phone}</Text>}
                               {!!adm.email && <Text style={styles.previewNotificationContent}>{adm.email}</Text>}
                             </View>
-                          </View>
-                          <TouchableOpacity
-                              style={[styles.deleteIconButton, { backgroundColor: '#FFECEC', borderWidth: 1, borderColor: '#FFD1D1' }]}
+                            <TouchableOpacity
+                              style={[styles.iconActionButton, { backgroundColor: '#FFECEC', borderColor: '#FFD1D1' }]}
                               onPress={() => {
                                 if (adm.id === user?.id) {
                                   Alert.alert('Action not allowed', 'You cannot remove yourself.');
@@ -3155,15 +3222,16 @@ export default function SettingsScreen() {
                             >
                               <Trash2 size={20} color="#FF3B30" />
                             </TouchableOpacity>
+                          </View>
                         </View>
-                        {idx < adminUsers.length - 1 && <View style={styles.manageDivider} />}
-                      </View>
+                      </Swipeable>
                     ))
                   )}
                 </View>
               )}
             </View>
           </ScrollView>
+          </View>
         </SafeAreaView>
       </Modal>
       {/* Recurring Appointment Modal */}

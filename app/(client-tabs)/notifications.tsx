@@ -20,6 +20,7 @@ export default function ClientNotificationsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'new' | 'cancel' | 'waitlist'>('all');
 
   // Local iOS-like palette for this screen (Colors in project are currently monochrome)
   const ios = {
@@ -245,6 +246,56 @@ export default function ClientNotificationsScreen() {
     return null;
   };
 
+  // Filtering helpers
+  const isNewAppointmentNotification = (n: Notification): boolean => {
+    const title = (n.title || '').toLowerCase();
+    const content = (n.content || '').toLowerCase();
+    return (
+      /new appointment|appointment scheduled|appointment confirmed/.test(title) ||
+      /new appointment|appointment scheduled|appointment confirmed/.test(content) ||
+      /נקבע תור חדש|התור שלך נקבע/.test(n.title || '') ||
+      /נקבע תור חדש|התור שלך נקבע/.test(n.content || '')
+    );
+  };
+
+  const isCancellationNotification = (n: Notification): boolean => {
+    const title = (n.title || '').toLowerCase();
+    const content = (n.content || '').toLowerCase();
+    return (
+      /cancel|cancellation/.test(title) ||
+      /cancel|cancellation/.test(content) ||
+      /בוטל|ביטול/.test(n.title || '') ||
+      /בוטל|ביטול/.test(n.content || '')
+    );
+  };
+
+  const isWaitlistNotification = (n: Notification): boolean => {
+    const title = (n.title || '').toLowerCase();
+    const content = (n.content || '').toLowerCase();
+    return (
+      /waitlist/.test(title) ||
+      /waitlist/.test(content) ||
+      /spot opened/.test(title) ||
+      /spot opened/.test(content) ||
+      /רשימת\s*המתנה/.test(n.title || '') ||
+      /רשימת\s*המתנה/.test(n.content || '')
+    );
+  };
+
+  const filteredNotifications = notifications.filter((n) => {
+    switch (activeFilter) {
+      case 'new':
+        return isNewAppointmentNotification(n);
+      case 'cancel':
+        return isCancellationNotification(n);
+      case 'waitlist':
+        return isWaitlistNotification(n);
+      case 'all':
+      default:
+        return true;
+    }
+  });
+
   if (loading) {
     return (
       <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
@@ -280,6 +331,35 @@ export default function ClientNotificationsScreen() {
           <View style={styles.headerRight} />
         </View>
         <View style={styles.contentWrapper}>
+          {/* Filters */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterScroll}
+            contentContainerStyle={styles.filterBar}
+          >
+            {([
+              { key: 'all', label: 'All' },
+              { key: 'new', label: 'New Appointments' },
+              { key: 'cancel', label: 'Cancellations' },
+              { key: 'waitlist', label: 'Waitlist' },
+            ] as const).map(({ key, label }) => {
+              const isActive = activeFilter === key;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  onPress={() => setActiveFilter(key)}
+                  style={[styles.filterChip, isActive && styles.filterChipActive]}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
           <ScrollView
             style={styles.scrollView}
             contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPadding }]}
@@ -288,7 +368,7 @@ export default function ClientNotificationsScreen() {
             }
             showsVerticalScrollIndicator={false}
           >
-            {notifications.length === 0 ? (
+            {filteredNotifications.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Bell size={64} color={ios.secondary} />
                 <Text style={styles.emptyTitle}>No notifications</Text>
@@ -296,7 +376,7 @@ export default function ClientNotificationsScreen() {
               </View>
             ) : (
               <View style={styles.notificationsContainer}>
-                {notifications.map((notification) => (
+                {filteredNotifications.map((notification) => (
                   <TouchableOpacity
                     key={notification.id}
                     style={[
@@ -550,5 +630,34 @@ const styles = StyleSheet.create({
     color: '#34C759',
     marginLeft: 4,
     textAlign: 'left',
+  },
+  filterScroll: {
+    maxHeight: 52,
+  },
+  filterBar: {
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#F2F2F7',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    marginTop: 4,
+  },
+  filterChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  filterChipText: {
+    fontSize: 14,
+    color: '#1C1C1E',
+    fontWeight: '600',
+  },
+  filterChipTextActive: {
+    color: '#FFFFFF',
   },
 }); 

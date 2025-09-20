@@ -740,9 +740,8 @@ const styles = StyleSheet.create({
   },
   appointmentCard: {
     position: 'absolute',
-    backgroundColor: 'transparent',
-    borderColor: 'rgba(0,0,0,0.12)',
-    borderWidth: 1,
+    backgroundColor: '#F2F2F7',
+    borderWidth: 0,
     borderRadius: 14,
     paddingHorizontal: 0,
     paddingVertical: 0,
@@ -766,7 +765,7 @@ const styles = StyleSheet.create({
   appointmentBlurTint: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.45)',
+    backgroundColor: 'rgba(242,242,247,0.9)',
   },
   appointmentFill: {
     ...StyleSheet.absoluteFillObject,
@@ -906,7 +905,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#FFFFFF',
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 0,

@@ -18,12 +18,16 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { supabase, getBusinessId } from '@/lib/supabase';
+import { supabase, getBusinessId, BusinessProfile } from '@/lib/supabase';
 import { usersApi } from '@/lib/api/users';
 import Colors from '@/constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import { businessProfileApi } from '@/lib/api/businessProfile';
+import GradientBackground from '@/components/GradientBackground';
 import { getCurrentClientLogo } from '@/src/theme/assets';
+import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 
 // Local palette (male, dark-neutral accents)
 const palette = {
@@ -43,6 +47,9 @@ export default function RegisterScreen() {
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const translateY = useRef(new Animated.Value(0)).current;
+  const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const { colors: businessColors } = useBusinessColors();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -64,6 +71,22 @@ export default function RegisterScreen() {
 
   useEffect(() => {
     // No-op: content is visible by default
+  }, []);
+
+  // Load business profile for background like login screen
+  useEffect(() => {
+    const loadBusinessProfile = async () => {
+      try {
+        setIsLoadingProfile(true);
+        const profile = await businessProfileApi.getProfile();
+        setBusinessProfile(profile);
+      } catch (error) {
+        console.error('Failed to load business profile (register):', error);
+      } finally {
+        setIsLoadingProfile(false);
+      }
+    };
+    loadBusinessProfile();
   }, []);
 
   const validatePassword = (password: string) => {
@@ -176,14 +199,62 @@ export default function RegisterScreen() {
   };
 
   return (
-    <LinearGradient
-      colors={[ '#FFFFFF', '#F6F6F6', '#EFEFEF' ]}
-      locations={[0, 0.55, 1]}
-      start={{ x: 0.2, y: 0 }}
-      end={{ x: 0.8, y: 1 }}
-      style={styles.gradient}
-    >
-      <SafeAreaView style={styles.container}>
+    <View style={styles.gradient}>
+      {/* Background image/gradient same as login */}
+      {businessProfile?.login_img && !isLoadingProfile ? (
+        (businessProfile.login_img === 'gradient-background' || 
+         businessProfile.login_img === 'solid-blue-background' ||
+         businessProfile.login_img === 'solid-purple-background' ||
+         businessProfile.login_img === 'solid-green-background' ||
+         businessProfile.login_img === 'solid-orange-background' ||
+         businessProfile.login_img === 'light-silver-background' ||
+         businessProfile.login_img === 'light-white-background' ||
+         businessProfile.login_img === 'light-gray-background' ||
+         businessProfile.login_img === 'light-pink-background' ||
+         businessProfile.login_img === 'light-cyan-background' ||
+         businessProfile.login_img === 'light-lavender-background' ||
+         businessProfile.login_img === 'light-coral-background' ||
+         businessProfile.login_img === 'dark-black-background' ||
+         businessProfile.login_img === 'dark-charcoal-background') ? (
+          <GradientBackground 
+            style={styles.backgroundImage}
+            backgroundType={businessProfile.login_img}
+          />
+        ) : (
+          <Image 
+            source={{ uri: businessProfile.login_img }} 
+            style={styles.backgroundImage}
+            resizeMode="cover"
+          />
+        )
+      ) : (
+        <LinearGradient
+          colors={[ '#FFFFFF', '#F6F6F6', '#EFEFEF' ]}
+          locations={[0, 0.55, 1]}
+          start={{ x: 0.2, y: 0 }}
+          end={{ x: 0.8, y: 1 }}
+          style={styles.bgGradient}
+        >
+          <LinearGradient
+            colors={[ '#00000022', '#00000000' ]}
+            start={{ x: 1, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={styles.beamRight}
+            pointerEvents="none"
+          />
+          <LinearGradient
+            colors={[ '#00000026', '#FFFFFF00' ]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.beamTop}
+            pointerEvents="none"
+          />
+        </LinearGradient>
+      )}
+      {businessProfile?.login_img && !isLoadingProfile && (
+        <View style={styles.darkOverlay} />
+      )}
+      <SafeAreaView style={styles.container} edges={['top']}>
         <KeyboardAvoidingView 
           behavior={'height'}
           keyboardVerticalOffset={0}
@@ -214,22 +285,23 @@ export default function RegisterScreen() {
               <Image source={getCurrentClientLogo()} style={styles.logoImage} resizeMode="contain" />
             </View>
 
-            {/* Form with entrance animation */}
+            {/* Form with entrance animation, blurred sheet like login */}
             <Animated.View
-              style={[styles.formContainer, { opacity: fadeAnim, transform: [{ translateY }] }]}
+              style={[styles.formWrapper, styles.formWrapperFill, { opacity: fadeAnim, transform: [{ translateY }] }]}
               collapsable={false}
             >
+              <BlurView intensity={18} tint="light" style={styles.formContainer}>
               {/* Form header text */}
               <View style={styles.formHeader}>
-                <Text style={styles.formTitle}>Sign up now</Text>
+                <Text style={[styles.formTitle, { color: businessColors.primary }]}>Sign up now</Text>
                 <Text style={styles.formSubtitle}>Fill in your details to register and sign in</Text>
               </View>
               {/* Name Input */}
               <View style={styles.field}>
                 <View style={[styles.inputRow, { backgroundColor: palette.inputBg, borderColor: palette.inputBorder }]}>
-                  <Ionicons name="person-outline" size={16} color={palette.textSecondary} style={styles.iconRight} />
+                  <Ionicons name="person-outline" size={16} color={palette.textSecondary} style={styles.iconLeft} />
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input]}
                     placeholder="Full name"
                     placeholderTextColor={palette.textSecondary}
                     value={name}
@@ -249,9 +321,9 @@ export default function RegisterScreen() {
               {/* Phone Input */}
               <View style={styles.field}>
                 <View style={[styles.inputRow, { backgroundColor: palette.inputBg, borderColor: palette.inputBorder }]}>
-                  <Ionicons name="call-outline" size={16} color={palette.textSecondary} style={styles.iconRight} />
+                  <Ionicons name="call-outline" size={16} color={palette.textSecondary} style={styles.iconLeft} />
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input]}
                     placeholder="Phone number"
                     placeholderTextColor={palette.textSecondary}
                     value={phone}
@@ -272,9 +344,9 @@ export default function RegisterScreen() {
               {/* Email Input (optional) */}
               <View style={styles.field}>
                 <View style={[styles.inputRow, { backgroundColor: palette.inputBg, borderColor: palette.inputBorder }]}>
-                  <Ionicons name="mail-outline" size={16} color={palette.textSecondary} style={styles.iconRight} />
+                  <Ionicons name="mail-outline" size={16} color={palette.textSecondary} style={styles.iconLeft} />
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input]}
                     placeholder="Email"
                     placeholderTextColor={palette.textSecondary}
                     value={email}
@@ -298,7 +370,7 @@ export default function RegisterScreen() {
               {/* Password Input */}
               <View style={styles.field}>
                 <View style={[styles.inputRow, { backgroundColor: palette.inputBg, borderColor: palette.inputBorder }]}>
-                  <Ionicons name="lock-closed-outline" size={16} color={palette.textSecondary} style={styles.iconRight} />
+                  <Ionicons name="lock-closed-outline" size={16} color={palette.textSecondary} style={styles.iconLeft} />
                   <TextInput
                     style={[styles.input, styles.inputPassword]}
                     placeholder="Password (at least 6 characters)"
@@ -314,7 +386,7 @@ export default function RegisterScreen() {
                     autoCapitalize="none"
                     textAlign="left"
                   />
-                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButtonRight}>
                     <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={16} color={palette.textSecondary} />
                   </TouchableOpacity>
                 </View>
@@ -324,7 +396,7 @@ export default function RegisterScreen() {
               {/* Confirm Password Input */}
               <View style={styles.field}>
                 <View style={[styles.inputRow, { backgroundColor: palette.inputBg, borderColor: palette.inputBorder }]}>
-                  <Ionicons name="lock-closed-outline" size={16} color={palette.textSecondary} style={styles.iconRight} />
+                  <Ionicons name="lock-closed-outline" size={16} color={palette.textSecondary} style={styles.iconLeft} />
                   <TextInput
                     style={[styles.input, styles.inputPassword]}
                     placeholder="Confirm password"
@@ -340,7 +412,7 @@ export default function RegisterScreen() {
                     autoCapitalize="none"
                     textAlign="left"
                   />
-                  <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeButton}>
+                  <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeButtonRight}>
                     <Ionicons name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} size={16} color={palette.textSecondary} />
                   </TouchableOpacity>
                 </View>
@@ -350,7 +422,7 @@ export default function RegisterScreen() {
               {/* Register Button - styled like login CTA */}
               <TouchableOpacity onPress={handleRegister} activeOpacity={0.9} disabled={loading} style={styles.ctaShadow}>
                 <View style={styles.ctaRadiusWrap}>
-                  <LinearGradient colors={[ '#000000', '#000000' ]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cta}>
+                  <LinearGradient colors={[ businessColors.primary, businessColors.primary ]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cta}>
                     {loading ? (
                       <ActivityIndicator color={palette.white} size="small" />
                     ) : (
@@ -367,13 +439,13 @@ export default function RegisterScreen() {
                   <Text onPress={() => router.push('/login')} style={[styles.loginLink, styles.loginLinkSpacer]}>Sign in now</Text>
                 </Text>
               </View>
+              </BlurView>
             </Animated.View>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-      {/* Bottom white safe-area only for this screen */}
-      <View pointerEvents="none" style={[styles.bottomWhiteInset, { height: bottomWhiteHeight }]} />
-    </LinearGradient>
+      {/* No bottom safe-area inset on register screen */}
+    </View>
   );
 }
 
@@ -384,6 +456,53 @@ const styles = StyleSheet.create({
   },
   gradient: {
     flex: 1,
+  },
+  backgroundImage: {
+    position: 'absolute',
+    top: -20,
+    left: 0,
+    right: 0,
+    bottom: -20,
+    width: '100%',
+    height: '110%',
+    flex: 1,
+  },
+  bgGradient: {
+    position: 'absolute',
+    top: -50,
+    left: 0,
+    right: 0,
+    bottom: -50,
+    width: '100%',
+    height: '120%',
+  },
+  darkOverlay: {
+    position: 'absolute',
+    top: -50,
+    left: 0,
+    right: 0,
+    bottom: -50,
+    backgroundColor: 'rgba(0, 0, 0, 0.15)',
+  },
+  beamRight: {
+    position: 'absolute',
+    right: -120,
+    top: -40,
+    width: 300,
+    height: 500,
+    transform: [{ rotate: '18deg' }],
+    opacity: 1,
+    borderRadius: 24,
+  },
+  beamTop: {
+    position: 'absolute',
+    left: -80,
+    top: -60,
+    width: 380,
+    height: 240,
+    transform: [{ rotate: '-10deg' }],
+    opacity: 1,
+    borderRadius: 24,
   },
   keyboardAvoid: {
     flex: 1,
@@ -432,21 +551,30 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     alignSelf: 'center',
   },
-  formContainer: {
-    backgroundColor: 'rgba(255,255,255,0.75)',
+  formWrapper: {
+    backgroundColor: 'rgba(255,255,255,0.55)',
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
-    paddingHorizontal: 20,
-    paddingTop: 30,
-    paddingBottom: 40,
-    flex: 1,
+    overflow: 'hidden',
     minHeight: '70%',
-    // subtle top shadow
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: -2 },
     elevation: 2,
+  },
+  formWrapperFill: {
+    // Ensure the sheet reaches the bottom even without bottom safe-area view
+    marginBottom: 0,
+    flexGrow: 1,
+  },
+  formContainer: {
+    backgroundColor: 'rgba(255,255,255,0.55)',
+    paddingHorizontal: 20,
+    paddingTop: 30,
+    paddingBottom: 40,
+    flex: 1,
+    minHeight: '70%',
   },
   formHeader: {
     alignItems: 'center',
@@ -468,9 +596,9 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 10,
-    height: 46,
-    paddingHorizontal: 10,
+    borderRadius: 20,
+    height: 52,
+    paddingHorizontal: 12,
     borderWidth: 1,
     position: 'relative',
     width: '92%',
@@ -482,6 +610,7 @@ const styles = StyleSheet.create({
     color: palette.textPrimary,
     textAlign: 'left',
     paddingHorizontal: 6,
+    paddingLeft: 32,
     paddingRight: 32,
   },
   inputPassword: {
@@ -493,12 +622,25 @@ const styles = StyleSheet.create({
     right: 10,
     zIndex: 1,
   },
+  iconLeft: {
+    position: 'absolute',
+    left: 10,
+    zIndex: 1,
+  },
   eyeButton: {
     padding: 4,
     marginLeft: 0,
     marginRight: 6,
     position: 'absolute',
     left: 6,
+    zIndex: 1,
+  },
+  eyeButtonRight: {
+    padding: 4,
+    marginLeft: 6,
+    marginRight: 0,
+    position: 'absolute',
+    right: 6,
     zIndex: 1,
   },
   errorText: {
@@ -573,7 +715,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   loginLink: {
-    color: '#000000',
+    color: palette.textPrimary,
     fontSize: 16,
     fontWeight: '800',
   },
@@ -581,11 +723,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   bottomWhiteInset: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(255,255,255,0.75)',
+    // intentionally unused for register screen (no bottom safe area)
   },
 
 });

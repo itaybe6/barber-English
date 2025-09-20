@@ -11,7 +11,7 @@ import {
   ScrollView,
   Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, Link } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -37,6 +37,8 @@ const staticColors = {
 };
 
 export default function LoginScreen() {
+  const insets = useSafeAreaInsets();
+  const bottomWhiteHeight = Math.max(insets.bottom, 20);
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -279,24 +281,27 @@ export default function LoginScreen() {
       <SafeAreaView style={styles.fullSafe}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <BlurView intensity={15} tint="light" style={styles.card}>
-              {/* Header inside card */}
-              <View style={styles.headerContent}>
-                <Image source={getCurrentClientLogo()} style={styles.logoImage} resizeMode="contain" />
-                {businessProfile?.display_name && (
-                  <Text style={styles.businessName}>{businessProfile.display_name}</Text>
-                )}
-                <Text style={styles.appSubtitle}>Enter details to sign in to your account</Text>
+            {/* Branding at top (logo + optional business name) */}
+            <View style={styles.titleContainer}>
+              <Image source={getCurrentClientLogo()} style={styles.logoImage} resizeMode="contain" />
+            </View>
+
+            {/* Bottom sheet form container (like register) with slight blur and crisp rounded corners */}
+            <View style={styles.formWrapper}>
+              <BlurView intensity={18} tint="light" style={styles.formContainer}>
+              <View style={styles.formHeader}>
+                <Text style={[styles.formTitle, { color: businessColors.primary }]}>Sign in your account</Text>
+                <Text style={styles.formSubtitle}>Enter your details to access your account</Text>
               </View>
 
               {/* Phone */}
               <View style={styles.field}>
-                <View style={[styles.inputRow, { backgroundColor: staticColors.inputBg, borderColor: staticColors.inputBorder }]}>
-                  <Ionicons name="call-outline" size={18} color={staticColors.textSecondary} style={styles.iconLeft} />
+                <View style={[styles.inputRow, { backgroundColor: 'rgba(255,255,255,0.7)', borderColor: '#E5E7EB' }]}>
+                  <Ionicons name="call-outline" size={18} color="#6B7280" style={styles.iconLeft} />
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { color: '#4B5563' }]}
                     placeholder="Phone number"
-                    placeholderTextColor={staticColors.textSecondary}
+                    placeholderTextColor="#6B7280"
                     value={phone}
                     onChangeText={setPhone}
                     keyboardType="phone-pad"
@@ -308,12 +313,12 @@ export default function LoginScreen() {
 
               {/* Password */}
               <View style={styles.field}>
-                <View style={[styles.inputRow, { backgroundColor: staticColors.inputBg, borderColor: staticColors.inputBorder }]}>
-                  <Ionicons name="lock-closed-outline" size={18} color={staticColors.textSecondary} style={styles.iconLeft} />
+                <View style={[styles.inputRow, { backgroundColor: 'rgba(255,255,255,0.7)', borderColor: '#E5E7EB' }]}>
+                  <Ionicons name="lock-closed-outline" size={18} color="#6B7280" style={styles.iconLeft} />
                   <TextInput
-                    style={[styles.input, styles.inputPassword]}
+                    style={[styles.input, styles.inputPassword, { color: '#4B5563' }]}
                     placeholder="Password"
-                    placeholderTextColor={staticColors.textSecondary}
+                    placeholderTextColor="#6B7280"
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry={!showPassword}
@@ -321,7 +326,7 @@ export default function LoginScreen() {
                     textAlign="left"
                   />
                   <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButtonRight}>
-                    <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={staticColors.textSecondary} />
+                    <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color="#6B7280" />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -335,17 +340,18 @@ export default function LoginScreen() {
                 </View>
               </TouchableOpacity>
 
-              {/* Links */}
-              <TouchableOpacity style={styles.forgotPasswordButton} onPress={() => setIsForgotOpen(true)}>
-                <Text style={styles.forgotPasswordText}>Forgot password</Text>
-              </TouchableOpacity>
-              <Text style={styles.registerLine}>
-                Don't have an account? 
-                <Link href="/register" asChild>
-                  <Text style={[styles.registerAction, { color: businessColors.primary }]}>Sign up now</Text>
-                </Link>
-              </Text>
-            </BlurView>
+                {/* Links */}
+                <TouchableOpacity style={styles.forgotPasswordButton} onPress={() => setIsForgotOpen(true)}>
+                  <Text style={styles.forgotPasswordText}>Forgot password</Text>
+                </TouchableOpacity>
+                <Text style={styles.registerLine}>
+                  Don't have an account? 
+                  <Link href="/register" asChild>
+                    <Text style={[styles.registerAction, { color: businessColors.primary }]}>Sign up now</Text>
+                  </Link>
+                </Text>
+              </BlurView>
+            </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -357,7 +363,7 @@ export default function LoginScreen() {
             <Text style={styles.forgotSubtitle}>Enter phone and email as they appear on your account</Text>
             <View style={{ height: 10 }} />
             <View style={[styles.inputRow, { backgroundColor: '#F8F8F8', borderColor: '#E0E0E0' }]}> 
-              <Ionicons name="call-outline" size={18} color="#666666" style={styles.iconRight} />
+              <Ionicons name="call-outline" size={18} color="#666666" style={styles.iconLeft} />
               <TextInput
                 style={[styles.input, { color: '#000000' }]}
                 placeholder="Phone number"
@@ -371,7 +377,7 @@ export default function LoginScreen() {
             </View>
             <View style={{ height: 10 }} />
             <View style={[styles.inputRow, { backgroundColor: '#F8F8F8', borderColor: '#E0E0E0' }]}> 
-              <Ionicons name="mail-outline" size={18} color="#666666" style={styles.iconRight} />
+              <Ionicons name="mail-outline" size={18} color="#666666" style={styles.iconLeft} />
               <TextInput
                 style={[styles.input, { color: '#000000' }]}
                 placeholder="Email"
@@ -396,6 +402,8 @@ export default function LoginScreen() {
           </View>
         </View>
       )}
+      {/* Bottom white safe-area inset to match register screen */}
+      <View pointerEvents="none" style={[styles.bottomWhiteInset, { height: bottomWhiteHeight }]} />
     </View>
   );
 }
@@ -469,8 +477,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   logoImage: {
-    width: '80%',
-    height: 100,
+    width: '85%',
+    height: 120,
     marginBottom: 12,
     alignSelf: 'center',
   },
@@ -500,9 +508,56 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  titleContainer: {
     paddingHorizontal: 20,
-    paddingVertical: 32,
+    marginBottom: 24,
+    alignItems: 'center',
+  },
+  formWrapper: {
+    backgroundColor: 'rgba(255,255,255,0.55)',
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    overflow: 'hidden',
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
+    minHeight: '70%',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: -2 },
+    elevation: 2,
+  },
+  formContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 32,
+    minHeight: '70%',
+  },
+  formHeader: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  formTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  formSubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  bottomWhiteInset: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255,255,255,0.55)',
   },
   card: {
     backgroundColor: 'rgba(255,255,255,0.05)',
@@ -610,21 +665,19 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   forgotPasswordText: {
-    color: staticColors.textSecondary,
+    color: '#000000',
     fontSize: 14,
     fontWeight: '600',
   },
   registerLine: {
     marginTop: 8,
     textAlign: 'center',
-    color: staticColors.textSecondary,
+    color: '#000000',
     fontSize: 14,
   },
   registerAction: {
-    color: '#000000',
-    fontWeight: '900',
+    fontWeight: '700',
     fontSize: 16,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto-Black',
     marginRight: 4,
   },
   // Reuse modal button styles similar to other screens

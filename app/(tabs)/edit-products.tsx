@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,11 @@ import {
   FlatList,
   Platform,
   SafeAreaView,
+  Animated,
+  Easing,
+  Dimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '@/src/theme/ThemeProvider';
@@ -26,6 +30,7 @@ export default function EditProductsScreen() {
   const router = useRouter();
   const colors = useColors();
   const styles = createStyles(colors);
+  const insets = useSafeAreaInsets();
   
   const { products, isLoading, fetchProducts } = useProductsStore();
   
@@ -40,6 +45,12 @@ export default function EditProductsScreen() {
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Stepper state for Add/Edit Product (0: Image, 1: Details, 2: Price)
+  const [prodStep, setProdStep] = useState<number>(0);
+  const translateX = useRef(new Animated.Value(0)).current;
+  const progressAnim = useRef(new Animated.Value(0)).current; // 0..1
+  const [viewportWidth, setViewportWidth] = useState<number>(Dimensions.get('window').width);
+
   useEffect(() => {
     fetchProducts();
   }, []);
@@ -52,6 +63,9 @@ export default function EditProductsScreen() {
       image_url: '',
     });
     setEditingProduct(null);
+    setProdStep(0);
+    translateX.setValue(0);
+    progressAnim.setValue(0);
   };
 
   const openAddModal = () => {
@@ -68,12 +82,49 @@ export default function EditProductsScreen() {
     });
     setEditingProduct(product);
     setShowAddModal(true);
+    setProdStep(0);
+    translateX.setValue(0);
+    progressAnim.setValue(0);
   };
 
   const closeModal = () => {
     setShowAddModal(false);
     resetForm();
   };
+
+  const goToProdStep = (next: number, animate: boolean = true) => {
+    const clamped = Math.max(0, Math.min(2, next));
+    setProdStep(clamped);
+    const widthToUse = viewportWidth || Dimensions.get('window').width;
+    if (animate) {
+      Animated.timing(translateX, {
+        toValue: -clamped * widthToUse,
+        duration: 280,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+      Animated.timing(progressAnim, {
+        toValue: clamped / 2,
+        duration: 280,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start();
+    } else {
+      translateX.setValue(-clamped * widthToUse);
+      progressAnim.setValue(clamped / 2);
+    }
+  };
+
+  const goNextProd = () => {
+    if (prodStep < 2) {
+      goToProdStep(prodStep + 1);
+    } else {
+      // Final step -> save
+      handleSaveProduct();
+    }
+  };
+
+  const goBackProd = () => goToProdStep(prodStep - 1);
 
   const handleImageSelection = async (imageUri: string, isPreset: boolean) => {
     try {
@@ -298,6 +349,7 @@ export default function EditProductsScreen() {
       </View>
 
       {/* Products List */}
+      <View style={styles.screenBodyWrapper}>
       <View style={styles.content}>
         {isLoading ? (
           <View style={styles.loadingContainer}>
@@ -325,6 +377,7 @@ export default function EditProductsScreen() {
           />
         )}
       </View>
+      </View>
 
       {/* Add/Edit Product Modal */}
       <Modal
@@ -334,89 +387,161 @@ export default function EditProductsScreen() {
         onRequestClose={closeModal}
       >
         <SafeAreaView style={styles.modalContainer}>
+          {/* Header */}
           <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={closeModal}>
-              <Text style={styles.cancelButton}>Cancel</Text>
+            <TouchableOpacity onPress={closeModal} style={styles.headerIconButton}>
+              <Ionicons name="close" size={20} color={colors.text} />
             </TouchableOpacity>
-            
-            <Text style={styles.modalTitle}>
-              {editingProduct ? 'Edit Product' : 'Add Product'}
+            <Text style={[styles.modalTitle, { position: 'absolute', left: 64, right: 64, textAlign: 'center' }]}>
+              {editingProduct ? 'Edit product' : 'Add product'}
             </Text>
-            
-            <TouchableOpacity onPress={handleSaveProduct} disabled={isSaving}>
-              <Text style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}>
-                {isSaving ? 'Saving...' : 'Save'}
-              </Text>
-            </TouchableOpacity>
+            <View style={{ width: 60 }} />
           </View>
 
-          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-            {/* Product Image */}
-            <View style={styles.imageSection}>
-              <Text style={styles.sectionTitle}>Product Image</Text>
-              <TouchableOpacity
-                style={styles.imageSelector}
-                onPress={handleImagePicker}
-                disabled={isUploadingImage}
-              >
-                {productForm.image_url ? (
-                  <Image source={{ uri: productForm.image_url }} style={styles.selectedImage} />
-                ) : (
-                  <View style={styles.imagePlaceholder}>
-                    <Ionicons name="camera-outline" size={40} color={colors.textSecondary} />
-                    <Text style={styles.imagePlaceholderText}>Add Image</Text>
-                  </View>
-                )}
-                {isUploadingImage && (
-                  <View style={styles.uploadingOverlay}>
-                    <ActivityIndicator size="small" color={colors.primary} />
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
-
-            {/* Product Name */}
-            <View style={styles.inputSection}>
-              <Text style={styles.sectionTitle}>Product Name *</Text>
-              <TextInput
-                style={styles.textInput}
-                value={productForm.name}
-                onChangeText={(text) => setProductForm(prev => ({ ...prev, name: text }))}
-                placeholder="Enter product name"
-                placeholderTextColor={colors.textSecondary}
-              />
-            </View>
-
-            {/* Product Description */}
-            <View style={styles.inputSection}>
-              <Text style={styles.sectionTitle}>Description</Text>
-              <TextInput
-                style={[styles.textInput, styles.textArea]}
-                value={productForm.description}
-                onChangeText={(text) => setProductForm(prev => ({ ...prev, description: text }))}
-                placeholder="Enter product description"
-                placeholderTextColor={colors.textSecondary}
-                multiline
-                numberOfLines={3}
-              />
-            </View>
-
-            {/* Product Price */}
-            <View style={styles.inputSection}>
-              <Text style={styles.sectionTitle}>Price *</Text>
-              <View style={styles.priceInputContainer}>
-                <Text style={styles.currencySymbol}>$</Text>
-                <TextInput
-                  style={[styles.textInput, styles.priceInput]}
-                  value={productForm.price}
-                  onChangeText={(text) => setProductForm(prev => ({ ...prev, price: text }))}
-                  placeholder="0.00"
-                  placeholderTextColor={colors.textSecondary}
-                  keyboardType="decimal-pad"
-                />
+          {/* Body */}
+          <View style={styles.bodyWrapper}>
+            <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+              {/* Stepper */}
+              <View style={styles.stepperContainer}>
+                <View style={styles.stepperTrack}>
+                  <Animated.View
+                    style={[styles.stepperProgress, { backgroundColor: colors.primary, width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]}
+                  />
+                </View>
+                <View style={styles.stepperLabels}>
+                  {['Image','Details','Price'].map((label, idx) => (
+                    <View key={label} style={styles.stepperLabelWrap}>
+                      <View style={[styles.stepDot, { borderColor: idx <= prodStep ? colors.primary : '#D1D1D6', backgroundColor: idx < prodStep ? colors.primary : '#FFFFFF' }]} />
+                      <Text style={[styles.stepLabelText, { color: idx <= prodStep ? colors.primary : '#8E8E93' }]}>{label}</Text>
+                    </View>
+                  ))}
+                </View>
               </View>
-            </View>
-          </ScrollView>
+
+              {/* Animated steps viewport */}
+              <View style={styles.groupCard}>
+                <View
+                  style={styles.stepsViewport}
+                  onLayout={(e) => {
+                    const w = e.nativeEvent.layout.width;
+                    if (w && w > 0) {
+                      setViewportWidth(w);
+                      translateX.setValue(-prodStep * w);
+                    }
+                  }}
+                >
+                  <Animated.View style={[styles.stepsContainer, { width: (viewportWidth || Dimensions.get('window').width) * 3, transform: [{ translateX }] }]}> 
+                    {/* Step 0: Image */}
+                    <View style={[styles.stepPane, { width: viewportWidth || Dimensions.get('window').width }]}> 
+                      <View style={[styles.imageSection, styles.centeredSection]}>
+                        <Text style={[styles.sectionTitle, styles.centerText]}>Product Image</Text>
+                        <Text style={[styles.sectionSubtitle, styles.centerText]}>Add a product cover image</Text>
+                        <TouchableOpacity
+                          style={styles.imageSelector}
+                          onPress={handleImagePicker}
+                          disabled={isUploadingImage}
+                          activeOpacity={0.9}
+                        >
+                          {productForm.image_url ? (
+                            <Image source={{ uri: productForm.image_url }} style={styles.selectedImage} />
+                          ) : (
+                            <View style={styles.imagePlaceholder}>
+                              <Ionicons name="camera-outline" size={40} color={colors.textSecondary} />
+                              <Text style={styles.imagePlaceholderText}>Add Image</Text>
+                            </View>
+                          )}
+                          {isUploadingImage && (
+                            <View style={styles.uploadingOverlay}>
+                              <ActivityIndicator size="small" color={colors.primary} />
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    {/* Step 1: Details */}
+                    <View style={[styles.stepPane, { width: viewportWidth || Dimensions.get('window').width }]}> 
+                      <View style={styles.inputSection}>
+                        <View style={{ marginBottom: 8 }}>
+                          <Text style={styles.sectionTitle}>Product name *</Text>
+                          <Text style={styles.sectionSubtitle}>Enter the product display name</Text>
+                        </View>
+                        <TextInput
+                          style={styles.textInput}
+                          value={productForm.name}
+                          onChangeText={(text) => setProductForm(prev => ({ ...prev, name: text }))}
+                          placeholder="Enter product name"
+                          placeholderTextColor={colors.textSecondary}
+                        />
+                      </View>
+
+                      <View style={styles.inputSection}>
+                        <View style={{ marginBottom: 8 }}>
+                          <Text style={styles.sectionTitle}>Description</Text>
+                          <Text style={styles.sectionSubtitle}>Short description about this product</Text>
+                        </View>
+                        <TextInput
+                          style={[styles.textInput, styles.textArea]}
+                          value={productForm.description}
+                          onChangeText={(text) => setProductForm(prev => ({ ...prev, description: text }))}
+                          placeholder="Enter product description"
+                          placeholderTextColor={colors.textSecondary}
+                          multiline
+                          numberOfLines={3}
+                        />
+                      </View>
+                    </View>
+
+                    {/* Step 2: Price */}
+                    <View style={[styles.stepPane, { width: viewportWidth || Dimensions.get('window').width }]}> 
+                      <View style={styles.inputSection}>
+                        <View style={{ marginBottom: 8 }}>
+                          <Text style={styles.sectionTitle}>Price *</Text>
+                          <Text style={styles.sectionSubtitle}>Set the price for this product</Text>
+                        </View>
+                        <View style={styles.priceInputContainer}>
+                          <Text style={styles.currencySymbol}>$</Text>
+                          <TextInput
+                            style={[styles.textInput, styles.priceInput]}
+                            value={productForm.price}
+                            onChangeText={(text) => setProductForm(prev => ({ ...prev, price: text }))}
+                            placeholder="0.00"
+                            placeholderTextColor={colors.textSecondary}
+                            keyboardType="decimal-pad"
+                          />
+                        </View>
+                      </View>
+                    </View>
+                  </Animated.View>
+                </View>
+
+                {/* Step navigation */}
+                <View style={styles.stepNavRow}>
+                  <TouchableOpacity onPress={goBackProd} disabled={prodStep === 0} style={[styles.stepNavButton, prodStep === 0 && styles.stepNavButtonDisabled]}> 
+                    <Text style={[styles.stepNavText, prodStep === 0 && styles.stepNavTextDisabled]}>Back</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={prodStep < 2 ? goNextProd : handleSaveProduct}
+                    disabled={
+                      (prodStep === 1 && !productForm.name.trim()) ||
+                      (prodStep === 2 && (isSaving || !productForm.price || isNaN(parseFloat(productForm.price)) || parseFloat(productForm.price) <= 0))
+                    }
+                    style={[styles.stepNavPrimary, { backgroundColor: colors.primary }, ((prodStep === 1 && !productForm.name.trim()) || (prodStep === 2 && (isSaving || !productForm.price || isNaN(parseFloat(productForm.price)) || parseFloat(productForm.price) <= 0))) && { opacity: 0.6 }]}
+                  >
+                    <Text style={styles.stepNavPrimaryText}>{prodStep < 2 ? 'Next' : (isSaving ? 'Saving...' : 'Done')}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+          {/* Color the bottom safe area to gray to avoid white split */}
+          <View
+            pointerEvents="none"
+            style={[
+              styles.bottomSafeOverlay,
+              { height: Math.max(insets.bottom || 0, 16) }
+            ]}
+          />
         </SafeAreaView>
       </Modal>
 
@@ -436,8 +561,8 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
+    borderBottomWidth: 0,
+    borderBottomColor: 'transparent',
   },
   backButton: {
     width: 40,
@@ -463,6 +588,14 @@ const createStyles = (colors: any) => StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 20,
+  },
+  screenBodyWrapper: {
+    flex: 1,
+    backgroundColor: '#F2F2F7',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
+    paddingTop: 8,
   },
   loadingContainer: {
     flex: 1,
@@ -582,7 +715,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#FFFFFF',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -590,9 +723,17 @@ const createStyles = (colors: any) => StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 0,
+    borderBottomColor: 'transparent',
+  },
+  headerIconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: -4,
   },
   cancelButton: {
     fontSize: 16,
@@ -604,16 +745,67 @@ const createStyles = (colors: any) => StyleSheet.create({
     color: colors.text,
   },
   saveButton: {
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    minHeight: 36,
+    minWidth: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+  },
+  saveButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.primary,
+    color: '#FFFFFF',
   },
   saveButtonDisabled: {
-    color: colors.textSecondary,
+    opacity: 0.6,
+  },
+  bodyWrapper: {
+    flex: 1,
+    backgroundColor: '#F2F2F7',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
   },
   modalContent: {
     flex: 1,
     paddingHorizontal: 20,
+  },
+  stepperContainer: {
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  stepperTrack: {
+    height: 4,
+    backgroundColor: '#E5E5EA',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  stepperProgress: {
+    height: '100%',
+  },
+  stepperLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  stepperLabelWrap: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  stepDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    marginBottom: 4,
+    backgroundColor: '#FFFFFF',
+  },
+  stepLabelText: {
+    fontSize: 12,
+    color: '#8E8E93',
   },
   imageSection: {
     marginTop: 24,
@@ -624,6 +816,20 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     marginBottom: 12,
+  },
+  centeredSection: {
+    alignItems: 'center',
+  },
+  centerText: {
+    textAlign: 'center',
+    alignSelf: 'center',
+  },
+  sectionSubtitle: {
+    fontSize: 13,
+    color: '#8E8E93',
+    marginTop: -6,
+    marginBottom: 10,
+    textAlign: 'left',
   },
   imageSelector: {
     width: 120,
@@ -693,5 +899,68 @@ const createStyles = (colors: any) => StyleSheet.create({
     flex: 1,
     borderWidth: 0,
     paddingHorizontal: 0,
+  },
+  groupCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    padding: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  stepsViewport: {
+    overflow: 'hidden',
+  },
+  stepsContainer: {
+    flexDirection: 'row',
+  },
+  stepPane: {
+    paddingRight: 4,
+  },
+  stepNavRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  stepNavButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#F2F2F7',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  stepNavButtonDisabled: {
+    opacity: 0.6,
+  },
+  stepNavText: {
+    color: '#1C1C1E',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  stepNavTextDisabled: {
+    color: '#8E8E93',
+  },
+  stepNavPrimary: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+  },
+  stepNavPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  bottomSafeOverlay: {
+    backgroundColor: '#F2F2F7',
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
 });

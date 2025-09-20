@@ -35,7 +35,8 @@ import {
   Image as ImageIcon,
   Home,
   Clock,
-  User
+  User,
+  Repeat
 } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -1404,6 +1405,39 @@ export default function SettingsScreen() {
   const [repeatWeeks, setRepeatWeeks] = useState<number>(1);
   const [showRepeatDropdown, setShowRepeatDropdown] = useState(false);
 
+  // Stepper state for recurring appointment modal
+  const [recStep, setRecStep] = useState<number>(0); // 0: client, 1: service, 2: day, 3: time, 4: repeat
+  const recTranslateX = useRef(new Animated.Value(0)).current;
+  const recProgressAnim = useRef(new Animated.Value(0)).current;
+  const [recViewportWidth, setRecViewportWidth] = useState<number>(0);
+  const [recRenderKey, setRecRenderKey] = useState<number>(0);
+
+  const goToRecStep = (next: number, animate: boolean = true) => {
+    const maxStep = 4;
+    const clamped = Math.max(0, Math.min(maxStep, next));
+    setRecStep(clamped);
+    const widthToUse = recViewportWidth || 0;
+    if (widthToUse && animate) {
+      Animated.timing(recTranslateX, {
+        toValue: -clamped * widthToUse,
+        duration: 260,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+      Animated.timing(recProgressAnim, {
+        toValue: clamped / maxStep,
+        duration: 260,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start();
+    } else {
+      recTranslateX.setValue(-(clamped * widthToUse));
+      recProgressAnim.setValue(clamped / maxStep);
+    }
+  };
+  const goNextRec = () => goToRecStep(recStep + 1);
+  const goBackRec = () => goToRecStep(recStep - 1);
+
   // Employees management modal state
   const [showManageEmployeesModal, setShowManageEmployeesModal] = useState(false);
   const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
@@ -1671,6 +1705,13 @@ export default function SettingsScreen() {
       setShowRepeatDropdown(false);
       // Load initial client list (show all clients by default)
       searchClients('');
+      // Reset stepper
+      setTimeout(() => {
+        setRecStep(0);
+        recTranslateX.setValue(0);
+        recProgressAnim.setValue(0);
+        setRecRenderKey((k) => k + 1);
+      }, 0);
     }
   }, [showRecurringModal]);
 
@@ -2999,6 +3040,11 @@ export default function SettingsScreen() {
                                 <Text style={styles.previewNotificationContent}>{item.client_phone}</Text>
                                 <Text style={styles.previewNotificationContent}>{item.service_name}</Text>
                                 <Text style={styles.previewNotificationContent}>{['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][item.day_of_week]} · {String(item.slot_time).slice(0,5)}</Text>
+                                {!!item.repeat_interval && (
+                                  <Text style={styles.previewNotificationContent}>
+                                    Repeat: {item.repeat_interval === 1 ? 'every week' : `every ${item.repeat_interval} weeks`}
+                                  </Text>
+                                )}
                               </View>
                               <TouchableOpacity
                                 style={[styles.iconActionButton, { backgroundColor: '#FFECEC', borderColor: '#FFD1D1' }]}
@@ -3034,7 +3080,7 @@ export default function SettingsScreen() {
         presentationStyle="pageSheet"
         onRequestClose={() => setShowManageEmployeesModal(false)}
       >
-        <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#F8F9FA' }]}> 
+        <SafeAreaView edges={['top']} style={[styles.modalContainer, { backgroundColor: '#F8F9FA' }]}> 
           <View style={styles.modalHeader}>
             <TouchableOpacity 
               style={styles.modalCloseButton}
@@ -3125,7 +3171,7 @@ export default function SettingsScreen() {
         presentationStyle="pageSheet"
         onRequestClose={() => setShowRecurringModal(false)}
       >
-        <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#F8F9FA' }]}>
+        <SafeAreaView edges={['top']} style={[styles.modalContainer, { backgroundColor: Colors.white }]}> 
           <View style={styles.modalHeader}>
             <TouchableOpacity 
               style={styles.cancellationModalCloseButton}
@@ -3133,262 +3179,316 @@ export default function SettingsScreen() {
             >
               <X size={20} color={Colors.text} />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Add recurring appointment</Text>
-            <TouchableOpacity 
-              style={[styles.modalSendButton, { backgroundColor: businessColors.primary }, isSubmittingRecurring && styles.modalSendButtonDisabled]}
-              onPress={handleSubmitRecurring}
-              disabled={isSubmittingRecurring}
-            >
-              <Text style={[styles.modalSendText, { color: Colors.white }, isSubmittingRecurring && styles.modalSendTextDisabled]}>
-                {isSubmittingRecurring ? 'Saving...' : 'Save'}
-              </Text>
-            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>Add recurring appointment</Text>
+            <View style={{ width: 44 }} />
           </View>
 
-          <ScrollView 
-            style={[styles.modalContent, { padding: 20 }]} 
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            nestedScrollEnabled={true}
-          >
-            <View style={styles.recurringCard}>
-            {/* Client select as dropdown with inline search */}
-            <View style={styles.inputContainer}>
-              <Text style={[styles.inputLabel, { textAlign: 'left' }]}>Client</Text>
-              {!selectedClient ? (
-                <>
-                  <Pressable style={[styles.dropdownContainer, styles.grayField]} onPress={() => setShowClientDropdown(!showClientDropdown)}>
-                    <View style={styles.dropdownHeader}>
-                      <Text style={[styles.dropdownText, styles.dropdownPlaceholder, { textAlign: 'left' }]}>Select client...</Text>
-                      {showClientDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
-                    </View>
-                  </Pressable>
-                  {showClientDropdown && (
-                    <View style={styles.dropdownOptions}>
-                      <View style={{ paddingHorizontal: 12, paddingVertical: 10 }}>
-                        <TextInput
-                          style={[styles.textInput, { borderWidth: 1, borderColor: '#E5E5EA', backgroundColor: '#F2F2F7' }]}
-                          value={clientSearch}
-                          onChangeText={searchClients}
-                          placeholder="Search by name or phone..."
-                          placeholderTextColor={Colors.subtext}
-                          textAlign="left"
-                        />
+          <View key={`rec-body-${recRenderKey}`} style={styles.modalBodyRounded}>
+          {/* Stepper */}
+          <View style={{ paddingHorizontal: 20, paddingTop: 12 }} onLayout={(e) => {
+            const w = e.nativeEvent.layout.width;
+            if (w && w > 0 && w !== recViewportWidth) {
+              setRecViewportWidth(w);
+              recTranslateX.setValue(-recStep * w);
+            }
+          }}>
+            <View style={{ height: 4, backgroundColor: '#E5E5EA', borderRadius: 2, overflow: 'hidden' }}>
+              <Animated.View style={{ height: '100%', backgroundColor: businessColors.primary, width: recProgressAnim.interpolate({ inputRange: [0,1], outputRange: ['0%','100%'] }) }} />
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+              {['Client','Service','Day','Time','Repeat'].map((label, idx) => (
+                <View key={label} style={{ alignItems: 'center', flex: 1 }}>
+                  <View style={{ width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: idx <= recStep ? businessColors.primary : '#D1D1D6', backgroundColor: idx < recStep ? businessColors.primary : '#FFFFFF', marginBottom: 4 }} />
+                  <Text style={{ fontSize: 12, color: idx <= recStep ? businessColors.primary : Colors.subtext }}>{label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* Steps viewport */}
+          <View style={{ paddingHorizontal: 20 }}>
+            <View style={{ overflow: 'hidden' }} onLayout={(e) => {
+              const w = e.nativeEvent.layout.width;
+              if (w && w > 0 && w !== recViewportWidth) {
+                setRecViewportWidth(w);
+                recTranslateX.setValue(-recStep * w);
+              }
+            }}>
+              <Animated.View key={`steps-${recViewportWidth}-${recRenderKey}`} style={{ flexDirection: 'row', width: Math.max(1, recViewportWidth || 0) * 5, minHeight: 1, transform: [{ translateX: recTranslateX }] }}>
+                <View style={{ width: recViewportWidth }}>
+                  <View style={styles.wizardSectionCard}>
+                    <View style={styles.inputContainer}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <User size={18} color={businessColors.primary} />
+                        <Text style={[styles.inputLabel, { textAlign: 'left', marginBottom: 0 }]}>Client</Text>
                       </View>
-                      <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                        {clientResults.map((c, idx) => (
-                          <Pressable
-                            key={c.phone}
-                            style={[styles.dropdownOption, idx === clientResults.length - 1 && styles.dropdownOptionLast]}
-                            onPress={() => { setSelectedClient(c); setShowClientDropdown(false); }}
-                          >
-                            <View style={styles.dropdownOptionContent}>
-                              <Text style={styles.dropdownOptionTitle}>{c.name || 'Client'}</Text>
-                              <Text style={styles.dropdownOptionDescription}>{c.phone}</Text>
+                      <Text style={styles.stepHint}>Choose a client</Text>
+                      {!selectedClient ? (
+                        <>
+                      <Pressable style={[styles.dropdownContainer, styles.grayField, { minHeight: 52 }]} onPress={() => setShowClientDropdown(!showClientDropdown)}>
+                            <View style={styles.dropdownHeader}>
+                              <Text style={[styles.dropdownText, styles.dropdownPlaceholder, { textAlign: 'left' }]}>Select client...</Text>
+                              {showClientDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
                             </View>
                           </Pressable>
-                        ))}
-                        {clientResults.length === 0 && (
-                          <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-                            <Text style={{ textAlign: 'center', color: Colors.subtext }}>No results</Text>
+                          {showClientDropdown && (
+                            <View style={[styles.dropdownOptions, styles.dropPanelRecurring]}>
+                              <View style={{ paddingHorizontal: 12, paddingVertical: 10 }}>
+                                <TextInput
+                                  style={[styles.textInput, { borderWidth: 1, borderColor: '#E5E5EA', backgroundColor: '#F2F2F7' }]}
+                                  value={clientSearch}
+                                  onChangeText={searchClients}
+                                  placeholder="Search by name or phone..."
+                                  placeholderTextColor={Colors.subtext}
+                                  textAlign="left"
+                                />
+                              </View>
+                              <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                                {clientResults.map((c, idx) => (
+                                  <Pressable
+                                    key={c.phone}
+                                    style={[styles.dropdownOption, idx === clientResults.length - 1 && styles.dropdownOptionLast]}
+                                    onPress={() => { setSelectedClient(c); setShowClientDropdown(false); goToRecStep(1); }}
+                                  >
+                                    <View style={styles.dropdownOptionContent}>
+                                      <Text style={styles.dropdownOptionTitle}>{c.name || 'Client'}</Text>
+                                      <Text style={styles.dropdownOptionDescription}>{c.phone}</Text>
+                                    </View>
+                                  </Pressable>
+                                ))}
+                                {clientResults.length === 0 && (
+                                  <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+                                    <Text style={{ textAlign: 'center', color: Colors.subtext }}>No results</Text>
+                                  </View>
+                                )}
+                              </ScrollView>
+                            </View>
+                          )}
+                        </>
+                      ) : (
+                        <View style={[styles.previewCard, { marginTop: 6 }]}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <View style={{ alignItems: 'flex-start' }}>
+                              <Text style={styles.previewNotificationTitle}>{selectedClient.name}</Text>
+                              <Text style={styles.previewNotificationContent}>{selectedClient.phone}</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => { setSelectedClient(null); setShowClientDropdown(false); }}>
+                              <Text style={{ color: '#FF3B30', fontWeight: '600' }}>Change</Text>
+                            </TouchableOpacity>
                           </View>
-                        )}
-                      </ScrollView>
-                    </View>
-                  )}
-                </>
-              ) : (
-                <View style={[styles.previewCard, { marginTop: 6 }]}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <View style={{ alignItems: 'flex-start' }}>
-                      <Text style={styles.previewNotificationTitle}>{selectedClient.name}</Text>
-                      <Text style={styles.previewNotificationContent}>{selectedClient.phone}</Text>
-                    </View>
-                    <TouchableOpacity onPress={() => { setSelectedClient(null); setShowClientDropdown(false); }}>
-                      <Text style={{ color: '#FF3B30', fontWeight: '600' }}>Change</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-            </View>
-
-            {/* Service select (before day/time) */}
-            <View style={styles.inputContainer}>
-              <Text style={[styles.inputLabel, { textAlign: 'left' }]}>Service</Text>
-              <Pressable style={[styles.dropdownContainer, styles.grayField]} onPress={() => setShowServiceDropdown(!showServiceDropdown)}>
-                <View style={styles.dropdownHeader}>
-                  {selectedService ? (
-                    <View style={{ flex: 1, alignItems: 'flex-start' }}>
-                      <Text style={styles.serviceHeaderTitle}>{selectedService.name}</Text>
-                      {!!selectedService.duration_minutes && (
-                        <Text style={styles.serviceHeaderSub}>{`${selectedService.duration_minutes} minutes`}</Text>
+                        </View>
                       )}
                     </View>
-                  ) : (
-                    <Text style={[styles.dropdownText, styles.dropdownPlaceholder, { textAlign: 'left' }]}>Select service...</Text>
-                  )}
-                  {showServiceDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
+                  </View>
                 </View>
-              </Pressable>
-              {showServiceDropdown && (
-                <View style={styles.dropdownOptions}>
-                  <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                    {recurringServices.map((svc, idx) => (
+                <View style={{ width: recViewportWidth }}>
+                  <View style={styles.wizardSectionCard}>
+                    <View style={styles.inputContainer}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <Calendar size={18} color={businessColors.primary} />
+                        <Text style={[styles.inputLabel, { textAlign: 'left', marginBottom: 0 }]}>Service</Text>
+                      </View>
+                      <Text style={styles.stepHint}>Pick a service</Text>
+                      <Pressable style={[styles.dropdownContainer, styles.grayField, { minHeight: 52 }]} onPress={() => setShowServiceDropdown(!showServiceDropdown)}>
+                        <View style={styles.dropdownHeader}>
+                          {selectedService ? (
+                            <View style={{ flex: 1, alignItems: 'flex-start' }}>
+                              <Text style={styles.serviceHeaderTitle}>{selectedService.name}</Text>
+                              {!!selectedService.duration_minutes && (
+                                <Text style={styles.serviceHeaderSub}>{`${selectedService.duration_minutes} minutes`}</Text>
+                              )}
+                            </View>
+                          ) : (
+                            <Text style={[styles.dropdownText, styles.dropdownPlaceholder, { textAlign: 'left' }]}>Select service...</Text>
+                          )}
+                          {showServiceDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
+                        </View>
+                      </Pressable>
+                      {showServiceDropdown && (
+                        <View style={[styles.dropdownOptions, styles.dropPanelRecurring]}>
+                          <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                            {recurringServices.map((svc, idx) => (
+                              <Pressable
+                                key={svc.id}
+                                style={[styles.dropdownOption, idx === recurringServices.length - 1 && styles.dropdownOptionLast]}
+                                onPress={() => { setSelectedService(svc); setShowServiceDropdown(false); goToRecStep(2); }}
+                              >
+                                <View style={styles.dropdownOptionContent}>
+                                  <Text style={styles.dropdownOptionTitle}>{svc.name}</Text>
+                                  {!!svc.duration_minutes && (
+                                    <Text style={styles.dropdownOptionDescription}>{`${svc.duration_minutes} minutes`}</Text>
+                                  )}
+                                </View>
+                              </Pressable>
+                            ))}
+                          </ScrollView>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                </View>
+                <View style={{ width: recViewportWidth }}>
+                  <View style={styles.wizardSectionCard}>
+                    <View style={styles.inputContainer}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <Calendar size={18} color={businessColors.primary} />
+                        <Text style={[styles.inputLabel, { textAlign: 'left', marginBottom: 0 }]}>Day of week</Text>
+                      </View>
+                      <Text style={styles.stepHint}>Select a day of the week</Text>
                       <Pressable
-                        key={svc.id}
-                        style={[styles.dropdownOption, idx === recurringServices.length - 1 && styles.dropdownOptionLast]}
-                        onPress={() => { setSelectedService(svc); setShowServiceDropdown(false); }}
+                        style={[styles.dropdownContainer, styles.grayField, { opacity: selectedService ? 1 : 0.6 }]}
+                        onPress={() => {
+                          if (!selectedService) { Alert.alert('Error', 'Please select a service'); return; }
+                          setShowDayDropdown(!showDayDropdown);
+                        }}
                       >
-                        <View style={styles.dropdownOptionContent}>
-                          <Text style={styles.dropdownOptionTitle}>{svc.name}</Text>
-                          {!!svc.duration_minutes && (
-                            <Text style={styles.dropdownOptionDescription}>{`${svc.duration_minutes} minutes`}</Text>
+                        <View style={styles.dropdownHeader}>
+                          <Text style={[styles.dropdownText, !Number.isInteger(selectedDayOfWeek as any) && styles.dropdownPlaceholder, { textAlign: 'left' }]}>
+                            {Number.isInteger(selectedDayOfWeek as any) ? dayNames[selectedDayOfWeek as number] : 'Select day...'}
+                          </Text>
+                          {showDayDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
+                        </View>
+                      </Pressable>
+                      {showDayDropdown && (
+                        <View style={[styles.dropdownOptions, styles.dropPanelRecurring]}>
+                          <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                            {dayNames.map((n, idx) => (
+                              <Pressable key={n} style={[styles.dropdownOption, idx === dayNames.length - 1 && styles.dropdownOptionLast]} onPress={() => { setSelectedDayOfWeek(idx); setShowDayDropdown(false); goToRecStep(3); }}>
+                                <Text style={styles.dropdownOptionTitle}>{n}</Text>
+                              </Pressable>
+                            ))}
+                          </ScrollView>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                </View>
+                <View style={{ width: recViewportWidth }}>
+                  <View style={styles.wizardSectionCard}>
+                    <View style={styles.inputContainer}> 
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <Clock size={18} color={businessColors.primary} />
+                        <Text style={[styles.sectionHeaderTitle, { textAlign: 'left' }]}>Select time</Text>
+                      </View>
+                      <Text style={styles.stepHint}>Pick an available time</Text>
+                      <Pressable
+                        style={[styles.dropdownContainer, styles.grayField, { minHeight: 52, opacity: Number.isInteger(selectedDayOfWeek as any) ? 1 : 0.6 }]}
+                        onPress={() => {
+                          if (!selectedService) { Alert.alert('Error', 'Please select a service'); return; }
+                          if (!Number.isInteger(selectedDayOfWeek as any)) { Alert.alert('Error', 'Please select a day of the week'); return; }
+                          if (!showTimeDropdown) { setIsLoadingTimes(true); if (Number.isInteger(selectedDayOfWeek as any)) { loadAvailableTimesForDay(selectedDayOfWeek as number); } }
+                          setShowTimeDropdown(!showTimeDropdown);
+                        }}
+                      >
+                        <View style={styles.dropdownHeader}>
+                          <Text style={[styles.dropdownText, !selectedTime && styles.dropdownPlaceholder, { textAlign: 'left' }]}>
+                            {selectedTime ? formatTime12Hour(selectedTime) : (isLoadingTimes ? 'Loading times...' : 'Select time...')}
+                          </Text>
+                          {showTimeDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
+                        </View>
+                      </Pressable>
+                      {showTimeDropdown && (
+                        <View style={[styles.dropdownOptions, styles.dropPanelRecurring]}>
+                          {isLoadingTimes ? (
+                            <View style={{ padding: 12, alignItems: 'center' }}>
+                              <ActivityIndicator size="small" color={businessColors.primary} />
+                              <Text style={{ textAlign: 'center', color: Colors.subtext, marginTop: 8 }}>
+                                Loading available times...
+                              </Text>
+                            </View>
+                          ) : availableTimes.length === 0 ? (
+                            <View style={{ padding: 12 }}>
+                              <Text style={{ textAlign: 'center', color: Colors.subtext }}>
+                                No available times for this day
+                              </Text>
+                            </View>
+                          ) : (
+                            <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                              {availableTimes.map((t, idx) => (
+                                <Pressable
+                                  key={t}
+                                  style={[styles.dropdownOption, idx === availableTimes.length - 1 && styles.dropdownOptionLast]}
+                                  onPress={async () => {
+                                    if (!Number.isInteger(selectedDayOfWeek as any)) return;
+                                    const ok = await isTimeAvailable(selectedDayOfWeek as number, t);
+                                    if (!ok) { Alert.alert('Appointment booked', 'The selected time is already booked for this week. Please choose another time.'); return; }
+                                    setSelectedTime(t);
+                                    setShowTimeDropdown(false);
+                                    goToRecStep(4);
+                                  }}
+                                >
+                                  <View style={styles.dropdownOptionContent}>
+                                    <Text style={styles.dropdownOptionTitle}>{formatTime12Hour(t)}</Text>
+                                  </View>
+                                </Pressable>
+                              ))}
+                            </ScrollView>
                           )}
                         </View>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
+                      )}
+                    </View>
+                  </View>
                 </View>
-              )}
-            </View>
-
-            {/* Repeat interval selection */}
-            <View style={styles.inputContainer}>
-              <Text style={[styles.inputLabel, { textAlign: 'left' }]}>Repeat every</Text>
-              <Pressable style={[styles.dropdownContainer, styles.grayField]} onPress={() => setShowRepeatDropdown(!showRepeatDropdown)}>
-                <View style={styles.dropdownHeader}>
-                  <Text style={[styles.dropdownText, { textAlign: 'left' }]}>{repeatWeeks === 1 ? 'every week' : `every ${repeatWeeks} weeks`}</Text>
-                  {showRepeatDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
-                </View>
-              </Pressable>
-              {showRepeatDropdown && (
-                <View style={styles.dropdownOptions}>
-                  <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                    {[1, 2, 3, 4].map((w, idx) => (
-                      <Pressable
-                        key={w}
-                        style={[styles.dropdownOption, idx === 3 && styles.dropdownOptionLast]}
-                        onPress={() => { setRepeatWeeks(w); setShowRepeatDropdown(false); }}
-                      >
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <Text style={styles.dropdownOptionTitle}>{w === 1 ? 'every week' : `every ${w} weeks`}</Text>
-                          {repeatWeeks === w && <Check size={18} color={businessColors.primary} />}
+                <View style={{ width: recViewportWidth }}>
+                  <View style={styles.wizardSectionCard}>
+                    <View style={styles.inputContainer}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <Repeat size={18} color={businessColors.primary} />
+                        <Text style={[styles.inputLabel, { textAlign: 'left', marginBottom: 0 }]}>Repeat every</Text>
+                      </View>
+                      <Text style={styles.stepHint}>Set how often this repeats</Text>
+                      <Pressable style={[styles.dropdownContainer, styles.grayField, { minHeight: 52 }]} onPress={() => setShowRepeatDropdown(!showRepeatDropdown)}>
+                        <View style={styles.dropdownHeader}>
+                          <Text style={[styles.dropdownText, { textAlign: 'left' }]}>{repeatWeeks === 1 ? 'every week' : `every ${repeatWeeks} weeks`}</Text>
+                          {showRepeatDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
                         </View>
                       </Pressable>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
-            </View>
-
-            {/* Day select (disabled until service chosen) */}
-            <View style={styles.inputContainer}>
-              <Text style={[styles.inputLabel, { textAlign: 'left' }]}>Day of week</Text>
-              <Pressable
-                style={[styles.dropdownContainer, styles.grayField, { opacity: selectedService ? 1 : 0.6 }]}
-                onPress={() => {
-                  if (!selectedService) {
-                    Alert.alert('Error', 'Please select a service');
-                    return;
-                  }
-                  setShowDayDropdown(!showDayDropdown);
-                }}
-              >
-                <View style={styles.dropdownHeader}>
-                  <Text style={[styles.dropdownText, !Number.isInteger(selectedDayOfWeek as any) && styles.dropdownPlaceholder, { textAlign: 'left' }]}>
-                    {Number.isInteger(selectedDayOfWeek as any) ? dayNames[selectedDayOfWeek as number] : 'Select day...'}
-                  </Text>
-                  {showDayDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
-                </View>
-              </Pressable>
-              {showDayDropdown && (
-                <View style={styles.dropdownOptions}>
-                  <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                    {dayNames.map((n, idx) => (
-                      <Pressable key={n} style={[styles.dropdownOption, idx === dayNames.length - 1 && styles.dropdownOptionLast]} onPress={() => { setSelectedDayOfWeek(idx); setShowDayDropdown(false); }}>
-                        <Text style={styles.dropdownOptionTitle}>{n}</Text>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
-            </View>
-
-            {/* Time select */}
-            <View style={styles.inputContainer}> 
-              <View style={styles.sectionHeaderRow}>
-                <Text style={[styles.sectionHeaderTitle, { textAlign: 'left' }]}>Select time</Text>
-              </View>
-              <Pressable
-                style={[styles.dropdownContainer, styles.grayField, { opacity: Number.isInteger(selectedDayOfWeek as any) ? 1 : 0.6 }]}
-                onPress={() => {
-                  if (!selectedService) {
-                    Alert.alert('Error', 'Please select a service');
-                    return;
-                  }
-                  if (!Number.isInteger(selectedDayOfWeek as any)) {
-                    Alert.alert('Error', 'Please select a day of the week');
-                    return;
-                  }
-                  setShowTimeDropdown((prev) => !prev);
-                  if (availableTimes.length === 0 && !isLoadingTimes && Number.isInteger(selectedDayOfWeek as any)) {
-                    loadAvailableTimesForDay(selectedDayOfWeek as number);
-                  }
-                }}
-              >
-                <View style={styles.dropdownHeader}>
-                  <Text style={[styles.dropdownText, !selectedTime && styles.dropdownPlaceholder, { textAlign: 'left' }]}>
-                    {selectedTime ? formatTime12Hour(selectedTime) : (isLoadingTimes ? 'Loading times...' : 'Select time...')}
-                  </Text>
-                  {showTimeDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
-                </View>
-              </Pressable>
-              {showTimeDropdown && (
-                <View style={styles.dropdownOptions}>
-                  {isLoadingTimes ? (
-                    <View style={{ padding: 12, alignItems: 'center' }}>
-                      <ActivityIndicator size="small" color={businessColors.primary} />
-                      <Text style={{ textAlign: 'center', color: Colors.subtext, marginTop: 8 }}>
-                        Loading available times...
-                      </Text>
+                      {showRepeatDropdown && (
+                        <View style={[styles.dropdownOptions, styles.dropPanelRecurring]}>
+                          <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                            {[1, 2, 3, 4].map((w, idx) => (
+                              <Pressable
+                                key={w}
+                                style={[styles.dropdownOption, idx === 3 && styles.dropdownOptionLast]}
+                                onPress={() => { setRepeatWeeks(w); setShowRepeatDropdown(false); }}
+                              >
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <Text style={styles.dropdownOptionTitle}>{w === 1 ? 'every week' : `every ${w} weeks`}</Text>
+                                  {repeatWeeks === w && <Check size={18} color={businessColors.primary} />}
+                                </View>
+                              </Pressable>
+                            ))}
+                          </ScrollView>
+                        </View>
+                      )}
                     </View>
-                  ) : availableTimes.length === 0 ? (
-                    <View style={{ padding: 12 }}>
-                      <Text style={{ textAlign: 'center', color: Colors.subtext }}>
-                        No available times for this day
-                      </Text>
-                    </View>
-                  ) : (
-                    <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                      {availableTimes.map((t, idx) => (
-                        <Pressable
-                          key={t}
-                          style={[styles.dropdownOption, idx === availableTimes.length - 1 && styles.dropdownOptionLast]}
-                          onPress={async () => {
-                            if (!Number.isInteger(selectedDayOfWeek as any)) return;
-                            const ok = await isTimeAvailable(selectedDayOfWeek as number, t);
-                            if (!ok) {
-                              Alert.alert('Appointment booked', 'The selected time is already booked for this week. Please choose another time.');
-                              return;
-                            }
-                            setSelectedTime(t);
-                            setShowTimeDropdown(false);
-                          }}
-                        >
-                          <View style={styles.dropdownOptionContent}>
-                            <Text style={styles.dropdownOptionTitle}>{formatTime12Hour(t)}</Text>
-                          </View>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-                  )}
+                  </View>
                 </View>
-              )}
+              </Animated.View>
             </View>
+            {/* Step navigation visible for all steps */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, paddingHorizontal: 4 }}>
+              <TouchableOpacity onPress={goBackRec} disabled={recStep === 0} style={[styles.stepNavButton, recStep === 0 && styles.stepNavButtonDisabled]}>
+                <Text style={[styles.stepNavText, recStep === 0 && styles.stepNavTextDisabled]}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={recStep < 4 ? goNextRec : handleSubmitRecurring}
+                disabled={
+                  (recStep === 0 && !selectedClient) ||
+                  (recStep === 1 && !selectedService) ||
+                  (recStep === 2 && selectedDayOfWeek === null) ||
+                  (recStep === 3 && !selectedTime) ||
+                  (recStep === 4 && !repeatWeeks)
+                }
+                style={[styles.stepNavPrimary, { backgroundColor: businessColors.primary }, ((recStep === 0 && !selectedClient) || (recStep === 1 && !selectedService) || (recStep === 2 && selectedDayOfWeek === null) || (recStep === 3 && !selectedTime) || (recStep === 4 && !repeatWeeks)) && { opacity: 0.6 }]}
+              >
+                <Text style={styles.stepNavPrimaryText}>{recStep < 4 ? 'Next' : (isSubmittingRecurring ? 'Saving...' : 'Done')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
 
-            {/* Service select moved above */}
-            </View>
-          </ScrollView>
+          
+          </View>
         </SafeAreaView>
       </Modal>
       {/* Services Edit Modal as animated bottom sheet */}
@@ -4361,7 +4461,7 @@ const styles = StyleSheet.create({
   // Modal Styles
   modalContainer: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.white,
   },
   smallModalOverlay: {
     flex: 1,
@@ -4381,6 +4481,13 @@ const styles = StyleSheet.create({
   smallModalContent: {
     padding: 20,
     backgroundColor: '#F8F9FA',
+  },
+  modalBodyRounded: {
+    flex: 1,
+    backgroundColor: '#F2F2F7',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -4494,7 +4601,7 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F2F2F7',
   },
   modalFormContent: {
     padding: 20,
@@ -4572,6 +4679,12 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginBottom: 12,
     marginTop: 8,
+    textAlign: 'left',
+  },
+  stepHint: {
+    fontSize: 12,
+    color: Colors.subtext,
+    marginBottom: 8,
     textAlign: 'left',
   },
   inputLabelLTR: {
@@ -4685,6 +4798,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
+    minHeight: 48,
+    justifyContent: 'center',
     marginBottom: 8,
   },
   grayField: {
@@ -4788,6 +4903,14 @@ const styles = StyleSheet.create({
     elevation: 10,
     ...shadowStyle,
   },
+  dropPanelRecurring: {
+    borderWidth: 0,
+    shadowColor: '#000000',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
   dropdownList: {
     maxHeight: 180,
     flexGrow: 0,
@@ -4867,11 +4990,24 @@ const styles = StyleSheet.create({
   recurringCard: {
     backgroundColor: 'transparent',
     borderRadius: 0,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
+    borderWidth: 0,
+    borderColor: 'transparent',
     padding: 16,
     marginBottom: 16,
     shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  wizardSectionCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 12,
+    marginBottom: 16,
+    borderWidth: 0,
+    shadowColor: '#000000',
     shadowOpacity: 0.05,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
@@ -5280,5 +5416,42 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  summaryValue: {
+    fontSize: 15,
+    color: '#000000',
+    fontWeight: '600',
+    textAlign: 'left',
+    flex: 1,
+    marginLeft: 8,
+  },
+  stepNavButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#F2F2F7',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  stepNavButtonDisabled: {
+    opacity: 0.6,
+  },
+  stepNavText: {
+    color: '#1C1C1E',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  stepNavTextDisabled: {
+    color: '#8E8E93',
+  },
+  stepNavPrimary: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+  },
+  stepNavPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

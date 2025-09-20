@@ -1057,11 +1057,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#E5E5EA',
+    borderBottomWidth: 0,
+    marginBottom: 8,
   },
   dropdownItemLast: {
     borderBottomWidth: 0,
+    marginBottom: 0,
   },
   clientAvatar: {
     width: 40,

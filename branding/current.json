@@ -1,27 +1,29 @@
 {
-  "client": "clientA",
+  "client": "JamesBarber",
   "config": {
     "expo": {
-      "name": "Client A App",
-      "slug": "client-a-app",
+      "name": "James Barber",
+      "slug": "james-barber",
       "version": "1.0.0",
       "orientation": "portrait",
-      "icon": "./branding/clientA/icon.png",
-      "scheme": "clienta",
+      "icon": "./branding/JamesBarber/icon.png",
+      "scheme": "jamesbarber",
       "userInterfaceStyle": "automatic",
       "splash": {
-        "image": "./branding/clientA/splash.png",
+        "image": "./branding/JamesBarber/splash.png",
         "resizeMode": "contain",
         "backgroundColor": "#ffffff"
       },
       "ios": {
         "buildNumber": "1",
         "supportsTablet": true,
-        "bundleIdentifier": "com.clienta.app",
+        "bundleIdentifier": "com.bcode.jamesbarber",
         "infoPlist": {
           "ITSAppUsesNonExemptEncryption": false,
           "CFBundleDevelopmentRegion": "en",
           "CFBundleAllowMixedLocalizations": true,
+          "NSCalendarsUsageDescription": "The app uses your calendar to add and manage haircut appointments you schedule.",
+          "NSRemindersUsageDescription": "The app can create reminders for your upcoming haircut appointments.",
           "NSPhotoLibraryUsageDescription": "The app needs access to photos to select and upload images to the gallery or profile.",
           "NSPhotoLibraryAddUsageDescription": "The app may save photos you've taken to your photo library.",
           "NSCameraUsageDescription": "The app needs access to the camera to take photos for upload.",
@@ -32,10 +34,10 @@
         "jsEngine": "hermes"
       },
       "android": {
-        "package": "com.clienta.app",
+        "package": "com.jamesbarber.app",
         "versionCode": 1,
         "adaptiveIcon": {
-          "foregroundImage": "./branding/clientA/icon.png",
+          "foregroundImage": "./branding/JamesBarber/icon.png",
           "backgroundColor": "#ffffff"
         },
         "intentFilters": [
@@ -44,7 +46,7 @@
             "action": "VIEW",
             "data": {
               "scheme": "https",
-              "host": "clienta.com"
+              "host": "jamesbarber.com"
             },
             "category": [
               "BROWSABLE",
@@ -55,13 +57,13 @@
         "supportsRtl": false
       },
       "web": {
-        "favicon": "./branding/clientA/icon.png"
+        "favicon": "./branding/JamesBarber/icon.png"
       },
       "plugins": [
         [
           "expo-router",
           {
-            "origin": "https://clienta.com/"
+            "origin": "https://jamesbarber.com/"
           }
         ],
         [
@@ -82,15 +84,12 @@
       },
       "extra": {
         "router": {
-          "origin": "https://clienta.com/"
-        },
-        "eas": {
-          "projectId": "f0c09635-7e73-4fc6-94e1-b0addf0ab9f3"
+          "origin": "https://jamesbarber.com/"
         },
         "locale": "en",
-        "CLIENT": "clientA",
-        "logo": "./branding/clientA/logo.png",
-        "logoWhite": "./branding/clientA/logo-white.png",
+        "CLIENT": "JamesBarber",
+        "logo": "./branding/JamesBarber/logo.png",
+        "logoWhite": "./branding/JamesBarber/logo-white.png",
         "theme": {
           "colors": {
             "primary": "#007AFF",
@@ -107,18 +106,21 @@
             "info": "#007AFF"
           },
           "branding": {
-            "logo": "./branding/clientA/logo.png",
-            "logoWhite": "./branding/clientA/logo-white.png",
-            "companyName": "Client A",
-            "website": "https://clienta.com",
-            "supportEmail": "support@clienta.com"
+            "logo": "./branding/JamesBarber/logo.png",
+            "logoWhite": "./branding/JamesBarber/logo-white.png",
+            "companyName": "James Barber",
+            "website": "https://jamesbarber.com",
+            "supportEmail": "support@jamesbarber.com"
           },
           "fonts": {
             "primary": "System",
             "secondary": "System"
           }
         },
-        "BUSINESS_ID": "01664149-b59f-41e5-a712-9f3bc3c9d29a"
+        "BUSINESS_ID": "01664149-b59f-41e5-a712-9f3bc3c9d29a",
+        "eas": {
+          "projectId": "8efaeaeb-7141-4328-a75f-5d56de528df1"
+        }
       }
     }
   },
@@ -138,16 +140,16 @@
       "info": "#007AFF"
     },
     "branding": {
-      "logo": "./branding/clientA/logo.png",
-      "logoWhite": "./branding/clientA/logo-white.png",
-      "companyName": "Client A",
-      "website": "https://clienta.com",
-      "supportEmail": "support@clienta.com"
+      "logo": "./branding/JamesBarber/logo.png",
+      "logoWhite": "./branding/JamesBarber/logo-white.png",
+      "companyName": "James Barber",
+      "website": "https://jamesbarber.com",
+      "supportEmail": "support@jamesbarber.com"
     },
     "fonts": {
       "primary": "System",
       "secondary": "System"
     }
   },
-  "timestamp": "2025-09-20T15:39:11.616Z"
+  "timestamp": "2025-09-20T20:07:19.122Z"
 }

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Switch, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Switch, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking, Dimensions } from 'react-native';
 import Constants from 'expo-constants';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import * as ImagePicker from 'expo-image-picker';
@@ -1410,7 +1410,9 @@ export default function SettingsScreen() {
   const [recStep, setRecStep] = useState<number>(0); // 0: client, 1: service, 2: day, 3: time, 4: repeat
   const recTranslateX = useRef(new Animated.Value(0)).current;
   const recProgressAnim = useRef(new Animated.Value(0)).current;
-  const [recViewportWidth, setRecViewportWidth] = useState<number>(0);
+  // Give the steps viewport an initial width so content doesn't overflow on first render
+  const initialRecViewportWidth = Math.max(1, (Dimensions.get('window')?.width || 0) - 40);
+  const [recViewportWidth, setRecViewportWidth] = useState<number>(initialRecViewportWidth);
   const [recRenderKey, setRecRenderKey] = useState<number>(0);
 
   const goToRecStep = (next: number, animate: boolean = true) => {

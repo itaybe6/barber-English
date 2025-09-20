@@ -12,6 +12,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { notificationsApi } from '@/lib/api/notifications';
 import { ThemeProvider } from '@/src/theme/ThemeProvider';
 import { ColorUpdateProvider } from '@/lib/contexts/ColorUpdateContext';
+import { StatusBar } from 'expo-status-bar';
 
 // Configure RTL layout properly
 I18nManager.allowRTL(false);
@@ -170,6 +171,7 @@ export default function RootLayout() {
     <ColorUpdateProvider>
       <ThemeProvider>
         <GestureHandlerRootView style={{ flex: 1 }} onLayout={onLayoutRootView}>
+          <StatusBar style="dark" />
           {content}
         </GestureHandlerRootView>
       </ThemeProvider>

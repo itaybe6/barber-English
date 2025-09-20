@@ -36,7 +36,7 @@ const palette = {
   accent: '#111111',
   textPrimary: '#1F2937',
   textSecondary: '#6B7280',
-  inputBg: 'rgba(255,255,255,0.7)',
+  inputBg: 'rgba(255,255,255,0.6)',
   inputBorder: '#E5E7EB',
   white: '#FFFFFF',
 };

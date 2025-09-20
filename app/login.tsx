@@ -296,7 +296,7 @@ export default function LoginScreen() {
 
               {/* Phone */}
               <View style={styles.field}>
-                <View style={[styles.inputRow, { backgroundColor: 'rgba(255,255,255,0.7)', borderColor: '#E5E7EB' }]}>
+                <View style={[styles.inputRow, { backgroundColor: 'rgba(255,255,255,0.6)', borderColor: '#E5E7EB' }]}>
                   <Ionicons name="call-outline" size={18} color="#6B7280" style={styles.iconLeft} />
                   <TextInput
                     style={[styles.input, { color: '#4B5563' }]}
@@ -313,7 +313,7 @@ export default function LoginScreen() {
 
               {/* Password */}
               <View style={styles.field}>
-                <View style={[styles.inputRow, { backgroundColor: 'rgba(255,255,255,0.7)', borderColor: '#E5E7EB' }]}>
+                <View style={[styles.inputRow, { backgroundColor: 'rgba(255,255,255,0.6)', borderColor: '#E5E7EB' }]}>
                   <Ionicons name="lock-closed-outline" size={18} color="#6B7280" style={styles.iconLeft} />
                   <TextInput
                     style={[styles.input, styles.inputPassword, { color: '#4B5563' }]}

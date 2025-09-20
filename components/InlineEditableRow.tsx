@@ -13,6 +13,7 @@ interface InlineEditableRowProps {
   keyboardType?: KeyboardTypeOption;
   onSave: (next: string) => Promise<void> | void;
   validate?: (v: string) => boolean;
+  chevronColor?: string;
 }
 
 export default function InlineEditableRow({
@@ -22,6 +23,7 @@ export default function InlineEditableRow({
   keyboardType = 'url',
   onSave,
   validate,
+  chevronColor,
 }: InlineEditableRowProps) {
   const [expanded, setExpanded] = useState(false);
   const [draft, setDraft] = useState(value || '');
@@ -131,7 +133,7 @@ export default function InlineEditableRow({
           <Text style={styles.title}>{title}</Text>
         </View>
         <Animated.View style={[styles.chevronWrap, { transform: [{ rotate: chevronRotate }] }]}>
-          <ChevronRight size={20} color={Colors.primary} />
+          <ChevronRight size={20} color={chevronColor || Colors.primary} />
         </Animated.View>
       </TouchableOpacity>
       <Animated.View style={[styles.expandWrap, { maxHeight, opacity: opacityAnim }]}>

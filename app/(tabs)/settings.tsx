@@ -1934,6 +1934,7 @@ export default function SettingsScreen() {
                 placeholder="e.g. 30"
                 keyboardType="default"
                 onSave={handleSaveReminderInline}
+                chevronColor={businessColors.primary}
                 validate={(v) => {
                   const n = parseInt((v || '').trim(), 10);
                   return Number.isFinite(n) && n >= 1 && n <= 1440;
@@ -1967,6 +1968,7 @@ export default function SettingsScreen() {
                 placeholder="Business name"
                 keyboardType="default"
                 onSave={handleSaveDisplayNameInline}
+                chevronColor={businessColors.primary}
                 validate={(v) => v.trim().length > 0}
               />
             </View>
@@ -1988,6 +1990,7 @@ export default function SettingsScreen() {
                 placeholder="https://instagram.com/yourpage"
                 keyboardType="url"
                 onSave={handleSaveInstagramInline}
+                chevronColor={businessColors.primary}
                 validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
               />
             </View>
@@ -2001,6 +2004,7 @@ export default function SettingsScreen() {
                 placeholder="https://facebook.com/yourpage"
                 keyboardType="url"
                 onSave={handleSaveFacebookInline}
+                chevronColor={businessColors.primary}
                 validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
               />
             </View>
@@ -2014,6 +2018,7 @@ export default function SettingsScreen() {
                 placeholder="https://www.tiktok.com/@yourpage"
                 keyboardType="url"
                 onSave={handleSaveTiktokInline}
+                chevronColor={businessColors.primary}
                 validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
               />
             </View>
@@ -2109,6 +2114,7 @@ export default function SettingsScreen() {
                 placeholder="e.g. 24"
                 keyboardType="default"
                 onSave={handleSaveCancellationInline}
+                chevronColor={businessColors.primary}
                 validate={(v) => {
                   const n = parseInt((v || '').trim(), 10);
                   return !isNaN(n) && n >= 0 && n <= 168;
@@ -2547,11 +2553,35 @@ export default function SettingsScreen() {
               },
             }).panHandlers)}><View style={styles.sheetGrabber} /></View>
           </View>
-          <View style={styles.addressHeaderRow}>
-            <MapPin size={18} color={businessColors.primary} style={styles.addressHeaderIcon} />
-            <Text style={styles.addressSheetTitle}>Choose business address</Text>
+          {(() => { const canSave = ((placesFormattedAddress || addressDraft || '').trim().length > 0); return (
+          <View style={styles.modalHeader}>
+            <TouchableOpacity 
+              style={styles.cancellationModalCloseButton}
+              onPress={() => {
+                Animated.timing(addressSheetAnim, { toValue: 0, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => {
+                  addressDragY.setValue(0);
+                  setShowAddressSheet(false);
+                });
+              }}
+            >
+              <X size={20} color={Colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>Business address</Text>
+            <TouchableOpacity
+              style={[styles.modalSendButton, { backgroundColor: businessColors.primary }, !canSave ? { opacity: 0.6 } : null]}
+              disabled={!canSave}
+              onPress={async () => {
+                const selected = (placesFormattedAddress || addressDraft || '').trim();
+                if (!selected) { return; }
+                setAddressDraft(selected);
+                await saveAddress();
+                Animated.timing(addressSheetAnim, { toValue: 0, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => setShowAddressSheet(false));
+              }}
+            >
+              <Text style={[styles.modalSendText, { color: Colors.white }]}>Save</Text>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.addressSheetSubtitle}>Pick the exact business location from the list. Clients will navigate here.</Text>
+          ); })()}
           <KeyboardAvoidingView behavior={Platform.select({ ios: 'padding', android: undefined })} style={styles.addressSheetBody}>
             <View style={{ flex: 1, padding: 16, paddingBottom: insets.bottom + 16 }}>
               <View style={styles.addressInfoCard}>
@@ -2635,23 +2665,7 @@ export default function SettingsScreen() {
                   />
                 </View>
               )}
-              {(() => { const canSave = ((placesFormattedAddress || addressDraft || '').trim().length > 0); return (
-              <View style={styles.addressSaveRow}>
-                <TouchableOpacity
-                  onPress={async () => {
-                    const selected = (placesFormattedAddress || addressDraft || '').trim();
-                    if (!selected) { Alert.alert('Error', 'Please select an address'); return; }
-                    setAddressDraft(selected);
-                    await saveAddress();
-                    Animated.timing(addressSheetAnim, { toValue: 0, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => setShowAddressSheet(false));
-                  }}
-                  style={[styles.addressSaveButton, { backgroundColor: businessColors.primary }, !canSave && styles.addressSaveButtonDisabled]}
-                  disabled={!canSave}
-                >
-                  <Text style={styles.addressSaveText}>Save</Text>
-                </TouchableOpacity>
-              </View>
-              ); })()}
+              {/* Save action moved to header; bottom save row removed */}
             </View>
           </KeyboardAvoidingView>
         </Animated.View>

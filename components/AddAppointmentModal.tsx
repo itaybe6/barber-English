@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import {
   TextInput,
   Pressable,
   Dimensions,
+  Animated,
+  Easing,
 } from 'react-native';
 import { Calendar, Search, User, Clock, CalendarDays, X } from 'lucide-react-native';
 import { Calendar as RNCalendar, LocaleConfig } from 'react-native-calendars';
@@ -81,6 +83,12 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
   const [isLoadingTimes, setIsLoadingTimes] = useState(false);
   const [lastTimesForDate, setLastTimesForDate] = useState<string | null>(null);
   
+  // Stepper state (0: client, 1: service, 2: date, 3: time)
+  const [currentStep, setCurrentStep] = useState<number>(0);
+  const translateX = useRef(new Animated.Value(0)).current;
+  const progressAnim = useRef(new Animated.Value(0)).current; // 0..1
+  const [viewportWidth, setViewportWidth] = useState<number>(width);
+  
   // Search states
   const [clientSearch, setClientSearch] = useState('');
   const [filteredClients, setFilteredClients] = useState<Array<{ name: string; phone: string }>>([]);
@@ -91,6 +99,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       loadClients();
       loadServices();
       resetForm();
+      goToStep(0, false);
     }
   }, [visible]);
 
@@ -160,7 +169,35 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
     setShowTimeDropdown(false);
     setAvailableTimes([]);
     setCurrentMonth(new Date());
+    setCurrentStep(0);
+    translateX.setValue(0);
+    progressAnim.setValue(0);
   };
+
+  const goToStep = (next: number, animate: boolean = true) => {
+    const clamped = Math.max(0, Math.min(3, next));
+    setCurrentStep(clamped);
+    if (animate) {
+      Animated.timing(translateX, {
+        toValue: -clamped * (viewportWidth || width),
+        duration: 280,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+      Animated.timing(progressAnim, {
+        toValue: clamped / 3,
+        duration: 280,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start();
+    } else {
+      translateX.setValue(-clamped * (viewportWidth || width));
+      progressAnim.setValue(clamped / 3);
+    }
+  };
+
+  const goNext = () => goToStep(currentStep + 1);
+  const goBack = () => goToStep(currentStep - 1);
 
   const loadAvailableTimesForDate = async (date: Date) => {
     if (!selectedService) return;
@@ -321,6 +358,8 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       // If no service yet, we'll fetch after service selection
       setIsLoadingTimes(false);
     }
+    // Auto-advance to time step
+    goToStep(3);
   };
 
   const handleServiceSelect = (service: Service) => {
@@ -332,6 +371,8 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       setIsLoadingTimes(true);
       loadAvailableTimesForDate(selectedDate);
     }
+    // Auto-advance to next step
+    goToStep(2);
   };
 
   const handleSubmit = async () => {
@@ -409,6 +450,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
           <CalendarDays size={20} color={'#000000'} />
           <Text style={styles.sectionTitle}>Appointment Date</Text>
         </View>
+        <Text style={styles.sectionSubtitle}>Select the date for this appointment</Text>
         <View style={styles.calendarContainer}>
           <RNCalendar
             current={selected || undefined}
@@ -475,6 +517,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
         <User size={20} color={'#000000'} />
         <Text style={styles.sectionTitle}>Client</Text>
       </View>
+      <Text style={styles.sectionSubtitle}>Pick the client for this appointment</Text>
       
       {!selectedClient ? (
         <>
@@ -509,6 +552,8 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
                       setSelectedClient(client);
                       setShowClientDropdown(false);
                       setClientSearch('');
+                      // Auto-advance
+                      goToStep(1);
                     }}
                   >
                     <View style={styles.clientAvatar}>
@@ -559,6 +604,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
         <Calendar size={20} color={'#000000'} />
         <Text style={styles.sectionTitle}>Service</Text>
       </View>
+      <Text style={styles.sectionSubtitle}>Choose the service to perform</Text>
       
       <Pressable 
         style={[styles.selectorButton, styles.grayField]} 
@@ -604,6 +650,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
         <Clock size={20} color={'#000000'} />
         <Text style={styles.sectionTitle}>Time</Text>
       </View>
+      <Text style={styles.sectionSubtitle}>Pick an available time slot</Text>
       
       <Pressable 
         style={[
@@ -682,7 +729,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
             <X size={20} color={Colors.text} />
           </TouchableOpacity>
-          <Text style={styles.title}>Add Appointment for Client</Text>
+          <Text style={[styles.title, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>add appointment</Text>
           <TouchableOpacity 
             style={[
               styles.submitButton, 
@@ -698,12 +745,70 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
           </TouchableOpacity>
         </View>
 
+        <View style={styles.bodyWrapper}>
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {/* Stepper */}
+          <View style={styles.stepperContainer}>
+            <View style={styles.stepperTrack}>
+              <Animated.View
+                style={[styles.stepperProgress, { backgroundColor: businessColors.primary, width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]}
+              />
+            </View>
+            <View style={styles.stepperLabels}>
+              {['Client','Service','Date','Time'].map((label, idx) => (
+                <View key={label} style={styles.stepperLabelWrap}>
+                  <View style={[styles.stepDot, { borderColor: idx <= currentStep ? businessColors.primary : '#D1D1D6', backgroundColor: idx < currentStep ? businessColors.primary : '#FFFFFF' }]} />
+                  <Text style={[styles.stepLabelText, { color: idx <= currentStep ? businessColors.primary : '#8E8E93' }]}>{label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* Animated steps viewport */}
           <View style={styles.groupCard}>
-            {renderClientSelector()}
-            {renderServiceSelector()}
-            {renderDatePicker()}
-            {renderTimeSelector()}
+            <View style={styles.stepsViewport} onLayout={(e) => {
+              const w = e.nativeEvent.layout.width;
+              if (w && w > 0) {
+                setViewportWidth(w);
+                // Keep current step position aligned to new width
+                translateX.setValue(-currentStep * w);
+              }
+            }}>
+              <Animated.View style={[styles.stepsContainer, { width: (viewportWidth || width) * 4, transform: [{ translateX }] }]}> 
+                <View style={[styles.stepPane, { width: viewportWidth || width }]}>
+                  {renderClientSelector()}
+                </View>
+                <View style={[styles.stepPane, { width: viewportWidth || width }]}>
+                  {renderServiceSelector()}
+                </View>
+                <View style={[styles.stepPane, { width: viewportWidth || width }]}>
+                  {renderDatePicker()}
+                </View>
+                <View style={[styles.stepPane, { width: viewportWidth || width }]}>
+                  {renderTimeSelector()}
+                </View>
+              </Animated.View>
+            </View>
+            {/* Navigation controls */}
+            <View style={styles.stepNavRow}>
+              <TouchableOpacity onPress={goBack} disabled={currentStep === 0} style={[styles.stepNavButton, currentStep === 0 && styles.stepNavButtonDisabled]}> 
+                <Text style={[styles.stepNavText, currentStep === 0 && styles.stepNavTextDisabled]}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={goNext}
+                disabled={
+                  (currentStep === 0 && !selectedClient) ||
+                  (currentStep === 1 && !selectedService) ||
+                  (currentStep === 2 && !selectedDate) ||
+                  (currentStep === 3 && !selectedTime)
+                }
+                style={[styles.stepNavPrimary, { backgroundColor: businessColors.primary },
+                  ((currentStep === 0 && !selectedClient) || (currentStep === 1 && !selectedService) || (currentStep === 2 && !selectedDate) || (currentStep === 3 && !selectedTime)) && { opacity: 0.6 }
+                ]}
+              >
+                <Text style={styles.stepNavPrimaryText}>{currentStep < 3 ? 'Next' : 'Done'}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
           
           {/* Summary */}
@@ -738,6 +843,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
             </View>
           )}
         </ScrollView>
+        </View>
       </View>
     </Modal>
     </>
@@ -747,7 +853,14 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  bodyWrapper: {
+    flex: 1,
     backgroundColor: '#F2F2F7',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
   },
   // (styles for success modal were removed)
   header: {
@@ -757,8 +870,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     backgroundColor: '#FFFFFF',
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#C6C6C8',
+    borderBottomWidth: 0,
+    borderBottomColor: 'transparent',
   },
   closeButton: {
     width: 44,
@@ -805,6 +918,39 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
+  stepperContainer: {
+    marginBottom: 12,
+  },
+  stepperTrack: {
+    height: 4,
+    backgroundColor: '#E5E5EA',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  stepperProgress: {
+    height: '100%',
+  },
+  stepperLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  stepperLabelWrap: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  stepDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    marginBottom: 4,
+    backgroundColor: '#FFFFFF',
+  },
+  stepLabelText: {
+    fontSize: 12,
+    color: '#8E8E93',
+  },
   section: {
     marginBottom: 32,
   },
@@ -813,6 +959,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
     justifyContent: 'flex-start',
+  },
+  sectionSubtitle: {
+    fontSize: 13,
+    color: '#8E8E93',
+    marginTop: -6,
+    marginBottom: 10,
+    textAlign: 'left',
   },
   sectionTitle: {
     fontSize: 17,
@@ -831,7 +984,8 @@ const styles = StyleSheet.create({
   },
   grayField: {
     backgroundColor: '#F2F2F7',
-    borderColor: '#E5E5EA',
+    borderColor: 'transparent',
+    borderWidth: 0,
   },
   selectorContent: {
     flexDirection: 'row',
@@ -1033,6 +1187,50 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+  },
+  stepsViewport: {
+    overflow: 'hidden',
+  },
+  stepsContainer: {
+    flexDirection: 'row',
+  },
+  stepPane: {
+    paddingRight: 4,
+  },
+  stepNavRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  stepNavButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#F2F2F7',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  stepNavButtonDisabled: {
+    opacity: 0.6,
+  },
+  stepNavText: {
+    color: '#1C1C1E',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  stepNavTextDisabled: {
+    color: '#8E8E93',
+  },
+  stepNavPrimary: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+  },
+  stepNavPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
   dateOption: {
     width: 70,

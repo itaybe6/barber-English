@@ -1334,7 +1334,7 @@ export default function BookAppointment() {
           <View style={styles.section}>
             <View style={styles.dayHeaderRow}>
               <TouchableOpacity onPress={() => setCurrentStep(1)} style={styles.backCircle} activeOpacity={0.8}>
-                <Ionicons name="arrow-forward" size={18} color="#000000" />
+                <Ionicons name="arrow-back" size={18} color="#000000" />
               </TouchableOpacity>
               <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>Select Service</Text>
               <View style={{ width: 36 }} />
@@ -1396,7 +1396,7 @@ export default function BookAppointment() {
                 style={styles.backCircle} 
                 activeOpacity={0.8}
               >
-                <Ionicons name="arrow-forward" size={18} color="#000000" />
+                <Ionicons name="arrow-back" size={18} color="#000000" />
               </TouchableOpacity>
               <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>Select Day</Text>
               <View style={{ width: 36 }} />

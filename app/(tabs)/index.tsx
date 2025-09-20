@@ -32,6 +32,7 @@ import { useColors } from '@/src/theme/ThemeProvider';
 import { useProductsStore } from '@/stores/productsStore';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import type { BusinessProfile } from '@/lib/supabase';
+import { StatusBar, setStatusBarStyle, setStatusBarBackgroundColor } from 'expo-status-bar';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -50,6 +51,24 @@ export default function HomeScreen() {
   const fetchUnread = useNotificationsStore((state) => state.fetchUnreadCount);
   const colors = useColors();
   const styles = createStyles(colors);
+  // Ensure light status bar when this screen is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      try {
+        setStatusBarStyle('light', true);
+        setStatusBarBackgroundColor('transparent', true);
+      } catch (e) {
+        // noop
+      }
+      return () => {
+        try {
+          setStatusBarStyle('dark', true);
+        } catch (e) {
+          // noop
+        }
+      };
+    }, [])
+  );
 
   const [appointments] = useState(generateAppointments());
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -611,6 +630,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      <StatusBar style="light" translucent backgroundColor="transparent" />
       {/* Hero with overlay header (like client home) */}
       <View style={styles.fullScreenHero}>
         <Image

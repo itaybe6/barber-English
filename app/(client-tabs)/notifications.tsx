@@ -9,6 +9,7 @@ import { notificationsApi } from '@/lib/api/notifications';
 import { Notification } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { Bell, Clock, CheckCircle, AlertCircle, Calendar, XCircle, User } from 'lucide-react-native';
+import { useColors } from '@/src/theme/ThemeProvider';
 
 export default function ClientNotificationsScreen() {
   const insets = useSafeAreaInsets();
@@ -16,6 +17,7 @@ export default function ClientNotificationsScreen() {
   const bottomPadding = BOTTOM_SPACER + (insets?.bottom || 0);
   const router = useRouter();
   const { user } = useAuthStore();
+  const colors = useColors();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -349,10 +351,16 @@ export default function ClientNotificationsScreen() {
                 <TouchableOpacity
                   key={key}
                   onPress={() => setActiveFilter(key)}
-                  style={[styles.filterChip, isActive && styles.filterChipActive]}
+                  style={[
+                    styles.filterChip,
+                    isActive && { backgroundColor: colors.primary, borderColor: colors.primary },
+                  ]}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                  <Text style={[
+                    styles.filterChipText,
+                    isActive && { color: '#FFFFFF' },
+                  ]}>
                     {label}
                   </Text>
                 </TouchableOpacity>
@@ -649,6 +657,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   filterChipActive: {
+    // Kept for fallback; dynamic color applied inline using useColors()
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },

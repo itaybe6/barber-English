@@ -256,7 +256,6 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
               ) : (
                 <View style={styles.emptyStateContainer}>
                   <Text style={styles.emptyTitle}>No upcoming appointments today</Text>
-                  <Text style={styles.emptySubtitle}>No appointments scheduled for today</Text>
                 </View>
               )}
             </>

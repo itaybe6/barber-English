@@ -23,6 +23,7 @@ import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { useProductsStore } from '@/stores/productsStore';
 import { getCurrentClientLogo } from '@/src/theme/assets';
 import { useColors } from '@/src/theme/ThemeProvider';
+import { StatusBar, setStatusBarStyle, setStatusBarBackgroundColor } from 'expo-status-bar';
 
 
 // API functions for client home
@@ -143,6 +144,24 @@ export default function ClientHomeScreen() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isBlocked = Boolean((user as any)?.block);
   const colors = useColors();
+  // Ensure light status bar when this screen is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      try {
+        setStatusBarStyle('light', true);
+        setStatusBarBackgroundColor('transparent', true);
+      } catch (e) {
+        // noop
+      }
+      return () => {
+        try {
+          setStatusBarStyle('dark', true);
+        } catch (e) {
+          // noop
+        }
+      };
+    }, [])
+  );
   
   const [nextAppointment, setNextAppointment] = useState<AvailableTimeSlot | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -674,6 +693,7 @@ export default function ClientHomeScreen() {
 
   return (
     <View style={styles.container}>
+      <StatusBar style="light" translucent backgroundColor="transparent" />
       {/* Full Screen Hero with Overlay Header */}
       <View style={styles.fullScreenHero}>
         <Image 

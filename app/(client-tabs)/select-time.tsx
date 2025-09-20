@@ -470,7 +470,7 @@ export default function SelectTimeScreen() {
               style={styles.backCircle}
               activeOpacity={0.8}
             >
-              <Ionicons name="arrow-forward" size={18} color="#000000" />
+              <Ionicons name="arrow-back" size={18} color="#000000" />
             </TouchableOpacity>
             <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>Select Time</Text>
             <View style={{ width: 36 }} />

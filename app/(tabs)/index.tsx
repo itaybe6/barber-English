@@ -1587,7 +1587,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
   },
   editGalleryButtonText: {
-    color: colors.text,
+    color: colors.primary,
     fontWeight: '600',
     letterSpacing: -0.2,
     marginLeft: 8,

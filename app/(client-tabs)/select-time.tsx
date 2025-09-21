@@ -358,28 +358,79 @@ export default function SelectTimeScreen() {
         barber_id: barberId || null,
         user_id: user?.id || null,
       };
-      
-      
-      const { data: updated, error: updateError } = await supabase
-        .from('appointments')
-        .update(updateData)
-        .eq('slot_date', selectedDate)
-        .eq('slot_time', selectedTime)
-        .eq('business_id', businessId)
-        .eq('is_available', true)
-        .select()
-        .maybeSingle();
+      // 1) Find a single free-slot row id to update (scoped by barber/global)
+      const baseSelect = () =>
+        supabase
+          .from('appointments')
+          .select('id')
+          .eq('slot_date', selectedDate)
+          .eq('slot_time', selectedTime)
+          .eq('business_id', businessId)
+          .eq('is_available', true);
 
+      let candidateId: string | null = null;
+      try {
+        if (barberId) {
+          // Prefer new schema: user_id == barberId
+          const { data: candA } = await baseSelect()
+            .eq('user_id', barberId as string)
+            .order('id', { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          if (candA?.id) {
+            candidateId = candA.id as unknown as string;
+          } else {
+            // Fallback to legacy schema: barber_id == barberId
+            const { data: candB } = await baseSelect()
+              .eq('barber_id', barberId as string)
+              .order('id', { ascending: true })
+              .limit(1)
+              .maybeSingle();
+            if (candB?.id) {
+              candidateId = candB.id as unknown as string;
+            }
+          }
+        } else {
+          // Global slots: user_id is null
+          const { data: candGlobal } = await baseSelect()
+            .is('user_id', null)
+            .order('id', { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          if (candGlobal?.id) {
+            candidateId = candGlobal.id as unknown as string;
+          }
+        }
+      } catch {}
 
-      let success = updated;
-      if (!updateError && !updated) {
-        // Ensure no conflicting row exists
-        const { data: existing } = await supabase
+      let success: any = null;
+      if (candidateId) {
+        const { data: updatedRows, error: updateByIdErr } = await supabase
+          .from('appointments')
+          .update(updateData)
+          .eq('id', candidateId)
+          .eq('business_id', businessId)
+          .select()
+          .single();
+        if (!updateByIdErr) {
+          success = updatedRows;
+        }
+      }
+
+      if (!success) {
+        // Ensure no conflicting row exists (scoped to the same barber/global)
+        let existingQuery = supabase
           .from('appointments')
           .select('id')
           .eq('slot_date', selectedDate)
           .eq('slot_time', selectedTime)
           .eq('business_id', businessId);
+        if (barberId) {
+          existingQuery = existingQuery.or(`user_id.eq.${barberId},barber_id.eq.${barberId}`);
+        } else {
+          existingQuery = existingQuery.is('user_id', null);
+        }
+        const { data: existing } = await existingQuery;
         if (!existing || existing.length === 0) {
           const insertData = {
             slot_date: selectedDate,
@@ -395,14 +446,12 @@ export default function SelectTimeScreen() {
             user_id: user?.id || null,
           };
           
-          
           const { data: inserted, error: insertError } = await supabase
             .from('appointments')
             .insert([insertData])
             .select()
             .single();
             
-          
           success = inserted;
         }
       }

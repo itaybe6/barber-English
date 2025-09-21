@@ -1,0 +1,91 @@
+{
+  "expo": {
+    "name": "James Barber",
+    "slug": "james-barber",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./branding/JamesBarber/icon.png",
+    "scheme": "jamesbarber",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./branding/JamesBarber/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "buildNumber": "1",
+      "supportsTablet": true,
+      "bundleIdentifier": "com.jamesbarber.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleDevelopmentRegion": "en",
+        "CFBundleAllowMixedLocalizations": true,
+        "NSPhotoLibraryUsageDescription": "The app needs access to photos to select and upload images to the gallery or profile.",
+        "NSPhotoLibraryAddUsageDescription": "The app may save photos you've taken to your photo library.",
+        "NSCameraUsageDescription": "The app needs access to the camera to take photos for upload."
+      },
+      "jsEngine": "hermes"
+    },
+    "android": {
+      "package": "com.clienta.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./branding/JamesBarber/icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "intentFilters": [
+        {
+          "autoVerify": true,
+          "action": "VIEW",
+          "data": {
+            "scheme": "https",
+            "host": "jamesbarber.com"
+          },
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
+      "supportsRtl": false
+    },
+    "web": {
+      "favicon": "./branding/JamesBarber/icon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://jamesbarber.com/"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#ffffff"
+        }
+      ],
+      "expo-web-browser",
+      "expo-font",
+      "expo-localization"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "locales": {
+      "he": "./assets/locales/he.json"
+    },
+    "extra": {
+      "router": {
+        "origin": "https://clienta.com/"
+      },
+      "eas": {
+        "projectId": "f0c09635-7e73-4fc6-94e1-b0addf0ab9f3"
+      },
+      "locale": "en",
+      "CLIENT": "JamesBarber",
+      "logo": "./branding/JamesBarber/logo.png",
+      "logoWhite": "./branding/JamesBarber/logo-white.png"
+    }
+  }
+}

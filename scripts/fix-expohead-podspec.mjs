@@ -6,12 +6,19 @@ import fs from 'fs';
 import path from 'path';
 
 const repoRoot = process.cwd();
-const podspecPath = path.join(
+const expoHeadPodspecPath = path.join(
   repoRoot,
   'node_modules',
   'expo-router',
   'ios',
   'ExpoHead.podspec'
+);
+
+const expoPodspecPath = path.join(
+  repoRoot,
+  'node_modules',
+  'expo',
+  'Expo.podspec'
 );
 
 function moveAddDependencyLine(contents) {
@@ -62,22 +69,44 @@ function moveAddDependencyLine(contents) {
   return { changed: true, result: lines.join('\n') };
 }
 
+function removeReactAppDependencyProvider(contents) {
+  const lines = contents.split(/\r?\n/);
+  const idx = lines.findIndex((l) => l.includes("s.dependency 'ReactAppDependencyProvider'"));
+  if (idx === -1) return { changed: false, result: contents };
+  lines.splice(idx, 1);
+  return { changed: true, result: lines.join('\n') };
+}
+
 try {
-  if (!fs.existsSync(podspecPath)) {
-    console.log('[fix-expohead-podspec] ExpoHead.podspec not found, skipping');
-    process.exit(0);
+  // Fix ExpoHead.podspec ordering
+  if (fs.existsSync(expoHeadPodspecPath)) {
+    const original = fs.readFileSync(expoHeadPodspecPath, 'utf8');
+    const { changed, result } = moveAddDependencyLine(original);
+    if (changed) {
+      fs.writeFileSync(expoHeadPodspecPath, result, 'utf8');
+      console.log('[fix-expo-pods] Reordered add_dependency in ExpoHead.podspec');
+    } else {
+      console.log('[fix-expo-pods] ExpoHead.podspec already OK');
+    }
+  } else {
+    console.log('[fix-expo-pods] ExpoHead.podspec not found, skipping');
   }
 
-  const original = fs.readFileSync(podspecPath, 'utf8');
-  const { changed, result } = moveAddDependencyLine(original);
-  if (changed) {
-    fs.writeFileSync(podspecPath, result, 'utf8');
-    console.log('[fix-expohead-podspec] Reordered add_dependency below pod_target_xcconfig');
+  // Remove ReactAppDependencyProvider from Expo.podspec for RN <= 0.76
+  if (fs.existsSync(expoPodspecPath)) {
+    const expoOriginal = fs.readFileSync(expoPodspecPath, 'utf8');
+    const { changed: expoChanged, result: expoResult } = removeReactAppDependencyProvider(expoOriginal);
+    if (expoChanged) {
+      fs.writeFileSync(expoPodspecPath, expoResult, 'utf8');
+      console.log('[fix-expo-pods] Removed ReactAppDependencyProvider from Expo.podspec');
+    } else {
+      console.log('[fix-expo-pods] Expo.podspec did not reference ReactAppDependencyProvider or already fixed');
+    }
   } else {
-    console.log('[fix-expohead-podspec] No changes needed');
+    console.log('[fix-expo-pods] Expo.podspec not found, skipping');
   }
 } catch (err) {
-  console.warn('[fix-expohead-podspec] Failed to adjust ExpoHead.podspec:', err?.message || err);
+  console.warn('[fix-expo-pods] Failed to adjust Expo podspecs:', err?.message || err);
   // Do not fail install; just warn
   process.exit(0);
 }

@@ -105,15 +105,13 @@ export default function RootLayout() {
   }, [error]);
 
   const onLayoutRootView = React.useCallback(async (_e?: any) => {
-    // Hide splash screen only after the root view has mounted
-    if (loaded || fontError) {
-      try {
-        await SplashScreen.hideAsync();
-      } catch (err) {
-        console.warn('Failed to hide splash screen:', err);
-      }
+    // Hide splash screen after root is mounted
+    try {
+      await SplashScreen.hideAsync();
+    } catch (err) {
+      console.warn('Failed to hide splash screen:', err);
     }
-  }, [loaded, fontError]);
+  }, []);
 
   // Set default text styling
   useEffect(() => {
@@ -136,11 +134,13 @@ export default function RootLayout() {
     registerToken();
   }, [user?.phone, notificationsEnabled]);
 
-  // Wait for fonts and auth-store hydration before deciding navigation
-  // Allow app to continue even if fonts fail to load
-  if ((!loaded && !fontError) || !storeHydrated) {
-    return null;
-  }
+  // Fuse: ensure splash hides even if fonts/hydration lag in production
+  useEffect(() => {
+    const t = setTimeout(() => {
+      SplashScreen.hideAsync().catch(() => {});
+    }, 5000);
+    return () => clearTimeout(t);
+  }, []);
 
   let content: React.ReactNode = null;
 

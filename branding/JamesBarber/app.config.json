@@ -15,11 +15,13 @@
     "ios": {
       "buildNumber": "1",
       "supportsTablet": true,
-      "bundleIdentifier": "com.jamesbarber.app",
+      "bundleIdentifier": "com.bcode.jamesbarber",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "CFBundleDevelopmentRegion": "en",
         "CFBundleAllowMixedLocalizations": true,
+        "NSCalendarsUsageDescription": "The app uses your calendar to add and manage haircut appointments you schedule.",
+        "NSRemindersUsageDescription": "The app can create reminders for your upcoming haircut appointments.",
         "NSPhotoLibraryUsageDescription": "The app needs access to photos to select and upload images to the gallery or profile.",
         "NSPhotoLibraryAddUsageDescription": "The app may save photos you've taken to your photo library.",
         "NSCameraUsageDescription": "The app needs access to the camera to take photos for upload."
@@ -27,7 +29,7 @@
       "jsEngine": "hermes"
     },
     "android": {
-      "package": "com.clienta.app",
+      "package": "com.jamesbarber.app",
       "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./branding/JamesBarber/icon.png",
@@ -77,10 +79,7 @@
     },
     "extra": {
       "router": {
-        "origin": "https://clienta.com/"
-      },
-      "eas": {
-        "projectId": "f0c09635-7e73-4fc6-94e1-b0addf0ab9f3"
+          "origin": "https://jamesbarber.com/"
       },
       "locale": "en",
       "CLIENT": "JamesBarber",

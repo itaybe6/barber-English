@@ -29,9 +29,9 @@
           "disabled": false
         }
       },
-      "clientA": {
+      "JamesBarber": {
         "env": {
-          "ENV_FILE": "branding/clientA/.env",
+          "ENV_FILE": "branding/JamesBarber/.env",
           "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
           "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
         }

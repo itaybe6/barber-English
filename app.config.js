@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
-// Get client from environment variable, default to 'clientA'
-const CLIENT = process.env.CLIENT || 'clientA';
+// Get client from environment variable, default to 'JamesBarber'
+const CLIENT = process.env.CLIENT || 'JamesBarber';
 
 // Load environment variables for the specific client
 const envPath = path.join(__dirname, 'branding', CLIENT, '.env');
@@ -177,6 +177,11 @@ try {
 // Add theme and business ID to appConfig extra
 appConfig.expo.extra.theme = themeConfig;
 appConfig.expo.extra.BUSINESS_ID = process.env.BUSINESS_ID;
+// Ensure EAS projectId is present (required for EAS builds with dynamic config)
+try {
+  appConfig.expo.extra.eas = appConfig.expo.extra.eas || {};
+  appConfig.expo.extra.eas.projectId = process.env.EAS_PROJECT_ID || '8efaeaeb-7141-4328-a75f-5d56de528df1';
+} catch {}
 
 // Ensure iOS LSApplicationQueriesSchemes contains comgooglemaps for Google Maps deep linking
 try {

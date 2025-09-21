@@ -3,7 +3,7 @@ import { CURRENT_CLIENT } from '../config/currentClient';
 
 // Logo mapping for different clients - now using branding folder structure
 export const clientLogos = {
-  clientA: require('../../branding/clientA/logo.png'),
+  JamesBarber: require('../../branding/JamesBarber/logo.png'),
   clientB: require('../../branding/clientB/logo.png'),
 } as const;
 
@@ -29,12 +29,12 @@ export const getCurrentClient = (): keyof typeof clientLogos => {
     console.warn('Could not get CLIENT:', error);
   }
   
-  // Default to clientA if no client found or invalid client
-  return 'clientA';
+  // Default to JamesBarber if no client found or invalid client
+  return 'JamesBarber';
 };
 
 // Alternative method - you can manually set the client
-let currentClient: keyof typeof clientLogos = 'clientA';
+let currentClient: keyof typeof clientLogos = 'JamesBarber';
 
 export const setCurrentClient = (client: keyof typeof clientLogos) => {
   currentClient = client;
@@ -55,7 +55,7 @@ export const getLogoByClient = (clientName: string) => {
   if (clientName && clientName in clientLogos) {
     return clientLogos[clientName as keyof typeof clientLogos];
   }
-  return clientLogos.clientA; // Default fallback
+  return clientLogos.JamesBarber; // Default fallback
 };
 
 // Export all available clients

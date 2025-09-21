@@ -21,6 +21,16 @@ const expoPodspecPath = path.join(
   'Expo.podspec'
 );
 
+const expoViewShadowNodePath = path.join(
+  repoRoot,
+  'node_modules',
+  'expo-modules-core',
+  'common',
+  'cpp',
+  'fabric',
+  'ExpoViewShadowNode.cpp'
+);
+
 function moveAddDependencyLine(contents) {
   const lines = contents.split(/\r?\n/);
   const addDepIdx = lines.findIndex((l) => l.includes('add_dependency(s, "RNScreens")'));
@@ -104,6 +114,33 @@ try {
     }
   } else {
     console.log('[fix-expo-pods] Expo.podspec not found, skipping');
+  }
+
+  // Patch ExpoViewShadowNode.cpp to avoid newer RN-only symbols on RN 0.76
+  if (fs.existsSync(expoViewShadowNodePath)) {
+    const src = fs.readFileSync(expoViewShadowNodePath, 'utf8');
+    if (src.includes('YGDisplayContents') || src.includes('ForceFlattenView')) {
+      // Remove the RN >= 0.78 ForceFlatten/DisplayContents block entirely
+      let patched = src.replace(/\n\s*if \(YGNodeStyleGetDisplay\(&yogaNode_\) == YGDisplayContents\) \{[\s\S]*?\n\s*\}/m, '\n  // [postinstall patch] Disabled ForceFlatten handling for RN < 0.78');
+
+      // Some versions end up with an extra stray closing brace before the namespace
+      // Ensure we only keep one function terminator before the namespace close.
+      patched = patched.replace(/\n\}\s*\n\}\s*\n(\}\s*\/\/\s*namespace\s+expo)/m, '\n}\n$1');
+
+      fs.writeFileSync(expoViewShadowNodePath, patched, 'utf8');
+      console.log('[fix-expo-pods] Patched ExpoViewShadowNode.cpp to avoid RN 0.78+ symbols');
+    } else {
+      // Also normalize braces if a previous install produced an extra one
+      const normalized = src.replace(/\n\}\s*\n\}\s*\n(\}\s*\/\/\s*namespace\s+expo)/m, '\n}\n$1');
+      if (normalized !== src) {
+        fs.writeFileSync(expoViewShadowNodePath, normalized, 'utf8');
+        console.log('[fix-expo-pods] Normalized extra closing brace in ExpoViewShadowNode.cpp');
+      } else {
+        console.log('[fix-expo-pods] ExpoViewShadowNode.cpp does not require patch');
+      }
+    }
+  } else {
+    console.log('[fix-expo-pods] ExpoViewShadowNode.cpp not found, skipping');
   }
 } catch (err) {
   console.warn('[fix-expo-pods] Failed to adjust Expo podspecs:', err?.message || err);

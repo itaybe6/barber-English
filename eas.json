@@ -24,6 +24,7 @@
         "env": {
           "CLIENT": "JamesBarber",
           "ENV_FILE": "branding/JamesBarber/.env",
+          "POD_INSTALL_ARGS": "--repo-update",
           "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
           "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
         },

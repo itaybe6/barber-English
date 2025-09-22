@@ -10,7 +10,8 @@
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm",
-        "RCT_NEW_ARCH_ENABLED": "0"
+        "RCT_NEW_ARCH_ENABLED": "0",
+        "EAS_BUILD_RUNNER_FORCE_NPM_INSTALL": "1"
       }
     },
     "preview": {
@@ -18,7 +19,8 @@
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm",
-        "RCT_NEW_ARCH_ENABLED": "0"
+        "RCT_NEW_ARCH_ENABLED": "0",
+        "EAS_BUILD_RUNNER_FORCE_NPM_INSTALL": "1"
       }
     },
     "production": {
@@ -29,7 +31,8 @@
         "POD_INSTALL_ARGS": "--repo-update",
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm",
-        "RCT_NEW_ARCH_ENABLED": "0"
+        "RCT_NEW_ARCH_ENABLED": "0",
+        "EAS_BUILD_RUNNER_FORCE_NPM_INSTALL": "1"
       },
       "cache": {
         "disabled": false
@@ -42,7 +45,9 @@
         "ENV_FILE": "branding/JamesBarber/.env",
         "POD_INSTALL_ARGS": "--repo-update",
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-        "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
+        "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm",
+        "RCT_NEW_ARCH_ENABLED": "0",
+        "EAS_BUILD_RUNNER_FORCE_NPM_INSTALL": "1"
       }
     },
     "clientB": {
@@ -51,7 +56,9 @@
         "CLIENT": "clientB",
         "ENV_FILE": "branding/clientB/.env",
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-        "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
+        "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm",
+        "RCT_NEW_ARCH_ENABLED": "0",
+        "EAS_BUILD_RUNNER_FORCE_NPM_INSTALL": "1"
       }
     }
   },

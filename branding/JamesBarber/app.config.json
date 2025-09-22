@@ -8,11 +8,6 @@
     "scheme": "jamesbarber",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./branding/JamesBarber/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "splash": {
       "hideAsync": true,
       "resizeMode": "contain",
       "backgroundColor": "#ffffff",

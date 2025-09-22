@@ -1097,7 +1097,7 @@ export default function ClientHomeScreen() {
              )}
               <View style={styles.mapOverlay} />
               <View style={[styles.mapLogoCircle, { borderColor: colors.primary }]}>
-                <Image source={getCurrentClientLogo()} style={styles.mapLogoImage} resizeMode="cover" />
+                <Image source={getCurrentClientLogo()} style={styles.mapLogoImage} resizeMode="contain" />
               </View>
               <View style={styles.mapAttribution}>
                 <Text style={styles.mapAttributionText}>Maps</Text>

@@ -5,64 +5,58 @@
   },
   "build": {
     "development": {
+      "node": "20.19.4",
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-        "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm",
-        "RCT_NEW_ARCH_ENABLED": "0",
-        "EAS_BUILD_RUNNER_FORCE_NPM_INSTALL": "1"
+        "RCT_NEW_ARCH_ENABLED": "1"
       }
     },
     "preview": {
+      "node": "20.19.4",
       "distribution": "internal",
       "env": {
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-        "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm",
-        "RCT_NEW_ARCH_ENABLED": "0",
-        "EAS_BUILD_RUNNER_FORCE_NPM_INSTALL": "1"
+        "RCT_NEW_ARCH_ENABLED": "1"
       }
     },
     "production": {
+      "node": "20.19.4",
       "autoIncrement": true,
       "env": {
         "CLIENT": "JamesBarber",
         "ENV_FILE": "branding/JamesBarber/.env",
         "POD_INSTALL_ARGS": "--repo-update",
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-        "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm",
-        "RCT_NEW_ARCH_ENABLED": "0",
-        "EAS_BUILD_RUNNER_FORCE_NPM_INSTALL": "1"
+        "RCT_NEW_ARCH_ENABLED": "1"
       },
-      "cache": {
-        "disabled": false
-      }
+      "cache": { "disabled": false }
     },
     "JamesBarber": {
+      "node": "20.19.4",
       "autoIncrement": true,
       "env": {
         "CLIENT": "JamesBarber",
         "ENV_FILE": "branding/JamesBarber/.env",
         "POD_INSTALL_ARGS": "--repo-update",
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-        "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm",
-        "RCT_NEW_ARCH_ENABLED": "0",
-        "EAS_BUILD_RUNNER_FORCE_NPM_INSTALL": "1"
+        "RCT_NEW_ARCH_ENABLED": "1"
       }
     },
     "clientB": {
+      "node": "20.19.4",
       "autoIncrement": true,
       "env": {
         "CLIENT": "clientB",
         "ENV_FILE": "branding/clientB/.env",
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-        "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm",
-        "RCT_NEW_ARCH_ENABLED": "0",
-        "EAS_BUILD_RUNNER_FORCE_NPM_INSTALL": "1"
+        "RCT_NEW_ARCH_ENABLED": "1"
       }
     }
   },
   "submit": {
+    "production": {
+      "ios": {
+        "appleId": "itaybenyair99@gmail.com",
+        "ascAppId": "6752813865"
+      }
+    },
     "JamesBarber": {
       "ios": {
         "appleId": "itaybenyair99@gmail.com",

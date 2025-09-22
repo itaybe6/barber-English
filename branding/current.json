@@ -10,11 +10,6 @@
       "scheme": "jamesbarber",
       "userInterfaceStyle": "automatic",
       "splash": {
-        "image": "./branding/JamesBarber/splash.png",
-        "resizeMode": "contain",
-        "backgroundColor": "#ffffff"
-      },
-      "splashScreen": {
         "hideAsync": true,
         "resizeMode": "contain",
         "backgroundColor": "#ffffff",
@@ -160,9 +155,5 @@
       "secondary": "System"
     }
   },
-<<<<<<< HEAD
-  "timestamp": "2025-09-22T07:32:05.925Z"
-=======
-  "timestamp": "2025-09-21T10:36:48.584Z"
->>>>>>> 50aff471d0e7b57ec210c8dafd21eacac3eb15d9
+  "timestamp": "2025-09-22T12:30:40.109Z"
 }

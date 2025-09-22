@@ -12,7 +12,7 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "splashScreen": {
+    "splash": {
       "hideAsync": true,
       "resizeMode": "contain",
       "backgroundColor": "#ffffff",

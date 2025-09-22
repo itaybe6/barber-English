@@ -231,7 +231,7 @@ EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
 BUSINESS_ID=${clientName}-business-id-${Math.random().toString(36).substr(2, 9)}
-CLIENT_NAME=${clientName}
+CLIENT=${clientName}
 `;
   const envPath = path.join(clientPath, '.env');
   fs.writeFileSync(envPath, envContent);

@@ -116,31 +116,29 @@ try {
     console.log('[fix-expo-pods] Expo.podspec not found, skipping');
   }
 
-  // Patch ExpoViewShadowNode.cpp to avoid newer RN-only symbols on RN 0.76
-  if (fs.existsSync(expoViewShadowNodePath)) {
-    const src = fs.readFileSync(expoViewShadowNodePath, 'utf8');
-    if (src.includes('YGDisplayContents') || src.includes('ForceFlattenView')) {
-      // Remove the RN >= 0.78 ForceFlatten/DisplayContents block entirely
-      let patched = src.replace(/\n\s*if \(YGNodeStyleGetDisplay\(&yogaNode_\) == YGDisplayContents\) \{[\s\S]*?\n\s*\}/m, '\n  // [postinstall patch] Disabled ForceFlatten handling for RN < 0.78');
-
-      // Some versions end up with an extra stray closing brace before the namespace
-      // Ensure we only keep one function terminator before the namespace close.
-      patched = patched.replace(/\n\}\s*\n\}\s*\n(\}\s*\/\/\s*namespace\s+expo)/m, '\n}\n$1');
-
-      fs.writeFileSync(expoViewShadowNodePath, patched, 'utf8');
-      console.log('[fix-expo-pods] Patched ExpoViewShadowNode.cpp to avoid RN 0.78+ symbols');
-    } else {
-      // Also normalize braces if a previous install produced an extra one
-      const normalized = src.replace(/\n\}\s*\n\}\s*\n(\}\s*\/\/\s*namespace\s+expo)/m, '\n}\n$1');
-      if (normalized !== src) {
-        fs.writeFileSync(expoViewShadowNodePath, normalized, 'utf8');
-        console.log('[fix-expo-pods] Normalized extra closing brace in ExpoViewShadowNode.cpp');
-      } else {
-        console.log('[fix-expo-pods] ExpoViewShadowNode.cpp does not require patch');
+  // Avoid patching ExpoViewShadowNode.cpp by default. Text patches can introduce
+  // syntax errors (e.g., extraneous closing brace) in cloud builds. If you need
+  // to force this patch for a specific toolchain, set RN_FORCE_EXPO_VIEW_PATCH=1.
+  if (process.env.RN_FORCE_EXPO_VIEW_PATCH === '1') {
+    if (fs.existsSync(expoViewShadowNodePath)) {
+      try {
+        const src = fs.readFileSync(expoViewShadowNodePath, 'utf8');
+        if (src.includes('YGDisplayContents') || src.includes('ForceFlattenView')) {
+          let patched = src.replace(/\n\s*if \(YGNodeStyleGetDisplay\(&yogaNode_\) == YGDisplayContents\) \{[\s\S]*?\n\s*\}/m, '\n  // [postinstall patch] Disabled ForceFlatten handling for RN < 0.78');
+          patched = patched.replace(/\n\}\s*\n\}\s*\n(\}\s*\/\/\s*namespace\s+expo)/m, '\n}\n$1');
+          fs.writeFileSync(expoViewShadowNodePath, patched, 'utf8');
+          console.log('[fix-expo-pods] Patched ExpoViewShadowNode.cpp');
+        } else {
+          console.log('[fix-expo-pods] ExpoViewShadowNode.cpp looks compatible; no patch applied');
+        }
+      } catch (e) {
+        console.warn('[fix-expo-pods] Failed patching ExpoViewShadowNode.cpp:', e?.message || e);
       }
+    } else {
+      console.log('[fix-expo-pods] ExpoViewShadowNode.cpp not found, skipping');
     }
   } else {
-    console.log('[fix-expo-pods] ExpoViewShadowNode.cpp not found, skipping');
+    console.log('[fix-expo-pods] Skipping ExpoViewShadowNode.cpp patch');
   }
 } catch (err) {
   console.warn('[fix-expo-pods] Failed to adjust Expo podspecs:', err?.message || err);

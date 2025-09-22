@@ -1,5 +1,4 @@
 {
-<<<<<<< HEAD
   "cli": {
     "version": ">= 16.13.4",
     "appVersionSource": "remote"
@@ -10,62 +9,30 @@
       "distribution": "internal",
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-        "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
-=======
-    "cli": {
-      "version": ">= 16.13.4",
-      "appVersionSource": "remote"
-    },
-    "build": {
-      "development": {
-        "developmentClient": true,
-        "distribution": "internal",
-        "env": {
-          "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-          "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
-        }
-      },
-      "preview": {
-        "distribution": "internal",
-        "env": {
-          "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-          "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
-        }
-      },
-      "production": {
-        "autoIncrement": true,
-        "env": {
-          "CLIENT": "JamesBarber",
-          "ENV_FILE": "branding/JamesBarber/.env",
-          "POD_INSTALL_ARGS": "--repo-update",
-          "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-          "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
-        },
-        "cache": {
-          "disabled": false
-        }
-      },
-      "JamesBarber": {
-        "env": {
-          "ENV_FILE": "branding/JamesBarber/.env",
-          "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-          "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
-        }
-      },
-      "clientB": {
-        "env": {
-          "ENV_FILE": "branding/clientB/.env",
-          "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-          "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
-        }
->>>>>>> 50aff471d0e7b57ec210c8dafd21eacac3eb15d9
+        "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm",
+        "RCT_NEW_ARCH_ENABLED": "0"
       }
     },
     "preview": {
       "distribution": "internal",
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-        "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
+        "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm",
+        "RCT_NEW_ARCH_ENABLED": "0"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "CLIENT": "JamesBarber",
+        "ENV_FILE": "branding/JamesBarber/.env",
+        "POD_INSTALL_ARGS": "--repo-update",
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm",
+        "RCT_NEW_ARCH_ENABLED": "0"
+      },
+      "cache": {
+        "disabled": false
       }
     },
     "JamesBarber": {
@@ -73,6 +40,7 @@
       "env": {
         "CLIENT": "JamesBarber",
         "ENV_FILE": "branding/JamesBarber/.env",
+        "POD_INSTALL_ARGS": "--repo-update",
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
       }
@@ -80,6 +48,7 @@
     "clientB": {
       "autoIncrement": true,
       "env": {
+        "CLIENT": "clientB",
         "ENV_FILE": "branding/clientB/.env",
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
         "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"

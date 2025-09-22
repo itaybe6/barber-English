@@ -1,0 +1,9 @@
+diff --git a/node_modules/expo-modules-core/common/cpp/fabric/ExpoViewShadowNode.cpp b/node_modules/expo-modules-core/common/cpp/fabric/ExpoViewShadowNode.cpp
+index a7656cb..937482b 100644
+--- a/node_modules/expo-modules-core/common/cpp/fabric/ExpoViewShadowNode.cpp
++++ b/node_modules/expo-modules-core/common/cpp/fabric/ExpoViewShadowNode.cpp
+@@ -42,4 +42,3 @@ void ExpoViewShadowNode::initialize() noexcept {
+   }
+ }
+ 
+-} // namespace expo

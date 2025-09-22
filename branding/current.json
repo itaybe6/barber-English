@@ -118,6 +118,10 @@
           }
         },
         "BUSINESS_ID": "01664149-b59f-41e5-a712-9f3bc3c9d29a",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://vqstsrobzbykfivlahxa.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxc3Rzcm9iemJ5a2ZpdmxhaHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc2MDM1MjUsImV4cCI6MjA3MzE3OTUyNX0.iW4vYBC3usEqACGug6BNDkB7PJdHZ75lXo8TJO2x30k",
+        "EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY": "AIzaSyAVHoNZSAuWDnCArgFn1gAqA9bxkSuhdJ8",
+        "EXPO_PUBLIC_GOOGLE_PLACES_KEY": "AIzaSyAVHoNZSAuWDnCArgFn1gAqA9bxkSuhdJ8",
         "eas": {
           "projectId": "8efaeaeb-7141-4328-a75f-5d56de528df1"
         }
@@ -151,9 +155,5 @@
       "secondary": "System"
     }
   },
-<<<<<<< HEAD
-  "timestamp": "2025-09-21T04:56:24.688Z"
-=======
-  "timestamp": "2025-09-20T20:07:19.122Z"
->>>>>>> 980a35ff4714cba47c1b90b776a2e53f94060e92
+  "timestamp": "2025-09-22T04:53:14.938Z"
 }

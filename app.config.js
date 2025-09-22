@@ -1,11 +1,17 @@
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config();
 
-// Get client from environment variable, default to 'JamesBarber'
+// -------------------------------------------------------------
+// 1. מי הלקוח? אם אין הגדרה – ברירת מחדל JamesBarber
+// -------------------------------------------------------------
 const CLIENT = process.env.CLIENT || 'JamesBarber';
+const clientDir = path.join(__dirname, 'branding', CLIENT);
 
-// Load environment variables for the specific client
-const envPath = path.join(__dirname, 'branding', CLIENT, '.env');
+// -------------------------------------------------------------
+// 2. טוען ENV_FILE של הלקוח אם קיים
+// -------------------------------------------------------------
+const envPath = path.join(clientDir, '.env');
 if (fs.existsSync(envPath)) {
   require('dotenv').config({ path: envPath });
   console.log(`✅ Loaded environment from: ${envPath}`);
@@ -13,185 +19,82 @@ if (fs.existsSync(envPath)) {
   console.warn(`⚠️ Environment file not found: ${envPath}`);
 }
 
-// Paths for client-specific configs
-const clientConfigPath = path.join(__dirname, 'branding', CLIENT, 'app.config.json');
-const clientThemePath = path.join(__dirname, 'branding', CLIENT, 'theme.json');
-const currentConfigPath = path.join(__dirname, 'branding', 'current.json');
-
-// Default config (fallback)
-const defaultConfig = {
-  expo: {
-    name: "Default App",
-    slug: "default-app",
-    version: "1.0.0",
-    orientation: "portrait",
-    icon: "./assets/images/icon.png",
-    scheme: "myapp",
-    userInterfaceStyle: "automatic",
-    splash: {
-      image: "./assets/images/splash-icon.png",
-      resizeMode: "contain",
-      backgroundColor: "#ffffff"
-    },
-    ios: {
-      buildNumber: "1",
-      supportsTablet: true,
-      bundleIdentifier: "com.default.app",
-      infoPlist: {
-        ITSAppUsesNonExemptEncryption: false,
-        CFBundleDevelopmentRegion: "en",
-        CFBundleAllowMixedLocalizations: true,
-        NSPhotoLibraryUsageDescription: "The app needs access to photos to select and upload images to the gallery or profile.",
-        NSPhotoLibraryAddUsageDescription: "The app may save photos you've taken to your photo library.",
-        NSCameraUsageDescription: "The app needs access to the camera to take photos for upload.",
-        LSApplicationQueriesSchemes: ["comgooglemaps"]
-      },
-      jsEngine: "hermes"
-    },
-    android: {
-      package: "com.default.app",
-      versionCode: 1,
-      adaptiveIcon: {
-        foregroundImage: "./assets/images/adaptive-icon.png",
-        backgroundColor: "#ffffff"
-      },
-      intentFilters: [
-        {
-          autoVerify: true,
-          action: "VIEW",
-          data: {
-            scheme: "https",
-            host: "default.com"
-          },
-          category: [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
-        }
-      ],
-      supportsRtl: false
-    },
-    web: {
-      favicon: "./assets/images/favicon.png"
-    },
-    plugins: [
-      [
-        "expo-router",
-        {
-          origin: "https://default.com/"
-        }
-      ],
-      [
-        "expo-notifications",
-        {
-          color: "#ffffff"
-        }
-      ],
-      "expo-web-browser",
-      "expo-font",
-      "expo-localization"
-    ],
-    experiments: {
-      typedRoutes: true
-    },
-    locales: {
-      he: "./assets/locales/he.json"
-    },
-      extra: {
-        router: {
-          origin: "https://default.com/"
-        },
-        eas: {
-          projectId: "f0c09635-7e73-4fc6-94e1-b0addf0ab9f3"
-        },
-        locale: "en",
-        CLIENT: CLIENT, // Add the current client to extra
-        BUSINESS_ID: process.env.BUSINESS_ID, // Add the business ID to extra
-        EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY: process.env.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY || process.env.GOOGLE_STATIC_MAPS_KEY,
-        EXPO_PUBLIC_GOOGLE_PLACES_KEY: process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY 
-      }
-  }
-};
-
-// Default theme (fallback)
-const defaultTheme = {
-  colors: {
-    primary: "#007AFF",
-    secondary: "#5856D6",
-    accent: "#FF3B30",
-    background: "#FFFFFF",
-    surface: "#F2F2F7",
-    text: "#1C1C1E",
-    textSecondary: "#8E8E93",
-    border: "#E5E5EA",
-    success: "#34C759",
-    warning: "#FF9500",
-    error: "#FF3B30",
-    info: "#007AFF"
-  },
-  branding: {
-    logo: "./assets/images/logo-03.png",
-    logoWhite: "./assets/images/logo-03.png",
-    companyName: "Default Company",
-    website: "https://default.com",
-    supportEmail: "support@default.com"
-  },
-  fonts: {
-    primary: "System",
-    secondary: "System"
-  }
-};
-
-// Load client-specific config
-let appConfig;
-try {
-  if (fs.existsSync(clientConfigPath)) {
-    const clientConfig = JSON.parse(fs.readFileSync(clientConfigPath, 'utf8'));
-    appConfig = clientConfig;
+// -------------------------------------------------------------
+// 3. טוען app.config.json של הלקוח
+// -------------------------------------------------------------
+let appConfig = { expo: {} };
+const clientConfigPath = path.join(clientDir, 'app.config.json');
+if (fs.existsSync(clientConfigPath)) {
+  try {
+    appConfig = JSON.parse(fs.readFileSync(clientConfigPath, 'utf8'));
     console.log(`✅ Loaded config for client: ${CLIENT}`);
-  } else {
-    console.warn(`⚠️  Client config not found: ${clientConfigPath}, using default config`);
-    appConfig = defaultConfig;
+  } catch (error) {
+    console.error(`❌ Error parsing client config: ${error.message}`);
   }
-} catch (error) {
-  console.error(`❌ Error loading client config: ${error.message}`);
-  appConfig = defaultConfig;
+} else {
+  console.warn(`⚠️ Client config not found: ${clientConfigPath}`);
 }
 
-// Load client-specific theme
-let themeConfig;
-try {
-  if (fs.existsSync(clientThemePath)) {
-    const clientTheme = JSON.parse(fs.readFileSync(clientThemePath, 'utf8'));
-    themeConfig = clientTheme;
+// -------------------------------------------------------------
+// 4. טוען theme.json של הלקוח (אם קיים)
+// -------------------------------------------------------------
+let themeConfig = {};
+const clientThemePath = path.join(clientDir, 'theme.json');
+if (fs.existsSync(clientThemePath)) {
+  try {
+    themeConfig = JSON.parse(fs.readFileSync(clientThemePath, 'utf8'));
     console.log(`✅ Loaded theme for client: ${CLIENT}`);
-  } else {
-    console.warn(`⚠️  Client theme not found: ${clientThemePath}, using default theme`);
-    themeConfig = defaultTheme;
+  } catch (error) {
+    console.error(`❌ Error parsing theme.json: ${error.message}`);
   }
-} catch (error) {
-  console.error(`❌ Error loading client theme: ${error.message}`);
-  themeConfig = defaultTheme;
+} else {
+  console.warn(`⚠️ No theme.json found at: ${clientThemePath}`);
 }
 
-// Add theme and business ID to appConfig extra
-appConfig.expo.extra.theme = themeConfig;
-appConfig.expo.extra.BUSINESS_ID = process.env.BUSINESS_ID;
-// Ensure EAS projectId is present (required for EAS builds with dynamic config)
+// -------------------------------------------------------------
+// 5. מוסיף extra עם משתני ENV + fallback בטוח
+// -------------------------------------------------------------
+appConfig.expo = appConfig.expo || {};
+appConfig.expo.extra = {
+  ...(appConfig.expo.extra || {}),
+  CLIENT,
+  theme: themeConfig,
+  BUSINESS_ID: process.env.BUSINESS_ID || appConfig.expo.extra?.BUSINESS_ID || 'default',
+  EXPO_PUBLIC_SUPABASE_URL:
+    process.env.EXPO_PUBLIC_SUPABASE_URL || appConfig.expo.extra?.EXPO_PUBLIC_SUPABASE_URL,
+  EXPO_PUBLIC_SUPABASE_ANON_KEY:
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || appConfig.expo.extra?.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+  EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY:
+    process.env.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY || process.env.GOOGLE_STATIC_MAPS_KEY,
+  EXPO_PUBLIC_GOOGLE_PLACES_KEY: process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY
+};
+
+// -------------------------------------------------------------
+// 6. מבטיח שתמיד יש projectId ל-EAS (נדרש ל-build)
+// -------------------------------------------------------------
 try {
   appConfig.expo.extra.eas = appConfig.expo.extra.eas || {};
-  appConfig.expo.extra.eas.projectId = process.env.EAS_PROJECT_ID || '8efaeaeb-7141-4328-a75f-5d56de528df1';
+  appConfig.expo.extra.eas.projectId =
+    process.env.EAS_PROJECT_ID || '8efaeaeb-7141-4328-a75f-5d56de528df1';
 } catch {}
 
-// Ensure iOS LSApplicationQueriesSchemes contains comgooglemaps for Google Maps deep linking
+// -------------------------------------------------------------
+// 7. מבטיח שתמיד יש comgooglemaps ב-iOS infoPlist
+// -------------------------------------------------------------
 try {
   appConfig.expo.ios = appConfig.expo.ios || {};
   appConfig.expo.ios.infoPlist = appConfig.expo.ios.infoPlist || {};
-  const schemes = new Set([...(appConfig.expo.ios.infoPlist.LSApplicationQueriesSchemes || []), 'comgooglemaps']);
+  const schemes = new Set([
+    ...(appConfig.expo.ios.infoPlist.LSApplicationQueriesSchemes || []),
+    'comgooglemaps'
+  ]);
   appConfig.expo.ios.infoPlist.LSApplicationQueriesSchemes = Array.from(schemes);
 } catch {}
 
-// Create current.json with both config and theme
+// -------------------------------------------------------------
+// 8. כותב current.json עם קונפיג מלא (debug/runtime)
+// -------------------------------------------------------------
+const currentConfigPath = path.join(__dirname, 'branding', 'current.json');
 const currentConfig = {
   client: CLIENT,
   config: appConfig,
@@ -199,21 +102,20 @@ const currentConfig = {
   timestamp: new Date().toISOString()
 };
 
-// Write current.json for runtime access
 try {
-  // Ensure branding directory exists
   const brandingDir = path.dirname(currentConfigPath);
   if (!fs.existsSync(brandingDir)) {
     fs.mkdirSync(brandingDir, { recursive: true });
   }
-  
   fs.writeFileSync(currentConfigPath, JSON.stringify(currentConfig, null, 2));
   console.log(`✅ Written current config to: ${currentConfigPath}`);
 } catch (error) {
   console.error(`❌ Error writing current config: ${error.message}`);
 }
 
-// Write current client to a separate file for easy access
+// -------------------------------------------------------------
+// 9. כותב src/config/currentClient.ts
+// -------------------------------------------------------------
 try {
   const currentClientPath = path.join(__dirname, 'src', 'config', 'currentClient.ts');
   const currentClientContent = `// Current client configuration
@@ -221,18 +123,17 @@ try {
 
 export const CURRENT_CLIENT = '${CLIENT}';
 `;
-  
-  // Ensure src/config directory exists
   const configDir = path.dirname(currentClientPath);
   if (!fs.existsSync(configDir)) {
     fs.mkdirSync(configDir, { recursive: true });
   }
-  
   fs.writeFileSync(currentClientPath, currentClientContent);
   console.log(`✅ Written current client to: ${currentClientPath}`);
 } catch (error) {
   console.error(`❌ Error writing current client: ${error.message}`);
 }
 
-// Export the app config for Expo
+// -------------------------------------------------------------
+// 10. ייצוא סופי ל-Expo
+// -------------------------------------------------------------
 module.exports = appConfig;

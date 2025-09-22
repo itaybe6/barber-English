@@ -1,50 +1,52 @@
 {
-    "cli": {
-      "version": ">= 16.13.4",
-      "appVersionSource": "remote"
-    },
-    "build": {
-      "development": {
-        "developmentClient": true,
-        "distribution": "internal",
-        "env": {
-          "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-          "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
-        }
-      },
-      "preview": {
-        "distribution": "internal",
-        "env": {
-          "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-          "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
-        }
-      },
-      "production": {
-        "autoIncrement": true,
-        "env": {
-          "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-          "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
-        },
-        "cache": {
-          "disabled": false
-        }
-      },
-      "JamesBarber": {
-        "env": {
-          "ENV_FILE": "branding/JamesBarber/.env",
-          "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-          "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
-        }
-      },
-      "clientB": {
-        "env": {
-          "ENV_FILE": "branding/clientB/.env",
-          "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-          "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
-        }
+  "cli": {
+    "version": ">= 16.13.4",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
       }
     },
-    "submit": {
-      "production": {}
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
+      }
+    },
+    "JamesBarber": {
+      "autoIncrement": true,
+      "env": {
+        "ENV_FILE": "branding/JamesBarber/.env",
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
+      }
+    },
+    "clientB": {
+      "autoIncrement": true,
+      "env": {
+        "ENV_FILE": "branding/clientB/.env",
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EAS_BUILD_NODE_PACKAGE_MANAGER": "npm"
+      }
+    }
+  },
+  "submit": {
+    "JamesBarber": {
+      "ios": {
+        "appleId": "itaybenyair99@gmail.com",
+        "ascAppId": "6752813865"
+      }
+    },
+    "clientB": {
+      "ios": {
+        "appleId": "itaybenyair99@gmail.com"
+      }
     }
   }
+}

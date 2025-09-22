@@ -470,7 +470,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(248, 248, 248, 0.8)',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    backdropFilter: 'blur(20px)',
   },
   
   // Manual label style for custom tab buttons (matches tabBarLabelStyle)

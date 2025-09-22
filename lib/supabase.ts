@@ -51,11 +51,11 @@ export const supabase = createClient(
 
 // Export business ID for use throughout the app
 export const getBusinessId = (): string => {
-  if (!businessId) {
-    console.error('[supabase] BUSINESS_ID is not configured');
-    throw new Error('Business ID is not configured. Please set BUSINESS_ID in your environment variables.');
-  }
-  return businessId;
+  // Never throw here in production; use safe fallbacks so UI can boot
+  if (businessId) return businessId;
+  const fallback = (extra as any)?.BUSINESS_ID || 'default';
+  console.error('[supabase] BUSINESS_ID is not configured; using fallback:', fallback);
+  return fallback;
 };
 
 // Types for our database tables

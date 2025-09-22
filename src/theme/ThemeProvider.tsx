@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { Asset } from 'expo-asset';
 import Constants from 'expo-constants';
+import { getExpoExtra } from '@/lib/getExtra';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
 
@@ -173,7 +174,8 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   const loadMockTheme = async (): Promise<Theme> => {
     try {
       // Try to get theme from Constants (injected by app.config.js)
-      const currentTheme = Constants.expoConfig?.extra?.theme;
+      const extra = getExpoExtra();
+      const currentTheme = extra?.theme ?? Constants.expoConfig?.extra?.theme;
       if (currentTheme) {
         return currentTheme as Theme;
       }

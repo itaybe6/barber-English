@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
-import Constants from 'expo-constants';
+import { getExpoExtra } from '@/lib/getExtra';
 
-const extra = (Constants?.expoConfig as any)?.extra ?? {};
+const extra = getExpoExtra();
 
 // טעינת משתני סביבה עם סדר עדיפויות ברור
 const supabaseUrl =

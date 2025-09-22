@@ -12,6 +12,15 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "splashScreen": {
+      "hideAsync": true,
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff",
+      "image": "./branding/JamesBarber/splash.png",
+      "timeout": 3000,
+      "autoHide": true,
+      "fadeOutDuration": 200
+    },
     "ios": {
       "buildNumber": "1",
       "supportsTablet": true,
@@ -68,14 +77,10 @@
         }
       ],
       "expo-web-browser",
-      "expo-font",
-      "expo-localization"
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
-    },
-    "locales": {
-      "he": "./assets/locales/he.json"
     },
     "extra": {
       "router": {

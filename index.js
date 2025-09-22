@@ -7,3 +7,15 @@ import 'react-native-reanimated'; // נדרש ל-Production (במיוחד ב-iOS
 import 'react-native-get-random-values';
 
 import 'expo-router/entry';
+import * as SplashScreen from 'expo-splash-screen';
+
+// Fallback: hide splash after 5s even if React tree didn't mount
+setTimeout(() => {
+  SplashScreen.hideAsync().catch(() => {});
+}, 5000);
+
+// Minimal boot logs to device console in production
+try {
+  // eslint-disable-next-line no-console
+  console.log('[boot] index.js loaded');
+} catch {}

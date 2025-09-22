@@ -29,6 +29,11 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 export default function RootLayout() {
   const [loaded, error] = useFonts({
     ...FontAwesome.font,
+    'FbPragmati-Regular': require('../assets/fonts/FbPragmati-Regular.otf'),
+    'FbPragmati-Bold': require('../assets/fonts/FbPragmati-Bold.otf'),
+    'FbPragmati-Light': require('../assets/fonts/FbPragmati-Light.otf'),
+    'FbPragmati-Black': require('../assets/fonts/FbPragmati-Black.otf'),
+    'FbPragmati-Thin': require('../assets/fonts/FbPragmati-Thin.otf'),
   });
 
   const { isAuthenticated, isAdminUser, user, notificationsEnabled } = useAuthStore();
@@ -36,6 +41,11 @@ export default function RootLayout() {
   const [fontError, setFontError] = React.useState<string | null>(null);
   const segments = useSegments();
   const router = useRouter();
+  const [bootDebug, setBootDebug] = React.useState<{ start: number; notes: string[] }>({ start: Date.now(), notes: [] });
+  const addNote = React.useCallback((m: string) => {
+    setBootDebug((s) => ({ ...s, notes: [...s.notes, `${Math.round((Date.now()-s.start)/1000)}s ${m}`] }));
+    try { console.log('[boot]', m); } catch {}
+  }, []);
 
   // Compute desired group upfront (do not place hooks after conditional returns!)
   const rawRole: unknown = (user as any)?.type ?? (user as any)?.user_type;
@@ -68,8 +78,10 @@ export default function RootLayout() {
 
   // Wait for zustand-persist hydration
   React.useEffect(() => {
+    addNote('auth persist subscribe');
     const unsub = useAuthStore.persist.onFinishHydration(() => {
       setStoreHydrated(true);
+      addNote('auth hydrated');
       if (__DEV__) {
         // eslint-disable-next-line no-console
       }
@@ -77,6 +89,7 @@ export default function RootLayout() {
     // If already hydrated (e.g., fast refresh), reflect immediately
     if (useAuthStore.persist.hasHydrated()) {
       setStoreHydrated(true);
+      addNote('auth already hydrated');
     }
     return () => {
       if (typeof unsub === 'function') unsub();
@@ -93,6 +106,7 @@ export default function RootLayout() {
     if (error) {
       console.error('Font loading error:', error);
       setFontError(error.message || 'Failed to load fonts');
+      addNote('font error');
       
       // In development, you might want to see the error more clearly
       if (__DEV__) {
@@ -107,6 +121,7 @@ export default function RootLayout() {
   const onLayoutRootView = React.useCallback(async (_e?: any) => {
     // Hide splash screen after root is mounted
     try {
+      addNote('onLayout -> hide splash');
       await SplashScreen.hideAsync();
     } catch (err) {
       console.warn('Failed to hide splash screen:', err);
@@ -137,10 +152,22 @@ export default function RootLayout() {
   // Fuse: ensure splash hides even if fonts/hydration lag in production
   useEffect(() => {
     const t = setTimeout(() => {
+      addNote('3000ms fallback hide');
       SplashScreen.hideAsync().catch(() => {});
-    }, 5000);
+    }, 3000); // Reduced from 5000 to 3000
     return () => clearTimeout(t);
   }, []);
+
+  // Hide splash screen when fonts are loaded or after timeout
+  useEffect(() => {
+    if (loaded || error) {
+      const t = setTimeout(() => {
+        addNote('fonts loaded -> hide');
+        SplashScreen.hideAsync().catch(() => {});
+      }, 100);
+      return () => clearTimeout(t);
+    }
+  }, [loaded, error]);
 
   let content: React.ReactNode = null;
 
@@ -172,6 +199,17 @@ export default function RootLayout() {
       <ThemeProvider>
         <GestureHandlerRootView style={{ flex: 1 }} onLayout={onLayoutRootView}>
           <StatusBar style="dark" />
+          {/* Boot debug overlay (disappears after 8s) */}
+          {Date.now() - bootDebug.start < 8000 && (
+            <View style={{ position: 'absolute', top: 40, left: 10, right: 10, padding: 8, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 8, zIndex: 9999 }}>
+              <Text style={{ color: 'white', fontSize: 12 }}>
+                Boot: {loaded ? 'fonts✔' : 'fonts…'} | {storeHydrated ? 'hydrated✔' : 'hydrating…'}
+              </Text>
+              {bootDebug.notes.slice(-4).map((n, i) => (
+                <Text key={i} style={{ color: '#ddd', fontSize: 11 }}>{n}</Text>
+              ))}
+            </View>
+          )}
           {content}
         </GestureHandlerRootView>
       </ThemeProvider>

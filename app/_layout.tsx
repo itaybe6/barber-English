@@ -43,7 +43,9 @@ export default function RootLayout() {
   const router = useRouter();
   const [bootDebug, setBootDebug] = React.useState<{ start: number; notes: string[] }>({ start: Date.now(), notes: [] });
   const addNote = React.useCallback((m: string) => {
-    setBootDebug((s) => ({ ...s, notes: [...s.notes, `${Math.round((Date.now()-s.start)/1000)}s ${m}`] }));
+    if (__DEV__) {
+      setBootDebug((s) => ({ ...s, notes: [...s.notes, `${Math.round((Date.now()-s.start)/1000)}s ${m}`] }));
+    }
     try { console.log('[boot]', m); } catch {}
   }, []);
 
@@ -199,17 +201,7 @@ export default function RootLayout() {
       <ThemeProvider>
         <GestureHandlerRootView style={{ flex: 1 }} onLayout={onLayoutRootView}>
           <StatusBar style="dark" />
-          {/* Boot debug overlay (disappears after 8s) */}
-          {Date.now() - bootDebug.start < 8000 && (
-            <View style={{ position: 'absolute', top: 40, left: 10, right: 10, padding: 8, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 8, zIndex: 9999 }}>
-              <Text style={{ color: 'white', fontSize: 12 }}>
-                Boot: {loaded ? 'fonts✔' : 'fonts…'} | {storeHydrated ? 'hydrated✔' : 'hydrating…'}
-              </Text>
-              {bootDebug.notes.slice(-4).map((n, i) => (
-                <Text key={i} style={{ color: '#ddd', fontSize: 11 }}>{n}</Text>
-              ))}
-            </View>
-          )}
+          {/* Removed boot debug overlay */}
           {content}
         </GestureHandlerRootView>
       </ThemeProvider>

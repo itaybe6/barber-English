@@ -914,24 +914,13 @@ export default function SettingsScreen() {
       }
       const extGuess = (contentType.split('/')![1] || 'jpg').toLowerCase();
       const randomId = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-      const filePath = `${user?.id || 'anon'}/${Date.now()}_${randomId()}.${extGuess}`;
-      let bucketUsed = 'avatars';
-      const firstAttempt = await supabase.storage.from(bucketUsed).upload(filePath, fileBody as any, { contentType, upsert: false });
-      if (firstAttempt.error) {
-        const msg = String((firstAttempt.error as any)?.message || '').toLowerCase();
-        if (msg.includes('bucket') && msg.includes('not found')) {
-          bucketUsed = 'designs';
-          const retry = await supabase.storage.from(bucketUsed).upload(filePath, fileBody as any, { contentType, upsert: false });
-          if (retry.error) {
-            console.error('avatar upload error (retry)', retry.error);
-            return null;
-          }
-        } else {
-          console.error('avatar upload error', firstAttempt.error);
-          return null;
-        }
+      const filePath = `avatars/${user?.id || 'anon'}/${Date.now()}_${randomId()}.${extGuess}`;
+      const { error: uploadError } = await supabase.storage.from('app_design').upload(filePath, fileBody as any, { contentType, upsert: false });
+      if (uploadError) {
+        console.error('avatar upload error', uploadError);
+        return null;
       }
-      const { data } = supabase.storage.from(bucketUsed).getPublicUrl(filePath);
+      const { data } = supabase.storage.from('app_design').getPublicUrl(filePath);
       return data.publicUrl;
     } catch (e) {
       console.error('avatar upload exception', e);
@@ -999,15 +988,39 @@ export default function SettingsScreen() {
       const randomId = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
       const filePath = `business-images/${Date.now()}_${randomId()}.${extGuess}`;
       
-      const { error } = await supabase.storage.from('designs').upload(filePath, fileBody, { contentType, upsert: false });
+      const { error } = await supabase.storage.from('app_design').upload(filePath, fileBody, { contentType, upsert: false });
       if (error) {
         console.error('business image upload error', error);
         return null;
       }
-      const { data } = supabase.storage.from('designs').getPublicUrl(filePath);
+      const { data } = supabase.storage.from('app_design').getPublicUrl(filePath);
       return data.publicUrl;
     } catch (e) {
       console.error('business image upload exception', e);
+      return null;
+    }
+  };
+
+  // Upload a copy of a remote image URL into our app_design bucket
+  const uploadRemoteImageToStorage = async (remoteUrl: string, subdir: string = 'business-images'): Promise<string | null> => {
+    try {
+      const response = await fetch(remoteUrl, { cache: 'no-store' });
+      if (!response.ok) return null;
+      const arrayBuffer = await response.arrayBuffer();
+      const fileBody = new Uint8Array(arrayBuffer);
+      const contentTypeHeader = response.headers.get('content-type') || 'image/jpeg';
+      const extGuess = (contentTypeHeader.split('/')[1] || 'jpg').toLowerCase().split(';')[0];
+      const randomId = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+      const filePath = `${subdir}/${Date.now()}_${randomId()}.${extGuess}`;
+      const { error } = await supabase.storage.from('app_design').upload(filePath, fileBody, { contentType: contentTypeHeader, upsert: false });
+      if (error) {
+        console.error('copy remote image upload error', error);
+        return null;
+      }
+      const { data } = supabase.storage.from('app_design').getPublicUrl(filePath);
+      return data.publicUrl;
+    } catch (e) {
+      console.error('copy remote image to storage exception', e);
       return null;
     }
   };
@@ -1028,13 +1041,13 @@ export default function SettingsScreen() {
       const extGuess = (contentType.split('/')[1] || 'jpg').toLowerCase();
       const randomId = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
       const filePath = `services/${Date.now()}_${randomId()}.${extGuess}`;
-      // Reuse 'designs' bucket as בפרויקט – ניתן להחליף ל-bucket ייעודי 'services' אם קיים
-      const { error } = await supabase.storage.from('designs').upload(filePath, fileBody as any, { contentType, upsert: false });
+      // Upload to new unified bucket 'app_design'
+      const { error } = await supabase.storage.from('app_design').upload(filePath, fileBody as any, { contentType, upsert: false });
       if (error) {
         console.error('upload error', error);
         return null;
       }
-      const { data } = supabase.storage.from('designs').getPublicUrl(filePath);
+      const { data } = supabase.storage.from('app_design').getPublicUrl(filePath);
       return data.publicUrl;
     } catch (e) {
       console.error('upload exception', e);
@@ -1137,9 +1150,15 @@ export default function SettingsScreen() {
       let uploadedUrl: string;
 
       if (isPreset) {
-        // For preset images, we'll use the URL directly since they're external URLs
-        // Special case for gradient background - save as special identifier
-        uploadedUrl = imageUri;
+        // For preset images, prefer copying the remote file into our Storage for stability
+        // If it's a special keyword (e.g., gradient backgrounds on login), keep as-is
+        const isRemoteHttp = /^https?:\/\//i.test(imageUri);
+        if (isRemoteHttp) {
+          const copied = await uploadRemoteImageToStorage(imageUri, 'business-images');
+          uploadedUrl = copied || imageUri; // fallback to remote URL if copy failed
+        } else {
+          uploadedUrl = imageUri;
+        }
       } else {
         // For gallery images, parse the asset data
         try {

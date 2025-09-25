@@ -1,45 +1,73 @@
 {
-  "client": "KetyCooper",
+  "client": "JamesBarber",
   "config": {
     "expo": {
-      "name": "Kety Cooper",
-      "slug": "kety-cooper",
+      "name": "James Barber",
+      "slug": "james-barber",
       "version": "1.0.0",
-      "icon": "./branding/KetyCooper/icon.png",
-      "scheme": "ketycooper",
+      "orientation": "portrait",
+      "icon": "./branding/JamesBarber/icon.png",
+      "scheme": "jamesbarber",
       "userInterfaceStyle": "automatic",
       "splash": {
-        "image": "./branding/KetyCooper/splash.png",
+        "hideAsync": true,
         "resizeMode": "contain",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#ffffff",
+        "image": "./branding/JamesBarber/splash.png",
+        "timeout": 3000,
+        "autoHide": true,
+        "fadeOutDuration": 200
       },
       "ios": {
         "buildNumber": "1",
         "supportsTablet": true,
-        "bundleIdentifier": "BookingApp2",
+        "bundleIdentifier": "com.bcode.jamesbarber",
         "infoPlist": {
+          "ITSAppUsesNonExemptEncryption": false,
+          "CFBundleDevelopmentRegion": "en",
+          "CFBundleAllowMixedLocalizations": true,
+          "NSCalendarsUsageDescription": "The app uses your calendar to add and manage haircut appointments you schedule.",
+          "NSRemindersUsageDescription": "The app can create reminders for your upcoming haircut appointments.",
+          "NSPhotoLibraryUsageDescription": "The app needs access to photos to select and upload images to the gallery or profile.",
+          "NSPhotoLibraryAddUsageDescription": "The app may save photos you've taken to your photo library.",
+          "NSCameraUsageDescription": "The app needs access to the camera to take photos for upload.",
           "LSApplicationQueriesSchemes": [
             "comgooglemaps"
           ]
-        }
+        },
+        "jsEngine": "hermes"
       },
       "android": {
-        "package": "com.ketycooper.app",
+        "package": "com.jamesbarber.app",
         "versionCode": 1,
         "adaptiveIcon": {
-          "foregroundImage": "./branding/KetyCooper/icon.png",
+          "foregroundImage": "./branding/JamesBarber/icon.png",
           "backgroundColor": "#ffffff"
         },
+        "intentFilters": [
+          {
+            "autoVerify": true,
+            "action": "VIEW",
+            "data": {
+              "scheme": "https",
+              "host": "jamesbarber.com"
+            },
+            "category": [
+              "BROWSABLE",
+              "DEFAULT"
+            ]
+          }
+        ],
         "supportsRtl": false
       },
       "web": {
-        "favicon": "./branding/KetyCooper/icon.png"
+        "favicon": "./branding/JamesBarber/icon.png"
       },
       "plugins": [
         [
           "expo-router",
           {
-            "origin": "https://ketycooper.com/"
+            "origin": "https://jamesbarber.com/"
           }
         ],
         [
@@ -49,30 +77,23 @@
           }
         ],
         "expo-web-browser",
-        "expo-font",
-        "expo-localization"
+        "expo-font"
       ],
       "experiments": {
         "typedRoutes": true
       },
-      "locales": {
-        "he": "./assets/locales/he.json"
-      },
       "extra": {
         "router": {
-          "origin": "https://ketycooper.com/"
+          "origin": "https://jamesbarber.com/"
         },
         "locale": "en",
-        "CLIENT": "KetyCooper",
-        "eas": {
-          "projectId": "98671cac-90d9-42b1-8228-225df1dc4f9e"
-        },
-        "logo": "./branding/KetyCooper/logo.png",
-        "logoWhite": "./branding/KetyCooper/logo-white.png",
+        "CLIENT": "JamesBarber",
+        "logo": "./branding/JamesBarber/logo.png",
+        "logoWhite": "./branding/JamesBarber/logo-white.png",
         "theme": {
           "colors": {
-            "primary": "#D4AF37",
-            "secondary": "#8B6A2B",
+            "primary": "#007AFF",
+            "secondary": "#5856D6",
             "accent": "#FF3B30",
             "background": "#FFFFFF",
             "surface": "#F2F2F7",
@@ -85,29 +106,33 @@
             "info": "#007AFF"
           },
           "branding": {
-            "logo": "./branding/KetyCooper/logo.png",
-            "logoWhite": "./branding/KetyCooper/logo-white.png",
-            "companyName": "Kety Cooper",
-            "website": "https://ketycooper.com",
-            "supportEmail": "support@ketycooper.com"
+            "logo": "./branding/JamesBarber/logo.png",
+            "logoWhite": "./branding/JamesBarber/logo-white.png",
+            "companyName": "James Barber",
+            "website": "https://jamesbarber.com",
+            "supportEmail": "support@jamesbarber.com"
           },
           "fonts": {
             "primary": "System",
             "secondary": "System"
           }
         },
-        "BUSINESS_ID": "91036074-55af-4f5d-883e-47b5804a465c",
+        "BUSINESS_ID": "01664149-b59f-41e5-a712-9f3bc3c9d29a",
         "EXPO_PUBLIC_SUPABASE_URL": "https://vqstsrobzbykfivlahxa.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxc3Rzcm9iemJ5a2ZpdmxhaHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc2MDM1MjUsImV4cCI6MjA3MzE3OTUyNX0.iW4vYBC3usEqACGug6BNDkB7PJdHZ75lXo8TJO2x30k",
         "EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY": "AIzaSyAVHoNZSAuWDnCArgFn1gAqA9bxkSuhdJ8",
-        "EXPO_PUBLIC_GOOGLE_PLACES_KEY": "AIzaSyAVHoNZSAuWDnCArgFn1gAqA9bxkSuhdJ8"
+        "EXPO_PUBLIC_GOOGLE_PLACES_KEY": "AIzaSyAVHoNZSAuWDnCArgFn1gAqA9bxkSuhdJ8",
+        "eas": {
+          "projectId": "8efaeaeb-7141-4328-a75f-5d56de528df1"
+        },
+        "EXPO_PUBLIC_PROJECT_ID": "8efaeaeb-7141-4328-a75f-5d56de528df1"
       }
     }
   },
   "theme": {
     "colors": {
-      "primary": "#D4AF37",
-      "secondary": "#8B6A2B",
+      "primary": "#007AFF",
+      "secondary": "#5856D6",
       "accent": "#FF3B30",
       "background": "#FFFFFF",
       "surface": "#F2F2F7",
@@ -120,16 +145,16 @@
       "info": "#007AFF"
     },
     "branding": {
-      "logo": "./branding/KetyCooper/logo.png",
-      "logoWhite": "./branding/KetyCooper/logo-white.png",
-      "companyName": "Kety Cooper",
-      "website": "https://ketycooper.com",
-      "supportEmail": "support@ketycooper.com"
+      "logo": "./branding/JamesBarber/logo.png",
+      "logoWhite": "./branding/JamesBarber/logo-white.png",
+      "companyName": "James Barber",
+      "website": "https://jamesbarber.com",
+      "supportEmail": "support@jamesbarber.com"
     },
     "fonts": {
       "primary": "System",
       "secondary": "System"
     }
   },
-  "timestamp": "2025-09-25T08:04:54.315Z"
+  "timestamp": "2025-09-25T13:28:40.367Z"
 }

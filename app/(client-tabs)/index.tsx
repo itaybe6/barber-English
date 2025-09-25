@@ -43,19 +43,11 @@ const clientHomeApi = {
         .order('slot_date')
         .order('slot_time');
 
-      // Filter by user if provided
-      if (userName || userPhone) {
-        const conditions = [];
-        if (userName) {
-          conditions.push(`client_name.ilike.%${userName.trim()}%`);
-        }
-        if (userPhone) {
-          conditions.push(`client_phone.eq.${userPhone.trim()}`);
-        }
-        
-        if (conditions.length > 0) {
-          query = query.or(conditions.join(','));
-        }
+      // Filter strictly by user's phone when available, otherwise fall back to name
+      if (userPhone && userPhone.trim().length > 0) {
+        query = query.eq('client_phone', userPhone.trim());
+      } else if (userName && userName.trim().length > 0) {
+        query = query.or([`client_name.ilike.%${userName.trim()}%`].join(','));
       }
 
       const { data, error } = await query;
@@ -65,17 +57,12 @@ const clientHomeApi = {
         throw error;
       }
 
-      // Additional client-side filtering for exact matches
+      // Additional client-side filtering: prefer phone strict match; name fallback only if no phone
       let filteredData = data || [];
-      if (userName || userPhone) {
-        filteredData = filteredData.filter(slot => {
-          const nameMatch = userName && slot.client_name && 
-            slot.client_name.trim().toLowerCase() === userName.trim().toLowerCase();
-          const phoneMatch = userPhone && slot.client_phone && 
-            slot.client_phone.trim() === userPhone.trim();
-          
-          return nameMatch || phoneMatch;
-        });
+      if (userPhone && userPhone.trim().length > 0) {
+        filteredData = filteredData.filter(slot => String(slot.client_phone || '').trim() === userPhone.trim());
+      } else if (userName && userName.trim().length > 0) {
+        filteredData = filteredData.filter(slot => String(slot.client_name || '').trim().toLowerCase() === userName.trim().toLowerCase());
       }
 
       return filteredData;
@@ -190,6 +177,25 @@ export default function ClientHomeScreen() {
   const GOOGLE_KEY_ENV = (process.env as any)?.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY;
   const GOOGLE_KEY_FALLBACK = '';
   const GOOGLE_STATIC_MAPS_KEY = GOOGLE_KEY_EXTRA || GOOGLE_KEY_JSON || GOOGLE_KEY_ENV || GOOGLE_KEY_FALLBACK;
+
+  // Debug: log next appointment details when available/changed
+  useEffect(() => {
+    try {
+      if (nextAppointment) {
+        console.log('[ClientHome] Next appointment object:', nextAppointment);
+        console.log('[ClientHome] Next appointment details:', {
+          service: (nextAppointment as any)?.service_name,
+          date: (nextAppointment as any)?.slot_date,
+          time: (nextAppointment as any)?.slot_time,
+          barberId: (nextAppointment as any)?.barber_id,
+          clientName: (nextAppointment as any)?.client_name,
+          clientPhone: (nextAppointment as any)?.client_phone,
+        });
+      } else {
+        console.log('[ClientHome] No upcoming appointment');
+      }
+    } catch {}
+  }, [nextAppointment]);
 
   // Designs store
   const { designs, isLoading: isLoadingDesigns, fetchDesigns } = useDesignsStore();
@@ -400,14 +406,10 @@ export default function ClientHomeScreen() {
       
       const upcomingAppointments = userAppointments
         .filter((apt: AvailableTimeSlot) => {
-          const appointmentDate = new Date(apt.slot_date);
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          
-          // Show appointments from today onwards
-          const isUpcoming = appointmentDate >= today;
-          
-          return isUpcoming;
+          const timeString = apt.slot_time ? String(apt.slot_time) : '00:00';
+          const [hh = '00', mm = '00'] = timeString.split(':');
+          const appointmentDateTime = new Date(`${apt.slot_date}T${hh.padStart(2, '0')}:${mm.padStart(2, '0')}`);
+          return appointmentDateTime.getTime() >= Date.now();
         })
         .sort((a: AvailableTimeSlot, b: AvailableTimeSlot) => {
           const dateA = new Date(a.slot_date);
@@ -418,6 +420,21 @@ export default function ClientHomeScreen() {
           }
           return dateA.getTime() - dateB.getTime();
         });
+      try {
+        console.log('[ClientHome] Upcoming appointments count:', upcomingAppointments.length);
+        if (upcomingAppointments.length > 0) {
+          const first = upcomingAppointments[0] as any;
+          console.log('[ClientHome] First upcoming appointment:', first);
+          console.log('[ClientHome] First upcoming summary:', {
+            service: first?.service_name,
+            date: first?.slot_date,
+            time: first?.slot_time,
+            barberId: first?.barber_id,
+            clientName: first?.client_name,
+            clientPhone: first?.client_phone,
+          });
+        }
+      } catch {}
       
       if (upcomingAppointments.length > 0) {
         setNextAppointment(upcomingAppointments[0]);

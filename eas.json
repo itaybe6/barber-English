@@ -23,8 +23,9 @@
       "node": "20.19.4",
       "autoIncrement": true,
       "env": {
-        "CLIENT": "KetyCooper",
-        "ENV_FILE": "branding/KetyCooper/.env",
+        "CLIENT": "JamesBarber",
+        "ENV_FILE": "branding/JamesBarber/.env",
+        "EAS_PROJECT_ID": "8efaeaeb-7141-4328-a75f-5d56de528df1",
         "POD_INSTALL_ARGS": "--repo-update",
         "RCT_NEW_ARCH_ENABLED": "1"
       },
@@ -63,7 +64,8 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "itaybenyair99@gmail.com"
+        "appleId": "itaybenyair99@gmail.com",
+        "ascAppId": "6752813865"
       }
     },
     "JamesBarber": {

@@ -2,6 +2,7 @@ import { supabase, getBusinessId } from '@/lib/supabase';
 import { Notification } from '@/lib/supabase';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
+import { getExpoExtra } from '@/lib/getExtra';
 import { Platform } from 'react-native';
 
 // Configure notifications
@@ -364,14 +365,20 @@ export const notificationsApi = {
         return null;
       }
 
-      // Try to resolve projectId from env or app.json extra.eas.projectId
+      // Try to resolve projectId from several sources (env, runtime extra, expoConfig)
+      const extra = getExpoExtra();
       const envProjectId = process.env.EXPO_PUBLIC_PROJECT_ID || process.env.EAS_PROJECT_ID;
-      const configProjectId = (Constants?.expoConfig as any)?.extra?.eas?.projectId;
-      const projectId = envProjectId || configProjectId || undefined;
+      const extraProjectId = (extra?.eas?.projectId as string | undefined) || (extra?.projectId as string | undefined);
+      const configProjectId = (Constants?.expoConfig as any)?.extra?.eas?.projectId as string | undefined;
+      const projectId = envProjectId || extraProjectId || configProjectId;
 
-      const token = await Notifications.getExpoPushTokenAsync(
-        projectId ? { projectId } : undefined as any
-      );
+      // In dev (Expo Go / local), if projectId is still missing, avoid throwing and just return null
+      if (!projectId) {
+        console.warn('No "projectId" found for push token. Skipping token request. Ensure extra.eas.projectId is set.');
+        return null;
+      }
+
+      const token = await Notifications.getExpoPushTokenAsync({ projectId });
 
       return token.data;
     } catch (error) {

@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
 import { AvailableTimeSlot } from '@/lib/supabase';
-import { supabase } from '@/lib/supabase';
+import { supabase, getBusinessId } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { checkWaitlistAndNotify, notifyServiceWaitlistClients } from '@/lib/api/waitlistNotifications';
 import { notificationsApi } from '@/lib/api/notifications';
@@ -22,10 +22,12 @@ const clientAppointmentsApi = {
   // Get user appointments for multiple dates (most efficient for user appointments)
   async getUserAppointmentsForMultipleDates(dates: string[], userName?: string, userPhone?: string, currentUserId?: string): Promise<AvailableTimeSlot[]> {
     try {
+      const businessId = getBusinessId();
       let query = supabase
         .from('appointments')
         .select('*')
         .in('slot_date', dates)
+        .eq('business_id', businessId)
         .eq('is_available', false); // Only booked appointments
 
       // If this is an admin user (barber), filter by their user_id
@@ -35,18 +37,12 @@ const clientAppointmentsApi = {
 
       query = query.order('slot_date').order('slot_time');
 
-      // Filter by user if provided (for client view)
-      if (userName || userPhone) {
-        const conditions = [];
-        if (userName) {
-          conditions.push(`client_name.ilike.%${userName.trim()}%`);
-        }
-        if (userPhone) {
-          conditions.push(`client_phone.eq.${userPhone.trim()}`);
-        }
-        
-        if (conditions.length > 0) {
-          query = query.or(conditions.join(','));
+      // Strict client scoping: prefer phone equality; fallback to name only if phone missing
+      if (!currentUserId) { // client view only
+        if (userPhone && userPhone.trim().length > 0) {
+          query = query.eq('client_phone', userPhone.trim());
+        } else if (userName && userName.trim().length > 0) {
+          query = query.or([`client_name.ilike.%${userName.trim()}%`].join(','));
         }
       }
 
@@ -57,17 +53,14 @@ const clientAppointmentsApi = {
         throw error;
       }
 
-      // Additional client-side filtering for exact matches (for client view)
+      // Additional client-side filtering: phone strict match preferred
       let filteredData = data || [];
-      if (userName || userPhone) {
-        filteredData = filteredData.filter(slot => {
-          const nameMatch = userName && slot.client_name && 
-            slot.client_name.trim().toLowerCase() === userName.trim().toLowerCase();
-          const phoneMatch = userPhone && slot.client_phone && 
-            slot.client_phone.trim() === userPhone.trim();
-          
-          return nameMatch || phoneMatch;
-        });
+      if (!currentUserId) {
+        if (userPhone && userPhone.trim().length > 0) {
+          filteredData = filteredData.filter(slot => String(slot.client_phone || '').trim() === userPhone.trim());
+        } else if (userName && userName.trim().length > 0) {
+          filteredData = filteredData.filter(slot => String(slot.client_name || '').trim().toLowerCase() === userName.trim().toLowerCase());
+        }
       }
 
       return filteredData;
@@ -109,6 +102,7 @@ const clientAppointmentsApi = {
           service_name: 'Available Slot', // Set to default value instead of null
         })
         .eq('id', slotId)
+        .eq('business_id', appointmentData.business_id)
         .eq('is_available', false);
 
       if (error) {

@@ -1064,8 +1064,8 @@ const createStyles = (colors: any) => StyleSheet.create({
     justifyContent: 'flex-start',
   },
   overlayLogoInner: {
-    width: 300,
-    height: 100,
+    width: 180,
+    height: 70,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -56,27 +56,6 @@ import GradientBackground from '@/components/GradientBackground';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { compressImage } from '@/lib/utils/imageCompression';
 
-// Parse Supabase public URL to bucket and path for deletion
-const parseSupabasePublicUrl = (url: string): { bucket: string; path: string } | null => {
-  try {
-    if (!url || typeof url !== 'string') return null;
-    if (!/^https?:\/\//.test(url)) return null;
-    const parts = url.split('/storage/v1/object/public/');
-    if (parts.length !== 2) return null;
-    const rest = parts[1];
-    const firstSlash = rest.indexOf('/');
-    if (firstSlash === -1) return null;
-    const bucket = rest.slice(0, firstSlash);
-    const path = rest.slice(firstSlash + 1);
-    if (!bucket || !path) return null;
-    return { bucket, path: decodeURIComponent(path) };
-  } catch {
-    return null;
-  }
-};
-
-const normalizeUrlForCompare = (u?: string | null) => (typeof u === 'string' ? u.split('?')[0] : '');
-
 // Helper for shadow style
 const shadowStyle = Platform.select({
   ios: {
@@ -1224,13 +1203,6 @@ export default function SettingsScreen() {
         return;
       }
 
-      // Determine previous URL for potential deletion after successful save
-      const prevUrl =
-        currentImageType === 'page1' ? profileImageOnPage1 :
-        currentImageType === 'page2' ? profileImageOnPage2 :
-        currentImageType === 'page3' ? profileImageOnPage3 :
-        profileLoginImg;
-
       // Update the appropriate image state
       if (currentImageType === 'page1') {
         setProfileImageOnPage1(uploadedUrl);
@@ -1276,27 +1248,6 @@ export default function SettingsScreen() {
         setPreviewImageType(null);
         setCurrentImageType(null);
         
-        // Attempt to delete the previous image from storage if it's different, not referenced elsewhere, and in Supabase public bucket
-        try {
-          const oldUrl = normalizeUrlForCompare(prevUrl);
-          const newUrl = normalizeUrlForCompare(uploadedUrl);
-          const allRefs = [
-            (updated as any)?.image_on_page_1,
-            (updated as any)?.image_on_page_2,
-            (updated as any)?.image_on_page_3,
-            (updated as any)?.login_img,
-          ];
-          const stillReferenced = allRefs.some((u) => normalizeUrlForCompare(u) === oldUrl);
-          if (oldUrl && newUrl && oldUrl !== newUrl && !stillReferenced) {
-            const parsed = parseSupabasePublicUrl(oldUrl);
-            if (parsed) {
-              await supabase.storage.from(parsed.bucket).remove([parsed.path]);
-            }
-          }
-        } catch (delErr) {
-          console.warn('Failed to delete previous image (ignored):', delErr);
-        }
-
         Alert.alert('Success', 'Image saved successfully');
       } else {
         Alert.alert('Error', 'Failed to save image');

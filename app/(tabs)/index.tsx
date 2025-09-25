@@ -681,8 +681,8 @@ export default function HomeScreen() {
         </SafeAreaView>
 
         {/* Absolute logo overlay so size doesn't affect header layout */}
-        <View pointerEvents="none" style={[styles.overlayLogoWrapper, { top: insets.top -15 }]}> 
-          <View style={styles.overlayLogoInner}>
+          <View pointerEvents="none" style={[styles.overlayLogoWrapper, { top: insets.top -15 }]}> 
+            <View style={styles.overlayLogoInner}>
             <Image source={getCurrentClientLogo()} style={styles.overlayLogo} resizeMode="contain" />
           </View>
         </View>

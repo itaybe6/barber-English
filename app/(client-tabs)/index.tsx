@@ -178,24 +178,7 @@ export default function ClientHomeScreen() {
   const GOOGLE_KEY_FALLBACK = '';
   const GOOGLE_STATIC_MAPS_KEY = GOOGLE_KEY_EXTRA || GOOGLE_KEY_JSON || GOOGLE_KEY_ENV || GOOGLE_KEY_FALLBACK;
 
-  // Debug: log next appointment details when available/changed
-  useEffect(() => {
-    try {
-      if (nextAppointment) {
-        console.log('[ClientHome] Next appointment object:', nextAppointment);
-        console.log('[ClientHome] Next appointment details:', {
-          service: (nextAppointment as any)?.service_name,
-          date: (nextAppointment as any)?.slot_date,
-          time: (nextAppointment as any)?.slot_time,
-          barberId: (nextAppointment as any)?.barber_id,
-          clientName: (nextAppointment as any)?.client_name,
-          clientPhone: (nextAppointment as any)?.client_phone,
-        });
-      } else {
-        console.log('[ClientHome] No upcoming appointment');
-      }
-    } catch {}
-  }, [nextAppointment]);
+  
 
   // Designs store
   const { designs, isLoading: isLoadingDesigns, fetchDesigns } = useDesignsStore();
@@ -420,21 +403,7 @@ export default function ClientHomeScreen() {
           }
           return dateA.getTime() - dateB.getTime();
         });
-      try {
-        console.log('[ClientHome] Upcoming appointments count:', upcomingAppointments.length);
-        if (upcomingAppointments.length > 0) {
-          const first = upcomingAppointments[0] as any;
-          console.log('[ClientHome] First upcoming appointment:', first);
-          console.log('[ClientHome] First upcoming summary:', {
-            service: first?.service_name,
-            date: first?.slot_date,
-            time: first?.slot_time,
-            barberId: first?.barber_id,
-            clientName: first?.client_name,
-            clientPhone: first?.client_phone,
-          });
-        }
-      } catch {}
+      
       
       if (upcomingAppointments.length > 0) {
         setNextAppointment(upcomingAppointments[0]);

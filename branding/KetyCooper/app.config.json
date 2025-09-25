@@ -1,0 +1,67 @@
+{
+  "expo": {
+    "name": "Kety Cooper",
+    "slug": "kety-cooper",
+    "version": "1.0.0",
+    "icon": "./branding/KetyCooper/icon.png",
+    "scheme": "ketycooper",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./branding/KetyCooper/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "buildNumber": "1",
+      "supportsTablet": true,
+      "bundleIdentifier": "BookingApp2"
+    },
+    "android": {
+      "package": "com.ketycooper.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./branding/KetyCooper/icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "supportsRtl": false
+    },
+    "web": {
+      "favicon": "./branding/KetyCooper/icon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://ketycooper.com/"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#ffffff"
+        }
+      ],
+      "expo-web-browser",
+      "expo-font",
+      "expo-localization"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "locales": {
+      "he": "./assets/locales/he.json"
+    },
+    "extra": {
+      "router": {
+        "origin": "https://ketycooper.com/"
+      },
+      "locale": "en",
+      "CLIENT": "KetyCooper",
+      "eas": { "projectId": "98671cac-90d9-42b1-8228-225df1dc4f9e" },
+      "logo": "./branding/KetyCooper/logo.png",
+      "logoWhite": "./branding/KetyCooper/logo-white.png"
+    }
+  }
+}
+
+

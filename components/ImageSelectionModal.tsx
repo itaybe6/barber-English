@@ -34,6 +34,7 @@ interface SelectedImage {
   uri: string;
   isPreset: boolean;
   source?: any;
+  assetDataJson?: string;
 }
 
 // Preset images organized by category - using local images from default folder
@@ -353,8 +354,9 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
         
         // Show preview instead of directly selecting
         setSelectedImage({
-          uri: assetData,
+          uri: asset.uri,
           isPreset: false,
+          assetDataJson: assetData,
         });
         setShowPreview(true);
       }
@@ -416,7 +418,7 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
 
   const handleSaveImage = () => {
     if (selectedImage) {
-      onImageSelected(selectedImage.uri, selectedImage.isPreset);
+      onImageSelected(selectedImage.assetDataJson ?? selectedImage.uri, selectedImage.isPreset);
       onClose();
     }
   };

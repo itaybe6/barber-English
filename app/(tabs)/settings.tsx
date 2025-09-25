@@ -54,6 +54,28 @@ import AddAdminModal from '@/components/AddAdminModal';
 import DeleteAccountModal from '@/components/DeleteAccountModal';
 import GradientBackground from '@/components/GradientBackground';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
+import { compressImage } from '@/lib/utils/imageCompression';
+
+// Parse Supabase public URL to bucket and path for deletion
+const parseSupabasePublicUrl = (url: string): { bucket: string; path: string } | null => {
+  try {
+    if (!url || typeof url !== 'string') return null;
+    if (!/^https?:\/\//.test(url)) return null;
+    const parts = url.split('/storage/v1/object/public/');
+    if (parts.length !== 2) return null;
+    const rest = parts[1];
+    const firstSlash = rest.indexOf('/');
+    if (firstSlash === -1) return null;
+    const bucket = rest.slice(0, firstSlash);
+    const path = rest.slice(firstSlash + 1);
+    if (!bucket || !path) return null;
+    return { bucket, path: decodeURIComponent(path) };
+  } catch {
+    return null;
+  }
+};
+
+const normalizeUrlForCompare = (u?: string | null) => (typeof u === 'string' ? u.split('?')[0] : '');
 
 // Helper for shadow style
 const shadowStyle = Platform.select({
@@ -1160,21 +1182,38 @@ export default function SettingsScreen() {
           uploadedUrl = imageUri;
         }
       } else {
-        // For gallery images, parse the asset data
+        // For gallery images, parse the asset data and compress before upload
         try {
           const assetData = JSON.parse(imageUri);
+          let sourceUri = assetData.uri;
+          // Compress for all design images to reduce size
+          const compressed = await compressImage(assetData.uri, {
+            quality: 0.7,
+            maxWidth: 1200,
+            maxHeight: 1200,
+            format: 'jpeg',
+          });
+          sourceUri = compressed.uri;
           uploadedUrl = await uploadBusinessImage({
-            uri: assetData.uri,
-            base64: assetData.base64,
-            mimeType: assetData.mimeType,
+            uri: sourceUri,
+            base64: null,
+            mimeType: 'image/jpeg',
             fileName: assetData.fileName,
           });
         } catch (parseError) {
-          // Fallback for old format (just URI)
+          // Fallback for old format (just URI) with compression
+          let sourceUri = imageUri;
+          const compressed = await compressImage(imageUri, {
+            quality: 0.7,
+            maxWidth: 1200,
+            maxHeight: 1200,
+            format: 'jpeg',
+          });
+          sourceUri = compressed.uri;
           uploadedUrl = await uploadBusinessImage({
-            uri: imageUri,
+            uri: sourceUri,
             base64: null,
-            mimeType: null,
+            mimeType: 'image/jpeg',
             fileName: null,
           });
         }
@@ -1184,6 +1223,13 @@ export default function SettingsScreen() {
         Alert.alert('Error', 'Failed to upload image');
         return;
       }
+
+      // Determine previous URL for potential deletion after successful save
+      const prevUrl =
+        currentImageType === 'page1' ? profileImageOnPage1 :
+        currentImageType === 'page2' ? profileImageOnPage2 :
+        currentImageType === 'page3' ? profileImageOnPage3 :
+        profileLoginImg;
 
       // Update the appropriate image state
       if (currentImageType === 'page1') {
@@ -1230,6 +1276,27 @@ export default function SettingsScreen() {
         setPreviewImageType(null);
         setCurrentImageType(null);
         
+        // Attempt to delete the previous image from storage if it's different, not referenced elsewhere, and in Supabase public bucket
+        try {
+          const oldUrl = normalizeUrlForCompare(prevUrl);
+          const newUrl = normalizeUrlForCompare(uploadedUrl);
+          const allRefs = [
+            (updated as any)?.image_on_page_1,
+            (updated as any)?.image_on_page_2,
+            (updated as any)?.image_on_page_3,
+            (updated as any)?.login_img,
+          ];
+          const stillReferenced = allRefs.some((u) => normalizeUrlForCompare(u) === oldUrl);
+          if (oldUrl && newUrl && oldUrl !== newUrl && !stillReferenced) {
+            const parsed = parseSupabasePublicUrl(oldUrl);
+            if (parsed) {
+              await supabase.storage.from(parsed.bucket).remove([parsed.path]);
+            }
+          }
+        } catch (delErr) {
+          console.warn('Failed to delete previous image (ignored):', delErr);
+        }
+
         Alert.alert('Success', 'Image saved successfully');
       } else {
         Alert.alert('Error', 'Failed to save image');
@@ -2031,151 +2098,159 @@ export default function SettingsScreen() {
         </View>
 
 
-        <Text style={styles.sectionTitleNew}>Business details</Text>
-        <View style={[styles.cardNew, shadowStyle]}>
-          <View style={styles.settingItemLTR}>
-            <View style={styles.settingIconLTR}><Pencil size={20} color={businessColors.primary} /></View>
-            <View style={{ flex: 1 }}>
-              <InlineEditableRow
-                title="Business name"
-                value={profileDisplayName || ''}
-                placeholder="Business name"
-                keyboardType="default"
-                onSave={handleSaveDisplayNameInline}
-                chevronColor={businessColors.primary}
-                validate={(v) => v.trim().length > 0}
-              />
+        {canSeeAddEmployee && (
+          <>
+            <Text style={styles.sectionTitleNew}>Business details</Text>
+            <View style={[styles.cardNew, shadowStyle]}>
+              <View style={styles.settingItemLTR}>
+                <View style={styles.settingIconLTR}><Pencil size={20} color={businessColors.primary} /></View>
+                <View style={{ flex: 1 }}>
+                  <InlineEditableRow
+                    title="Business name"
+                    value={profileDisplayName || ''}
+                    placeholder="Business name"
+                    keyboardType="default"
+                    onSave={handleSaveDisplayNameInline}
+                    chevronColor={businessColors.primary}
+                    validate={(v) => v.trim().length > 0}
+                  />
+                </View>
+              </View>
+              {renderSettingItemLTR(
+                <MapPin size={20} color="#FF3B30" />, 
+                'Business address',
+                businessAddressDisplay || 'Add address',
+                undefined,
+                openEditAddress
+              )}
+              {/* Inline editable social links */}
+              <View style={styles.settingItemLTR}>
+                <View style={styles.settingIconLTR}><Instagram size={20} color="#E4405F" /></View>
+                <View style={{ flex: 1 }}>
+                  <InlineEditableRow
+                    title="Instagram"
+                    value={profileInstagram || ''}
+                    placeholder="https://instagram.com/yourpage"
+                    keyboardType="url"
+                    onSave={handleSaveInstagramInline}
+                    chevronColor={businessColors.primary}
+                    validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
+                  />
+                </View>
+              </View>
+              <View style={styles.settingItemLTR}>
+                <View style={styles.settingIconLTR}><Facebook size={20} color="#1877F2" /></View>
+                <View style={{ flex: 1 }}>
+                  <InlineEditableRow
+                    title="Facebook"
+                    value={profileFacebook || ''}
+                    placeholder="https://facebook.com/yourpage"
+                    keyboardType="url"
+                    onSave={handleSaveFacebookInline}
+                    chevronColor={businessColors.primary}
+                    validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
+                  />
+                </View>
+              </View>
+              <View style={styles.settingItemLTR}>
+                <View style={styles.settingIconLTR}><Ionicons name="logo-tiktok" size={20} color="#000000" /></View>
+                <View style={{ flex: 1 }}>
+                  <InlineEditableRow
+                    title="TikTok"
+                    value={profileTiktok || ''}
+                    placeholder="https://www.tiktok.com/@yourpage"
+                    keyboardType="url"
+                    onSave={handleSaveTiktokInline}
+                    chevronColor={businessColors.primary}
+                    validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
+                  />
+                </View>
+              </View>
             </View>
-          </View>
-          {renderSettingItemLTR(
-            <MapPin size={20} color="#FF3B30" />, 
-            'Business address',
-            businessAddressDisplay || 'Add address',
-            undefined,
-            openEditAddress
-          )}
-          {/* Inline editable social links */}
-          <View style={styles.settingItemLTR}>
-            <View style={styles.settingIconLTR}><Instagram size={20} color="#E4405F" /></View>
-            <View style={{ flex: 1 }}>
-              <InlineEditableRow
-                title="Instagram"
-                value={profileInstagram || ''}
-                placeholder="https://instagram.com/yourpage"
-                keyboardType="url"
-                onSave={handleSaveInstagramInline}
-                chevronColor={businessColors.primary}
-                validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
-              />
-            </View>
-          </View>
-          <View style={styles.settingItemLTR}>
-            <View style={styles.settingIconLTR}><Facebook size={20} color="#1877F2" /></View>
-            <View style={{ flex: 1 }}>
-              <InlineEditableRow
-                title="Facebook"
-                value={profileFacebook || ''}
-                placeholder="https://facebook.com/yourpage"
-                keyboardType="url"
-                onSave={handleSaveFacebookInline}
-                chevronColor={businessColors.primary}
-                validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
-              />
-            </View>
-          </View>
-          <View style={styles.settingItemLTR}>
-            <View style={styles.settingIconLTR}><Ionicons name="logo-tiktok" size={20} color="#000000" /></View>
-            <View style={{ flex: 1 }}>
-              <InlineEditableRow
-                title="TikTok"
-                value={profileTiktok || ''}
-                placeholder="https://www.tiktok.com/@yourpage"
-                keyboardType="url"
-                onSave={handleSaveTiktokInline}
-                chevronColor={businessColors.primary}
-                validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
-              />
-            </View>
-          </View>
-        </View>
+          </>
+        )}
 
-        <Text style={styles.sectionTitleNew}>Design Application</Text>
-        <View style={[styles.cardNew, shadowStyle]}>
-          <ColorPicker 
-            currentColor={profile?.primary_color || '#000000'}
-            onColorSelect={(color) => {
-              // Update local profile state immediately
-              if (profile) {
-                setProfile({ ...profile, primary_color: color });
-              }
+        {canSeeAddEmployee && (
+          <>
+            <Text style={styles.sectionTitleNew}>Design Application</Text>
+            <View style={[styles.cardNew, shadowStyle]}>
+              <ColorPicker 
+                currentColor={profile?.primary_color || '#000000'}
+                onColorSelect={(color) => {
+                  // Update local profile state immediately
+                  if (profile) {
+                    setProfile({ ...profile, primary_color: color });
+                  }
+                  
+                  // Trigger comprehensive app refresh immediately
+                  triggerColorUpdate();
+                  forceAppRefresh();
+                  
+                  // Trigger additional color updates to ensure all components refresh
+                  setTimeout(() => triggerColorUpdate(), 100);
+                  setTimeout(() => triggerColorUpdate(), 300);
+                  setTimeout(() => triggerColorUpdate(), 600);
+                  setTimeout(() => triggerColorUpdate(), 1000);
+                  
+                  // Force additional app refresh
+                  setTimeout(() => forceAppRefresh(), 200);
+                  setTimeout(() => forceAppRefresh(), 800);
+                  
+                  // Force a complete re-render of the settings screen
+                  setTimeout(() => {
+                    // This will force the entire component to re-render
+                    setProfile(prev => prev ? { ...prev } : null);
+                  }, 1200);
+                }}
+              />
               
-              // Trigger comprehensive app refresh immediately
-              triggerColorUpdate();
-              forceAppRefresh();
-              
-              // Trigger additional color updates to ensure all components refresh
-              setTimeout(() => triggerColorUpdate(), 100);
-              setTimeout(() => triggerColorUpdate(), 300);
-              setTimeout(() => triggerColorUpdate(), 600);
-              setTimeout(() => triggerColorUpdate(), 1000);
-              
-              // Force additional app refresh
-              setTimeout(() => forceAppRefresh(), 200);
-              setTimeout(() => forceAppRefresh(), 800);
-              
-              // Force a complete re-render of the settings screen
-              setTimeout(() => {
-                // This will force the entire component to re-render
-                setProfile(prev => prev ? { ...prev } : null);
-              }, 1200);
-            }}
-          />
-          
-          {renderSettingItemLTR(
-            <Home size={20} color={isUploadingImagePage1 ? Colors.subtext : businessColors.primary} />, 
-            'Home page image',
-            isUploadingImagePage1 ? 'Uploading...' : (profileImageOnPage1 ? 'Image uploaded' : 'Upload home page image'),
-            isUploadingImagePage1 ? (
-              <ActivityIndicator size="small" color={businessColors.primary} />
-            ) : undefined,
-            isUploadingImagePage1 ? undefined : (profileImageOnPage1 ? () => openImagePreview('page1') : () => handlePickBusinessImage('page1')),
-            false,
-            isUploadingImagePage1
-          )}
-          {renderSettingItemLTR(
-            <ImageIcon size={20} color={isUploadingImagePage2 ? Colors.subtext : businessColors.primary} />, 
-            'Booking page image',
-            isUploadingImagePage2 ? 'Uploading...' : (profileImageOnPage2 ? 'Image uploaded' : 'Upload booking page image'),
-            isUploadingImagePage2 ? (
-              <ActivityIndicator size="small" color={businessColors.primary} />
-            ) : undefined,
-            isUploadingImagePage2 ? undefined : (profileImageOnPage2 ? () => openImagePreview('page2') : () => handlePickBusinessImage('page2')),
-            false,
-            isUploadingImagePage2
-          )}
-          {renderSettingItemLTR(
-            <ImageIcon size={20} color={isUploadingImagePage3 ? Colors.subtext : businessColors.primary} />, 
-            'Existing Booking',
-            isUploadingImagePage3 ? 'Uploading...' : (profileImageOnPage3 ? 'Image uploaded' : 'Upload existing booking image'),
-            isUploadingImagePage3 ? (
-              <ActivityIndicator size="small" color={businessColors.primary} />
-            ) : undefined,
-            isUploadingImagePage3 ? undefined : (profileImageOnPage3 ? () => openImagePreview('page3') : () => handlePickBusinessImage('page3')),
-            false,
-            isUploadingImagePage3
-          )}
-          {renderSettingItemLTR(
-            <Ionicons name="log-in-outline" size={20} color={isUploadingLoginImg ? Colors.subtext : businessColors.primary} />, 
-            'Login page image',
-            isUploadingLoginImg ? 'Uploading...' : (profileLoginImg ? 'Image uploaded' : 'Upload login page image'),
-            isUploadingLoginImg ? (
-              <ActivityIndicator size="small" color={businessColors.primary} />
-            ) : undefined,
-            isUploadingLoginImg ? undefined : (profileLoginImg ? () => openImagePreview('login') : () => handlePickBusinessImage('login')),
-            false,
-            isUploadingLoginImg
-          )}
-        </View>
+              {renderSettingItemLTR(
+                <Home size={20} color={isUploadingImagePage1 ? Colors.subtext : businessColors.primary} />, 
+                'Home page image',
+                isUploadingImagePage1 ? 'Uploading...' : (profileImageOnPage1 ? 'Image uploaded' : 'Upload home page image'),
+                isUploadingImagePage1 ? (
+                  <ActivityIndicator size="small" color={businessColors.primary} />
+                ) : undefined,
+                isUploadingImagePage1 ? undefined : (profileImageOnPage1 ? () => openImagePreview('page1') : () => handlePickBusinessImage('page1')),
+                false,
+                isUploadingImagePage1
+              )}
+              {renderSettingItemLTR(
+                <ImageIcon size={20} color={isUploadingImagePage2 ? Colors.subtext : businessColors.primary} />, 
+                'Booking page image',
+                isUploadingImagePage2 ? 'Uploading...' : (profileImageOnPage2 ? 'Image uploaded' : 'Upload booking page image'),
+                isUploadingImagePage2 ? (
+                  <ActivityIndicator size="small" color={businessColors.primary} />
+                ) : undefined,
+                isUploadingImagePage2 ? undefined : (profileImageOnPage2 ? () => openImagePreview('page2') : () => handlePickBusinessImage('page2')),
+                false,
+                isUploadingImagePage2
+              )}
+              {renderSettingItemLTR(
+                <ImageIcon size={20} color={isUploadingImagePage3 ? Colors.subtext : businessColors.primary} />, 
+                'Existing Booking',
+                isUploadingImagePage3 ? 'Uploading...' : (profileImageOnPage3 ? 'Image uploaded' : 'Upload existing booking image'),
+                isUploadingImagePage3 ? (
+                  <ActivityIndicator size="small" color={businessColors.primary} />
+                ) : undefined,
+                isUploadingImagePage3 ? undefined : (profileImageOnPage3 ? () => openImagePreview('page3') : () => handlePickBusinessImage('page3')),
+                false,
+                isUploadingImagePage3
+              )}
+              {renderSettingItemLTR(
+                <Ionicons name="log-in-outline" size={20} color={isUploadingLoginImg ? Colors.subtext : businessColors.primary} />, 
+                'Login page image',
+                isUploadingLoginImg ? 'Uploading...' : (profileLoginImg ? 'Image uploaded' : 'Upload login page image'),
+                isUploadingLoginImg ? (
+                  <ActivityIndicator size="small" color={businessColors.primary} />
+                ) : undefined,
+                isUploadingLoginImg ? undefined : (profileLoginImg ? () => openImagePreview('login') : () => handlePickBusinessImage('login')),
+                false,
+                isUploadingLoginImg
+              )}
+            </View>
+          </>
+        )}
 
         <Text style={styles.sectionTitleNew}>Appointment policies</Text>
         <View style={[styles.cardNew, shadowStyle]}>

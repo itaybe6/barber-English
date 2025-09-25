@@ -23,8 +23,8 @@
       "node": "20.19.4",
       "autoIncrement": true,
       "env": {
-        "CLIENT": "JamesBarber",
-        "ENV_FILE": "branding/JamesBarber/.env",
+        "CLIENT": "KetyCooper",
+        "ENV_FILE": "branding/KetyCooper/.env",
         "POD_INSTALL_ARGS": "--repo-update",
         "RCT_NEW_ARCH_ENABLED": "1"
       },
@@ -48,13 +48,22 @@
         "ENV_FILE": "branding/clientB/.env",
         "RCT_NEW_ARCH_ENABLED": "1"
       }
+    },
+    "KetyCooper": {
+      "node": "20.19.4",
+      "autoIncrement": true,
+      "env": {
+        "CLIENT": "KetyCooper",
+        "ENV_FILE": "branding/KetyCooper/.env",
+        "POD_INSTALL_ARGS": "--repo-update",
+        "RCT_NEW_ARCH_ENABLED": "1"
+      }
     }
   },
   "submit": {
     "production": {
       "ios": {
-        "appleId": "itaybenyair99@gmail.com",
-        "ascAppId": "6752813865"
+        "appleId": "itaybenyair99@gmail.com"
       }
     },
     "JamesBarber": {
@@ -64,6 +73,11 @@
       }
     },
     "clientB": {
+      "ios": {
+        "appleId": "itaybenyair99@gmail.com"
+      }
+    },
+    "KetyCooper": {
       "ios": {
         "appleId": "itaybenyair99@gmail.com"
       }

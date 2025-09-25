@@ -1,0 +1,29 @@
+{
+  "colors": {
+    "primary": "#D4AF37",
+    "secondary": "#8B6A2B",
+    "accent": "#FF3B30",
+    "background": "#FFFFFF",
+    "surface": "#F2F2F7",
+    "text": "#1C1C1E",
+    "textSecondary": "#8E8E93",
+    "border": "#E5E5EA",
+    "success": "#34C759",
+    "warning": "#FF9500",
+    "error": "#FF3B30",
+    "info": "#007AFF"
+  },
+  "branding": {
+    "logo": "./branding/KetyCooper/logo.png",
+    "logoWhite": "./branding/KetyCooper/logo-white.png",
+    "companyName": "Kety Cooper",
+    "website": "https://ketycooper.com",
+    "supportEmail": "support@ketycooper.com"
+  },
+  "fonts": {
+    "primary": "System",
+    "secondary": "System"
+  }
+}
+
+

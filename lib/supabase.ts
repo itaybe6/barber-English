@@ -200,6 +200,20 @@ export interface Notification {
   push_sent?: boolean;
 }
 
+// Messages interface (broadcast messages shown in the app)
+export interface Message {
+  id: string;
+  title: string;
+  content: string;
+  user_id?: string | null; // sender admin id
+  business_id: string;
+  ttl_hours: number; // how long the message is active on the home page
+  published_at: string; // timestamptz
+  expires_at?: string | null; // computed by trigger
+  created_at: string;
+  updated_at: string;
+}
+
 // Recurring appointments interface
 export interface RecurringAppointment {
   id: string;

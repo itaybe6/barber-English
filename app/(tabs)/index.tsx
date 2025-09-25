@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import * as React from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Platform, Modal, ActivityIndicator, TextInput, FlatList, Alert, Linking, RefreshControl, Animated, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -654,10 +655,8 @@ export default function HomeScreen() {
                 <AdminBroadcastComposer variant="icon" language="en" iconColor="#fff" />
               </View>
             </View>
-            {/* Center: Logo */}
-            <View style={styles.headerCenter}>
-              <Image source={getCurrentClientLogo()} style={styles.overlayLogo} resizeMode="contain" />
-            </View>
+            {/* Center placeholder to keep spacing; logo is absolutely positioned */}
+            <View style={styles.headerCenter} />
             {/* Right: Notifications */}
             <View style={styles.headerSide}>
               <TouchableOpacity
@@ -680,6 +679,13 @@ export default function HomeScreen() {
             </View>
           </View>
         </SafeAreaView>
+
+        {/* Absolute logo overlay so size doesn't affect header layout */}
+        <View pointerEvents="none" style={[styles.overlayLogoWrapper, { top: insets.top -15 }]}> 
+          <View style={styles.overlayLogoInner}>
+            <Image source={getCurrentClientLogo()} style={styles.overlayLogo} resizeMode="contain" />
+          </View>
+        </View>
 
         {/* Hero Text Content */}
         <View style={[styles.fullScreenHeroContent, { top: insets.top + 110 }]}>
@@ -1045,9 +1051,23 @@ const createStyles = (colors: any) => StyleSheet.create({
     elevation: 4,
   },
   overlayLogo: {
-    width: 170,
-    height: 60,
+    width: '100%',
+    height: '100%',
     tintColor: '#FFFFFF',
+  },
+  overlayLogoWrapper: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 3,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  overlayLogoInner: {
+    width: 300,
+    height: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   overlayNotificationBadge: {
     position: 'absolute',

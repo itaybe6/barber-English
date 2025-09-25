@@ -122,9 +122,7 @@
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxc3Rzcm9iemJ5a2ZpdmxhaHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc2MDM1MjUsImV4cCI6MjA3MzE3OTUyNX0.iW4vYBC3usEqACGug6BNDkB7PJdHZ75lXo8TJO2x30k",
         "EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY": "AIzaSyAVHoNZSAuWDnCArgFn1gAqA9bxkSuhdJ8",
         "EXPO_PUBLIC_GOOGLE_PLACES_KEY": "AIzaSyAVHoNZSAuWDnCArgFn1gAqA9bxkSuhdJ8",
-        "eas": {
-          "projectId": "8efaeaeb-7141-4328-a75f-5d56de528df1"
-        }
+        "eas": {}
       }
     }
   },
@@ -155,5 +153,5 @@
       "secondary": "System"
     }
   },
-  "timestamp": "2025-09-23T22:18:20.600Z"
+  "timestamp": "2025-09-25T07:45:29.070Z"
 }

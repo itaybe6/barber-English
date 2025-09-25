@@ -1,13 +1,14 @@
-import React, { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet, TextInput, Platform, Alert, ScrollView, KeyboardAvoidingView, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
-import { notificationsApi } from '@/lib/api/notifications';
+import { messagesApi } from '@/lib/api/messages';
+import { useAuthStore } from '@/stores/authStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/src/theme/ThemeProvider';
 
-type TitleType = 'custom' | 'preset';
+// Simplified composer: free-text title and TTL hours
 
 type AdminBroadcastComposerProps = {
   variant?: 'floating' | 'icon';
@@ -34,6 +35,7 @@ export default function AdminBroadcastComposer({
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const styles = createStyles(colors);
+  const currentUser = useAuthStore((s) => s.user);
   const effectiveIconColor = iconColor ?? colors.primary;
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = typeof open === 'boolean';
@@ -43,39 +45,12 @@ export default function AdminBroadcastComposer({
     else setInternalOpen(value);
   };
   const isLTR = language === 'en';
-  const dropdownFieldRef = useRef<View>(null);
-  const [anchorRect, setAnchorRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
-  const [showCustomPanel, setShowCustomPanel] = useState(false);
-  const [selectedTitleType, setSelectedTitleType] = useState<TitleType>('custom');
-  const [showTitleDropdown, setShowTitleDropdown] = useState(false);
-  const [customTitle, setCustomTitle] = useState('');
-  const [notificationTitle, setNotificationTitle] = useState('');
+  const [title, setTitle] = useState('');
   const [notificationContent, setNotificationContent] = useState('');
+  const [ttlInput, setTtlInput] = useState('24');
   const [isSending, setIsSending] = useState(false);
 
-  const predefinedTitles = useMemo(
-    () =>
-      language === 'en'
-        ? [
-            { id: 'promotion', title: 'New promotion! 🎉', description: 'Announcement about a promotion or discount' },
-            { id: 'reminder', title: 'Important reminder ⏰', description: 'Reminder for appointment or event' },
-            { id: 'update', title: 'Service update 📢', description: 'Update about new services' },
-            { id: 'holiday', title: 'Closed for holiday 🏖️', description: 'Notice of closure or changed hours' },
-            { id: 'welcome', title: 'Welcome! 👋', description: 'Greeting message to clients' },
-            { id: 'custom', title: 'Custom title ✏️', description: 'Custom title' },
-          ]
-        : [
-            { id: 'promotion', title: 'מבצע חדש! 🎉', description: 'הודעה על מבצע או הנחה' },
-            { id: 'reminder', title: 'תזכורת חשובה ⏰', description: 'תזכורת לתור או אירוע' },
-            { id: 'update', title: 'עדכון שירות 📢', description: 'עדכון על שירותים חדשים' },
-            { id: 'holiday', title: 'סגירה לחג 🏖️', description: 'הודעה על סגירה או שינוי שעות' },
-            { id: 'welcome', title: 'ברוכים הבאים! 👋', description: 'הודעת ברכה ללקוחות' },
-            { id: 'custom', title: 'כותרת מותאמת אישית ✏️', description: 'כותרת מותאמת אישית' },
-          ],
-    [language]
-  );
-
-  const currentTitle = selectedTitleType === 'custom' ? customTitle.trim() : notificationTitle.trim();
+  const currentTitle = title.trim();
   const canSend = currentTitle.length > 0 && notificationContent.trim().length > 0 && !isSending;
 
   const t = useMemo(() => {
@@ -83,56 +58,56 @@ export default function AdminBroadcastComposer({
       return {
         triggerLabel: 'Send message to clients',
         headerTitle: 'Send message to clients',
-        titleLabel: 'Notification title',
-        dropdownCustomPlaceholder: 'Custom title ✏️',
-        dropdownChoosePlaceholder: 'Choose a title...',
-        customInputPlaceholder: 'Enter a custom title...',
-        contentLabel: 'Notification content',
-        contentPlaceholder: 'Enter notification content...',
-        previewTitlePlaceholder: 'Notification title',
-        previewContentPlaceholder: 'Notification content will appear here...',
+        titleLabel: 'Title',
+        customInputPlaceholder: 'Enter a title...',
+        contentLabel: 'Content',
+        contentPlaceholder: 'Enter content...',
+        previewTitlePlaceholder: 'Title',
+        previewContentPlaceholder: 'Content will appear here...',
+        ttlLabel: 'Visible for (hours)',
+        ttlPlaceholder: 'Enter hours (1–720)',
         cancel: 'Cancel',
         sendAll: 'Send to all',
         sending: 'Sending...',
         error: 'Error',
         errorFill: 'Please fill in title and content',
+        ttlError: 'Please enter hours between 1 and 720',
         success: 'Success',
-        successMsg: 'Notification sent to all clients',
+        successMsg: 'Message published',
         ok: 'OK',
-        failMsg: 'Failed to send notification. Please try again.',
+        failMsg: 'Failed to publish message. Please try again.',
         accessibilitySend: 'Send message to clients',
       };
     }
     return {
       triggerLabel: 'שליחת הודעה ללקוחות',
       headerTitle: 'שליחת הודעה ללקוחות',
-      titleLabel: 'כותרת ההתראה',
-      dropdownCustomPlaceholder: 'כותרת מותאמת אישית ✏️',
-      dropdownChoosePlaceholder: 'בחר כותרת...',
-      customInputPlaceholder: 'הכנס כותרת מותאמת אישית...',
-      contentLabel: 'תוכן ההתראה',
-      contentPlaceholder: 'הכנס את תוכן ההתראה...',
-      previewTitlePlaceholder: 'כותרת ההתראה',
-      previewContentPlaceholder: 'תוכן ההתראה יופיע כאן...',
+      titleLabel: 'כותרת',
+      customInputPlaceholder: 'הכנס כותרת...',
+      contentLabel: 'תוכן',
+      contentPlaceholder: 'הכנס תוכן...',
+      previewTitlePlaceholder: 'כותרת',
+      previewContentPlaceholder: 'תוכן יופיע כאן...',
+      ttlLabel: 'זמן באוויר (שעות)',
+      ttlPlaceholder: 'הכנס שעות (1–720)',
       cancel: 'ביטול',
       sendAll: 'שלח לכולם',
       sending: 'שולח...',
       error: 'שגיאה',
       errorFill: 'אנא מלא את הכותרת והתוכן של ההתראה',
+      ttlError: 'אנא הזן שעות בין 1 ל‑720',
       success: 'הצלחה',
-      successMsg: 'ההתראה נשלחה בהצלחה לכל הלקוחות',
+      successMsg: 'ההודעה פורסמה',
       ok: 'אישור',
-      failMsg: 'שגיאה בשליחת ההתראה. אנא נסה שוב.',
+      failMsg: 'שגיאה בפרסום ההודעה. אנא נסה שוב.',
       accessibilitySend: 'שליחת הודעה ללקוחות',
     };
   }, [language]);
 
   const resetState = () => {
-    setSelectedTitleType('custom');
-    setShowTitleDropdown(false);
-    setCustomTitle('');
-    setNotificationTitle('');
+    setTitle('');
     setNotificationContent('');
+    setTtlInput('24');
   };
 
   const handleSend = async () => {
@@ -141,15 +116,22 @@ export default function AdminBroadcastComposer({
       Alert.alert(t.error, t.errorFill);
       return;
     }
+    const ttl = parseInt(ttlInput, 10);
+    if (!Number.isFinite(ttl) || ttl < 1 || ttl > 720) {
+      Alert.alert(t.error, t.ttlError);
+      return;
+    }
 
     setIsSending(true);
     try {
-      const ok = await notificationsApi.sendNotificationToAllClients(
-        finalTitle,
-        notificationContent.trim(),
-        'general'
-      );
-      if (ok) {
+      // Insert a single broadcast message record instead of per-client notifications
+      const created = await messagesApi.createMessage({
+        title: finalTitle,
+        content: notificationContent.trim(),
+        ttlHours: ttl,
+        userId: (currentUser as any)?.id || null,
+      });
+      if (created) {
         Alert.alert(t.success, t.successMsg, [
           { text: t.ok, onPress: () => { setOpen(false); resetState(); } },
         ]);
@@ -236,61 +218,21 @@ export default function AdminBroadcastComposer({
             </LinearGradient>
 
             <ScrollView style={{ maxHeight: '100%' }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-              {/* Title Picker */}
+              {/* Title */}
               <View style={styles.sectionCard}>
                 <Text style={[styles.label, isLTR && { textAlign: 'left' }]}>{t.titleLabel}</Text>
-                <View style={[
-                  styles.titleDropdownWrap,
-                  showTitleDropdown && styles.titleDropdownWrapOpen,
-                ]}>
-                  <TouchableOpacity
-                    ref={dropdownFieldRef as any}
-                    style={styles.dropdown}
-                    onPress={() => {
-                      if (!showTitleDropdown) {
-                        setShowCustomPanel(false);
-                        setShowTitleDropdown(true);
-                        setTimeout(() => {
-                          try {
-                            (dropdownFieldRef.current as any)?.measureInWindow?.((x: number, y: number, width: number, height: number) => {
-                              setAnchorRect({ x, y, width, height });
-                            });
-                          } catch {}
-                        }, 0);
-                      } else {
-                        setShowTitleDropdown(false);
-                        setShowCustomPanel(false);
-                      }
-                    }}
-                    activeOpacity={0.85}
-                  >
-                    <Text
-                      style={[styles.dropdownText, isLTR && { textAlign: 'left' }, (!currentTitle) && styles.dropdownPlaceholder]}
-                      numberOfLines={1}
-                    >
-                      {selectedTitleType === 'custom'
-                        ? (customTitle || t.dropdownCustomPlaceholder)
-                        : (notificationTitle || t.dropdownChoosePlaceholder)}
-                    </Text>
-                    <Ionicons name={showTitleDropdown ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.subtext} />
-                  </TouchableOpacity>
-                  {/* Dropdown is rendered in a portal modal to avoid clipping and z-index issues */}
+                <View style={{ marginTop: 8 }}>
+                  <TextInput
+                    style={[styles.input, isLTR && { textAlign: 'left' }]}
+                    placeholder={t.customInputPlaceholder}
+                    placeholderTextColor={Colors.subtext}
+                    value={title}
+                    onChangeText={setTitle}
+                    maxLength={80}
+                    textAlign={isLTR ? 'left' : 'right'}
+                  />
+                  <Text style={styles.counter}>{title.length}/80</Text>
                 </View>
-
-                {selectedTitleType === 'custom' && !showTitleDropdown && (
-                  <View style={{ marginTop: 8 }}>
-                    <TextInput
-                      style={[styles.input, isLTR && { textAlign: 'left' }]}
-                      placeholder={t.customInputPlaceholder}
-                      placeholderTextColor={Colors.subtext}
-                      value={customTitle}
-                      onChangeText={setCustomTitle}
-                      maxLength={50}
-                      textAlign={isLTR ? 'left' : 'right'}
-                    />
-                    <Text style={styles.counter}>{customTitle.length}/50</Text>
-                  </View>
-                )}
               </View>
 
               {/* Content */}
@@ -309,6 +251,21 @@ export default function AdminBroadcastComposer({
                   textAlignVertical="top"
                 />
                 <Text style={styles.counter}>{notificationContent.length}/500</Text>
+              </View>
+
+              {/* TTL Hours */}
+              <View style={[styles.sectionCard, { marginTop: 12 }]}>
+                <Text style={[styles.label, isLTR && { textAlign: 'left' }]}>{t.ttlLabel}</Text>
+                <TextInput
+                  style={[styles.input, isLTR && { textAlign: 'left' }]}
+                  placeholder={t.ttlPlaceholder}
+                  placeholderTextColor={Colors.subtext}
+                  value={ttlInput}
+                  onChangeText={(v) => setTtlInput(v.replace(/[^0-9]/g, ''))}
+                  keyboardType="number-pad"
+                  maxLength={3}
+                  textAlign={isLTR ? 'left' : 'right'}
+                />
               </View>
 
               {/* Preview */}
@@ -353,87 +310,7 @@ export default function AdminBroadcastComposer({
               </View>
             </ScrollView>
             </View>
-            {showTitleDropdown && (
-              <View
-                pointerEvents="box-none"
-                style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
-              >
-                <View
-                  style={[
-                    styles.portalDropdown,
-                    anchorRect && {
-                      left: Math.max(8, anchorRect.x),
-                      top: Math.max(insets.top + 8, anchorRect.y + anchorRect.height + 4),
-                      width: Math.max(220, anchorRect.width),
-                    },
-                    !anchorRect && {
-                      left: 16,
-                      top: Math.max(insets.top + 80, 120),
-                      width: 260,
-                    },
-                  ]}
-                >
-                  {showCustomPanel ? (
-                    <View style={styles.customTitlePanel}>
-                      <TextInput
-                        style={[styles.input, isLTR && { textAlign: 'left' }]}
-                        placeholder={t.customInputPlaceholder}
-                        placeholderTextColor={Colors.subtext}
-                        value={customTitle}
-                        onChangeText={setCustomTitle}
-                        maxLength={50}
-                        textAlign={isLTR ? 'left' : 'right'}
-                      />
-                      <View style={{ marginTop: 8, flexDirection: isLTR ? 'row' : 'row-reverse', justifyContent: 'space-between' }}>
-                        <TouchableOpacity
-                          onPress={() => setShowCustomPanel(false)}
-                          activeOpacity={0.85}
-                          style={[styles.secondaryButton, { paddingVertical: 8, flex: 0 }]}
-                        >
-                          <Text style={styles.secondaryButtonText}>{language === 'en' ? 'Back' : 'חזרה'}</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={() => { setShowTitleDropdown(false); setShowCustomPanel(false); }}
-                          activeOpacity={0.85}
-                          style={styles.applyButton}
-                        >
-                          <Text style={styles.applyButtonText}>{language === 'en' ? 'Apply' : 'אישור'}</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ) : (
-                    <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                      {predefinedTitles.map((t, idx) => (
-                        <TouchableOpacity
-                          key={t.id}
-                          style={[styles.dropdownOption, idx === predefinedTitles.length - 1 && styles.dropdownOptionLast]}
-                          onPress={() => {
-                            if (t.id === 'custom') {
-                              setSelectedTitleType('custom');
-                              setNotificationTitle('');
-                              setShowCustomPanel(true);
-                              return;
-                            }
-                            setSelectedTitleType('preset');
-                            setNotificationTitle(t.title);
-                            setShowTitleDropdown(false);
-                          }}
-                          activeOpacity={0.85}
-                        >
-                          <View style={styles.dropdownOptionIconCircle}>
-                            <Ionicons name="pricetag-outline" size={16} color={colors.primary} />
-                          </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={[styles.dropdownOptionTitle, isLTR && { textAlign: 'left' }]}>{t.title}</Text>
-                            <Text style={[styles.dropdownOptionDescription, isLTR && { textAlign: 'left' }]}>{t.description}</Text>
-                          </View>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  )}
-                </View>
-              </View>
-            )}
+            {/* Dropdown removed in simplified UX */}
           </View>
         </KeyboardAvoidingView>
       </Modal>

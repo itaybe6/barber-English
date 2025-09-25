@@ -741,7 +741,8 @@ const styles = StyleSheet.create({
   appointmentCard: {
     position: 'absolute',
     backgroundColor: '#F2F2F7',
-    borderWidth: 0,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#3A3A3C',
     borderRadius: 14,
     paddingHorizontal: 0,
     paddingVertical: 0,

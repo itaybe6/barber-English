@@ -3,9 +3,20 @@ const path = require('path');
 require('dotenv').config();
 
 // -------------------------------------------------------------
-// 1. מי הלקוח? אם אין הגדרה – ברירת מחדל JamesBarber
+// 1. מי הלקוח? אם אין הגדרה – ננסה לגזור מה-EAS_BUILD_PROFILE → eas.json
+//    מאפשר להריץ: `npx eas-cli build --profile production` בלי CLIENT מקומי
 // -------------------------------------------------------------
-const CLIENT = process.env.CLIENT || 'JamesBarber';
+let clientFromProfile = undefined;
+try {
+  const profileName = process.env.EAS_BUILD_PROFILE;
+  if (profileName) {
+    const easJsonPath = path.join(__dirname, 'eas.json');
+    const easJson = JSON.parse(fs.readFileSync(easJsonPath, 'utf8'));
+    clientFromProfile = easJson?.build?.[profileName]?.env?.CLIENT;
+  }
+} catch {}
+
+const CLIENT = process.env.CLIENT || clientFromProfile || 'JamesBarber';
 const clientDir = path.join(__dirname, 'branding', CLIENT);
 
 // -------------------------------------------------------------
@@ -70,12 +81,18 @@ appConfig.expo.extra = {
 };
 
 // -------------------------------------------------------------
-// 6. מבטיח שתמיד יש projectId ל-EAS (נדרש ל-build)
+// 6. projectId ל-EAS: לא מכריחים ברירת־מחדל של פרויקט אחר
+//    אם קיים ב-ENV נשתמש בו; אחרת נשאיר ריק כדי ש-EAS יקשר/ייצור
 // -------------------------------------------------------------
 try {
+  appConfig.expo.extra = appConfig.expo.extra || {};
   appConfig.expo.extra.eas = appConfig.expo.extra.eas || {};
-  appConfig.expo.extra.eas.projectId =
-    process.env.EAS_PROJECT_ID || '8efaeaeb-7141-4328-a75f-5d56de528df1';
+  const projectIdFromEnv = process.env.EAS_PROJECT_ID || appConfig.expo.extra.eas.projectId;
+  if (projectIdFromEnv) {
+    appConfig.expo.extra.eas.projectId = projectIdFromEnv;
+  } else {
+    try { delete appConfig.expo.extra.eas.projectId; } catch {}
+  }
 } catch {}
 
 // -------------------------------------------------------------

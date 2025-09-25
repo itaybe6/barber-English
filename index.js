@@ -6,8 +6,14 @@ import 'react-native-reanimated'; // נדרש ל-Production (במיוחד ב-iOS
 // Keep it minimal to avoid touching TurboModules before runtime is ready.
 import 'react-native-get-random-values';
 
-import 'expo-router/entry';
 import * as SplashScreen from 'expo-splash-screen';
+
+// Ensure native splash is registered before React tree mounts
+try {
+  SplashScreen.preventAutoHideAsync().catch(() => {});
+} catch {}
+
+import 'expo-router/entry';
 
 // Fallback: hide splash after 5s even if React tree didn't mount
 setTimeout(() => {

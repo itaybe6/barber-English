@@ -5,6 +5,7 @@ import { CURRENT_CLIENT } from '../config/currentClient';
 export const clientLogos = {
   JamesBarber: require('../../branding/JamesBarber/logo.png'),
   clientB: require('../../branding/clientB/logo.png'),
+  KetyCooper: require('../../branding/KetyCooper/logo.png'),
 } as const;
 
 // Get the current client from environment or default to clientA

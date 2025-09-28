@@ -394,78 +394,42 @@ DECLARE
   v_count integer := 0;
 BEGIN
   WITH appts AS (
-    SELECT a.id, a.client_name, a.client_phone, a.service_name, a.slot_date, a.slot_time
+    SELECT 
+      a.id,
+      a.client_name,
+      a.client_phone,
+      a.service_name,
+      a.slot_date,
+      a.slot_time,
+      a.business_id,
+      COALESCE(NULLIF(u.name, ''), 'העובד') AS barber_name
     FROM public.appointments a
+    LEFT JOIN public.users u ON u.id = a.barber_id
     WHERE a.is_available = FALSE
       AND a.client_phone IS NOT NULL AND TRIM(a.client_phone) <> ''
       -- Send at or after the 24h threshold, but only while the appointment is still in the future (catch-up safe)
       AND public.make_appointment_timestamptz(a.slot_date, a.slot_time) - INTERVAL '24 hours' <= NOW()
       AND public.make_appointment_timestamptz(a.slot_date, a.slot_time) > NOW()
   )
-  INSERT INTO public.notifications (title, content, type, recipient_name, recipient_phone, appointment_id)
+  INSERT INTO public.notifications (title, content, type, recipient_name, recipient_phone, appointment_id, business_id)
   SELECT
     'תזכורת',
-    format('היי %s, זה תזכורת לתור שלך ל%s בתאריך %s בשעה %s. נתראה! 👋',
+    format('היי %s, זה תזכורת לתור שלך ל%s אצל %s בתאריך %s בשעה %s. נתראה! 👋',
            COALESCE(NULLIF(a.client_name, ''), 'לקוח'),
            COALESCE(NULLIF(a.service_name, ''), 'הטיפול'),
+           COALESCE(NULLIF(a.barber_name, ''), 'העובד'),
            to_char(a.slot_date, 'DD/MM/YYYY'),
            to_char(a.slot_time, 'HH24:MI')
     )::text,
     'appointment_reminder',
     COALESCE(NULLIF(a.client_name, ''), 'לקוח'),
     TRIM(a.client_phone),
-    a.id
+    a.id,
+    a.business_id
   FROM appts a
   WHERE NOT EXISTS (
     SELECT 1 FROM public.notifications n
     WHERE n.appointment_id = a.id AND n.type = 'appointment_reminder' AND n.recipient_phone = TRIM(a.client_phone)
-  );
-
-  GET DIAGNOSTICS v_count = ROW_COUNT;
-  RETURN v_count;
-END;
-$$;
-
--- Processor: admin reminders 30 דקות לפני התור
-CREATE OR REPLACE FUNCTION public.process_due_admin_reminders()
-RETURNS INTEGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_count integer := 0;
-BEGIN
-  WITH appts AS (
-    SELECT a.id, a.client_name, a.client_phone, a.service_name, a.slot_date, a.slot_time
-    FROM public.appointments a
-    WHERE a.is_available = FALSE
-      -- Send at or after the 30m threshold, but only while the appointment is still in the future (catch-up safe)
-      AND public.make_appointment_timestamptz(a.slot_date, a.slot_time) - INTERVAL '30 minutes' <= NOW()
-      AND public.make_appointment_timestamptz(a.slot_date, a.slot_time) > NOW()
-  ), admins AS (
-    SELECT name, TRIM(phone) AS phone
-    FROM public.users
-    WHERE user_type = 'admin' AND phone IS NOT NULL AND TRIM(phone) <> ''
-  )
-  INSERT INTO public.notifications (title, content, type, recipient_name, recipient_phone, appointment_id)
-  SELECT
-    'תור בעוד 30 דקות',
-    format('תזכורת מנהל: %s (%s) מוזמן/ת ל%s היום בשעה %s',
-           COALESCE(NULLIF(a.client_name, ''), 'לקוח'),
-           COALESCE(TRIM(a.client_phone), ''),
-           COALESCE(NULLIF(a.service_name, ''), 'הטיפול'),
-           to_char(a.slot_time, 'HH24:MI')
-    )::text,
-    'system',
-    COALESCE(NULLIF(ad.name, ''), 'מנהל'),
-    ad.phone,
-    a.id
-  FROM appts a
-  CROSS JOIN admins ad
-  WHERE NOT EXISTS (
-    SELECT 1 FROM public.notifications n
-    WHERE n.appointment_id = a.id AND n.type = 'system' AND n.recipient_phone = ad.phone
   );
 
   GET DIAGNOSTICS v_count = ROW_COUNT;
@@ -488,15 +452,10 @@ BEGIN
     '*/5 * * * *',
     $cron$SELECT public.process_due_client_reminders();$cron$
   );
-
-  -- Admin reminders 30m
+  
+  -- Ensure admin 30m job is disabled (unschedule if exists)
   SELECT jobid INTO v_job_id FROM cron.job WHERE jobname = 'admin_reminders_processor_30m';
   IF v_job_id IS NOT NULL THEN
     PERFORM cron.unschedule(v_job_id);
   END IF;
-  PERFORM cron.schedule(
-    'admin_reminders_processor_30m',
-    '*/5 * * * *',
-    $cron$SELECT public.process_due_admin_reminders();$cron$
-  );
 END $$;

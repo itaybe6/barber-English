@@ -17,6 +17,7 @@ export default function ClientNotificationsScreen() {
   const bottomPadding = BOTTOM_SPACER + (insets?.bottom || 0);
   const router = useRouter();
   const { user } = useAuthStore();
+  const isAdmin = useAuthStore((s) => s.isAdminUser());
   const colors = useColors();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -333,7 +334,8 @@ export default function ClientNotificationsScreen() {
           <View style={styles.headerRight} />
         </View>
         <View style={styles.contentWrapper}>
-          {/* Filters */}
+        {/* Filters */}
+        {isAdmin && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -367,6 +369,7 @@ export default function ClientNotificationsScreen() {
               );
             })}
           </ScrollView>
+        )}
 
           <ScrollView
             style={styles.scrollView}

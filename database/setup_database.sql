@@ -174,6 +174,7 @@ ALTER TABLE business_hours DISABLE ROW LEVEL SECURITY;
     facebook_url TEXT,
     tiktok_url TEXT,
     break INT DEFAULT 0 CHECK (break >= 0 AND break <= 180),
+    booking_open_days INT NOT NULL DEFAULT 7 CHECK (booking_open_days BETWEEN 1 AND 60),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
   );
@@ -188,6 +189,8 @@ ALTER TABLE business_hours DISABLE ROW LEVEL SECURITY;
   -- Add phone column to existing business_profile table if it doesn't exist
   ALTER TABLE business_profile 
     ADD COLUMN IF NOT EXISTS phone TEXT;
+  ALTER TABLE business_profile 
+    ADD COLUMN IF NOT EXISTS booking_open_days INT NOT NULL DEFAULT 7;
 
   -- Disable RLS for business_profile
   ALTER TABLE business_profile DISABLE ROW LEVEL SECURITY;
@@ -328,8 +331,8 @@ BEGIN
     END IF;
 
     IF NOT within_break THEN
-      INSERT INTO appointments (slot_date, slot_time, is_available)
-      SELECT target_date, t, TRUE
+      INSERT INTO appointments (slot_date, slot_time, is_available, service_name)
+      SELECT target_date, t, TRUE, 'Available Slot'
       WHERE NOT EXISTS (
         SELECT 1 FROM appointments 
         WHERE slot_date = target_date AND slot_time = t
@@ -371,6 +374,74 @@ BEGIN
 END;
 $$;
 
+-- Generate time slots for the full open window based on booking_open_days
+CREATE OR REPLACE FUNCTION public.generate_time_slots_for_open_window()
+RETURNS VOID
+LANGUAGE plpgsql
+AS $$
+DECLARE 
+  open_days INT := 7;
+  d DATE;
+  cutoff DATE;
+BEGIN
+  SELECT COALESCE(booking_open_days, 7) INTO open_days
+  FROM business_profile
+  ORDER BY created_at DESC
+  LIMIT 1;
+
+  cutoff := CURRENT_DATE + (open_days - 1);
+
+  -- Clean only available slots to preserve booked history
+  DELETE FROM appointments WHERE slot_date > cutoff AND is_available = TRUE;
+  DELETE FROM appointments WHERE slot_date < CURRENT_DATE AND is_available = TRUE;
+
+  FOR d IN SELECT generate_series(CURRENT_DATE, cutoff, INTERVAL '1 day')::date LOOP
+    PERFORM public.generate_time_slots_for_date(d);
+  END LOOP;
+END;
+$$;
+
+-- Roll forward only the edge of the window nightly
+CREATE OR REPLACE FUNCTION public.generate_time_slots_roll_forward()
+RETURNS VOID
+LANGUAGE plpgsql
+AS $$
+DECLARE 
+  open_days INT := 7;
+  target DATE;
+  cutoff DATE;
+BEGIN
+  SELECT COALESCE(booking_open_days, 7) INTO open_days
+  FROM business_profile
+  ORDER BY created_at DESC
+  LIMIT 1;
+
+  target := CURRENT_DATE + (open_days - 1);
+  cutoff := target;
+
+  -- Clean only available slots to preserve booked history
+  DELETE FROM appointments WHERE slot_date > cutoff AND is_available = TRUE;
+  DELETE FROM appointments WHERE slot_date < CURRENT_DATE AND is_available = TRUE;
+
+  PERFORM public.generate_time_slots_for_date(target);
+END;
+$$;
+
+-- Trigger to regenerate when booking window changes
+CREATE OR REPLACE FUNCTION public.on_booking_window_changed()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  IF COALESCE(NEW.booking_open_days,7) IS DISTINCT FROM COALESCE(OLD.booking_open_days,7) THEN
+    PERFORM public.generate_time_slots_for_open_window();
+  END IF;
+  RETURN NEW;
+END; $$;
+
+DROP TRIGGER IF EXISTS trg_booking_window_changed ON public.business_profile;
+CREATE TRIGGER trg_booking_window_changed
+AFTER INSERT OR UPDATE OF booking_open_days ON public.business_profile
+FOR EACH ROW EXECUTE FUNCTION public.on_booking_window_changed();
+
 -- 8. Schedule: every day at 00:00 generate slots for date + 6 days (rolling next 7 days including today)
 -- Requires pg_cron extension (available on Supabase). Safe to CREATE EXTENSION IF NOT EXISTS
 CREATE EXTENSION IF NOT EXISTS pg_cron;
@@ -386,11 +457,11 @@ BEGIN
     PERFORM cron.unschedule(v_job_id);
   END IF;
 
-  -- Schedule the job to create slots for CURRENT_DATE + 6 days
+  -- Schedule the job to roll the window forward nightly
   PERFORM cron.schedule(
-    'generate_time_slots_for_next_week_day',
+    'nightly_generate_slots',
     '0 0 * * *', -- every day at 00:00 (database timezone)
-    $cron$SELECT public.generate_time_slots_for_date((CURRENT_DATE + INTERVAL '6 days')::date);$cron$
+    $cron$SELECT public.generate_time_slots_roll_forward();$cron$
   );
 END;
 $$;

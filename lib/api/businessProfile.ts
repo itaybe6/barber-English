@@ -47,6 +47,7 @@ export const businessProfileApi = {
         break_by_user: {},
         min_cancellation_hours: 24, // Default 24 hours
         primary_color: '#000000', // Default black color
+        booking_open_days: 7,
       };
 
       const { data, error } = await supabase
@@ -90,6 +91,7 @@ export const businessProfileApi = {
         reminder_minutes_by_user: (updates as any).reminder_minutes_by_user,
         min_cancellation_hours: updates.min_cancellation_hours,
         primary_color: updates.primary_color,
+            booking_open_days: (updates as any).booking_open_days,
           })
           .eq('id', businessId)
           .select('*')
@@ -120,6 +122,7 @@ export const businessProfileApi = {
           reminder_minutes_by_user: (updates as any).reminder_minutes_by_user,
           min_cancellation_hours: updates.min_cancellation_hours,
           primary_color: updates.primary_color || '#000000',
+          booking_open_days: (updates as any).booking_open_days ?? 7,
         })
         .select('*')
         .single();

@@ -249,6 +249,8 @@ export interface BusinessProfile {
   reminder_minutes_by_user?: Record<string, number | null>;
   min_cancellation_hours?: number;
   primary_color?: string; // Hex color code for primary UI color
+  // Number of days forward to open booking window; defaults to 7 on server
+  booking_open_days?: number;
   created_at: string;
   updated_at: string;
 }

@@ -372,8 +372,9 @@ export default function ClientHomeScreen() {
     const today = new Date();
     const dates: string[] = [];
     
-    // Fetch appointments for the next 14 days
-    for (let i = 0; i <= 14; i++) {
+    // Fetch appointments for the next N days based on booking window
+    const horizonDays = Math.max(1, Number((businessProfile as any)?.booking_open_days ?? 7));
+    for (let i = 0; i <= horizonDays; i++) {
       const date = new Date(today);
       date.setDate(today.getDate() + i);
       const dateString = date.toISOString().split('T')[0];
@@ -519,6 +520,8 @@ export default function ClientHomeScreen() {
       try {
         const p = await businessProfileApi.getProfile();
         setBusinessProfile(p);
+        // After profile is loaded, refresh appointments horizon
+        try { await fetchUserAppointments(); } catch {}
         
         // Extract phone number from business profile
         if (p?.phone) {

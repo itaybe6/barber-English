@@ -144,6 +144,7 @@ export default function SettingsScreen() {
   const [profileImageOnPage3, setProfileImageOnPage3] = useState('');
   const [profileLoginImg, setProfileLoginImg] = useState('');
   const [profileMinCancellationHours, setProfileMinCancellationHours] = useState(24);
+  const [profileBookingOpenDays, setProfileBookingOpenDays] = useState(7);
   const [showEditDisplayNameModal, setShowEditDisplayNameModal] = useState(false);
   const [showEditAddressModal, setShowEditAddressModal] = useState(false);
   const [showAddressSheet, setShowAddressSheet] = useState(false);
@@ -235,6 +236,7 @@ export default function SettingsScreen() {
         setProfileImageOnPage3(isBadLocalAssetRef((p as any)?.image_on_page_3) ? '' : ((p as any)?.image_on_page_3 || ''));
         setProfileLoginImg(isBadLocalAssetRef((p as any)?.login_img) ? '' : ((p as any)?.login_img || ''));
         setProfileMinCancellationHours(p?.min_cancellation_hours || 24);
+        setProfileBookingOpenDays(Number(((p as any)?.booking_open_days ?? 7)));
         
         // Preload images for better performance
         preloadImages(p);
@@ -504,6 +506,27 @@ export default function SettingsScreen() {
       }
       setProfile(updated);
       setProfileMinCancellationHours(updated.min_cancellation_hours || 24);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleSaveBookingOpenDaysInline = async (next: string) => {
+    setIsSavingProfile(true);
+    try {
+      const parsed = Math.max(1, Math.min(60, Math.floor(Number((next || '').trim()) || 7)));
+      const updated = await businessProfileApi.upsertProfile({
+        booking_open_days: parsed as any,
+      });
+      if (!updated) {
+        Alert.alert('Error', 'Failed to save booking window');
+        return;
+      }
+      setProfile(updated);
+      setProfileBookingOpenDays(Number(((updated as any)?.booking_open_days ?? 7)));
+      try {
+        await supabase.rpc('generate_time_slots_for_open_window');
+      } catch {}
     } finally {
       setIsSavingProfile(false);
     }
@@ -2064,6 +2087,23 @@ export default function SettingsScreen() {
                     onSave={handleSaveDisplayNameInline}
                     chevronColor={businessColors.primary}
                     validate={(v) => v.trim().length > 0}
+                  />
+                </View>
+              </View>
+              <View style={styles.settingItemLTR}>
+                <View style={styles.settingIconLTR}><Calendar size={20} color={businessColors.primary} /></View>
+                <View style={{ flex: 1 }}>
+                  <InlineEditableRow
+                    title="Booking window (days)"
+                    value={String(profileBookingOpenDays || 7)}
+                    placeholder="7"
+                    keyboardType="default"
+                    onSave={handleSaveBookingOpenDaysInline}
+                    chevronColor={businessColors.primary}
+                    validate={(v) => {
+                      const n = parseInt((v || '').trim(), 10);
+                      return Number.isFinite(n) && n >= 1 && n <= 60;
+                    }}
                   />
                 </View>
               </View>

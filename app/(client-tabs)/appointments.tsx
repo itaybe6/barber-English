@@ -30,19 +30,17 @@ const clientAppointmentsApi = {
         .eq('business_id', businessId)
         .eq('is_available', false); // Only booked appointments
 
-      // If this is an admin user (barber), filter by their user_id
+      // If this is an admin user (barber), filter by their user_id OR barber_id
       if (currentUserId) {
-        query = query.eq('user_id', currentUserId);
+        query = query.or(`user_id.eq.${currentUserId},barber_id.eq.${currentUserId}`);
       }
 
       query = query.order('slot_date').order('slot_time');
 
-      // Strict client scoping: prefer phone equality; fallback to name only if phone missing
+      // Strict client scoping: phone equality only
       if (!currentUserId) { // client view only
         if (userPhone && userPhone.trim().length > 0) {
           query = query.eq('client_phone', userPhone.trim());
-        } else if (userName && userName.trim().length > 0) {
-          query = query.or([`client_name.ilike.%${userName.trim()}%`].join(','));
         }
       }
 
@@ -53,13 +51,11 @@ const clientAppointmentsApi = {
         throw error;
       }
 
-      // Additional client-side filtering: phone strict match preferred
+      // Additional client-side filtering: phone strict match only (defensive)
       let filteredData = data || [];
       if (!currentUserId) {
         if (userPhone && userPhone.trim().length > 0) {
           filteredData = filteredData.filter(slot => String(slot.client_phone || '').trim() === userPhone.trim());
-        } else if (userName && userName.trim().length > 0) {
-          filteredData = filteredData.filter(slot => String(slot.client_name || '').trim().toLowerCase() === userName.trim().toLowerCase());
         }
       }
 
@@ -279,8 +275,13 @@ export default function ClientAppointmentsScreen() {
     const today = new Date();
     const dates: string[] = [];
     
-    // Load past 7 days and next 14 days
-    for (let i = -7; i <= 14; i++) {
+    // Load past 7 days and next N days according to booking window
+    let horizonDays = 14;
+    try {
+      const profile = await businessProfileApi.getProfile();
+      horizonDays = Math.max(1, Number((profile as any)?.booking_open_days ?? 14));
+    } catch {}
+    for (let i = -7; i <= horizonDays; i++) {
       const date = new Date(today);
       date.setDate(today.getDate() + i);
       const dateString = date.toISOString().split('T')[0];

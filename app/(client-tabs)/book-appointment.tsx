@@ -329,13 +329,13 @@ const bookingApi = {
   },
 };
 
-// Generate next 7 days with Hebrew day names
-const getNext7Days = () => {
+// Generate next N days with Hebrew day names
+const getNextNDays = (n: number) => {
   const today = new Date();
   const days = [];
   const hebrewDays = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
   
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < Math.max(1, n); i++) {
     const date = new Date(today);
     date.setDate(today.getDate() + i);
     days.push({
@@ -425,9 +425,18 @@ export default function BookAppointment() {
     return () => { isMounted = false; };
   }, [selectedBarber?.id]);
 
+  const [bookingOpenDays, setBookingOpenDays] = useState<number>(7);
+  useEffect(() => {
+    (async () => {
+      try {
+        const profile = await businessProfileApi.getProfile();
+        const n = Number(((profile as any)?.booking_open_days ?? 7));
+        setBookingOpenDays(Number.isFinite(n) && n > 0 ? n : 7);
+      } catch {}
+    })();
+  }, []);
 
-
-  const days = getNext7Days();
+  const days = getNextNDays(bookingOpenDays);
   const selectedDate = selectedDay !== null ? days[selectedDay]?.fullDate : null;
   const footerVisible =
     (currentStep === 1 && !!selectedBarber) ||
@@ -1401,88 +1410,96 @@ export default function BookAppointment() {
               <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>Select Day</Text>
               <View style={{ width: 36 }} />
             </View>
-            <View style={styles.daysListNew}>
-              {days.map((day, idx) => {
-                const dsIso = day.fullDate.toISOString().split('T')[0];
-                const dd = String(day.fullDate.getDate()).padStart(2, '0');
-                const mm = String(day.fullDate.getMonth() + 1).padStart(2, '0');
-                const yy = String(day.fullDate.getFullYear()).slice(-2);
-                const dsPretty = `${mm}/${dd}/${yy}`;
-                const hasAvail = (dayAvailability[dsIso] ?? 0) > 0;
-                const isToday = new Date().toDateString() === day.fullDate.toDateString();
-                const label = isToday ? 'Today' : day.dayName;
-                
-                // Convert Hebrew day names to English
-                const getEnglishDayName = (hebrewDay: string) => {
-                  const dayMap: { [key: string]: string } = {
-                    'ראשון': 'Sunday',
-                    'שני': 'Monday', 
-                    'שלישי': 'Tuesday',
-                    'רביעי': 'Wednesday',
-                    'חמישי': 'Thursday',
-                    'שישי': 'Friday',
-                    'שבת': 'Saturday'
-                  };
-                  return dayMap[hebrewDay] || hebrewDay;
-                };
-                
-                const englishLabel = isToday ? 'Today' : getEnglishDayName(day.dayName);
-                const isSelected = selectedDay === idx;
-                return (
-                  <TouchableOpacity
-                    key={idx}
-                    style={[
-                      styles.dayListItem,
-                      !hasAvail && styles.dayListItemUnavailable,
-                      isSelected && hasAvail && styles.dayListItemSelected,
-                      isSelected && !hasAvail && styles.dayListItemUnavailableSelected,
-                    ]}
-                    onPress={() => {
-                      const isSame = selectedDay === idx;
-                      setSelectedDay(isSame ? null : idx);
-                      setSelectedTime(null);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.dayListItemContent}>
-                      <View style={styles.dayListItemLeftSection}>
-                        <Text style={[
-                          styles.dayListItemDate,
-                          !hasAvail && styles.dayListItemDateUnavailable,
-                          isSelected && styles.dayListItemDateSelected,
-                        ]}>{dsPretty}</Text>
-                        <View style={[
-                          styles.dayListItemDayTag,
-                          !hasAvail && styles.dayListItemDayTagUnavailable,
-                          isSelected && styles.dayListItemDayTagSelected,
-                        ]}>
-                          <Text style={[
-                            styles.dayListItemDayTagText,
-                            !hasAvail && styles.dayListItemDayTagTextUnavailable,
-                            isSelected && styles.dayListItemDayTagTextSelected,
-                          ]}>{englishLabel}</Text>
-                        </View>
-                      </View>
-                      <View style={styles.dayListItemRightSection}>
-                        {hasAvail && (
-                          <View style={styles.dayListItemAvailable}>
-                            <Text style={styles.dayListItemAvailableText}>Available</Text>
+            {/* Monthly calendar grid limited by booking window */}
+            {(() => {
+              const start = new Date();
+              const end = new Date();
+              end.setDate(start.getDate() + Math.max(0, bookingOpenDays - 1));
+
+              const monthStart = new Date(start.getFullYear(), start.getMonth(), 1);
+              const monthEnd = new Date(end.getFullYear(), end.getMonth(), 1);
+
+              const months: Date[] = [];
+              const cursor = new Date(monthStart);
+              while (cursor <= monthEnd) {
+                months.push(new Date(cursor));
+                cursor.setMonth(cursor.getMonth() + 1);
+              }
+
+              const isSameDate = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+
+              return (
+                <View>
+                  {months.map((m, mi) => {
+                    const year = m.getFullYear();
+                    const month = m.getMonth();
+                    const firstDayIdx = new Date(year, month, 1).getDay(); // 0..6, 0=Sun
+                    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+                    // Build grid cells with leading blanks
+                    const cells: (Date | null)[] = Array(firstDayIdx).fill(null);
+                    for (let d = 1; d <= daysInMonth; d++) {
+                      cells.push(new Date(year, month, d));
+                    }
+                    // chunk into weeks
+                    const weeks: (Date | null)[][] = [];
+                    for (let i = 0; i < cells.length; i += 7) {
+                      weeks.push(cells.slice(i, i + 7));
+                    }
+
+                    const monthLabel = new Date(year, month, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+                    return (
+                      <View key={`m-${year}-${month}`} style={{ marginBottom: 16 }}>
+                        <Text style={styles.calendarMonthTitle}>{monthLabel}</Text>
+                        {weeks.map((week, wi) => (
+                          <View key={`w-${mi}-${wi}`} style={styles.calendarGrid}>
+                            {week.map((dateObj, di) => {
+                              if (!dateObj) {
+                                return <View key={`c-${mi}-${wi}-${di}`} style={[styles.calendarCell, { backgroundColor: 'transparent' }]} />;
+                              }
+                              // within range?
+                              const inRange = dateObj >= new Date(start.getFullYear(), start.getMonth(), start.getDate()) && dateObj <= end;
+                              const dsIso = dateObj.toISOString().split('T')[0];
+                              const hasAvail = (dayAvailability[dsIso] ?? 0) > 0;
+                              const isSel = selectedDate ? isSameDate(dateObj, selectedDate) : false;
+                              return (
+                                <TouchableOpacity
+                                  key={`c-${mi}-${wi}-${di}`}
+                                  disabled={!inRange}
+                                  onPress={() => {
+                                    const idx = days.findIndex(d => d.fullDate.toDateString() === dateObj.toDateString());
+                                    setSelectedDay(idx >= 0 ? idx : null);
+                                    setSelectedTime(null);
+                                  }}
+                                  style={[
+                                    styles.calendarCell,
+                                    !inRange && styles.calendarCellDisabled,
+                                    isSel && styles.calendarCellSelected,
+                                  ]}
+                                  activeOpacity={0.7}
+                                >
+                                  <Text style={{
+                                    fontSize: 14,
+                                    fontWeight: '600',
+                                    color: isSel ? '#FFFFFF' : (!inRange ? '#C7C7CC' : '#1C1C1E'),
+                                  }}>
+                                    {dateObj.getDate()}
+                                  </Text>
+                                  {inRange && (
+                                    <View style={[styles.calendarAvailDot, { backgroundColor: hasAvail ? '#34C759' : '#FF3B30' }]} />
+                                  )}
+                                </TouchableOpacity>
+                              );
+                            })}
                           </View>
-                        )}
-                        {!hasAvail && (
-                          <View style={styles.dayListItemWaitlist}>
-                            <Text style={styles.dayListItemWaitlistText}>Join Waitlist</Text>
-                          </View>
-                        )}
+                        ))}
                       </View>
-                    </View>
-                    {isSelected && (
-                      <Ionicons name="checkmark-circle" size={24} color={hasAvail ? colors.primary : "#FF3B30"} />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+                    );
+                  })}
+                </View>
+              );
+            })()}
             <Text style={styles.daysLegendNew}>* Days with no available appointments are marked in red</Text>
             <Text style={styles.daysLegendSecondaryNew}>
               * Even if there are no available appointments – you can click on the day and join the waitlist for that day
@@ -1836,6 +1853,37 @@ export default function BookAppointment() {
 }
 
 const createStyles = (colors: any) => StyleSheet.create({
+  calendarMonthTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    marginBottom: 8,
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 8,
+  },
+  calendarCell: {
+    width: `${100 / 7}%`,
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    marginVertical: 2,
+  },
+  calendarCellDisabled: {
+    opacity: 0.35,
+  },
+  calendarCellSelected: {
+    backgroundColor: colors.primary,
+  },
+  calendarAvailDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginTop: 4,
+  },
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',

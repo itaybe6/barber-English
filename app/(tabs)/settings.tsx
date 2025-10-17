@@ -169,6 +169,7 @@ export default function SettingsScreen() {
   const [isImageLoading, setIsImageLoading] = useState(false);
   const [imageLoadError, setImageLoadError] = useState(false);
   const [imageLoadTimeout, setImageLoadTimeout] = useState<number | null>(null);
+  const [previewFallback, setPreviewFallback] = useState(false);
   const [progressAnimation] = useState(new Animated.Value(0));
   // Address bottom sheet animation
   const addressSheetAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
@@ -222,7 +223,8 @@ export default function SettingsScreen() {
       if (p) {
         const isBadLocalAssetRef = (val: any): boolean => {
           const s = String(val || '');
-          return s.includes('unstable_path=') || /(^\.?\/?assets\/images\/default)/i.test(s);
+          // Treat Expo dev unstable paths, relative bundled assets, and device-local file:// URIs as invalid for remote display
+          return s.includes('unstable_path=') || /(^\.?\/?assets\/images\/default)/i.test(s) || /^file:/i.test(s);
         };
 
         setProfile(p);
@@ -1089,6 +1091,7 @@ export default function SettingsScreen() {
     setPreviewImageType(imageType);
     setImageTranslateX(0);
     setImageTranslateY(0);
+    setPreviewFallback(false);
     
     // Special handling for special backgrounds - no loading needed
     if (imageType === 'login' && (profileLoginImg === 'gradient-background' || 
@@ -1174,14 +1177,34 @@ export default function SettingsScreen() {
       let uploadedUrl: string;
 
       if (isPreset) {
-        // For preset images, prefer copying the remote file into our Storage for stability
-        // If it's a special keyword (e.g., gradient backgrounds on login), keep as-is
+        // For preset images: if HTTP, copy into our storage. If local file path, upload to storage.
         const isRemoteHttp = /^https?:\/\//i.test(imageUri);
-        if (isRemoteHttp) {
+        const isSpecialLoginKeyword = (currentImageType === 'login') && (
+          imageUri === 'gradient-background' ||
+          imageUri === 'solid-blue-background' ||
+          imageUri === 'solid-purple-background' ||
+          imageUri === 'solid-green-background' ||
+          imageUri === 'solid-orange-background' ||
+          imageUri === 'light-silver-background' ||
+          imageUri === 'light-white-background' ||
+          imageUri === 'light-gray-background' ||
+          imageUri === 'light-pink-background' ||
+          imageUri === 'light-cyan-background' ||
+          imageUri === 'light-lavender-background' ||
+          imageUri === 'light-coral-background' ||
+          imageUri === 'dark-black-background' ||
+          imageUri === 'dark-charcoal-background'
+        );
+        if (isSpecialLoginKeyword) {
+          uploadedUrl = imageUri; // keep keyword as-is for login backgrounds
+        } else if (isRemoteHttp) {
           const copied = await uploadRemoteImageToStorage(imageUri, 'business-images');
-          uploadedUrl = copied || imageUri; // fallback to remote URL if copy failed
+          uploadedUrl = copied || imageUri; // fallback to original URL if copy failed
         } else {
-          uploadedUrl = imageUri;
+          // Local preset from app bundle (file:// or asset://) — upload into our storage
+          const guessType = guessMimeFromUri(imageUri);
+          const up = await uploadBusinessImage({ uri: imageUri, base64: null, mimeType: guessType, fileName: null });
+          uploadedUrl = up || '';
         }
       } else {
         // For gallery images, parse the asset data and compress before upload
@@ -1224,6 +1247,13 @@ export default function SettingsScreen() {
       if (!uploadedUrl) {
         Alert.alert('Error', 'Failed to upload image');
         return;
+      }
+
+      // Sanitize: never persist device-local file:// URIs in DB for page images
+      if (/^file:/i.test(uploadedUrl) && currentImageType !== 'login') {
+        const guessType = guessMimeFromUri(uploadedUrl);
+        const up2 = await uploadBusinessImage({ uri: uploadedUrl, base64: null, mimeType: guessType, fileName: null });
+        if (up2) uploadedUrl = up2;
       }
 
       // Update the appropriate image state
@@ -4178,13 +4208,19 @@ export default function SettingsScreen() {
                   backgroundType={profileLoginImg}
                 />
               ) : (
-                <Image
-                  source={{
-                    uri: previewImageType === 'page1' ? profileImageOnPage1 : 
-                          previewImageType === 'page2' ? profileImageOnPage2 : 
-                          previewImageType === 'page3' ? profileImageOnPage3 :
-                          profileLoginImg
-                  }}
+              <Image
+                  source={(() => {
+                    if (previewImageType === 'page1') {
+                      return (imageLoadError ? require('@/assets/images/1homePage.jpg') : { uri: profileImageOnPage1 });
+                    }
+                    if (previewImageType === 'page2') {
+                      return (imageLoadError ? require('@/assets/images/bookApp.jpg') : { uri: profileImageOnPage2 });
+                    }
+                    if (previewImageType === 'page3') {
+                      return (imageLoadError ? require('@/assets/images/nextApp.jpg') : { uri: profileImageOnPage3 });
+                    }
+                    return { uri: profileLoginImg };
+                  })()}
                   style={previewImageType === 'login' ? styles.loginImagePreview : styles.imagePreviewImage}
                   resizeMode={previewImageType === 'login' ? "cover" : "contain"}
                   onLoadStart={() => setIsImageLoading(true)}
@@ -4208,6 +4244,7 @@ export default function SettingsScreen() {
                     setImageLoadTimeout(null);
                   }
                 }}
+                defaultSource={previewImageType === 'page1' ? require('@/assets/images/1homePage.jpg') : (previewImageType === 'page2' ? require('@/assets/images/bookApp.jpg') : (previewImageType === 'page3' ? require('@/assets/images/nextApp.jpg') : undefined))}
                 />
               )}
             </ScrollView>

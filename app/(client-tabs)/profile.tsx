@@ -141,7 +141,7 @@ export default function ClientProfileScreen() {
       if (updated) {
         updateUserProfile({ image_url: uploadedUrl } as any);
       } else {
-        updateUserProfile({ image_url: uploadedUrl } as any);
+        Alert.alert('Error', 'Failed to save profile image');
       }
     } catch (e) {
       console.error('pick/upload avatar failed', e);
@@ -234,7 +234,7 @@ export default function ClientProfileScreen() {
               onPress: async () => {
                 try {
                   setIsDeleting(true);
-                  const ok = await usersApi.deleteUser(user.id);
+                  const ok = await usersApi.deleteUserAndAllDataById(user.id);
                   if (ok) {
                     logout();
                     router.replace('/login');
@@ -278,30 +278,23 @@ export default function ClientProfileScreen() {
           .select('*')
           .eq('business_id', businessId)
           .eq('is_available', false)
-          .lt('slot_date', todayStr)
+          .lt('slot_date', todayStr);
+
+        // Strictly filter by current client within current business
+        if (user?.phone?.trim()) {
+          query = query.eq('client_phone', user.phone.trim());
+        } else if (user?.name?.trim()) {
+          query = query.eq('client_name', user.name.trim());
+        }
+
+        query = query
           .order('slot_date', { ascending: false })
           .order('slot_time', { ascending: false });
-
-        if (user?.name || user?.phone) {
-          const conditions: string[] = [];
-          if (user?.name) conditions.push(`client_name.ilike.%${user.name.trim()}%`);
-          if (user?.phone) conditions.push(`client_phone.eq.${user.phone.trim()}`);
-          if (conditions.length > 0) {
-            query = query.or(conditions.join(','));
-          }
-        }
 
         const { data, error } = await query;
         if (error) throw error;
 
-        let items: AvailableTimeSlot[] = data || [];
-        if (user?.name || user?.phone) {
-          items = items.filter(slot => {
-            const nameMatch = user?.name && slot.client_name && slot.client_name.trim().toLowerCase() === user.name.trim().toLowerCase();
-            const phoneMatch = user?.phone && slot.client_phone && slot.client_phone.trim() === user.phone.trim();
-            return Boolean(nameMatch || phoneMatch);
-          });
-        }
+        let items: AvailableTimeSlot[] = (data || []).filter((slot) => String(slot.business_id) === String(businessId));
 
         setPastAppointments(items);
 
@@ -313,26 +306,21 @@ export default function ClientProfileScreen() {
           .eq('is_available', false)
           .gte('slot_date', todayStr);
 
-        if (user?.name || user?.phone) {
-          const upcomingConds: string[] = [];
-          if (user?.name) upcomingConds.push(`client_name.ilike.%${user.name.trim()}%`);
-          if (user?.phone) upcomingConds.push(`client_phone.eq.${user.phone.trim()}`);
-          if (upcomingConds.length > 0) {
-            upcomingQuery = upcomingQuery.or(upcomingConds.join(','));
-          }
+        // Strictly filter by current client within current business
+        if (user?.phone?.trim()) {
+          upcomingQuery = upcomingQuery.eq('client_phone', user.phone.trim());
+        } else if (user?.name?.trim()) {
+          upcomingQuery = upcomingQuery.eq('client_name', user.name.trim());
         }
+
+        upcomingQuery = upcomingQuery
+          .order('slot_date', { ascending: true })
+          .order('slot_time', { ascending: true });
 
         const { data: upcomingData, error: upcomingError } = await upcomingQuery;
         if (upcomingError) throw upcomingError;
 
-        let upcomingItems: AvailableTimeSlot[] = upcomingData || [];
-        if (user?.name || user?.phone) {
-          upcomingItems = upcomingItems.filter(slot => {
-            const nameMatch = user?.name && slot.client_name && slot.client_name.trim().toLowerCase() === user.name.trim().toLowerCase();
-            const phoneMatch = user?.phone && slot.client_phone && slot.client_phone.trim() === user.phone.trim();
-            return Boolean(nameMatch || phoneMatch);
-          });
-        }
+        let upcomingItems: AvailableTimeSlot[] = (upcomingData || []).filter((slot) => String(slot.business_id) === String(businessId));
         setUpcomingAppointments(upcomingItems);
       } catch (e) {
         console.error('Error loading past appointments:', e);
@@ -572,8 +560,8 @@ export default function ClientProfileScreen() {
                     if (updated) {
                       updateUserProfile({ name: updated.name as any, phone: (updated as any).phone, email: (updated as any).email } as any);
                     } else {
-                      // Fallback: update local store even if API failed, per request UX
-                      updateUserProfile({ name: editName.trim(), phone: editPhone.trim(), email: (editEmail || '').trim() || (null as any) } as any);
+                      Alert.alert('Error', 'Failed to save profile');
+                      return;
                     }
                     setIsEditOpen(false);
                   } catch (e) {
@@ -756,7 +744,7 @@ export default function ClientProfileScreen() {
                       <Text style={styles.historyService}>{item.service_name || 'שירות'}</Text>
                       <View style={[styles.statusPill, { backgroundColor: `${businessColors.primary}20` }]}>
                         <Ionicons name="calendar" size={16} color={businessColors.primary} />
-                        <Text style={[styles.statusPillText, { color: businessColors.primary }]}>קרוב</Text>
+                        <Text style={[styles.statusPillText, { color: businessColors.primary }]}>Upcoming</Text>
                       </View>
                     </View>
                     <View style={styles.historyCardBody}>

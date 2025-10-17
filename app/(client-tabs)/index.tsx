@@ -161,6 +161,7 @@ export default function ClientHomeScreen() {
   const [showMessageModal, setShowMessageModal] = useState(false);
   const [cardWidth, setCardWidth] = useState(0);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
+  const [heroImageFailed, setHeroImageFailed] = useState(false);
   const [managerPhone, setManagerPhone] = useState<string | null>(null);
   const [businessPhone, setBusinessPhone] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -705,9 +706,17 @@ export default function ClientHomeScreen() {
       {/* Full Screen Hero with Overlay Header */}
       <View style={styles.fullScreenHero}>
         <Image 
-          source={businessProfile?.image_on_page_1 ? { uri: businessProfile.image_on_page_1 } : require('@/assets/images/1homePage.jpg')} 
+          source={
+            heroImageFailed
+              ? require('@/assets/images/1homePage.jpg')
+              : (businessProfile?.image_on_page_1
+                  ? { uri: businessProfile.image_on_page_1 }
+                  : require('@/assets/images/1homePage.jpg'))
+          }
           style={styles.fullScreenHeroImage}
           resizeMode="cover"
+          onError={() => setHeroImageFailed(true)}
+          defaultSource={require('@/assets/images/1homePage.jpg')}
         />
         <LinearGradient
           colors={['rgba(0,0,0,0.6)', 'rgba(0,0,0,0.6)', 'rgba(0,0,0,0.6)']}

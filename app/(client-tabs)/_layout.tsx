@@ -3,12 +3,24 @@ import { Tabs } from 'expo-router';
 import { View, TouchableOpacity, StyleSheet, Animated, Easing, Alert, Text as RNText } from 'react-native';
 import Colors from '@/constants/colors';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import LoginRequiredModal from '@/components/LoginRequiredModal';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
+
+// Utility to convert hex color to rgba string with alpha for translucent tints
+function hexToRgba(hex: string, alpha: number): string {
+  const normalized = hex.replace('#', '');
+  const isShort = normalized.length === 3;
+  const r = parseInt(isShort ? normalized[0] + normalized[0] : normalized.slice(0, 2), 16);
+  const g = parseInt(isShort ? normalized[1] + normalized[1] : normalized.slice(2, 4), 16);
+  const b = parseInt(isShort ? normalized[2] + normalized[2] : normalized.slice(4, 6), 16);
+  const clampedAlpha = Math.max(0, Math.min(1, alpha));
+  return `rgba(${r}, ${g}, ${b}, ${clampedAlpha})`;
+}
 
 // Custom floating button component
 const FloatingBookButton = ({ onPress, focused }: { onPress: () => void; focused: boolean }) => {
@@ -66,11 +78,16 @@ const FloatingBookButton = ({ onPress, focused }: { onPress: () => void; focused
     >
       <Animated.View style={motionStyle}>
         <LinearGradient
-          colors={[colors.primary, colors.primary]}
+          // Glassy tint that preserves brand color while adding transparency
+          colors={[hexToRgba(colors.primary, 0.55), hexToRgba(colors.primary, 0.4)]}
           style={styles.floatingGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
         >
+          {/* Liquid glass blur behind the tint */}
+          <BlurView intensity={50} tint="light" style={StyleSheet.absoluteFillObject} />
+          {/* Subtle inner highlight for glass edge */}
+          <View style={styles.floatingGlassEdge} />
           <View style={[styles.floatingIcon, focused && styles.floatingIconFocused]}>
             <Ionicons 
               name="add" 
@@ -433,6 +450,19 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.05 }],
   },
   
+  // Subtle inner edge/highlight for glass look
+  floatingGlassEdge: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)'
+  },
+
   floatingShadow: {
     position: 'absolute',
     top: 4,

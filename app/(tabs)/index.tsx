@@ -95,6 +95,7 @@ export default function HomeScreen() {
   const [editClientPhone, setEditClientPhone] = useState('');
   const [savingClient, setSavingClient] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [heroImageFailed, setHeroImageFailed] = useState(false);
   const [blockedFilter, setBlockedFilter] = useState<'all' | 'blocked' | 'unblocked'>('all');
   const categories = [
     {
@@ -635,9 +636,17 @@ export default function HomeScreen() {
       {/* Hero with overlay header (like client home) */}
       <View style={styles.fullScreenHero}>
         <Image
-          source={businessProfile?.image_on_page_1 ? { uri: businessProfile.image_on_page_1 } : require('@/assets/images/1homePage.jpg')}
+          source={
+            heroImageFailed
+              ? require('@/assets/images/1homePage.jpg')
+              : (businessProfile?.image_on_page_1
+                  ? { uri: businessProfile.image_on_page_1 }
+                  : require('@/assets/images/1homePage.jpg'))
+          }
           style={styles.fullScreenHeroImage}
           resizeMode="cover"
+          onError={() => setHeroImageFailed(true)}
+          defaultSource={require('@/assets/images/1homePage.jpg')}
         />
         <LinearGradient
           colors={['rgba(0,0,0,0.6)', 'rgba(0,0,0,0.6)', 'rgba(0,0,0,0.6)']}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Image, Modal, RefreshControl, Linking, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Image, Modal, RefreshControl, Linking, Platform, Dimensions, FlatList } from 'react-native';
 import { BlurView } from 'expo-blur';
 import * as Calendar from 'expo-calendar';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +16,7 @@ import { notificationsApi } from '@/lib/api/notifications';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
 import { User } from '@/lib/supabase';
+import Animated, { useSharedValue, useAnimatedScrollHandler, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, Easing } from 'react-native-reanimated';
 
 
 // API functions for booking appointments
@@ -346,6 +347,147 @@ const getNextNDays = (n: number) => {
   }
   
   return days;
+};
+
+// Circular slider constants
+const AVATAR_SIZE = 68;
+const ITEM_SPACING = 16;
+const ITEM_SIZE = AVATAR_SIZE + ITEM_SPACING;
+const SCREEN = Dimensions.get('window');
+const CAROUSEL_HEIGHT = SCREEN.height;
+const AnimatedFlatList: any = Animated.createAnimatedComponent(FlatList as any);
+
+type BarberSelectorProps = {
+  barbers: User[];
+  activeIndex: number;
+  onIndexChange: (idx: number) => void;
+  styles: any;
+  renderTopOverlay?: () => React.ReactNode;
+  bottomOffset?: number;
+};
+
+const BarberCarouselSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, onIndexChange, styles, renderTopOverlay, bottomOffset }) => {
+  const scrollX = useSharedValue(Math.max(0, activeIndex) * ITEM_SIZE);
+  const listRef = React.useRef<FlatList>(null);
+  const lastIndex = React.useRef<number>(Math.max(0, activeIndex));
+
+  // Background cross-fade between current and next barber image
+  const [bgCurrent, setBgCurrent] = React.useState<string | null>(barbers[activeIndex]?.image_url || null);
+  const [bgNext, setBgNext] = React.useState<string | null>(null);
+  const bgFade = useSharedValue(0);
+  const bgScale = useSharedValue(1);
+
+  React.useEffect(() => {
+    const nextUrl = barbers[activeIndex]?.image_url || null;
+    if (nextUrl && nextUrl !== bgCurrent) {
+      setBgNext(nextUrl);
+      bgFade.value = 0;
+      bgScale.value = 0.985;
+      bgFade.value = withTiming(1, { duration: 420, easing: Easing.out(Easing.cubic) }, (finished) => {
+        if (finished) {
+          runOnJS(setBgCurrent)(nextUrl);
+          runOnJS(setBgNext)(null);
+        }
+        bgFade.value = 0;
+        bgScale.value = withTiming(1, { duration: 260, easing: Easing.out(Easing.cubic) });
+      });
+    }
+  }, [activeIndex, barbers.length]);
+
+  React.useEffect(() => {
+    try {
+      if (listRef.current && Number.isFinite(activeIndex)) {
+        listRef.current.scrollToOffset({ offset: Math.max(0, activeIndex) * ITEM_SIZE, animated: true });
+      }
+    } catch {}
+  }, [activeIndex]);
+
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      'worklet';
+      scrollX.value = e.contentOffset.x;
+    },
+  });
+
+  const nextBgStyle = useAnimatedStyle(() => ({ opacity: bgFade.value, transform: [{ scale: bgScale.value }] }));
+
+  const CarouselItem: React.FC<{ item: User; index: number }> = ({ item, index }) => {
+    const cardStyle = (useAnimatedStyle(() => {
+      const pos = scrollX.value / ITEM_SIZE;
+      const scale = interpolate(pos, [index - 1, index, index + 1], [0.94, 1.08, 0.94], Extrapolate.CLAMP);
+      const opacity = interpolate(pos, [index - 1, index, index + 1], [0.6, 1, 0.6], Extrapolate.CLAMP);
+      return { transform: [{ scale: scale as any }] as any, opacity } as any;
+    }) as any);
+
+    return (
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={() => {
+          try {
+            listRef.current?.scrollToOffset({ offset: index * ITEM_SIZE, animated: true });
+          } catch {}
+          onIndexChange(index);
+        }}
+      >
+        <Animated.View style={[styles.carouselItem, cardStyle]}>
+          {item.image_url ? (
+            <Image source={{ uri: item.image_url }} style={styles.carouselItemImage} />
+          ) : (
+            <View style={[styles.carouselItemImage, styles.carouselItemPlaceholder]}>
+              <Ionicons name="person" size={28} color="#8E8E93" />
+            </View>
+          )}
+        </Animated.View>
+      </TouchableOpacity>
+    );
+  };
+
+  return (
+    <View style={styles.carouselContainer}>
+      {!!bgCurrent && (
+        <Image source={{ uri: bgCurrent }} style={styles.bgImage} />
+      )}
+      {!!bgNext && (
+        <Animated.Image source={{ uri: bgNext }} style={[styles.bgImage, nextBgStyle]} />
+      )}
+      <View style={styles.bgDimOverlay} />
+      {typeof renderTopOverlay === 'function' ? (
+        <View style={styles.carouselTopOverlay}>{renderTopOverlay()}</View>
+      ) : null}
+
+      <View style={[styles.carouselBottomArea, { bottom: (bottomOffset ?? 28) }] }>
+        <AnimatedFlatList
+          ref={listRef as any}
+          horizontal
+          data={barbers}
+          keyExtractor={(it: User) => String(it.id)}
+          renderItem={({ item, index }) => <CarouselItem item={item} index={index} />}
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={ITEM_SIZE}
+          decelerationRate="fast"
+          bounces={false}
+          style={styles.carouselList}
+          contentContainerStyle={{ paddingHorizontal: (SCREEN.width - ITEM_SIZE) / 2 }}
+          onScroll={scrollHandler}
+          onMomentumScrollEnd={(e: any) => {
+            const raw = e.nativeEvent.contentOffset.x / ITEM_SIZE;
+            const idx = Math.round(raw);
+            const clamped = Math.max(0, Math.min(barbers.length - 1, idx));
+            if (clamped !== lastIndex.current) {
+              lastIndex.current = clamped;
+              onIndexChange(clamped);
+            }
+          }}
+          scrollEventThrottle={16}
+        />
+        {Number.isFinite(activeIndex) && barbers[activeIndex] && (
+          <Text style={styles.carouselActiveName} numberOfLines={1}>
+            {barbers[activeIndex]?.name || ''}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
 };
 
 export default function BookAppointment() {
@@ -1269,70 +1411,65 @@ export default function BookAppointment() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View style={{ width: 22 }} />
-          <View style={{ alignItems: 'center' }}>
-            <Text style={styles.title}>Appointment Booking</Text>
-            <Text style={styles.headerSubtitle}>Select a service, day, and time</Text>
+    <SafeAreaView style={styles.container} edges={currentStep === 1 ? [] : ['top']}>
+      {currentStep !== 1 && (
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <View style={{ width: 22 }} />
+            <View style={{ alignItems: 'center' }}>
+              <Text style={styles.title}>Appointment Booking</Text>
+              <Text style={styles.headerSubtitle}>Select a service, day, and time</Text>
+            </View>
+            <View style={{ width: 22 }} />
           </View>
-          <View style={{ width: 22 }} />
         </View>
-      </View>
-      <View style={styles.contentWrapper}>
+      )}
+      <View style={[styles.contentWrapper, currentStep === 1 ? { backgroundColor: 'transparent', borderTopLeftRadius: 0, borderTopRightRadius: 0, paddingTop: 0 } : null]}>
         <ScrollView
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: contentBottomPadding }]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: currentStep === 1 ? 160 : contentBottomPadding }]}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#000" />}
         >
 
         {/* Step 1: Barber Selection */}
         {currentStep === 1 && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>Select Employee</Text>
+          <View style={[styles.section, styles.sectionFullBleed]}>
             {isLoadingBarbers ? (
               <View style={styles.loadingContainer}>
                 <Text style={styles.loadingText}>Loading Employees...</Text>
               </View>
             ) : (
-              <View style={styles.barbersList}>
-                {availableBarbers.map((barber) => (
-                  <TouchableOpacity
-                    key={barber.id}
-                    style={[
-                      styles.barberListItem,
-                      selectedBarber?.id === barber.id && styles.barberListItemSelected
-                    ]}
-                    onPress={() => {
-                      const isSame = selectedBarber?.id === barber.id;
-                      setSelectedBarber(isSame ? null : barber);
-                      setSelectedService(null);
-                      setSelectedDay(null);
-                      setSelectedTime(null);
-                      setAvailableSlots([]);
-                      setIsLoadingSlots(false);
-                      setDayAvailability({});
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.barberListItemImageContainer}>
-                      {barber.image_url ? (
-                        <Image source={{ uri: barber.image_url }} style={styles.barberListItemImage} />
-                      ) : (
-                        <View style={styles.barberListItemImagePlaceholder}>
-                          <Ionicons name="person" size={24} color="#8E8E93" />
-                        </View>
-                      )}
-                    </View>
-                    <View style={styles.barberListItemContent}>
-                      <Text style={styles.barberListItemName}>{barber.name}</Text>
-                    </View>
-                    {selectedBarber?.id === barber.id && (
-                      <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
-                    )}
-                  </TouchableOpacity>
-                ))}
+              <View>
+                <BarberCarouselSelector
+                  barbers={availableBarbers}
+                  activeIndex={Math.max(0, availableBarbers.findIndex(b => b.id === selectedBarber?.id))}
+                  onIndexChange={(idx) => {
+                    const barber = availableBarbers[idx];
+                    if (!barber) return;
+                    const isSame = selectedBarber?.id === barber.id;
+                    setSelectedBarber(isSame ? barber : barber);
+                    setSelectedService(null);
+                    setSelectedDay(null);
+                    setSelectedTime(null);
+                    setAvailableSlots([]);
+                    setIsLoadingSlots(false);
+                    setDayAvailability({});
+                  }}
+                  styles={styles}
+                  renderTopOverlay={() => (
+                    selectedBarber ? (
+                      <TouchableOpacity
+                        style={styles.overlayContinueBtn}
+                        activeOpacity={0.9}
+                        onPress={() => setCurrentStep(2)}
+                      >
+                        <BlurView intensity={24} tint="dark" style={styles.overlayContinueBlur} />
+                        <Text style={styles.overlayContinueText}>Continue to Service Selection</Text>
+                      </TouchableOpacity>
+                    ) : null
+                  )}
+                  bottomOffset={Math.max(insets.bottom, 20) + 60}
+                />
               </View>
             )}
           </View>
@@ -1511,16 +1648,9 @@ export default function BookAppointment() {
       </View>
 
       {/* Footer action button per step */}
-      {footerVisible && (
+      {footerVisible && currentStep !== 1 && (
         <View style={[styles.bookingFooter, { bottom: footerBottom }]}>
-          {currentStep === 1 && selectedBarber && (
-            <TouchableOpacity
-              style={[styles.bookBtn]}
-              onPress={() => setCurrentStep(2)}
-            >
-              <Text style={styles.bookBtnText}>Continue to Service Selection</Text>
-            </TouchableOpacity>
-          )}
+          {/* Step 1 button moved into overlay; footer hidden */}
 
           {currentStep === 2 && selectedService && (
             <TouchableOpacity
@@ -1853,6 +1983,103 @@ export default function BookAppointment() {
 }
 
 const createStyles = (colors: any) => StyleSheet.create({
+  // Carousel & background styles
+  carouselContainer: {
+    height: CAROUSEL_HEIGHT,
+    borderRadius: 0,
+    overflow: 'hidden',
+    marginBottom: 0,
+  },
+  bgImage: {
+    ...StyleSheet.absoluteFillObject as any,
+    width: '100%',
+    height: '100%',
+  },
+  bgDimOverlay: {
+    ...StyleSheet.absoluteFillObject as any,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
+  carouselTopOverlay: {
+    position: 'absolute',
+    top: 56,
+    left: 16,
+    right: 16,
+    alignItems: 'center',
+  },
+  carouselBottomArea: {
+    position: 'absolute',
+    bottom: 28,
+    left: 0,
+    right: 0,
+    paddingBottom: 12,
+    paddingHorizontal: 12,
+  },
+  carouselList: {
+    paddingTop: 10,
+    paddingBottom: 10,
+  },
+  carouselItem: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: ITEM_SPACING / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.85)',
+    // Keep stable layout to avoid jumps
+    alignSelf: 'center',
+  },
+  carouselItemImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: AVATAR_SIZE / 2,
+  },
+  carouselItemPlaceholder: {
+    backgroundColor: '#F2F2F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  carouselActiveName: {
+    textAlign: 'center',
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 16,
+    marginTop: 12,
+    textShadowColor: 'rgba(0,0,0,0.25)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  overlayContinueBtn: {
+    width: '88%',
+    borderRadius: 22,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  overlayContinueBlur: {
+    ...StyleSheet.absoluteFillObject as any,
+    borderRadius: 22,
+  },
+  overlayContinueText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    textShadowColor: 'rgba(0,0,0,0.25)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
   calendarMonthTitle: {
     fontSize: 16,
     fontWeight: '700',
@@ -1959,6 +2186,10 @@ const createStyles = (colors: any) => StyleSheet.create({
   section: {
     marginTop: 24,
     marginHorizontal: 16,
+  },
+  sectionFullBleed: {
+    marginTop: 0,
+    marginHorizontal: 0,
   },
   sectionTitle: {
     fontSize: 24,

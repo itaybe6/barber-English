@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native';
 import { Client } from '@/constants/clients';
 import Colors from '@/constants/colors';
 import Card from './Card';
+import { useTranslation } from 'react-i18next';
 import { Phone, Calendar } from 'lucide-react-native';
 
 interface ClientCardProps {
@@ -11,8 +12,9 @@ interface ClientCardProps {
 }
 
 export default function ClientCard({ client, onPress }: ClientCardProps) {
+  const { t } = useTranslation();
   const formatDate = (dateString?: string) => {
-    if (!dateString) return 'לא ביקרה עדיין';
+    if (!dateString) return t('clients.noVisit', 'No visit yet');
     
     const date = new Date(dateString);
     return date.toLocaleDateString('he-IL');
@@ -38,7 +40,7 @@ export default function ClientCard({ client, onPress }: ClientCardProps) {
           
           <View style={styles.infoRow}>
             <Calendar size={14} color={Colors.subtext} />
-            <Text style={styles.infoText}>ביקור אחרון: {formatDate(client.lastVisit)}</Text>
+            <Text style={styles.infoText}>{t('clients.lastVisit', 'Last visit')}: {formatDate(client.lastVisit)}</Text>
           </View>
         </View>
       </Card>

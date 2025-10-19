@@ -1,6 +1,7 @@
 import React from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useColors } from '../src/theme/ThemeProvider';
@@ -15,6 +16,7 @@ type Props = {
 
 export default function LoginRequiredModal({ visible, onClose, onLogin, title, message }: Props) {
   const colors = useColors();
+  const { t } = useTranslation();
   
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
@@ -38,9 +40,9 @@ export default function LoginRequiredModal({ visible, onClose, onLogin, title, m
 
             {/* Content */}
             <View style={styles.content}>
-              <Text style={styles.title}>{title || 'Login required'}</Text>
+              <Text style={styles.title}>{title || t('login.required', 'Login required')}</Text>
               <Text style={styles.message}>
-                {message || 'Please sign in to access this feature'}
+                {message || t('login.pleaseSignInTo', 'Please sign in to {{action}}.', { action: t('notifications.title', 'Notifications') })}
               </Text>
             </View>
 
@@ -54,12 +56,12 @@ export default function LoginRequiredModal({ visible, onClose, onLogin, title, m
                   style={styles.primaryButtonGradient}
                 >
                   <Ionicons name="log-in-outline" size={20} color="#FFFFFF" />
-                  <Text style={styles.primaryButtonText}>Sign in now</Text>
+                  <Text style={styles.primaryButtonText}>{t('auth.signInNow', 'Sign in now')}</Text>
                 </LinearGradient>
               </TouchableOpacity>
               
               <TouchableOpacity style={styles.secondaryButton} onPress={onClose} activeOpacity={0.8}>
-                <Text style={styles.secondaryButtonText}>Maybe later</Text>
+                <Text style={styles.secondaryButtonText}>{t('auth.maybeLater', 'Maybe later')}</Text>
               </TouchableOpacity>
             </View>
           </View>

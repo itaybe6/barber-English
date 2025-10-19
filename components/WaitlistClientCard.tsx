@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { View, Text, Image, StyleSheet } from 'react-native';
 
 interface WaitlistClientCardProps {
@@ -14,8 +15,9 @@ export default function WaitlistClientCard({
   image,
   time,
   type,
-  tag = 'המתנה',
+  tag,
 }: WaitlistClientCardProps) {
+  const { t } = useTranslation();
   const hasImage = Boolean(image && image.trim().length > 0);
   const placeholder = require('@/assets/images/user.png');
   
@@ -27,7 +29,7 @@ export default function WaitlistClientCard({
         <Text style={styles.type} numberOfLines={1} ellipsizeMode="tail">{type}</Text>
         <Text style={styles.time} numberOfLines={1} ellipsizeMode="tail">{time}</Text>
         <View style={styles.tag}>
-          <Text style={styles.tagText}>{tag}</Text>
+          <Text style={styles.tagText}>{tag || t('admin.waitlist.waiting', 'Waiting')}</Text>
         </View>
       </View>
     </View>

@@ -90,6 +90,14 @@
   "appointments.subtitle.client": "Upcoming and past appointments",
   "appointments.upcoming": "Upcoming",
   "appointments.history": "History",
+  "appointments.status": { "confirmed": "Confirmed", "pending": "Pending", "cancelled": "Cancelled", "completed": "Completed" },
+  "appointments.payment": { "paid": "Paid", "deposit": "Deposit", "unpaid": "Unpaid" },
+  "clients": { "noVisit": "No visit yet", "lastVisit": "Last visit" },
+  "clients.client": "Client ",
+  "appointments.empty.date": "No appointments for this date",
+  "commonEx": { "tryAgain": "An error occurred. Please try again.", "client": "Client", "smsOpenFailed": "SMS app cannot be opened on this device", "change": "Change", "select": "Select" },
+  "adminEx": { "appointmentsAdmin": { "pickDate": "Select the date for this appointment", "client": "Client", "pickClient": "Pick the client for this appointment", "pickService": "Choose the service to perform", "selectServicePlaceholder": "Select service...", "pickTime": "Pick an available time slot", "addAppointment": "add appointment", "summary": "Appointment Summary" } },
+  "appointments.empty.today": "No upcoming appointments today",
   "appointments.updating": "Updating appointments...",
   "appointments.loadingSchedule": "Loading your schedule...",
   "appointments.loadingAppointments": "Loading your appointments...",
@@ -149,6 +157,8 @@
   "gallery.emptySubtitle.products": "When you add products, they will appear here",
   "gallery.viewer.designPhotos": "Design Photos",
   "gallery.viewer.productPhotos": "Product Photos",
+  "gallery.preview": "Preview",
+  "gallery.loadingImage": "Loading image...",
   
   "notifications.loading": "Loading notifications...",
   "notifications.filter.all": "All",
@@ -211,8 +221,12 @@
   "tabs": { "home": "Home", "gallery": "Gallery", "book": "Book", "profile": "Profile" },
   "gallery": { "loginToView": "Please sign in to view full designs" },
   "products": { "loginToViewDetails": "Please sign in to view product details" },
+  "auth": { "signInNow": "Sign in now", "maybeLater": "Maybe later" },
+  "nearestSlots": { "title": "Available soon", "empty": "No nearby available appointments" },
   "map": { "mapsLabel": "Maps" },
   "common": { "tryAgain": "An error occurred. Please try again.", "client": "Client", "smsOpenFailed": "SMS app cannot be opened on this device" },
+  "category": { "gel": "Gel polish", "feet": "Pedicure polish", "manicure": "Manicure" },
+  "admin2": { "hoursAdmin": { "title": "Work constraints", "segment": { "hours": "Hours", "singleDay": "Single day", "multiDays": "Multiple days" }, "pickDateShort": "Pick a date", "closedHours": "Closed hours", "pickDateAllDay": "Pick a date (closed all day)", "pickDateRangeAllDay": "Pick a date range (closed all day)", "selectedRange": "Selected range:", "allDay": "All day", "chooseClosedHours": "Choose closed hours", "start": "Start", "end": "End", "upcomingConstraints": "Upcoming constraints", "noUpcomingConstraints": "No upcoming constraints", "noReason": "No reason", "saveCTA": "Save constraints" } },
   "login": {
     "fillAll": "Please fill in all fields",
     "blockedCannotSignIn": "Your account is blocked and cannot sign in. Please contact the manager.",
@@ -398,7 +412,7 @@
       "priceHint": "Set the price for this product",
       "pricePlaceholder": "0.00"
     },
-    "appointments": {
+    "appointmentsAdmin": {
       "loadingForDate": "Loading appointments for {{date}}...",
       "emptyTitle": "No appointments for this day",
       "emptySubtitle": "Choose another day from the top bar",
@@ -406,7 +420,7 @@
       "callClient": "Call client",
       "cancelMessage": "This will free the time and remove the client details for the selected appointment."
     },
-    "hours": {
+    "hoursAdmin": {
       "title": "Working hours",
       "subtitle": "Set your weekly working schedule and breaks",
       "manageConstraints": "Manage constraints (closed dates/hours)",
@@ -446,6 +460,25 @@
       "waiting": "Waiting",
       "emptyTitle": "No waitlist entries for this day",
       "emptySubtitle": "No clients are waiting for this day"
+    },
+    "appointments": {
+      "loadClientsFailed": "Error loading client list",
+      "loadServicesFailed": "Error loading services list",
+      "fillAllRequired": "Please fill in all required fields",
+      "userNotLogged": "User not logged in",
+      "scheduled": "Appointment scheduled successfully",
+      "scheduleFailed": "Error scheduling appointment",
+      "selectDateAndService": "Please select date and service first",
+      "selectClientPlaceholder": "Select client..."
+    },
+    "hours": {
+      "selectDate": "Please select a date",
+      "endAfterStart": "End time must be after start time",
+      "selectDateRange": "Please select a date range",
+      "invalidDateRange": "Invalid date range",
+      "saved": "Constraints saved successfully",
+      "saveFailed": "Failed to save constraints",
+      "enterReason": "Enter reason"
     }
   }
 }

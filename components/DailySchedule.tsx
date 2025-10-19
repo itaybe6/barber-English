@@ -106,7 +106,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
   return (
     <View style={isFrosted ? styles.frostedContainer : styles.container}>
       <View style={styles.dailyTitleWrapper}>
-        <Text style={[styles.dailyTitle, { color: colors.primary }]}>Daily Schedule</Text>
+        <Text style={[styles.dailyTitle, { color: colors.primary }]}>{t('appointments.mySchedule', 'My Schedule')}</Text>
         <View style={styles.dailyTitleAccent} />
       </View>
       <View style={styles.cardsRow}>
@@ -155,7 +155,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
               ) : (
                 <View style={styles.timePillHeader}>
                   <Text style={styles.timeTextPill}>
-                    {todayAppointmentsCount} today
+                    {todayAppointmentsCount} {t('today', 'Today')}
                   </Text>
                 </View>
               )}
@@ -214,16 +214,16 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
             </BlurView>
           ) : (
             <>
-              <View style={styles.cardHeaderRow}>
+            <View style={styles.cardHeaderRow}>
                 <View style={styles.headerIconCircle}>
                   <Ionicons name="time-outline" size={18} color={colors.primary} />
                 </View>
-                <Text style={styles.nextTitle}>Next appointment</Text>
+              <Text style={styles.nextTitle}>{t('appointments.next', 'Your next appointment')}</Text>
               </View>
               {loading ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="small" color={colors.primary} />
-                  <Text style={styles.loadingText}>Loading...</Text>
+                <Text style={styles.loadingText}>{t('appointments.loading', 'Loading appointments...')}</Text>
                 </View>
               ) : nextAppointment ? (
                 <>
@@ -238,7 +238,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
                           )}
                         </View>
                         <Text style={styles.clientNameBlack}>
-                          {nextAppointment.client_name || 'Unknown client'}
+                          {nextAppointment.client_name || t('booking.unknown', 'Unknown')}
                         </Text>
                       </View>
                       {nextAppointment.service_name && (
@@ -255,7 +255,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
                 </>
               ) : (
                 <View style={styles.emptyStateContainer}>
-                  <Text style={styles.emptyTitle}>No upcoming appointments today</Text>
+                  <Text style={styles.emptyTitle}>{t('appointments.empty.today', 'No upcoming appointments today')}</Text>
                 </View>
               )}
             </>

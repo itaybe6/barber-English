@@ -5,6 +5,7 @@ import { supabase, AvailableTimeSlot } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
 
 export default function FloatingNearestSlots() {
   const router = useRouter();
@@ -12,6 +13,7 @@ export default function FloatingNearestSlots() {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [slots, setSlots] = useState<AvailableTimeSlot[]>([]);
+  const { t } = useTranslation();
 
   const fetchNearest = useCallback(async () => {
     setIsLoading(true);
@@ -88,7 +90,7 @@ export default function FloatingNearestSlots() {
               <View style={styles.headerIcon}>
                 <Ionicons name="flash" size={18} color="#FFD60A" />
               </View>
-              <Text style={styles.sheetTitle}>תורים זמינים בקרוב</Text>
+              <Text style={styles.sheetTitle}>{t('nearestSlots.title', 'Available soon')}</Text>
               <TouchableOpacity onPress={() => setIsOpen(false)} style={styles.closeBtn}>
                 <Ionicons name="close" size={20} color="#8E8E93" />
               </TouchableOpacity>
@@ -97,12 +99,12 @@ export default function FloatingNearestSlots() {
             {isLoading ? (
               <View style={styles.loadingWrap}>
                 <ActivityIndicator size="small" color="#007AFF" />
-                <Text style={styles.loadingText}>טוען...</Text>
+                <Text style={styles.loadingText}>{t('refreshing', 'Refreshing...')}</Text>
               </View>
             ) : slots.length === 0 ? (
               <View style={styles.emptyWrap}>
                 <Ionicons name="calendar-outline" size={22} color="#8E8E93" />
-                <Text style={styles.emptyText}>אין תורים זמינים בקרוב</Text>
+                <Text style={styles.emptyText}>{t('nearestSlots.empty', 'No nearby available appointments')}</Text>
               </View>
             ) : (
               <View style={styles.list}>

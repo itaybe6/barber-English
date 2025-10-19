@@ -2,11 +2,12 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 const categories = [
-  { key: 'gel', label: "לק ג'ל", icon: 'hand-back-left-outline' },
-  { key: 'feet', label: 'לק ברגליים', icon: 'foot-print' },
-  { key: 'manicure', label: 'מניקור', icon: 'hand-heart' },
+  { key: 'gel', label: 'category.gel', icon: 'hand-back-left-outline' },
+  { key: 'feet', label: 'category.feet', icon: 'foot-print' },
+  { key: 'manicure', label: 'category.manicure', icon: 'hand-heart' },
 ];
 
 type CategoryButtonProps = {
@@ -17,6 +18,7 @@ type CategoryButtonProps = {
 };
 
 const CategoryButton = ({ icon, label, active, onPress }: CategoryButtonProps) => {
+  const { t } = useTranslation();
   const animated = useRef(new Animated.Value(active ? 1 : 0)).current;
 
   useEffect(() => {
@@ -33,7 +35,7 @@ const CategoryButton = ({ icon, label, active, onPress }: CategoryButtonProps) =
         <View style={styles.iconCircle}>
           <MaterialCommunityIcons name={icon} size={22} color={active ? '#fff' : '#8B6DE9'} />
         </View>
-        <Text style={active ? styles.activeText : styles.inactiveText}>{label}</Text>
+        <Text style={active ? styles.activeText : styles.inactiveText}>{t(label as any)}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -45,6 +47,7 @@ type CategoryBarProps = {
 };
 
 export default function CategoryBar({ initial = 'haircut', onSelect }: CategoryBarProps) {
+  const { t } = useTranslation();
   const [selected, setSelected] = useState(initial);
 
   const handleSelect = (key: string) => {

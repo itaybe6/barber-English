@@ -19,6 +19,7 @@ import { X, User, Phone, Mail, Lock } from 'lucide-react-native';
 import { usersApi } from '@/lib/api/users';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import Colors from '@/constants/colors';
+import { useTranslation } from 'react-i18next';
 
 interface AddAdminModalProps {
   visible: boolean;
@@ -28,6 +29,7 @@ interface AddAdminModalProps {
 
 export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminModalProps) {
   const { colors: businessColors } = useBusinessColors();
+  const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
   
   // Form fields
@@ -61,12 +63,12 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
 
   const validateForm = () => {
     if (!name.trim()) {
-      Alert.alert('Error', 'Please enter a name');
+      Alert.alert(t('error.generic', 'Error'), t('settings.admin.nameRequired', 'Please enter a name'));
       return false;
     }
     
     if (!phone.trim()) {
-      Alert.alert('Error', 'Please enter a phone number');
+      Alert.alert(t('error.generic', 'Error'), t('settings.admin.phoneRequired', 'Please enter a phone number'));
       return false;
     }
     
@@ -75,34 +77,34 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
     const usPhoneRegex = /^[0-9]{10}$/; // 10 digits for US
     
     if (!usPhoneRegex.test(cleanPhone)) {
-      Alert.alert('Error', 'Please enter a valid phone number (US: (555) 123-4567)');
+      Alert.alert(t('error.generic', 'Error'), t('settings.admin.phoneInvalid', 'Please enter a valid phone number (US: (555) 123-4567)'));
       return false;
     }
     
     if (!email.trim()) {
-      Alert.alert('Error', 'Please enter an email address');
+      Alert.alert(t('error.generic', 'Error'), t('settings.admin.emailRequired', 'Please enter an email address'));
       return false;
     }
     
     // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
-      Alert.alert('Error', 'Please enter a valid email address');
+      Alert.alert(t('error.generic', 'Error'), t('settings.admin.emailInvalid', 'Please enter a valid email address'));
       return false;
     }
     
     if (!password.trim()) {
-      Alert.alert('Error', 'Please enter a password');
+      Alert.alert(t('error.generic', 'Error'), t('settings.admin.passwordRequired', 'Please enter a password'));
       return false;
     }
     
     if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      Alert.alert(t('error.generic', 'Error'), t('settings.admin.passwordTooShort', 'Password must be at least 6 characters'));
       return false;
     }
     
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      Alert.alert(t('error.generic', 'Error'), t('settings.admin.passwordsMismatch', 'Passwords do not match'));
       return false;
     }
     
@@ -244,14 +246,14 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
                 <View style={[styles.stepPane, { width: viewportWidth || width }]}> 
                   {/* Step 0: Basic */}
                   <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Full Name *</Text>
+                  <Text style={styles.label}>{t('settings.admin.fullNameLabel', 'Full Name *')}</Text>
                     <View style={styles.inputContainer}>
                       <User size={20} color="#666" style={styles.inputIcon} />
                       <TextInput
                         style={styles.input}
                         value={name}
                         onChangeText={setName}
-                        placeholder="Enter full name"
+                        placeholder={t('settings.admin.fullNamePlaceholder', 'Enter full name')}
                         placeholderTextColor="#999"
                         textAlign="left"
                         returnKeyType="next"
@@ -260,14 +262,14 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
                     </View>
                   </View>
                   <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Phone Number *</Text>
+                  <Text style={styles.label}>{t('settings.admin.phoneLabel', 'Phone Number *')}</Text>
                     <View style={styles.inputContainer}>
                       <Phone size={20} color="#666" style={styles.inputIcon} />
                       <TextInput
                         style={styles.input}
                         value={phone}
                         onChangeText={setPhone}
-                        placeholder="(555) 123-4567"
+                        placeholder={t('settings.admin.phonePlaceholder', '(555) 123-4567')}
                         placeholderTextColor="#999"
                         keyboardType="phone-pad"
                         textAlign="left"
@@ -280,14 +282,14 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
                 <View style={[styles.stepPane, { width: viewportWidth || width }]}> 
                   {/* Step 1: Email */}
                   <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Email Address *</Text>
+                  <Text style={styles.label}>{t('settings.admin.emailLabel', 'Email Address *')}</Text>
                     <View style={styles.inputContainer}>
                       <Mail size={20} color="#666" style={styles.inputIcon} />
                       <TextInput
                         style={styles.input}
                         value={email}
                         onChangeText={setEmail}
-                        placeholder="example@email.com"
+                        placeholder={t('settings.admin.emailPlaceholder', 'example@email.com')}
                         placeholderTextColor="#999"
                         keyboardType="email-address"
                         autoCapitalize="none"
@@ -301,14 +303,14 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
                 <View style={[styles.stepPane, { width: viewportWidth || width }]}> 
                   {/* Step 2: Password */}
                   <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Password *</Text>
+                  <Text style={styles.label}>{t('settings.admin.passwordLabel', 'Password *')}</Text>
                     <View style={styles.inputContainer}>
                       <Lock size={20} color="#666" style={styles.inputIcon} />
                       <TextInput
                         style={styles.input}
                         value={password}
                         onChangeText={setPassword}
-                        placeholder="Enter password"
+                        placeholder={t('settings.admin.passwordPlaceholder', 'Enter password')}
                         placeholderTextColor="#999"
                         secureTextEntry
                         textAlign="left"
@@ -316,17 +318,17 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
                         underlineColorAndroid="transparent"
                       />
                     </View>
-                    <Text style={styles.helperText}>* Minimum 6 characters</Text>
+                    <Text style={styles.helperText}>{t('settings.admin.passwordHint', '* Minimum 6 characters')}</Text>
                   </View>
                   <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Confirm Password *</Text>
+                  <Text style={styles.label}>{t('settings.admin.confirmPasswordLabel', 'Confirm Password *')}</Text>
                     <View style={styles.inputContainer}>
                       <Lock size={20} color="#666" style={styles.inputIcon} />
                       <TextInput
                         style={styles.input}
                         value={confirmPassword}
                         onChangeText={setConfirmPassword}
-                        placeholder="Confirm password"
+                        placeholder={t('settings.admin.confirmPasswordPlaceholder', 'Confirm password')}
                         placeholderTextColor="#999"
                         secureTextEntry
                         textAlign="left"
@@ -338,10 +340,10 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
                 </View>
                 <View style={[styles.stepPane, { width: viewportWidth || width }]}> 
                   {/* Step 3: Review */}
-                  <Text style={[styles.label, { marginBottom: 12 }]}>Review</Text>
-                  <View style={styles.reviewRow}><Text style={styles.reviewLabel}>Name</Text><Text style={styles.reviewValue}>{name.trim()}</Text></View>
-                  <View style={styles.reviewRow}><Text style={styles.reviewLabel}>Phone</Text><Text style={styles.reviewValue}>{phone.trim()}</Text></View>
-                  <View style={styles.reviewRow}><Text style={styles.reviewLabel}>Email</Text><Text style={styles.reviewValue}>{email.trim()}</Text></View>
+                  <Text style={[styles.label, { marginBottom: 12 }]}>{t('settings.admin.review', 'Review')}</Text>
+                  <View style={styles.reviewRow}><Text style={styles.reviewLabel}>{t('settings.admin.reviewName', 'Name')}</Text><Text style={styles.reviewValue}>{name.trim()}</Text></View>
+                  <View style={styles.reviewRow}><Text style={styles.reviewLabel}>{t('settings.admin.reviewPhone', 'Phone')}</Text><Text style={styles.reviewValue}>{phone.trim()}</Text></View>
+                  <View style={styles.reviewRow}><Text style={styles.reviewLabel}>{t('settings.admin.reviewEmail', 'Email')}</Text><Text style={styles.reviewValue}>{email.trim()}</Text></View>
                 </View>
               </Animated.View>
             </View>
@@ -349,7 +351,7 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
             {/* Navigation controls */}
             <View style={styles.stepNavRow}>
               <TouchableOpacity onPress={goBack} disabled={step === 0} style={[styles.stepNavButton, step === 0 && styles.stepNavButtonDisabled]}>
-                <Text style={[styles.stepNavText, step === 0 && styles.stepNavTextDisabled]}>Back</Text>
+                <Text style={[styles.stepNavText, step === 0 && styles.stepNavTextDisabled]}>{t('back', 'Back')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={step < maxStep ? goNext : handleSubmit}

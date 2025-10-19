@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
 import Colors from '@/constants/colors';
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 
 interface DatePickerProps {
   onSelectDate: (date: Date) => void;
@@ -18,6 +19,7 @@ export default function DatePicker({
   minDate = new Date(),
   maxDate,
 }: DatePickerProps) {
+  const { t, i18n } = useTranslation();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [dates, setDates] = useState<Date[]>([]);
   
@@ -79,23 +81,21 @@ export default function DatePicker({
   };
   
   const formatWeekday = (date: Date) => {
-    const weekdays = ['א\'', 'ב\'', 'ג\'', 'ד\'', 'ה\'', 'ו\'', 'ש\''];
-    return weekdays[date.getDay()];
+    const weekdaysHe = ['א\'', 'ב\'', 'ג\'', 'ד\'', 'ה\'', 'ו\'', 'ש\''];
+    const weekdaysEn = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+    const list = i18n?.language?.startsWith('he') ? weekdaysHe : weekdaysEn;
+    return list[date.getDay()];
   };
   
   const formatMonth = (date: Date) => {
-    const months = [
-      'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
-      'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'
-    ];
-    return `${months[date.getMonth()]} ${date.getFullYear()}`;
+    return date.toLocaleDateString(i18n?.language?.startsWith('he') ? 'he-IL' : 'en-US', { month: 'long', year: 'numeric' } as any);
   };
   
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Calendar size={20} color={Colors.primary} />
-        <Text style={styles.headerText}>בחרי תאריך</Text>
+        <Text style={styles.headerText}>{t('booking.selectDay', 'Select Day')}</Text>
       </View>
       
       <ScrollView 

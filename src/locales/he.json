@@ -90,6 +90,14 @@
   "appointments.subtitle.client": "תורים קרובים ועבר",
   "appointments.upcoming": "קרובים",
   "appointments.history": "היסטוריה",
+  "appointments.status": { "confirmed": "מאושר", "pending": "ממתין", "cancelled": "בוטל", "completed": "הושלם" },
+  "appointments.payment": { "paid": "שולם", "deposit": "מקדמה", "unpaid": "לא שולם" },
+  "clients": { "noVisit": "לא ביקרה עדיין", "lastVisit": "ביקור אחרון" },
+  "clients.client": "לקוחה ",
+  "appointments.empty.date": "אין תורים לתאריך זה",
+  "commonEx": { "tryAgain": "אירעה שגיאה. נסו שוב.", "client": "לקוח", "smsOpenFailed": "לא ניתן לפתוח את אפליקציית ה-SMS במכשיר זה", "change": "שנה", "select": "בחר/י" },
+  "adminEx": { "appointmentsAdmin": { "pickDate": "בחר/י את התאריך לתור זה", "client": "לקוח", "pickClient": "בחר/י לקוח לתור", "pickService": "בחר/י את השירות לביצוע", "selectServicePlaceholder": "בחר/י שירות...", "pickTime": "בחר/י חלון זמן פנוי", "addAppointment": "הוספת תור", "summary": "סיכום תור" } },
+  "appointments.empty.today": "אין תורים קרובים היום",
   "appointments.updating": "מעדכן תורים...",
   "appointments.loadingSchedule": "טוען את היומן שלך...",
   "appointments.loadingAppointments": "טוען את התורים שלך...",
@@ -149,6 +157,8 @@
   "gallery.emptySubtitle.products": "כשתוסיפו מוצרים, הם יופיעו כאן",
   "gallery.viewer.designPhotos": "תמונות עיצוב",
   "gallery.viewer.productPhotos": "תמונות מוצר",
+  "gallery.preview": "תצוגה מקדימה",
+  "gallery.loadingImage": "טוען תמונה...",
   
   "notifications.loading": "טוען התראות...",
   "notifications.filter.all": "הכול",
@@ -211,8 +221,12 @@
   "tabs": { "home": "בית", "gallery": "גלריה", "book": "קביעת תור", "profile": "פרופיל" },
   "gallery": { "loginToView": "אנא התחבר/י להצגת העיצובים המלאים" },
   "products": { "loginToViewDetails": "אנא התחבר/י להצגת פרטי המוצר" },
+  "auth": { "signInNow": "התחבר/י עכשיו", "maybeLater": "אולי אחר כך" },
+  "nearestSlots": { "title": "תורים זמינים בקרוב", "empty": "אין תורים זמינים בקרוב" },
   "map": { "mapsLabel": "מפות" },
   "common": { "tryAgain": "אירעה שגיאה. נסו שוב.", "client": "לקוח", "smsOpenFailed": "לא ניתן לפתוח את אפליקציית ה-SMS במכשיר זה" },
+  "category": { "gel": "לק ג'ל", "feet": "לק ברגליים", "manicure": "מניקור" },
+  "admin2": { "hoursAdmin": { "title": "אילוצי עבודה", "segment": { "hours": "שעות", "singleDay": "יום אחד", "multiDays": "מספר ימים" }, "pickDateShort": "בחר/י תאריך", "closedHours": "שעות סגורות", "pickDateAllDay": "בחירת תאריך (סגור כל היום)", "pickDateRangeAllDay": "בחירת טווח תאריכים (סגור כל היום)", "selectedRange": ":טווח נבחר", "allDay": "כל היום", "chooseClosedHours": "בחר/י שעות סגורות", "start": "התחלה", "end": "סיום", "upcomingConstraints": "אילוצים קרובים", "noUpcomingConstraints": "אין אילוצים קרובים", "noReason": "ללא סיבה", "saveCTA": "שמור אילוצים" } },
   "login": {
     "fillAll": "אנא מלא/י את כל השדות",
     "blockedCannotSignIn": "החשבון חסום ואינו יכול להתחבר. אנא צרו קשר עם המנהל.",
@@ -397,7 +411,7 @@
       "priceHint": "קבע/י מחיר למוצר",
       "pricePlaceholder": "0.00"
     },
-    "appointments": {
+    "appointmentsAdmin": {
       "loadingForDate": "טוען תורים עבור {{date}}...",
       "emptyTitle": "אין תורים ליום זה",
       "emptySubtitle": "בחר/י יום אחר מהסרגל העליון",
@@ -405,7 +419,7 @@
       "callClient": "חייג ללקוח",
       "cancelMessage": "פעולה זו תפנה את הזמן ותסיר את פרטי הלקוח מהתור הנבחר."
     },
-    "hours": {
+    "hoursAdmin": {
       "title": "שעות עבודה",
       "subtitle": "הגדרת לוז שבועי והפסקות",
       "manageConstraints": "ניהול אילוצים (תאריכים/שעות סגירה)",
@@ -445,6 +459,25 @@
       "waiting": "ממתין/ה",
       "emptyTitle": "אין רשומות לרשימת ההמתנה ביום זה",
       "emptySubtitle": "אין לקוחות שממתינים ליום זה"
+    },
+    "appointments": {
+      "loadClientsFailed": "שגיאה בטעינת רשימת הלקוחות",
+      "loadServicesFailed": "שגיאה בטעינת רשימת השירותים",
+      "fillAllRequired": "אנא מלא/י את כל השדות הנדרשים",
+      "userNotLogged": "המשתמש לא מחובר",
+      "scheduled": "התור נקבע בהצלחה",
+      "scheduleFailed": "שגיאה בקביעת התור",
+      "selectDateAndService": "אנא בחר/י תאריך ושירות תחילה",
+      "selectClientPlaceholder": "בחר/י לקוח..."
+    },
+    "hours": {
+      "selectDate": "אנא בחר/י תאריך",
+      "endAfterStart": "שעת הסיום חייבת להיות אחרי שעת ההתחלה",
+      "selectDateRange": "אנא בחר/י טווח תאריכים",
+      "invalidDateRange": "טווח תאריכים לא תקין",
+      "saved": "האילוצים נשמרו בהצלחה",
+      "saveFailed": "שמירת האילוצים נכשלה",
+      "enterReason": "הזן/י סיבה"
     }
   }
 }

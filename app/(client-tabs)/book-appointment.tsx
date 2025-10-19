@@ -7,6 +7,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import BarberSelector from '@/components/BarberSelector';
+import ServiceSelector from '@/components/ServiceSelector';
 
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { Service } from '@/lib/supabase';
@@ -356,137 +358,14 @@ const ITEM_SPACING = 16;
 const ITEM_SIZE = AVATAR_SIZE + ITEM_SPACING;
 const SCREEN = Dimensions.get('window');
 const CAROUSEL_HEIGHT = SCREEN.height;
-const AnimatedFlatList: any = Animated.createAnimatedComponent(FlatList as any);
+// AnimatedFlatList is not used directly in this screen anymore; selectors own their lists
 
 // Service carousel sizing
 const SERVICE_CARD_WIDTH = Math.min(SCREEN.width * 0.78, 320);
 const SERVICE_CARD_HEIGHT = 200;
 const SERVICE_ITEM_SIZE = SERVICE_CARD_WIDTH + ITEM_SPACING;
 
-type BarberSelectorProps = {
-  barbers: User[];
-  activeIndex: number;
-  onIndexChange: (idx: number) => void;
-  styles: any;
-  renderTopOverlay?: () => React.ReactNode;
-  bottomOffset?: number;
-};
-
-const BarberCarouselSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, onIndexChange, styles, renderTopOverlay, bottomOffset }) => {
-  const scrollX = useSharedValue(Math.max(0, activeIndex) * ITEM_SIZE);
-  const listRef = React.useRef<FlatList>(null);
-  const lastIndex = React.useRef<number>(Math.max(0, activeIndex));
-
-  // Background cross-fade between current and next barber image
-  const [bgCurrent, setBgCurrent] = React.useState<string | null>(barbers[activeIndex]?.image_url || null);
-  const bgOpacity = useSharedValue(1);
-
-  React.useEffect(() => {
-    const nextUrl = barbers[activeIndex]?.image_url || null;
-    if (nextUrl && nextUrl !== bgCurrent) {
-      // Fade out current, swap instantly when invisible, fade in new
-      bgOpacity.value = withTiming(0, { duration: 200, easing: Easing.inOut(Easing.ease) }, (finished) => {
-        if (finished) {
-          runOnJS(setBgCurrent)(nextUrl);
-          bgOpacity.value = 0;
-          bgOpacity.value = withTiming(1, { duration: 300, easing: Easing.inOut(Easing.ease) });
-        }
-      });
-    }
-  }, [activeIndex, barbers.length]);
-
-  React.useEffect(() => {
-    try {
-      if (listRef.current && Number.isFinite(activeIndex)) {
-        listRef.current.scrollToOffset({ offset: Math.max(0, activeIndex) * ITEM_SIZE, animated: true });
-      }
-    } catch {}
-  }, [activeIndex]);
-
-  const scrollHandler = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      'worklet';
-      scrollX.value = e.contentOffset.x;
-    },
-  });
-
-  const bgStyle = useAnimatedStyle(() => ({ opacity: bgOpacity.value }));
-
-  const CarouselItem: React.FC<{ item: User; index: number }> = ({ item, index }) => {
-    const cardStyle = (useAnimatedStyle(() => {
-      const pos = scrollX.value / ITEM_SIZE;
-      const scale = interpolate(pos, [index - 1, index, index + 1], [0.94, 1.08, 0.94], Extrapolate.CLAMP);
-      const opacity = interpolate(pos, [index - 1, index, index + 1], [0.6, 1, 0.6], Extrapolate.CLAMP);
-      return { transform: [{ scale: scale as any }] as any, opacity } as any;
-    }) as any);
-
-    return (
-      <TouchableOpacity
-        activeOpacity={0.85}
-        onPress={() => {
-          try {
-            listRef.current?.scrollToOffset({ offset: index * ITEM_SIZE, animated: true });
-          } catch {}
-          onIndexChange(index);
-        }}
-      >
-        <Animated.View style={[styles.carouselItem, cardStyle]}>
-          {item.image_url ? (
-            <Image source={{ uri: item.image_url }} style={styles.carouselItemImage} />
-          ) : (
-            <View style={[styles.carouselItemImage, styles.carouselItemPlaceholder]}>
-              <Ionicons name="person" size={28} color="#8E8E93" />
-            </View>
-          )}
-        </Animated.View>
-      </TouchableOpacity>
-    );
-  };
-
-  return (
-    <View style={styles.carouselContainer}>
-      {!!bgCurrent && (
-        <Animated.Image source={{ uri: bgCurrent }} style={[styles.bgImage, bgStyle]} resizeMode="cover" fadeDuration={0 as any} />
-      )}
-      <View style={styles.bgDimOverlay} />
-      {typeof renderTopOverlay === 'function' ? (
-        <View style={styles.carouselTopOverlay}>{renderTopOverlay()}</View>
-      ) : null}
-
-      <View style={[styles.carouselBottomArea, { bottom: (bottomOffset ?? 28) }] }>
-        <AnimatedFlatList
-          ref={listRef as any}
-          horizontal
-          data={barbers}
-          keyExtractor={(it: User) => String(it.id)}
-          renderItem={({ item, index }) => <CarouselItem item={item} index={index} />}
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={ITEM_SIZE}
-          decelerationRate="fast"
-          bounces={false}
-          style={styles.carouselList}
-          contentContainerStyle={{ paddingHorizontal: (SCREEN.width - ITEM_SIZE) / 2 }}
-          onScroll={scrollHandler}
-          onMomentumScrollEnd={(e: any) => {
-            const raw = e.nativeEvent.contentOffset.x / ITEM_SIZE;
-            const idx = Math.round(raw);
-            const clamped = Math.max(0, Math.min(barbers.length - 1, idx));
-            if (clamped !== lastIndex.current) {
-              lastIndex.current = clamped;
-              onIndexChange(clamped);
-            }
-          }}
-          scrollEventThrottle={16}
-        />
-        {Number.isFinite(activeIndex) && barbers[activeIndex] && (
-          <Text style={styles.carouselActiveName} numberOfLines={1}>
-            {barbers[activeIndex]?.name || ''}
-          </Text>
-        )}
-      </View>
-    </View>
-  );
-};
+// Inline Barber selector removed
 
 export default function BookAppointment() {
   const router = useRouter();
@@ -607,154 +486,7 @@ export default function BookAppointment() {
     }
   }, [currentStep]);
 
-  // Service carousel selector component - similar to barber selector
-  type ServiceSelectorProps = {
-    services: Service[];
-    activeIndex: number;
-    onIndexChange: (idx: number) => void;
-    styles: any;
-    bottomOffset?: number;
-  };
-
-  const ServiceCarouselSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex, onIndexChange, styles, bottomOffset }) => {
-    const SERVICE_ITEM = AVATAR_SIZE + ITEM_SPACING; // Same as barber items for consistency
-    const scrollX = useSharedValue(Math.max(0, activeIndex) * SERVICE_ITEM);
-    const listRef = React.useRef<FlatList>(null);
-    const lastIndex = React.useRef<number>(Math.max(0, activeIndex));
-
-    // Background cross-fade between current and next service image
-    const getCurrentImageUrl = (idx: number) => {
-      const service = services[idx];
-      return (service as any)?.image_url || 
-             (service as any)?.cover_url || 
-             (service as any)?.image || 
-             null;
-    };
-
-    const [bgCurrent, setBgCurrent] = React.useState<string | null>(getCurrentImageUrl(activeIndex));
-    const bgOpacity = useSharedValue(1);
-
-    React.useEffect(() => {
-      const nextUrl = getCurrentImageUrl(activeIndex);
-      if (nextUrl && nextUrl !== bgCurrent) {
-        bgOpacity.value = withTiming(0, { duration: 200, easing: Easing.inOut(Easing.ease) }, (finished) => {
-          if (finished) {
-            runOnJS(setBgCurrent)(nextUrl);
-            bgOpacity.value = 0;
-            bgOpacity.value = withTiming(1, { duration: 300, easing: Easing.inOut(Easing.ease) });
-          }
-        });
-      }
-    }, [activeIndex, services.length]);
-
-    React.useEffect(() => {
-      try {
-        if (listRef.current && Number.isFinite(activeIndex)) {
-          listRef.current.scrollToOffset({ offset: Math.max(0, activeIndex) * SERVICE_ITEM, animated: true });
-        }
-      } catch {}
-    }, [activeIndex]);
-
-    const scrollHandler = useAnimatedScrollHandler({
-      onScroll: (e) => {
-        'worklet';
-        scrollX.value = e.contentOffset.x;
-      },
-    });
-
-    const bgStyle = useAnimatedStyle(() => ({ opacity: bgOpacity.value }));
-
-    const CarouselItem: React.FC<{ item: Service; index: number }> = ({ item, index }) => {
-      const cardStyle = (useAnimatedStyle(() => {
-        const pos = scrollX.value / SERVICE_ITEM;
-        const scale = interpolate(pos, [index - 1, index, index + 1], [0.94, 1.08, 0.94], Extrapolate.CLAMP);
-        const opacity = interpolate(pos, [index - 1, index, index + 1], [0.6, 1, 0.6], Extrapolate.CLAMP);
-        return { transform: [{ scale: scale as any }] as any, opacity } as any;
-      }) as any);
-
-      const imageUrl = (item as any)?.image_url || (item as any)?.cover_url || (item as any)?.image || null;
-
-      return (
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={() => {
-            try {
-              listRef.current?.scrollToOffset({ offset: index * SERVICE_ITEM, animated: true });
-            } catch {}
-            onIndexChange(index);
-          }}
-        >
-          <Animated.View style={[styles.carouselItem, cardStyle]}>
-            {imageUrl ? (
-              <Image source={{ uri: imageUrl }} style={styles.carouselItemImage} />
-            ) : (
-              <View style={[styles.carouselItemImage, styles.carouselItemPlaceholder]}>
-                <Ionicons name="cut" size={28} color="#8E8E93" />
-              </View>
-            )}
-          </Animated.View>
-        </TouchableOpacity>
-      );
-    };
-
-    return (
-      <View style={styles.carouselContainer}>
-        {!!bgCurrent && (
-          <Animated.Image source={{ uri: bgCurrent }} style={[styles.bgImage, bgStyle]} resizeMode="cover" fadeDuration={0 as any} />
-        )}
-        <View style={styles.bgDimOverlay} />
-
-        <View style={[styles.carouselBottomArea, { bottom: (bottomOffset ?? 28) }]}>
-          <AnimatedFlatList
-            ref={listRef as any}
-            horizontal
-            data={services}
-            keyExtractor={(it: Service) => String(it.id)}
-            renderItem={({ item, index }) => <CarouselItem item={item} index={index} />}
-            showsHorizontalScrollIndicator={false}
-            snapToInterval={SERVICE_ITEM}
-            decelerationRate="fast"
-            bounces={false}
-            nestedScrollEnabled={true}
-            style={styles.carouselList}
-            contentContainerStyle={{ paddingHorizontal: (SCREEN.width - SERVICE_ITEM) / 2 }}
-            onScroll={scrollHandler}
-            onMomentumScrollEnd={(e: any) => {
-              const raw = e.nativeEvent.contentOffset.x / SERVICE_ITEM;
-              const idx = Math.round(raw);
-              const clamped = Math.max(0, Math.min(services.length - 1, idx));
-              if (clamped !== lastIndex.current) {
-                lastIndex.current = clamped;
-                onIndexChange(clamped);
-              }
-            }}
-            scrollEventThrottle={16}
-          />
-          {Number.isFinite(activeIndex) && services[activeIndex] && (
-            <View style={{ alignItems: 'center', marginTop: 12 }}>
-              <Text style={styles.carouselActiveName} numberOfLines={1}>
-                {services[activeIndex]?.name || ''}
-              </Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 8 }}>
-                <View style={[styles.serviceBadge, styles.serviceBadgePrimary]}>
-                  <Ionicons name="time-outline" size={14} color="#FFFFFF" />
-                  <Text style={styles.serviceBadgeText}>
-                    {`${services[activeIndex]?.duration_minutes ?? 60} ${t('booking.minutes', 'min')}`}
-                  </Text>
-                </View>
-                <View style={[styles.serviceBadge, styles.serviceBadgeGhost]}>
-                  <Ionicons name="pricetag-outline" size={14} color="#111827" />
-                  <Text style={[styles.serviceBadgeText, styles.serviceBadgeTextDark]}>
-                    {`${t('booking.price', '$')} ${services[activeIndex]?.price ?? 0}`}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          )}
-        </View>
-      </View>
-    );
-  };
+  // Inline Service selector removed
   // Reset all local state when the screen gains focus so each visit starts fresh
   useFocusEffect(
     React.useCallback(() => {
@@ -1692,7 +1424,7 @@ export default function BookAppointment() {
               </View>
             ) : (
               <View>
-                <BarberCarouselSelector
+                <BarberSelector
                   barbers={availableBarbers}
                   activeIndex={Math.max(0, availableBarbers.findIndex(b => b.id === selectedBarber?.id))}
                   onIndexChange={(idx) => {
@@ -1726,7 +1458,7 @@ export default function BookAppointment() {
               </View>
             ) : availableServices.length > 0 ? (
               <View>
-                <ServiceCarouselSelector
+                <ServiceSelector
                   services={availableServices}
                   activeIndex={selectedServiceIndex}
                   onIndexChange={(idx) => {

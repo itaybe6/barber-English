@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
 import Colors from '@/constants/colors';
+import { useTranslation } from 'react-i18next';
 import { Clock } from 'lucide-react-native';
 
 interface TimeSlot {
@@ -19,11 +20,12 @@ export default function TimeSlotPicker({
   selectedTime,
   onSelectTime,
 }: TimeSlotPickerProps) {
+  const { t } = useTranslation();
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Clock size={20} color={Colors.primary} />
-        <Text style={styles.headerText}>בחרי שעה</Text>
+        <Text style={styles.headerText}>{t('selectTime.selectTime', 'Select Time')}</Text>
       </View>
       
       <ScrollView 

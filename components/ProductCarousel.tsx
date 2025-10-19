@@ -331,13 +331,13 @@ export default function ProductCarousel({
                       style={[styles.modalBuyButton, { backgroundColor: colors.primary }]}
                       onPress={() => {
                         Alert.alert(
-                          'Contact Us',
-                          'To purchase this product, please contact us directly.',
-                          [{ text: 'OK', style: 'default' }]
+                          t('products.contactUs', 'Contact Us'),
+                          t('products.purchaseContact', 'To purchase this product, please contact us directly.'),
+                          [{ text: t('ok', 'OK'), style: 'default' }]
                         );
                       }}
                     >
-                      <Text style={styles.modalBuyButtonText}>Contact Us</Text>
+                      <Text style={styles.modalBuyButtonText}>{t('products.contactUs', 'Contact Us')}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>

@@ -18,6 +18,7 @@ import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { Plus, Check } from 'lucide-react-native';
 import Colors from '../constants/colors';
+import { useTranslation } from 'react-i18next';
 import { useColors } from '../src/theme/ThemeProvider';
 import * as ImagePicker from 'expo-image-picker';
 import GradientBackground from './GradientBackground';
@@ -202,6 +203,7 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
   const previewFadeAnim = useRef(new Animated.Value(0)).current;
   const colors = useColors();
+  const { t } = useTranslation();
 
   // Simplified preload - only for current category
   const preloadCurrentImages = React.useCallback(() => {
@@ -331,7 +333,7 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow gallery access to select an image');
+        Alert.alert(t('profile.permissionRequired', 'Permission Required'), t('admin.gallery.permissionGallery', 'Please allow gallery access to select an image'));
         return;
       }
 
@@ -362,7 +364,7 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Error', 'Unable to select image');
+      Alert.alert(t('error.generic', 'Error'), t('admin.gallery.pickerAccessFailed', 'Unable to select image'));
     }
   };
 
@@ -460,7 +462,7 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
                 <TouchableOpacity onPress={handleBackFromPreview} style={styles.backButton}>
                   <Ionicons name="arrow-back" size={24} color="#000000" />
                 </TouchableOpacity>
-                <Text style={styles.previewTitle}>Preview</Text>
+                <Text style={styles.previewTitle}>{t('gallery.preview', 'Preview')}</Text>
                 <TouchableOpacity onPress={handleSaveImage} style={styles.saveButton}>
                   <View style={[styles.saveButtonContainer, { backgroundColor: colors.primary }]}>
                     <Check size={20} color="#FFFFFF" />
@@ -498,7 +500,7 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
                   {previewImageLoading && (
                     <View style={styles.previewLoadingContainer}>
                       <Ionicons name="image-outline" size={60} color="#CCCCCC" />
-                      <Text style={styles.previewLoadingText}>Loading image...</Text>
+                      <Text style={styles.previewLoadingText}>{t('gallery.loadingImage', 'Loading image...')}</Text>
                     </View>
                   )}
                   
@@ -679,7 +681,7 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
                         {isLoading && (
                           <View style={styles.imagePlaceholder}>
                             <Ionicons name="image-outline" size={40} color="#CCCCCC" />
-                            <Text style={styles.loadingText}>Loading...</Text>
+                            <Text style={styles.loadingText}>{t('refreshing', 'Refreshing...')}</Text>
                           </View>
                         )}
                         
@@ -699,7 +701,7 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
                     
                     <View style={[styles.imageOverlay, { opacity: 0 }]}>
                       <View style={styles.selectButton}>
-                        <Text style={styles.selectButtonText}>Select</Text>
+                        <Text style={styles.selectButtonText}>{t('common.select', 'Select')}</Text>
                       </View>
                     </View>
                   </View>

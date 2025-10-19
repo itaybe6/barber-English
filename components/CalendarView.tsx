@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
 import Colors from '@/constants/colors';
+import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { Appointment } from '@/constants/appointments';
 
@@ -17,6 +18,7 @@ export default function CalendarView({
   selectedDate,
   onSelectAppointment,
 }: CalendarViewProps) {
+  const { t } = useTranslation();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   
   // Generate days for the current month
@@ -165,7 +167,7 @@ export default function CalendarView({
     if (dateAppointments.length === 0) {
       return (
         <View style={styles.noAppointments}>
-          <Text style={styles.noAppointmentsText}>אין תורים לתאריך זה</Text>
+          <Text style={styles.noAppointmentsText}>{t('appointments.empty.date', 'No appointments for this date')}</Text>
         </View>
       );
     }
@@ -209,12 +211,12 @@ export default function CalendarView({
   
   const getClientName = (clientId: string) => {
     // This would normally come from your clients data
-    return clientId.replace('client-', 'לקוחה ');
+    return clientId.replace('client-', t('clients.client', 'Client ') as any);
   };
   
   const getServiceName = (serviceId: string) => {
     // This would normally come from your services data
-    return serviceId.replace('service-', 'שירות ');
+    return serviceId.replace('service-', t('booking.field.service', 'Service ') as any);
   };
   
   const getStatusColor = (status: string) => {

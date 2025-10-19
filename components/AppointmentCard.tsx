@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import Colors from '@/constants/colors';
 import Card from './Card';
+import { useTranslation } from 'react-i18next';
 import { Clock, Calendar, User, CreditCard } from 'lucide-react-native';
 import { Appointment } from '@/constants/appointments';
 import { clients } from '@/constants/clients';
@@ -13,6 +14,7 @@ interface AppointmentCardProps {
 }
 
 export default function AppointmentCard({ appointment, onPress }: AppointmentCardProps) {
+  const { t } = useTranslation();
   const client = clients.find(c => c.id === appointment.clientId);
   const service = services.find(s => s.id === appointment.serviceId);
   
@@ -44,13 +46,13 @@ export default function AppointmentCard({ appointment, onPress }: AppointmentCar
   const getStatusText = (status: string) => {
     switch (status) {
       case 'confirmed':
-        return 'מאושר';
+        return t('appointments.status.confirmed', 'Confirmed');
       case 'pending':
-        return 'ממתין';
+        return t('appointments.status.pending', 'Pending');
       case 'cancelled':
-        return 'בוטל';
+        return t('appointments.status.cancelled', 'Cancelled');
       case 'completed':
-        return 'הושלם';
+        return t('appointments.status.completed', 'Completed');
       default:
         return status;
     }
@@ -59,11 +61,11 @@ export default function AppointmentCard({ appointment, onPress }: AppointmentCar
   const getPaymentStatusText = (status: string) => {
     switch (status) {
       case 'paid':
-        return 'שולם';
+        return t('appointments.payment.paid', 'Paid');
       case 'deposit':
-        return 'מקדמה';
+        return t('appointments.payment.deposit', 'Deposit');
       case 'unpaid':
-        return 'לא שולם';
+        return t('appointments.payment.unpaid', 'Unpaid');
       default:
         return status;
     }
@@ -76,7 +78,7 @@ export default function AppointmentCard({ appointment, onPress }: AppointmentCar
     >
       <Card style={styles.card}>
         <View style={styles.header}>
-          <Text style={styles.serviceName}>{service?.name || 'שירות לא ידוע'}</Text>
+          <Text style={styles.serviceName}>{service?.name || t('booking.unknown', 'Unknown')}</Text>
           <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appointment.status) }]}>
             <Text style={styles.statusText}>{getStatusText(appointment.status)}</Text>
           </View>
@@ -95,7 +97,7 @@ export default function AppointmentCard({ appointment, onPress }: AppointmentCar
           
           <View style={styles.infoRow}>
             <User size={16} color={Colors.primary} />
-            <Text style={styles.infoText}>{client?.name || 'לקוחה לא ידועה'}</Text>
+            <Text style={styles.infoText}>{client?.name || t('profile.history.emptyTitle', 'No past appointments')}</Text>
           </View>
           
           <View style={styles.infoRow}>

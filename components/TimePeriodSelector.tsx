@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
+import { useTranslation } from 'react-i18next';
 
 export type TimePeriod = 'morning' | 'afternoon' | 'evening' | 'any';
 
@@ -16,28 +17,28 @@ interface TimePeriodOption {
 const timePeriodOptions: TimePeriodOption[] = [
   {
     value: 'morning',
-    label: 'Morning',
+    label: 'time_period.morning',
     icon: 'sunny',
     color: '#FF9500',
     description: '8:00 - 12:00',
   },
   {
     value: 'afternoon',
-    label: 'Afternoon',
+    label: 'time_period.afternoon',
     icon: 'partly-sunny',
     color: '#FF6B6B',
     description: '12:00 - 16:00',
   },
   {
     value: 'evening',
-    label: 'Evening',
+    label: 'time_period.evening',
     icon: 'moon',
     color: '#5856D6',
     description: '16:00 - 20:00',
   },
   {
     value: 'any',
-    label: 'Any time',
+    label: 'time_period.any',
     icon: 'time',
     color: '#34C759',
     description: 'Flexible timing',
@@ -55,11 +56,12 @@ export default function TimePeriodSelector({
   onSelectPeriod,
   disabled = false,
 }: TimePeriodSelectorProps) {
+  const { t } = useTranslation();
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Select preferred time period</Text>
+      <Text style={styles.title}>{t('waitlist.selectPeriod', 'Please select a preferred time period')}</Text>
       <Text style={styles.subtitle}>
-        We'll notify you when a slot opens in your preferred time period
+        {t('waitlist.selectPeriodSubtitle', "We'll notify you when a slot opens in your preferred time period")}
       </Text>
       
       <View style={styles.optionsContainer}>
@@ -89,7 +91,7 @@ export default function TimePeriodSelector({
                 selectedPeriod === option.value && styles.selectedOptionLabel,
                 disabled && styles.disabledText,
               ]}>
-                {option.label}
+                {t(option.label as any)}
               </Text>
               <Text style={[
                 styles.optionDescription,

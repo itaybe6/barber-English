@@ -144,7 +144,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       setFilteredClients(validClients);
     } catch (error) {
       console.error('Error loading clients:', error);
-      Alert.alert('Error', 'Error loading client list');
+      Alert.alert(t('error.generic', 'Error'), t('admin.appointmentsAdmin.loadClientsFailed', 'Error loading client list'));
     }
   };
 
@@ -154,7 +154,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       setServices(data);
     } catch (error) {
       console.error('Error loading services:', error);
-      Alert.alert('Error', 'Error loading services list');
+      Alert.alert(t('error.generic', 'Error'), t('admin.appointmentsAdmin.loadServicesFailed', 'Error loading services list'));
     }
   };
 
@@ -338,7 +338,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       
     } catch (error) {
       console.error('Error loading available times:', error);
-      Alert.alert('Error', 'Error loading available times');
+      Alert.alert(t('error.generic', 'Error'), t('settings.recurring.timesLoadFailed', 'Failed to load available times. Please try again.'));
     } finally {
       setIsLoadingTimes(false);
     }
@@ -377,12 +377,12 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
 
   const handleSubmit = async () => {
     if (!selectedDate || !selectedClient || !selectedService || !selectedTime) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      Alert.alert(t('error.generic', 'Error'), t('admin.appointmentsAdmin.fillAllRequired', 'Please fill in all required fields'));
       return;
     }
 
     if (!user?.id) {
-      Alert.alert('Error', 'User not logged in');
+      Alert.alert(t('error.generic', 'Error'), t('admin.appointmentsAdmin.userNotLogged', 'User not logged in'));
       return;
     }
 
@@ -400,7 +400,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       .eq('user_id', user.id);
 
     if (conflictingAppointments && conflictingAppointments.length > 0) {
-      Alert.alert('Slot taken', 'The selected time is already booked. Please choose another time.');
+      Alert.alert(t('settings.recurring.slotTakenTitle', 'Slot taken'), t('settings.recurring.slotTaken', 'The selected time is already booked this week. Please choose another time.'));
       return;
     }
 
@@ -423,7 +423,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
 
       if (error) throw error;
 
-      Alert.alert('Success', 'Appointment scheduled successfully', [
+      Alert.alert(t('success.generic', 'Success'), t('admin.appointmentsAdmin.scheduled', 'Appointment scheduled successfully'), [
         { text: 'OK', onPress: () => {
           onSuccess?.();
           onClose();
@@ -432,7 +432,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       
     } catch (error) {
       console.error('Error creating appointment:', error);
-      Alert.alert('Error', 'Error scheduling appointment');
+      Alert.alert(t('error.generic', 'Error'), t('admin.appointmentsAdmin.scheduleFailed', 'Error scheduling appointment'));
     } finally {
       setIsSubmitting(false);
     }
@@ -447,9 +447,9 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <CalendarDays size={20} color={'#000000'} />
-          <Text style={styles.sectionTitle}>Appointment Date</Text>
+          <Text style={styles.sectionTitle}>{t('booking.field.date', 'Date')}</Text>
         </View>
-        <Text style={styles.sectionSubtitle}>Select the date for this appointment</Text>
+        <Text style={styles.sectionSubtitle}>{t('admin.appointmentsAdmin.pickDate', 'Select the date for this appointment')}</Text>
         <View style={styles.calendarContainer}>
           <RNCalendar
             current={selected || undefined}
@@ -514,9 +514,9 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         <User size={20} color={'#000000'} />
-        <Text style={styles.sectionTitle}>Client</Text>
+        <Text style={styles.sectionTitle}>{t('admin.appointmentsAdmin.client', 'Client')}</Text>
       </View>
-      <Text style={styles.sectionSubtitle}>Pick the client for this appointment</Text>
+      <Text style={styles.sectionSubtitle}>{t('admin.appointmentsAdmin.pickClient', 'Pick the client for this appointment')}</Text>
       
       {!selectedClient ? (
         <>
@@ -526,7 +526,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
                 style={styles.selectorTextInput}
                 value={clientSearch}
                 onChangeText={setClientSearch}
-                placeholder="Select client..."
+                placeholder={t('admin.appointmentsAdmin.selectClientPlaceholder', 'Select client...')}
                 placeholderTextColor={Colors.subtext}
                 textAlign="left"
                 onFocus={() => setShowClientDropdown(true)}
@@ -590,7 +590,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
             onPress={() => setSelectedClient(null)}
             style={styles.changeButton}
           >
-            <Text style={[styles.changeButtonText, { color: businessColors.primary }]}>Change</Text>
+            <Text style={[styles.changeButtonText, { color: businessColors.primary }]}>{t('common.change', 'Change')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -601,9 +601,9 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         <Calendar size={20} color={'#000000'} />
-        <Text style={styles.sectionTitle}>Service</Text>
+        <Text style={styles.sectionTitle}>{t('booking.field.service', 'Service')}</Text>
       </View>
-      <Text style={styles.sectionSubtitle}>Choose the service to perform</Text>
+      <Text style={styles.sectionSubtitle}>{t('admin.appointmentsAdmin.pickService', 'Choose the service to perform')}</Text>
       
       <Pressable 
         style={[styles.selectorButton, styles.grayField]} 
@@ -611,7 +611,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       >
         <View style={styles.selectorContent}>
           <Text style={selectedService ? styles.selectorText : styles.selectorPlaceholder}>
-            {selectedService ? `${selectedService.name} · $${selectedService.price}` : 'Select service...'}
+            {selectedService ? `${selectedService.name} · $${selectedService.price}` : t('admin.appointmentsAdmin.selectServicePlaceholder', 'Select service...')}
           </Text>
           <View style={styles.selectorIcon}>
             <Calendar size={16} color={Colors.subtext} />
@@ -647,9 +647,9 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         <Clock size={20} color={'#000000'} />
-        <Text style={styles.sectionTitle}>Time</Text>
+        <Text style={styles.sectionTitle}>{t('booking.field.time', 'Time')}</Text>
       </View>
-      <Text style={styles.sectionSubtitle}>Pick an available time slot</Text>
+      <Text style={styles.sectionSubtitle}>{t('admin.appointmentsAdmin.pickTime', 'Pick an available time slot')}</Text>
       
       <Pressable 
         style={[
@@ -659,7 +659,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
         ]} 
         onPress={() => {
           if (!selectedDate || !selectedService) {
-            Alert.alert('Error', 'Please select date and service first');
+            Alert.alert(t('error.generic', 'Error'), t('admin.appointmentsAdmin.selectDateAndService', 'Please select date and service first'));
             return;
           }
           // Ensure times are up-to-date when opening
@@ -672,7 +672,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       >
         <View style={styles.selectorContent}>
           <Text style={selectedTime ? styles.selectorText : styles.selectorPlaceholder}>
-            {selectedTime ? formatTimeToAMPM(selectedTime) : (isLoadingTimes ? 'Loading times...' : 'Select time...')}
+            {selectedTime ? formatTimeToAMPM(selectedTime) : (isLoadingTimes ? t('selectTime.loadingTimes', 'Loading available times...') : t('selectTime.selectTime', 'Select Time'))}
           </Text>
           <View style={styles.selectorIcon}>
             <Clock size={16} color={Colors.subtext} />
@@ -686,11 +686,11 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
             {isLoadingTimes ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="small" color={Colors.primary} />
-                <Text style={styles.loadingText}>Loading available times...</Text>
+                <Text style={styles.loadingText}>{t('selectTime.loadingTimes', 'Loading available times...')}</Text>
               </View>
             ) : availableTimes.length === 0 ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyStateText}>No available times for this day</Text>
+                <Text style={styles.emptyStateText}>{t('selectTime.noTimes', 'No available times for this day')}</Text>
               </View>
             ) : (
               availableTimes.map((time, idx) => (
@@ -728,7 +728,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
             <X size={20} color={Colors.text} />
           </TouchableOpacity>
-          <Text style={[styles.title, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>add appointment</Text>
+          <Text style={[styles.title, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>{t('admin.appointmentsAdmin.addAppointment', 'Add appointment')}</Text>
           <View style={{ width: 60 }} />
         </View>
 
@@ -742,7 +742,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
               />
             </View>
             <View style={styles.stepperLabels}>
-              {['Client','Service','Date','Time'].map((label, idx) => (
+              {[t('admin.appointmentsAdmin.client','Client'), t('booking.field.service','Service'), t('booking.field.date','Date'), t('booking.field.time','Time')].map((label, idx) => (
                 <View key={label} style={styles.stepperLabelWrap}>
                   <View style={[styles.stepDot, { borderColor: idx <= currentStep ? businessColors.primary : '#D1D1D6', backgroundColor: idx < currentStep ? businessColors.primary : '#FFFFFF' }]} />
                   <Text style={[styles.stepLabelText, { color: idx <= currentStep ? businessColors.primary : '#8E8E93' }]}>{label}</Text>
@@ -779,7 +779,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
             {/* Navigation controls */}
             <View style={styles.stepNavRow}>
               <TouchableOpacity onPress={goBack} disabled={currentStep === 0} style={[styles.stepNavButton, currentStep === 0 && styles.stepNavButtonDisabled]}> 
-                <Text style={[styles.stepNavText, currentStep === 0 && styles.stepNavTextDisabled]}>Back</Text>
+                <Text style={[styles.stepNavText, currentStep === 0 && styles.stepNavTextDisabled]}>{t('back', 'Back')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={currentStep < 3 ? goNext : handleSubmit}
@@ -793,7 +793,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
                   ((currentStep === 0 && !selectedClient) || (currentStep === 1 && !selectedService) || (currentStep === 2 && !selectedDate) || (currentStep === 3 && (!selectedTime || isSubmitting))) && { opacity: 0.6 }
                 ]}
               >
-                <Text style={styles.stepNavPrimaryText}>{currentStep < 3 ? 'Next' : (isSubmitting ? 'Saving...' : 'Done')}</Text>
+                <Text style={styles.stepNavPrimaryText}>{currentStep < 3 ? t('next', 'Next') : (isSubmitting ? t('settings.common.saving', 'Saving...') : t('done', 'Done'))}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -801,15 +801,15 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
           {/* Summary */}
           {selectedDate && selectedClient && selectedService && selectedTime && (
             <View style={styles.summaryCard}>
-              <Text style={styles.summaryTitle}>Appointment Summary</Text>
+              <Text style={styles.summaryTitle}>{t('admin.appointmentsAdmin.summary', 'Appointment Summary')}</Text>
               <View style={styles.summaryContent}>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryValue}>{selectedClient.name}</Text>
-                  <Text style={styles.summaryLabel}>Client:</Text>
+                  <Text style={styles.summaryLabel}>{t('admin.appointmentsAdmin.client','Client')}:</Text>
                 </View>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryValue}>{selectedService.name}</Text>
-                  <Text style={styles.summaryLabel}>Service:</Text>
+                  <Text style={styles.summaryLabel}>{t('booking.field.service','Service')}:</Text>
                 </View>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryValue}>
@@ -820,11 +820,11 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
                       weekday: 'long'
                     })}
                   </Text>
-                  <Text style={styles.summaryLabel}>Date:</Text>
+                  <Text style={styles.summaryLabel}>{t('booking.field.date','Date')}:</Text>
                 </View>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryValue}>{formatTimeToAMPM(selectedTime)}</Text>
-                  <Text style={styles.summaryLabel}>Time:</Text>
+                  <Text style={styles.summaryLabel}>{t('booking.field.time','Time')}:</Text>
                 </View>
               </View>
             </View>

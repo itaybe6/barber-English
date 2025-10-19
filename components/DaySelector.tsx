@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Dimensions, I18nM
 import Colors from '@/constants/colors';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
 import { useColors } from '@/src/theme/ThemeProvider';
 
 interface DaySelectorProps {
@@ -23,6 +24,7 @@ export default function DaySelector({
   startFromToday = false,
 }: DaySelectorProps) {
   const colors = useColors();
+  const { t, i18n } = useTranslation();
   const [dates, setDates] = useState<Date[]>([]);
   const [currentMonth, setCurrentMonth] = useState('');
   const scrollRef = useRef<ScrollView | null>(null);
@@ -95,11 +97,9 @@ export default function DaySelector({
   }, [markedDates]);
   
   const updateCurrentMonth = (date: Date) => {
-    const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-    setCurrentMonth(`${months[date.getMonth()]} ${date.getFullYear()}`);
+    setCurrentMonth(
+      date.toLocaleDateString(i18n?.language?.startsWith('he') ? 'he-IL' : 'en-US', { month: 'long', year: 'numeric' } as any)
+    );
   };
   
   const navigateDays = (direction: 'prev' | 'next') => {
@@ -145,9 +145,10 @@ export default function DaySelector({
   };
   
   const getDayName = (date: Date) => {
-    // English short weekday names: Sun .. Sat
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    return days[date.getDay()];
+    const daysEn = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const daysHe = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
+    const list = i18n?.language?.startsWith('he') ? daysHe : daysEn;
+    return list[date.getDay()];
   };
   
   const scrollToSelected = (animated: boolean) => {

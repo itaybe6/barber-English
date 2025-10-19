@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, Image, Dimensions, FlatList } from 'react-native';
+import { BlurView } from 'expo-blur';
 import Animated, { useSharedValue, useAnimatedScrollHandler, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, Easing } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -10,7 +11,7 @@ const ITEM_SPACING = 16;
 const SERVICE_ITEM = AVATAR_SIZE + ITEM_SPACING; // match barber item size
 const SCREEN = Dimensions.get('window');
 const AnimatedFlatList: any = Animated.createAnimatedComponent(FlatList as any);
-const HEADER_HEIGHT = 80; // much smaller header to visibly reduce image size
+const HEADER_HEIGHT = 600; // increase header image height for better prominence
 
 export type ServiceSelectorProps = {
   services: Service[];
@@ -112,6 +113,38 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
               fadeDuration={0 as any}
             />
             <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.25)' }} />
+            {/* Glass overlay with service name + price */}
+            <View style={{ position: 'absolute', top: 12, left: 12, right: 12, alignItems: 'center' }}>
+              <BlurView intensity={28} tint="light" style={{
+                paddingVertical: 10,
+                paddingHorizontal: 14,
+                borderRadius: 16,
+                overflow: 'hidden',
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.35)',
+                backgroundColor: 'rgba(255,255,255,0.16)'
+              }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <Text numberOfLines={1} style={{
+                    flexShrink: 1,
+                    color: '#111827',
+                    fontWeight: '800',
+                    fontSize: 16,
+                    textShadowColor: 'rgba(255,255,255,0.6)',
+                    textShadowOffset: { width: 0, height: 1 },
+                    textShadowRadius: 2
+                  }}>
+                    {services[activeIndex]?.name || ''}
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.85)', borderWidth: 1, borderColor: 'rgba(17,24,39,0.08)' }}>
+                    <Ionicons name="pricetag-outline" size={14} color="#111827" />
+                    <Text style={{ color: '#111827', fontWeight: '800', fontSize: 14 }}>
+                      {`${t('booking.price', '$')} ${services[activeIndex]?.price ?? 0}`}
+                    </Text>
+                  </View>
+                </View>
+              </BlurView>
+            </View>
           </>
         ) : null}
       </View>
@@ -153,27 +186,7 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
           }}
           scrollEventThrottle={16}
         />
-        {Number.isFinite(activeIndex) && services[activeIndex] && (
-          <View style={{ alignItems: 'center', marginTop: 12 }}>
-            <Text style={styles.carouselActiveName} numberOfLines={1}>
-              {services[activeIndex]?.name || ''}
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 8 }}>
-              <View style={[styles.serviceBadge, styles.serviceBadgePrimary]}>
-                <Ionicons name="time-outline" size={14} color="#FFFFFF" />
-                <Text style={styles.serviceBadgeText}>
-                  {`${services[activeIndex]?.duration_minutes ?? 60} ${t('booking.minutes', 'min')}`}
-                </Text>
-              </View>
-              <View style={[styles.serviceBadge, styles.serviceBadgeGhost]}>
-                <Ionicons name="pricetag-outline" size={14} color="#111827" />
-                <Text style={[styles.serviceBadgeText, styles.serviceBadgeTextDark]}>
-                  {`${t('booking.price', '$')} ${services[activeIndex]?.price ?? 0}`}
-                </Text>
-              </View>
-            </View>
-          </View>
-        )}
+        {null}
       </View>
     </View>
   );

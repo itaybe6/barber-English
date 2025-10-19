@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, TextInput, StyleSheet, Animated, Easing, 
 import { ChevronRight, Check } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { useTranslation } from 'react-i18next';
 
 type KeyboardTypeOption = 'default' | 'url';
 
@@ -25,6 +26,7 @@ export default function InlineEditableRow({
   validate,
   chevronColor,
 }: InlineEditableRowProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [draft, setDraft] = useState(value || '');
   const [isSaving, setIsSaving] = useState(false);
@@ -157,16 +159,16 @@ export default function InlineEditableRow({
                 activeOpacity={0.8}
               >
                 {isSaving ? (
-                  <Text style={styles.saveText}>Saving...</Text>
+                  <Text style={styles.saveText}>{t('settings.common.saving', 'Saving...')}</Text>
                 ) : (
-                  <Text style={styles.saveText}>Save</Text>
+                  <Text style={styles.saveText}>{t('save', 'Save')}</Text>
                 )}
               </TouchableOpacity>
             </View>
             {savedBanner ? (
               <View style={styles.savedBanner}>
                 <Check size={16} color="#4CAF50" />
-                <Text style={styles.savedText}>Saved</Text>
+                <Text style={styles.savedText}>{t('settings.saved', 'Saved')}</Text>
               </View>
             ) : null}
           </View>

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { X, AlertTriangle, Trash2 } from 'lucide-react-native';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
+import { useTranslation } from 'react-i18next';
 import { usersApi } from '@/lib/api/users';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -25,18 +26,19 @@ export default function DeleteAccountModal({ visible, onClose, onSuccess }: Dele
   const { colors: businessColors } = useBusinessColors();
   const logout = useAuthStore((state) => state.logout);
   const [isLoading, setIsLoading] = useState(false);
+  const { t } = useTranslation();
 
   const handleDeleteAccount = async () => {
     Alert.alert(
-      'Delete Account',
-      'Are you absolutely sure you want to delete your account? This action cannot be undone and will permanently delete all your data.',
+      t('profile.delete.title', 'Delete Account'),
+      t('profile.delete.confirm', 'Are you absolutely sure you want to delete your account? This action cannot be undone and will permanently delete all your data.'),
       [
         {
-          text: 'Cancel',
+          text: t('cancel', 'Cancel'),
           style: 'cancel',
         },
         {
-          text: 'Delete',
+          text: t('profile.delete.confirmButton', 'Delete'),
           style: 'destructive',
           onPress: async () => {
             setIsLoading(true);
@@ -46,11 +48,11 @@ export default function DeleteAccountModal({ visible, onClose, onSuccess }: Dele
               
               if (success) {
                 Alert.alert(
-                  'Account Deleted',
-                  'Your account and all associated data have been permanently deleted.',
+                  t('success.generic', 'Success'),
+                  t('profile.delete.success', 'Your account and all associated data have been permanently deleted.'),
                   [
                     {
-                      text: 'OK',
+                      text: t('ok', 'OK'),
                       onPress: () => {
                         onClose();
                         logout();
@@ -60,11 +62,11 @@ export default function DeleteAccountModal({ visible, onClose, onSuccess }: Dele
                   ]
                 );
               } else {
-                Alert.alert('Error', 'Failed to delete account. Please try again.');
+                Alert.alert(t('error.generic', 'Error'), t('profile.delete.failed', 'Failed to delete account'));
               }
             } catch (error) {
               console.error('Error deleting account:', error);
-              Alert.alert('Error', 'An error occurred while deleting your account.');
+              Alert.alert(t('error.generic', 'Error'), t('profile.delete.failed', 'Failed to delete account'));
             } finally {
               setIsLoading(false);
             }
@@ -86,7 +88,7 @@ export default function DeleteAccountModal({ visible, onClose, onSuccess }: Dele
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Delete Account</Text>
+          <Text style={styles.title}>{t('profile.delete.title', 'Delete Account')}</Text>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <X size={24} color="#666" />
           </TouchableOpacity>
@@ -95,44 +97,44 @@ export default function DeleteAccountModal({ visible, onClose, onSuccess }: Dele
         <View style={styles.content}>
           <View style={styles.warningContainer}>
             <AlertTriangle size={48} color="#FF3B30" style={styles.warningIcon} />
-            <Text style={styles.warningTitle}>Warning: This action is irreversible</Text>
+            <Text style={styles.warningTitle}>{t('profile.delete.warningTitle', 'Warning: This action is irreversible')}</Text>
             <Text style={styles.warningText}>
-              Deleting your account will permanently remove:
+              {t('profile.delete.warningBody', 'Deleting your account will permanently remove:')}
             </Text>
           </View>
 
           <View style={styles.listContainer}>
             <View style={styles.listItem}>
               <Trash2 size={16} color="#666" />
-              <Text style={styles.listText}>Your user profile</Text>
+              <Text style={styles.listText}>{t('profile.delete.items.profile', 'Your user profile')}</Text>
             </View>
             <View style={styles.listItem}>
               <Trash2 size={16} color="#666" />
-              <Text style={styles.listText}>All appointments</Text>
+              <Text style={styles.listText}>{t('profile.delete.items.appointments', 'All appointments')}</Text>
             </View>
             <View style={styles.listItem}>
               <Trash2 size={16} color="#666" />
-              <Text style={styles.listText}>Business constraints</Text>
+              <Text style={styles.listText}>{t('profile.delete.items.constraints', 'Business constraints')}</Text>
             </View>
             <View style={styles.listItem}>
               <Trash2 size={16} color="#666" />
-              <Text style={styles.listText}>Business hours</Text>
+              <Text style={styles.listText}>{t('profile.delete.items.hours', 'Business hours')}</Text>
             </View>
             <View style={styles.listItem}>
               <Trash2 size={16} color="#666" />
-              <Text style={styles.listText}>Designs and gallery</Text>
+              <Text style={styles.listText}>{t('profile.delete.items.gallery', 'Designs and gallery')}</Text>
             </View>
             <View style={styles.listItem}>
               <Trash2 size={16} color="#666" />
-              <Text style={styles.listText}>Notifications</Text>
+              <Text style={styles.listText}>{t('profile.delete.items.notifications', 'Notifications')}</Text>
             </View>
             <View style={styles.listItem}>
               <Trash2 size={16} color="#666" />
-              <Text style={styles.listText}>Recurring appointments</Text>
+              <Text style={styles.listText}>{t('profile.delete.items.recurring', 'Recurring appointments')}</Text>
             </View>
             <View style={styles.listItem}>
               <Trash2 size={16} color="#666" />
-              <Text style={styles.listText}>Waitlist entries</Text>
+              <Text style={styles.listText}>{t('profile.delete.items.waitlist', 'Waitlist entries')}</Text>
             </View>
           </View>
 

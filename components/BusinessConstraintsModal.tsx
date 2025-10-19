@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Alert, Pressable, TextInput, Platform, KeyboardAvoidingView } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
@@ -51,6 +52,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
   const insets = useSafeAreaInsets();
   const { colors: businessColors } = useBusinessColors();
   const { user } = useAuthStore();
+  const { t } = useTranslation();
   const today = useMemo(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -137,30 +139,30 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
       const normReason = reason?.trim() || null;
       if (mode === 'hours') {
         if (!singleDateISO) {
-          Alert.alert('Error', 'Please select a date');
+          Alert.alert(t('error.generic', 'Error'), t('admin.hoursAdmin.selectDate', 'Please select a date'));
           return;
         }
         if (startTime >= endTime) {
-          Alert.alert('Error', 'End time must be after start time');
+          Alert.alert(t('error.generic', 'Error'), t('admin.hoursAdmin.endAfterStart', 'End time must be after start time'));
           return;
         }
         entries = [{ date: singleDateISO, start_time: formatTime24Hour(startTime), end_time: formatTime24Hour(endTime), reason: normReason }];
       } else if (mode === 'single-day') {
         if (!singleDateISO) {
-          Alert.alert('Error', 'Please select a date');
+          Alert.alert(t('error.generic', 'Error'), t('admin.hoursAdmin.selectDate', 'Please select a date'));
           return;
         }
         entries = [{ date: singleDateISO, start_time: '00:00', end_time: '23:59', reason: normReason }];
       } else {
         // multi-days via date range
         if (!rangeStartISO || !rangeEndISO) {
-          Alert.alert('Error', 'Please select a date range');
+          Alert.alert(t('error.generic', 'Error'), t('admin.hoursAdmin.selectDateRange', 'Please select a date range'));
           return;
         }
         const start = new Date(rangeStartISO);
         const end = new Date(rangeEndISO);
         if (start > end) {
-          Alert.alert('Error', 'Invalid date range');
+          Alert.alert(t('error.generic', 'Error'), t('admin.hoursAdmin.invalidDateRange', 'Invalid date range'));
           return;
         }
         const days: string[] = [];
@@ -178,9 +180,9 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
       const end = toISODate(addDays(today, 365));
       const rows = await businessConstraintsApi.getConstraintsInRange(start, end);
       setExisting((rows || []).filter((r: any) => (r.date as string) >= start) as any);
-      Alert.alert('Saved', 'Constraints saved successfully');
+      Alert.alert(t('success.generic', 'Success'), t('admin.hoursAdmin.saved', 'Constraints saved successfully'));
     } catch (e) {
-      Alert.alert('Error', 'Failed to save constraints');
+      Alert.alert(t('error.generic', 'Error'), t('admin.hoursAdmin.saveFailed', 'Failed to save constraints'));
     } finally {
       setIsSaving(false);
     }
@@ -248,7 +250,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
       <SafeAreaView style={styles.container} edges={['left','right']}>
         <View style={[styles.header, { paddingTop: Math.max(16, insets.top + 8) }]}>
           <TouchableOpacity onPress={onClose} style={styles.headerBtn}><Ionicons name="close" size={20} color={'#000'} /></TouchableOpacity>
-          <Text style={styles.headerTitle}>Work constraints</Text>
+          <Text style={styles.headerTitle}>{t('admin.hoursAdmin.title', 'Work constraints')}</Text>
           <TouchableOpacity onPress={() => setIsExistingModalOpen(true)} style={[styles.headerAction, { backgroundColor: businessColors.primary, borderWidth: 0 }]} activeOpacity={0.9}>
             <View style={styles.headerActionInner}>
               <Ionicons name="create-outline" size={20} color={'#FFFFFF'} />
@@ -262,13 +264,13 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
           <View style={styles.segmentedCard}>
             <View style={styles.segmented}>
               <TouchableOpacity onPress={() => setMode('hours')} style={[styles.segment, mode === 'hours' && { backgroundColor: `${businessColors.primary}15`, borderColor: `${businessColors.primary}30` }]} activeOpacity={0.9}>
-                <Text style={[styles.segmentText, mode === 'hours' && { color: businessColors.primary }]}>Hours</Text>
+                <Text style={[styles.segmentText, mode === 'hours' && { color: businessColors.primary }]}>{t('admin.hoursAdmin.segment.hours', 'Hours')}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setMode('single-day')} style={[styles.segment, mode === 'single-day' && { backgroundColor: `${businessColors.primary}15`, borderColor: `${businessColors.primary}30` }]} activeOpacity={0.9}>
-                <Text style={[styles.segmentText, mode === 'single-day' && { color: businessColors.primary }]}>Single day</Text>
+                <Text style={[styles.segmentText, mode === 'single-day' && { color: businessColors.primary }]}>{t('admin.hoursAdmin.segment.singleDay', 'Single day')}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setMode('multi-days')} style={[styles.segment, mode === 'multi-days' && { backgroundColor: `${businessColors.primary}15`, borderColor: `${businessColors.primary}30` }]} activeOpacity={0.9}>
-                <Text style={[styles.segmentText, mode === 'multi-days' && { color: businessColors.primary }]}>Multiple days</Text>
+                <Text style={[styles.segmentText, mode === 'multi-days' && { color: businessColors.primary }]}>{t('admin.hoursAdmin.segment.multiDays', 'Multiple days')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -277,7 +279,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
           {mode === 'hours' && (
             <>
               <View style={styles.card}>
-                <Text style={styles.sectionTitle}>Pick a date</Text>
+                <Text style={styles.sectionTitle}>{t('admin.hoursAdmin.pickDateShort', 'Pick a date')}</Text>
                 <View style={styles.calendarCard}>
                                   <RNCalendar
                   current={singleDateISO}
@@ -328,7 +330,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
               </View>
               <View style={styles.card}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Text style={styles.sectionTitle}>Closed hours</Text>
+                  <Text style={styles.sectionTitle}>{t('admin.hoursAdmin.closedHours', 'Closed hours')}</Text>
                   <TouchableOpacity onPress={() => { setTempStartHour(startTime); setTempEndHour(endTime); setIsHoursModalOpen(true); }} style={[styles.smallIconBtn, { backgroundColor: businessColors.primary }]} activeOpacity={0.9}>
                     <Ionicons name="add" size={18} color={'#FFFFFF'} />
                   </TouchableOpacity>
@@ -346,7 +348,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
           {/* Single full day: pick one date */}
           {mode === 'single-day' && (
             <View style={styles.card}>
-              <Text style={styles.sectionTitle}>Pick a date (closed all day)</Text>
+              <Text style={styles.sectionTitle}>{t('admin.hoursAdmin.pickDateAllDay', 'Pick a date (closed all day)')}</Text>
               <View style={styles.calendarCard}>
                 <RNCalendar
                   current={singleDateISO}
@@ -400,7 +402,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
           {/* Multi-days: date range selection */}
           {mode === 'multi-days' && (
             <View style={styles.card}>
-              <Text style={styles.sectionTitle}>Pick a date range (closed all day)</Text>
+              <Text style={styles.sectionTitle}>{t('admin.hoursAdmin.pickDateRangeAllDay', 'Pick a date range (closed all day)')}</Text>
               <View style={styles.calendarCard}>
                 <RNCalendar
                   current={rangeStartISO || toISODate(today)}
@@ -624,7 +626,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
               <TouchableOpacity onPress={() => { setReason(tempReason.trim()); setIsReasonModalOpen(false); }} style={[styles.confirmBtn, { backgroundColor: businessColors.primary }]}>
                 <Ionicons name="checkmark" size={18} color={'#FFFFFF'} />
               </TouchableOpacity>
-              <Text style={styles.sheetTitle}>Enter reason</Text>
+        <Text style={styles.sheetTitle}>{t('admin.hoursAdmin.enterReason', 'Enter reason')}</Text>
             </View>
             <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12 }}>
               <View style={styles.inputWrapper}>

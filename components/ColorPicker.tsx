@@ -182,7 +182,7 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
     // Validate hex color format
     const hexPattern = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
     if (!hexPattern.test(customColorHex)) {
-      Alert.alert('Invalid Color', 'Please enter a valid hex color (e.g., #FF5733)');
+      Alert.alert(t('color.invalidTitle', 'Invalid Color'), t('color.invalidMessage', 'Please enter a valid hex color (e.g., #FF5733)'));
       return;
     }
     handleColorSelect(customColorHex);
@@ -191,16 +191,16 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>Primary Color</Text>
+      <Text style={styles.label}>{t('color.primary', 'Primary Color')}</Text>
       <View style={styles.currentColorContainer}>
         <View style={[styles.currentColorPreview, { backgroundColor: selectedColor }]} />
-        <Text style={styles.currentColorText}>Current: {selectedColor}</Text>
+        <Text style={styles.currentColorText}>{t('color.current', 'Current')}: {selectedColor}</Text>
       </View>
       <TouchableOpacity
         style={[styles.colorButton, { backgroundColor: selectedColor }]}
         onPress={() => setIsModalVisible(true)}
       >
-        <Text style={styles.colorButtonText}>Choose App Color</Text>
+        <Text style={styles.colorButtonText}>{t('color.chooseApp', 'Choose App Color')}</Text>
       </TouchableOpacity>
       
       
@@ -212,7 +212,7 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Choose Your App Color</Text>
+            <Text style={styles.modalTitle}>{t('color.chooseYourApp', 'Choose Your App Color')}</Text>
             
             {/* Category Selection */}
             <ScrollView 
@@ -267,7 +267,7 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
                   style={styles.customColorButton}
                   onPress={() => setShowCustomPicker(true)}
                 >
-                  <Text style={styles.customColorButtonText}>+ Custom Color</Text>
+                  <Text style={styles.customColorButtonText}>{t('color.customButton', '+ Custom Color')}</Text>
                 </TouchableOpacity>
                 
                 {/* Reset to Default Button */}
@@ -275,13 +275,13 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
                   style={styles.resetButton}
                   onPress={() => handleColorSelect('#000000')}
                 >
-                  <Text style={styles.resetButtonText}>Reset to Default</Text>
+                  <Text style={styles.resetButtonText}>{t('color.reset', 'Reset to Default')}</Text>
                 </TouchableOpacity>
               </ScrollView>
             ) : (
               <View style={styles.customColorContainer}>
-                <Text style={styles.customColorTitle}>Enter Custom Color</Text>
-                <Text style={styles.customColorSubtitle}>Enter a hex color code (e.g., #FF5733)</Text>
+                <Text style={styles.customColorTitle}>{t('color.enterCustom', 'Enter Custom Color')}</Text>
+                <Text style={styles.customColorSubtitle}>{t('color.enterHex', 'Enter a hex color code (e.g., #FF5733)')}</Text>
                 
                 <View style={styles.customColorInputContainer}>
                   <View style={[styles.colorPreview, { backgroundColor: customColorHex }]} />
@@ -289,7 +289,7 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
                     style={styles.customColorInput}
                     value={customColorHex}
                     onChangeText={setCustomColorHex}
-                    placeholder="#000000"
+                    placeholder={t('color.placeholder', '#000000')}
                     placeholderTextColor="#999"
                     autoCapitalize="characters"
                     maxLength={7}
@@ -301,13 +301,13 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
                     style={styles.customColorCancelButton}
                     onPress={() => setShowCustomPicker(false)}
                   >
-                    <Text style={styles.customColorCancelButtonText}>Back</Text>
+                    <Text style={styles.customColorCancelButtonText}>{t('back', 'Back')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.customColorSubmitButton}
                     onPress={handleCustomColorSubmit}
                   >
-                    <Text style={styles.customColorSubmitButtonText}>Apply</Text>
+                    <Text style={styles.customColorSubmitButtonText}>{t('color.apply', 'Apply')}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -317,7 +317,7 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
               style={styles.cancelButton}
               onPress={() => setIsModalVisible(false)}
             >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
+              <Text style={styles.cancelButtonText}>{t('cancel', 'Cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>

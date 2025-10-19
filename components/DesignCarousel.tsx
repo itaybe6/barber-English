@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Design } from '@/lib/supabase';
 import { supabase } from '@/lib/supabase';
 import { useColors } from '@/src/theme/ThemeProvider';
+import { useTranslation } from 'react-i18next';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH * 0.38; // Increased from 0.32 to 0.38 for larger cards
@@ -42,8 +43,8 @@ interface AdminUser {
 export default function DesignCarousel({ 
   designs, 
   onDesignPress, 
-  title = "העיצובים החדשים שלנו",
-  subtitle = "גלו את הטרנדים האחרונים ותבחרו את העיצוב המושלם",
+  title = undefined,
+  subtitle = undefined,
   showHeader = true,
 }: DesignCarouselProps) {
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
@@ -52,6 +53,7 @@ export default function DesignCarousel({
   const [modalVisible, setModalVisible] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const colors = useColors();
+  const { t } = useTranslation();
   
   // Animation values for floating elements
   const floatingAnim = useRef(new Animated.Value(0)).current;
@@ -283,8 +285,8 @@ export default function DesignCarousel({
       {showHeader && (
         <View style={styles.elegantHeader}>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.elegantTitle}>Design Gallery</Text>
-            <Text style={styles.elegantSubtitle}>Discover our latest creations</Text>
+            <Text style={styles.elegantTitle}>{title || t('admin.gallery.title', 'Gallery')}</Text>
+            <Text style={styles.elegantSubtitle}>{subtitle || t('admin.gallery.subtitle', 'Manage your designs')}</Text>
           </View>
         </View>
       )}

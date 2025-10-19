@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, TextInput, View, TouchableOpacity, Platform } from 'react-native';
 import Colors from '@/constants/colors';
+import { useTranslation } from 'react-i18next';
 import { Search, X } from 'lucide-react-native';
 
 interface SearchBarProps {
@@ -13,9 +14,10 @@ interface SearchBarProps {
 export default function SearchBar({
   value,
   onChangeText,
-  placeholder = 'חיפוש...',
+  placeholder = undefined,
   onClear,
 }: SearchBarProps) {
+  const { t } = useTranslation();
   return (
     <View style={styles.container}>
       <View style={styles.searchIcon}>
@@ -26,7 +28,7 @@ export default function SearchBar({
         style={styles.input}
         value={value}
         onChangeText={onChangeText}
-        placeholder={placeholder}
+        placeholder={placeholder || t('common.searchPlaceholder', 'Search...')}
         placeholderTextColor={Colors.subtext}
         clearButtonMode="never"
         textAlign="right"

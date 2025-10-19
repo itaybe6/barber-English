@@ -1656,13 +1656,20 @@ export default function BookAppointment() {
           </View>
         </View>
       )}
-      <View style={[styles.contentWrapper, (currentStep === 1 || currentStep === 2) ? { backgroundColor: 'transparent', borderTopLeftRadius: 0, borderTopRightRadius: 0, paddingTop: 0 } : null]}>
+      <View style={[
+        styles.contentWrapper,
+        (currentStep === 1)
+          ? { backgroundColor: 'transparent', borderTopLeftRadius: 0, borderTopRightRadius: 0, paddingTop: 0 }
+          : (currentStep === 2)
+            ? { backgroundColor: '#FFFFFF', borderTopLeftRadius: 0, borderTopRightRadius: 0, paddingTop: 0 }
+            : null
+      ]}>
         <ScrollView
           ref={scrollRef as any}
           contentContainerStyle={[
             styles.scrollContent, 
             { paddingBottom: (currentStep === 1 || currentStep === 2) ? 160 : contentBottomPadding },
-            (currentStep === 1 || currentStep === 2) ? { minHeight: CAROUSEL_HEIGHT + 100 } : null
+            (currentStep === 1) ? { minHeight: CAROUSEL_HEIGHT + 100 } : null
           ]}
           showsVerticalScrollIndicator={false}
           refreshControl={currentStep === 3 ? <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#000" /> : undefined}
@@ -1712,7 +1719,7 @@ export default function BookAppointment() {
 
         {/* Step 2: Service Selection */}
         {currentStep === 2 && selectedBarber && (
-          <Animated.View style={[styles.section, styles.sectionFullBleed, step2FadeStyle]}>
+          <Animated.View style={[styles.section, step2FadeStyle]}>
             {isLoadingServices ? (
               <View style={[styles.loadingContainer, { height: CAROUSEL_HEIGHT, justifyContent: 'center' }]}>
                 <Text style={[styles.loadingText, { color: '#FFFFFF' }]}>{t('booking.loadingServices', 'Loading services...')}</Text>

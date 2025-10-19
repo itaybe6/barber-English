@@ -34,8 +34,10 @@ import { useProductsStore } from '@/stores/productsStore';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import type { BusinessProfile } from '@/lib/supabase';
 import { StatusBar, setStatusBarStyle, setStatusBarBackgroundColor } from 'expo-status-bar';
+import { useTranslation } from 'react-i18next';
 
 export default function HomeScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const designsFromStore = useDesignsStore((state) => state.designs);
@@ -584,7 +586,7 @@ export default function HomeScreen() {
       return (
         <View style={{ paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center', paddingVertical: 20 }}>
           <ActivityIndicator size="small" color={colors.primary} />
-          <Text style={{ marginTop: 8, color: colors.textSecondary }}>Loading products...</Text>
+          <Text style={{ marginTop: 8, color: colors.textSecondary }}>{t('admin.products.loading','Loading products...')}</Text>
         </View>
       );
     }
@@ -674,7 +676,7 @@ export default function HomeScreen() {
                   router.push('/(tabs)/notifications');
                 }}
                 activeOpacity={0.85}
-                accessibilityLabel="Notifications"
+                accessibilityLabel={t('notifications.title','Notifications')}
               >
                 <Ionicons name="notifications-outline" size={24} color="#fff" />
                 {unreadCount > 0 && (
@@ -699,11 +701,11 @@ export default function HomeScreen() {
         {/* Hero Text Content */}
         <View style={[styles.fullScreenHeroContent, { top: insets.top + 110 }]}>
           <View style={styles.heroTextContainer}>
-            <Text style={styles.heroWelcome}>Welcome</Text>
-            <Text style={styles.heroTitle}>{user?.name || 'Admin'}</Text>
+            <Text style={styles.heroWelcome}>{t('admin.home.welcome','Welcome')}</Text>
+            <Text style={styles.heroTitle}>{user?.name || t('settings.admin.admin','Admin')}</Text>
             <Text style={styles.heroSubtitle} numberOfLines={2} ellipsizeMode="tail">
-              Manage your day with confidence{'\n'}
-              This app keeps your schedule sharp
+              {t('admin.home.subtitle.line1','Manage your day with confidence')}{'\n'}
+              {t('admin.home.subtitle.line2','This app keeps your schedule sharp')}
             </Text>
           </View>
         </View>
@@ -763,7 +765,7 @@ export default function HomeScreen() {
                 ) : (
                   <Text style={[styles.statsNumber, { color: colors.primary }]}>{monthlyStats.totalClients}</Text>
                 )}
-                <Text style={styles.statsLabelSecondary}>Clients</Text>
+                <Text style={styles.statsLabelSecondary}>{t('admin.home.clients','Clients')}</Text>
               </View>
             </TouchableOpacity>
 
@@ -777,7 +779,7 @@ export default function HomeScreen() {
                 ) : (
                   <Text style={[styles.statsNumber, { color: colors.primary }]}>{monthlyStats.completedAppointments}</Text>
                 )}
-                <Text style={styles.statsLabelSecondary}>This month</Text>
+                <Text style={styles.statsLabelSecondary}>{t('admin.home.thisMonth','This month')}</Text>
               </View>
             </View>
           </View>
@@ -788,8 +790,8 @@ export default function HomeScreen() {
           <View style={{ paddingHorizontal: 8, marginBottom: 8 }}>
             <View style={styles.sectionHeaderRow}>
               <View style={styles.sectionHeaderTexts}>
-                <Text style={styles.sectionHeaderTitle}>Gallery</Text>
-                <Text style={styles.sectionHeaderSubtitle}>manage your desings</Text>
+                <Text style={styles.sectionHeaderTitle}>{t('admin.gallery.title','Gallery')}</Text>
+                <Text style={styles.sectionHeaderSubtitle}>{t('admin.gallery.subtitle','Manage your designs')}</Text>
               </View>
               <TouchableOpacity
                 onPress={() => router.push('/(tabs)/edit-gallery')}
@@ -799,7 +801,7 @@ export default function HomeScreen() {
                 <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20`, width: 28, height: 28, borderRadius: 14, marginRight: 0 }]}> 
                   <Ionicons name="create-outline" size={18} color={colors.primary} />
                 </View>
-                <Text style={styles.editGalleryButtonText}>Edit Gallery</Text>
+                <Text style={styles.editGalleryButtonText}>{t('admin.gallery.edit','Edit Gallery')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -828,8 +830,8 @@ export default function HomeScreen() {
           <View style={{ paddingHorizontal: 8, marginBottom: 8 }}>
             <View style={styles.sectionHeaderRow}>
               <View style={styles.sectionHeaderTexts}>
-                <Text style={styles.sectionHeaderTitle}>Products</Text>
-                <Text style={styles.sectionHeaderSubtitle}>Manage your products</Text>
+                <Text style={styles.sectionHeaderTitle}>{t('admin.products.title','Products')}</Text>
+                <Text style={styles.sectionHeaderSubtitle}>{t('admin.products.subtitle','Manage your products')}</Text>
               </View>
               <TouchableOpacity
                 onPress={() => router.push('/(tabs)/edit-products')}
@@ -839,7 +841,7 @@ export default function HomeScreen() {
                 <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20`, width: 28, height: 28, borderRadius: 14, marginRight: 12 }]}> 
                   <Ionicons name="create-outline" size={18} color={colors.primary} />
                 </View>
-                <Text style={styles.editGalleryButtonText}>Edit Products</Text>
+                <Text style={styles.editGalleryButtonText}>{t('admin.products.edit','Edit Products')}</Text>
               </TouchableOpacity>
             </View>
           </View>

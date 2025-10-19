@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useLocalSearchParams } from 'expo-router';
@@ -14,6 +15,7 @@ import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 
 export default function WaitlistScreen() {
   const router = useRouter();
+  const { t, i18n } = useTranslation();
   const params = useLocalSearchParams();
   const { serviceName = 'General service', selectedDate = '', barberId = '' } = params as { serviceName: string; selectedDate: string; barberId: string };
   
@@ -29,7 +31,7 @@ export default function WaitlistScreen() {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString(i18n?.language === 'he' ? 'he-IL' : 'en-US', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
@@ -39,17 +41,17 @@ export default function WaitlistScreen() {
 
   const handleAddToWaitlist = async () => {
     if (!selectedPeriod) {
-      Alert.alert('Error', 'Please select a preferred time period');
+      Alert.alert(t('error.generic', 'Error'), t('waitlist.selectPeriod', 'Please select a preferred time period'));
       return;
     }
 
     if (!user?.name || !user?.phone) {
-      Alert.alert('Error', 'User info is missing');
+      Alert.alert(t('error.generic', 'Error'), t('waitlist.userInfoMissing', 'User info is missing'));
       return;
     }
 
     if (!selectedDate || selectedDate === '') {
-      Alert.alert('Error', 'No date selected');
+      Alert.alert(t('error.generic', 'Error'), t('waitlist.noDate', 'No date selected'));
       return;
     }
 
@@ -65,11 +67,11 @@ export default function WaitlistScreen() {
 
       if (success) {
         Alert.alert(
-          'Added to waitlist',
-          `Successfully added to the waitlist for ${formatDate(selectedDate)}. We\'ll notify you when a slot opens!`,
+          t('waitlist.addedTitle', 'Added to waitlist'),
+          t('waitlist.addedMessage', "Successfully added to the waitlist for {{date}}. We'll notify you when a slot opens!", { date: formatDate(selectedDate) }),
           [
             {
-              text: 'OK',
+              text: t('ok', 'OK'),
               onPress: () => {
                 router.push('/(client-tabs)/book-appointment');
               },
@@ -77,10 +79,10 @@ export default function WaitlistScreen() {
           ]
         );
       } else {
-        Alert.alert('Error', error || 'An error occurred while adding to the waitlist');
+        Alert.alert(t('error.generic', 'Error'), error || t('waitlist.addError', 'An error occurred while adding to the waitlist'));
       }
     } catch (error) {
-      Alert.alert('Error', 'An error occurred while adding to the waitlist');
+      Alert.alert(t('error.generic', 'Error'), t('waitlist.addError', 'An error occurred while adding to the waitlist'));
     }
   };
 
@@ -100,9 +102,11 @@ export default function WaitlistScreen() {
               <Ionicons name="arrow-back" size={24} color={Colors.text} />
             </TouchableOpacity>
             <View style={{ alignItems: 'center', flexShrink: 1 }}>
-              <Text style={styles.headerTitle}>Waitlist</Text>
+              <Text style={styles.headerTitle}>{t('waitlist.title', 'Waitlist')}</Text>
               <Text style={styles.headerSubtitle} numberOfLines={2} ellipsizeMode="tail">
-                {`No appointments available\n${serviceName === 'General service' ? 'on this date' : `for ${serviceName} on this date`}`}
+                {serviceName === 'General service'
+                  ? t('waitlist.noAppointmentsOnDate', 'No appointments available\non this date')
+                  : t('waitlist.noAppointmentsForServiceOnDate', 'No appointments available\nfor {{service}} on this date', { service: serviceName })}
               </Text>
             </View>
             <View style={{ width: 40 }} />
@@ -119,7 +123,7 @@ export default function WaitlistScreen() {
           <View style={styles.infoCard}>
             <View style={styles.infoHeader}>
               <Ionicons name="information-circle" size={24} color={Colors.primary} />
-              <Text style={styles.infoTitle}>Request details</Text>
+              <Text style={styles.infoTitle}>{t('waitlist.requestDetails', 'Request details')}</Text>
             </View>
             
             <View style={styles.infoRow}>
@@ -127,7 +131,7 @@ export default function WaitlistScreen() {
                 <Ionicons name="calendar" size={20} color={Colors.primary} />
               </View>
               <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Date</Text>
+                <Text style={styles.infoLabel}>{t('booking.field.date', 'Date')}</Text>
                 <Text style={styles.infoValue}>{formatDate(displayDate)}</Text>
               </View>
             </View>
@@ -137,9 +141,9 @@ export default function WaitlistScreen() {
                 <Ionicons name="apps" size={20} color={Colors.primary} />
               </View>
               <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Service</Text>
+                <Text style={styles.infoLabel}>{t('booking.field.service', 'Service')}</Text>
                 <Text style={styles.infoValue}>
-                  {serviceName === 'General service' ? 'Any available service' : serviceName}
+                  {serviceName === 'General service' ? t('waitlist.anyService', 'Any available service') : serviceName}
                 </Text>
               </View>
             </View>
@@ -166,13 +170,13 @@ export default function WaitlistScreen() {
               {isLoading ? (
                 <View style={styles.loadingContainer}>
                   <Ionicons name="hourglass" size={20} color="#FFFFFF" />
-                  <Text style={styles.confirmButtonText}>Adding to waitlist...</Text>
+                  <Text style={styles.confirmButtonText}>{t('waitlist.adding', 'Adding to waitlist...')}</Text>
                 </View>
               ) : (
                 <View style={styles.buttonContent}>
                   <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
                   <Text style={styles.confirmButtonText}>
-                    {selectedPeriod ? 'Confirm and save' : 'Select a time period first'}
+                    {selectedPeriod ? t('waitlist.confirmAndSave', 'Confirm and save') : t('waitlist.selectPeriodFirst', 'Select a time period first')}
                   </Text>
                 </View>
               )}

@@ -25,6 +25,7 @@ import { useProductsStore } from '@/stores/productsStore';
 import { getCurrentClientLogo } from '@/src/theme/assets';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { StatusBar, setStatusBarStyle, setStatusBarBackgroundColor } from 'expo-status-bar';
+import { useTranslation } from 'react-i18next';
 
 
 // API functions for client home
@@ -128,6 +129,7 @@ const clientHomeApi = {
 
 export default function ClientHomeScreen() {
   const router = useRouter();
+  const { t, i18n } = useTranslation();
   const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isBlocked = Boolean((user as any)?.block);
@@ -236,8 +238,8 @@ export default function ClientHomeScreen() {
     if (!isAuthenticated) {
       setLoginModal({
         visible: true,
-        title: 'Login Required',
-        message: `Please sign in to ${actionDescription}.`,
+        title: t('login.required'),
+        message: t('login.pleaseSignInTo', { action: actionDescription }),
       });
       return;
     }
@@ -669,9 +671,10 @@ export default function ClientHomeScreen() {
 
   // Show all services in a horizontal scroll
   
+  const appLocale = i18n?.language === 'he' ? 'he-IL' : 'en-US';
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString(appLocale as any, {
       day: 'numeric',
       month: 'long'
     });
@@ -679,7 +682,7 @@ export default function ClientHomeScreen() {
   
   const formatWaitlistDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('he-IL', {
+    return date.toLocaleDateString(appLocale as any, {
       weekday: 'long',
       day: 'numeric',
       month: 'long'
@@ -731,9 +734,9 @@ export default function ClientHomeScreen() {
             <View style={styles.headerSide}>
               <TouchableOpacity
                 style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}
-                onPress={() => requireAuth('access your profile and settings', () => router.push('/(client-tabs)/profile'))}
+                onPress={() => requireAuth(t('profile.title'), () => router.push('/(client-tabs)/profile'))}
                 activeOpacity={0.85}
-                accessibilityLabel="Settings and Profile"
+                accessibilityLabel={t('profile.title')}
               >
                 <Ionicons name="settings-outline" size={24} color="#fff" />
               </TouchableOpacity>
@@ -745,13 +748,13 @@ export default function ClientHomeScreen() {
               <TouchableOpacity 
                 style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}
                 onPress={async () => {
-                  return requireAuth('view notifications', async () => {
+                  return requireAuth(t('notifications.title'), async () => {
                     await router.push('/(client-tabs)/notifications');
                     setUnreadNotificationsCount(0);
                   });
                 }}
                 activeOpacity={0.85}
-                accessibilityLabel="Notifications"
+                accessibilityLabel={t('notifications.title')}
               >
                 <Ionicons name="notifications-outline" size={24} color="#fff" />
                 {unreadNotificationsCount > 0 && (
@@ -769,13 +772,9 @@ export default function ClientHomeScreen() {
         {/* Hero Text Content */}
         <View style={styles.fullScreenHeroContent}>
           <View style={styles.heroTextContainer}>
-            <Text style={styles.heroWelcome}>Welcome</Text>
-            <Text style={styles.heroTitle}>{user?.name || 'Valued Client'}</Text>
-            <Text style={styles.heroSubtitle} numberOfLines={2} ellipsizeMode="tail">
-            Book your appointment quickly and easily{'\n'}
-            Your time matters 
-              
-            </Text>
+            <Text style={styles.heroWelcome}>{t('welcome')}</Text>
+            <Text style={styles.heroTitle}>{user?.name || t('valuedClient')}</Text>
+            <Text style={styles.heroSubtitle} numberOfLines={2} ellipsizeMode="tail">{t('home.subtitle')}</Text>
           </View>
         </View>
 
@@ -811,11 +810,11 @@ export default function ClientHomeScreen() {
                   <Ionicons name="time" size={28} color="#FFFFFF" />
                 </View>
                 <View style={styles.waitlistTopInfo}>
-                  <Text style={styles.waitlistTopTitle}>You are on the waitlist</Text>
+                  <Text style={styles.waitlistTopTitle}>{t('waitlist.title')}</Text>
                   <Text style={styles.waitlistTopSubtitle}>
                     {waitlistEntries.length === 1 
-                      ? `Waiting for ${waitlistEntries[0].service_name}`
-                      : `Waiting for ${waitlistEntries.length} appointments`
+                      ? t('waitlist.waitingFor', { service: waitlistEntries[0].service_name })
+                      : t('waitlist.waitingForMany', { count: waitlistEntries.length })
                     }
                   </Text>
                   <View style={styles.waitlistTimePeriodContainer}>
@@ -831,9 +830,9 @@ export default function ClientHomeScreen() {
                           color="rgba(255, 255, 255, 0.9)" 
                         />
                         <Text style={styles.waitlistTimePeriodText}>
-                          {entry.time_period === 'morning' ? 'Morning' :
-                           entry.time_period === 'afternoon' ? 'Afternoon' :
-                           entry.time_period === 'evening' ? 'Evening' : 'Any time'}
+                          {entry.time_period === 'morning' ? t('time_period.morning') :
+                           entry.time_period === 'afternoon' ? t('time_period.afternoon') :
+                           entry.time_period === 'evening' ? t('time_period.evening') : t('time_period.any')}
                         </Text>
                       </View>
                     ))}
@@ -851,15 +850,15 @@ export default function ClientHomeScreen() {
                 style={styles.waitlistTopButton}
                 onPress={() => {
                   Alert.alert(
-                    'Leave waitlist',
-                    'Are you sure you want to leave the waitlist?',
+                    t('waitlist.leave.title'),
+                    t('waitlist.leave.message'),
                     [
                       {
-                        text: 'Cancel',
+                        text: t('cancel'),
                         style: 'cancel',
                       },
                       {
-                        text: 'Confirm',
+                        text: t('confirm'),
                         style: 'destructive',
                         onPress: () => {
                           // Remove all waitlist entries
@@ -878,7 +877,7 @@ export default function ClientHomeScreen() {
                   tint="light"
                   style={styles.waitlistButtonBlur}
                 >
-                  <Text style={styles.waitlistTopButtonText}>Remove from waitlist</Text>
+                  <Text style={styles.waitlistTopButtonText}>{t('waitlist.remove')}</Text>
                 </BlurView>
               </TouchableOpacity>
             </View>
@@ -892,10 +891,10 @@ export default function ClientHomeScreen() {
               <View style={{ width: 22 }} />
               <View style={{ alignItems: 'center' }}>
                 <Text style={styles.appointmentsHeaderTitle}>
-                  Appointments
+                  {t('appointments.title')}
                 </Text>
                 <Text style={styles.appointmentsHeaderSubtitle}>
-                  Manage your bookings
+                  {t('appointments.subtitle')}
                 </Text>
               </View>
               <View style={{ width: 22 }} />
@@ -910,7 +909,7 @@ export default function ClientHomeScreen() {
           ) : nextAppointment ? (
             <TouchableOpacity
               activeOpacity={0.9}
-              onPress={() => requireAuth('view your appointments', () => router.push('/(client-tabs)/appointments'))}
+              onPress={() => requireAuth(t('appointments.title'), () => router.push('/(client-tabs)/appointments'))}
               style={styles.nextAppointmentContainer}
             >
               <Image 
@@ -934,7 +933,7 @@ export default function ClientHomeScreen() {
                   style={styles.nextAppointmentInfoBlur}
                 >
                   <View style={styles.appointmentInfo}>
-                    <Text style={styles.nextAppointmentLabel}>Your next appointment</Text>
+                    <Text style={styles.nextAppointmentLabel}>{t('appointments.next')}</Text>
                     <Text style={styles.nextAppointmentService}>{nextAppointment.service_name || 'Service'}</Text>
                     <View style={styles.nextAppointmentDetails}>
                       <View style={styles.appointmentDetail}>
@@ -987,13 +986,13 @@ export default function ClientHomeScreen() {
                     if (!isAuthenticated) {
                       setLoginModal({
                         visible: true,
-                        title: 'Login Required',
-                        message: 'Please sign in to book an appointment.',
+                        title: t('login.required'),
+                        message: t('login.pleaseSignInToBook'),
                       });
                       return;
                     }
                     if (isBlocked) {
-                      Alert.alert('Account Blocked', 'Your account is blocked. You cannot book appointments.');
+                      Alert.alert(t('account.blocked'), t('account.blocked.message'));
                       return;
                     }
                     router.push('/(client-tabs)/book-appointment');
@@ -1007,7 +1006,7 @@ export default function ClientHomeScreen() {
                     style={styles.bookAppointmentButtonBlur}
                   >
                     <View style={styles.bookAppointmentButtonContent}>
-                      <Text style={styles.bookAppointmentButtonText}>Book now</Text>
+                      <Text style={styles.bookAppointmentButtonText}>{t('book.now')}</Text>
                       <View style={[styles.bookAppointmentIconCircle, { backgroundColor: colors.primary }]}>
                         <MaterialCommunityIcons name="arrow-top-left" size={20} color="#FFFFFF" />
                       </View>
@@ -1061,8 +1060,8 @@ export default function ClientHomeScreen() {
         {displayAddress && (
           <View style={[styles.sectionContainer, { marginBottom: 24 }]}> 
             <View style={styles.sectionHeaderModernSimple}>
-              <Text style={{ fontSize: 26, fontWeight: '700', color: '#1C1C1E', textAlign: 'center', letterSpacing: -0.3, marginBottom: 4 }}>How to get here</Text>
-              <Text style={{ fontSize: 14, fontWeight: '400', color: '#8E8E93', textAlign: 'center', letterSpacing: 0.2 }}>Tap the map to open directions</Text>
+              <Text style={{ fontSize: 26, fontWeight: '700', color: '#1C1C1E', textAlign: 'center', letterSpacing: -0.3, marginBottom: 4 }}>{t('how.to.get.here')}</Text>
+              <Text style={{ fontSize: 14, fontWeight: '400', color: '#8E8E93', textAlign: 'center', letterSpacing: 0.2 }}>{t('tap.map.for.directions')}</Text>
             </View>
              
              <TouchableOpacity
@@ -1105,7 +1104,7 @@ export default function ClientHomeScreen() {
                <View style={[styles.mapImage, { backgroundColor: '#E5E5EA', alignItems: 'center', justifyContent: 'center' }]}>
                  <Ionicons name="location-outline" size={48} color="#8E8E93" />
                  <Text style={{ fontSize: 16, fontWeight: '600', color: '#8E8E93', marginTop: 8, textAlign: 'center' }}>
-                   Map Preview
+                   {t('map.preview')}
                  </Text>
                  <Text style={{ fontSize: 12, color: '#8E8E93', marginTop: 4, textAlign: 'center', paddingHorizontal: 20 }}>
                    {displayAddress}
@@ -1149,7 +1148,7 @@ export default function ClientHomeScreen() {
               <View style={[styles.decorationDot, { opacity: 0.1 }]} />
             </View>
             <View style={styles.headerTitleContainer}>
-              <Text style={[styles.modernTitle, { color: '#1C1C1E' }]}>Follow us</Text>
+              <Text style={[styles.modernTitle, { color: '#1C1C1E' }]}>{t('follow.us')}</Text>
             </View>
             <View style={styles.headerDecorationRight}>
               <View style={[styles.decorationDot, { opacity: 0.1 }]} />
@@ -1176,7 +1175,7 @@ export default function ClientHomeScreen() {
               onPress={async () => {
                 const phoneToUse = businessPhone || managerPhone;
                 if (!phoneToUse) {
-                  Alert.alert('Error', 'Business phone number not available');
+                  Alert.alert(t('error.generic'), 'Business phone number not available');
                   return;
                 }
                 const message = 'Hi';
@@ -1191,11 +1190,11 @@ export default function ClientHomeScreen() {
                     Alert.alert('Error', 'SMS app cannot be opened on this device');
                   }
                 } catch (e) {
-                  Alert.alert('Error', 'SMS app cannot be opened on this device');
+                  Alert.alert(t('error.generic'), 'SMS app cannot be opened on this device');
                 }
               }}
               activeOpacity={0.8}
-              accessibilityLabel="Contact us via SMS"
+              accessibilityLabel={t('notifications.title')}
             >
               <Ionicons name="chatbubble-ellipses-outline" size={24} color="#FFFFFF" />
             </TouchableOpacity>
@@ -1276,7 +1275,7 @@ export default function ClientHomeScreen() {
                     end={{ x: 1, y: 1 }}
                     style={{ paddingVertical: 12, alignItems: 'center', justifyContent: 'center' }}
                   >
-                    <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>{'OK'}</Text>
+                    <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>{t('ok')}</Text>
                   </LinearGradient>
                 </TouchableOpacity>
               </View>

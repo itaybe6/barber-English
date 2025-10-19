@@ -55,6 +55,7 @@ import DeleteAccountModal from '@/components/DeleteAccountModal';
 import GradientBackground from '@/components/GradientBackground';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { compressImage } from '@/lib/utils/imageCompression';
+import { useTranslation } from 'react-i18next';
 
 // Helper for shadow style
 const shadowStyle = Platform.select({
@@ -105,6 +106,7 @@ export default function SettingsScreen() {
   const { colors: businessColors } = useBusinessColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t, i18n } = useTranslation();
   
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [showBroadcast, setShowBroadcast] = useState(false);
@@ -363,11 +365,11 @@ export default function SettingsScreen() {
         login_img: profileLoginImg.trim() || null as any,
       });
       if (!updated) {
-        Alert.alert('Error', 'Failed to save business profile');
+        Alert.alert(t('error.generic','Error'), t('settings.profile.saveFailed','Failed to save business profile'));
         return;
       }
       setProfile(updated);
-      Alert.alert('Success', 'Business details saved successfully');
+      Alert.alert(t('success.generic','Success'), t('settings.profile.saveSuccess','Business details saved successfully'));
     } finally {
       setIsSavingProfile(false);
     }
@@ -414,7 +416,7 @@ export default function SettingsScreen() {
         tiktok_url: (profileTiktok || '').trim() || null as any,
       });
       if (!updated) {
-        Alert.alert('Error', 'Failed to save business name');
+        Alert.alert(t('error.generic','Error'), t('settings.profile.nameSaveFailed','Failed to save business name'));
         return;
       }
       setProfile(updated);
@@ -435,7 +437,7 @@ export default function SettingsScreen() {
         tiktok_url: (profileTiktok || '').trim() || null as any,
       });
       if (!updated) {
-        Alert.alert('Error', 'Failed to save Instagram link');
+        Alert.alert(t('error.generic','Error'), t('settings.profile.instagramSaveFailed','Failed to save Instagram link'));
         return;
       }
       setProfile(updated);
@@ -455,7 +457,7 @@ export default function SettingsScreen() {
         tiktok_url: (profileTiktok || '').trim() || null as any,
       });
       if (!updated) {
-        Alert.alert('Error', 'Failed to save Facebook link');
+        Alert.alert(t('error.generic','Error'), t('settings.profile.facebookSaveFailed','Failed to save Facebook link'));
         return;
       }
       setProfile(updated);
@@ -475,7 +477,7 @@ export default function SettingsScreen() {
         tiktok_url: (next || '').trim() || null as any,
       });
       if (!updated) {
-        Alert.alert('Error', 'Failed to save TikTok link');
+        Alert.alert(t('error.generic','Error'), t('settings.profile.tiktokSaveFailed','Failed to save TikTok link'));
         return;
       }
       setProfile(updated);
@@ -489,7 +491,7 @@ export default function SettingsScreen() {
     const trimmed = (next || '').trim();
     const hours = parseInt(trimmed, 10);
     if (isNaN(hours) || hours < 0 || hours > 168) {
-      Alert.alert('Error', 'Please enter a valid number between 0 and 168 hours');
+      Alert.alert(t('error.generic','Error'), t('settings.profile.cancellationInvalid','Please enter a valid number between 0 and 168 hours'));
       return;
     }
     setIsSavingProfile(true);
@@ -503,7 +505,7 @@ export default function SettingsScreen() {
         min_cancellation_hours: hours,
       });
       if (!updated) {
-        Alert.alert('Error', 'Failed to save cancellation policy');
+        Alert.alert(t('error.generic','Error'), t('settings.profile.cancellationSaveFailed','Failed to save cancellation policy'));
         return;
       }
       setProfile(updated);
@@ -521,7 +523,7 @@ export default function SettingsScreen() {
         booking_open_days: parsed as any,
       });
       if (!updated) {
-        Alert.alert('Error', 'Failed to save booking window');
+        Alert.alert(t('error.generic','Error'), t('settings.profile.bookingWindowSaveFailed','Failed to save booking window'));
         return;
       }
       setProfile(updated);
@@ -539,7 +541,7 @@ export default function SettingsScreen() {
     const trimmed = (next || '').trim();
     const mins = parseInt(trimmed, 10);
     if (!Number.isFinite(mins) || mins < 1 || mins > 1440) {
-      Alert.alert('Error', 'Enter a valid number between 1 and 1440 minutes');
+      Alert.alert(t('error.generic','Error'), t('settings.profile.reminderInvalid','Enter a valid number between 1 and 1440 minutes'));
       return;
     }
     try {
@@ -567,7 +569,7 @@ export default function SettingsScreen() {
         facebook_url: (profileFacebook || '').trim() || null as any,
       });
       if (!updated) {
-        Alert.alert('Error', 'Failed to save address');
+        Alert.alert(t('error.generic','Error'), t('settings.profile.addressSaveFailed','Failed to save address'));
         return;
       }
       setProfile(updated);
@@ -668,7 +670,7 @@ export default function SettingsScreen() {
 
   const saveBusinessAddress = async () => {
     if (!placesFormattedAddress) {
-      Alert.alert('Error', 'Please select an address');
+      Alert.alert(t('error.generic','Error'), t('settings.profile.addressSelectRequired','Please select an address'));
       return;
     }
     setAddressDraft(placesFormattedAddress);
@@ -828,16 +830,15 @@ export default function SettingsScreen() {
 
   const handleLogout = () => {
     Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
+      t('profile.logout.title','Log out'),
+      t('profile.logout.message','Are you sure you want to log out?'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('cancel','Cancel'), style: 'cancel' },
         { 
-          text: 'Logout', 
+          text: t('profile.logout.confirm','Log out'), 
           style: 'destructive',
           onPress: () => {
             logout();
-            // Force navigation to login page
             router.replace('/login');
           }
         }
@@ -890,6 +891,9 @@ export default function SettingsScreen() {
   const [addSvcIsSaving, setAddSvcIsSaving] = useState(false);
   // category removed
   const [showDurationDropdown, setShowDurationDropdown] = useState(false);
+
+  // Uploading indicator for per-service image update
+  const [uploadingServiceId, setUploadingServiceId] = useState<string | null>(null);
 
 
   const durationOptions: number[] = Array.from({ length: ((180 - 10) / 5) + 1 }, (_, i) => 10 + i * 5);
@@ -978,7 +982,7 @@ export default function SettingsScreen() {
         fileName: a.fileName ?? null,
       });
       if (!uploadedUrl) {
-        Alert.alert('Error', 'Image upload failed');
+        Alert.alert(t('error.generic','Error'), t('settings.profile.uploadFailed','Image upload failed'));
         return;
       }
       const updated = await usersApi.updateUser(user.id as any, { image_url: uploadedUrl } as any);
@@ -989,7 +993,7 @@ export default function SettingsScreen() {
       updateUserProfile({ image_url: uploadedUrl } as any);
     } catch (e) {
       console.error('pick/upload admin avatar failed', e);
-      Alert.alert('Error', 'Image upload failed');
+      Alert.alert(t('error.generic','Error'), t('settings.profile.uploadFailed','Image upload failed'));
     } finally {
       setIsUploadingAdminAvatar(false);
     }
@@ -1078,6 +1082,40 @@ export default function SettingsScreen() {
     } catch (e) {
       console.error('upload exception', e);
       return null;
+    }
+  };
+
+  const handlePickServiceImage = async (serviceId: string) => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission required', 'Please allow gallery access to pick an image');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images',
+        allowsMultipleSelection: false,
+        quality: 0.9,
+        base64: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const a: any = result.assets[0];
+      setUploadingServiceId(serviceId);
+      const uploadedUrl = await uploadServiceImage({
+        uri: a.uri,
+        base64: a.base64 ?? null,
+        mimeType: a.mimeType ?? null,
+        fileName: a.fileName ?? null,
+      });
+      if (!uploadedUrl) {
+        Alert.alert(t('error.generic','Error'), t('settings.profile.uploadFailed','Image upload failed'));
+        return;
+      }
+      updateLocalServiceField(serviceId, 'image_url', uploadedUrl as any);
+    } catch (e) {
+      Alert.alert('Error', 'Image upload failed');
+    } finally {
+      setUploadingServiceId(null);
     }
   };
 
@@ -1245,7 +1283,7 @@ export default function SettingsScreen() {
       }
 
       if (!uploadedUrl) {
-        Alert.alert('Error', 'Failed to upload image');
+      Alert.alert(t('error.generic','Error'), t('settings.profile.uploadFailed','Failed to upload image'));
         return;
       }
 
@@ -1301,13 +1339,13 @@ export default function SettingsScreen() {
         setPreviewImageType(null);
         setCurrentImageType(null);
         
-        Alert.alert('Success', 'Image saved successfully');
+        Alert.alert(t('success.generic','Success'), t('settings.profile.imageSaveSuccess','Image saved successfully'));
       } else {
-        Alert.alert('Error', 'Failed to save image');
+        Alert.alert(t('error.generic','Error'), t('settings.profile.imageSaveFailed','Failed to save image'));
       }
     } catch (e) {
       console.error('image selection failed', e);
-      Alert.alert('Error', 'Failed to save image');
+      Alert.alert(t('error.generic','Error'), t('settings.profile.imageSaveFailed','Failed to save image'));
     } finally {
       // Clear all image-related states
       setIsUploadingImagePage1(false);
@@ -1340,7 +1378,7 @@ export default function SettingsScreen() {
 
   const handleCreateService = async () => {
     if (!addSvcName.trim()) {
-      Alert.alert('Error', 'Please enter a service name');
+      Alert.alert(t('error.generic','Error'), t('settings.services.nameRequired','Please enter a service name'));
       return;
     }
     setAddSvcIsSaving(true);
@@ -1359,20 +1397,20 @@ export default function SettingsScreen() {
         setAddSvcPrice('0');
         setAddSvcDuration('60');
       } else {
-        Alert.alert('Error', 'Failed to create service');
+        Alert.alert(t('error.generic','Error'), t('settings.services.createFailed','Failed to create service'));
       }
     } catch (e) {
-      Alert.alert('Error', 'Failed to create service');
+      Alert.alert(t('error.generic','Error'), t('settings.services.createFailed','Failed to create service'));
     } finally {
       setAddSvcIsSaving(false);
     }
   };
 
   const handleDeleteService = (id: string) => {
-    Alert.alert('Delete service', 'Are you sure you want to delete this service?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('settings.services.deleteTitle','Delete service'), t('settings.services.deleteConfirm','Are you sure you want to delete this service?'), [
+      { text: t('cancel','Cancel'), style: 'cancel' },
       {
-        text: 'Delete', 
+        text: t('settings.services.delete','Delete'), 
         style: 'destructive',
         onPress: async () => {
           const ok = await deleteService(id);
@@ -1380,7 +1418,7 @@ export default function SettingsScreen() {
             setEditableServices(prev => prev.filter(s => s.id !== id));
             if (expandedServiceId === id) setExpandedServiceId(null);
           } else {
-            Alert.alert('Error', 'Failed to delete service');
+            Alert.alert(t('error.generic','Error'), t('settings.services.deleteFailed','Failed to delete service'));
           }
         }
       }
@@ -1436,9 +1474,9 @@ export default function SettingsScreen() {
         return;
       }
       setEditableServices(prev => prev.map(s => (s.id === service.id ? updated : s)));
-      Alert.alert('Success', 'Service saved successfully');
+      Alert.alert(t('success.generic','Success'), t('settings.services.saveSuccess','Service saved successfully'));
     } catch (e) {
-      Alert.alert('Error', 'Failed to save service');
+      Alert.alert(t('error.generic','Error'), t('settings.services.saveFailed','Failed to save service'));
     } finally {
       setSavingServiceId(null);
     }
@@ -1777,7 +1815,7 @@ export default function SettingsScreen() {
       console.error('Error loading available times:', error);
       setAvailableTimes([]);
       // Show error to user
-      Alert.alert('Error', 'Failed to load available times. Please try again.');
+      Alert.alert(t('error.generic','Error'), t('settings.recurring.timesLoadFailed','Failed to load available times. Please try again.'));
     } finally {
       setIsLoadingTimes(false);
     }
@@ -1855,13 +1893,13 @@ export default function SettingsScreen() {
 
   const handleSubmitRecurring = async () => {
     if (!selectedClient || selectedDayOfWeek === null || !selectedTime || !selectedService) {
-      Alert.alert('Error', 'Please fill all fields: client, day, time, and service');
+      Alert.alert(t('error.generic','Error'), t('settings.recurring.fillAll','Please fill all fields: client, day, time, and service'));
       return;
     }
     // Final guard before creating: verify time is still available for the nearest occurrence
     const stillAvailable = await isTimeAvailable(selectedDayOfWeek as number, selectedTime as string);
     if (!stillAvailable) {
-      Alert.alert('Slot taken', 'The selected time is already booked this week. Please choose another time.');
+      Alert.alert(t('settings.recurring.slotTakenTitle','Slot taken'), t('settings.recurring.slotTaken','The selected time is already booked this week. Please choose another time.'));
       return;
     }
     setIsSubmittingRecurring(true);
@@ -1886,13 +1924,13 @@ export default function SettingsScreen() {
       }
       const created = await recurringAppointmentsApi.create(recurringData);
       if (created) {
-        Alert.alert('Success', 'Recurring appointment created. The slot will be kept after weekly generation.');
+        Alert.alert(t('success.generic','Success'), t('settings.recurring.createSuccess','Recurring appointment created. The slot will be kept after weekly generation.'));
         setShowRecurringModal(false);
       } else {
-        Alert.alert('Error', 'Failed to create recurring appointment');
+        Alert.alert(t('error.generic','Error'), t('settings.recurring.createFailed','Failed to create recurring appointment'));
       }
     } catch (e) {
-      Alert.alert('Error', 'Failed to create recurring appointment');
+      Alert.alert(t('error.generic','Error'), t('settings.recurring.createFailed','Failed to create recurring appointment'));
     } finally {
       setIsSubmittingRecurring(false);
     }
@@ -2455,9 +2493,9 @@ export default function SettingsScreen() {
           <View style={styles.smallModalCard}>
             <View style={styles.modalHeader}>
               <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowEditDisplayNameModal(false)}>
-                <Text style={styles.modalCloseText}>Cancel</Text>
+                <Text style={styles.modalCloseText}>{t('cancel','Cancel')}</Text>
               </TouchableOpacity>
-              <Text style={styles.modalTitleLTR}>Business name</Text>
+              <Text style={styles.modalTitleLTR}>{t('settings.profile.businessName','Business name')}</Text>
               <TouchableOpacity style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]} onPress={async () => {
                 setIsSavingProfile(true);
                 try {
@@ -2478,17 +2516,17 @@ export default function SettingsScreen() {
                   setIsSavingProfile(false);
                 }
               }} disabled={isSavingProfile}>
-                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'Saving...' : 'Save'}</Text>
+                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? t('settings.common.saving','Saving...') : t('save','Save')}</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabelLTR}>Business name</Text>
+                <Text style={styles.inputLabelLTR}>{t('settings.profile.businessName','Business name')}</Text>
                 <TextInput
                   style={styles.textInput}
                   value={displayNameDraft}
                   onChangeText={setDisplayNameDraft}
-                  placeholder="For example: The Studio of Hadas"
+                  placeholder={t('settings.profile.businessNamePlaceholder','For example: The Studio of Hadas')}
                   placeholderTextColor={Colors.subtext}
                   textAlign="left"
                 />
@@ -2509,9 +2547,9 @@ export default function SettingsScreen() {
           <View style={styles.smallModalCard}>
             <View style={styles.modalHeader}>
               <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowEditReminderModal(false)}>
-                <Text style={styles.modalCloseText}>Cancel</Text>
+                <Text style={styles.modalCloseText}>{t('cancel','Cancel')}</Text>
               </TouchableOpacity>
-              <Text style={styles.modalTitleLTR}>Reminder before appointment</Text>
+              <Text style={styles.modalTitleLTR}>{t('settings.reminder.title','Reminder before appointment')}</Text>
               <TouchableOpacity
                 style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]}
                 onPress={async () => {
@@ -2533,12 +2571,12 @@ export default function SettingsScreen() {
                 }}
                 disabled={isSavingProfile}
               >
-                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'Saving...' : 'Save'}</Text>
+                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? t('settings.common.saving','Saving...') : t('save','Save')}</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabelLTR}>Minutes before</Text>
+                <Text style={styles.inputLabelLTR}>{t('settings.reminder.minutesBefore','Minutes before')}</Text>
                 <TextInput
                   style={styles.textInput}
                   value={reminderMinutesDraft}
@@ -2569,9 +2607,9 @@ export default function SettingsScreen() {
           <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#F8F9FA' }]}>
           <View style={styles.modalHeader}>
             <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowEditAdminModal(false)}>
-              <Text style={styles.modalCloseText}>Cancel</Text>
+              <Text style={styles.modalCloseText}>{t('cancel','Cancel')}</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Edit admin</Text>
+            <Text style={styles.modalTitle}>{t('settings.admin.edit','Edit admin')}</Text>
             <TouchableOpacity
               style={[styles.modalSendButton, { backgroundColor: businessColors.primary }, (isSavingAdmin) && styles.modalSendButtonDisabled]}
               onPress={async () => {
@@ -2600,7 +2638,7 @@ export default function SettingsScreen() {
               }}
               disabled={isSavingAdmin}
             >
-              <Text style={[styles.modalSendText, { color: Colors.white }, isSavingAdmin && styles.modalSendTextDisabled]}>{isSavingAdmin ? 'Saving...' : 'Save'}</Text>
+              <Text style={[styles.modalSendText, { color: Colors.white }, isSavingAdmin && styles.modalSendTextDisabled]}>{isSavingAdmin ? t('settings.common.saving','Saving...') : t('save','Save')}</Text>
             </TouchableOpacity>
           </View>
           <ScrollView 
@@ -2629,37 +2667,37 @@ export default function SettingsScreen() {
                   </TouchableOpacity>
                 </LinearGradient>
               </View>
-              <Text style={styles.modalAdminName}>{adminNameDraft || user?.name || 'Admin'}</Text>
+              <Text style={styles.modalAdminName}>{adminNameDraft || user?.name || t('settings.admin.admin','Admin')}</Text>
               <Text style={styles.modalAdminMeta}>{adminPhoneDraft || (user as any)?.phone || ''}</Text>
               {(adminEmailDraft || (user as any)?.email) ? (
                 <Text style={styles.modalAdminMeta}>{adminEmailDraft || (user as any)?.email}</Text>
               ) : null}
               <View style={{ marginTop: 8 }}>
                 <TouchableOpacity onPress={handlePickAdminAvatar} style={[styles.pickButton, { alignSelf: 'center', backgroundColor: '#F2F2F7', borderColor: '#E5E5EA' }]} activeOpacity={0.85} disabled={isUploadingAdminAvatar}>
-                  <Text style={styles.pickButtonText}>{isUploadingAdminAvatar ? 'Uploading...' : 'Change profile picture'}</Text>
+                  <Text style={styles.pickButtonText}>{isUploadingAdminAvatar ? t('settings.common.uploading','Uploading...') : t('settings.profile.changeProfilePicture','Change profile picture')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
 
             <View style={styles.iosCard}>
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Admin name</Text>
+                <Text style={styles.inputLabel}>{t('settings.admin.name','Admin name')}</Text>
                 <TextInput
                   style={styles.textInput}
                   value={adminNameDraft}
                   onChangeText={setAdminNameDraft}
-                  placeholder="Full name"
+                  placeholder={t('profile.edit.namePlaceholder','Full Name')}
                   placeholderTextColor={Colors.subtext}
                   textAlign="left"
                 />
               </View>
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Phone number</Text>
+                <Text style={styles.inputLabel}>{t('profile.phone','Phone number')}</Text>
                 <TextInput
                   style={styles.textInput}
                   value={adminPhoneDraft}
                   onChangeText={setAdminPhoneDraft}
-                  placeholder="(555) 123-4567"
+                  placeholder={t('settings.admin.phonePlaceholder','(555) 123-4567')}
                   placeholderTextColor={Colors.subtext}
                   keyboardType="phone-pad"
                   textAlign="left"
@@ -3180,10 +3218,10 @@ export default function SettingsScreen() {
                                 onPress={async () => {
                                   const ok = await recurringAppointmentsApi.delete(item.id);
                                   if (ok) setRecurringList((prev) => prev.filter((x) => x.id !== item.id));
-                                  else Alert.alert('Error', 'Failed to delete appointment');
+                                  else Alert.alert(t('error.generic','Error'), t('settings.recurring.deleteFailed','Failed to delete appointment'));
                                 }}
                                 accessibilityRole="button"
-                                accessibilityLabel="Delete"
+                                accessibilityLabel={t('settings.recurring.a11yDelete','Delete')}
                               >
                                 <Trash2 size={18} color="#FF3B30" />
                               </TouchableOpacity>
@@ -3264,24 +3302,24 @@ export default function SettingsScreen() {
                             activeOpacity={0.85}
                             onPress={() => {
                               if (adm.id === user?.id) {
-                                Alert.alert('Action not allowed', 'You cannot remove yourself.');
+                                Alert.alert(t('settings.admin.actionNotAllowed','Action not allowed'), t('settings.admin.cannotRemoveSelf','You cannot remove yourself.'));
                                 return;
                               }
                               Alert.alert(
-                                'Remove employee',
-                                `Are you sure you want to remove ${adm.name || 'this employee'}?`,
+                                t('settings.admin.removeEmployeeTitle','Remove employee'),
+                                `${t('settings.admin.removeEmployeeConfirm','Are you sure you want to remove')} ${adm.name || t('settings.admin.thisEmployee','this employee')}?`,
                                 [
-                                  { text: 'Cancel', style: 'cancel' },
+                                  { text: t('cancel','Cancel'), style: 'cancel' },
                                   {
-                                    text: 'Remove',
+                                    text: t('settings.admin.remove','Remove'),
                                     style: 'destructive',
                                     onPress: async () => {
                                       const ok = await usersApi.deleteUserAndAllDataById(adm.id);
                                       if (ok) {
                                         setAdminUsers((prev) => prev.filter((u) => u.id !== adm.id));
-                                        Alert.alert('Success', 'Employee deleted successfully');
+                                        Alert.alert(t('success.generic','Success'), t('settings.admin.removeSuccess','Employee deleted successfully'));
                                       } else {
-                                        Alert.alert('Error', 'Failed to remove employee');
+                                        Alert.alert(t('error.generic','Error'), t('settings.admin.removeFailed','Failed to remove employee'));
                                       }
                                     }
                                   }
@@ -3289,10 +3327,10 @@ export default function SettingsScreen() {
                               );
                             }}
                             accessibilityRole="button"
-                            accessibilityLabel="Delete"
+                            accessibilityLabel={t('settings.services.a11yDelete','Delete service')}
                           >
                             <Trash2 size={20} color={'#fff'} />
-                            <Text style={styles.swipeDeleteText}>Delete</Text>
+                            <Text style={styles.swipeDeleteText}>{t('settings.services.delete','Delete')}</Text>
                           </TouchableOpacity>
                         )}
                       >
@@ -3308,32 +3346,32 @@ export default function SettingsScreen() {
                               style={[styles.iconActionButton, { backgroundColor: '#FFECEC', borderColor: '#FFD1D1' }]}
                               onPress={() => {
                                 if (adm.id === user?.id) {
-                                  Alert.alert('Action not allowed', 'You cannot remove yourself.');
+                                  Alert.alert(t('settings.admin.actionNotAllowed','Action not allowed'), t('settings.admin.cannotRemoveSelf','You cannot remove yourself.'));
                                   return;
                                 }
                                 Alert.alert(
-                                  'Remove employee',
-                                  `Are you sure you want to remove ${adm.name || 'this employee'}?`,
+                                  t('settings.admin.removeEmployeeTitle','Remove employee'),
+                                  `${t('settings.admin.removeEmployeeConfirm','Are you sure you want to remove')} ${adm.name || t('settings.admin.thisEmployee','this employee')}?`,
                                   [
-                                    { text: 'Cancel', style: 'cancel' },
+                                    { text: t('cancel','Cancel'), style: 'cancel' },
                                     {
-                                      text: 'Remove',
+                                      text: t('settings.admin.remove','Remove'),
                                       style: 'destructive',
                                       onPress: async () => {
                                         const ok = await usersApi.deleteUserAndAllDataById(adm.id);
                                         if (ok) {
                                           setAdminUsers((prev) => prev.filter((u) => u.id !== adm.id));
-                                          Alert.alert('Success', 'Employee deleted successfully');
+                                          Alert.alert(t('success.generic','Success'), t('settings.admin.removeSuccess','Employee deleted successfully'));
                                         } else {
-                                          Alert.alert('Error', 'Failed to remove employee');
+                                          Alert.alert(t('error.generic','Error'), t('settings.admin.removeFailed','Failed to remove employee'));
                                         }
                                       }
                                     }
                                   ]
                                 );
                               }}
-                              accessibilityRole="button"
-                              accessibilityLabel="Delete"
+                            accessibilityRole="button"
+                            accessibilityLabel={t('settings.recurring.a11yDelete','Delete')}
                             >
                               <Trash2 size={20} color="#FF3B30" />
                             </TouchableOpacity>
@@ -3480,7 +3518,7 @@ export default function SettingsScreen() {
                             <View style={{ flex: 1, alignItems: 'flex-start' }}>
                               <Text style={styles.serviceHeaderTitle}>{selectedService.name}</Text>
                               {!!selectedService.duration_minutes && (
-                                <Text style={styles.serviceHeaderSub}>{`${selectedService.duration_minutes} minutes`}</Text>
+                                <Text style={styles.serviceHeaderSub}>{`${selectedService.duration_minutes} ${t('settings.services.minutes','minutes')}`}</Text>
                               )}
                             </View>
                           ) : (
@@ -3501,7 +3539,7 @@ export default function SettingsScreen() {
                                 <View style={styles.dropdownOptionContent}>
                                   <Text style={styles.dropdownOptionTitle}>{svc.name}</Text>
                                   {!!svc.duration_minutes && (
-                                    <Text style={styles.dropdownOptionDescription}>{`${svc.duration_minutes} minutes`}</Text>
+                                    <Text style={styles.dropdownOptionDescription}>{`${svc.duration_minutes} ${t('settings.services.minutes','minutes')}`}</Text>
                                   )}
                                 </View>
                               </Pressable>
@@ -3763,15 +3801,24 @@ export default function SettingsScreen() {
                         onPress={() => setExpandedServiceId(prev => prev === svc.id ? null : svc.id)}
                       >
                           {/* Right: thumbnail */}
-                          {svc.image_url ? (
-                            <Image source={{ uri: svc.image_url }} style={[styles.accordionThumb, { marginLeft: 0, marginRight: 12 }]} />
-                          ) : (
-                            <View style={[styles.accordionThumbPlaceholder, { marginLeft: 0, marginRight: 12 }]}>
-                              <Text style={styles.accordionThumbPlaceholderText}>
-                                {(svc.name || '').slice(0, 1)}
-                              </Text>
-                            </View>
-                          )}
+                          <View style={{ marginLeft: 0, marginRight: 12, position: 'relative' }}>
+                            <TouchableOpacity onPress={() => handlePickServiceImage(svc.id)} activeOpacity={0.85}>
+                              {svc.image_url ? (
+                                <Image source={{ uri: svc.image_url }} style={[styles.accordionThumb]} />
+                              ) : (
+                                <View style={[styles.accordionThumbPlaceholder]}>
+                                  <Text style={styles.accordionThumbPlaceholderText}>
+                                    {(svc.name || '').slice(0, 1)}
+                                  </Text>
+                                </View>
+                              )}
+                            </TouchableOpacity>
+                            {uploadingServiceId === svc.id && (
+                              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 8 }}>
+                                <ActivityIndicator size="small" color={businessColors.primary} />
+                              </View>
+                            )}
+                          </View>
                           {/* Middle: title and subtitle */}
                           <View style={{ flex: 1, alignItems: 'flex-start' }}>
                             <Text style={styles.accordionTitle}>{svc.name || 'No name'}</Text>
@@ -3791,9 +3838,39 @@ export default function SettingsScreen() {
 
                     {expandedServiceId === svc.id && (
                       <View>
+                        <View style={styles.imageHeaderContainer}>
+                          <View style={{ width: 120, height: 120, borderRadius: 16, overflow: 'hidden' }}>
+                            {svc.image_url ? (
+                              <Image source={{ uri: svc.image_url }} style={styles.serviceImagePreview} resizeMode="cover" />
+                            ) : (
+                              <View style={[styles.accordionThumbPlaceholder, { width: 120, height: 120, borderRadius: 16 }]}>
+                                <Text style={styles.accordionThumbPlaceholderText}>
+                                  {(svc.name || '').slice(0, 1)}
+                                </Text>
+                              </View>
+                            )}
+                            {uploadingServiceId === svc.id && (
+                              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.15)' }}>
+                                <ActivityIndicator size="small" color={businessColors.primary} />
+                              </View>
+                            )}
+                          </View>
+                          <TouchableOpacity
+                            onPress={() => handlePickServiceImage(svc.id)}
+                            style={[styles.pickButton, { alignSelf: 'center' }]}
+                            activeOpacity={0.85}
+                            disabled={uploadingServiceId === svc.id}
+                          >
+                            <Text style={styles.pickButtonText}>
+                              {uploadingServiceId === svc.id
+                                ? t('settings.common.uploading','Uploading...')
+                                : (svc.image_url ? t('settings.services.changeImage','Change image') : t('settings.services.uploadImage','Upload image'))}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
 
                         <View style={styles.formGroup}>
-                          <Text style={styles.formLabel}>Service name</Text>
+                          <Text style={styles.formLabel}>{t('settings.services.name','Service name')}</Text>
                           <TextInput
                             style={styles.formInput}
                             value={svc.name}
@@ -3806,7 +3883,7 @@ export default function SettingsScreen() {
 
                         <View style={[styles.twoColumnRow, { flexDirection: 'row' }]}>
                           <View style={[styles.formGroup, styles.twoColumnItem]}>
-                            <Text style={[styles.formLabel, { textAlign: 'left' }]}>Price ($)</Text>
+                            <Text style={[styles.formLabel, { textAlign: 'left' }]}>{t('settings.services.price','Price ($)')}</Text>
                             <TextInput
                               style={styles.formInput}
                               value={String(svc.price ?? '')}
@@ -3819,14 +3896,14 @@ export default function SettingsScreen() {
                             />
                           </View>
                           <View style={[styles.formGroup, styles.twoColumnItem]}>
-                            <Text style={styles.formLabel}>Duration (minutes)</Text>
+                            <Text style={styles.formLabel}>{t('settings.services.duration','Duration (minutes)')}</Text>
                             <Pressable
                               style={styles.dropdownContainer}
                               onPress={() => setEditDurationDropdownFor(prev => prev === svc.id ? null : svc.id)}
                             >
                               <View style={styles.dropdownHeader}>
-                                <Text style={[styles.dropdownText, { textAlign: 'left' }, !svc.duration_minutes && styles.dropdownPlaceholder]}>
-                                  {svc.duration_minutes ? `${svc.duration_minutes} minutes` : 'Select duration...'}
+                                <Text style={[styles.dropdownText, { textAlign: 'left' }, !svc.duration_minutes && styles.dropdownPlaceholder]}> 
+                                  {svc.duration_minutes ? `${svc.duration_minutes} ${t('settings.services.minutes','minutes')}` : t('settings.services.selectDuration','Select duration...')}
                                 </Text>
                                 {editDurationDropdownFor === svc.id ? (
                                   <ChevronUp size={20} color={businessColors.primary} />
@@ -3844,7 +3921,7 @@ export default function SettingsScreen() {
                                       style={[styles.dropdownOption, idx === durationOptions.length - 1 && styles.dropdownOptionLast]}
                                       onPress={() => { updateLocalServiceField(svc.id, 'duration_minutes', mins as any); setEditDurationDropdownFor(null); }}
                                     >
-                                      <Text style={[styles.dropdownOptionTitle, { textAlign: 'left' }]}>{`${mins} minutes`}</Text>
+                                      <Text style={[styles.dropdownOptionTitle, { textAlign: 'left' }]}>{`${mins} ${t('settings.services.minutes','minutes')}`}</Text>
                                     </Pressable>
                                   ))}
                                 </ScrollView>
@@ -3863,7 +3940,7 @@ export default function SettingsScreen() {
                             activeOpacity={0.85}
                           >
                             <Text style={styles.primaryPillButtonText}>
-                              {savingServiceId === svc.id ? 'Saving...' : 'Save changes'}
+                              {savingServiceId === svc.id ? t('settings.common.saving','Saving...') : t('settings.services.saveChanges','Save changes')}
                             </Text>
                           </TouchableOpacity>
                           <TouchableOpacity
@@ -3932,18 +4009,18 @@ export default function SettingsScreen() {
             >
               <View style={styles.modalFormContent}>
                 <View style={styles.formSection}>
-                  <Text style={styles.inputLabel}>Service Name *</Text>
+                  <Text style={styles.inputLabel}>{t('settings.services.name','Service name')} *</Text>
                   <TextInput
                     style={styles.formInput}
                     value={addSvcName}
                     onChangeText={setAddSvcName}
-                    placeholder="Enter service name"
+                    placeholder={t('settings.services.enterName','Enter service name')}
                     placeholderTextColor={Colors.subtext}
                   />
                 </View>
 
                 <View style={styles.formSection}>
-                  <Text style={styles.inputLabel}>Price ($) *</Text>
+                  <Text style={styles.inputLabel}>{t('settings.services.price','Price ($)')} *</Text>
                   <TextInput
                     style={styles.formInput}
                     value={addSvcPrice}
@@ -3958,11 +4035,11 @@ export default function SettingsScreen() {
                 </View>
 
                 <View style={styles.formSectionLast}>
-                  <Text style={styles.inputLabel}>Service Duration (minutes) *</Text>
+                  <Text style={styles.inputLabel}>{t('settings.services.duration','Duration (minutes)')} *</Text>
               <Pressable style={styles.dropdownContainer} onPress={() => setShowDurationDropdown(!showDurationDropdown)}>
                 <View style={styles.dropdownHeader}>
                   <Text style={[styles.dropdownText, { textAlign: 'left' }, !addSvcDuration && styles.dropdownPlaceholder]}>
-                    {addSvcDuration ? `${addSvcDuration} minutes` : 'Select duration...'}
+                    {addSvcDuration ? `${addSvcDuration} ${t('settings.services.minutes','minutes')}` : t('settings.services.selectDuration','Select duration...')}
                   </Text>
                   {showDurationDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
                 </View>

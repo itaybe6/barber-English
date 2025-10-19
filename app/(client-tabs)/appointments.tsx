@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, FlatList, ActivityIndicator, Alert, Modal, RefreshControl, Linking, Image } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -126,6 +127,7 @@ const clientAppointmentsApi = {
 
 export default function ClientAppointmentsScreen() {
   const router = useRouter();
+  const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabType>('upcoming');
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -205,7 +207,7 @@ export default function ClientAppointmentsScreen() {
   // Open WhatsApp chat with manager
   const contactManagerOnWhatsApp = useCallback(async (message: string) => {
     if (!managerPhone) {
-      Alert.alert('Error', 'Manager phone number is currently unavailable');
+      Alert.alert(t('error.generic', 'Error'), t('appointments.managerPhoneUnavailable', 'Manager phone number is currently unavailable'));
       return;
     }
     const encoded = encodeURIComponent(message);
@@ -219,14 +221,14 @@ export default function ClientAppointmentsScreen() {
         await Linking.openURL(webUrl);
       }
     } catch (e) {
-      Alert.alert('Error', 'WhatsApp cannot be opened on this device');
+      Alert.alert(t('error.generic', 'Error'), t('appointments.whatsappOpenFailed', 'WhatsApp cannot be opened on this device'));
     }
   }, [managerPhone]);
 
   // Open business location in maps
   const openBusinessLocation = useCallback(async () => {
     if (!businessAddress) {
-      Alert.alert('Address unavailable', 'Business address is not available right now.');
+      Alert.alert(t('appointments.addressUnavailable', 'Address unavailable'), t('appointments.addressUnavailableMessage', 'Business address is not available right now.'));
       return;
     }
     const encoded = encodeURIComponent(businessAddress);
@@ -234,7 +236,7 @@ export default function ClientAppointmentsScreen() {
     try {
       await Linking.openURL(url);
     } catch (e) {
-      Alert.alert('Error', 'Unable to open maps on this device');
+      Alert.alert(t('error.generic', 'Error'), t('appointments.mapsOpenFailed', 'Unable to open maps on this device'));
     }
   }, [businessAddress]);
 
@@ -361,15 +363,16 @@ export default function ClientAppointmentsScreen() {
     loadUserAppointments(true);
   }, [loadUserAppointments]);
 
+  const appLocale = i18n?.language === 'he' ? 'he-IL' : 'en-US';
   const formatDate = React.useCallback((dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
+    return date.toLocaleDateString(appLocale as any, { 
       weekday: 'long', 
       year: 'numeric', 
       month: 'long', 
       day: 'numeric' 
     });
-  }, []);
+  }, [appLocale]);
 
   const formatTime = React.useCallback((timeString: string) => {
     return formatTime12Hour(timeString);
@@ -577,11 +580,11 @@ export default function ClientAppointmentsScreen() {
 
     let dateText = '';
     if (!forceFull && isToday) {
-      dateText = 'Today';
+      dateText = t('today', 'Today');
     } else if (!forceFull && isTomorrow) {
-      dateText = 'Tomorrow';
+      dateText = t('tomorrow', 'Tomorrow');
     } else {
-      dateText = dateObj.toLocaleDateString('en-US', {
+      dateText = dateObj.toLocaleDateString(appLocale as any, {
         weekday: 'long',
         day: 'numeric',
         month: 'long',
@@ -595,12 +598,12 @@ export default function ClientAppointmentsScreen() {
         <View style={styles.dateHeaderLine} />
       </View>
     );
-  }, []);
+  }, [t, appLocale]);
 
   // Small calendar-like date pill (e.g., JUN / 20)
   const DatePill: React.FC<{ date: string }> = React.useCallback(({ date }) => {
     const d = new Date(date);
-    const month = d.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+    const month = d.toLocaleString(appLocale as any, { month: 'short' }).toUpperCase();
     const day = String(d.getDate());
     return (
       <View style={styles.datePill}>
@@ -609,7 +612,7 @@ export default function ClientAppointmentsScreen() {
         <Text style={styles.datePillDay}>{day}</Text>
       </View>
     );
-  }, []);
+  }, [appLocale]);
 
   // Barber Avatar Component
   const BarberAvatar: React.FC<{ barberId?: string; size?: number }> = React.useCallback(({ barberId, size = 36 }) => {
@@ -665,12 +668,12 @@ export default function ClientAppointmentsScreen() {
               activeOpacity={0.8}
             >
               <Ionicons name="close" size={16} color="#FF3B30" />
-              <Text style={styles.heroCancelButtonText}>Cancel</Text>
+              <Text style={styles.heroCancelButtonText}>{t('cancel', 'Cancel')}</Text>
             </TouchableOpacity>
 
             {/* Location removed for client cards per request */}
 
-            <Text style={styles.heroServiceNameNext}>{nextAppointment!.service_name || 'Service'}</Text>
+              <Text style={styles.heroServiceNameNext}>{nextAppointment!.service_name || t('booking.field.service', 'Service')}</Text>
 
             {/* Admin: client info remains */}
             {user?.user_type === 'admin' && nextAppointment!.client_name && (
@@ -785,14 +788,14 @@ export default function ClientAppointmentsScreen() {
               <View style={styles.regularHeader}>
                 <View style={styles.pastBadge}>
                   <Ionicons name="checkmark-circle" size={16} color="#34C759" />
-                  <Text style={styles.pastBadgeText}>Completed</Text>
+                  <Text style={styles.pastBadgeText}>{t('appointments.completed', 'Completed')}</Text>
                 </View>
                 <View style={styles.regularHeaderRight} />
               </View>
 
               {/* Location removed for client cards per request */}
 
-              <Text style={styles.heroServiceName}>{item.service_name || 'Service'}</Text>
+              <Text style={styles.heroServiceName}>{item.service_name || t('booking.field.service', 'Service')}</Text>
 
               {/* Admin: client info remains */}
               {user?.user_type === 'admin' && item.client_name && (
@@ -863,7 +866,7 @@ export default function ClientAppointmentsScreen() {
               activeOpacity={0.8}
             >
               <Ionicons name="close" size={16} color="#FF3B30" />
-              <Text style={styles.heroCancelButtonText}>Cancel</Text>
+              <Text style={styles.heroCancelButtonText}>{t('cancel', 'Cancel')}</Text>
             </TouchableOpacity>
 
             {/* Location removed for client cards per request */}
@@ -922,10 +925,10 @@ export default function ClientAppointmentsScreen() {
           <View style={{ width: 22 }} />
           <View style={{ alignItems: 'center' }}>
             <Text style={styles.headerTitle}>
-              {user?.user_type === 'admin' ? 'My Schedule' : 'My Appointments'}
+              {user?.user_type === 'admin' ? t('appointments.mySchedule', 'My Schedule') : t('appointments.myAppointments', 'My Appointments')}
             </Text>
             <Text style={styles.headerSubtitle}>
-              {user?.user_type === 'admin' ? 'Your appointments as a barber' : 'Upcoming and past appointments'}
+              {user?.user_type === 'admin' ? t('appointments.subtitle.admin', 'Your appointments as a barber') : t('appointments.subtitle.client', 'Upcoming and past appointments')}
             </Text>
           </View>
           <View style={{ width: 22 }} />
@@ -962,7 +965,7 @@ export default function ClientAppointmentsScreen() {
                 styles.toggleText, 
                 activeTab === 'upcoming' && styles.toggleTextActive
               ]}>
-                Upcoming
+                {t('appointments.upcoming', 'Upcoming')}
               </Text>
               <Ionicons 
                 name="calendar-outline" 
@@ -998,7 +1001,7 @@ export default function ClientAppointmentsScreen() {
                 styles.toggleText, 
                 activeTab === 'past' && styles.toggleTextActive
               ]}>
-                History
+                {t('appointments.history', 'History')}
               </Text>
               <Ionicons 
                 name="checkmark-done-circle-outline" 
@@ -1020,19 +1023,19 @@ export default function ClientAppointmentsScreen() {
                 onRefresh={onRefresh}
                 colors={[Colors.primary]}
                 tintColor={Colors.primary}
-                title="Updating appointments..."
+                title={t('appointments.updating', 'Updating appointments...')}
                 titleColor={Colors.primary}
               />
             }
           >
             <ActivityIndicator size="large" color={Colors.primary} style={{ alignSelf: 'center' }} />
             <Text style={styles.loadingText}>
-              {user?.user_type === 'admin' ? 'Loading your schedule...' : 'Loading your appointments...'}
+              {user?.user_type === 'admin' ? t('appointments.loadingSchedule', 'Loading your schedule...') : t('appointments.loadingAppointments', 'Loading your appointments...')}
             </Text>
             <Text style={styles.loadingSubtext}>
               {user?.user_type === 'admin' 
-                ? (user?.name ? `Loading appointments for barber ${user.name}` : 'Loading appointments...')
-                : (user?.name ? `Searching appointments for ${user.name}` : 'Searching appointments...')
+                ? (user?.name ? t('appointments.loadingForBarber', 'Loading appointments for barber {{name}}', { name: user.name }) : t('appointments.loading', 'Loading appointments...'))
+                : (user?.name ? t('appointments.searchingForClient', 'Searching appointments for {{name}}', { name: user.name }) : t('appointments.searching', 'Searching appointments...'))
               }
             </Text>
           </ScrollView>
@@ -1067,7 +1070,7 @@ export default function ClientAppointmentsScreen() {
                 onRefresh={onRefresh}
                 colors={[Colors.primary]}
                 tintColor={Colors.primary}
-                title="Updating appointments..."
+                title={t('appointments.updating', 'Updating appointments...')}
                 titleColor={Colors.primary}
               />
             }
@@ -1081,7 +1084,7 @@ export default function ClientAppointmentsScreen() {
                   onRefresh={onRefresh}
                   colors={[Colors.primary]}
                   tintColor={Colors.primary}
-                  title="Updating appointments..."
+                  title={t('appointments.updating', 'Updating appointments...')}
                   titleColor={Colors.primary}
                 />
               }
@@ -1094,13 +1097,13 @@ export default function ClientAppointmentsScreen() {
               />
               <Text style={styles.emptyTitle}>
                 {activeTab === 'upcoming' 
-                  ? (user?.user_type === 'admin' ? 'No upcoming appointments' : 'No upcoming appointments')
-                  : (user?.user_type === 'admin' ? 'No past appointments' : 'No past appointments')}
+                  ? t('appointments.empty.upcoming', 'No upcoming appointments')
+                  : t('appointments.empty.past', 'No past appointments')}
               </Text>
               <Text style={styles.emptySubtitle}>
                 {activeTab === 'upcoming' 
-                  ? (user?.user_type === 'admin' ? 'Your upcoming appointments will appear here' : 'Your upcoming appointments will appear here')
-                  : (user?.user_type === 'admin' ? 'Appointments you handled will appear here' : 'Your past appointments will appear here')}
+                  ? t('appointments.emptySubtitle.upcoming', 'Your upcoming appointments will appear here')
+                  : t('appointments.emptySubtitle.past', 'Your past appointments will appear here')}
               </Text>
             </ScrollView>
         )}
@@ -1116,9 +1119,9 @@ export default function ClientAppointmentsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.cancelModal}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Cancel Appointment</Text>
+              <Text style={styles.modalTitle}>{t('appointments.cancel.title', 'Cancel Appointment')}</Text>
               <Text style={styles.modalMessage}>
-                Would you like to cancel your appointment?
+                {t('appointments.cancel.message', 'Would you like to cancel your appointment?')}
               </Text>
               {selectedAppointment && (
                 <View style={styles.appointmentChips}>
@@ -1148,7 +1151,7 @@ export default function ClientAppointmentsScreen() {
                 onPress={() => setShowCancelModal(false)}
                 disabled={isCanceling}
               >
-                <Text style={styles.cancelModalButtonText}>Cancel</Text>
+                <Text style={styles.cancelModalButtonText}>{t('cancel', 'Cancel')}</Text>
               </TouchableOpacity>
               
               <TouchableOpacity
@@ -1159,7 +1162,7 @@ export default function ClientAppointmentsScreen() {
                 {isCanceling ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.confirmModalButtonText}>Confirm</Text>
+                  <Text style={styles.confirmModalButtonText}>{t('confirm', 'Confirm')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -1177,9 +1180,9 @@ export default function ClientAppointmentsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.iosModalCard}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Cannot Cancel Appointment</Text>
+              <Text style={styles.modalTitle}>{t('appointments.lateCancel.title', 'Cannot Cancel Appointment')}</Text>
               <Text style={styles.modalMessage}>
-                Appointments can be canceled up to {minCancellationHours} hours before the time. For short notice cancellations, please contact the manager.
+                {t('appointments.lateCancel.message', 'Appointments can be canceled up to {{hours}} hours before the time. For short notice cancellations, please contact the manager.', { hours: minCancellationHours })}
               </Text>
               {selectedAppointment && (
                 <View style={styles.appointmentChips}>
@@ -1209,7 +1212,7 @@ export default function ClientAppointmentsScreen() {
                 onPress={() => setShowLateCancelModal(false)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.cancelModalButtonText}>Close</Text>
+                <Text style={styles.cancelModalButtonText}>{t('close', 'Close')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1226,7 +1229,7 @@ export default function ClientAppointmentsScreen() {
               >
                 <View style={styles.whatsappButtonRow}>
                   <Ionicons name="logo-whatsapp" size={18} color="#FFFFFF" style={styles.whatsappButtonIcon} />
-                  <Text style={styles.whatsappButtonText}>Send Message</Text>
+                  <Text style={styles.whatsappButtonText}>{t('appointments.sendMessage', 'Send Message')}</Text>
                 </View>
               </TouchableOpacity>
             </View>

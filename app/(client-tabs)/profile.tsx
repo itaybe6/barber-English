@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Modal, TextInput, ActivityIndicator, Switch, Image, KeyboardAvoidingView, Platform } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -18,6 +19,7 @@ import { notificationsApi } from '@/lib/api/notifications';
 
 export default function ClientProfileScreen() {
   const router = useRouter();
+  const { t, i18n } = useTranslation();
   const { user, logout, updateUserProfile, notificationsEnabled, setNotificationsEnabled } = useAuthStore();
   const insets = useSafeAreaInsets();
   const { colors: businessColors } = useBusinessColors();
@@ -118,7 +120,7 @@ export default function ClientProfileScreen() {
       if (!user?.id) return;
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow gallery access to pick a profile picture');
+        Alert.alert(t('profile.permissionRequired', 'Permission Required'), t('profile.permissionGallery', 'Please allow gallery access to pick a profile picture'));
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -134,18 +136,18 @@ export default function ClientProfileScreen() {
       setIsUploadingAvatar(true);
       const uploadedUrl = await uploadAvatar({ uri: a.uri, base64: a.base64 ?? null, mimeType: a.mimeType ?? null, fileName: a.fileName ?? null });
       if (!uploadedUrl) {
-        Alert.alert('Error', 'Failed to upload image');
+        Alert.alert(t('error.generic', 'Error'), t('profile.uploadFailed', 'Failed to upload image'));
         return;
       }
       const updated = await usersApi.updateUser(user.id, { image_url: uploadedUrl } as any);
       if (updated) {
         updateUserProfile({ image_url: uploadedUrl } as any);
       } else {
-        Alert.alert('Error', 'Failed to save profile image');
+        Alert.alert(t('error.generic', 'Error'), t('profile.saveImageFailed', 'Failed to save profile image'));
       }
     } catch (e) {
       console.error('pick/upload avatar failed', e);
-      Alert.alert('Error', 'Failed to upload image');
+      Alert.alert(t('error.generic', 'Error'), t('profile.uploadFailed', 'Failed to upload image'));
     } finally {
       setIsUploadingAvatar(false);
     }
@@ -153,12 +155,12 @@ export default function ClientProfileScreen() {
 
   const handleLogout = () => {
     Alert.alert(
-      'Log out',
-      'Are you sure you want to log out?',
+      t('profile.logout.title', 'Log out'),
+      t('profile.logout.message', 'Are you sure you want to log out?'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('cancel', 'Cancel'), style: 'cancel' },
         { 
-          text: 'Log out', 
+          text: t('profile.logout.confirm', 'Log out'), 
           style: 'destructive',
           onPress: () => {
             logout();
@@ -173,8 +175,8 @@ export default function ClientProfileScreen() {
     {
       id: 'edit-profile',
       icon: 'person-outline',
-      title: 'Edit Profile',
-      subtitle: 'Update personal details',
+      title: t('profile.menu.edit', 'Edit Profile'),
+      subtitle: t('profile.menu.editSubtitle', 'Update personal details'),
       onPress: async () => {
         setEditName(user?.name ?? '');
         setEditPhone(user?.phone ?? '');
@@ -197,8 +199,8 @@ export default function ClientProfileScreen() {
     {
       id: 'notifications',
       icon: 'notifications-outline',
-      title: 'Notifications',
-      subtitle: pushEnabled ? 'Notifications enabled' : 'Notifications disabled',
+      title: t('notifications.title', 'Notifications'),
+      subtitle: pushEnabled ? t('profile.notifications.enabled', 'Notifications enabled') : t('profile.notifications.disabled', 'Notifications disabled'),
       onPress: async () => {
         const next = !pushEnabled;
         setPushEnabled(next);
@@ -219,17 +221,17 @@ export default function ClientProfileScreen() {
     {
       id: 'delete-account',
       icon: 'trash-outline',
-      title: 'Delete Account',
-      subtitle: 'Permanently delete your account',
+      title: t('profile.delete.title', 'Delete Account'),
+      subtitle: t('profile.delete.subtitle', 'Permanently delete your account'),
       onPress: async () => {
         if (!user?.id || isDeleting) return;
         Alert.alert(
-          'Delete Account',
-          'Are you sure you want to delete your account? This action cannot be undone.',
+          t('profile.delete.title', 'Delete Account'),
+          t('profile.delete.confirm', 'Are you sure you want to delete your account? This action cannot be undone.'),
           [
-            { text: 'Cancel', style: 'cancel' },
+            { text: t('cancel', 'Cancel'), style: 'cancel' },
             {
-              text: 'Delete',
+              text: t('profile.delete.confirmButton', 'Delete'),
               style: 'destructive',
               onPress: async () => {
                 try {
@@ -239,11 +241,11 @@ export default function ClientProfileScreen() {
                     logout();
                     router.replace('/login');
                   } else {
-                    Alert.alert('Error', 'Failed to delete account');
+                    Alert.alert(t('error.generic', 'Error'), t('profile.delete.failed', 'Failed to delete account'));
                   }
                 } catch (e) {
                   console.error('delete account failed', e);
-                  Alert.alert('Error', 'Failed to delete account');
+                  Alert.alert(t('error.generic', 'Error'), t('profile.delete.failed', 'Failed to delete account'));
                 } finally {
                   setIsDeleting(false);
                 }
@@ -256,8 +258,8 @@ export default function ClientProfileScreen() {
     {
       id: 'terms',
       icon: 'document-text-outline',
-      title: 'Terms of Use',
-      subtitle: 'View the app terms of use',
+      title: t('profile.terms.title', 'Terms of Use'),
+      subtitle: t('profile.terms.subtitle', 'View the app terms of use'),
       onPress: () => setIsTermsOpen(true),
     },
   ];
@@ -376,8 +378,8 @@ export default function ClientProfileScreen() {
                     </LinearGradient>
                   </TouchableOpacity>
                 </View>
-                <Text style={[styles.profileName, styles.profileNameOnGradient, styles.centerText]}>{user?.name || 'Valued Client'}</Text>
-                <Text style={[styles.profilePhone, styles.profilePhoneOnGradient, styles.centerText]}>{user?.phone || 'Phone number'}</Text>
+                <Text style={[styles.profileName, styles.profileNameOnGradient, styles.centerText]}>{user?.name || t('valuedClient', 'Valued Client')}</Text>
+                <Text style={[styles.profilePhone, styles.profilePhoneOnGradient, styles.centerText]}>{user?.phone || t('profile.phone', 'Phone number')}</Text>
                 {(user as any)?.email ? (
                   <Text style={[styles.profileEmail, styles.centerText]}>{(user as any).email}</Text>
                 ) : null}
@@ -399,8 +401,8 @@ export default function ClientProfileScreen() {
 
         {/* Section Header: Settings */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Settings</Text>
-          <Text style={styles.sectionSubtitle}>Manage profile details, notifications, and terms</Text>
+          <Text style={styles.sectionTitle}>{t('profile.settings', 'Settings')}</Text>
+          <Text style={styles.sectionSubtitle}>{t('profile.settingsSubtitle', 'Manage profile details, notifications, and terms')}</Text>
         </View>
 
         {/* No inline history. Use the menu item to open the sheet. */}
@@ -466,7 +468,7 @@ export default function ClientProfileScreen() {
             style={styles.logoutGradient}
           >
             <LogOut size={20} color={Colors.white} />
-            <Text style={styles.logoutText}>Log out</Text>
+            <Text style={styles.logoutText}>{t('profile.logout.title', 'Log out')}</Text>
           </LinearGradient>
         </TouchableOpacity>
 
@@ -480,34 +482,34 @@ export default function ClientProfileScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={insets.top + 12} style={styles.modalOverlay}>
           <ScrollView contentContainerStyle={styles.modalOverlayContent} keyboardShouldPersistTaps="handled">
             <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Edit Profile</Text>
+            <Text style={styles.modalTitle}>{t('profile.edit.title', 'Edit Profile')}</Text>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Name</Text>
+              <Text style={styles.inputLabel}>{t('profile.edit.name', 'Name')}</Text>
               <TextInput
                 value={editName}
                 onChangeText={setEditName}
-                placeholder="Full Name"
+                placeholder={t('profile.edit.namePlaceholder', 'Full Name')}
                 style={styles.textInput}
                 textAlign="left"
               />
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Phone</Text>
+              <Text style={styles.inputLabel}>{t('profile.edit.phone', 'Phone')}</Text>
               <TextInput
                 value={editPhone}
                 onChangeText={setEditPhone}
-                placeholder="Phone Number"
+                placeholder={t('profile.edit.phonePlaceholder', 'Phone Number')}
                 keyboardType="phone-pad"
                 style={styles.textInput}
                 textAlign="left"
               />
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Email</Text>
+              <Text style={styles.inputLabel}>{t('profile.edit.email', 'Email')}</Text>
               <TextInput
                 value={editEmail}
                 onChangeText={setEditEmail}
-                placeholder="name@example.com"
+                placeholder={t('profile.edit.emailPlaceholder', 'name@example.com')}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -516,12 +518,12 @@ export default function ClientProfileScreen() {
               />
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>New Password</Text>
+              <Text style={styles.inputLabel}>{t('profile.edit.newPassword', 'New Password')}</Text>
               <View style={styles.inputWrapper}>
                 <TextInput
                   value={editPassword}
                   onChangeText={setEditPassword}
-                  placeholder="Leave empty if no change"
+                  placeholder={t('profile.edit.passwordPlaceholder', 'Leave empty if no change')}
                   secureTextEntry={!showEditPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -536,7 +538,7 @@ export default function ClientProfileScreen() {
 
             <View style={styles.modalActions}>
               <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setIsEditOpen(false)} disabled={isSaving}>
-                <Text style={styles.cancelBtnText}>Cancel</Text>
+                <Text style={styles.cancelBtnText}>{t('cancel', 'Cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalBtn, styles.saveBtn, { backgroundColor: businessColors.primary }]}
@@ -573,7 +575,7 @@ export default function ClientProfileScreen() {
                 }}
                 disabled={isSaving}
               >
-                {isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Save</Text>}
+                {isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>{t('save', 'Save')}</Text>}
               </TouchableOpacity>
             </View>
             </View>
@@ -588,7 +590,7 @@ export default function ClientProfileScreen() {
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
               <View style={{ width: 44 }} />
-              <Text style={styles.sheetTitle}>Appointment History</Text>
+              <Text style={styles.sheetTitle}>{t('profile.history.title', 'Appointment History')}</Text>
               <TouchableOpacity onPress={() => setIsHistoryOpen(false)} style={styles.sheetCloseBtn}>
                 <Ionicons name="close" size={22} color={Colors.text} />
               </TouchableOpacity>
@@ -598,22 +600,22 @@ export default function ClientProfileScreen() {
               {isLoading ? (
                 <View style={styles.historyLoadingState}>
                   <ActivityIndicator color={businessColors.primary} />
-                  <Text style={styles.historyLoadingText}>Loading appointment history...</Text>
+                  <Text style={styles.historyLoadingText}>{t('profile.history.loading', 'Loading appointment history...')}</Text>
                 </View>
               ) : pastAppointments.length === 0 ? (
                 <View style={styles.historyEmpty}>
                   <Ionicons name="calendar-outline" size={56} color={businessColors.primary} />
-                  <Text style={styles.historyEmptyTitle}>No past appointments</Text>
-                  <Text style={styles.historyEmptySubtitle}>When there's history, it'll appear here</Text>
+                  <Text style={styles.historyEmptyTitle}>{t('profile.history.emptyTitle', 'No past appointments')}</Text>
+                  <Text style={styles.historyEmptySubtitle}>{t('profile.history.emptySubtitle', "When there's history, it'll appear here")}</Text>
                 </View>
               ) : (
                 pastAppointments.map((item) => (
                   <View key={`${item.id}-${item.slot_date}-${item.slot_time}`} style={styles.historyCard}>
                     <View style={styles.historyCardHeader}>
-                      <Text style={styles.historyService}>{item.service_name || 'Service'}</Text>
+                      <Text style={styles.historyService}>{item.service_name || t('booking.field.service', 'Service')}</Text>
                       <View style={styles.statusPill}>
                         <Ionicons name="checkmark-circle" size={16} color={businessColors.primary} />
-                        <Text style={styles.statusPillText}>Completed</Text>
+                        <Text style={styles.statusPillText}>{t('appointments.completed', 'Completed')}</Text>
                       </View>
                     </View>
                     <View style={styles.historyCardBody}>
@@ -642,7 +644,7 @@ export default function ClientProfileScreen() {
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
               <View style={{ width: 44 }} />
-              <Text style={styles.sheetTitle}>Terms of Use</Text>
+              <Text style={styles.sheetTitle}>{t('profile.terms.title', 'Terms of Use')}</Text>
               <TouchableOpacity onPress={() => setIsTermsOpen(false)} style={styles.sheetCloseBtn}>
                 <Ionicons name="close" size={22} color={Colors.text} />
               </TouchableOpacity>
@@ -769,7 +771,7 @@ export default function ClientProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = StyleSheet.create<any>({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',

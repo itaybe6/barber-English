@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, RefreshControl, StatusBar } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -12,6 +13,7 @@ import { Bell, Clock, CheckCircle, AlertCircle, Calendar, XCircle, User } from '
 import { useColors } from '@/src/theme/ThemeProvider';
 
 export default function ClientNotificationsScreen() {
+  const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const BOTTOM_SPACER = 124; // to keep last item above the tab bar
   const bottomPadding = BOTTOM_SPACER + (insets?.bottom || 0);
@@ -308,12 +310,12 @@ export default function ClientNotificationsScreen() {
             <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
               <Ionicons name="arrow-back" size={24} color={Colors.text} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Notifications</Text>
+            <Text style={styles.headerTitle}>{t('notifications.title', 'Notifications')}</Text>
             <View style={styles.headerRight} />
           </View>
           <View style={styles.contentWrapper}>
             <View style={styles.loadingContainer}>
-              <Text style={styles.loadingText}>Loading notifications...</Text>
+              <Text style={styles.loadingText}>{t('notifications.loading', 'Loading notifications...')}</Text>
             </View>
           </View>
         </View>
@@ -330,7 +332,7 @@ export default function ClientNotificationsScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={Colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Notifications</Text>
+          <Text style={styles.headerTitle}>{t('notifications.title', 'Notifications')}</Text>
           <View style={styles.headerRight} />
         </View>
         <View style={styles.contentWrapper}>
@@ -343,10 +345,10 @@ export default function ClientNotificationsScreen() {
             contentContainerStyle={styles.filterBar}
           >
             {([
-              { key: 'all', label: 'All' },
-              { key: 'new', label: 'New Appointments' },
-              { key: 'cancel', label: 'Cancellations' },
-              { key: 'waitlist', label: 'Waitlist' },
+              { key: 'all', label: t('notifications.filter.all', 'All') },
+              { key: 'new', label: t('notifications.filter.new', 'New Appointments') },
+              { key: 'cancel', label: t('notifications.filter.cancel', 'Cancellations') },
+              { key: 'waitlist', label: t('notifications.filter.waitlist', 'Waitlist') },
             ] as const).map(({ key, label }) => {
               const isActive = activeFilter === key;
               return (
@@ -382,8 +384,8 @@ export default function ClientNotificationsScreen() {
             {filteredNotifications.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Bell size={64} color={ios.secondary} />
-                <Text style={styles.emptyTitle}>No notifications</Text>
-                <Text style={styles.emptySubtitle}>When you have a new notification, it will appear here</Text>
+                <Text style={styles.emptyTitle}>{t('notifications.empty', 'No notifications')}</Text>
+                <Text style={styles.emptySubtitle}>{t('notifications.emptySubtitle', 'When you have a new notification, it will appear here')}</Text>
               </View>
             ) : (
               <View style={styles.notificationsContainer}>

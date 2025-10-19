@@ -14,6 +14,10 @@ try {
 } catch {}
 
 import 'expo-router/entry';
+// Initialize i18n before React tree mounts
+try {
+  require('./src/config/i18n');
+} catch {}
 
 // Fallback: hide splash after 5s even if React tree didn't mount
 setTimeout(() => {

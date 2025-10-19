@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Modal, Linking, Platform } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { BlurView } from 'expo-blur';
 import * as Calendar from 'expo-calendar';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +16,7 @@ import { formatTime12Hour } from '@/lib/utils/timeFormat';
 
 export default function SelectTimeScreen() {
   const router = useRouter();
+  const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const { colors } = useBusinessColors();
@@ -457,12 +459,12 @@ export default function SelectTimeScreen() {
       }
 
       if (success) {
-        const header = `Your appointment for\n"${serviceName}"`;
+        const header = t('selectTime.successHeader', 'Your appointment for\n"{{service}}"', { service: serviceName });
         setSuccessMessage(header);
         setShowSuccessModal(true);
         try {
-          const title = 'New appointment booked';
-          const content = `${user?.name || 'Client'} (${user?.phone || ''}) booked an appointment for "${serviceName}" on ${selectedDate} at ${formatTime12Hour(selectedTime)}`;
+          const title = t('selectTime.adminNotifyTitle', 'New appointment booked');
+          const content = t('selectTime.adminNotifyContent', '{{name}} ({{phone}}) booked an appointment for "{{service}}" on {{date}} at {{time}}', { name: user?.name || 'Client', phone: user?.phone || '', service: serviceName, date: selectedDate, time: formatTime12Hour(selectedTime) });
           const assignedAdminId = params.barberId as string | undefined;
           if (assignedAdminId) {
             notificationsApi.createAdminNotificationForUserId(assignedAdminId, title, content, 'system').catch(() => {});
@@ -473,10 +475,10 @@ export default function SelectTimeScreen() {
         // Navigate safely without relying on multiple back actions
         // ניווט יקרה לאחר אישור חלון ההצלחה
       } else {
-        Alert.alert('Error', 'Failed to book appointment. Please try again.');
+        Alert.alert(t('error.generic', 'Error'), t('selectTime.bookingFailed', 'Failed to book appointment. Please try again.'));
       }
     } catch (e) {
-      Alert.alert('Error', 'Failed to book appointment. Please try again.');
+      Alert.alert(t('error.generic', 'Error'), t('selectTime.bookingFailed', 'Failed to book appointment. Please try again.'));
     } finally {
       setBooking(false);
     }
@@ -504,8 +506,8 @@ export default function SelectTimeScreen() {
         <View style={styles.headerContent}>
           <View style={{ width: 22 }} />
           <View style={{ alignItems: 'center' }}>
-            <Text style={styles.title}>Book Appointment</Text>
-            <Text style={styles.headerSubtitle}>Select service, day and time</Text>
+            <Text style={styles.title}>{t('selectTime.title', 'Book Appointment')}</Text>
+            <Text style={styles.headerSubtitle}>{t('selectTime.subtitle', 'Select service, day and time')}</Text>
           </View>
           <View style={{ width: 22 }} />
         </View>
@@ -521,12 +523,12 @@ export default function SelectTimeScreen() {
             >
               <Ionicons name="arrow-back" size={18} color="#000000" />
             </TouchableOpacity>
-            <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>Select Time</Text>
+            <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>{t('selectTime.selectTime', 'Select Time')}</Text>
             <View style={{ width: 36 }} />
           </View>
           <View style={styles.timesList}>
             {loading ? (
-              <View style={styles.loadingContainer}><Text style={styles.loadingText}>Loading available times...</Text></View>
+              <View style={styles.loadingContainer}><Text style={styles.loadingText}>{t('selectTime.loadingTimes', 'Loading available times...')}</Text></View>
             ) : availableTimes.length > 0 ? (
               availableTimes.map((t) => {
                 const isSel = selectedTime === t;
@@ -549,7 +551,7 @@ export default function SelectTimeScreen() {
                 );
               })
             ) : (
-              <View style={styles.loadingContainer}><Text style={styles.loadingText}>No available times for this day</Text></View>
+              <View style={styles.loadingContainer}><Text style={styles.loadingText}>{t('selectTime.noTimes', 'No available times for this day')}</Text></View>
             )}
           </View>
         </ScrollView>
@@ -561,7 +563,7 @@ export default function SelectTimeScreen() {
           disabled={!canBook || checkingSameDay}
           onPress={onPressBook}
         >
-          <Text style={styles.bookBtnText}>{booking ? 'Booking appointment...' : (checkingSameDay ? 'Checking existing appointment...' : `Book Appointment - $${params.price || 0}`)}</Text>
+          <Text style={styles.bookBtnText}>{booking ? t('selectTime.bookingInProgress', 'Booking appointment...') : (checkingSameDay ? t('selectTime.checkingExisting', 'Checking existing appointment...') : t('selectTime.bookWithPrice', 'Book Appointment - ${{price}}', { price: params.price || 0 }))}</Text>
         </TouchableOpacity>
       </View>
 
@@ -574,12 +576,14 @@ export default function SelectTimeScreen() {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>You have an existing appointment</Text>
+              <Text style={styles.modalTitle}>{t('selectTime.existingTitle', 'You have an existing appointment')}</Text>
               <Text style={styles.modalMessage} numberOfLines={0} allowFontScaling={false}>
-                You have an existing appointment on {existingAppointment?.slot_date ? new Date(existingAppointment.slot_date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : 'unknown date'} at {existingAppointment?.slot_time ? formatTime12Hour(existingAppointment.slot_time) : 'unknown time'} for {existingAppointment?.service_name || 'unknown service'}.
-                {'\n'}
-                {'\n'}
-                Would you like to replace the existing appointment with the new one at {selectedTime ? formatTime12Hour(selectedTime) : 'unknown time'} or book an additional appointment?
+                {t('selectTime.existingMessage', 'You have an existing appointment on {{date}} at {{time}} for {{service}}.\n\nWould you like to replace the existing appointment with the new one at {{newTime}} or book an additional appointment?', {
+                  date: existingAppointment?.slot_date ? new Date(existingAppointment.slot_date).toLocaleDateString(i18n?.language === 'he' ? 'he-IL' : 'en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : t('booking.unknown', 'unknown date'),
+                  time: existingAppointment?.slot_time ? formatTime12Hour(existingAppointment.slot_time) : t('booking.unknown', 'unknown time'),
+                  service: existingAppointment?.service_name || t('booking.undefined', 'unknown service'),
+                  newTime: selectedTime ? formatTime12Hour(selectedTime) : t('booking.unknown', 'unknown time')
+                })}
               </Text>
               <View style={[styles.modalButtons, styles.modalButtonsStacked]}>
                 <TouchableOpacity
@@ -587,7 +591,7 @@ export default function SelectTimeScreen() {
                   onPress={() => setShowReplaceModal(false)}
                   activeOpacity={0.9}
                 >
-                  <Text style={styles.modalButtonCancelText}>Cancel</Text>
+                  <Text style={styles.modalButtonCancelText}>{t('cancel', 'Cancel')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.modalButtonStacked, styles.modalButtonReplace]}
@@ -596,7 +600,7 @@ export default function SelectTimeScreen() {
                     if (existingAppointment?.id) {
                       const ok = await cancelExistingAppointment(existingAppointment.id);
                       if (!ok) {
-                        Alert.alert('Error', 'Failed to cancel existing appointment');
+                        Alert.alert(t('error.generic', 'Error'), t('selectTime.cancelExistingFailed', 'Failed to cancel existing appointment'));
                         return;
                       }
                     }
@@ -604,7 +608,7 @@ export default function SelectTimeScreen() {
                   }}
                   activeOpacity={0.9}
                 >
-                  <Text style={styles.modalButtonText}>Replace Appointment</Text>
+                  <Text style={styles.modalButtonText}>{t('booking.replace', 'Replace Appointment')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.modalButtonStacked, styles.modalButtonBookAdditional]}
@@ -614,7 +618,7 @@ export default function SelectTimeScreen() {
                   }}
                   activeOpacity={0.9}
                 >
-                  <Text style={styles.modalButtonText}>Book Additional</Text>
+                  <Text style={styles.modalButtonText}>{t('selectTime.bookAdditional', 'Book Additional')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -632,12 +636,12 @@ export default function SelectTimeScreen() {
           <View style={styles.modalOverlay}>
             <BlurView style={StyleSheet.absoluteFill} intensity={24} tint="dark" />
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Appointment Booked</Text>
+              <Text style={styles.modalTitle}>{t('selectTime.bookedTitle', 'Appointment Booked')}</Text>
               <View style={styles.appointmentChips}>
                 {selectedDate ? (
                   <View style={styles.chip}>
                     <Ionicons name="calendar" size={14} color={colors.primary} style={styles.chipIcon} />
-                    <Text style={styles.chipText}>{new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</Text>
+                    <Text style={styles.chipText}>{new Date(selectedDate).toLocaleDateString(i18n?.language === 'he' ? 'he-IL' : 'en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</Text>
                   </View>
                 ) : null}
                 {selectedTime ? (
@@ -665,7 +669,7 @@ export default function SelectTimeScreen() {
 
                       const perm = await Calendar.requestCalendarPermissionsAsync();
                       if (perm.status !== 'granted') {
-                        Alert.alert('נדרש אישור', 'נדרש אישור גישה ליומן כדי להוסיף אירוע.');
+                        Alert.alert(t('booking.permissionsRequired', 'נדרש אישור'), t('booking.calendarPermissionMessage', 'נדרש אישור גישה ליומן כדי להוסיף אירוע.'));
                         return;
                       }
 
@@ -679,7 +683,7 @@ export default function SelectTimeScreen() {
                       }
 
                       if (!calendarId) {
-                        Alert.alert('שגיאה', 'לא נמצא יומן שניתן לכתוב אליו.');
+                        Alert.alert(t('error.generic', 'שגיאה'), t('booking.noCalendar', 'לא נמצא יומן שניתן לכתוב אליו.'));
                         return;
                       }
 
@@ -690,16 +694,16 @@ export default function SelectTimeScreen() {
                         notes: 'Booked via the app',
                       });
 
-                      Alert.alert('נוסף', 'האירוע נוסף ליומן שלך.');
+                      Alert.alert(t('booking.added', 'נוסף'), t('booking.eventAdded', 'האירוע נוסף ליומן שלך.'));
                     } catch (e) {
-                      Alert.alert('שגיאה', 'לא ניתן להוסיף את האירוע ליומן.');
+                      Alert.alert(t('error.generic', 'שגיאה'), t('booking.eventAddFailed', 'לא ניתן להוסיף את האירוע ליומן.'));
                     }
                   }}
                   activeOpacity={0.9}
                 >
                   <View style={styles.modalButtonRow}>
                     <Ionicons name="calendar-outline" size={20} color="#000000" style={styles.modalButtonIcon} />
-                    <Text style={styles.modalButtonSecondaryText}>Add to Calendar</Text>
+                    <Text style={styles.modalButtonSecondaryText}>{t('booking.addToCalendar', 'Add to Calendar')}</Text>
                   </View>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -714,7 +718,7 @@ export default function SelectTimeScreen() {
                   }}
                   activeOpacity={0.9}
                 >
-                  <Text style={styles.modalButtonText}>Got it</Text>
+                  <Text style={styles.modalButtonText}>{t('booking.gotIt', 'Got it')}</Text>
                 </TouchableOpacity>
               </View>
             </View>

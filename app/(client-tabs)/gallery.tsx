@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
 import { StyleSheet, View, FlatList, Text, TouchableOpacity, Dimensions, Image, Modal, Animated, PanResponder, Pressable, RefreshControl } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -145,6 +146,7 @@ interface AdminUser {
 }
 
 export default function GalleryScreen() {
+  const { t } = useTranslation();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerImages, setViewerImages] = useState<string[]>([]);
@@ -257,10 +259,10 @@ export default function GalleryScreen() {
           <View style={{ width: 22 }} />
           <View style={{ alignItems: 'center' }}>
             <Text style={styles.headerTitle}>
-              Gallery
+              {t('gallery.title', 'Gallery')}
             </Text>
             <Text style={styles.headerSubtitle}>
-              Discover our designs and products
+              {t('gallery.subtitle', 'Discover our designs and products')}
             </Text>
           </View>
           <View style={{ width: 22 }} />
@@ -288,7 +290,7 @@ export default function GalleryScreen() {
                 styles.toggleButtonText,
                 activeTab === 'designs' && { color: Colors.white }
               ]}>
-                Designs
+                {t('gallery.designs', 'Designs')}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -309,7 +311,7 @@ export default function GalleryScreen() {
                 styles.toggleButtonText,
                 activeTab === 'products' && { color: Colors.white }
               ]}>
-                Products
+                {t('gallery.products', 'Products')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -351,12 +353,12 @@ export default function GalleryScreen() {
                   />
                 </View>
                 <Text style={[styles.emptyTitle, { color: businessColors.primary }]}>
-                  {activeTab === 'designs' ? 'No designs yet' : 'No products yet'}
+                  {activeTab === 'designs' ? t('gallery.empty.designs', 'No designs yet') : t('gallery.empty.products', 'No products yet')}
                 </Text>
                 <Text style={styles.emptySubtitle}>
                   {activeTab === 'designs' 
-                    ? 'When you add designs, they will appear here' 
-                    : 'When you add products, they will appear here'
+                    ? t('gallery.emptySubtitle.designs', 'When you add designs, they will appear here') 
+                    : t('gallery.emptySubtitle.products', 'When you add products, they will appear here')
                   }
                 </Text>
               </View>
@@ -391,7 +393,7 @@ export default function GalleryScreen() {
                 <Ionicons name="close" size={22} color={Colors.white} />
               </TouchableOpacity>
               <Text style={[styles.viewerTitle, { color: businessColors.primary }]}>
-                {activeTab === 'designs' ? 'Design Photos' : 'Product Photos'}
+                {activeTab === 'designs' ? t('gallery.viewer.designPhotos', 'Design Photos') : t('gallery.viewer.productPhotos', 'Product Photos')}
               </Text>
               <View style={{ width: 44 }} />
             </View>

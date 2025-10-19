@@ -68,6 +68,7 @@ export interface User {
   password_hash?: string;
   image_url?: string;
   push_token?: string;
+  language?: 'he' | 'en';
   business_id: string;
   created_at: string;
   updated_at: string;

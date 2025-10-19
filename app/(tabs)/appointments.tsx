@@ -24,6 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react-native';
 import { useAuthStore } from '@/stores/authStore';
+import { useTranslation } from 'react-i18next';
 
 // Press feedback: scale-on-press animated touchable
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
@@ -79,6 +80,7 @@ const PressableScale = ({ onPress, style, children, disabled, hitSlop, pressRete
 };
 
 export default function AdminAppointmentsScreen() {
+  const { t } = useTranslation();
   const user = useAuthStore((state) => state.user);
   const { colors: businessColors } = useBusinessColors();
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
@@ -375,7 +377,7 @@ export default function AdminAppointmentsScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Appointments</Text>
+        <Text style={styles.headerTitle}>{t('appointments.title','Appointments')}</Text>
         <View style={styles.monthSwitcher}>
           <TouchableOpacity onPress={() => {
             const d = new Date(selectedDate);
@@ -407,7 +409,7 @@ export default function AdminAppointmentsScreen() {
       {isLoading ? (
         <View style={styles.loaderContainer}>
           <ActivityIndicator size="large" color={Colors.text} />
-          <Text style={styles.loadingText}>Loading appointments for {selectedDateStr}...</Text>
+          <Text style={styles.loadingText}>{t('admin.appointments.loadingForDate','Loading appointments for {{date}}...', { date: selectedDateStr })}</Text>
         </View>
       ) : (
         <ScrollView
@@ -422,7 +424,7 @@ export default function AdminAppointmentsScreen() {
               onRefresh={onRefresh}
               colors={[Colors.text]}
               tintColor={Colors.text}
-              title="Refreshing..."
+              title={t('refreshing','Refreshing...')}
               titleColor={Colors.text}
             />
           }
@@ -518,8 +520,8 @@ export default function AdminAppointmentsScreen() {
 
           {appointments.length === 0 && (
             <View style={styles.emptyState}> 
-              <Text style={styles.emptyTitle}>No appointments for this day</Text>
-              <Text style={styles.emptySubtitle}>Choose another day from the top bar</Text>
+              <Text style={styles.emptyTitle}>{t('admin.appointments.emptyTitle','No appointments for this day')}</Text>
+              <Text style={styles.emptySubtitle}>{t('admin.appointments.emptySubtitle','Choose another day from the top bar')}</Text>
             </View>
           )}
         </ScrollView>
@@ -534,11 +536,11 @@ export default function AdminAppointmentsScreen() {
       >
         <View style={styles.actionsOverlay}>
           <View style={styles.actionsSheet}>
-            <Text style={styles.actionsTitle}>Choose an action</Text>
+            <Text style={styles.actionsTitle}>{t('admin.appointments.chooseAction','Choose an action')}</Text>
             {!!actionsAppointment?.client_phone && (
               <PressableScale
                 style={styles.actionsOption}
-                accessibilityLabel="Call client"
+                accessibilityLabel={t('admin.appointments.callClient','Call client')}
                 onPress={async () => {
                   const phone = actionsAppointment?.client_phone;
                   closeActionsMenu();
@@ -548,13 +550,13 @@ export default function AdminAppointmentsScreen() {
                 <View style={[styles.actionsIconCircle, { backgroundColor: '#E8F0FF' }]}>
                   <Ionicons name="call" size={18} color="#0A84FF" />
                 </View>
-                <Text style={styles.actionsOptionText}>Call client</Text>
+                <Text style={styles.actionsOptionText}>{t('admin.appointments.callClient','Call client')}</Text>
               </PressableScale>
             )}
             <View style={styles.actionsDivider} />
             <PressableScale
               style={styles.actionsOption}
-              accessibilityLabel="Cancel appointment"
+              accessibilityLabel={t('appointments.cancel.title','Cancel Appointment')}
               onPress={() => {
                 if (actionsAppointment) {
                   askCancelAppointment(actionsAppointment);
@@ -565,14 +567,14 @@ export default function AdminAppointmentsScreen() {
               <View style={[styles.actionsIconCircle, { backgroundColor: '#FFECEC' }]}>
                 <Ionicons name="close" size={18} color="#FF3B30" />
               </View>
-              <Text style={[styles.actionsOptionText, { color: Colors.error }]}>Cancel appointment</Text>
+              <Text style={[styles.actionsOptionText, { color: Colors.error }]}>{t('appointments.cancel.title','Cancel Appointment')}</Text>
             </PressableScale>
             <PressableScale
               style={styles.actionsCancelButton}
-              accessibilityLabel="Close"
+              accessibilityLabel={t('close','Close')}
               onPress={closeActionsMenu}
             >
-              <Text style={styles.actionsCancelText}>Close</Text>
+              <Text style={styles.actionsCancelText}>{t('close','Close')}</Text>
             </PressableScale>
           </View>
         </View>
@@ -590,9 +592,9 @@ export default function AdminAppointmentsScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.iosAlertContainer}>
-            <Text style={styles.iosAlertTitle}>Cancel the appointment?</Text>
+            <Text style={styles.iosAlertTitle}>{t('appointments.cancel.title','Cancel Appointment')}</Text>
             <Text style={styles.iosAlertMessage}>
-              This will free the time and remove the client details for the selected appointment.
+              {t('admin.appointments.cancelMessage','This will free the time and remove the client details for the selected appointment.')}
             </Text>
             <View style={styles.iosAlertButtonsRow}>
               <TouchableOpacity
@@ -604,7 +606,7 @@ export default function AdminAppointmentsScreen() {
                 }}
                 disabled={isCancelling}
               >
-                <Text style={styles.iosAlertButtonDefaultText}>Cancel</Text>
+                <Text style={styles.iosAlertButtonDefaultText}>{t('cancel','Cancel')}</Text>
               </TouchableOpacity>
               <View style={styles.iosAlertButtonDivider} />
               <TouchableOpacity
@@ -616,7 +618,7 @@ export default function AdminAppointmentsScreen() {
                 {isCancelling ? (
                   <ActivityIndicator size="small" color="#FF3B30" />
                 ) : (
-                  <Text style={styles.iosAlertButtonDestructiveText}>Confirm</Text>
+                  <Text style={styles.iosAlertButtonDestructiveText}>{t('confirm','Confirm')}</Text>
                 )}
               </TouchableOpacity>
             </View>

@@ -12,6 +12,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
 import { usersApi } from '@/lib/api/users';
 import { compressImage, compressImages } from '@/lib/utils/imageCompression';
+import { useTranslation } from 'react-i18next';
 
 const { width } = Dimensions.get('window');
 const numColumns = 2;
@@ -20,6 +21,7 @@ const tileSize = (width - horizontalPadding * 2) / numColumns;
 const ACCENT_PURPLE = '#000000';
 
 export default function EditGalleryScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { designs, fetchDesigns, createDesign, deleteDesign, updateDesign, isLoading } = useDesignsStore();
@@ -64,7 +66,7 @@ export default function EditGalleryScreen() {
   const pickImages = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Please allow access to gallery to select images');
+      Alert.alert(t('permission.required','Permission Required'), t('admin.gallery.permissionGallery','Please allow access to gallery to select images'));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -95,7 +97,7 @@ export default function EditGalleryScreen() {
         );
       } catch (error) {
         console.error('Error compressing images:', error);
-        Alert.alert('Error', 'Failed to process selected images');
+        Alert.alert(t('error.generic','Error'), t('admin.gallery.processFailed','Failed to process selected images'));
       }
     }
   };
@@ -197,7 +199,7 @@ export default function EditGalleryScreen() {
   const addImagesToEdit = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Please allow access to gallery to select images');
+      Alert.alert(t('permission.required','Permission Required'), t('admin.gallery.permissionGallery','Please allow access to gallery to select images'));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -230,7 +232,7 @@ export default function EditGalleryScreen() {
         setEditImages(prev => [...prev, ...newItems]);
       } catch (error) {
         console.error('Error compressing images:', error);
-        Alert.alert('Error', 'Failed to process selected images');
+        Alert.alert(t('error.generic','Error'), t('admin.gallery.processFailed','Failed to process selected images'));
       }
     }
   };
@@ -238,7 +240,7 @@ export default function EditGalleryScreen() {
   const saveEdit = async () => {
     if (!selectedDesign) return;
     if (!editName.trim()) {
-      Alert.alert('Error', 'Please enter a design name');
+      Alert.alert(t('error.generic','Error'), t('admin.gallery.nameRequired','Please enter a design name'));
       return;
     }
     try {
@@ -251,7 +253,7 @@ export default function EditGalleryScreen() {
         } else {
           const uploaded = await uploadImage(item.asset);
           if (!uploaded) {
-            Alert.alert('Error', 'Failed to upload one of the images');
+            Alert.alert(t('error.generic','Error'), t('admin.gallery.uploadOneFailed','Failed to upload one of the images'));
             setIsSavingEdit(false);
             return;
           }
@@ -272,7 +274,7 @@ export default function EditGalleryScreen() {
       });
 
       if (!updated) {
-        Alert.alert('Error', 'Failed to save design');
+        Alert.alert(t('error.generic','Error'), t('admin.gallery.saveFailed','Failed to save design'));
         setIsSavingEdit(false);
         return;
       }
@@ -280,7 +282,7 @@ export default function EditGalleryScreen() {
       closeEdit();
     } catch (e) {
       console.error('saveEdit error', e);
-      Alert.alert('שגיאה', 'נכשלה שמירת העיצוב');
+      Alert.alert(t('error.generic','Error'), t('admin.gallery.saveFailed','Failed to save design'));
       setIsSavingEdit(false);
     }
   };
@@ -290,7 +292,7 @@ export default function EditGalleryScreen() {
       // Try delete DB first
       const ok = await deleteDesign(id);
       if (!ok) {
-        Alert.alert('Error', 'Failed to delete design');
+        Alert.alert(t('error.generic','Error'), t('admin.gallery.deleteFailed','Failed to delete design'));
         return;
       }
       // If images are within our public storage bucket, attempt to delete the files as well
@@ -313,11 +315,11 @@ export default function EditGalleryScreen() {
 
   const handleCreate = async () => {
     if (!name.trim()) {
-      Alert.alert('Error', 'Please enter a design name');
+      Alert.alert(t('error.generic','Error'), t('admin.gallery.nameRequired','Please enter a design name'));
       return;
     }
     if (pickedAssets.length === 0) {
-      Alert.alert('Error', 'Please select at least one image');
+      Alert.alert(t('error.generic','Error'), t('admin.gallery.atLeastOne','Please select at least one image'));
       return;
     }
 
@@ -332,14 +334,14 @@ export default function EditGalleryScreen() {
         if (url) {
           urls.push(url);
         } else {
-          Alert.alert('Error', `Failed to upload image ${i + 1}`);
+          Alert.alert(t('error.generic','Error'), t('admin.gallery.uploadIndexFailed','Failed to upload image {{num}}',{ num: i + 1 }));
           setIsCreating(false);
           return;
         }
       }
       
       if (urls.length === 0) {
-        Alert.alert('Error', 'Failed to upload images');
+        Alert.alert(t('error.generic','Error'), t('admin.gallery.uploadFailed','Failed to upload images'));
         setIsCreating(false);
         return;
       }
@@ -353,16 +355,16 @@ export default function EditGalleryScreen() {
       });
 
       if (created) {
-        Alert.alert('Success', 'Design added to gallery');
+        Alert.alert(t('success.generic','Success'), t('admin.gallery.createSuccess','Design added to gallery'));
         setName('');
         setPickedAssets([]);
         setCreateVisible(false);
       } else {
-        Alert.alert('Error', 'Failed to add design');
+        Alert.alert(t('error.generic','Error'), t('admin.gallery.createFailed','Failed to add design'));
       }
     } catch (e) {
       console.error('Error in handleCreate:', e);
-      Alert.alert('שגיאה', 'נכשלה הוספת העיצוב');
+      Alert.alert(t('error.generic','Error'), t('admin.gallery.createFailed','Failed to add design'));
     } finally {
       setIsCreating(false);
     }
@@ -375,7 +377,7 @@ export default function EditGalleryScreen() {
           <TouchableOpacity onPress={() => router.back()}>
             <Ionicons name="arrow-forward" size={24} color={Colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Edit Gallery</Text>
+          <Text style={styles.headerTitle}>{t('admin.gallery.edit','Edit Gallery')}</Text>
           <TouchableOpacity onPress={() => setCreateVisible(true)}>
             <Ionicons name="add" size={26} color={Colors.text} />
           </TouchableOpacity>
@@ -421,7 +423,7 @@ export default function EditGalleryScreen() {
               <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%' }}>
                 <View style={styles.modalCard}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={styles.sectionTitle}>Edit Design</Text>
+                    <Text style={styles.sectionTitle}>{t('admin.gallery.editDesign','Edit Design')}</Text>
                     <TouchableOpacity onPress={closeEdit}>
                       <Ionicons name="close" size={22} color={Colors.text} />
                     </TouchableOpacity>
@@ -436,7 +438,7 @@ export default function EditGalleryScreen() {
                       />
                       <View style={styles.replaceOverlay}>
                         <Ionicons name="image-outline" size={18} color="#fff" />
-                        <Text style={styles.replaceText}>Cover Image</Text>
+                        <Text style={styles.replaceText}>{t('admin.gallery.coverImage','Cover Image')}</Text>
                       </View>
                     </TouchableOpacity>
 
@@ -451,7 +453,7 @@ export default function EditGalleryScreen() {
                     {/* Admin User Selection for Edit */}
                     {adminUsers.length > 1 && (
                       <View style={{ marginTop: 12 }}>
-                        <Text style={[styles.sectionTitle, { fontSize: 14, marginBottom: 8 }]}>Select Admin</Text>
+                        <Text style={[styles.sectionTitle, { fontSize: 14, marginBottom: 8 }]}>{t('admin.gallery.selectAdmin','Select Admin')}</Text>
                         <View style={styles.adminSelectorContainer}>
                           {adminUsers.map((user) => (
                             <TouchableOpacity
@@ -477,10 +479,10 @@ export default function EditGalleryScreen() {
                     {/* Thumbnails and actions */}
                     <View style={{ marginTop: 12 }}>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                        <Text style={styles.sectionTitle}>Design Images</Text>
+                        <Text style={styles.sectionTitle}>{t('admin.gallery.designImages','Design Images')}</Text>
                         <TouchableOpacity onPress={addImagesToEdit} style={[styles.pickButton, { paddingVertical: 8, paddingHorizontal: 12 }]}> 
                           <Ionicons name="images-outline" size={16} color="#1d1d1f" />
-                          <Text style={styles.pickButtonText}>Add Images</Text>
+                          <Text style={styles.pickButtonText}>{t('admin.gallery.addImages','Add Images')}</Text>
                         </TouchableOpacity>
                       </View>
                       <FlatList
@@ -529,7 +531,7 @@ export default function EditGalleryScreen() {
                       {isSavingEdit ? (
                         <ActivityIndicator color="#fff" />
                       ) : (
-                        <Text style={styles.createButtonText}>Save</Text>
+                        <Text style={styles.createButtonText}>{t('save','Save')}</Text>
                       )}
                     </TouchableOpacity>
                   </ScrollView>
@@ -548,7 +550,7 @@ export default function EditGalleryScreen() {
               <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%' }}>
                 <View style={styles.modalCard}>
                   <View style={styles.modalHeader}>
-                    <Text style={[styles.sectionTitle, { color: Colors.text }]}>Add Design</Text>
+                    <Text style={[styles.sectionTitle, { color: Colors.text }]}>{t('admin.gallery.addDesign','Add Design')}</Text>
                     <TouchableOpacity 
                       onPress={() => !isCreating && setCreateVisible(false)} 
                       style={[styles.closeIconButton, isCreating && { opacity: 0.5 }]}
@@ -559,12 +561,12 @@ export default function EditGalleryScreen() {
                   </View>
 
                   <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
-                    <Text style={[styles.helperText, { marginBottom: 4 }]}>You can select multiple images. The first one will be used as the cover image.</Text>
+                    <Text style={[styles.helperText, { marginBottom: 4 }]}>{t('admin.gallery.helper','You can select multiple images. The first one will be used as the cover image.')}</Text>
 
                     {/* Admin User Selection */}
                     {adminUsers.length > 1 && (
                       <View style={{ marginBottom: 12, opacity: isCreating ? 0.5 : 1 }}>
-                        <Text style={[styles.sectionTitle, { fontSize: 14, marginBottom: 8 }]}>Select Admin</Text>
+                        <Text style={[styles.sectionTitle, { fontSize: 14, marginBottom: 8 }]}>{t('admin.gallery.selectAdmin','Select Admin')}</Text>
                         <View style={styles.adminSelectorContainer}>
                           {adminUsers.map((user) => (
                             <TouchableOpacity
@@ -595,7 +597,7 @@ export default function EditGalleryScreen() {
                       disabled={isCreating}
                     >
                       <Ionicons name="images-outline" size={18} color={ACCENT_PURPLE} />
-                      <Text style={[styles.pickButtonText, { color: ACCENT_PURPLE }]}>Select Images</Text>
+                      <Text style={[styles.pickButtonText, { color: ACCENT_PURPLE }]}>{t('admin.gallery.selectImages','Select Images')}</Text>
                       {pickedAssets.length > 0 && (
                         <View style={[styles.badge, { backgroundColor: ACCENT_PURPLE }]}><Text style={styles.badgeText}>{pickedAssets.length}</Text></View>
                       )}
@@ -627,7 +629,7 @@ export default function EditGalleryScreen() {
 
                     <TextInput
                       style={[styles.input, { marginTop: 8 }, isCreating && { opacity: 0.5 }]}
-                      placeholder="Design name"
+                      placeholder={t('admin.gallery.namePlaceholder','Design name')}
                       value={name}
                       onChangeText={setName}
                       editable={!isCreating}
@@ -637,10 +639,10 @@ export default function EditGalleryScreen() {
                       {isCreating ? (
                         <View style={styles.loadingContainer}>
                           <ActivityIndicator color="#fff" size="small" />
-                          <Text style={[styles.createButtonText, { marginLeft: 8 }]}>Uploading images...</Text>
+                          <Text style={[styles.createButtonText, { marginLeft: 8 }]}>{t('admin.gallery.uploadingImages','Uploading images...')}</Text>
                         </View>
                       ) : (
-                        <Text style={styles.createButtonText}>{isLoading ? 'Saving...' : 'Publish'}</Text>
+                        <Text style={styles.createButtonText}>{isLoading ? t('settings.common.saving','Saving...') : t('admin.gallery.publish','Publish')}</Text>
                       )}
                     </TouchableOpacity>
                   </ScrollView>

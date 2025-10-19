@@ -9,6 +9,7 @@ import { supabase, WaitlistEntry } from '@/lib/supabase';
 import DaySelector from '@/components/DaySelector';
 import { useAuthStore } from '@/stores/authStore';
 import { useColors } from '@/src/theme/ThemeProvider';
+import { useTranslation } from 'react-i18next';
 
 // Helper function to format date as YYYY-MM-DD in local timezone
 function formatDateToLocalString(date: Date): string {
@@ -188,6 +189,7 @@ export default function WaitlistScreen() {
   const [phoneToImage, setPhoneToImage] = useState<Record<string, string>>({});
   const { user } = useAuthStore();
   const colors = useColors();
+  const { t } = useTranslation();
 
   // Next 7 days (rolling from today)
   const weekDays = useMemo(() => {
@@ -214,7 +216,7 @@ export default function WaitlistScreen() {
   const loadWeekWaitlist = async () => {
     setLoading(true);
     try {
-      const start = weekDays[0];
+    const start = weekDays[0];
       const end = weekDays[weekDays.length - 1];
       // Pass user.id to filter waitlist entries for this admin
       const data = await fetchWaitlistForRange(start, end, user?.id);
@@ -228,7 +230,7 @@ export default function WaitlistScreen() {
       }
     } catch (error) {
       console.error('Error loading waitlist week data:', error);
-      Alert.alert('Error', 'An error occurred while loading the weekly waitlist');
+      Alert.alert(t('error.generic','Error'), t('admin.waitlist.loadFailed','An error occurred while loading the weekly waitlist'));
     } finally {
       setLoading(false);
     }
@@ -236,12 +238,12 @@ export default function WaitlistScreen() {
 
   const handleCallClient = async (phoneNumber: string) => {
     Alert.alert(
-      'Contact',
-      'Would you like to call this client?',
+      t('admin.waitlist.contact','Contact'),
+      t('admin.waitlist.callPrompt','Would you like to call this client?'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('cancel','Cancel'), style: 'cancel' },
         {
-          text: 'Call',
+          text: t('admin.waitlist.call','Call'),
           onPress: () => makePhoneCall(phoneNumber)
         }
       ]
@@ -250,20 +252,20 @@ export default function WaitlistScreen() {
 
   const handleDelete = async (entryId: string) => {
     Alert.alert(
-      'Delete entry',
-      'Are you sure you want to delete this entry?',
+      t('admin.waitlist.deleteTitle','Delete entry'),
+      t('admin.waitlist.deleteConfirm','Are you sure you want to delete this entry?'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('cancel','Cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('settings.services.delete','Delete'),
           style: 'destructive',
           onPress: async () => {
             const success = await deleteWaitlistEntry(entryId);
             if (success) {
               loadWeekWaitlist();
-              Alert.alert('Deleted', 'Entry deleted successfully');
+              Alert.alert(t('admin.waitlist.deleted','Deleted'), t('admin.waitlist.deleteSuccess','Entry deleted successfully'));
             } else {
-              Alert.alert('Error', 'An error occurred while deleting the entry');
+              Alert.alert(t('error.generic','Error'), t('admin.waitlist.deleteFailed','An error occurred while deleting the entry'));
             }
           }
         }
@@ -292,8 +294,8 @@ export default function WaitlistScreen() {
       <View style={styles.headerLikeAppointments}>
         <View style={styles.headerTopRow}>
           <View style={styles.headerTitleColumn}>
-            <Text style={[styles.headerTitle, { color: colors.primary }]}>Waitlist</Text>
-            <Text style={styles.headerSubtitle}>This week</Text>
+            <Text style={[styles.headerTitle, { color: colors.primary }]}>{t('admin.waitlist.title','Waitlist')}</Text>
+            <Text style={styles.headerSubtitle}>{t('admin.waitlist.thisWeek','This week')}</Text>
           </View>
           <View style={styles.monthBadge}>
             <Text style={styles.monthText}>{monthYearLabel}</Text>
@@ -328,7 +330,7 @@ export default function WaitlistScreen() {
                       image={phoneToImage[entry.client_phone] || ''}
                       time={time}
                       type={entry.service_name}
-                      tag="Waiting"
+                      tag={t('admin.waitlist.waiting','Waiting')}
                     />
                     <View style={styles.actionButtons}>
                       <TouchableOpacity 
@@ -336,14 +338,14 @@ export default function WaitlistScreen() {
                         onPress={() => handleCallClient(entry.client_phone)}
                       >
                         <Phone size={16} color={colors.primary} />
-                        <Text style={[styles.actionButtonText, { color: colors.primary }]}>Contact</Text>
+                        <Text style={[styles.actionButtonText, { color: colors.primary }]}>{t('admin.waitlist.contact','Contact')}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity 
                         style={[styles.actionButton, styles.deleteButton]}
                         onPress={() => handleDelete(entry.id)}
                       >
                         <Trash2 size={16} color="#FF3B30" />
-                        <Text style={[styles.actionButtonText, { color: '#FF3B30' }]}>Delete</Text>
+                        <Text style={[styles.actionButtonText, { color: '#FF3B30' }]}>{t('settings.services.delete','Delete')}</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -355,8 +357,8 @@ export default function WaitlistScreen() {
               <View style={styles.emptyIconCircle}>
                 <Ionicons name="hourglass-outline" size={22} color={colors.primary} />
               </View>
-              <Text style={styles.emptyTitle}>No waitlist entries for this day</Text>
-              <Text style={styles.emptySubtitle}>No clients are waiting for this day</Text>
+              <Text style={styles.emptyTitle}>{t('admin.waitlist.emptyTitle','No waitlist entries for this day')}</Text>
+              <Text style={styles.emptySubtitle}>{t('admin.waitlist.emptySubtitle','No clients are waiting for this day')}</Text>
             </View>
           )}
         </ScrollView>

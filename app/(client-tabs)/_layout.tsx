@@ -1,6 +1,7 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { View, TouchableOpacity, StyleSheet, Animated, Easing, Alert, Text as RNText } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import Colors from '@/constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -114,6 +115,7 @@ export default function ClientTabsLayout() {
   const isBlocked = Boolean((user as any)?.block);
   const colors = useColors();
   const { colorUpdateTrigger } = useColorUpdate();
+  const { t } = useTranslation();
   
   const [loginModal, setLoginModal] = React.useState<{ visible: boolean; title?: string; message?: string }>({ visible: false });
   
@@ -156,14 +158,14 @@ export default function ClientTabsLayout() {
                     if (!isAuthenticated) {
                       setLoginModal({
                         visible: true,
-                        title: 'Login Required',
-                        message: 'Please sign in to book an appointment.',
+                        title: t('login.required', 'Login Required'),
+                        message: t('login.pleaseSignInToBook', 'Please sign in to book an appointment.'),
                       });
                       return;
                     }
                     if (isBlocked) {
                       // Keep Alert for blocked users as it's a different use case
-                      Alert.alert('Account Blocked', 'Your account is blocked. You cannot book appointments.');
+                      Alert.alert(t('account.blocked', 'Account Blocked'), t('account.blocked.message', 'Your account is blocked. You cannot book appointments.'));
                       return;
                     }
                     router.push('/(client-tabs)/book-appointment');
@@ -198,8 +200,8 @@ export default function ClientTabsLayout() {
                   if (!isAuthenticated) {
                     setLoginModal({
                       visible: true,
-                      title: 'Login Required',
-                      message: `Please sign in to access ${route.name === 'appointments' ? 'booking' : 'profile'}.`,
+                      title: t('login.required', 'Login Required'),
+                      message: t('login.pleaseSignInTo', 'Please sign in to {{action}}.', { action: route.name === 'appointments' ? t('appointments.title', 'Appointments') : t('profile.title', 'Settings and Profile') }),
                     });
                     return;
                   }
@@ -254,19 +256,19 @@ export default function ClientTabsLayout() {
       <Tabs.Screen 
         name="index" 
         options={{
-          title: 'Home',
+          title: t('tabs.home', 'Home'),
         }}
       />
       <Tabs.Screen 
         name="gallery" 
         options={{
-          title: 'Gallery',
+          title: t('tabs.gallery', 'Gallery'),
         }}
       />
       <Tabs.Screen 
         name="book-appointment" 
         options={{
-          title: 'Book',
+          title: t('tabs.book', 'Book'),
           tabBarButton: (props: any) => (
             <TouchableOpacity
               {...props}
@@ -274,13 +276,13 @@ export default function ClientTabsLayout() {
                 if (!isAuthenticated) {
                   setLoginModal({
                     visible: true,
-                    title: 'Login Required',
-                    message: 'Please sign in to book an appointment.',
+                    title: t('login.required', 'Login Required'),
+                    message: t('login.pleaseSignInToBook', 'Please sign in to book an appointment.'),
                   });
                   return;
                 }
                 if (isBlocked) {
-                  Alert.alert('Account Blocked', 'Your account is blocked. You cannot book appointments.');
+                  Alert.alert(t('account.blocked', 'Account Blocked'), t('account.blocked.message', 'Your account is blocked. You cannot book appointments.'));
                   return;
                 }
                 router.push('/(client-tabs)/book-appointment');
@@ -292,13 +294,13 @@ export default function ClientTabsLayout() {
                   if (!isAuthenticated) {
                     setLoginModal({
                       visible: true,
-                      title: 'Login Required',
-                      message: 'Please sign in to book an appointment.',
+                      title: t('login.required', 'Login Required'),
+                      message: t('login.pleaseSignInToBook', 'Please sign in to book an appointment.'),
                     });
                     return;
                   }
                   if (isBlocked) {
-                    Alert.alert('Account Blocked', 'Your account is blocked. You cannot book appointments.');
+                    Alert.alert(t('account.blocked', 'Account Blocked'), t('account.blocked.message', 'Your account is blocked. You cannot book appointments.'));
                     return;
                   }
                   router.push('/(client-tabs)/book-appointment');
@@ -312,19 +314,19 @@ export default function ClientTabsLayout() {
       <Tabs.Screen 
         name="appointments" 
         options={{
-          title: 'Booking',
+          title: t('appointments.title', 'Appointments'),
         }}
       />
       <Tabs.Screen 
         name="profile" 
         options={{
-          title: 'Profile',
+          title: t('tabs.profile', 'Profile'),
         }}
       />
       <Tabs.Screen 
         name="waitlist" 
         options={{
-          title: 'Waitlist',
+          title: t('waitlist.title', 'Waitlist'),
           href: null
         }}
       />
@@ -332,7 +334,7 @@ export default function ClientTabsLayout() {
 <Tabs.Screen 
         name="notifications" 
         options={{
-          title: 'notifications',
+          title: t('notifications.title', 'Notifications'),
           href: null
         }}
       />
@@ -361,13 +363,14 @@ export default function ClientTabsLayout() {
 
 // Helper function to get tab labels
 function getTabLabel(routeName: string): string {
+  // This function remains as a fallback. Actual labels are provided via options and screenOptions.
   switch (routeName) {
     case 'index':
       return 'Home';
     case 'gallery':
       return 'Gallery';
     case 'appointments':
-      return 'Booking';
+      return 'Appointments';
     case 'profile':
       return 'Profile';
     case 'book-appointment':

@@ -148,7 +148,7 @@ export default function RegisterScreen() {
         .single();
 
       if (existingUser) {
-        Alert.alert('Phone number already exists', 'This phone number is already registered in the system. Please use a different phone number or sign in to your existing account.');
+        Alert.alert(t('register.phoneExists.title', 'Phone number already exists'), t('register.phoneExists.message', 'This phone number is already registered in the system. Please use a different phone number or sign in to your existing account.'));
         return;
       }
 
@@ -161,17 +161,17 @@ export default function RegisterScreen() {
       } as any, password);
 
       if (!newUser) {
-        Alert.alert('Error', 'An error occurred creating the account. Please try again.');
+        Alert.alert(t('error.generic', 'Error'), t('register.createError', 'An error occurred creating the account. Please try again.'));
         return;
       }
 
       // Success!
       Alert.alert(
-        'Registration successful!', 
-        `Your account was created successfully.\n\nYou can now sign in with your phone number and chosen password.\n\nPhone number: ${phone.trim()}`,
+        t('register.success.title', 'Registration successful!'), 
+        t('register.success.message', 'Your account was created successfully.\n\nYou can now sign in with your phone number and chosen password.\n\nPhone number: {{phone}}', { phone: phone.trim() }),
         [
           {
-            text: 'OK',
+            text: t('ok', 'OK'),
             onPress: () => router.push('/login')
           }
         ]
@@ -179,7 +179,7 @@ export default function RegisterScreen() {
       
     } catch (error) {
       console.error('Registration error:', error);
-      Alert.alert('Error', 'A system error occurred. Please try again.');
+      Alert.alert(t('error.generic', 'Error'), t('common.tryAgain', 'A system error occurred. Please try again.'));
     } finally {
       setLoading(false);
     }

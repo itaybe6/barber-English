@@ -1,37 +1,32 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform, Animated, Keyboard, Dimensions, ScrollView, StatusBar } from 'react-native';
 import Colors from '@/constants/colors';
 import { ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Bell, Send, Users, Calendar, Gift, MessageSquare } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { notificationsApi } from '@/lib/api/notifications';
 import { useFonts } from 'expo-font';
+import { useTranslation } from 'react-i18next';
 
-const TITLES = [
-  'תזכורת לתור',
-  'ברכה לחג',
-  'הודעה על מבצע',
-  'הודעה כללית',
-];
-
-const TITLE_TO_TYPE = {
-  'תזכורת לתור': 'appointment_reminder',
-  'ברכה לחג': 'general',
-  'הודעה על מבצע': 'promotion',
-  'הודעה כללית': 'general',
-} as const;
-
-const TITLE_TO_ICON = {
-  'תזכורת לתור': Calendar,
-  'ברכה לחג': Gift,
-  'הודעה על מבצע': Bell,
-  'הודעה כללית': MessageSquare,
-} as const;
+const TITLE_KEYS = ['appointmentReminder','holidayGreeting','promotion','general'] as const;
+const KEY_TO_TYPE: Record<typeof TITLE_KEYS[number], 'appointment_reminder'|'promotion'|'general'> = {
+  appointmentReminder: 'appointment_reminder',
+  holidayGreeting: 'general',
+  promotion: 'promotion',
+  general: 'general',
+};
+const KEY_TO_ICON: Record<typeof TITLE_KEYS[number], any> = {
+  appointmentReminder: Calendar,
+  holidayGreeting: Gift,
+  promotion: Bell,
+  general: MessageSquare,
+};
 
 export default function ClientNotificationsScreen() {
+  const { t } = useTranslation();
   const [message, setMessage] = useState('');
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState<string>('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [buttonAnim] = useState(new Animated.Value(1));
   const [toast, setToast] = useState('');
@@ -45,14 +40,15 @@ export default function ClientNotificationsScreen() {
     'FbPragmati-Black': require('@/assets/fonts/FbPragmati-Black.otf'),
   });
 
+  const titles = useMemo(() => TITLE_KEYS.map(k => t(`admin.notificationsComposer.title.${k}`, k)), [t]);
   const handleSend = async () => {
     Keyboard.dismiss();
     if (!title) {
-      setError('יש לבחור כותרת להודעה');
+      setError(t('admin.notificationsComposer.error.noTitle','Please select a title'));
       return;
     }
     if (!message.trim()) {
-      setError('יש להזין תוכן להודעה');
+      setError(t('admin.notificationsComposer.error.noMessage','Please enter a message'));
       return;
     }
     
@@ -65,7 +61,10 @@ export default function ClientNotificationsScreen() {
         Animated.timing(buttonAnim, { toValue: 1, duration: 100, useNativeDriver: true })
       ]).start();
 
-      const notificationType = TITLE_TO_TYPE[title as keyof typeof TITLE_TO_TYPE] || 'general';
+      // Find key by current localized title
+      const keyIndex = titles.indexOf(title);
+      const key = keyIndex >= 0 ? TITLE_KEYS[keyIndex] : 'general';
+      const notificationType = KEY_TO_TYPE[key];
       
       const success = await notificationsApi.sendNotificationToAllClients(
         title,
@@ -75,15 +74,15 @@ export default function ClientNotificationsScreen() {
 
       if (success) {
         setSent(true);
-        setToast('ההודעה נשלחה בהצלחה לכל הלקוחות עם התראות Push!');
+        setToast(t('admin.notificationsComposer.sentToast','Notification sent to all clients with push enabled!'));
         setMessage('');
         setTitle('');
       } else {
-        setError('אירעה שגיאה בשליחת ההודעה. אנא נסה שוב.');
+        setError(t('admin.notificationsComposer.error.sendFailed','Failed to send notification. Please try again.'));
       }
     } catch (error) {
       console.error('Error sending notification:', error);
-      setError('אירעה שגיאה בשליחת ההודעה. אנא נסה שוב.');
+      setError(t('admin.notificationsComposer.error.sendFailed','Failed to send notification. Please try again.'));
     } finally {
       setIsSending(false);
       setTimeout(() => {
@@ -94,7 +93,7 @@ export default function ClientNotificationsScreen() {
   };
 
   if (!fontsLoaded) {
-    return <View style={{ flex: 1, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' }}><Text>טוען...</Text></View>;
+    return <View style={{ flex: 1, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' }}><Text>{t('loading','Loading...')}</Text></View>;
   }
 
   return (
@@ -103,8 +102,8 @@ export default function ClientNotificationsScreen() {
       
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>התראות</Text>
-        <Text style={styles.headerSubtitle}>שליחת הודעות לכל הלקוחות</Text>
+        <Text style={styles.headerTitle}>{t('notifications.title','Notifications')}</Text>
+        <Text style={styles.headerSubtitle}>{t('admin.notificationsComposer.subtitle','Send a message to all clients')}</Text>
       </View>
 
       {/* Toast Message */}
@@ -123,14 +122,14 @@ export default function ClientNotificationsScreen() {
               <Bell size={24} color="#1C1C1E" />
             </View>
             <View style={styles.headerTextContainer}>
-              <Text style={styles.cardTitle}>יצירת התראה חדשה</Text>
-              <Text style={styles.cardSubtitle}>בחר סוג הודעה והזן את התוכן לשליחה מיידית</Text>
+              <Text style={styles.cardTitle}>{t('admin.notificationsComposer.createTitle','Create a new notification')}</Text>
+              <Text style={styles.cardSubtitle}>{t('admin.notificationsComposer.createSubtitle','Choose a type and enter the content to send now')}</Text>
             </View>
           </View>
 
           {/* Notification Type Selection */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>סוג ההתראה</Text>
+            <Text style={styles.sectionTitle}>{t('admin.notificationsComposer.type','Notification type')}</Text>
             <TouchableOpacity
               style={styles.dropdown}
               onPress={() => setShowDropdown(!showDropdown)}
@@ -140,7 +139,9 @@ export default function ClientNotificationsScreen() {
                 {title ? (
                   <>
                     {(() => {
-                      const IconComponent = TITLE_TO_ICON[title as keyof typeof TITLE_TO_ICON];
+                      const idx = titles.indexOf(title);
+                      const key = idx >= 0 ? TITLE_KEYS[idx] : 'general';
+                      const IconComponent = KEY_TO_ICON[key];
                       return IconComponent ? <IconComponent size={20} color="#1C1C1E" style={{ marginLeft: 12 }} /> : null;
                     })()}
                     <Text style={styles.dropdownText}>{title}</Text>
@@ -148,7 +149,7 @@ export default function ClientNotificationsScreen() {
                 ) : (
                   <>
                     <MessageSquare size={20} color="#8E8E93" style={{ marginLeft: 12 }} />
-                    <Text style={[styles.dropdownText, { color: '#8E8E93' }]}>בחר סוג התראה</Text>
+                    <Text style={[styles.dropdownText, { color: '#8E8E93' }]}>{t('admin.notificationsComposer.selectType','Select notification type')}</Text>
                   </>
                 )}
               </View>
@@ -161,20 +162,21 @@ export default function ClientNotificationsScreen() {
             
             {showDropdown && (
               <View style={styles.dropdownList}>
-                {TITLES.map((t, idx) => {
-                  const IconComponent = TITLE_TO_ICON[t as keyof typeof TITLE_TO_ICON];
+                {titles.map((label, idx) => {
+                  const key = TITLE_KEYS[idx];
+                  const IconComponent = KEY_TO_ICON[key];
                   return (
                     <TouchableOpacity
-                      key={t}
+                      key={label}
                       style={[styles.dropdownItem, idx !== TITLES.length - 1 && styles.dropdownItemBorder]}
                       onPress={() => {
-                        setTitle(t);
+                        setTitle(label);
                         setShowDropdown(false);
                       }}
                     >
                       <View style={styles.dropdownItemContent}>
                         {IconComponent && <IconComponent size={18} color="#1C1C1E" style={{ marginLeft: 12 }} />}
-                        <Text style={styles.dropdownItemText}>{t}</Text>
+                        <Text style={styles.dropdownItemText}>{label}</Text>
                       </View>
                     </TouchableOpacity>
                   );
@@ -185,13 +187,13 @@ export default function ClientNotificationsScreen() {
 
           {/* Message Content */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>תוכן ההודעה</Text>
+            <Text style={styles.sectionTitle}>{t('admin.notificationsComposer.message','Message content')}</Text>
             <View style={styles.inputContainer}>
               <TextInput
                 style={[styles.input, { minHeight: 120 }]}
                 value={message}
                 onChangeText={setMessage}
-                placeholder="כתוב כאן את תוכן ההודעה..."
+                placeholder={t('admin.notificationsComposer.messagePlaceholder','Write your message here...')}
                 placeholderTextColor="#8E8E93"
                 multiline
                 textAlign="right"
@@ -218,7 +220,7 @@ export default function ClientNotificationsScreen() {
               <View style={styles.sendButtonContent}>
                 <Send size={20} color="#FFFFFF" style={{ marginLeft: 8 }} />
                 <Text style={styles.sendButtonText}>
-                  {isSending ? 'שולח...' : 'שלח לכל הלקוחות'}
+                  {isSending ? t('admin.notificationsComposer.sending','Sending...') : t('admin.notificationsComposer.sendAll','Send to all clients')}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -228,7 +230,7 @@ export default function ClientNotificationsScreen() {
         {/* Preview Section */}
         {title && message && (
           <View style={styles.previewCard}>
-            <Text style={styles.previewTitle}>תצוגה מקדימה</Text>
+            <Text style={styles.previewTitle}>{t('admin.notificationsComposer.preview','Preview')}</Text>
             <View style={styles.notificationPreview}>
               <View style={{ marginBottom: 12 }}>
                 <Text style={styles.notificationTitle}>{title}</Text>

@@ -743,13 +743,13 @@ export default function ClientAppointmentsScreen() {
         setSelectedAppointment(null);
 
         // Create admin notification about the cancellation (target specific assigned barber if available)
-        const canceledBy = user?.name || selectedAppointment.client_name || 'Client';
+        const canceledBy = user?.name || selectedAppointment.client_name || t('common.client', 'Client');
         const canceledPhone = user?.phone || selectedAppointment.client_phone || '';
-        const serviceName = selectedAppointment.service_name || 'Service';
+        const serviceName = selectedAppointment.service_name || t('booking.field.service', 'Service');
         const date = selectedAppointment.slot_date;
         const time = selectedAppointment.slot_time;
-        const title = 'Appointment Cancellation';
-        const content = `${canceledBy} (${canceledPhone}) canceled an appointment for "${serviceName}" on ${date} at ${time}`;
+        const title = t('appointments.cancelled.title', 'Appointment Cancellation');
+        const content = t('appointments.cancelled.content', '{{name}} ({{phone}}) canceled an appointment for "{{service}}" on {{date}} at {{time}}', { name: canceledBy, phone: canceledPhone, service: serviceName, date, time });
         // If the appointment has a specific barber/admin, notify only them
         const assignedAdminId = (selectedAppointment as any)?.barber_id || (selectedAppointment as any)?.user_id;
         if (assignedAdminId) {
@@ -759,10 +759,10 @@ export default function ClientAppointmentsScreen() {
           notificationsApi.createAdminNotification(title, content, 'system').catch(() => {});
         }
       } else {
-        Alert.alert('Cannot Cancel Appointment', result.error || 'Unable to cancel the appointment. Please try again.');
+        Alert.alert(t('appointments.cannotCancel.title', 'Cannot Cancel Appointment'), result.error || t('appointments.cannotCancel.message', 'Unable to cancel the appointment. Please try again.'));
       }
     } catch (error) {
-      Alert.alert('Error', 'An error occurred while cancelling. Please try again.');
+      Alert.alert(t('error.generic', 'Error'), t('appointments.cancelError', 'An error occurred while cancelling. Please try again.'));
     } finally {
       setIsCanceling(false);
     }

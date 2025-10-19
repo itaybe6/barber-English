@@ -9,6 +9,7 @@ import SearchBar from '@/components/SearchBar';
 import { Heart, Plus } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ScrollView } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 const { width } = Dimensions.get('window');
 const numColumns = 2;
@@ -104,6 +105,7 @@ const updatedDesigns = [
 
 export default function GalleryScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
@@ -137,7 +139,7 @@ export default function GalleryScreen() {
               styles.categoryChipText,
               selectedCategory === null && styles.selectedCategoryChipText
             ]}>
-              הכל
+              {t('admin.gallery.all','All')}
             </Text>
           </TouchableOpacity>
           

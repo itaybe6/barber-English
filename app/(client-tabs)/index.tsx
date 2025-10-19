@@ -465,11 +465,11 @@ export default function ClientHomeScreen() {
       if (success) {
         // Remove from local state
         setWaitlistEntries(prev => prev.filter(entry => entry.id !== entryId));
-        Alert.alert('Removed from waitlist', 'You have been successfully removed from the waitlist');
+        Alert.alert(t('removed.from.waitlist', 'Removed from waitlist'), t('removed.from.waitlist.message', 'You have been successfully removed from the waitlist'));
       }
     } catch (error) {
       console.error('Error removing from waitlist:', error);
-      Alert.alert('Error', 'An error occurred while removing from the waitlist');
+      Alert.alert(t('error.generic', 'Error'), t('error.removing.waitlist', 'An error occurred while removing from the waitlist'));
     } finally {
       setIsRemovingFromWaitlist(false);
     }
@@ -904,7 +904,7 @@ export default function ClientHomeScreen() {
           {/* Next Appointment */}
           {isLoading ? (
             <View style={styles.loadingCard}>
-              <Text style={styles.loadingText}>Loading appointments...</Text>
+              <Text style={styles.loadingText}>{t('appointments.loadingAppointments', 'Loading your appointments...')}</Text>
             </View>
           ) : nextAppointment ? (
             <TouchableOpacity
@@ -1027,8 +1027,8 @@ export default function ClientHomeScreen() {
               if (!isAuthenticated) {
                 setLoginModal({
                   visible: true,
-                  title: 'Login Required',
-                  message: 'Please sign in to view full designs.',
+                  title: t('login.required', 'Login Required'),
+                  message: t('gallery.loginToView', 'Please sign in to view full designs.'),
                 });
                 return;
               }
@@ -1046,8 +1046,8 @@ export default function ClientHomeScreen() {
               if (!isAuthenticated) {
                 setLoginModal({
                   visible: true,
-                  title: 'Login Required',
-                  message: 'Please sign in to view product details.',
+                  title: t('login.required', 'Login Required'),
+                  message: t('products.loginToViewDetails', 'Please sign in to view product details.'),
                 });
                 return;
               }
@@ -1116,7 +1116,7 @@ export default function ClientHomeScreen() {
                 <Image source={getCurrentClientLogo()} style={styles.mapLogoImage} resizeMode="contain" />
               </View>
               <View style={styles.mapAttribution}>
-                <Text style={styles.mapAttributionText}>Maps</Text>
+                <Text style={styles.mapAttributionText}>{t('map.mapsLabel', 'Maps')}</Text>
               </View>
               {/* Bottom dark bar with business name and address */}
               {(businessProfile?.display_name || displayAddress) && (
@@ -1175,7 +1175,7 @@ export default function ClientHomeScreen() {
               onPress={async () => {
                 const phoneToUse = businessPhone || managerPhone;
                 if (!phoneToUse) {
-                  Alert.alert(t('error.generic'), 'Business phone number not available');
+                  Alert.alert(t('error.generic', 'Error'), t('appointments.managerPhoneUnavailable', 'Manager phone number is currently unavailable'));
                   return;
                 }
                 const message = 'Hi';
@@ -1187,10 +1187,10 @@ export default function ClientHomeScreen() {
                   if (canOpen) {
                     await Linking.openURL(smsUrl);
                   } else {
-                    Alert.alert('Error', 'SMS app cannot be opened on this device');
+                    Alert.alert(t('error.generic', 'Error'), t('common.smsOpenFailed', 'SMS app cannot be opened on this device'));
                   }
                 } catch (e) {
-                  Alert.alert(t('error.generic'), 'SMS app cannot be opened on this device');
+                  Alert.alert(t('error.generic', 'Error'), t('common.smsOpenFailed', 'SMS app cannot be opened on this device'));
                 }
               }}
               activeOpacity={0.8}

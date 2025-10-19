@@ -24,6 +24,7 @@ import { notifyWaitlistOnBusinessHoursUpdate } from '@/lib/api/waitlistNotificat
 import { BusinessHours } from '@/lib/supabase';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { useAuthStore } from '@/stores/authStore';
+import { useTranslation } from 'react-i18next';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 
 // Modern Apple-like Colors
@@ -220,6 +221,7 @@ const TimePicker: React.FC<TimePickerProps & { primaryColor?: string; useAmPm?: 
 };
 
 export default function BusinessHoursScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { user } = useAuthStore();
   const { colors: businessColors } = useBusinessColors();
@@ -236,7 +238,15 @@ export default function BusinessHoursScreen() {
   const useAmPm = user?.user_type === 'admin';
 
   const getDayName = (dayOfWeek: number) => {
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayNames = [
+      t('day.sunday','Sunday'),
+      t('day.monday','Monday'),
+      t('day.tuesday','Tuesday'),
+      t('day.wednesday','Wednesday'),
+      t('day.thursday','Thursday'),
+      t('day.friday','Friday'),
+      t('day.saturday','Saturday')
+    ];
     return dayNames[dayOfWeek] || '';
   };
 
@@ -658,8 +668,8 @@ export default function BusinessHoursScreen() {
       {/* Header within a top-only SafeArea to keep top background white */}
       <SafeAreaView edges={['top']} style={{ backgroundColor: Colors.card }}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Working hours</Text>
-          <Text style={styles.headerSubtitle}>Set your weekly working schedule and breaks</Text>
+          <Text style={styles.headerTitle}>{t('admin.hours.title','Working hours')}</Text>
+          <Text style={styles.headerSubtitle}>{t('admin.hours.subtitle','Set your weekly working schedule and breaks')}</Text>
         </View>
       </SafeAreaView>
 
@@ -679,7 +689,7 @@ export default function BusinessHoursScreen() {
             style={[styles.constraintsButton, { backgroundColor: businessColors.primary, shadowColor: businessColors.primary }]}
           >
             <Ionicons name="remove-circle-outline" size={18} color={'#FFFFFF'} />
-            <Text style={styles.constraintsButtonText}>Manage constraints (closed dates/hours)</Text>
+            <Text style={styles.constraintsButtonText}>{t('admin.hours.manageConstraints','Manage constraints (closed dates/hours)')}</Text>
           </TouchableOpacity>
         </View>
         {/* Global constant break between appointments */}
@@ -687,10 +697,10 @@ export default function BusinessHoursScreen() {
           <View style={styles.globalBreakCard}>
             <View style={styles.sectionHeader}>
               <Ionicons name="timer-outline" size={18} color={businessColors.primary} />
-              <Text style={[styles.sectionTitle, { color: businessColors.primary }]}>Break minutes</Text>
+              <Text style={[styles.sectionTitle, { color: businessColors.primary }]}>{t('admin.hours.breakMinutes','Break minutes')}</Text>
             </View>
             <Text style={{ color: Colors.secondaryText, textAlign: 'left', marginBottom: 12 }}>
-              Choose the number of minutes to add between appointments. 0 keeps no fixed break.
+              {t('admin.hours.breakHint','Choose the number of minutes to add between appointments. 0 keeps no fixed break.')}
             </Text>
             <TouchableOpacity
               style={styles.breakPickerButton}
@@ -698,7 +708,7 @@ export default function BusinessHoursScreen() {
               activeOpacity={0.85}
             >
               <BlurView intensity={30} tint="light" style={styles.breakPickerInner}>
-                <Text style={[styles.dropdownButtonText, { color: Colors.text }]}> {globalBreakMinutes} min</Text>
+                <Text style={[styles.dropdownButtonText, { color: Colors.text }]}> {globalBreakMinutes} {t('admin.hours.min','min')}</Text>
                 {isSavingGlobalBreak ? (
                   <ActivityIndicator size="small" color={Colors.text} />
                 ) : (
@@ -720,7 +730,7 @@ export default function BusinessHoursScreen() {
           <View style={[styles.bottomSheet, { backgroundColor: Colors.card }]}>
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
-              <Text style={[styles.sheetTitle, { color: businessColors.primary }]}>Break between appointments</Text>
+              <Text style={[styles.sheetTitle, { color: businessColors.primary }]}>{t('admin.hours.breakBetween','Break between appointments')}</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 <TouchableOpacity onPress={() => setIsBreakPickerOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                   <Ionicons name="close" size={20} color={Colors.secondaryText} />

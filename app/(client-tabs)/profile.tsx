@@ -34,6 +34,7 @@ export default function ClientProfileScreen() {
   const [showEditPassword, setShowEditPassword] = useState<boolean>(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
+  const [isLanguageOpen, setIsLanguageOpen] = useState(false);
   const [pushEnabled, setPushEnabled] = useState<boolean>(notificationsEnabled);
   const [isUpcomingOpen, setIsUpcomingOpen] = useState(false);
   const [upcomingAppointments, setUpcomingAppointments] = useState<AvailableTimeSlot[]>([]);
@@ -217,6 +218,13 @@ export default function ClientProfileScreen() {
           }
         } catch {}
       },
+    },
+    {
+      id: 'language',
+      icon: 'globe-outline',
+      title: t('profile.language.title', 'Language'),
+      subtitle: i18n.language?.startsWith('he') ? t('profile.language.hebrew','Hebrew') : t('profile.language.english','English'),
+      onPress: () => setIsLanguageOpen(true),
     },
     {
       id: 'delete-account',
@@ -548,7 +556,7 @@ export default function ClientProfileScreen() {
                     return;
                   }
                   if (!editName.trim() || !editPhone.trim()) {
-                    Alert.alert('Error', 'Please fill in all fields');
+                    Alert.alert(t('error.generic','Error'), t('profile.edit.fillAll','Please fill in all fields'));
                     return;
                   }
                   try {
@@ -557,18 +565,19 @@ export default function ClientProfileScreen() {
                       name: editName.trim(),
                       phone: editPhone.trim(),
                       email: (editEmail || '').trim() ? (editEmail || '').trim() : (null as any),
+                      language: i18n.language?.startsWith('he') ? 'he' : 'en',
                       ...(editPassword.trim() ? { password: editPassword.trim() } : {}),
                     } as any);
                     if (updated) {
-                      updateUserProfile({ name: updated.name as any, phone: (updated as any).phone, email: (updated as any).email } as any);
+                      updateUserProfile({ name: updated.name as any, phone: (updated as any).phone, email: (updated as any).email, language: (updated as any).language } as any);
                     } else {
-                      Alert.alert('Error', 'Failed to save profile');
+                      Alert.alert(t('error.generic','Error'), t('profile.saveFailed','Failed to save profile'));
                       return;
                     }
                     setIsEditOpen(false);
                   } catch (e) {
                     console.error('Failed to save profile', e);
-                    Alert.alert('Error', 'Failed to save profile');
+                    Alert.alert(t('error.generic','Error'), t('profile.saveFailed','Failed to save profile'));
                   } finally {
                     setIsSaving(false);
                   }
@@ -581,6 +590,61 @@ export default function ClientProfileScreen() {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Language Bottom Sheet */}
+      <Modal visible={isLanguageOpen} transparent animationType="slide" onRequestClose={() => setIsLanguageOpen(false)}>
+        <View style={styles.historyOverlay}>
+          <View style={styles.historySheet}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <View style={{ width: 44 }} />
+              <Text style={styles.sheetTitle}>{t('profile.language.title','Language')}</Text>
+              <TouchableOpacity onPress={() => setIsLanguageOpen(false)} style={styles.sheetCloseBtn}>
+                <Ionicons name="close" size={22} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+            <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+              <TouchableOpacity
+                style={styles.languageOption}
+                onPress={async () => {
+                  try {
+                    await i18n.changeLanguage('en');
+                    if (user?.id) {
+                      const updated = await usersApi.updateUser(user.id, { language: 'en' } as any);
+                      if (updated) updateUserProfile({ language: 'en' } as any);
+                    }
+                  } finally {
+                    setIsLanguageOpen(false);
+                  }
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.languageOptionText}>{t('profile.language.english','English')}</Text>
+                {i18n.language?.startsWith('en') && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.languageOption}
+                onPress={async () => {
+                  try {
+                    await i18n.changeLanguage('he');
+                    if (user?.id) {
+                      const updated = await usersApi.updateUser(user.id, { language: 'he' } as any);
+                      if (updated) updateUserProfile({ language: 'he' } as any);
+                    }
+                  } finally {
+                    setIsLanguageOpen(false);
+                  }
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.languageOptionText}>{t('profile.language.hebrew','Hebrew')}</Text>
+                {i18n.language?.startsWith('he') && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
+              </TouchableOpacity>
+              <Text style={styles.helperNote}>{t('profile.language.restartNote','Direction changes may require app restart')}</Text>
+            </View>
+          </View>
+        </View>
       </Modal>
 
       {/* History Bottom Sheet */}
@@ -1172,6 +1236,29 @@ const styles = StyleSheet.create<any>({
     fontSize: 14,
     color: Colors.text,
     lineHeight: 22,
+    textAlign: 'left',
+  },
+  languageOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  languageOptionText: {
+    fontSize: 16,
+    color: Colors.text,
+    fontWeight: '600',
+  },
+  helperNote: {
+    marginTop: 6,
+    fontSize: 12,
+    color: Colors.subtext,
     textAlign: 'left',
   },
   statsContainer: {

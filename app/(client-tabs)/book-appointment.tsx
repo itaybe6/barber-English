@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Image, Modal, RefreshControl, Linking, Platform, Dimensions, FlatList } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Image, Modal, RefreshControl, Linking, Platform, Dimensions, FlatList, PanResponder } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { BlurView } from 'expo-blur';
 import * as Calendar from 'expo-calendar';
@@ -500,6 +500,7 @@ export default function BookAppointment() {
   
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [selectedServiceIndex, setSelectedServiceIndex] = useState<number>(0);
   const [availableServices, setAvailableServices] = useState<Service[]>([]);
   const [isLoadingServices, setIsLoadingServices] = useState<boolean>(false);
   const [selectedBarber, setSelectedBarber] = useState<User | null>(null);
@@ -529,13 +530,6 @@ export default function BookAppointment() {
     transform: [{ translateY: interpolate(introFade.value, [0, 1], [20, 0], Extrapolate.CLAMP) }],
   }));
   const hasTriggeredStep2 = React.useRef(false);
-  const serviceScrollX = useSharedValue(0);
-  const serviceScrollHandler = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      'worklet';
-      serviceScrollX.value = e.contentOffset.x;
-    },
-  });
   const resetStep1Guards = React.useCallback(() => {
     try { hasTriggeredStep2.current = false; } catch {}
     try { scrollRef.current?.scrollTo({ y: 0, animated: false }); } catch {}
@@ -567,7 +561,7 @@ export default function BookAppointment() {
         }
       } else if (currentStep === 2) {
         // Scroll up (pull) → back to barber selection
-        if (y < -16) {
+        if (y < -8) {
           isTransitioning.current = true;
           step2Fade.value = withTiming(0, { duration: 240, easing: Easing.out(Easing.cubic) }, () => {
             runOnJS(setCurrentStep)(1);
@@ -578,7 +572,7 @@ export default function BookAppointment() {
           return;
         }
         // Scroll down → to day selection, only if a service is selected
-        if (y > 8 && selectedService && !hasTriggeredStep3.current) {
+        if (y > 16 && selectedService && !hasTriggeredStep3.current) {
           hasTriggeredStep3.current = true;
           isTransitioning.current = true;
           step2Fade.value = withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) }, () => {
@@ -605,52 +599,160 @@ export default function BookAppointment() {
     if (currentStep === 2) {
       hasTriggeredStep3.current = false;
       isTransitioning.current = false;
+      step2Fade.value = 1;
+      // Reset scroll position for step 2 to enable scrolling
+      setTimeout(() => {
+        try { scrollRef.current?.scrollTo({ y: 0, animated: false }); } catch {}
+      }, 100);
     }
   }, [currentStep]);
 
-  const ServiceCarouselCard: React.FC<{
-    item: Service;
-    index: number;
-    isSelected: boolean;
-    onPress: () => void;
+  // Service carousel selector component - similar to barber selector
+  type ServiceSelectorProps = {
+    services: Service[];
+    activeIndex: number;
+    onIndexChange: (idx: number) => void;
     styles: any;
-  }> = ({ item, index, isSelected, onPress, styles }) => {
-    const cardScaleStyle = useAnimatedStyle(() => {
-      const pos = serviceScrollX.value / SERVICE_ITEM_SIZE;
-      const scale = interpolate(pos, [index - 1, index, index + 1], [0.94, 1.04, 0.94], Extrapolate.CLAMP);
-      const opacity = interpolate(pos, [index - 1, index, index + 1], [0.75, 1, 0.75], Extrapolate.CLAMP);
-      return { transform: [{ scale: scale as any }] as any, opacity } as any;
+    bottomOffset?: number;
+  };
+
+  const ServiceCarouselSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex, onIndexChange, styles, bottomOffset }) => {
+    const SERVICE_ITEM = AVATAR_SIZE + ITEM_SPACING; // Same as barber items for consistency
+    const scrollX = useSharedValue(Math.max(0, activeIndex) * SERVICE_ITEM);
+    const listRef = React.useRef<FlatList>(null);
+    const lastIndex = React.useRef<number>(Math.max(0, activeIndex));
+
+    // Background cross-fade between current and next service image
+    const getCurrentImageUrl = (idx: number) => {
+      const service = services[idx];
+      return (service as any)?.image_url || 
+             (service as any)?.cover_url || 
+             (service as any)?.image || 
+             null;
+    };
+
+    const [bgCurrent, setBgCurrent] = React.useState<string | null>(getCurrentImageUrl(activeIndex));
+    const bgOpacity = useSharedValue(1);
+
+    React.useEffect(() => {
+      const nextUrl = getCurrentImageUrl(activeIndex);
+      if (nextUrl && nextUrl !== bgCurrent) {
+        bgOpacity.value = withTiming(0, { duration: 200, easing: Easing.inOut(Easing.ease) }, (finished) => {
+          if (finished) {
+            runOnJS(setBgCurrent)(nextUrl);
+            bgOpacity.value = 0;
+            bgOpacity.value = withTiming(1, { duration: 300, easing: Easing.inOut(Easing.ease) });
+          }
+        });
+      }
+    }, [activeIndex, services.length]);
+
+    React.useEffect(() => {
+      try {
+        if (listRef.current && Number.isFinite(activeIndex)) {
+          listRef.current.scrollToOffset({ offset: Math.max(0, activeIndex) * SERVICE_ITEM, animated: true });
+        }
+      } catch {}
+    }, [activeIndex]);
+
+    const scrollHandler = useAnimatedScrollHandler({
+      onScroll: (e) => {
+        'worklet';
+        scrollX.value = e.contentOffset.x;
+      },
     });
-    return (
-      <TouchableOpacity activeOpacity={0.85} onPress={onPress}>
-        <Animated.View style={[styles.serviceCarouselCard, cardScaleStyle] as any}>
-          <View style={styles.serviceCarouselImageWrapper}>
-            <Image
-              source={{ uri: (item as any).image_url || (item as any).cover_url || (item as any).image || (item as any).photo || 'https://via.placeholder.com/600x400?text=Service' }}
-              style={styles.serviceCarouselImage}
-              resizeMode="cover"
-            />
-            <View style={styles.serviceBadgeRow}>
-              <View style={[styles.serviceBadge, styles.serviceBadgePrimary]}>
-                <Ionicons name="time-outline" size={14} color="#FFFFFF" />
-                <Text style={styles.serviceBadgeText}>{`${item.duration_minutes ?? 60} ${t('booking.minutes', 'min')}`}</Text>
-              </View>
-              <View style={[styles.serviceBadge, styles.serviceBadgeGhost]}>
-                <Ionicons name="pricetag-outline" size={14} color="#111827" />
-                <Text style={[styles.serviceBadgeText, styles.serviceBadgeTextDark]}>{`${t('booking.price', '$')} ${item.price ?? 0}`}</Text>
-              </View>
-            </View>
-            <View style={styles.serviceTitleOverlay}>
-              <Text style={styles.serviceTitleText}>{item.name}</Text>
-            </View>
-            {isSelected && (
-              <View style={styles.serviceSelectedMark}>
-                <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+
+    const bgStyle = useAnimatedStyle(() => ({ opacity: bgOpacity.value }));
+
+    const CarouselItem: React.FC<{ item: Service; index: number }> = ({ item, index }) => {
+      const cardStyle = (useAnimatedStyle(() => {
+        const pos = scrollX.value / SERVICE_ITEM;
+        const scale = interpolate(pos, [index - 1, index, index + 1], [0.94, 1.08, 0.94], Extrapolate.CLAMP);
+        const opacity = interpolate(pos, [index - 1, index, index + 1], [0.6, 1, 0.6], Extrapolate.CLAMP);
+        return { transform: [{ scale: scale as any }] as any, opacity } as any;
+      }) as any);
+
+      const imageUrl = (item as any)?.image_url || (item as any)?.cover_url || (item as any)?.image || null;
+
+      return (
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => {
+            try {
+              listRef.current?.scrollToOffset({ offset: index * SERVICE_ITEM, animated: true });
+            } catch {}
+            onIndexChange(index);
+          }}
+        >
+          <Animated.View style={[styles.carouselItem, cardStyle]}>
+            {imageUrl ? (
+              <Image source={{ uri: imageUrl }} style={styles.carouselItemImage} />
+            ) : (
+              <View style={[styles.carouselItemImage, styles.carouselItemPlaceholder]}>
+                <Ionicons name="cut" size={28} color="#8E8E93" />
               </View>
             )}
-          </View>
-        </Animated.View>
-      </TouchableOpacity>
+          </Animated.View>
+        </TouchableOpacity>
+      );
+    };
+
+    return (
+      <View style={styles.carouselContainer}>
+        {!!bgCurrent && (
+          <Animated.Image source={{ uri: bgCurrent }} style={[styles.bgImage, bgStyle]} resizeMode="cover" fadeDuration={0 as any} />
+        )}
+        <View style={styles.bgDimOverlay} />
+
+        <View style={[styles.carouselBottomArea, { bottom: (bottomOffset ?? 28) }]}>
+          <AnimatedFlatList
+            ref={listRef as any}
+            horizontal
+            data={services}
+            keyExtractor={(it: Service) => String(it.id)}
+            renderItem={({ item, index }) => <CarouselItem item={item} index={index} />}
+            showsHorizontalScrollIndicator={false}
+            snapToInterval={SERVICE_ITEM}
+            decelerationRate="fast"
+            bounces={false}
+            nestedScrollEnabled={true}
+            style={styles.carouselList}
+            contentContainerStyle={{ paddingHorizontal: (SCREEN.width - SERVICE_ITEM) / 2 }}
+            onScroll={scrollHandler}
+            onMomentumScrollEnd={(e: any) => {
+              const raw = e.nativeEvent.contentOffset.x / SERVICE_ITEM;
+              const idx = Math.round(raw);
+              const clamped = Math.max(0, Math.min(services.length - 1, idx));
+              if (clamped !== lastIndex.current) {
+                lastIndex.current = clamped;
+                onIndexChange(clamped);
+              }
+            }}
+            scrollEventThrottle={16}
+          />
+          {Number.isFinite(activeIndex) && services[activeIndex] && (
+            <View style={{ alignItems: 'center', marginTop: 12 }}>
+              <Text style={styles.carouselActiveName} numberOfLines={1}>
+                {services[activeIndex]?.name || ''}
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 8 }}>
+                <View style={[styles.serviceBadge, styles.serviceBadgePrimary]}>
+                  <Ionicons name="time-outline" size={14} color="#FFFFFF" />
+                  <Text style={styles.serviceBadgeText}>
+                    {`${services[activeIndex]?.duration_minutes ?? 60} ${t('booking.minutes', 'min')}`}
+                  </Text>
+                </View>
+                <View style={[styles.serviceBadge, styles.serviceBadgeGhost]}>
+                  <Ionicons name="pricetag-outline" size={14} color="#111827" />
+                  <Text style={[styles.serviceBadgeText, styles.serviceBadgeTextDark]}>
+                    {`${t('booking.price', '$')} ${services[activeIndex]?.price ?? 0}`}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
+        </View>
+      </View>
     );
   };
   // Reset all local state when the screen gains focus so each visit starts fresh
@@ -666,6 +768,7 @@ export default function BookAppointment() {
 
       setCurrentStep(1);
       setSelectedService(null);
+      setSelectedServiceIndex(0);
       setSelectedBarber(null);
       setSelectedDay(null);
       setSelectedTime(null);
@@ -712,8 +815,6 @@ export default function BookAppointment() {
   const days = getNextNDays(bookingOpenDays);
   const selectedDate = selectedDay !== null ? days[selectedDay]?.fullDate : null;
   const footerVisible =
-    (currentStep === 1 && !!selectedBarber) ||
-    (currentStep === 2 && !!selectedService) ||
     (currentStep === 3 && selectedDay !== null) ||
     currentStep === 4;
   const buttonHeight = 56;
@@ -1542,8 +1643,8 @@ export default function BookAppointment() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={currentStep === 1 ? [] : ['top']}>
-      {currentStep !== 1 && (
+    <SafeAreaView style={styles.container} edges={(currentStep === 1 || currentStep === 2) ? [] : ['top']}>
+      {currentStep >= 3 && (
         <View style={styles.header}>
           <View style={styles.headerContent}>
             <View style={{ width: 22 }} />
@@ -1555,18 +1656,24 @@ export default function BookAppointment() {
           </View>
         </View>
       )}
-      <View style={[styles.contentWrapper, currentStep === 1 ? { backgroundColor: 'transparent', borderTopLeftRadius: 0, borderTopRightRadius: 0, paddingTop: 0 } : null]}>
+      <View style={[styles.contentWrapper, (currentStep === 1 || currentStep === 2) ? { backgroundColor: 'transparent', borderTopLeftRadius: 0, borderTopRightRadius: 0, paddingTop: 0 } : null]}>
         <ScrollView
           ref={scrollRef as any}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: currentStep === 1 ? 160 : contentBottomPadding }]}
+          contentContainerStyle={[
+            styles.scrollContent, 
+            { paddingBottom: (currentStep === 1 || currentStep === 2) ? 160 : contentBottomPadding },
+            (currentStep === 1 || currentStep === 2) ? { minHeight: CAROUSEL_HEIGHT + 100 } : null
+          ]}
           showsVerticalScrollIndicator={false}
           refreshControl={currentStep === 3 ? <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#000" /> : undefined}
           onScroll={handleScrollTransitions}
           alwaysBounceVertical
           bounces
+          scrollEnabled={true}
           overScrollMode="always"
           contentInsetAdjustmentBehavior="always"
           scrollEventThrottle={16}
+          nestedScrollEnabled={true}
         >
 
         {/* Step 1: Barber Selection */}
@@ -1587,6 +1694,7 @@ export default function BookAppointment() {
                     const isSame = selectedBarber?.id === barber.id;
                     setSelectedBarber(isSame ? barber : barber);
                     setSelectedService(null);
+                    setSelectedServiceIndex(0);
                     setSelectedDay(null);
                     setSelectedTime(null);
                     setAvailableSlots([]);
@@ -1604,64 +1712,36 @@ export default function BookAppointment() {
 
         {/* Step 2: Service Selection */}
         {currentStep === 2 && selectedBarber && (
-          <Animated.View style={[styles.section, step2FadeStyle]}>
-            <View style={styles.dayHeaderRow}>
-              <TouchableOpacity 
-                onPress={() => {
-                  step2Fade.value = withTiming(0, { duration: 240, easing: Easing.out(Easing.cubic) }, () => {
-                    runOnJS(setCurrentStep)(1);
-                    runOnJS(resetStep1Guards)();
-                    step2Fade.value = 1;
-                  });
-                }} 
-                style={styles.backCircle} 
-                activeOpacity={0.8}
-              >
-                <Ionicons name="arrow-back" size={18} color="#000000" />
-              </TouchableOpacity>
-              <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>{t('booking.selectService', 'Select Service')}</Text>
-              <View style={{ width: 36 }} />
-            </View>
+          <Animated.View style={[styles.section, styles.sectionFullBleed, step2FadeStyle]}>
             {isLoadingServices ? (
-              <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>{t('booking.loadingServices', 'Loading services...')}</Text>
+              <View style={[styles.loadingContainer, { height: CAROUSEL_HEIGHT, justifyContent: 'center' }]}>
+                <Text style={[styles.loadingText, { color: '#FFFFFF' }]}>{t('booking.loadingServices', 'Loading services...')}</Text>
+              </View>
+            ) : availableServices.length > 0 ? (
+              <View>
+                <ServiceCarouselSelector
+                  services={availableServices}
+                  activeIndex={selectedServiceIndex}
+                  onIndexChange={(idx) => {
+                    const service = availableServices[idx];
+                    if (!service) return;
+                    setSelectedServiceIndex(idx);
+                    setSelectedService(service);
+                    setSelectedDay(null);
+                    setSelectedTime(null);
+                    setAvailableSlots([]);
+                    setIsLoadingSlots(false);
+                    setShowConfirmModal(false);
+                    setShowReplaceModal(false);
+                    setExistingAppointment(null);
+                  }}
+                  styles={styles}
+                  bottomOffset={Math.max(insets.bottom, 20) + 60}
+                />
               </View>
             ) : (
-              <View>
-                <AnimatedFlatList
-                  horizontal
-                  data={availableServices}
-                  keyExtractor={(s: Service) => String(s.id)}
-                  renderItem={({ item, index }) => {
-                    return (
-                      <ServiceCarouselCard
-                        item={item}
-                        index={index}
-                        isSelected={selectedService?.id === item.id}
-                        onPress={() => {
-                          const isSame = selectedService?.id === item.id;
-                          setSelectedService(isSame ? null : item);
-                          setSelectedDay(null);
-                          setSelectedTime(null);
-                          setAvailableSlots([]);
-                          setIsLoadingSlots(false);
-                          setShowConfirmModal(false);
-                          setShowReplaceModal(false);
-                          setExistingAppointment(null);
-                        }}
-                        styles={styles}
-                      />
-                    );
-                  }}
-                  snapToInterval={SERVICE_ITEM_SIZE}
-                  decelerationRate="fast"
-                  showsHorizontalScrollIndicator={false}
-                  bounces={false}
-                  style={{ paddingVertical: 6 }}
-                  contentContainerStyle={{ paddingHorizontal: (SCREEN.width - SERVICE_CARD_WIDTH) / 2 }}
-                  onScroll={serviceScrollHandler}
-                  scrollEventThrottle={16}
-                />
+              <View style={[styles.loadingContainer, { height: CAROUSEL_HEIGHT, justifyContent: 'center' }]}>
+                <Text style={[styles.loadingText, { color: '#FFFFFF' }]}>{t('booking.noServices', 'No services available')}</Text>
               </View>
             )}
           </Animated.View>
@@ -1782,9 +1862,9 @@ export default function BookAppointment() {
       </View>
 
       {/* Footer action button per step */}
-      {footerVisible && currentStep !== 1 && (
+      {footerVisible && currentStep >= 3 && (
         <View style={[styles.bookingFooter, { bottom: footerBottom }]}>
-          {/* Step 1 button moved into overlay; footer hidden */}
+          {/* Step 1 & 2 buttons moved into overlay; footer shown from step 3 onwards */}
 
         {currentStep === 3 && selectedDay !== null && (() => {
           const dateStr = selectedDate?.toISOString().split('T')[0] || '';

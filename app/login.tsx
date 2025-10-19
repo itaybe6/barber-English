@@ -77,7 +77,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!phone.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert(t('error.generic', 'Error'), t('login.fillAll', 'Please fill in all fields'));
       return;
     }
 
@@ -90,12 +90,12 @@ export default function LoginScreen() {
       if (user) {
         // Blocked user cannot log in
         if ((user as any)?.block) {
-          Alert.alert('Account Blocked', 'Your account is blocked and cannot sign in. Please contact the manager.');
+          Alert.alert(t('account.blocked', 'Account Blocked'), t('login.blockedCannotSignIn', 'Your account is blocked and cannot sign in. Please contact the manager.'));
           return;
         }
         // Validate user type
         if (!isValidUserType(user.user_type)) {
-          Alert.alert('Error', 'Invalid user type');
+          Alert.alert(t('error.generic', 'Error'), t('login.invalidUserType', 'Invalid user type'));
           return;
         }
         
@@ -129,7 +129,7 @@ export default function LoginScreen() {
 
         if (userInOtherBusiness) {
           // Don't reveal that user exists in another business - just show generic error
-          Alert.alert('Error', 'Incorrect phone or password');
+          Alert.alert(t('error.generic', 'Error'), t('login.incorrectCredentials', 'Incorrect phone or password'));
           return;
         }
 
@@ -144,7 +144,7 @@ export default function LoginScreen() {
             router.replace('/(client-tabs)');
           }
         } else {
-          Alert.alert('Error', 'Incorrect phone or password');
+          Alert.alert(t('error.generic', 'Error'), t('login.incorrectCredentials', 'Incorrect phone or password'));
         }
       }
     } catch (error) {
@@ -162,11 +162,11 @@ export default function LoginScreen() {
             router.replace('/(client-tabs)');
           }
         } else {
-          Alert.alert('Error', 'Incorrect phone or password');
+          Alert.alert(t('error.generic', 'Error'), t('login.incorrectCredentials', 'Incorrect phone or password'));
         }
       } catch (demoError) {
         console.error('Demo login error:', demoError);
-        Alert.alert('Error', 'An error occurred during sign-in');
+        Alert.alert(t('error.generic', 'Error'), t('login.signInError', 'An error occurred during sign-in'));
       }
     } finally {
       setIsLoading(false);
@@ -175,9 +175,8 @@ export default function LoginScreen() {
 
 
   const handleForgotSubmit = async () => {
-    const p = (forgotPhone || '').trim();
     const e = (forgotEmail || '').trim();
-    if (!e) { Alert.alert('Error', 'Please enter an email'); return; }
+    if (!e) { Alert.alert(t('error.generic', 'Error'), t('login.enterEmail', 'Please enter an email')); return; }
     setIsSendingReset(true);
     try {
       // 1) Try Edge Function first
@@ -189,14 +188,14 @@ export default function LoginScreen() {
         console.warn('[ForgotPassword] edge failed, falling back to auth.resetPasswordForEmail', fnErr);
         const { error: rpErr } = await supabase.auth.resetPasswordForEmail(e);
         if (rpErr) {
-          const msg = (rpErr as any)?.message || 'Error requesting password reset';
-          Alert.alert('Error', String(msg));
+          const msg = (rpErr as any)?.message || t('login.resetError', 'Error requesting password reset');
+          Alert.alert(t('error.generic', 'Error'), String(msg));
           return;
         }
       }
 
-      Alert.alert('Email Sent', 'We sent you a password reset email. Check your inbox.', [
-        { text: 'OK', onPress: () => setIsForgotOpen(false) },
+      Alert.alert(t('login.emailSent.title', 'Email Sent'), t('login.emailSent.message', 'We sent you a password reset email. Check your inbox.'), [
+        { text: t('ok', 'OK'), onPress: () => setIsForgotOpen(false) },
       ]);
     } catch (err) {
       console.error('Forgot password error (invoke/catch):', err);
@@ -204,15 +203,15 @@ export default function LoginScreen() {
       try {
         const { error: rpErr } = await supabase.auth.resetPasswordForEmail(e);
         if (rpErr) {
-          Alert.alert('Error', String((rpErr as any)?.message || 'An error occurred. Please try again.'));
+          Alert.alert(t('error.generic', 'Error'), String((rpErr as any)?.message || t('common.tryAgain', 'An error occurred. Please try again.')));
           return;
         }
-        Alert.alert('Email Sent', 'We sent you a password reset email. Check your inbox.', [
-          { text: 'OK', onPress: () => setIsForgotOpen(false) },
+        Alert.alert(t('login.emailSent.title', 'Email Sent'), t('login.emailSent.message', 'We sent you a password reset email. Check your inbox.'), [
+          { text: t('ok', 'OK'), onPress: () => setIsForgotOpen(false) },
         ]);
       } catch (subErr) {
         console.error('Forgot password fallback error:', subErr);
-        Alert.alert('Error', 'An error occurred. Please try again.');
+        Alert.alert(t('error.generic', 'Error'), t('common.tryAgain', 'An error occurred. Please try again.'));
       }
     } finally {
       setIsSendingReset(false);

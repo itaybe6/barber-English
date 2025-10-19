@@ -3,7 +3,7 @@ import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 import { Text, View, I18nManager } from 'react-native';
-import '@/src/config/i18n';
+import i18n from '@/src/config/i18n';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -99,10 +99,18 @@ export default function RootLayout() {
     };
   }, []);
 
-  // Effect to monitor authentication changes
+  // When user changes, adopt their saved language if present
   useEffect(() => {
-    // Authentication state monitoring
-  }, [isAuthenticated, user]);
+    try {
+      const userLang: unknown = (user as any)?.language;
+      if (typeof userLang === 'string' && userLang.length > 0) {
+        const normalized = userLang.startsWith('he') ? 'he' : 'en';
+        if (i18n.language !== normalized) {
+          i18n.changeLanguage(normalized).catch(() => {});
+        }
+      }
+    } catch {}
+  }, [user]);
 
   // Handle font loading errors gracefully - DO NOT THROW IN PRODUCTION
   useEffect(() => {

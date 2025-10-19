@@ -25,8 +25,10 @@ import { productsApi, Product, CreateProductData } from '@/lib/api/products';
 import { useProductsStore } from '@/stores/productsStore';
 import * as ImagePicker from 'expo-image-picker';
 import { compressImage } from '@/lib/utils/imageCompression';
+import { useTranslation } from 'react-i18next';
 
 export default function EditProductsScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const colors = useColors();
   const styles = createStyles(colors);
@@ -148,7 +150,7 @@ export default function EditProductsScreen() {
       setProductForm(prev => ({ ...prev, image_url: finalImageUrl }));
     } catch (error) {
       console.error('Error handling image selection:', error);
-      Alert.alert('Error', 'Failed to process image');
+      Alert.alert(t('error.generic','Error'), t('admin.products.imageProcessFailed','Failed to process image'));
     } finally {
       setIsUploadingImage(false);
     }
@@ -159,23 +161,23 @@ export default function EditProductsScreen() {
       // Request permissions
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Please grant camera roll permissions to select images');
+        Alert.alert(t('permission.required','Permission Required'), t('admin.products.galleryPermission','Please grant camera roll permissions to select images'));
         return;
       }
 
       // Show action sheet
       Alert.alert(
-        'Select Image',
-        'Choose an option',
+        t('admin.products.selectImage','Select Image'),
+        t('admin.products.chooseOption','Choose an option'),
         [
-          { text: 'Camera', onPress: () => openCamera() },
-          { text: 'Photo Library', onPress: () => openImageLibrary() },
-          { text: 'Cancel', style: 'cancel' },
+          { text: t('admin.products.camera','Camera'), onPress: () => openCamera() },
+          { text: t('admin.products.photoLibrary','Photo Library'), onPress: () => openImageLibrary() },
+          { text: t('cancel','Cancel'), style: 'cancel' },
         ]
       );
     } catch (error) {
       console.error('Error requesting permissions:', error);
-      Alert.alert('Error', 'Failed to access image picker');
+      Alert.alert(t('error.generic','Error'), t('admin.products.pickerAccessFailed','Failed to access image picker'));
     }
   };
 
@@ -183,7 +185,7 @@ export default function EditProductsScreen() {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Please grant camera permissions to take photos');
+        Alert.alert(t('permission.required','Permission Required'), t('admin.products.cameraPermission','Please grant camera permissions to take photos'));
         return;
       }
 
@@ -199,7 +201,7 @@ export default function EditProductsScreen() {
       }
     } catch (error) {
       console.error('Error opening camera:', error);
-      Alert.alert('Error', 'Failed to open camera');
+      Alert.alert(t('error.generic','Error'), t('admin.products.cameraOpenFailed','Failed to open camera'));
     }
   };
 
@@ -217,18 +219,18 @@ export default function EditProductsScreen() {
       }
     } catch (error) {
       console.error('Error opening image library:', error);
-      Alert.alert('Error', 'Failed to open image library');
+      Alert.alert(t('error.generic','Error'), t('admin.products.libraryOpenFailed','Failed to open image library'));
     }
   };
 
   const handleSaveProduct = async () => {
     if (!productForm.name.trim()) {
-      Alert.alert('Error', 'Please enter a product name');
+      Alert.alert(t('error.generic','Error'), t('admin.products.nameRequired','Please enter a product name'));
       return;
     }
 
     if (!productForm.price || parseFloat(productForm.price) <= 0) {
-      Alert.alert('Error', 'Please enter a valid price');
+      Alert.alert(t('error.generic','Error'), t('admin.products.priceInvalid','Please enter a valid price'));
       return;
     }
 
@@ -245,11 +247,11 @@ export default function EditProductsScreen() {
       if (editingProduct) {
         // Update existing product
         await productsApi.updateProduct(editingProduct.id, productData);
-        Alert.alert('Success', 'Product updated successfully');
+        Alert.alert(t('success.generic','Success'), t('admin.products.updateSuccess','Product updated successfully'));
       } else {
         // Create new product
         await productsApi.createProduct(productData);
-        Alert.alert('Success', 'Product created successfully');
+        Alert.alert(t('success.generic','Success'), t('admin.products.createSuccess','Product created successfully'));
       }
 
       // Refresh products list
@@ -257,7 +259,7 @@ export default function EditProductsScreen() {
       closeModal();
     } catch (error) {
       console.error('Error saving product:', error);
-      Alert.alert('Error', editingProduct ? 'Failed to update product' : 'Failed to create product');
+      Alert.alert(t('error.generic','Error'), editingProduct ? t('admin.products.updateFailed','Failed to update product') : t('admin.products.createFailed','Failed to create product'));
     } finally {
       setIsSaving(false);
     }
@@ -265,21 +267,21 @@ export default function EditProductsScreen() {
 
   const handleDeleteProduct = (product: Product) => {
     Alert.alert(
-      'Delete Product',
-      `Are you sure you want to delete "${product.name}"?`,
+      t('admin.products.deleteTitle','Delete Product'),
+      t('admin.products.deleteConfirm','Are you sure you want to delete "{{name}}"?', { name: product.name }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('cancel','Cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('settings.services.delete','Delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               await productsApi.deleteProduct(product.id);
               await fetchProducts();
-              Alert.alert('Success', 'Product deleted successfully');
+              Alert.alert(t('success.generic','Success'), t('admin.products.deleteSuccess','Product deleted successfully'));
             } catch (error) {
               console.error('Error deleting product:', error);
-              Alert.alert('Error', 'Failed to delete product');
+              Alert.alert(t('error.generic','Error'), t('admin.products.deleteFailed','Failed to delete product'));
             }
           },
         },
@@ -338,7 +340,7 @@ export default function EditProductsScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         
-        <Text style={styles.headerTitle}>Edit Products</Text>
+        <Text style={styles.headerTitle}>{t('admin.products.edit','Edit Products')}</Text>
         
         <TouchableOpacity
           style={styles.addButton}
@@ -354,17 +356,17 @@ export default function EditProductsScreen() {
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.loadingText}>Loading products...</Text>
+            <Text style={styles.loadingText}>{t('admin.products.loading','Loading products...')}</Text>
           </View>
         ) : products.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="bag-outline" size={80} color={colors.textSecondary} />
-            <Text style={styles.emptyTitle}>No Products Yet</Text>
+            <Text style={styles.emptyTitle}>{t('admin.products.empty','No Products Yet')}</Text>
             <Text style={styles.emptySubtitle}>
-              Add your first product to get started
+              {t('admin.products.emptySubtitle','Add your first product to get started')}
             </Text>
             <TouchableOpacity style={styles.emptyButton} onPress={openAddModal}>
-              <Text style={styles.emptyButtonText}>Add Product</Text>
+              <Text style={styles.emptyButtonText}>{t('admin.products.add','Add Product')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -393,7 +395,7 @@ export default function EditProductsScreen() {
               <Ionicons name="close" size={20} color={colors.text} />
             </TouchableOpacity>
             <Text style={[styles.modalTitle, { position: 'absolute', left: 64, right: 64, textAlign: 'center' }]}>
-              {editingProduct ? 'Edit product' : 'Add product'}
+              {editingProduct ? t('admin.products.editOne','Edit product') : t('admin.products.addOne','Add product')}
             </Text>
             <View style={{ width: 60 }} />
           </View>
@@ -434,8 +436,8 @@ export default function EditProductsScreen() {
                     {/* Step 0: Image */}
                     <View style={[styles.stepPane, { width: viewportWidth || Dimensions.get('window').width }]}> 
                       <View style={[styles.imageSection, styles.centeredSection]}>
-                        <Text style={[styles.sectionTitle, styles.centerText]}>Product Image</Text>
-                        <Text style={[styles.sectionSubtitle, styles.centerText]}>Add a product cover image</Text>
+                        <Text style={[styles.sectionTitle, styles.centerText]}>{t('admin.products.productImage','Product Image')}</Text>
+                        <Text style={[styles.sectionSubtitle, styles.centerText]}>{t('admin.products.addCover','Add a product cover image')}</Text>
                         <TouchableOpacity
                           style={styles.imageSelector}
                           onPress={handleImagePicker}
@@ -447,7 +449,7 @@ export default function EditProductsScreen() {
                           ) : (
                             <View style={styles.imagePlaceholder}>
                               <Ionicons name="camera-outline" size={40} color={colors.textSecondary} />
-                              <Text style={styles.imagePlaceholderText}>Add Image</Text>
+                              <Text style={styles.imagePlaceholderText}>{t('admin.products.addImage','Add Image')}</Text>
                             </View>
                           )}
                           {isUploadingImage && (
@@ -463,28 +465,28 @@ export default function EditProductsScreen() {
                     <View style={[styles.stepPane, { width: viewportWidth || Dimensions.get('window').width }]}> 
                       <View style={styles.inputSection}>
                         <View style={{ marginBottom: 8 }}>
-                          <Text style={styles.sectionTitle}>Product name *</Text>
-                          <Text style={styles.sectionSubtitle}>Enter the product display name</Text>
+                          <Text style={styles.sectionTitle}>{t('admin.products.nameLabel','Product name *')}</Text>
+                          <Text style={styles.sectionSubtitle}>{t('admin.products.nameHint','Enter the product display name')}</Text>
                         </View>
                         <TextInput
                           style={styles.textInput}
                           value={productForm.name}
                           onChangeText={(text) => setProductForm(prev => ({ ...prev, name: text }))}
-                          placeholder="Enter product name"
+                          placeholder={t('admin.products.namePlaceholder','Enter product name')}
                           placeholderTextColor={colors.textSecondary}
                         />
                       </View>
 
                       <View style={styles.inputSection}>
                         <View style={{ marginBottom: 8 }}>
-                          <Text style={styles.sectionTitle}>Description</Text>
-                          <Text style={styles.sectionSubtitle}>Short description about this product</Text>
+                          <Text style={styles.sectionTitle}>{t('admin.products.description','Description')}</Text>
+                          <Text style={styles.sectionSubtitle}>{t('admin.products.descriptionHint','Short description about this product')}</Text>
                         </View>
                         <TextInput
                           style={[styles.textInput, styles.textArea]}
                           value={productForm.description}
                           onChangeText={(text) => setProductForm(prev => ({ ...prev, description: text }))}
-                          placeholder="Enter product description"
+                          placeholder={t('admin.products.descriptionPlaceholder','Enter product description')}
                           placeholderTextColor={colors.textSecondary}
                           multiline
                           numberOfLines={3}
@@ -496,8 +498,8 @@ export default function EditProductsScreen() {
                     <View style={[styles.stepPane, { width: viewportWidth || Dimensions.get('window').width }]}> 
                       <View style={styles.inputSection}>
                         <View style={{ marginBottom: 8 }}>
-                          <Text style={styles.sectionTitle}>Price *</Text>
-                          <Text style={styles.sectionSubtitle}>Set the price for this product</Text>
+                          <Text style={styles.sectionTitle}>{t('admin.products.priceLabel','Price *')}</Text>
+                          <Text style={styles.sectionSubtitle}>{t('admin.products.priceHint','Set the price for this product')}</Text>
                         </View>
                         <View style={styles.priceInputContainer}>
                           <Text style={styles.currencySymbol}>$</Text>
@@ -505,7 +507,7 @@ export default function EditProductsScreen() {
                             style={[styles.textInput, styles.priceInput]}
                             value={productForm.price}
                             onChangeText={(text) => setProductForm(prev => ({ ...prev, price: text }))}
-                            placeholder="0.00"
+                            placeholder={t('admin.products.pricePlaceholder','0.00')}
                             placeholderTextColor={colors.textSecondary}
                             keyboardType="decimal-pad"
                           />
@@ -518,7 +520,7 @@ export default function EditProductsScreen() {
                 {/* Step navigation */}
                 <View style={styles.stepNavRow}>
                   <TouchableOpacity onPress={goBackProd} disabled={prodStep === 0} style={[styles.stepNavButton, prodStep === 0 && styles.stepNavButtonDisabled]}> 
-                    <Text style={[styles.stepNavText, prodStep === 0 && styles.stepNavTextDisabled]}>Back</Text>
+                    <Text style={[styles.stepNavText, prodStep === 0 && styles.stepNavTextDisabled]}>{t('back','Back')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={prodStep < 2 ? goNextProd : handleSaveProduct}
@@ -528,7 +530,7 @@ export default function EditProductsScreen() {
                     }
                     style={[styles.stepNavPrimary, { backgroundColor: colors.primary }, ((prodStep === 1 && !productForm.name.trim()) || (prodStep === 2 && (isSaving || !productForm.price || isNaN(parseFloat(productForm.price)) || parseFloat(productForm.price) <= 0))) && { opacity: 0.6 }]}
                   >
-                    <Text style={styles.stepNavPrimaryText}>{prodStep < 2 ? 'Next' : (isSaving ? 'Saving...' : 'Done')}</Text>
+                    <Text style={styles.stepNavPrimaryText}>{prodStep < 2 ? t('next','Next') : (isSaving ? t('settings.common.saving','Saving...') : t('done','Done'))}</Text>
                   </TouchableOpacity>
                 </View>
               </View>

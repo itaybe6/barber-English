@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 interface DateSelectorProps {
   selectedDate: Date;
@@ -15,6 +16,7 @@ const COLORS = {
 
 export default function DateSelector({ selectedDate, onSelectDate }: DateSelectorProps) {
   const [dates, setDates] = useState<Date[]>([]);
+  const { i18n } = useTranslation();
 
   useEffect(() => {
     // הצג תמיד את השבוע מהיום ראשון (א) ועד שבת (ש)
@@ -32,8 +34,10 @@ export default function DateSelector({ selectedDate, onSelectDate }: DateSelecto
   }, []);
 
   const getDayName = (date: Date) => {
-    const days = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
-    return days[date.getDay()];
+    const daysHe = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
+    const daysEn = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+    const list = i18n?.language?.startsWith('he') ? daysHe : daysEn;
+    return list[date.getDay()];
   };
 
   const isSelected = (date: Date) =>

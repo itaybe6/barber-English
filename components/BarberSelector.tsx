@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Image, Dimensions, FlatList } from 'react-native';
+import { View, Text, TouchableOpacity, Image, Dimensions, FlatList, I18nManager } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Animated, { useSharedValue, useAnimatedScrollHandler, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, Easing } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +29,19 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
   const didInit = React.useRef(false);
   const didMount = React.useRef(false);
 
+  const isRTL = I18nManager?.isRTL ?? false;
+  const defaultIndex = React.useMemo(() => {
+    return isRTL && barbers && barbers.length > 0 ? barbers.length - 1 : 0;
+  }, [isRTL, barbers?.length]);
+
+  const centerPad = Math.max(0, (SCREEN.width - ITEM_SIZE) / 2);
+  const contentPadding = React.useMemo(() => {
+    const left = Math.max(0, centerPad - 36);
+    const right = Math.max(0, centerPad - 140);
+    // Mirror for RTL so visually leftmost item can be centered and scroll remains valid
+    return isRTL ? { paddingLeft: right, paddingRight: left } : { paddingLeft: left, paddingRight: right };
+  }, [isRTL, centerPad]);
+
   // Background cross-fade between current and next barber image
   const [bgCurrent, setBgCurrent] = React.useState<string | null>(barbers[activeIndex]?.image_url || null);
   const bgOpacity = useSharedValue(1);
@@ -56,24 +69,24 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
     }
     try {
       if (listRef.current && Number.isFinite(activeIndex)) {
-        listRef.current.scrollToOffset({ offset: Math.max(0, activeIndex) * ITEM_SIZE, animated: true });
+        (listRef.current as any).scrollToIndex?.({ index: Math.max(0, activeIndex), animated: true, viewPosition: 0.5 });
       }
     } catch {}
   }, [activeIndex]);
 
-  // Force default to first item on initial mount when data arrives
+  // Force default to visually leftmost item on initial mount (last index in RTL, first in LTR)
   React.useEffect(() => {
     if (!didInit.current && barbers && barbers.length > 0) {
       didInit.current = true;
-      try { listRef.current?.scrollToIndex?.({ index: 0, animated: false }); } catch {}
-      lastIndex.current = 0;
-      try { onIndexChange(0); } catch {}
+      try { listRef.current?.scrollToIndex?.({ index: defaultIndex, animated: false, viewPosition: 0.5 }); } catch {}
+      lastIndex.current = defaultIndex;
+      try { onIndexChange(defaultIndex); } catch {}
       // Guard against late prop updates selecting a different index
       setTimeout(() => {
-        try { listRef.current?.scrollToIndex?.({ index: 0, animated: false }); } catch {}
+        try { listRef.current?.scrollToIndex?.({ index: defaultIndex, animated: false, viewPosition: 0.5 }); } catch {}
       }, 50);
     }
-  }, [barbers?.length]);
+  }, [barbers?.length, defaultIndex]);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (e) => {
@@ -97,7 +110,7 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
         activeOpacity={0.85}
         onPress={() => {
           try {
-            listRef.current?.scrollToOffset({ offset: index * ITEM_SIZE, animated: true });
+            (listRef.current as any)?.scrollToIndex?.({ index, animated: true, viewPosition: 0.5 });
           } catch {}
           onIndexChange(index);
         }}
@@ -155,7 +168,7 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
           data={barbers}
           keyExtractor={(it: User) => String(it.id)}
           renderItem={({ item, index }) => <CarouselItem item={item} index={index} />}
-          initialScrollIndex={0}
+          initialScrollIndex={defaultIndex}
           getItemLayout={(_, index) => ({ length: ITEM_SIZE, offset: ITEM_SIZE * index, index })}
           showsHorizontalScrollIndicator={false}
           snapToInterval={ITEM_SIZE}
@@ -165,10 +178,18 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
           bounces={false}
           nestedScrollEnabled={false}
           style={styles.carouselList}
-          contentContainerStyle={{ paddingLeft: Math.max(0, (SCREEN.width - ITEM_SIZE) / 2 - 36), paddingRight: (SCREEN.width - ITEM_SIZE) / 2 -140 }}
+          contentContainerStyle={contentPadding}
           onScroll={scrollHandler}
+          onScrollToIndexFailed={(info: any) => {
+            try {
+              const wait = new Promise((resolve) => setTimeout(resolve, 60));
+              wait.then(() => (listRef.current as any)?.scrollToIndex?.({ index: info.index, animated: false, viewPosition: 0.5 }));
+            } catch {}
+          }}
           onMomentumScrollEnd={(e: any) => {
-            const raw = e.nativeEvent.contentOffset.x / ITEM_SIZE;
+            const padAdjust = (contentPadding as any).paddingLeft || 0; // base for index calc
+            const x = e.nativeEvent.contentOffset.x + padAdjust;
+            const raw = x / ITEM_SIZE;
             const idx = Math.round(raw);
             const clamped = Math.max(0, Math.min(barbers.length - 1, idx));
             if (clamped !== lastIndex.current) {

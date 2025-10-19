@@ -18,7 +18,7 @@ export default function CalendarView({
   selectedDate,
   onSelectAppointment,
 }: CalendarViewProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   
   // Generate days for the current month
@@ -43,11 +43,9 @@ export default function CalendarView({
   };
   
   const formatMonth = (date: Date) => {
-    const months = [
-      'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
-      'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'
-    ];
-    return `${months[date.getMonth()]} ${date.getFullYear()}`;
+    // Use locale-aware month name based on current language
+    const locale = i18n?.language?.startsWith('he') ? 'he-IL' : 'en-US';
+    return date.toLocaleDateString(locale, { month: 'long', year: 'numeric' } as any);
   };
   
   const isDateSelected = (date: Date) => {
@@ -87,7 +85,8 @@ export default function CalendarView({
     const firstDayOfMonth = getFirstDayOfMonth(currentMonth.getFullYear(), currentMonth.getMonth());
     
     const days = [];
-    const weekdays = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
+    const isHe = i18n?.language?.startsWith('he');
+    const weekdays = isHe ? ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'] : ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
     
     // Render weekday headers
     const weekdayHeaders = weekdays.map((day, index) => (
@@ -252,7 +251,7 @@ export default function CalendarView({
       
       <View style={styles.selectedDateHeader}>
         <Text style={styles.selectedDateText}>
-          {selectedDate.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' })}
+          {selectedDate.toLocaleDateString(i18n?.language?.startsWith('he') ? 'he-IL' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' })}
         </Text>
       </View>
       

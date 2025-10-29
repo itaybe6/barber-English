@@ -872,7 +872,7 @@ export default function BookAppointment() {
     }
   }, [selectedBarber?.id]);
 
-  // When service changes, reset day and time selections
+  // When service changes, reset day and time selections (do not auto-advance step)
   useEffect(() => {
     setSelectedDay(null);
     setSelectedTime(null);
@@ -881,10 +881,6 @@ export default function BookAppointment() {
     setShowConfirmModal(false);
     setShowReplaceModal(false);
     setExistingAppointment(null);
-    if (selectedService?.id) {
-      // Reveal day/time section immediately in the single-page flow
-      setCurrentStep(3);
-    }
   }, [selectedService?.id]);
 
   // If navigated back from select-time asking to open dates screen
@@ -916,6 +912,8 @@ export default function BookAppointment() {
     if (!selectedBarber) return [] as Service[];
     return (availableServices || []).filter((s: any) => String(s?.worker_id || '') === String(selectedBarber.id));
   }, [availableServices, selectedBarber?.id]);
+
+  // Do not auto-select a service on entering step 2; user must choose explicitly
 
   // Fetch barbers (admin users) from Supabase
   const loadBarbers = async () => {
@@ -1381,10 +1379,10 @@ export default function BookAppointment() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={(currentStep === 1 || currentStep === 2) ? [] : ['top']}>
+    <SafeAreaView style={styles.container} edges={(currentStep === 1 || currentStep === 2 || currentStep === 3) ? [] : ['top']}>
       {/* Top grey hero background (40% of screen) */}
       <View style={[styles.topHeroWrapper, { height: HERO_TOP_HEIGHT }]} pointerEvents="none" />
-      {(currentStep === 1 || currentStep === 2) && (
+      {(currentStep === 1 || currentStep === 2 || currentStep === 3) && (
         <View pointerEvents="box-none" style={[styles.topOverlayHeader, { paddingTop: insets.top + 8 }] }>
           <View style={styles.topOverlayHeaderContent}>
             <TouchableOpacity
@@ -1451,6 +1449,7 @@ export default function BookAppointment() {
                           {s.key}
                         </Text>
                       </View>
+                    {/* Removed name pill under step 1 per request */}
                     </View>
                     {/* Thumbnails under steps 1 & 2 removed per request; only image inside circle now */}
                     {s.key === 3 && selectedDay !== null && (
@@ -1486,16 +1485,28 @@ export default function BookAppointment() {
               <TouchableOpacity
                 onPress={() => {
                   const stepNum = Number(currentStep);
-                  const canAdvance = (stepNum === 1 && !!selectedBarber) || (stepNum === 2 && !!selectedService) || (stepNum === 3 && selectedDay !== null);
-                  if (!canAdvance) return;
-                  const next = Math.min(4, stepNum + 1) as any;
-                  setCurrentStep(next);
+                  if (stepNum === 1) {
+                    if (!selectedBarber) return;
+                    setCurrentStep(2 as any);
+                    return;
+                  }
+                  if (stepNum === 2) {
+                    // Allow going to day selection regardless; service may be auto-selected
+                    setCurrentStep(3 as any);
+                    return;
+                  }
+                  if (stepNum === 3) {
+                    if (selectedDay === null) return;
+                    setCurrentStep(4 as any);
+                    return;
+                  }
                 }}
                 activeOpacity={0.9}
                 style={styles.floatingNextButton}
               >
                 <BlurView intensity={36} tint="light" style={styles.floatingNextBlur} />
-                <Ionicons name="arrow-forward" size={22} color="#111827" />
+                <View style={styles.floatingNextInner} />
+                <Ionicons name="arrow-forward" size={22} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
           )}
@@ -1616,18 +1627,8 @@ export default function BookAppointment() {
 
         {/* Step 3: Day Selection */}
         {currentStep >= 3 && selectedBarber && selectedService && (
-          <View style={styles.section}>
-            <View style={styles.dayHeaderRow}>
-              <TouchableOpacity 
-                onPress={() => setCurrentStep(2)} 
-                style={styles.backCircle} 
-                activeOpacity={0.8}
-              >
-                <Ionicons name="arrow-back" size={18} color="#000000" />
-              </TouchableOpacity>
-              <Text style={[styles.sectionTitle, styles.sectionTitleCentered]}>{t('booking.selectDay', 'Select Day')}</Text>
-              <View style={{ width: 36 }} />
-            </View>
+          <View style={[styles.section, styles.calendarSectionCard]}>
+            <Text style={styles.calendarSectionTitle}>{t('booking.selectDay', 'Select Day')}</Text>
             {/* Monthly calendar grid limited by booking window */}
             {(() => {
               const start = new Date();
@@ -2194,8 +2195,8 @@ const createStyles = (colors: any) => StyleSheet.create({
   stepperItemColumn: {
     alignItems: 'center',
     position: 'relative',
-    height: 64, // lock height to circle so row alignment doesn't shift
-    width: 68,
+    height: 92, // allow caption under circle
+    width: 74,
   },
   stepperCircleWrapper: {
     width: 60,
@@ -2315,22 +2316,23 @@ const createStyles = (colors: any) => StyleSheet.create({
   floatingNextWrapper: {
     marginTop: 8,
     alignSelf: 'center',
+    zIndex: 50,
   },
   floatingNextButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.55)',
+    borderColor: 'rgba(255,255,255,0.65)',
     backgroundColor: 'transparent',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    elevation: 10,
   },
   floatingNextBlur: {
     position: 'absolute',
@@ -2339,6 +2341,34 @@ const createStyles = (colors: any) => StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'rgba(255,255,255,0.35)'
+  },
+  floatingNextInner: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primary,
+    opacity: 0.9,
+  },
+  stepperNamePill: {
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(17,24,39,0.1)',
+    maxWidth: 220,
+    alignSelf: 'center',
+  },
+  stepperNameText: {
+    color: '#111827',
+    fontSize: 11,
+    fontWeight: '800',
+    maxWidth: 200,
+    textAlign: 'center',
+    flexShrink: 0,
+    flexWrap: 'wrap',
   },
   topOverlayHeaderContent: {
     flexDirection: 'row',
@@ -2517,35 +2547,66 @@ const createStyles = (colors: any) => StyleSheet.create({
     shadowRadius: 4,
     elevation: 4,
   },
+  calendarSectionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  calendarSectionTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
   calendarMonthTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
-    color: '#1C1C1E',
-    marginBottom: 8,
+    color: '#111827',
+    marginBottom: 12,
+    textAlign: 'center',
   },
   calendarGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 8,
+    marginBottom: 12,
+    gap: 4,
   },
   calendarCell: {
-    width: `${100 / 7}%`,
+    width: `${(100 - 6) / 7}%`,
     aspectRatio: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
+    borderRadius: 12,
     marginVertical: 2,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1.5,
+    borderColor: 'transparent',
   },
   calendarCellDisabled: {
-    opacity: 0.35,
+    opacity: 0.3,
+    backgroundColor: '#FAFAFA',
   },
   calendarCellSelected: {
     backgroundColor: colors.primary,
+    borderColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   calendarAvailDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     marginTop: 4,
   },
   container: {

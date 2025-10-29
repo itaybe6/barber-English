@@ -479,7 +479,8 @@
       "descriptionPlaceholder": "Enter product description",
       "priceLabel": "Price *",
       "priceHint": "Set the price for this product",
-      "pricePlaceholder": "0.00"
+      "pricePlaceholder": "0.00",
+      "step": { "image": "Image", "details": "Details", "price": "Price" }
     },
     "appointmentsAdmin": {
       "loadingForDate": "Loading appointments for {{date}}...",

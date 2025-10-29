@@ -478,7 +478,8 @@
       "descriptionPlaceholder": "הזן/י תיאור למוצר",
       "priceLabel": "מחיר *",
       "priceHint": "קבע/י מחיר למוצר",
-      "pricePlaceholder": "0.00"
+      "pricePlaceholder": "0.00",
+      "step": { "image": "תמונה", "details": "פרטים", "price": "מחיר" }
     },
     "appointmentsAdmin": {
       "loadingForDate": "טוען תורים עבור {{date}}...",

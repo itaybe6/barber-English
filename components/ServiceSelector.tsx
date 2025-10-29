@@ -1,17 +1,16 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Image, Dimensions, FlatList } from 'react-native';
+import { View, Text, TouchableOpacity, Image, Dimensions, FlatList, I18nManager } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Animated, { useSharedValue, useAnimatedScrollHandler, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, Easing } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { Service } from '@/lib/supabase';
 
-const AVATAR_SIZE = 68;
-const ITEM_SPACING = 16;
-const SERVICE_ITEM = AVATAR_SIZE + ITEM_SPACING; // match barber item size
 const SCREEN = Dimensions.get('window');
-const AnimatedFlatList: any = Animated.createAnimatedComponent(FlatList as any);
-const HEADER_HEIGHT = 600; // increase header image height for better prominence
+const HEADER_HEIGHT = 320; // compact height to mirror BarberSelector
+const CARD_WIDTH_PERCENT = 0.68;
+const STRIP_SHIFT = 20; // margin/offset calibration
+const STRIP_TRANSLATE = 28; // hard translate to ensure visible shift left
 
 export type ServiceSelectorProps = {
   services: Service[];
@@ -23,9 +22,6 @@ export type ServiceSelectorProps = {
 
 const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex, onIndexChange, styles, bottomOffset }) => {
   const { t } = useTranslation();
-  const scrollX = useSharedValue(Math.max(0, activeIndex) * SERVICE_ITEM);
-  const listRef = React.useRef<FlatList>(null);
-  const lastIndex = React.useRef<number>(Math.max(0, activeIndex));
 
   const getCurrentImageUrl = (idx: number) => {
     const service = services[idx];
@@ -49,144 +45,102 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeIndex, services.length]);
 
-  React.useEffect(() => {
-    try {
-      if (listRef.current && Number.isFinite(activeIndex)) {
-        // Avoid fighting user when momentum is in progress by animating only if index drifted
-        const target = Math.max(0, activeIndex) * SERVICE_ITEM;
-        listRef.current.scrollToOffset({ offset: target, animated: true });
-      }
-    } catch {}
-  }, [activeIndex]);
-
-  const scrollHandler = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      'worklet';
-      scrollX.value = e.contentOffset.x;
-    },
-  });
+  React.useEffect(() => {}, [activeIndex]);
 
   const bgStyle = useAnimatedStyle(() => ({ opacity: bgOpacity.value }));
-
-  const CarouselItem: React.FC<{ item: Service; index: number }> = ({ item, index }) => {
-    const cardStyle = (useAnimatedStyle(() => {
-      const pos = scrollX.value / SERVICE_ITEM;
-      const scale = interpolate(pos, [index - 1, index, index + 1], [0.94, 1.08, 0.94], Extrapolate.CLAMP);
-      const opacity = interpolate(pos, [index - 1, index, index + 1], [0.6, 1, 0.6], Extrapolate.CLAMP);
-      return { transform: [{ scale: scale as any }] as any, opacity } as any;
-    }) as any);
-
-    const imageUrl = (item as any)?.image_url || (item as any)?.cover_url || (item as any)?.image || null;
-
-    return (
-      <TouchableOpacity
-        activeOpacity={0.85}
-        onPress={() => {
-          try {
-            listRef.current?.scrollToOffset({ offset: index * SERVICE_ITEM, animated: true });
-          } catch {}
-          onIndexChange(index);
-        }}
-      >
-        <Animated.View style={[styles.carouselItem, cardStyle]}>
-          {imageUrl ? (
-            <Image source={{ uri: imageUrl }} style={styles.carouselItemImage} />
-          ) : (
-            <View style={[styles.carouselItemImage, styles.carouselItemPlaceholder]}>
-              <Ionicons name="cut" size={28} color="#8E8E93" />
-            </View>
-          )}
-        </Animated.View>
-      </TouchableOpacity>
-    );
-  };
+  const cardWidth = SCREEN.width * CARD_WIDTH_PERCENT;
+  const cardHorizontalMargin = (SCREEN.width - cardWidth) / 2;
+  const sidePeekShift = Math.min(36, cardHorizontalMargin + 12);
+  const prevIdx = services.length > 0 ? (((activeIndex || 0) - 1 + services.length) % services.length) : 0;
+  const nextIdx = services.length > 0 ? (((activeIndex || 0) + 1) % services.length) : 0;
+  const canGoPrev = services.length > 1;
+  const canGoNext = services.length > 1;
+  const goPrev = React.useCallback(() => {
+    if (!services || services.length === 0) return;
+    const length = services.length;
+    const next = ((activeIndex || 0) - 1 + length) % length;
+    if (next !== activeIndex) onIndexChange(next);
+  }, [activeIndex, services.length]);
+  const goNext = React.useCallback(() => {
+    if (!services || services.length === 0) return;
+    const length = services.length;
+    const next = ((activeIndex || 0) + 1) % length;
+    if (next !== activeIndex) onIndexChange(next);
+  }, [activeIndex, services.length]);
 
   return (
-    <View style={{ position: 'relative', height: HEADER_HEIGHT + 240 }}>
-      <View style={{ height: HEADER_HEIGHT, marginTop: 12, marginHorizontal: 12, borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden', backgroundColor: '#F2F2F7' }}>
-        {bgCurrent ? (
-          <>
-            <Animated.Image
-              source={{ uri: bgCurrent }}
-              style={[{ width: '100%', height: '100%' }, bgStyle]}
-              resizeMode="cover"
-              fadeDuration={0 as any}
-            />
-            <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.25)' }} />
-            {/* Glass overlay with service name + price */}
-            <View style={{ position: 'absolute', top: 12, left: 12, right: 12, alignItems: 'center' }}>
-              <BlurView intensity={28} tint="light" style={{
-                paddingVertical: 10,
-                paddingHorizontal: 14,
-                borderRadius: 16,
-                overflow: 'hidden',
-                borderWidth: 1,
-                borderColor: 'rgba(255,255,255,0.35)',
-                backgroundColor: 'rgba(255,255,255,0.16)'
-              }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                  <Text numberOfLines={1} style={{
-                    flexShrink: 1,
-                    color: '#111827',
-                    fontWeight: '800',
-                    fontSize: 16,
-                    textShadowColor: 'rgba(255,255,255,0.6)',
-                    textShadowOffset: { width: 0, height: 1 },
-                    textShadowRadius: 2
-                  }}>
-                    {services[activeIndex]?.name || ''}
-                  </Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.85)', borderWidth: 1, borderColor: 'rgba(17,24,39,0.08)' }}>
-                    <Ionicons name="pricetag-outline" size={14} color="#111827" />
-                    <Text style={{ color: '#111827', fontWeight: '800', fontSize: 14 }}>
-                      {`${t('booking.price', '$')} ${services[activeIndex]?.price ?? 0}`}
-                    </Text>
-                  </View>
-                </View>
-              </BlurView>
-            </View>
-          </>
-        ) : null}
-      </View>
+    <View style={{ position: 'relative', height: HEADER_HEIGHT + 220, marginBottom: -50 }}>
+      <View style={{ transform: [{ translateX: -STRIP_TRANSLATE }] }}>
+      {/* Side previews */}
+      {services.length > 1 && prevIdx !== activeIndex && (
+        <View style={{ position: 'absolute', left: -sidePeekShift - 8 - STRIP_SHIFT, top: 16, width: cardWidth * 0.74, height: HEADER_HEIGHT - 40, borderRadius: 20, overflow: 'hidden', transform: [{ rotateZ: '-2deg' }, { scale: 0.92 }], opacity: 0.65 }}>
+          {services[prevIdx] && (
+            <Image source={{ uri: getCurrentImageUrl(prevIdx) as any }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+          )}
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.25)' }} />
+        </View>
+      )}
+      {services.length > 1 && nextIdx !== activeIndex && (
+        <View style={{ position: 'absolute', right: -sidePeekShift - 8 + STRIP_SHIFT, top: 16, width: cardWidth * 0.74, height: HEADER_HEIGHT - 40, borderRadius: 20, overflow: 'hidden', transform: [{ rotateZ: '2deg' }, { scale: 0.92 }], opacity: 0.65 }}>
+          {services[nextIdx] && (
+            <Image source={{ uri: getCurrentImageUrl(nextIdx) as any }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+          )}
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.25)' }} />
+        </View>
+      )}
 
-      <View style={[styles.carouselBottomArea, { bottom: (bottomOffset ?? 28) }]}>
-        <AnimatedFlatList
-          ref={listRef as any}
-          horizontal
-          data={services}
-          keyExtractor={(it: Service) => String(it.id)}
-          renderItem={({ item, index }) => <CarouselItem item={item} index={index} />}
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={SERVICE_ITEM}
-          snapToAlignment="center"
-          disableIntervalMomentum={true}
-          decelerationRate="fast"
-          bounces={false}
-          nestedScrollEnabled={false}
-          style={styles.carouselList}
-          contentContainerStyle={{ paddingHorizontal: (SCREEN.width - SERVICE_ITEM) / 2 }}
-          onScroll={scrollHandler}
-          onScrollEndDrag={(e: any) => {
-            const raw = e.nativeEvent.contentOffset.x / SERVICE_ITEM;
-            const idx = Math.round(raw);
-            const clamped = Math.max(0, Math.min(services.length - 1, idx));
-            if (clamped !== lastIndex.current) {
-              lastIndex.current = clamped;
-              onIndexChange(clamped);
-            }
-          }}
-          onMomentumScrollEnd={(e: any) => {
-            const raw = e.nativeEvent.contentOffset.x / SERVICE_ITEM;
-            const idx = Math.round(raw);
-            const clamped = Math.max(0, Math.min(services.length - 1, idx));
-            if (clamped !== lastIndex.current) {
-              lastIndex.current = clamped;
-              onIndexChange(clamped);
-            }
-          }}
-          scrollEventThrottle={16}
-        />
-        {null}
+      {/* Main card */}
+      <View style={{ height: HEADER_HEIGHT, marginTop: 24, marginLeft: cardHorizontalMargin - STRIP_SHIFT, marginRight: cardHorizontalMargin + STRIP_SHIFT, width: cardWidth, borderRadius: 20, overflow: 'hidden', backgroundColor: '#F2F2F7', zIndex: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 16, elevation: 10 }}>
+        {!!bgCurrent && (
+          <Animated.Image source={{ uri: bgCurrent }} style={[{ width: '100%', height: '100%' }, bgStyle]} resizeMode="cover" fadeDuration={0 as any} />
+        )}
+        <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.25)' }} />
+        <View style={{ position: 'absolute', left: 12, right: 12, bottom: 12, alignItems: 'center' }}>
+          <BlurView intensity={28} tint="light" style={{
+            paddingVertical: 10,
+            paddingHorizontal: 14,
+            borderRadius: 20,
+            overflow: 'hidden',
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.35)',
+            backgroundColor: 'rgba(255,255,255,0.16)'
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <Text numberOfLines={1} style={{
+                color: '#FFFFFF',
+                fontWeight: '800',
+                fontSize: 16,
+                textShadowColor: 'rgba(255,255,255,0.6)',
+                textShadowOffset: { width: 0, height: 1 },
+                textShadowRadius: 2,
+                flexShrink: 1,
+              }}>
+                {services[activeIndex]?.name || ''}
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.85)', borderWidth: 1, borderColor: 'rgba(17,24,39,0.08)' }}>
+                <Ionicons name="pricetag-outline" size={14} color="#111827" />
+                <Text style={{ color: '#111827', fontWeight: '800', fontSize: 14 }}>
+                  {`${t('booking.price', '$')} ${services[activeIndex]?.price ?? 0}`}
+                </Text>
+              </View>
+            </View>
+          </BlurView>
+        </View>
+
+        {/* Arrows */}
+        <View style={{ position: 'absolute', top: '50%', left: 12, transform: [{ translateY: -28 }], zIndex: 10, opacity: canGoPrev ? 1 : 0.4 }}>
+          <TouchableOpacity onPress={goPrev} activeOpacity={0.75} disabled={!canGoPrev} style={{ width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.5)', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 8, backgroundColor: 'transparent' }}>
+            <BlurView intensity={36} tint="light" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.3)' }} />
+            <Ionicons name="chevron-back-outline" size={28} color="#1C1C1E" />
+          </TouchableOpacity>
+        </View>
+        <View style={{ position: 'absolute', top: '50%', right: 12, transform: [{ translateY: -28 }], zIndex: 10, opacity: canGoNext ? 1 : 0.4 }}>
+          <TouchableOpacity onPress={goNext} activeOpacity={0.75} disabled={!canGoNext} style={{ width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.5)', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 8, backgroundColor: 'transparent' }}>
+            <BlurView intensity={36} tint="light" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.3)' }} />
+            <Ionicons name="chevron-forward-outline" size={28} color="#1C1C1E" />
+          </TouchableOpacity>
+        </View>
+      </View>
       </View>
     </View>
   );

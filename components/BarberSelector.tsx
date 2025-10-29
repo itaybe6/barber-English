@@ -132,28 +132,32 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
 
   const goPrev = React.useCallback(() => {
     try {
-      const next = Math.max(0, Math.min(barbers.length - 1, (activeIndex || 0) - 1));
+      if (!barbers || barbers.length === 0) return;
+      const length = barbers.length;
+      const next = ((activeIndex || 0) - 1 + length) % length;
       if (next !== activeIndex) onIndexChange(next);
     } catch {}
   }, [activeIndex, barbers.length]);
 
   const goNext = React.useCallback(() => {
     try {
-      const next = Math.max(0, Math.min(barbers.length - 1, (activeIndex || 0) + 1));
+      if (!barbers || barbers.length === 0) return;
+      const length = barbers.length;
+      const next = ((activeIndex || 0) + 1) % length;
       if (next !== activeIndex) onIndexChange(next);
     } catch {}
   }, [activeIndex, barbers.length]);
 
-  const prevIdx = Math.max(0, Math.min(barbers.length - 1, (activeIndex || 0) - 1));
-  const nextIdx = Math.max(0, Math.min(barbers.length - 1, (activeIndex || 0) + 1));
+  const prevIdx = barbers.length > 0 ? (((activeIndex || 0) - 1 + barbers.length) % barbers.length) : 0;
+  const nextIdx = barbers.length > 0 ? (((activeIndex || 0) + 1) % barbers.length) : 0;
   const cardWidth = SCREEN.width * CARD_WIDTH_PERCENT;
   const cardHorizontalMargin = (SCREEN.width - cardWidth) / 2;
   const sidePeekShift = Math.min(36, cardHorizontalMargin + 12);
-  const canGoPrev = activeIndex > 0;
-  const canGoNext = activeIndex < barbers.length - 1;
+  const canGoPrev = barbers.length > 1;
+  const canGoNext = barbers.length > 1;
 
   return (
-    <View style={{ position: 'relative', height: HEADER_HEIGHT + 220, marginTop: 72 }}>
+    <View style={{ position: 'relative', height: HEADER_HEIGHT + 220, marginTop: 72, marginBottom: 148 }}>
       {/* Services/top overlay sits ABOVE the image, not on it */}
       {typeof renderTopOverlay === 'function' ? (
         <View style={{ marginTop: 44, marginHorizontal: 16 }}>

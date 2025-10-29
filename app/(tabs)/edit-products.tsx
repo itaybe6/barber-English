@@ -411,7 +411,7 @@ export default function EditProductsScreen() {
                   />
                 </View>
                 <View style={styles.stepperLabels}>
-                  {['Image','Details','Price'].map((label, idx) => (
+                  {[t('admin.products.step.image','Image'), t('admin.products.step.details','Details'), t('admin.products.step.price','Price')].map((label, idx) => (
                     <View key={label} style={styles.stepperLabelWrap}>
                       <View style={[styles.stepDot, { borderColor: idx <= prodStep ? colors.primary : '#D1D1D6', backgroundColor: idx < prodStep ? colors.primary : '#FFFFFF' }]} />
                       <Text style={[styles.stepLabelText, { color: idx <= prodStep ? colors.primary : '#8E8E93' }]}>{label}</Text>

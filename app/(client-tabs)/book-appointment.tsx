@@ -15,6 +15,7 @@ import { Service } from '@/lib/supabase';
 import { servicesApi } from '@/lib/api/services';
 import { supabase, getBusinessId, Appointment } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
+import { getCurrentClientLogo } from '@/src/theme/assets';
 import { notificationsApi } from '@/lib/api/notifications';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
@@ -388,7 +389,7 @@ export default function BookAppointment() {
   const styles = createStyles(colors);
   const footerBottom = Math.max(insets.bottom, 16) + 80;
   const params = (router as any).useLocalSearchParams?.() || {};
-  const HERO_TOP_HEIGHT = Math.round(Dimensions.get('window').height * 0.40);
+  const HERO_TOP_HEIGHT = Math.round(Dimensions.get('window').height * 0.30);
   
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
@@ -442,17 +443,8 @@ export default function BookAppointment() {
         // In the new single-page flow we do not auto-advance to a separate service step.
         return;
       } else if (currentStep === 2) {
-        // Scroll up (pull) → back to barber selection
-        if (y < -8) {
-          isTransitioning.current = true;
-          step2Fade.value = withTiming(0, { duration: 240, easing: Easing.out(Easing.cubic) }, () => {
-            runOnJS(setCurrentStep)(1);
-            runOnJS(resetStep1Guards)();
-            step2Fade.value = 1;
-            isTransitioning.current = false;
-          });
-          return;
-        }
+        // Disabled: Do not navigate back to barber selection on pull-down in step 2
+        // Keep content fixed; only allow forward navigation by user action
         // Scroll down → to day selection, only if a service is selected
         if (y > 16 && selectedService && !hasTriggeredStep3.current) {
           hasTriggeredStep3.current = true;
@@ -1401,10 +1393,10 @@ export default function BookAppointment() {
               activeOpacity={0.82}
               accessibilityLabel={t('profile.title', 'Profile')}
             >
-              <Ionicons name="settings-outline" size={22} color="#1C1C1E" />
+              <Ionicons name="settings-outline" size={22} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.topOverlayTitleWrapper} pointerEvents="none">
-              <Text style={styles.topOverlayTitle}>{t('booking.title', 'Appointment Booking')}</Text>
+              <Image source={getCurrentClientLogo()} style={styles.topOverlayLogo} resizeMode="contain" />
             </View>
             <TouchableOpacity
               style={[styles.topOverlayButton, { backgroundColor: 'rgba(17,24,39,0.08)', borderColor: 'rgba(255,255,255,0.35)' }]}
@@ -1412,50 +1404,104 @@ export default function BookAppointment() {
               activeOpacity={0.82}
               accessibilityLabel={t('notifications.title', 'Notifications')}
             >
-              <Ionicons name="notifications-outline" size={22} color="#1C1C1E" />
+              <Ionicons name="notifications-outline" size={22} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
 
           {/* Stepper */}
-          <View style={styles.stepperContainer}>
+          <View style={[styles.stepperContainer, styles.ltr, styles.stepperShiftLeft]}>
             {[
               { key: 1, icon: 'person-outline', label: t('booking.step.barber', 'Barber') },
-              { key: 2, icon: 'cut', label: t('booking.step.service', 'Service') },
+              { key: 2, icon: 'briefcase-outline', label: t('booking.step.service', 'Service') },
               { key: 3, icon: 'calendar-outline', label: t('booking.step.day', 'Day') },
               { key: 4, icon: 'time-outline', label: t('booking.step.time', 'Time') },
-            ].map((s) => {
+            ].map((s, idx) => {
               const active = currentStep === (s.key as any);
               const done = currentStep > (s.key as any);
               return (
-                <TouchableOpacity
-                  key={String(s.key)}
-                  onPress={() => setCurrentStep(s.key as any)}
-                  activeOpacity={0.85}
-                  style={[styles.stepperPill, (active || done) && styles.stepperPillActive]}
-                >
-                  <Ionicons name={s.icon as any} size={16} color={active || done ? '#FFFFFF' : '#6B7280'} />
-                  <Text style={[styles.stepperText, (active || done) && styles.stepperTextActive]} numberOfLines={1}>
-                    {s.label}
-                  </Text>
-                </TouchableOpacity>
+                <View key={String(s.key)} style={styles.stepperItemWrapper}>
+                  <View style={styles.stepperItemColumn}>
+                    <View style={styles.stepperCircleWrapper}>
+                      <TouchableOpacity
+                      onPress={() => setCurrentStep(s.key as any)}
+                      activeOpacity={0.85}
+                      style={[styles.stepperCircle, (active || done) && styles.stepperCircleActive]}
+                    >
+                      {(
+                        (s.key === 1 && !!selectedBarber && Number(currentStep) >= 2) ||
+                        (s.key === 2 && !!selectedService && Number(currentStep) >= 3)
+                      ) ? (
+                        <Image
+                          source={{ uri: (s.key === 1
+                            ? (selectedBarber as any)?.image_url
+                            : (((selectedService as any)?.image_url) || ((selectedService as any)?.cover_url) || ((selectedService as any)?.image))) as any }}
+                          style={{ width: '100%', height: '100%' }}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <Ionicons
+                          name={s.icon as any}
+                          size={20}
+                          color={(active || done) ? '#111827' : 'rgba(255,255,255,0.9)'}
+                        />
+                      )}
+                      </TouchableOpacity>
+                      <View style={[styles.stepperBadge, (active || done) && styles.stepperBadgeActive]}>
+                        <Text style={[styles.stepperBadgeText, (active || done) && styles.stepperBadgeTextActive]}>
+                          {s.key}
+                        </Text>
+                      </View>
+                    </View>
+                    {/* Thumbnails under steps 1 & 2 removed per request; only image inside circle now */}
+                    {s.key === 3 && selectedDay !== null && (
+                      <TouchableOpacity
+                        onPress={() => setCurrentStep(3 as any)}
+                        activeOpacity={0.9}
+                        style={styles.stepperThumbPill}
+                      >
+                        <Ionicons name="calendar-outline" size={14} color="#111827" />
+                        <Text style={styles.stepperThumbPillText}>{days[selectedDay]?.date || ''}</Text>
+                      </TouchableOpacity>
+                    )}
+                    {s.key === 4 && !!selectedTime && (
+                      <TouchableOpacity
+                        onPress={() => setCurrentStep(4 as any)}
+                        activeOpacity={0.9}
+                        style={styles.stepperThumbPill}
+                      >
+                        <Ionicons name="time-outline" size={14} color="#111827" />
+                        <Text style={styles.stepperThumbPillText}>{selectedTime}</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  {idx < 3 && <View style={[styles.stepperLine, done && styles.stepperLineDone]} />}
+                </View>
               );
             })}
-            <TouchableOpacity
-              onPress={() => {
-                const stepNum = Number(currentStep);
-                const canAdvance = (stepNum === 1 && !!selectedBarber) || (stepNum === 2 && !!selectedService) || (stepNum === 3 && selectedDay !== null);
-                if (!canAdvance) return;
-                const next = Math.min(4, stepNum + 1) as any;
-                setCurrentStep(next);
-              }}
-              activeOpacity={0.85}
-              style={[styles.stepperNextBtn, { opacity: (((Number(currentStep) === 1) && selectedBarber) || ((Number(currentStep) === 2) && selectedService) || ((Number(currentStep) === 3) && selectedDay !== null)) ? 1 : 0.5 }]}
-            >
-              <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
-            </TouchableOpacity>
           </View>
+
+          {/* Floating next-step arrow in the grey area */}
+          {Number(currentStep) < 4 && (
+            <View style={styles.floatingNextWrapper}>
+              <TouchableOpacity
+                onPress={() => {
+                  const stepNum = Number(currentStep);
+                  const canAdvance = (stepNum === 1 && !!selectedBarber) || (stepNum === 2 && !!selectedService) || (stepNum === 3 && selectedDay !== null);
+                  if (!canAdvance) return;
+                  const next = Math.min(4, stepNum + 1) as any;
+                  setCurrentStep(next);
+                }}
+                activeOpacity={0.9}
+                style={styles.floatingNextButton}
+              >
+                <BlurView intensity={36} tint="light" style={styles.floatingNextBlur} />
+                <Ionicons name="arrow-forward" size={22} color="#111827" />
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       )}
+      {/* Per-step thumbnails now live directly under each step circle */}
       {currentStep >= 3 && (
         <View style={styles.header}>
           <View style={styles.headerContent}>
@@ -1470,33 +1516,32 @@ export default function BookAppointment() {
       )}
       <View style={[
         styles.contentWrapper,
-        (currentStep === 1)
+        (currentStep === 1 || currentStep === 2)
           ? { backgroundColor: 'transparent', borderTopLeftRadius: 0, borderTopRightRadius: 0, paddingTop: 0 }
-          : (currentStep === 2)
-            ? { backgroundColor: '#FFFFFF', borderTopLeftRadius: 0, borderTopRightRadius: 0, paddingTop: 0 }
-            : null
+          : null
       ]}>
-        <ScrollView
+          <ScrollView
           ref={scrollRef as any}
           contentContainerStyle={[
             styles.scrollContent, 
-            { paddingBottom: (currentStep === 1 || currentStep === 2) ? 160 : contentBottomPadding },
-            (currentStep === 1) ? { minHeight: CAROUSEL_HEIGHT + 100 } : null
+            { paddingBottom: (currentStep === 1 || currentStep === 2) ? Math.max(insets.bottom, 20) : contentBottomPadding },
+            (currentStep === 1) ? { minHeight: CAROUSEL_HEIGHT + 100 } : null,
+            (currentStep === 1 || currentStep === 2) ? { flexGrow: 1, justifyContent: 'flex-end' } : null
           ]}
           showsVerticalScrollIndicator={false}
-          refreshControl={currentStep === 3 ? <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#000" /> : undefined}
-          onScroll={handleScrollTransitions}
-          alwaysBounceVertical
-          bounces
-          scrollEnabled={true}
-          overScrollMode="always"
+            refreshControl={currentStep >= 3 ? <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#000" /> : undefined}
+            onScroll={currentStep >= 3 ? handleScrollTransitions : undefined}
+            alwaysBounceVertical={currentStep >= 3}
+            bounces={currentStep >= 3}
+            scrollEnabled={currentStep >= 3}
+            overScrollMode={currentStep >= 3 ? 'always' : 'never'}
           contentInsetAdjustmentBehavior="always"
           scrollEventThrottle={16}
           nestedScrollEnabled={true}
         >
 
         {/* Spacer to clear the top hero background */}
-        <View style={{ height: HERO_TOP_HEIGHT + 12 }} />
+        <View style={{ height: (currentStep >= 3 ? HERO_TOP_HEIGHT + 12 : 16) }} />
 
         {/* Step 1: Barber Selection */}
         {currentStep === 1 && (
@@ -2128,34 +2173,95 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   topHeroImage: {},
   stepperContainer: {
-    marginTop: 12,
-    paddingHorizontal: 6,
+    marginTop: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
   },
-  stepperPill: {
+  stepperShiftLeft: {
+    transform: [{ translateX: -25 }],
+  },
+  ltr: {
+    // Force LTR ordering for steps, regardless of app locale
+    direction: 'ltr' as any,
+  },
+  stepperItemWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.6)',
+  },
+  stepperItemColumn: {
+    alignItems: 'center',
+    position: 'relative',
+    height: 64, // lock height to circle so row alignment doesn't shift
+    width: 68,
+  },
+  stepperCircleWrapper: {
+    width: 60,
+    height: 60,
+    position: 'relative',
+  },
+  stepperCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  stepperCircleActive: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  stepperBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    backgroundColor: 'rgba(17,24,39,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)'
+    borderColor: 'rgba(255,255,255,0.7)',
+    zIndex: 5,
+    elevation: 5,
+    pointerEvents: 'none',
   },
-  stepperPillActive: {
+  stepperBadgeActive: {
     backgroundColor: '#111827',
-    borderColor: 'transparent',
+    borderColor: '#FFFFFF',
   },
-  stepperText: {
-    color: '#374151',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  stepperTextActive: {
+  stepperBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
     color: '#FFFFFF',
+  },
+  stepperBadgeTextActive: {
+    color: '#FFFFFF',
+  },
+  stepperLine: {
+    width: 36,
+    height: 2,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    marginHorizontal: 4,
+  },
+  stepperLineDone: {
+    backgroundColor: 'rgba(255,255,255,0.8)',
   },
   stepperNextBtn: {
     marginLeft: 'auto',
@@ -2163,6 +2269,76 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
+  },
+  stepperThumb: {
+    position: 'absolute',
+    top: 54,
+    left: 6,
+    width: 84,
+    alignItems: 'center',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)'
+  },
+  stepperThumbImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    alignSelf: 'center',
+  },
+  stepperThumbLabel: {
+    marginTop: 6,
+    maxWidth: 76,
+    textAlign: 'center',
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  stepperThumbPill: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(17,24,39,0.1)'
+  },
+  stepperThumbPillText: {
+    color: '#111827',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  floatingNextWrapper: {
+    marginTop: 8,
+    alignSelf: 'center',
+  },
+  floatingNextButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.55)',
+    backgroundColor: 'transparent',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  floatingNextBlur: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255,255,255,0.35)'
   },
   topOverlayHeaderContent: {
     flexDirection: 'row',
@@ -2193,6 +2369,11 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontWeight: '700',
     color: '#1C1C1E',
     letterSpacing: -0.2,
+  },
+  topOverlayLogo: {
+    width: 170,
+    height: 60,
+    tintColor: '#FFFFFF',
   },
   // Service chips overlay (single-page flow)
   serviceOverlayContainer: {

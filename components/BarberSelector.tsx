@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Image, Dimensions, FlatList, I18nManager, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Image, Dimensions, FlatList, I18nManager } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Animated, { useSharedValue, useAnimatedScrollHandler, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, Easing, FadeIn, FadeOut } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,7 +12,7 @@ const ITEM_SIZE = AVATAR_SIZE + ITEM_SPACING;
 const SCREEN = Dimensions.get('window');
 const AnimatedFlatList: any = Animated.createAnimatedComponent(FlatList as any);
 const HEADER_HEIGHT = 320; // compact card height
-const CARD_WIDTH_PERCENT = 0.72; // main card is 72% of screen width so side cards peek nicely
+const CARD_WIDTH_PERCENT = 0.68; // shrink main card a bit to create more space between images
 
 export type BarberSelectorProps = {
   barbers: User[];
@@ -149,37 +149,41 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
   const cardWidth = SCREEN.width * CARD_WIDTH_PERCENT;
   const cardHorizontalMargin = (SCREEN.width - cardWidth) / 2;
   const sidePeekShift = Math.min(36, cardHorizontalMargin + 12);
+  const canGoPrev = activeIndex > 0;
+  const canGoNext = activeIndex < barbers.length - 1;
 
   return (
-    <View style={{ position: 'relative', height: HEADER_HEIGHT + 180, marginTop: 32 }}>
+    <View style={{ position: 'relative', height: HEADER_HEIGHT + 220, marginTop: 72 }}>
       {/* Services/top overlay sits ABOVE the image, not on it */}
       {typeof renderTopOverlay === 'function' ? (
-        <View style={{ marginTop: 12, marginHorizontal: 16 }}>
+        <View style={{ marginTop: 44, marginHorizontal: 16 }}>
           {renderTopOverlay()}
         </View>
       ) : null}
 
       {/* Side preview cards (peeking) with elegant tilt */}
       {barbers.length > 1 && prevIdx !== activeIndex && (
-        <View style={{ position: 'absolute', left: -sidePeekShift, top: 92, width: cardWidth * 0.8, height: HEADER_HEIGHT - 36, borderRadius: 20, overflow: 'hidden', transform: [{ rotateZ: '-4deg' }, { scale: 0.9 }], opacity: 0.75 }}>
+        <View style={{ position: 'absolute', left: -sidePeekShift - 8, top: 128, width: cardWidth * 0.74, height: HEADER_HEIGHT - 40, borderRadius: 20, overflow: 'hidden', transform: [{ rotateZ: '-2deg' }, { scale: 0.92 }], opacity: 0.65 }}>
           {barbers[prevIdx]?.image_url ? (
             <Image source={{ uri: barbers[prevIdx].image_url as any }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
           ) : (
             <View style={{ width: '100%', height: '100%', backgroundColor: '#E5E5EA' }} />
           )}
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.25)' }} />
         </View>
       )}
       {barbers.length > 1 && nextIdx !== activeIndex && (
-        <View style={{ position: 'absolute', right: -sidePeekShift, top: 92, width: cardWidth * 0.8, height: HEADER_HEIGHT - 36, borderRadius: 20, overflow: 'hidden', transform: [{ rotateZ: '4deg' }, { scale: 0.9 }], opacity: 0.75 }}>
+        <View style={{ position: 'absolute', right: -sidePeekShift - 8, top: 128, width: cardWidth * 0.74, height: HEADER_HEIGHT - 40, borderRadius: 20, overflow: 'hidden', transform: [{ rotateZ: '2deg' }, { scale: 0.92 }], opacity: 0.65 }}>
           {barbers[nextIdx]?.image_url ? (
             <Image source={{ uri: barbers[nextIdx].image_url as any }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
           ) : (
             <View style={{ width: '100%', height: '100%', backgroundColor: '#E5E5EA' }} />
           )}
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.25)' }} />
         </View>
       )}
 
-      <View style={{ height: HEADER_HEIGHT, marginTop: 48, marginHorizontal: cardHorizontalMargin, width: cardWidth, borderRadius: 20, overflow: 'hidden', backgroundColor: '#F2F2F7', zIndex: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 16, elevation: 10 }}>
+      <View style={{ height: HEADER_HEIGHT, marginTop: 56, marginHorizontal: cardHorizontalMargin, width: cardWidth, borderRadius: 20, overflow: 'hidden', backgroundColor: '#F2F2F7', zIndex: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 16, elevation: 10 }}>
         {!!bgCurrent && (
           <Animated.Image source={{ uri: bgCurrent }} style={[{ width: '100%', height: '100%' }, bgStyle]} resizeMode="cover" fadeDuration={0 as any} />
         )}
@@ -217,9 +221,9 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
         </View>
 
         {/* Glassmorphic arrow buttons with beautiful styling */}
-        <View style={{ position: 'absolute', top: '50%', left: 12, transform: [{ translateY: -28 }], zIndex: 10 }}>
+        <View style={{ position: 'absolute', top: '50%', left: 12, transform: [{ translateY: -28 }], zIndex: 10, opacity: canGoPrev ? 1 : 0.4 }}>
           <TouchableOpacity
-            onPress={goPrev}
+            onPress={() => { if (canGoPrev) goPrev(); }}
             activeOpacity={0.75}
             style={{ 
               width: 56, 
@@ -237,14 +241,15 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
               elevation: 8,
               backgroundColor: 'transparent'
             }}
+            disabled={!canGoPrev}
           >
             <BlurView intensity={36} tint="light" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.3)' }} />
-            <Ionicons name={I18nManager?.isRTL ? 'chevron-forward' : 'chevron-back'} size={28} color="#1C1C1E" style={{ fontWeight: '800' } as any} />
+            <Ionicons name="chevron-back-outline" size={28} color="#1C1C1E" style={{ fontWeight: '800' } as any} />
           </TouchableOpacity>
         </View>
-        <View style={{ position: 'absolute', top: '50%', right: 12, transform: [{ translateY: -28 }], zIndex: 10 }}>
+        <View style={{ position: 'absolute', top: '50%', right: 12, transform: [{ translateY: -28 }], zIndex: 10, opacity: canGoNext ? 1 : 0.4 }}>
           <TouchableOpacity
-            onPress={goNext}
+            onPress={() => { if (canGoNext) goNext(); }}
             activeOpacity={0.75}
             style={{ 
               width: 56, 
@@ -262,9 +267,10 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
               elevation: 8,
               backgroundColor: 'transparent'
             }}
+            disabled={!canGoNext}
           >
             <BlurView intensity={36} tint="light" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.3)' }} />
-            <Ionicons name={I18nManager?.isRTL ? 'chevron-back' : 'chevron-forward'} size={28} color="#1C1C1E" style={{ fontWeight: '800' } as any} />
+            <Ionicons name="chevron-forward-outline" size={28} color="#1C1C1E" style={{ fontWeight: '800' } as any} />
           </TouchableOpacity>
         </View>
       </View>

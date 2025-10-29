@@ -287,7 +287,7 @@ export default function BusinessHoursScreen() {
         // Prefer per-barber setting; fallback to 0 if none
         setGlobalBreakMinutes(Math.max(0, Math.min(180, Number(perUserBreak ?? 0))));
       } catch (err) {
-        setError('Failed to fetch business hours');
+        setError(t('admin.hours.loadFailed','Failed to fetch business hours'));
         console.error(err);
       } finally {
         setIsLoading(false);
@@ -313,7 +313,7 @@ export default function BusinessHoursScreen() {
         return updated ? [...prev, updated as any] : prev;
       });
     } catch (err) {
-      setError('Failed to update business hours');
+      setError(t('admin.hours.updateFailed','Failed to update business hours'));
       console.error(err);
     }
   };
@@ -338,21 +338,21 @@ export default function BusinessHoursScreen() {
     if (editingDay !== null) {
       {
         if (tempStartTime >= tempEndTime) {
-          Alert.alert('Error', 'End time must be after start time');
+          Alert.alert(t('error.generic','Error'), t('admin.hours.endAfterStart','End time must be after start time'));
           return;
         }
         // validate multiple breaks (only if useBreaks is on)
         const allBreaks = useBreaks ? tempBreaks.slice() : [];
         for (const b of allBreaks) {
           if (!(tempStartTime < b.start_time && b.start_time < b.end_time && b.end_time <= tempEndTime)) {
-            Alert.alert('שגיאה', 'כל הפסקה חייבת להיות בתוך שעות העבודה וללא חפיפה');
+            Alert.alert(t('error.generic','Error'), t('admin.hours.breaksInvalid','Each break must be within work hours and non-overlapping'));
             return;
           }
         }
         const sortedBreaks = allBreaks.sort((a, b) => a.start_time.localeCompare(b.start_time));
         for (let i = 1; i < sortedBreaks.length; i++) {
           if (!(sortedBreaks[i - 1].end_time <= sortedBreaks[i].start_time)) {
-            Alert.alert('שגיאה', 'אין חפיפה בין הפסקות');
+            Alert.alert(t('error.generic','Error'), t('admin.hours.noOverlapBreaks','Breaks must not overlap'));
             return;
           }
         }
@@ -388,7 +388,7 @@ export default function BusinessHoursScreen() {
 
         setEditingDay(null);
       } catch (err) {
-        setError('Failed to save business hours');
+        setError(t('admin.hours.saveDayFailed','Failed to save business hours'));
         console.error(err);
       }
     }
@@ -451,7 +451,7 @@ export default function BusinessHoursScreen() {
             {dayHours && !dayHours.is_active && (
               <View style={styles.closedContainer}>
                 <Ionicons name="close-circle-outline" size={16} color={Colors.secondaryText} />
-                <Text style={styles.dayClosedText}>Closed</Text>
+                <Text style={styles.dayClosedText}>{t('admin.hours.closed','Closed')}</Text>
               </View>
             )}
           </View>
@@ -475,10 +475,10 @@ export default function BusinessHoursScreen() {
           <View style={styles.workHoursSection}>
             <View style={styles.sectionHeader}>
               <Ionicons name="briefcase-outline" size={18} color={Colors.primary} />
-              <Text style={styles.sectionTitle}>Work hours</Text>
+              <Text style={styles.sectionTitle}>{t('admin.hours.workHours','Work hours')}</Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <Text style={{ color: Colors.text, fontWeight: '600' }}>Show and set breaks?</Text>
+              <Text style={{ color: Colors.text, fontWeight: '600' }}>{t('admin.hours.showBreaksQuestion','Show and set breaks?')}</Text>
               <Switch
                 value={useBreaks}
                 onValueChange={setUseBreaks}
@@ -492,7 +492,7 @@ export default function BusinessHoursScreen() {
                 <TimePicker
                   value={tempStartTime}
                   onValueChange={setTempStartTime}
-                  label="Start time"
+                  label={t('admin.hours.startTime','Start time')}
                   options={startTimeOptions}
                   isBreakTime={false}
                   primaryColor={businessColors.primary}
@@ -517,7 +517,7 @@ export default function BusinessHoursScreen() {
                       setTempEndTime(v);
                     }
                   }}
-                  label="End time"
+                  label={t('admin.hours.endTime','End time')}
                   options={endTimeOptions}
                   isBreakTime={false}
                   primaryColor={businessColors.primary}
@@ -532,7 +532,7 @@ export default function BusinessHoursScreen() {
           <View style={styles.breakHoursSection}>
             <View style={styles.sectionHeader}>
               <Ionicons name="cafe-outline" size={18} color={Colors.secondaryText} />
-              <Text style={styles.sectionTitle}>Breaks</Text>
+              <Text style={styles.sectionTitle}>{t('admin.hours.breaks','Breaks')}</Text>
             </View>
             <View style={{ gap: 12 }}>
               {tempBreaks.map((b, idx) => (
@@ -546,7 +546,7 @@ export default function BusinessHoursScreen() {
                       <Ionicons name="close" size={16} color={Colors.danger} />
                     </TouchableOpacity>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Text style={{ fontSize: 15, fontWeight: '700', color: Colors.text }}>Break  #{idx + 1}</Text>
+                      <Text style={{ fontSize: 15, fontWeight: '700', color: Colors.text }}>{t('admin.hours.breakNumber','Break #{{num}}',{ num: idx + 1 })}</Text>
                       <Ionicons name="cafe" size={14} color={Colors.secondaryText} />
                     </View>
                   </View>
@@ -559,7 +559,7 @@ export default function BusinessHoursScreen() {
                           next[idx] = { ...next[idx], start_time: v };
                           setTempBreaks(next);
                         }}
-                        label={'Start'}
+                        label={t('admin.hours.start','Start')}
                         options={startTimeOptions}
                         isBreakTime
                         primaryColor={businessColors.primary}
@@ -577,7 +577,7 @@ export default function BusinessHoursScreen() {
                           next[idx] = { ...next[idx], end_time: v };
                           setTempBreaks(next);
                         }}
-                        label="End"
+                        label={t('admin.hours.end','End')}
                         options={endTimeOptions}
                         isBreakTime
                         primaryColor={businessColors.primary}
@@ -593,7 +593,7 @@ export default function BusinessHoursScreen() {
                 style={{ paddingVertical: 14, alignItems: 'center', borderRadius: 16, backgroundColor: 'rgba(255,149,0,0.08)', borderWidth: 1, borderColor: 'rgba(255,149,0,0.2)' }}
                 activeOpacity={0.8}
               >
-                <Text style={{ color: Colors.warning, fontWeight: '700' }}>Add break</Text>
+                <Text style={{ color: Colors.warning, fontWeight: '700' }}>{t('admin.hours.addBreak','Add break')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -605,10 +605,10 @@ export default function BusinessHoursScreen() {
           <View style={styles.daySummary}>
             <View style={styles.summaryHeader}>
               <Ionicons name="calendar-outline" size={16} color={Colors.primary} />
-              <Text style={styles.summaryTitle}>Day summary</Text>
+              <Text style={styles.summaryTitle}>{t('admin.hours.daySummary','Day summary')}</Text>
             </View>
             <View style={styles.summaryContent}>
-              <Text style={styles.summaryText}>Work: <Text style={styles.ltrText}>{formatRangeLtrDisplay(tempStartTime, tempEndTime, useAmPm)}</Text></Text>
+              <Text style={styles.summaryText}>{t('admin.hours.workPrefix','Work')}: <Text style={styles.ltrText}>{formatRangeLtrDisplay(tempStartTime, tempEndTime, useAmPm)}</Text></Text>
               {useBreaks ? (
                 tempBreaks.length > 0 ? (
                   <View style={{ gap: 4 }}>
@@ -622,7 +622,7 @@ export default function BusinessHoursScreen() {
               ) : (
                 tempBreakStartTime && tempBreakEndTime ? (
                   <Text style={styles.summaryBreak}>
-                    Break: <Text style={styles.ltrText}>{formatRangeLtrDisplay(tempBreakStartTime, tempBreakEndTime, useAmPm)}</Text>
+                    {t('admin.hours.breakPrefix','Break')}: <Text style={styles.ltrText}>{formatRangeLtrDisplay(tempBreakStartTime, tempBreakEndTime, useAmPm)}</Text>
                   </Text>
                 ) : null
               )}
@@ -635,7 +635,7 @@ export default function BusinessHoursScreen() {
               onPress={() => setEditingDay(null)}
               activeOpacity={0.7}
             >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
+              <Text style={styles.cancelButtonText}>{t('cancel','Cancel')}</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
@@ -643,7 +643,7 @@ export default function BusinessHoursScreen() {
               onPress={handleSaveDay}
               activeOpacity={0.7}
             >
-              <Text style={styles.saveButtonText}>Save</Text>
+              <Text style={styles.saveButtonText}>{t('save','Save')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -657,7 +657,7 @@ export default function BusinessHoursScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>Loading working hours...</Text>
+          <Text style={styles.loadingText}>{t('admin.hours.loading','Loading working hours...')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -746,7 +746,7 @@ export default function BusinessHoursScreen() {
                       }
                       setIsBreakPickerOpen(false);
                     } catch (e) {
-                      Alert.alert('שגיאה', 'נכשל בשמירת ההפסקה. נסו שוב.');
+                      Alert.alert(t('error.generic','Error'), t('admin.hours.saveBreakFailed','Failed to save break. Please try again.'));
                     } finally {
                       setIsSavingGlobalBreak(false);
                     }

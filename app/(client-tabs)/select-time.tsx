@@ -538,7 +538,7 @@ export default function SelectTimeScreen() {
                       <View style={styles.timePillLeftSection}>
                         <Text style={[styles.timePillLabel, isSel && styles.timePillLabelSelected]}>{formatTime12Hour(t)}</Text>
                         <View style={[styles.timePillTag, isSel && styles.timePillTagSelected]}>
-                          <Text style={[styles.timePillTagText, isSel && styles.timePillTagTextSelected]}>Available</Text>
+                          <Text style={[styles.timePillTagText, isSel && styles.timePillTagTextSelected]}>{t('selectTime.availableLabel','Available')}</Text>
                         </View>
                       </View>
                       <View style={styles.timePillRightSection}>

@@ -686,7 +686,7 @@ export default function SettingsScreen() {
         facebook_url: (profileFacebook || '').trim() || null as any,
       });
       if (!updated) {
-        Alert.alert('Error', 'Failed to save Instagram link');
+        Alert.alert(t('error.generic','Error'), t('settings.profile.instagramSaveFailed','Failed to save Instagram link'));
         return;
       }
       setProfile(updated);
@@ -707,7 +707,7 @@ export default function SettingsScreen() {
         tiktok_url: (profileTiktok || '').trim() || null as any,
       });
       if (!updated) {
-        Alert.alert('Error', 'Failed to save Facebook link');
+        Alert.alert(t('error.generic','Error'), t('settings.profile.facebookSaveFailed','Failed to save Facebook link'));
         return;
       }
       setProfile(updated);
@@ -728,7 +728,7 @@ export default function SettingsScreen() {
         tiktok_url: tiktokDraft.trim() || null as any,
       });
       if (!updated) {
-        Alert.alert('Error', 'Failed to save TikTok link');
+        Alert.alert(t('error.generic','Error'), t('settings.profile.tiktokSaveFailed','Failed to save TikTok link'));
         return;
       }
       setProfile(updated);
@@ -742,7 +742,7 @@ export default function SettingsScreen() {
   const saveCancellationHours = async () => {
     const hours = parseInt(cancellationHoursDraft);
     if (isNaN(hours) || hours < 0 || hours > 168) {
-      Alert.alert('Error', 'Please enter a valid number between 0 and 168 hours');
+      Alert.alert(t('error.generic','Error'), t('settings.profile.cancellationInvalid','Please enter a valid number between 0 and 168 hours'));
       return;
     }
     
@@ -757,7 +757,7 @@ export default function SettingsScreen() {
         min_cancellation_hours: hours,
       });
       if (!updated) {
-        Alert.alert('Error', 'Failed to save cancellation policy');
+        Alert.alert(t('error.generic','Error'), t('settings.profile.cancellationSaveFailed','Failed to save cancellation policy'));
         return;
       }
       setProfile(updated);
@@ -968,7 +968,7 @@ export default function SettingsScreen() {
       if (!user?.id) return;
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission required', 'Please allow gallery access to pick an image');
+        Alert.alert(t('profile.permissionRequired','Permission Required'), t('profile.permissionGallery','Please allow gallery access to pick a profile picture'));
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -992,7 +992,7 @@ export default function SettingsScreen() {
       }
       const updated = await usersApi.updateUser(user.id as any, { image_url: uploadedUrl } as any);
       if (!updated) {
-        Alert.alert('Error', 'Failed to save profile image');
+        Alert.alert(t('error.generic','Error'), t('settings.profile.saveImageFailed','Failed to save profile image'));
         return;
       }
       updateUserProfile({ image_url: uploadedUrl } as any);
@@ -1094,7 +1094,7 @@ export default function SettingsScreen() {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission required', 'Please allow gallery access to pick an image');
+        Alert.alert(t('profile.permissionRequired','Permission Required'), t('profile.permissionGallery','Please allow gallery access to pick a profile picture'));
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -1118,7 +1118,7 @@ export default function SettingsScreen() {
       }
       updateLocalServiceField(serviceId, 'image_url', uploadedUrl as any);
     } catch (e) {
-      Alert.alert('Error', 'Image upload failed');
+      Alert.alert(t('error.generic','Error'), t('settings.profile.uploadFailed','Image upload failed'));
     } finally {
       setUploadingServiceId(null);
     }
@@ -1481,7 +1481,7 @@ export default function SettingsScreen() {
         worker_id: (user?.id as any) as any,
       } as any);
       if (!updated) {
-        Alert.alert('Error', 'Failed to save service');
+        Alert.alert(t('error.generic','Error'), t('settings.services.saveFailed','Failed to save service'));
         return;
       }
       setEditableServices(prev => prev.map(s => (s.id === service.id ? updated : s)));
@@ -1505,10 +1505,10 @@ export default function SettingsScreen() {
       if (supported) {
         await Linking.openURL(url);
       } else {
-        Alert.alert('Error', 'Cannot open email client on this device');
+        Alert.alert(t('error.generic','Error'), t('common.emailOpenFailed','Cannot open email client on this device'));
       }
     } catch {
-      Alert.alert('Error', 'Cannot open email client on this device');
+      Alert.alert(t('error.generic','Error'), t('common.emailOpenFailed','Cannot open email client on this device'));
     }
   };
 
@@ -2099,13 +2099,13 @@ export default function SettingsScreen() {
       <View style={styles.contentWrapper}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
         
-        <Text style={styles.sectionTitleNew}>Notifications & messages</Text>
+        <Text style={styles.sectionTitleNew}>{t('settings.sections.notificationsMessages','Notifications & messages')}</Text>
         
         <View style={[styles.cardNew, shadowStyle]}>
           {renderSettingItem(
             <Bell size={20} color={businessColors.primary} />,
-            'Notifications',
-            'Receive notifications about appointments and updates',
+            t('settings.sections.notifications','Notifications'),
+            t('settings.notifications.subtitle','Receive notifications about appointments and updates'),
             <AppSwitch value={notificationsEnabled} onValueChange={setNotificationsEnabled} primaryColor={businessColors.primary} />,
             undefined,
             true
@@ -2113,8 +2113,8 @@ export default function SettingsScreen() {
           
           {renderSettingItem(
             <Send size={20} color={businessColors.primary} />,
-            'Send message to all clients',
-            'Send a custom message to all clients',
+            t('admin.notificationsComposer.sendToAllTitle','Send message to all clients'),
+            t('admin.notificationsComposer.sendToAllSubtitle','Send a custom message to all clients'),
             undefined,
             () => setShowBroadcast(true)
           )}
@@ -2123,7 +2123,7 @@ export default function SettingsScreen() {
             <View style={styles.settingIconLTR}><Clock size={20} color={businessColors.primary} /></View>
             <View style={{ flex: 1 }}>
               <InlineEditableRow
-                title="Reminder before appointment (minutes)"
+                title={t('settings.reminder.titleWithMinutes','Reminder before appointment (minutes)')}
                 value={reminderEnabled && Number(reminderMinutes) > 0 ? String(reminderMinutes) : ''}
                 placeholder={`${t('common.eg','e.g.')} 30`}
                 keyboardType="default"
@@ -2139,12 +2139,12 @@ export default function SettingsScreen() {
 
         </View>
         
-        <Text style={styles.sectionTitleNew}>Services</Text>
+        <Text style={styles.sectionTitleNew}>{t('settings.sections.services','Services')}</Text>
         <View style={[styles.cardNew, shadowStyle]}>
           {renderSettingItem(
             <Pencil size={20} color={businessColors.primary} />,
-            'Edit services',
-            'Update prices and durations',
+            t('settings.services.edit','Edit services'),
+            t('settings.services.editSubtitle','Update prices and durations'),
             undefined,
             openServicesModal
           )}
@@ -2153,7 +2153,7 @@ export default function SettingsScreen() {
 
         {canSeeAddEmployee && (
           <>
-            <Text style={styles.sectionTitleNew}>Business details</Text>
+            <Text style={styles.sectionTitleNew}>{t('settings.sections.businessDetails','Business details')}</Text>
             <View style={[styles.cardNew, shadowStyle]}>
               <View style={styles.settingItemLTR}>
                 <View style={styles.settingIconLTR}><Pencil size={20} color={businessColors.primary} /></View>
@@ -2175,7 +2175,7 @@ export default function SettingsScreen() {
                   <InlineEditableRow
                     title="Booking window (days)"
                     value={String(profileBookingOpenDays || 7)}
-                    placeholder="7"
+                    placeholder={t('settings.profile.bookingWindowPlaceholder','7')}
                     keyboardType="default"
                     onSave={handleSaveBookingOpenDaysInline}
                     chevronColor={businessColors.primary}
@@ -2322,7 +2322,7 @@ export default function SettingsScreen() {
           </>
         )}
 
-        <Text style={styles.sectionTitleNew}>Appointment policies</Text>
+        <Text style={styles.sectionTitleNew}>{t('settings.sections.appointmentPolicies','Appointment policies')}</Text>
         <View style={[styles.cardNew, shadowStyle]}>
           <View style={styles.settingItemLTR}>
             <View style={styles.settingIconLTR}><Clock size={20} color={businessColors.primary} /></View>
@@ -2346,30 +2346,30 @@ export default function SettingsScreen() {
 
         {isAdmin && (
           <>
-            <Text style={styles.sectionTitleNew}>Appointments management</Text>
+            <Text style={styles.sectionTitleNew}>{t('settings.sections.appointmentsManagement','Appointments management')}</Text>
             <View style={[styles.cardNew, shadowStyle]}>
               {renderSettingItem(
                 <Calendar size={20} color={businessColors.primary} />,
-                'Add appointment for a client',
-                'Create a new appointment for a client',
+                t('adminEx.appointmentsAdmin.addAppointment','add appointment'),
+                t('adminEx.appointmentsAdmin.summary','Appointment Summary'),
                 undefined,
                 () => setShowAddAppointmentModal(true)
               )}
             </View>
 
-            <Text style={styles.sectionTitleNew}>Recurring appointments</Text>
+            <Text style={styles.sectionTitleNew}>{t('settings.sections.recurringTitle','Recurring appointments')}</Text>
             <View style={[styles.cardNew, shadowStyle]}>
               {renderSettingItem(
                 <Pencil size={20} color={businessColors.primary} />, // reuse icon
-                'Add recurring appointment',
-                'Choose a client, day, and time for a recurring appointment',
+                t('settings.recurring.addTitle','Add recurring appointment'),
+                t('settings.recurring.fillAll','Please fill all fields: client, day, time, and service'),
                 undefined,
                 () => setShowRecurringModal(true)
               )}
               {renderSettingItem(
                 <Pencil size={20} color={businessColors.primary} />, // reuse icon
-                'Manage recurring appointments',
-                'View, edit, and delete existing recurring appointments',
+                t('settings.recurring.manageTitle','Manage recurring appointments'),
+                t('settings.recurring.manageSubtitle','View, edit, and delete existing recurring appointments'),
                 undefined,
                 async () => {
                   setShowManageRecurringModal(true);
@@ -2389,14 +2389,14 @@ export default function SettingsScreen() {
         
         
         
-        <Text style={styles.sectionTitleNew}>Security & support</Text>
+        <Text style={styles.sectionTitleNew}>{t('settings.sections.securitySupport','Security & support')}</Text>
         
         <View style={[styles.cardNew, shadowStyle]}>
           {canSeeAddEmployee && (
             renderSettingItem(
               <User size={20} color={businessColors.primary} />,
-              'Add employee user',
-              'Add another employee to the system',
+              t('settings.admin.addEmployee','Add employee user'),
+              t('settings.admin.addEmployeeSubtitle','Add another employee to the system'),
               undefined,
               () => setShowAddAdminModal(true)
             )
@@ -2404,8 +2404,8 @@ export default function SettingsScreen() {
           {canSeeAddEmployee && (
             renderSettingItem(
               <Users size={20} color={businessColors.primary} />,
-              'Manage employees',
-              'Remove employees from this business',
+              t('settings.admin.manageEmployees','Manage employees'),
+              t('settings.admin.manageEmployeesSubtitle','Remove employees from this business'),
               undefined,
               async () => {
                 setShowManageEmployeesModal(true);
@@ -2422,8 +2422,8 @@ export default function SettingsScreen() {
           )}
           {renderSettingItem(
             <HelpCircle size={20} color={businessColors.primary} />,
-            'Support and help',
-            'Common questions and contact',
+            t('settings.support.title','Support and help'),
+            t('settings.support.common','Common questions and contact'),
             undefined,
             () => setShowSupportModal(true)
           )}
@@ -2431,13 +2431,13 @@ export default function SettingsScreen() {
 
         {user && (
           <>
-            <Text style={styles.sectionTitleNew}>Account Management</Text>
+            <Text style={styles.sectionTitleNew}>{t('settings.sections.accountManagement','Account Management')}</Text>
             
             <View style={[styles.cardNew, shadowStyle]}>
               {renderSettingItem(
                 <Trash2 size={20} color="#FF3B30" />,
-                'Delete Account',
-                'Delete your account and all data',
+                t('profile.delete.title','Delete Account'),
+                t('profile.delete.subtitle','Permanently delete your account'),
                 undefined,
                 () => setShowDeleteAccountModal(true)
               )}
@@ -2447,10 +2447,10 @@ export default function SettingsScreen() {
         
         <TouchableOpacity style={[styles.logoutButton, { backgroundColor: businessColors.primary }]} onPress={handleLogout}>
           <LogOut size={20} color={Colors.white} />
-          <Text style={styles.logoutText}>Logout</Text>
+          <Text style={styles.logoutText}>{t('settings.sections.logoutLabel','Logout')}</Text>
         </TouchableOpacity>
         
-        <Text style={styles.versionText}>Version 1.0.0</Text>
+        <Text style={styles.versionText}>{t('settings.sections.version','Version')} 1.0.0</Text>
         </ScrollView>
       </View>
 
@@ -2472,20 +2472,20 @@ export default function SettingsScreen() {
             >
               <X size={20} color={Colors.text} />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Support and help</Text>
+            <Text style={styles.modalTitle}>{t('settings.support.title','Support and help')}</Text>
             <View style={{ width: 44 }} />
           </View>
           <ScrollView style={[styles.modalContent, { padding: 20 }]} showsVerticalScrollIndicator={false}>
             <View style={styles.groupCard}>
               <Text style={styles.previewNotificationTitle}>
-                Need help? Contact Slotlys support team
+                {t('settings.support.header','Need help? Contact Slotlys support team')}
               </Text>
               <Text style={styles.previewNotificationContent}>
-                Our dedicated support team is here to assist you with any questions or issues you may have. Whether you need help with appointments, account settings, or technical support, we're ready to help. Please use the contact button below to reach out to us directly.
+                {t('settings.support.description',"Our dedicated support team is here to assist you with any questions or issues you may have. Whether you need help with appointments, account settings, or technical support, we're ready to help. Please use the contact button below to reach out to us directly.")}
               </Text>
               <View style={{ marginTop: 16, alignItems: 'center' }}>
                 <TouchableOpacity style={[styles.modalSendButton, { backgroundColor: businessColors.primary }]} onPress={handleCallSupport}>
-                  <Text style={[styles.modalSendText, { color: Colors.white }]}>Contact us now </Text>
+                  <Text style={[styles.modalSendText, { color: Colors.white }]}>{t('settings.support.contactNow','Contact us now')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -2521,7 +2521,7 @@ export default function SettingsScreen() {
                     setProfileDisplayName(updated.display_name || '');
                     setShowEditDisplayNameModal(false);
                   } else {
-                    Alert.alert('Error', 'Failed to save business name');
+                    Alert.alert(t('error.generic','Error'), t('settings.profile.nameSaveFailed','Failed to save business name'));
                   }
                 } finally {
                   setIsSavingProfile(false);
@@ -2668,7 +2668,7 @@ export default function SettingsScreen() {
                   end={{ x: 1, y: 1 }}
                   style={styles.modalAvatarRing}
                 >
-                  <TouchableOpacity style={styles.modalAvatar} onPress={handlePickAdminAvatar} activeOpacity={0.9} accessibilityRole="button" accessibilityLabel="Change admin profile picture">
+                  <TouchableOpacity style={styles.modalAvatar} onPress={handlePickAdminAvatar} activeOpacity={0.9} accessibilityRole="button" accessibilityLabel={t('settings.profile.changeProfilePicture','Change profile picture')}>
                     <Image source={user?.image_url ? { uri: (user as any).image_url } : require('@/assets/images/logo-03.png')} style={styles.modalAvatarImage} resizeMode="cover" />
                     {isUploadingAdminAvatar && (
                       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 36 }}>
@@ -2785,7 +2785,7 @@ export default function SettingsScreen() {
             >
               <X size={20} color={Colors.text} />
             </TouchableOpacity>
-            <Text style={[styles.modalTitle, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>Business address</Text>
+            <Text style={[styles.modalTitle, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>{t('settings.profile.businessAddressTitle','Business address')}</Text>
             <TouchableOpacity
               style={[styles.modalSendButton, { backgroundColor: businessColors.primary }, !canSave ? { opacity: 0.6 } : null]}
               disabled={!canSave}
@@ -2797,14 +2797,14 @@ export default function SettingsScreen() {
                 Animated.timing(addressSheetAnim, { toValue: 0, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => setShowAddressSheet(false));
               }}
             >
-              <Text style={[styles.modalSendText, { color: Colors.white }]}>Save</Text>
+              <Text style={[styles.modalSendText, { color: Colors.white }]}>{t('save','Save')}</Text>
             </TouchableOpacity>
           </View>
           ); })()}
           <KeyboardAvoidingView behavior={Platform.select({ ios: 'padding', android: undefined })} style={styles.addressSheetBody}>
             <View style={{ flex: 1, padding: 16, paddingBottom: insets.bottom + 16 }}>
               <View style={styles.addressInfoCard}>
-                <Text style={styles.inputLabelLTR}>Address</Text>
+                <Text style={styles.inputLabelLTR}>{t('settings.profile.addressLabel','Address')}</Text>
                 <GooglePlacesAutocomplete
                   keyboardShouldPersistTaps="handled"
                   placeholder={t('settings.profile.businessAddressPlaceholder','Business address')}
@@ -2901,11 +2901,11 @@ export default function SettingsScreen() {
           <View style={styles.smallModalCard}>
             <View style={styles.modalHeader}>
               <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowEditInstagramModal(false)}>
-                <Text style={styles.modalCloseText}>Cancel</Text>
+                <Text style={styles.modalCloseText}>{t('cancel','Cancel')}</Text>
               </TouchableOpacity>
               <Text style={styles.modalTitleLTR}>Instagram URL</Text>
               <TouchableOpacity style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]} onPress={saveInstagram} disabled={isSavingProfile}>
-                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'Saving...' : 'Save'}</Text>
+                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? t('settings.common.saving','Saving...') : t('save','Save')}</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
@@ -2938,11 +2938,11 @@ export default function SettingsScreen() {
           <View style={styles.smallModalCard}>
             <View style={styles.modalHeader}>
               <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowEditFacebookModal(false)}>
-                <Text style={styles.modalCloseText}>Cancel</Text>
+                <Text style={styles.modalCloseText}>{t('cancel','Cancel')}</Text>
               </TouchableOpacity>
               <Text style={styles.modalTitleLTR}>Facebook URL</Text>
               <TouchableOpacity style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]} onPress={saveFacebook} disabled={isSavingProfile}>
-                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'Saving...' : 'Save'}</Text>
+                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? t('settings.common.saving','Saving...') : t('save','Save')}</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
@@ -2979,7 +2979,7 @@ export default function SettingsScreen() {
               </TouchableOpacity>
               <Text style={styles.modalTitleLTR}>TikTok URL</Text>
               <TouchableOpacity style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]} onPress={saveTiktok} disabled={isSavingProfile}>
-                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'Saving...' : 'Save'}</Text>
+                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? t('settings.common.saving','Saving...') : t('save','Save')}</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
@@ -3025,15 +3025,15 @@ export default function SettingsScreen() {
                   }}>
                     <X size={20} color={Colors.text} />
                   </TouchableOpacity>
-                  <Text style={styles.modalTitleLTR}>Minimum cancellation time</Text>
+                  <Text style={styles.modalTitleLTR}>{t('settings.policies.minCancellationTitle','Minimum cancellation time')}</Text>
                   <TouchableOpacity style={[styles.modalSendButton, { backgroundColor: businessColors.primary }, isSavingProfile && styles.modalSendButtonDisabled]} onPress={saveCancellationHours} disabled={isSavingProfile}>
-                    <Text style={[styles.modalSendText, { color: Colors.white }, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? 'Saving...' : 'Save'}</Text>
+                    <Text style={[styles.modalSendText, { color: Colors.white }, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? t('settings.common.saving','Saving...') : t('save','Save')}</Text>
                   </TouchableOpacity>
                 </View>
                 <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
                   <TouchableWithoutFeedback onPress={() => setShowCancellationDropdown(false)}>
                     <View style={styles.inputContainer}>
-                      <Text style={styles.inputLabelLTR}>Hours before appointment</Text>
+                      <Text style={styles.inputLabelLTR}>{t('settings.policies.hoursBefore','Hours before appointment')}</Text>
                       <View style={styles.dropdownContainer}>
                         <TouchableOpacity
                           style={styles.dropdownButton}
@@ -3413,7 +3413,7 @@ export default function SettingsScreen() {
             >
               <X size={20} color={Colors.text} />
             </TouchableOpacity>
-            <Text style={[styles.modalTitle, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>Add recurring appointment</Text>
+            <Text style={[styles.modalTitle, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>{t('settings.recurring.addTitle','Add recurring appointment')}</Text>
             <View style={{ width: 44 }} />
           </View>
 
@@ -3454,14 +3454,14 @@ export default function SettingsScreen() {
                     <View style={styles.inputContainer}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                         <User size={18} color={businessColors.primary} />
-                        <Text style={[styles.inputLabel, { textAlign: 'left', marginBottom: 0 }]}>Client</Text>
+                        <Text style={[styles.inputLabel, { textAlign: 'left', marginBottom: 0 }]}>{t('adminEx.appointmentsAdmin.client','Client')}</Text>
                       </View>
-                      <Text style={styles.stepHint}>Choose a client</Text>
+                      <Text style={styles.stepHint}>{t('adminEx.appointmentsAdmin.pickClient','Pick the client for this appointment')}</Text>
                       {!selectedClient ? (
                         <>
                       <Pressable style={[styles.dropdownContainer, styles.grayField, { minHeight: 52 }]} onPress={() => setShowClientDropdown(!showClientDropdown)}>
                             <View style={styles.dropdownHeader}>
-                              <Text style={[styles.dropdownText, styles.dropdownPlaceholder, { textAlign: 'left' }]}>Select client...</Text>
+                              <Text style={[styles.dropdownText, styles.dropdownPlaceholder, { textAlign: 'left' }]}>{t('adminEx.appointmentsAdmin.selectClientPlaceholder','Select client...')}</Text>
                               {showClientDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
                             </View>
                           </Pressable>
@@ -3520,9 +3520,9 @@ export default function SettingsScreen() {
                     <View style={styles.inputContainer}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                         <Calendar size={18} color={businessColors.primary} />
-                        <Text style={[styles.inputLabel, { textAlign: 'left', marginBottom: 0 }]}>Service</Text>
+                        <Text style={[styles.inputLabel, { textAlign: 'left', marginBottom: 0 }]}>{t('booking.field.service','Service')}</Text>
                       </View>
-                      <Text style={styles.stepHint}>Pick a service</Text>
+                      <Text style={styles.stepHint}>{t('adminEx.appointmentsAdmin.pickService','Choose the service to perform')}</Text>
                       <Pressable style={[styles.dropdownContainer, styles.grayField, { minHeight: 52 }]} onPress={() => setShowServiceDropdown(!showServiceDropdown)}>
                         <View style={styles.dropdownHeader}>
                           {selectedService ? (
@@ -3533,7 +3533,7 @@ export default function SettingsScreen() {
                               )}
                             </View>
                           ) : (
-                            <Text style={[styles.dropdownText, styles.dropdownPlaceholder, { textAlign: 'left' }]}>Select service...</Text>
+                            <Text style={[styles.dropdownText, styles.dropdownPlaceholder, { textAlign: 'left' }]}>{t('adminEx.appointmentsAdmin.selectServicePlaceholder','Select service...')}</Text>
                           )}
                           {showServiceDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
                         </View>
@@ -3566,19 +3566,19 @@ export default function SettingsScreen() {
                     <View style={styles.inputContainer}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                         <Calendar size={18} color={businessColors.primary} />
-                        <Text style={[styles.inputLabel, { textAlign: 'left', marginBottom: 0 }]}>Day of week</Text>
+                        <Text style={[styles.inputLabel, { textAlign: 'left', marginBottom: 0 }]}>{t('settings.recurring.dayOfWeek','Day of week')}</Text>
                       </View>
-                      <Text style={styles.stepHint}>Select a day of the week</Text>
+                      <Text style={styles.stepHint}>{t('settings.recurring.selectDayOfWeek','Select a day of the week')}</Text>
                       <Pressable
                         style={[styles.dropdownContainer, styles.grayField, { opacity: selectedService ? 1 : 0.6 }]}
                         onPress={() => {
-                          if (!selectedService) { Alert.alert('Error', 'Please select a service'); return; }
+                          if (!selectedService) { Alert.alert(t('error.generic','Error'), t('settings.recurring.selectServiceFirst','Please select a service')); return; }
                           setShowDayDropdown(!showDayDropdown);
                         }}
                       >
                         <View style={styles.dropdownHeader}>
                           <Text style={[styles.dropdownText, !Number.isInteger(selectedDayOfWeek as any) && styles.dropdownPlaceholder, { textAlign: 'left' }]}>
-                            {Number.isInteger(selectedDayOfWeek as any) ? dayNames[selectedDayOfWeek as number] : 'Select day...'}
+                            {Number.isInteger(selectedDayOfWeek as any) ? dayNames[selectedDayOfWeek as number] : t('admin2.hours.selectDate','Please select a date')}
                           </Text>
                           {showDayDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
                         </View>
@@ -3602,14 +3602,14 @@ export default function SettingsScreen() {
                     <View style={styles.inputContainer}> 
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                         <Clock size={18} color={businessColors.primary} />
-                        <Text style={[styles.sectionHeaderTitle, { textAlign: 'left' }]}>Select time</Text>
+                        <Text style={[styles.sectionHeaderTitle, { textAlign: 'left' }]}>{t('selectTime.selectTime','Select Time')}</Text>
                       </View>
-                      <Text style={styles.stepHint}>Pick an available time</Text>
+                      <Text style={styles.stepHint}>{t('adminEx.appointmentsAdmin.pickTime','Pick an available time slot')}</Text>
                       <Pressable
                         style={[styles.dropdownContainer, styles.grayField, { minHeight: 52, opacity: Number.isInteger(selectedDayOfWeek as any) ? 1 : 0.6 }]}
                         onPress={() => {
-                          if (!selectedService) { Alert.alert('Error', 'Please select a service'); return; }
-                          if (!Number.isInteger(selectedDayOfWeek as any)) { Alert.alert('Error', 'Please select a day of the week'); return; }
+                          if (!selectedService) { Alert.alert(t('error.generic','Error'), t('settings.recurring.selectServiceFirst','Please select a service')); return; }
+                          if (!Number.isInteger(selectedDayOfWeek as any)) { Alert.alert(t('error.generic','Error'), t('settings.recurring.selectDayFirst','Please select a day of the week')); return; }
                           if (!showTimeDropdown) { setIsLoadingTimes(true); if (Number.isInteger(selectedDayOfWeek as any)) { loadAvailableTimesForDay(selectedDayOfWeek as number); } }
                           setShowTimeDropdown(!showTimeDropdown);
                         }}
@@ -3668,12 +3668,12 @@ export default function SettingsScreen() {
                     <View style={styles.inputContainer}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                         <Repeat size={18} color={businessColors.primary} />
-                        <Text style={[styles.inputLabel, { textAlign: 'left', marginBottom: 0 }]}>Repeat every</Text>
+                        <Text style={[styles.inputLabel, { textAlign: 'left', marginBottom: 0 }]}>{t('settings.recurring.repeatEvery','Repeat every')}</Text>
                       </View>
-                      <Text style={styles.stepHint}>Set how often this repeats</Text>
+                      <Text style={styles.stepHint}>{t('settings.recurring.repeatHint','Set how often this repeats')}</Text>
                       <Pressable style={[styles.dropdownContainer, styles.grayField, { minHeight: 52 }]} onPress={() => setShowRepeatDropdown(!showRepeatDropdown)}>
                         <View style={styles.dropdownHeader}>
-                          <Text style={[styles.dropdownText, { textAlign: 'left' }]}>{repeatWeeks === 1 ? 'every week' : `every ${repeatWeeks} weeks`}</Text>
+                          <Text style={[styles.dropdownText, { textAlign: 'left' }]}>{repeatWeeks === 1 ? t('settings.recurring.everyWeek','every week') : t('settings.recurring.everyNWeeks','every {{count}} weeks', { count: repeatWeeks })}</Text>
                           {showRepeatDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
                         </View>
                       </Pressable>
@@ -3703,7 +3703,7 @@ export default function SettingsScreen() {
             {/* Step navigation visible for all steps */}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, paddingHorizontal: 4 }}>
               <TouchableOpacity onPress={goBackRec} disabled={recStep === 0} style={[styles.stepNavButton, recStep === 0 && styles.stepNavButtonDisabled]}>
-                <Text style={[styles.stepNavText, recStep === 0 && styles.stepNavTextDisabled]}>Back</Text>
+                <Text style={[styles.stepNavText, recStep === 0 && styles.stepNavTextDisabled]}>{t('back','Back')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={recStep < 4 ? goNextRec : handleSubmitRecurring}
@@ -3754,16 +3754,16 @@ export default function SettingsScreen() {
                 style={styles.servicesModalCloseButton}
                 onPress={closeServicesModal}
                 accessibilityRole="button"
-                accessibilityLabel="Close"
+                accessibilityLabel={t('close','Close')}
               >
                 <X size={20} color={Colors.text} />
               </TouchableOpacity>
-              <Text style={styles.servicesModalTitle}>Edit services</Text>
+              <Text style={styles.servicesModalTitle}>{t('settings.services.edit','Edit services')}</Text>
               <TouchableOpacity 
                 style={styles.modalActionButton}
                 onPress={handleOpenAddService}
                 accessibilityRole="button"
-                accessibilityLabel="Add service"
+                accessibilityLabel={t('settings.services.add','Add service')}
               >
                 <Text style={styles.modalActionText}>+</Text>
               </TouchableOpacity>
@@ -3781,7 +3781,7 @@ export default function SettingsScreen() {
                 {isLoadingServices && (
                   <View style={{ paddingVertical: 24, alignItems: 'center' }}>
                     <ActivityIndicator size="large" color={businessColors.primary} />
-                    <Text style={{ marginTop: 12, color: Colors.subtext }}>Loading services...</Text>
+                    <Text style={{ marginTop: 12, color: Colors.subtext }}>{t('settings.services.loading','Loading services...')}</Text>
                   </View>
                 )}
 
@@ -3801,7 +3801,7 @@ export default function SettingsScreen() {
                         onPress={() => handleDeleteService(svc.id)}
                       >
                         <Trash2 size={20} color={'#fff'} />
-                        <Text style={styles.swipeDeleteText}>Delete</Text>
+                        <Text style={styles.swipeDeleteText}>{t('settings.services.delete','Delete')}</Text>
                       </TouchableOpacity>
                     )}
                   >
@@ -3959,7 +3959,7 @@ export default function SettingsScreen() {
                             onPress={() => handleDeleteService(svc.id)}
                             activeOpacity={0.85}
                             accessibilityRole="button"
-                            accessibilityLabel="Delete service"
+                            accessibilityLabel={t('settings.services.a11yDelete','Delete service')}
                           >
                             <Trash2 size={20} color="#FF3B30" />
                           </TouchableOpacity>
@@ -4004,7 +4004,7 @@ export default function SettingsScreen() {
                 style={[styles.modalCloseButton, { marginLeft: -10, paddingLeft: 0 }]}
                 onPress={() => setShowAddServiceModal(false)}
                 accessibilityRole="button"
-                accessibilityLabel="Close"
+                accessibilityLabel={t('close','Close')}
               >
                 <X size={20} color={Colors.text} />
               </TouchableOpacity>
@@ -4093,7 +4093,7 @@ export default function SettingsScreen() {
                       const num = t.replace(/[^0-9.]/g, '');
                       setAddSvcPrice(num);
                     }}
-                    placeholder="0.00"
+                    placeholder={t('settings.services.pricePlaceholder','0.00')}
                     placeholderTextColor={Colors.subtext}
                     keyboardType="numeric"
                   />
@@ -4211,7 +4211,7 @@ export default function SettingsScreen() {
                 }
               }}
             >
-              <Text style={[styles.modalSendText, { color: '#FFFFFF' }]}>Change</Text>
+              <Text style={[styles.modalSendText, { color: '#FFFFFF' }]}>{t('common.change','Change')}</Text>
             </TouchableOpacity>
           </View>
           
@@ -4302,7 +4302,7 @@ export default function SettingsScreen() {
                     setImageLoadTimeout(timeout);
                   }}
                 >
-                  <Text style={styles.retryButtonText}>Retry</Text>
+                  <Text style={styles.retryButtonText}>{t('common.retry','Retry')}</Text>
                 </TouchableOpacity>
               </View>
             )}

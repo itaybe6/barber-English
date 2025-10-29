@@ -893,7 +893,7 @@ export default function HomeScreen() {
             <View style={styles.clientsModal}>
               <View style={styles.modalHeader}>
                 <View style={{ width: 36, height: 36 }} />
-                <Text style={styles.modalTitle}>Clients List</Text>
+                <Text style={styles.modalTitle}>{t('clients.listTitle','Clients List')}</Text>
                 <TouchableOpacity 
                   style={styles.closeButton}
                   onPress={() => setShowClientsModal(false)}
@@ -921,21 +921,21 @@ export default function HomeScreen() {
                  style={[styles.filterButton, blockedFilter === 'all' && styles.filterButtonActive]}
                  activeOpacity={0.85}
                >
-                 <Text style={[styles.filterButtonText, blockedFilter === 'all' && styles.filterButtonTextActive]}>All</Text>
+                 <Text style={[styles.filterButtonText, blockedFilter === 'all' && styles.filterButtonTextActive]}>{t('clients.filter.all','All')}</Text>
                </TouchableOpacity>
                <TouchableOpacity
                  onPress={() => setBlockedFilter('blocked')}
                  style={[styles.filterButton, blockedFilter === 'blocked' && styles.filterButtonActive]}
                  activeOpacity={0.85}
                >
-                 <Text style={[styles.filterButtonText, blockedFilter === 'blocked' && styles.filterButtonTextActive]}>Blocked</Text>
+                 <Text style={[styles.filterButtonText, blockedFilter === 'blocked' && styles.filterButtonTextActive]}>{t('clients.filter.blocked','Blocked')}</Text>
                </TouchableOpacity>
                <TouchableOpacity
                  onPress={() => setBlockedFilter('unblocked')}
                  style={[styles.filterButton, blockedFilter === 'unblocked' && styles.filterButtonActive]}
                  activeOpacity={0.85}
                >
-                 <Text style={[styles.filterButtonText, blockedFilter === 'unblocked' && styles.filterButtonTextActive]}>Unblocked</Text>
+                 <Text style={[styles.filterButtonText, blockedFilter === 'unblocked' && styles.filterButtonTextActive]}>{t('clients.filter.unblocked','Unblocked')}</Text>
                </TouchableOpacity>
              </View>
 
@@ -943,7 +943,7 @@ export default function HomeScreen() {
              {loadingClients ? (
                <View style={styles.loadingContainer}>
                  <ActivityIndicator size="large" color={colors.primary} />
-                 <Text style={styles.loadingText}>Loading clients...</Text>
+                 <Text style={styles.loadingText}>{t('clients.loading','Loading clients...')}</Text>
                </View>
               ) : (
                  <FlatList

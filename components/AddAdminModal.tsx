@@ -210,7 +210,7 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
           <TouchableOpacity style={styles.closeButton} onPress={step === 0 ? handleClose : () => goBack()}>
             <X size={20} color={Colors.text} />
           </TouchableOpacity>
-          <Text style={[styles.title, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>add employee</Text>
+          <Text style={[styles.title, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>{t('settings.admin.addEmployee','Add employee')}</Text>
           <View style={{ width: 60 }} />
         </View>
 

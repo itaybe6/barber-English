@@ -510,7 +510,7 @@ export default function EditGalleryScreen() {
                               {index === 0 && (
                                 <View style={styles.coverBadge}>
                                   <Ionicons name="star" size={12} color="#fff" />
-                                  <Text style={styles.coverBadgeText}>Cover</Text>
+                                  <Text style={styles.coverBadgeText}>{t('admin.gallery.cover','Cover')}</Text>
                                 </View>
                               )}
                             </TouchableOpacity>

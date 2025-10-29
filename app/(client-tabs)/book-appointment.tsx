@@ -371,11 +371,24 @@ export default function BookAppointment() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const { user } = useAuthStore();
+  const handleOpenSettings = React.useCallback(() => {
+    try {
+      router.push('/(client-tabs)/profile');
+    } catch {}
+  }, [router]);
+
+  const handleOpenNotifications = React.useCallback(() => {
+    try {
+      router.push('/(client-tabs)/notifications');
+    } catch {}
+  }, [router]);
+
   const { colors } = useBusinessColors();
   const insets = useSafeAreaInsets();
   const styles = createStyles(colors);
   const footerBottom = Math.max(insets.bottom, 16) + 80;
   const params = (router as any).useLocalSearchParams?.() || {};
+  const HERO_TOP_HEIGHT = Math.round(Dimensions.get('window').height * 0.40);
   
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
@@ -1377,6 +1390,72 @@ export default function BookAppointment() {
 
   return (
     <SafeAreaView style={styles.container} edges={(currentStep === 1 || currentStep === 2) ? [] : ['top']}>
+      {/* Top grey hero background (40% of screen) */}
+      <View style={[styles.topHeroWrapper, { height: HERO_TOP_HEIGHT }]} pointerEvents="none" />
+      {(currentStep === 1 || currentStep === 2) && (
+        <View pointerEvents="box-none" style={[styles.topOverlayHeader, { paddingTop: insets.top + 8 }] }>
+          <View style={styles.topOverlayHeaderContent}>
+            <TouchableOpacity
+              style={[styles.topOverlayButton, { backgroundColor: 'rgba(17,24,39,0.08)', borderColor: 'rgba(255,255,255,0.35)' }]}
+              onPress={handleOpenSettings}
+              activeOpacity={0.82}
+              accessibilityLabel={t('profile.title', 'Profile')}
+            >
+              <Ionicons name="settings-outline" size={22} color="#1C1C1E" />
+            </TouchableOpacity>
+            <View style={styles.topOverlayTitleWrapper} pointerEvents="none">
+              <Text style={styles.topOverlayTitle}>{t('booking.title', 'Appointment Booking')}</Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.topOverlayButton, { backgroundColor: 'rgba(17,24,39,0.08)', borderColor: 'rgba(255,255,255,0.35)' }]}
+              onPress={handleOpenNotifications}
+              activeOpacity={0.82}
+              accessibilityLabel={t('notifications.title', 'Notifications')}
+            >
+              <Ionicons name="notifications-outline" size={22} color="#1C1C1E" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Stepper */}
+          <View style={styles.stepperContainer}>
+            {[
+              { key: 1, icon: 'person-outline', label: t('booking.step.barber', 'Barber') },
+              { key: 2, icon: 'cut', label: t('booking.step.service', 'Service') },
+              { key: 3, icon: 'calendar-outline', label: t('booking.step.day', 'Day') },
+              { key: 4, icon: 'time-outline', label: t('booking.step.time', 'Time') },
+            ].map((s) => {
+              const active = currentStep === (s.key as any);
+              const done = currentStep > (s.key as any);
+              return (
+                <TouchableOpacity
+                  key={String(s.key)}
+                  onPress={() => setCurrentStep(s.key as any)}
+                  activeOpacity={0.85}
+                  style={[styles.stepperPill, (active || done) && styles.stepperPillActive]}
+                >
+                  <Ionicons name={s.icon as any} size={16} color={active || done ? '#FFFFFF' : '#6B7280'} />
+                  <Text style={[styles.stepperText, (active || done) && styles.stepperTextActive]} numberOfLines={1}>
+                    {s.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+            <TouchableOpacity
+              onPress={() => {
+                const stepNum = Number(currentStep);
+                const canAdvance = (stepNum === 1 && !!selectedBarber) || (stepNum === 2 && !!selectedService) || (stepNum === 3 && selectedDay !== null);
+                if (!canAdvance) return;
+                const next = Math.min(4, stepNum + 1) as any;
+                setCurrentStep(next);
+              }}
+              activeOpacity={0.85}
+              style={[styles.stepperNextBtn, { opacity: (((Number(currentStep) === 1) && selectedBarber) || ((Number(currentStep) === 2) && selectedService) || ((Number(currentStep) === 3) && selectedDay !== null)) ? 1 : 0.5 }]}
+            >
+              <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
       {currentStep >= 3 && (
         <View style={styles.header}>
           <View style={styles.headerContent}>
@@ -1416,6 +1495,9 @@ export default function BookAppointment() {
           nestedScrollEnabled={true}
         >
 
+        {/* Spacer to clear the top hero background */}
+        <View style={{ height: HERO_TOP_HEIGHT + 12 }} />
+
         {/* Step 1: Barber Selection */}
         {currentStep === 1 && (
           <Animated.View style={[styles.section, styles.sectionFullBleed, introFadeStyle]}>
@@ -1442,46 +1524,7 @@ export default function BookAppointment() {
                     setDayAvailability({});
                   }}
                   styles={styles}
-                  renderTopOverlay={() => {
-                    if (!selectedBarber) return null;
-                    if (!filteredServices || filteredServices.length === 0) return null;
-                    return (
-                      <Animated.View 
-                        key={`services-${selectedBarber.id}`}
-                        entering={FadeIn.duration(400).delay(100)}
-                        exiting={FadeOut.duration(200)}
-                        style={styles.serviceOverlayContainer}
-                      >
-                        <BlurView intensity={22} tint="light" style={styles.serviceOverlayBlur} />
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                          contentContainerStyle={styles.serviceChipsRow}
-                        >
-                          {filteredServices.map((svc, idx) => {
-                            const active = selectedService?.id === svc.id;
-                            return (
-                              <TouchableOpacity
-                                key={String(svc.id)}
-                                onPress={() => {
-                                  setSelectedServiceIndex(idx);
-                                  setSelectedService(svc);
-                                  setCurrentStep(3);
-                                }}
-                                activeOpacity={0.9}
-                                style={[styles.serviceChip, active && styles.serviceChipActive]}
-                              >
-                                <Ionicons name="cut" size={16} color={active ? '#FFFFFF' : '#111827'} />
-                                <Text numberOfLines={1} style={[styles.serviceChipText, active && styles.serviceChipTextActive]}>
-                                  {svc.name}
-                                </Text>
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </ScrollView>
-                      </Animated.View>
-                    );
-                  }}
+                  renderTopOverlay={() => null}
                   bottomOffset={Math.max(insets.bottom, 20) + 60}
                 />
               </View>
@@ -2064,44 +2107,148 @@ const createStyles = (colors: any) => StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
+  topOverlayHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    zIndex: 50,
+  },
+  topHeroWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    overflow: 'hidden',
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    zIndex: 0,
+    backgroundColor: '#23272F',
+  },
+  topHeroImage: {},
+  stepperContainer: {
+    marginTop: 12,
+    paddingHorizontal: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stepperPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)'
+  },
+  stepperPillActive: {
+    backgroundColor: '#111827',
+    borderColor: 'transparent',
+  },
+  stepperText: {
+    color: '#374151',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  stepperTextActive: {
+    color: '#FFFFFF',
+  },
+  stepperNextBtn: {
+    marginLeft: 'auto',
+    backgroundColor: '#111827',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  topOverlayHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  topOverlayButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    shadowColor: 'rgba(0,0,0,0.2)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  topOverlayTitleWrapper: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topOverlayTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    letterSpacing: -0.2,
+  },
   // Service chips overlay (single-page flow)
   serviceOverlayContainer: {
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: 'transparent',
     marginBottom: 8,
+    marginTop: 18,
   },
   serviceOverlayBlur: {
     ...StyleSheet.absoluteFillObject as any,
     borderRadius: 16,
   },
   serviceChipsRow: {
-    paddingVertical: 8,
-    paddingHorizontal: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
   },
   serviceChip: {
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.08)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    backgroundColor: '#1F2937',
+    borderWidth: 0,
+    borderColor: 'transparent',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 999,
     marginHorizontal: 6,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
   },
   serviceChipActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
   serviceChipText: {
-    color: '#111827',
+    color: '#E5E7EB',
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 15,
   },
   serviceChipTextActive: {
     color: '#FFFFFF',
+  },
+  serviceChipIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    marginRight: 6,
+  },
+  serviceChipIconCircleActive: {
+    backgroundColor: 'rgba(255,255,255,0.3)',
   },
   // Service carousel styles
   serviceCarouselCard: {

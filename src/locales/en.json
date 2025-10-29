@@ -210,6 +210,7 @@
   "profile.upcoming.emptyTitle": "No upcoming appointments",
   "profile.upcoming.emptySubtitle": "When appointments are booked, they will appear here"
   ,
+  "notFound": { "oops": "Oops!", "message": "This screen doesn't exist.", "goHome": "Go to home screen!" },
   "success.generic": "Success",
   "permission.required": "Permission Required",
   "refreshing": "Refreshing...",
@@ -221,7 +222,7 @@
   "profile.language.english": "English",
   "profile.language.hebrew": "Hebrew",
   "profile.language.restartNote": "Direction changes may require app restart",
-  "tabs": { "home": "Home", "gallery": "Gallery", "book": "Book", "profile": "Profile" },
+  "tabs": { "home": "Home", "gallery": "Gallery", "book": "Book", "profile": "Profile", "booking": "Appointments" },
   "gallery": {
     "loginToView": "Please sign in to view full designs",
     "subcategory": { "barber": "Barbers", "nails": "Nail Art" },
@@ -233,7 +234,7 @@
   "auth": { "signInNow": "Sign in now", "maybeLater": "Maybe later" },
   "nearestSlots": { "title": "Available soon", "empty": "No nearby available appointments" },
   "map": { "mapsLabel": "Maps" },
-  "common": { "tryAgain": "An error occurred. Please try again.", "client": "Client", "smsOpenFailed": "SMS app cannot be opened on this device", "searchPlaceholder": "Search...", "user": "User" },
+  "common": { "tryAgain": "An error occurred. Please try again.", "client": "Client", "smsOpenFailed": "SMS app cannot be opened on this device", "searchPlaceholder": "Search...", "user": "User", "retry": "Retry", "emailOpenFailed": "Cannot open email client on this device", "phoneOpenFailed": "Unable to open the dialer on this device" },
   "common.loading": "Loading...",
   "common.eg": "e.g.",
   "common.noResults": "No results",
@@ -270,15 +271,21 @@
   },
   "settings": {
     "common": { "saving": "Saving...", "uploading": "Uploading..." },
-    "policies": { "noRestriction": "0 hours (No restriction)", "hour": "hour", "hours": "hours", "day": "day", "days": "days" },
+    "policies": { "noRestriction": "0 hours (No restriction)", "hour": "hour", "hours": "hours", "day": "day", "days": "days", "minCancellationTitle": "Minimum cancellation time", "hoursBefore": "Hours before appointment" },
+    "notifications": { "subtitle": "Receive notifications about appointments and updates" },
     "services": {
       "title": "Services",
+      "edit": "Edit services",
+      "editSubtitle": "Update prices and durations",
       "delete": "Delete",
       "deleteTitle": "Delete service",
       "deleteConfirm": "Are you sure you want to delete this service?",
       "deleteFailed": "Failed to delete service",
       "changeImage": "Change image",
       "uploadImage": "Upload image",
+      "loading": "Loading services...",
+      "add": "Add service",
+      "pricePlaceholder": "0.00",
       "name": "Service name",
       "enterName": "Enter service name",
       "price": "Price ($)",
@@ -294,6 +301,9 @@
     },
     
     "profile": {
+      "businessAddressTitle": "Business address",
+      "addressLabel": "Address",
+      "bookingWindowPlaceholder": "7",
       "businessAddressPlaceholder": "Business address",
       "instagramUrlPlaceholder": "https://instagram.com/yourpage",
       "facebookUrlPlaceholder": "https://facebook.com/yourpage",
@@ -321,25 +331,44 @@
     },
     "sections": {
       "notifications": "Notifications",
+      "notificationsMessages": "Notifications & messages",
       "services": "Services",
       "businessDetails": "Business details",
       "designApp": "Design App",
       "policies": "Policies",
+      "appointmentPolicies": "Appointment policies",
       "appointments": "Appointments",
+      "appointmentsManagement": "Appointments management",
       "recurring": "Recurring",
+      "recurringTitle": "Recurring appointments",
       "security": "Security",
+      "securitySupport": "Security & support",
       "account": "Account",
+      "accountManagement": "Account Management",
       "logout": "Log out",
+      "logoutLabel": "Logout",
       "version": "Version"
     },
     "reminder": {
       "title": "Reminder before appointment",
+      "titleWithMinutes": "Reminder before appointment (minutes)",
       "minutesBefore": "Minutes before"
     },
     "recurring": {
       "empty": "No recurring appointments",
       "timesLoadFailed": "Failed to load available times. Please try again.",
       "fillAll": "Please fill all fields: client, day, time, and service",
+      "dayOfWeek": "Day of week",
+      "selectDayOfWeek": "Select a day of the week",
+      "selectServiceFirst": "Please select a service",
+      "selectDayFirst": "Please select a day of the week",
+      "repeatEvery": "Repeat every",
+      "repeatHint": "Set how often this repeats",
+      "everyWeek": "every week",
+      "everyNWeeks": "every {{count}} weeks",
+      "addTitle": "Add recurring appointment",
+      "manageTitle": "Manage recurring appointments",
+      "manageSubtitle": "View, edit, and delete existing recurring appointments",
       "slotTakenTitle": "Slot taken",
       "slotTaken": "The selected time is already booked this week. Please choose another time.",
       "createSuccess": "Recurring appointment created. The slot will be kept after weekly generation.",
@@ -347,7 +376,18 @@
       "deleteFailed": "Failed to delete appointment",
       "a11yDelete": "Delete"
     },
+    "support": {
+      "title": "Support and help",
+      "header": "Need help? Contact Slotlys support team",
+      "description": "Our dedicated support team is here to assist you with any questions or issues you may have. Whether you need help with appointments, account settings, or technical support, we're ready to help. Please use the contact button below to reach out to us directly.",
+      "contactNow": "Contact us now",
+      "common": "Common questions and contact"
+    },
     "admin": {
+      "addEmployee": "Add employee user",
+      "addEmployeeSubtitle": "Add another employee to the system",
+      "manageEmployees": "Manage employees",
+      "manageEmployeesSubtitle": "Remove employees from this business",
       "noEmployees": "No employees found",
       "edit": "Edit admin",
       "admin": "Admin",
@@ -447,7 +487,8 @@
       "emptySubtitle": "Choose another day from the top bar",
       "chooseAction": "Choose an action",
       "callClient": "Call client",
-      "cancelMessage": "This will free the time and remove the client details for the selected appointment."
+      "cancelMessage": "This will free the time and remove the client details for the selected appointment.",
+      "openActions": "Open appointment actions"
     },
     "hoursAdmin": {
       "title": "Working hours",
@@ -459,8 +500,46 @@
       "breakBetween": "Break between appointments",
       "saveBreakFailed": "Failed to save break. Please try again."
     },
+    "hours": {
+      "title": "Working hours",
+      "subtitle": "Set your weekly working schedule and breaks",
+      "manageConstraints": "Manage constraints (closed dates/hours)",
+      "breakMinutes": "Break minutes",
+      "breakHint": "Choose the number of minutes to add between appointments. 0 keeps no fixed break.",
+      "min": "min",
+      "breakBetween": "Break between appointments",
+      "saveBreakFailed": "Failed to save break. Please try again.",
+      "saveFailed": "Failed to save constraints",
+      "saveDayFailed": "Failed to save business hours",
+      "loadFailed": "Failed to fetch business hours",
+      "updateFailed": "Failed to update business hours",
+      "closed": "Closed",
+      "workHours": "Work hours",
+      "showBreaksQuestion": "Show and set breaks?",
+      "startTime": "Start time",
+      "endTime": "End time",
+      "breaks": "Breaks",
+      "breakNumber": "Break #{{num}}",
+      "start": "Start",
+      "end": "End",
+      "addBreak": "Add break",
+      "daySummary": "Day summary",
+      "workPrefix": "Work",
+      "breakPrefix": "Break",
+      "loading": "Loading working hours...",
+      "breaksInvalid": "Each break must be within work hours and non-overlapping",
+      "noOverlapBreaks": "Breaks must not overlap",
+      "selectDate": "Please select a date",
+      "endAfterStart": "End time must be after start time",
+      "selectDateRange": "Please select a date range",
+      "invalidDateRange": "Invalid date range",
+      "saved": "Constraints saved successfully",
+      "enterReason": "Enter reason"
+    },
     "notificationsComposer": {
       "subtitle": "Send a message to all clients",
+      "sendToAllTitle": "Send message to all clients",
+      "sendToAllSubtitle": "Send a custom message to all clients",
       "title": {"appointmentReminder":"Appointment reminder","holidayGreeting":"Holiday greeting","promotion":"Promotion","general":"General"},
       "type": "Notification type",
       "selectType": "Select notification type",
@@ -499,16 +578,8 @@
       "scheduleFailed": "Error scheduling appointment",
       "selectDateAndService": "Please select date and service first",
       "selectClientPlaceholder": "Select client..."
-    },
-    "hours": {
-      "selectDate": "Please select a date",
-      "endAfterStart": "End time must be after start time",
-      "selectDateRange": "Please select a date range",
-      "invalidDateRange": "Invalid date range",
-      "saved": "Constraints saved successfully",
-      "saveFailed": "Failed to save constraints",
-      "enterReason": "Enter reason"
     }
+    
   }
 }
 

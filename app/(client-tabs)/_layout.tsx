@@ -253,32 +253,46 @@ export default function ClientTabsLayout() {
           borderBottomLeftRadius: 28,
           borderBottomRightRadius: 28,
           shadowColor: '#000000',
-          shadowOffset: { width: 0, height: 18 },
-          shadowOpacity: 0.25,
-          shadowRadius: 34,
-          elevation: 30,
+          shadowOffset: { width: 0, height: 22 },
+          shadowOpacity: 0.22,
+          shadowRadius: 38,
+          elevation: 28,
           flexDirection: 'row'
         },
         tabBarBackground: () => (
-          <BlurView intensity={100} tint="dark" style={styles.tabBarBackground}>
-            {/* Subtle diagonal sheen for liquid glass */}
+          <BlurView intensity={96} tint="dark" style={styles.tabBarBackground}>
+            {/* Subtle white tint for refraction */}
+            <View style={styles.glassTint} />
+            {/* Static light sweep for depth (no animation) */}
             <LinearGradient
-              colors={["rgba(255,255,255,0.14)", "rgba(255,255,255,0.03)"]}
-              start={{ x: 0, y: 0 }}
+              colors={['rgba(255,255,255,0.26)', 'rgba(255,255,255,0.12)', 'rgba(255,255,255,0.00)']}
+              start={{ x: 0.1, y: 0 }}
               end={{ x: 1, y: 1 }}
-              style={styles.tabBarLiquidSheen}
+              style={styles.glassLight}
             />
-            {/* Main gray translucent overlay */}
-            <View style={styles.tabBarDarkOverlay} />
-            {/* Soft top edge highlight */}
+            {/* Top edge highlight */}
             <LinearGradient
-              colors={["rgba(255,255,255,0.18)", "rgba(255,255,255,0)"]}
+              colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0.0)']}
               start={{ x: 0, y: 0 }}
-              end={{ x: 0, y: 1 }}
-              style={styles.tabBarTopHighlight}
+              end={{ x: 0, y: 0.55 }}
+              style={styles.glassTopEdge}
             />
-            {/* Thin glass outline */}
-            <View style={styles.tabBarOutline} />
+            {/* Uniform subtle vertical vignette across the whole bar */}
+            <LinearGradient
+              colors={['rgba(255,255,255,0.06)', 'rgba(0,0,0,0.08)']}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={styles.glassVignette}
+            />
+            {/* Thin inner edge highlight */}
+            <View style={styles.glassEdge} />
+            {/* Subtle bottom sheen for underside reflection */}
+            <LinearGradient
+              colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.0)']}
+              start={{ x: 0.5, y: 1 }}
+              end={{ x: 0.5, y: 0.8 }}
+              style={styles.glassBottomSheen}
+            />
           </BlurView>
         ),
         headerShown: false,
@@ -531,42 +545,74 @@ const styles = StyleSheet.create({
     elevation: 20,
   },
   
-  // Liquid glass effects layers
-  tabBarLiquidSheen: {
+  // Subtle translucent tint over the blur to simulate refraction
+  glassTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.09)',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+  },
+
+  // Static light gradient for depth (Apple-like lighting)
+  glassLight: {
     ...StyleSheet.absoluteFillObject,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
-    pointerEvents: 'none',
   },
 
-  tabBarTopHighlight: {
+  // Top edge highlight (soft inner glow at the top)
+  glassTopEdge: {
+    ...StyleSheet.absoluteFillObject,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+  },
+
+  // Side vignettes to suggest glass thickness
+  glassSideVignetteLeft: {
     position: 'absolute',
     top: 0,
+    bottom: 0,
     left: 0,
-    right: 0,
-    height: 24,
+    width: '36%',
     borderTopLeftRadius: 28,
+    borderBottomLeftRadius: 28,
+  },
+  glassSideVignetteRight: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    right: 0,
+    width: '36%',
     borderTopRightRadius: 28,
-    pointerEvents: 'none',
+    borderBottomRightRadius: 28,
   },
 
-  tabBarOutline: {
+  // Bottom inner shadow
+  glassVignette: {
     ...StyleSheet.absoluteFillObject,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.16)',
-    pointerEvents: 'none',
   },
-  
-  // Dark translucent overlay above the blur for glass look
-  tabBarDarkOverlay: {
+
+  // Thin inner edge highlight to catch light
+  glassEdge: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(200, 200, 210, 0.14)',
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.38)',
+  },
+
+  // Bottom sheen overlay
+  glassBottomSheen: {
+    ...StyleSheet.absoluteFillObject,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderBottomLeftRadius: 28,

@@ -210,6 +210,7 @@
   "profile.upcoming.emptyTitle": "אין תורים קרובים",
   "profile.upcoming.emptySubtitle": "כאשר ייקבעו תורים, הם יופיעו כאן"
   ,
+  "notFound": { "oops": "אופס!", "message": "המסך הזה לא קיים.", "goHome": "חזרה למסך הבית" },
   "success.generic": "הצלחה",
   "permission.required": "נדרש אישור",
   "refreshing": "מרענן...",
@@ -221,7 +222,7 @@
   "profile.language.english": "אנגלית",
   "profile.language.hebrew": "עברית",
   "profile.language.restartNote": "שינוי כיוון עשוי לדרוש הפעלת אפליקציה מחדש",
-  "tabs": { "home": "בית", "gallery": "גלריה", "book": "קביעת תור", "profile": "פרופיל" },
+  "tabs": { "home": "בית", "gallery": "גלריה", "book": "קביעת תור", "profile": "פרופיל", "booking": "תורים" },
   "gallery": {
     "loginToView": "אנא התחבר/י להצגת העיצובים המלאים",
     "subcategory": { "barber": "ספרים", "nails": "ציפורניים" },
@@ -233,7 +234,7 @@
   "auth": { "signInNow": "התחבר/י עכשיו", "maybeLater": "אולי אחר כך" },
   "nearestSlots": { "title": "תורים זמינים בקרוב", "empty": "אין תורים זמינים בקרוב" },
   "map": { "mapsLabel": "מפות" },
-  "common": { "tryAgain": "אירעה שגיאה. נסו שוב.", "client": "לקוח", "smsOpenFailed": "לא ניתן לפתוח את אפליקציית ה-SMS במכשיר זה", "searchPlaceholder": "חפש...", "user": "משתמש" },
+  "common": { "tryAgain": "אירעה שגיאה. נסו שוב.", "client": "לקוח", "smsOpenFailed": "לא ניתן לפתוח את אפליקציית ה-SMS במכשיר זה", "searchPlaceholder": "חפש...", "user": "משתמש", "retry": "נסה שוב", "emailOpenFailed": "לא ניתן לפתוח את אפליקציית האימייל במכשיר זה", "phoneOpenFailed": "לא ניתן לפתוח את אפליקציית הטלפון במכשיר זה" },
   "common.loading": "טוען...",
   "common.eg": "למשל",
   "common.noResults": "אין תוצאות",
@@ -270,15 +271,21 @@
   },
   "settings": {
     "common": { "saving": "שומר...", "uploading": "מעלה..." },
-    "policies": { "noRestriction": "0 שעות (ללא הגבלה)", "hour": "שעה", "hours": "שעות", "day": "יום", "days": "ימים" },
+    "policies": { "noRestriction": "0 שעות (ללא הגבלה)", "hour": "שעה", "hours": "שעות", "day": "יום", "days": "ימים", "minCancellationTitle": "זמן ביטול מינימלי", "hoursBefore": "שעות לפני התור" },
+    "notifications": { "subtitle": "קבל/י התראות על תורים ועדכונים" },
     "services": {
       "title": "שירותים",
+      "edit": "עריכת שירותים",
+      "editSubtitle": "עדכון מחירים וזמני ביצוע",
       "delete": "מחק",
       "deleteTitle": "מחיקת שירות",
       "deleteConfirm": "האם למחוק את השירות?",
       "deleteFailed": "נכשל במחיקת השירות",
       "changeImage": "החלף תמונה",
       "uploadImage": "העלה תמונה",
+      "loading": "טוען שירותים...",
+      "add": "הוספת שירות",
+      "pricePlaceholder": "0.00",
       "name": "שם השירות",
       "enterName": "הזן שם שירות",
       "price": "מחיר (\u20AA)",
@@ -294,6 +301,9 @@
     },
     
     "profile": {
+      "businessAddressTitle": "כתובת העסק",
+      "addressLabel": "כתובת",
+      "bookingWindowPlaceholder": "7",
       "businessAddressPlaceholder": "כתובת העסק",
       "instagramUrlPlaceholder": "https://instagram.com/yourpage",
       "facebookUrlPlaceholder": "https://facebook.com/yourpage",
@@ -321,25 +331,44 @@
     },
     "sections": {
       "notifications": "התראות",
+      "notificationsMessages": "התראות והודעות",
       "services": "שירותים",
       "businessDetails": "פרטי העסק",
       "designApp": "עיצוב האפליקציה",
       "policies": "מדיניות",
+      "appointmentPolicies": "מדיניות תורים",
       "appointments": "תורים",
+      "appointmentsManagement": "ניהול תורים",
       "recurring": "מחזורי",
+      "recurringTitle": "תורים מחזוריים",
       "security": "אבטחה",
+      "securitySupport": "אבטחה ותמיכה",
       "account": "חשבון",
+      "accountManagement": "ניהול חשבון",
       "logout": "התנתקות",
+      "logoutLabel": "התנתקות",
       "version": "גרסה"
     },
     "reminder": {
       "title": "תזכורת לפני התור",
+      "titleWithMinutes": "תזכורת לפני התור (בדקות)",
       "minutesBefore": "דקות לפני"
     },
     "recurring": {
       "empty": "אין תורים מחזוריים",
       "timesLoadFailed": "נכשל בטעינת שעות זמינות. נסו שוב.",
       "fillAll": "אנא מלא/י את כל השדות: לקוח, יום, שעה ושירות",
+      "dayOfWeek": "יום בשבוע",
+      "selectDayOfWeek": "בחר/י יום בשבוע",
+      "selectServiceFirst": "אנא בחר/י שירות",
+      "selectDayFirst": "אנא בחר/י יום בשבוע",
+      "repeatEvery": "חזרה כל",
+      "repeatHint": "הגדירו כל כמה זמן זה יחזור",
+      "everyWeek": "כל שבוע",
+      "everyNWeeks": "כל {{count}} שבועות",
+      "addTitle": "הוספת תור מחזורי",
+      "manageTitle": "ניהול תורים מחזוריים",
+      "manageSubtitle": "צפייה, עריכה ומחיקה של תורים מחזוריים",
       "slotTakenTitle": "השעה תפוסה",
       "slotTaken": "השעה שנבחרה כבר נתפסת השבוע. אנא בחר/י שעה אחרת.",
       "createSuccess": "תור מחזורי נוצר. השעה תישמר לאחר יצירה שבועית.",
@@ -347,7 +376,18 @@
       "deleteFailed": "נכשל במחיקת התור",
       "a11yDelete": "מחק"
     },
+    "support": {
+      "title": "תמיכה ועזרה",
+      "header": "זקוקים לעזרה? צרו קשר עם צוות התמיכה של Slotlys",
+      "description": "צוות התמיכה שלנו כאן כדי לעזור בכל שאלה או בעיה. בין אם צריך עזרה בתורים, בהגדרות חשבון או בתמיכה טכנית – אנחנו כאן בשבילכם. השתמשו בכפתור יצירת קשר למטה כדי לפנות אלינו ישירות.",
+      "contactNow": "צרו קשר עכשיו",
+      "common": "שאלות נפוצות וצור קשר"
+    },
     "admin": {
+      "addEmployee": "הוספת עובד",
+      "addEmployeeSubtitle": "הוספת עובד נוסף למערכת",
+      "manageEmployees": "ניהול עובדים",
+      "manageEmployeesSubtitle": "הסרת עובדים מהעסק",
       "noEmployees": "לא נמצאו עובדים",
       "edit": "עריכת מנהל",
       "admin": "מנהל",
@@ -446,7 +486,8 @@
       "emptySubtitle": "בחר/י יום אחר מהסרגל העליון",
       "chooseAction": "בחר/י פעולה",
       "callClient": "חייג ללקוח",
-      "cancelMessage": "פעולה זו תפנה את הזמן ותסיר את פרטי הלקוח מהתור הנבחר."
+      "cancelMessage": "פעולה זו תפנה את הזמן ותסיר את פרטי הלקוח מהתור הנבחר.",
+      "openActions": "פתח/י אפשרויות לתור"
     },
     "hoursAdmin": {
       "title": "שעות עבודה",
@@ -458,8 +499,40 @@
       "breakBetween": "הפסקה בין תורים",
       "saveBreakFailed": "כשל בשמירת ההפסקה. אנא נסו שוב."
     },
+    "hours": {
+      "title": "שעות עבודה",
+      "subtitle": "הגדרת לוז שבועי והפסקות",
+      "manageConstraints": "ניהול אילוצים (תאריכים/שעות סגירה)",
+      "breakMinutes": "דקות הפסקה",
+      "breakHint": "בחר/י מספר דקות בין תורים. 0 משאיר ללא הפסקה קבועה.",
+      "min": "דק",
+      "breakBetween": "הפסקה בין תורים",
+      "saveBreakFailed": "כשל בשמירת ההפסקה. אנא נסו שוב.",
+      "saveFailed": "שמירת האילוצים נכשלה",
+      "saveDayFailed": "שמירת שעות העבודה נכשלה",
+      "loadFailed": "נכשל בטעינת שעות העבודה",
+      "updateFailed": "נכשל בעדכון שעות העבודה",
+      "closed": "סגור",
+      "workHours": "שעות עבודה",
+      "showBreaksQuestion": "להציג ולהגדיר הפסקות?",
+      "startTime": "שעת התחלה",
+      "endTime": "שעת סיום",
+      "breaks": "הפסקות",
+      "breakNumber": "הפסקה #{{num}}",
+      "start": "התחלה",
+      "end": "סיום",
+      "addBreak": "הוסף/י הפסקה",
+      "daySummary": "סיכום יום",
+      "workPrefix": "עבודה",
+      "breakPrefix": "הפסקה",
+      "loading": "טוען שעות עבודה...",
+      "breaksInvalid": "כל הפסקה חייבת להיות בתוך שעות העבודה וללא חפיפה",
+      "noOverlapBreaks": "אין חפיפה בין הפסקות"
+    },
     "notificationsComposer": {
       "subtitle": "שליחת הודעה לכל הלקוחות",
+      "sendToAllTitle": "שליחת הודעה לכל הלקוחות",
+      "sendToAllSubtitle": "שליחת הודעה מותאמת לכל הלקוחות",
       "title": {"appointmentReminder":"תזכורת לתור","holidayGreeting":"ברכה לחג","promotion":"הודעה על מבצע","general":"הודעה כללית"},
       "type": "סוג ההתראה",
       "selectType": "בחר/י סוג התראה",
@@ -498,16 +571,8 @@
       "scheduleFailed": "שגיאה בקביעת התור",
       "selectDateAndService": "אנא בחר/י תאריך ושירות תחילה",
       "selectClientPlaceholder": "בחר/י לקוח..."
-    },
-    "hours": {
-      "selectDate": "אנא בחר/י תאריך",
-      "endAfterStart": "שעת הסיום חייבת להיות אחרי שעת ההתחלה",
-      "selectDateRange": "אנא בחר/י טווח תאריכים",
-      "invalidDateRange": "טווח תאריכים לא תקין",
-      "saved": "האילוצים נשמרו בהצלחה",
-      "saveFailed": "שמירת האילוצים נכשלה",
-      "enterReason": "הזן/י סיבה"
     }
+    
   }
 }
 

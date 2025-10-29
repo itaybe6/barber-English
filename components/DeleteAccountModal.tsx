@@ -140,7 +140,7 @@ export default function DeleteAccountModal({ visible, onClose, onSuccess }: Dele
 
           <View style={styles.noteContainer}>
             <Text style={styles.noteText}>
-              This action cannot be undone. Please make sure you have backed up any important data before proceeding.
+              {t('profile.delete.note','This action cannot be undone. Please make sure you have backed up any important data before proceeding.')}
             </Text>
           </View>
         </View>
@@ -152,7 +152,7 @@ export default function DeleteAccountModal({ visible, onClose, onSuccess }: Dele
             disabled={isLoading}
           >
             <Text style={[styles.cancelButtonText, { color: businessColors.primary }]}>
-              Cancel
+              {t('cancel','Cancel')}
             </Text>
           </TouchableOpacity>
           
@@ -166,7 +166,7 @@ export default function DeleteAccountModal({ visible, onClose, onSuccess }: Dele
             ) : (
               <>
                 <Trash2 size={16} color="white" style={styles.deleteIcon} />
-                <Text style={styles.deleteButtonText}>Delete Account</Text>
+                <Text style={styles.deleteButtonText}>{t('profile.delete.title','Delete Account')}</Text>
               </>
             )}
           </TouchableOpacity>

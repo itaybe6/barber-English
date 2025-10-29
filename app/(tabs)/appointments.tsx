@@ -319,13 +319,13 @@ export default function AdminAppointmentsScreen() {
     try {
       const supported = await Linking.canOpenURL(url);
       if (!supported) {
-        Alert.alert('Error', 'Unable to open the dialer on this device.');
+        Alert.alert(t('error.generic','Error'), t('common.phoneOpenFailed','Unable to open the dialer on this device'));
         return;
       }
       await Linking.openURL(url);
     } catch (e) {
       console.error('Failed to initiate phone call:', e);
-      Alert.alert('Error', 'An error occurred while opening the dialer.');
+      Alert.alert(t('error.generic','Error'), t('common.phoneOpenFailed','Unable to open the dialer on this device'));
     }
   }, []);
 
@@ -466,7 +466,7 @@ export default function AdminAppointmentsScreen() {
                   <PressableScale
                     key={`${apt.id}-${apt.slot_time}`}
                     onPress={() => openActionsMenu(apt)}
-                    accessibilityLabel="Open appointment actions"
+                    accessibilityLabel={t('admin.appointments.openActions','Open appointment actions')}
                     style={[
                       styles.appointmentCard,
                       {

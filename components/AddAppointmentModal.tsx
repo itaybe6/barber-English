@@ -570,7 +570,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
                 ))}
                 {filteredClients.length === 0 && (
                   <View style={styles.emptyState}>
-                    <Text style={styles.emptyStateText}>No results</Text>
+                    <Text style={styles.emptyStateText}>{t('common.noResults','No results')}</Text>
                   </View>
                 )}
               </ScrollView>

@@ -907,7 +907,7 @@ export default function HomeScreen() {
                <Ionicons name="search" size={20} color={colors.primary} style={styles.searchIcon} />
                <TextInput
                  style={styles.searchInput}
-                 placeholder="Search by name..."
+                 placeholder={t('common.searchByName','Search by name...')}
                  placeholderTextColor={colors.textSecondary}
                  value={searchQuery}
                  onChangeText={setSearchQuery}

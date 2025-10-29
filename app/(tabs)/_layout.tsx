@@ -1,6 +1,7 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { BlurView } from 'expo-blur';
 import Colors from '@/constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -62,7 +63,7 @@ export default function TabsLayout() {
         tabBarHideOnKeyboard: true,
         tabBarIcon: ({ color, size, focused }) => {
           const iconSize = focused ? 26 : 24;
-          const iconColor = focused ? colors.primary : '#3A3A3C';
+          const iconColor = focused ? '#FFFFFF' : 'rgba(255,255,255,0.7)';
           
           let iconName;
           switch (route.name) {
@@ -94,8 +95,8 @@ export default function TabsLayout() {
             </View>
           );
         },
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: '#3A3A3C',
+        tabBarActiveTintColor: '#FFFFFF',
+        tabBarInactiveTintColor: 'rgba(255,255,255,0.7)',
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',
@@ -112,26 +113,30 @@ export default function TabsLayout() {
           flexDirection: 'row'
         },
         tabBarStyle: {
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          backgroundColor: 'transparent',
           borderTopWidth: 0,
-          height: 88,
-          paddingTop: 8,
-          paddingBottom: 20,
+          height: 76,
+          paddingTop: 6,
+          paddingBottom: 12,
           paddingHorizontal: 0,
           position: 'absolute',
+          bottom: 18,
+          marginHorizontal: 16,
           borderTopLeftRadius: 28,
           borderTopRightRadius: 28,
+          borderBottomLeftRadius: 28,
+          borderBottomRightRadius: 28,
           shadowColor: '#000000',
-          shadowOffset: { width: 0, height: -8 },
-          shadowOpacity: 0.08,
-          shadowRadius: 24,
-          elevation: 20,
+          shadowOffset: { width: 0, height: 18 },
+          shadowOpacity: 0.25,
+          shadowRadius: 34,
+          elevation: 30,
           flexDirection: 'row'
         },
         tabBarBackground: () => (
-          <View style={styles.tabBarBackground}>
-            <View style={styles.tabBarBlur} />
-          </View>
+          <BlurView intensity={80} tint="dark" style={styles.tabBarBackground}>
+            <View style={styles.tabBarDarkOverlay} />
+          </BlurView>
         ),
         headerShown: false,
       })}
@@ -324,9 +329,11 @@ const styles = StyleSheet.create({
   // Tab bar background with blur effect
   tabBarBackground: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: 'transparent',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
     overflow: 'hidden',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: -8 },
@@ -334,11 +341,14 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 20,
   },
-  
-  tabBarBlur: {
-    flex: 1,
-    backgroundColor: 'rgba(248, 248, 248, 0.8)',
+
+  // Light gray translucent overlay above the blur for glass look
+  tabBarDarkOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(172, 172, 172, 0.26)',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
   },
 });

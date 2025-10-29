@@ -607,10 +607,10 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
               </TouchableOpacity>
             </View>
             <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-              <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>Start</Text>
+              <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>{t('admin.hoursAdmin.start','Start')}</Text>
               <WheelPicker options={timeOptions} value={tempStartHour} onChange={setTempStartHour} primaryColor={businessColors.primary} />
               <View style={{ height: 12 }} />
-              <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>End</Text>
+              <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>{t('admin.hoursAdmin.end','End')}</Text>
               <WheelPicker options={timeOptions} value={tempEndHour} onChange={setTempEndHour} primaryColor={businessColors.primary} />
             </View>
           </View>
@@ -633,7 +633,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
                 <TextInput
                   value={tempReason}
                   onChangeText={setTempReason}
-                  placeholder="e.g., vacation, errands, temporary closure"
+                  placeholder={t('admin.hours.reasonExamples','e.g., vacation, errands, temporary closure')}
                   placeholderTextColor={'#8E8E93'}
                   style={styles.input}
                   textAlign="left"

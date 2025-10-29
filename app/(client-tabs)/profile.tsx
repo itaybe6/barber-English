@@ -795,12 +795,12 @@ export default function ClientProfileScreen() {
               {isLoading ? (
                 <View style={styles.historyLoadingState}>
                   <ActivityIndicator color={businessColors.primary} />
-                  <Text style={styles.historyLoadingText}>Loading upcoming appointments...</Text>
+                  <Text style={styles.historyLoadingText}>{t('profile.upcoming.loading','Loading upcoming appointments...')}</Text>
                 </View>
               ) : upcomingAppointments.length === 0 ? (
                 <View style={styles.historyEmpty}>
                   <Ionicons name="calendar-outline" size={56} color={businessColors.primary} />
-                  <Text style={styles.historyEmptyTitle}>No upcoming appointments</Text>
+                  <Text style={styles.historyEmptyTitle}>{t('profile.upcoming.emptyTitle','No upcoming appointments')}</Text>
                   <Text style={styles.historyEmptySubtitle}>When appointments are booked, they will appear here</Text>
                 </View>
               ) : (

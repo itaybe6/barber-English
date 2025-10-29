@@ -74,7 +74,7 @@ export default function DesignCarousel({
           if (profile) {
             setAdminUser({
               id: profile.id,
-              name: profile.name || 'Admin',
+              name: profile.name || t('settings.admin.admin', 'Admin'),
               image_url: profile.image_url
             });
           }
@@ -110,7 +110,7 @@ export default function DesignCarousel({
           profiles?.forEach(profile => {
             profilesMap[profile.id] = {
               id: profile.id,
-              name: profile.name || 'User',
+              name: profile.name || t('common.user', 'User'),
               image_url: profile.image_url
             };
           });
@@ -268,7 +268,7 @@ export default function DesignCarousel({
           
           {/* Admin Name Below */}
           <Text style={styles.adminName} numberOfLines={1}>
-            {userProfile?.name || 'Daniel Musai'}
+            {userProfile?.name || t('common.user', 'User')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -335,7 +335,7 @@ export default function DesignCarousel({
                 {/* Design Info */}
                 <View style={styles.modalInfo}>
                   <Text style={styles.modalTitle}>
-                    {selectedDesign.title || selectedDesign.name || 'Design'}
+                    {selectedDesign.title || selectedDesign.name || t('gallery.design','Design')}
                   </Text>
                   {selectedDesign.description && (
                     <Text style={styles.modalDescription}>

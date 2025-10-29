@@ -40,6 +40,7 @@
   "booking.loadingEmployees": "Loading Employees...",
   "booking.selectService": "Select Service",
   "booking.loadingServices": "Loading services...",
+  "booking.noServices": "No services available",
   "booking.selectDay": "Select Day",
   "booking.legend.noAvailability": "* Days with no available appointments are marked in red",
   "booking.legend.waitlist": "* Even if there are no available appointments – you can click on the day and join the waitlist for that day",
@@ -69,6 +70,8 @@
   "booking.eventAdded": "The event was added to your calendar.",
   "booking.eventAddFailed": "Could not add the event to the calendar.",
   "booking.addToCalendar": "Add to Calendar",
+  "booking.calendarEventTitle": "Appointment",
+  "booking.calendarNotes": "Booked via the app",
   "booking.gotIt": "Got it",
   "booking.cannotBook": "Cannot book",
   "booking.constraintMessage": "There are constraints at the selected date/time. Please choose another time.",
@@ -223,21 +226,27 @@
     "loginToView": "Please sign in to view full designs",
     "subcategory": { "barber": "Barbers", "nails": "Nail Art" },
     "noImages": { "login": "No login page images available", "category": "No images available for {{subcategory}} in {{category}}" },
-    "loginPage": { "formatNote": "\ud83d\udcf1 Login page images are displayed in (9:16 ratio)" }
+    "loginPage": { "formatNote": "\ud83d\udcf1 Login page images are displayed in (9:16 ratio)" },
+    "design": "Design"
   },
   "products": { "loginToViewDetails": "Please sign in to view product details" },
   "auth": { "signInNow": "Sign in now", "maybeLater": "Maybe later" },
   "nearestSlots": { "title": "Available soon", "empty": "No nearby available appointments" },
   "map": { "mapsLabel": "Maps" },
-  "common": { "tryAgain": "An error occurred. Please try again.", "client": "Client", "smsOpenFailed": "SMS app cannot be opened on this device", "searchPlaceholder": "Search..." },
+  "common": { "tryAgain": "An error occurred. Please try again.", "client": "Client", "smsOpenFailed": "SMS app cannot be opened on this device", "searchPlaceholder": "Search...", "user": "User" },
   "common.loading": "Loading...",
+  "common.eg": "e.g.",
   "common.noResults": "No results",
   "common.noName": "No name",
   "common.noPrice": "No price",
+  "common.searchByName": "Search by name...",
+  "common.searchByNamePhone": "Search by name or phone...",
+  "common.searchByNamePhoneEmail": "Search by name, phone, or email",
   "category": { "gel": "Gel polish", "feet": "Pedicure polish", "manicure": "Manicure" },
   "admin2": { "hoursAdmin": { "title": "Work constraints", "segment": { "hours": "Hours", "singleDay": "Single day", "multiDays": "Multiple days" }, "pickDateShort": "Pick a date", "closedHours": "Closed hours", "pickDateAllDay": "Pick a date (closed all day)", "pickDateRangeAllDay": "Pick a date range (closed all day)", "selectedRange": "Selected range:", "allDay": "All day", "chooseClosedHours": "Choose closed hours", "start": "Start", "end": "End", "upcomingConstraints": "Upcoming constraints", "noUpcomingConstraints": "No upcoming constraints", "noReason": "No reason", "saveCTA": "Save constraints" } },
   "login": {
     "fillAll": "Please fill in all fields",
+    "passwordPlaceholder": "Password",
     "blockedCannotSignIn": "Your account is blocked and cannot sign in. Please contact the manager.",
     "invalidUserType": "Invalid user type",
     "incorrectCredentials": "Incorrect phone or password",
@@ -249,7 +258,9 @@
   "register": {
     "phoneExists": { "title": "Phone number already exists", "message": "This phone number is already registered in the system. Please use a different phone number or sign in to your existing account." },
     "createError": "An error occurred creating the account. Please try again.",
-    "success": { "title": "Registration successful!", "message": "Your account was created successfully.\n\nYou can now sign in with your phone number and chosen password.\n\nPhone number: {{phone}}" }
+    "success": { "title": "Registration successful!", "message": "Your account was created successfully.\n\nYou can now sign in with your phone number and chosen password.\n\nPhone number: {{phone}}" },
+    "passwordPlaceholder": "Password (at least 6 characters)",
+    "confirmPasswordPlaceholder": "Confirm password"
   },
   "appointments": {
     "noPhone": { "title": "No phone number", "message": "No valid phone number was found for this client." },
@@ -283,6 +294,10 @@
     },
     
     "profile": {
+      "businessAddressPlaceholder": "Business address",
+      "instagramUrlPlaceholder": "https://instagram.com/yourpage",
+      "facebookUrlPlaceholder": "https://facebook.com/yourpage",
+      "tiktokUrlPlaceholder": "https://www.tiktok.com/@yourpage",
       "saveFailed": "Failed to save business profile",
       "saveSuccess": "Business details saved successfully",
       "nameSaveFailed": "Failed to save business name",

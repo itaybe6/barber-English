@@ -79,14 +79,14 @@ const FloatingBookButton = ({ onPress, focused }: { onPress: () => void; focused
     >
       <Animated.View style={motionStyle}>
         <LinearGradient
-          // Glassy tint that preserves brand color while adding transparency
-          colors={[hexToRgba(colors.primary, 0.55), hexToRgba(colors.primary, 0.4)]}
+          // Stronger color presence, lighter blur
+          colors={[hexToRgba(colors.primary, 0.9), hexToRgba(colors.primary, 0.78)]}
           style={styles.floatingGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
         >
-          {/* Liquid glass blur behind the tint */}
-          <BlurView intensity={50} tint="light" style={StyleSheet.absoluteFillObject} />
+          {/* Subtle blur only to soften edges */}
+          <BlurView intensity={12} tint="light" style={StyleSheet.absoluteFillObject} />
           {/* Subtle inner highlight for glass edge */}
           <View style={styles.floatingGlassEdge} />
           <View style={[styles.floatingIcon, focused && styles.floatingIconFocused]}>
@@ -135,7 +135,7 @@ export default function ClientTabsLayout() {
         tabBarHideOnKeyboard: true,
         tabBarIcon: ({ color, size, focused }) => {
           const iconSize = focused ? 26 : 24;
-          const iconColor = focused ? colors.primary : '#3A3A3C';
+          const iconColor = focused ? '#FFFFFF' : 'rgba(255,255,255,0.7)';
           
           let iconName;
           switch (route.name) {
@@ -211,8 +211,8 @@ export default function ClientTabsLayout() {
             />
           );
         },
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: '#3A3A3C',
+        tabBarActiveTintColor: '#FFFFFF',
+        tabBarInactiveTintColor: 'rgba(255,255,255,0.7)',
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',
@@ -222,33 +222,64 @@ export default function ClientTabsLayout() {
         },
         tabBarItemStyle: route.name === 'book-appointment' ? styles.centerTabItem : styles.regularTabItem,
         tabBarLabelPosition: 'below-icon',
-        tabBarLabel: route.name === 'book-appointment' ? '' : getTabLabel(route.name),
+        tabBarLabel: route.name === 'book-appointment'
+          ? ''
+          : (
+            route.name === 'index' ? t('tabs.home', 'Home') :
+            route.name === 'gallery' ? t('tabs.gallery', 'Gallery') :
+            route.name === 'appointments' ? t('tabs.booking', 'Booking') :
+            route.name === 'profile' ? t('tabs.profile', 'Profile') :
+            route.name === 'waitlist' ? t('waitlist.title', 'Waitlist') :
+            route.name === 'notifications' ? t('notifications.title', 'Notifications') :
+            t('tabs.home', 'Home')
+          ),
         tabBarContentContainerStyle: {
           justifyContent: 'space-between',
           alignItems: 'center',
           flexDirection: 'row'
         },
         tabBarStyle: {
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          backgroundColor: 'transparent',
           borderTopWidth: 0,
-          height: 88,
-          paddingTop: 8,
-          paddingBottom: 20,
+          height: 76,
+          paddingTop: 6,
+          paddingBottom: 12,
           paddingHorizontal: 0,
           position: 'absolute',
+          bottom: 18,
+          marginHorizontal:16,
           borderTopLeftRadius: 28,
           borderTopRightRadius: 28,
+          borderBottomLeftRadius: 28,
+          borderBottomRightRadius: 28,
           shadowColor: '#000000',
-          shadowOffset: { width: 0, height: -8 },
-          shadowOpacity: 0.08,
-          shadowRadius: 24,
-          elevation: 20,
+          shadowOffset: { width: 0, height: 18 },
+          shadowOpacity: 0.25,
+          shadowRadius: 34,
+          elevation: 30,
           flexDirection: 'row'
         },
         tabBarBackground: () => (
-          <View style={styles.tabBarBackground}>
-            <View style={styles.tabBarBlur} />
-          </View>
+          <BlurView intensity={100} tint="dark" style={styles.tabBarBackground}>
+            {/* Subtle diagonal sheen for liquid glass */}
+            <LinearGradient
+              colors={["rgba(255,255,255,0.14)", "rgba(255,255,255,0.03)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.tabBarLiquidSheen}
+            />
+            {/* Main gray translucent overlay */}
+            <View style={styles.tabBarDarkOverlay} />
+            {/* Soft top edge highlight */}
+            <LinearGradient
+              colors={["rgba(255,255,255,0.18)", "rgba(255,255,255,0)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={styles.tabBarTopHighlight}
+            />
+            {/* Thin glass outline */}
+            <View style={styles.tabBarOutline} />
+          </BlurView>
         ),
         headerShown: false,
       })}
@@ -314,7 +345,7 @@ export default function ClientTabsLayout() {
       <Tabs.Screen 
         name="appointments" 
         options={{
-          title: t('appointments.title', 'Appointments'),
+          title: t('tabs.booking', 'Booking'),
         }}
       />
       <Tabs.Screen 
@@ -370,7 +401,7 @@ function getTabLabel(routeName: string): string {
     case 'gallery':
       return 'Gallery';
     case 'appointments':
-      return 'Appointments';
+      return 'Booking';
     case 'profile':
       return 'Profile';
     case 'book-appointment':
@@ -487,9 +518,11 @@ const styles = StyleSheet.create({
   // Tab bar background with blur effect
   tabBarBackground: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: 'transparent',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
     overflow: 'hidden',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: -8 },
@@ -498,6 +531,48 @@ const styles = StyleSheet.create({
     elevation: 20,
   },
   
+  // Liquid glass effects layers
+  tabBarLiquidSheen: {
+    ...StyleSheet.absoluteFillObject,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    pointerEvents: 'none',
+  },
+
+  tabBarTopHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 24,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    pointerEvents: 'none',
+  },
+
+  tabBarOutline: {
+    ...StyleSheet.absoluteFillObject,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.16)',
+    pointerEvents: 'none',
+  },
+  
+  // Dark translucent overlay above the blur for glass look
+  tabBarDarkOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(200, 200, 210, 0.14)',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+  },
+
   tabBarBlur: {
     flex: 1,
     backgroundColor: 'rgba(248, 248, 248, 0.8)',

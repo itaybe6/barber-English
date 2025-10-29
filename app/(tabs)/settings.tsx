@@ -2125,7 +2125,7 @@ export default function SettingsScreen() {
               <InlineEditableRow
                 title="Reminder before appointment (minutes)"
                 value={reminderEnabled && Number(reminderMinutes) > 0 ? String(reminderMinutes) : ''}
-                placeholder="e.g. 30"
+                placeholder={`${t('common.eg','e.g.')} 30`}
                 keyboardType="default"
                 onSave={handleSaveReminderInline}
                 chevronColor={businessColors.primary}
@@ -2161,7 +2161,7 @@ export default function SettingsScreen() {
                   <InlineEditableRow
                     title="Business name"
                     value={profileDisplayName || ''}
-                    placeholder="Business name"
+                    placeholder={t('settings.profile.businessNamePlaceholder','Business name')}
                     keyboardType="default"
                     onSave={handleSaveDisplayNameInline}
                     chevronColor={businessColors.primary}
@@ -2200,7 +2200,7 @@ export default function SettingsScreen() {
                   <InlineEditableRow
                     title="Instagram"
                     value={profileInstagram || ''}
-                    placeholder="https://instagram.com/yourpage"
+                    placeholder={t('settings.profile.instagramUrlPlaceholder','https://instagram.com/yourpage')}
                     keyboardType="url"
                     onSave={handleSaveInstagramInline}
                     chevronColor={businessColors.primary}
@@ -2214,7 +2214,7 @@ export default function SettingsScreen() {
                   <InlineEditableRow
                     title="Facebook"
                     value={profileFacebook || ''}
-                    placeholder="https://facebook.com/yourpage"
+                    placeholder={t('settings.profile.facebookUrlPlaceholder','https://facebook.com/yourpage')}
                     keyboardType="url"
                     onSave={handleSaveFacebookInline}
                     chevronColor={businessColors.primary}
@@ -2228,7 +2228,7 @@ export default function SettingsScreen() {
                   <InlineEditableRow
                     title="TikTok"
                     value={profileTiktok || ''}
-                    placeholder="https://www.tiktok.com/@yourpage"
+                    placeholder={t('settings.profile.tiktokUrlPlaceholder','https://www.tiktok.com/@yourpage')}
                     keyboardType="url"
                     onSave={handleSaveTiktokInline}
                     chevronColor={businessColors.primary}
@@ -2330,7 +2330,7 @@ export default function SettingsScreen() {
               <InlineEditableRow
                 title="Minimum cancellation time (hours)"
                 value={String(profileMinCancellationHours || 24)}
-                placeholder="e.g. 24"
+                placeholder={`${t('common.eg','e.g.')} 24`}
                 keyboardType="default"
                 onSave={handleSaveCancellationInline}
                 chevronColor={businessColors.primary}
@@ -2592,7 +2592,7 @@ export default function SettingsScreen() {
                   style={styles.textInput}
                   value={reminderMinutesDraft}
                   onChangeText={setReminderMinutesDraft}
-                  placeholder="e.g. 30"
+                  placeholder={`${t('common.eg','e.g.')} 30`}
                   placeholderTextColor={Colors.subtext}
                   keyboardType="numeric"
                   textAlign="left"
@@ -2720,7 +2720,7 @@ export default function SettingsScreen() {
                   style={styles.textInput}
                   value={adminEmailDraft}
                   onChangeText={setAdminEmailDraft}
-                  placeholder="name@example.com"
+                  placeholder={t('profile.edit.emailPlaceholder','name@example.com')}
                   placeholderTextColor={Colors.subtext}
                   keyboardType="email-address"
                   autoCapitalize="none"
@@ -2807,7 +2807,7 @@ export default function SettingsScreen() {
                 <Text style={styles.inputLabelLTR}>Address</Text>
                 <GooglePlacesAutocomplete
                   keyboardShouldPersistTaps="handled"
-                  placeholder="Business address"
+                  placeholder={t('settings.profile.businessAddressPlaceholder','Business address')}
                   fetchDetails
                   debounce={200}
                   enablePoweredByContainer={false}
@@ -2915,7 +2915,7 @@ export default function SettingsScreen() {
                   style={styles.textInput}
                   value={instagramDraft}
                   onChangeText={setInstagramDraft}
-                  placeholder="https://instagram.com/yourpage"
+                  placeholder={t('settings.profile.instagramUrlPlaceholder','https://instagram.com/yourpage')}
                   placeholderTextColor={Colors.subtext}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -2952,7 +2952,7 @@ export default function SettingsScreen() {
                   style={styles.textInput}
                   value={facebookDraft}
                   onChangeText={setFacebookDraft}
-                  placeholder="https://facebook.com/yourpage"
+                  placeholder={t('settings.profile.facebookUrlPlaceholder','https://facebook.com/yourpage')}
                   placeholderTextColor={Colors.subtext}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -2989,7 +2989,7 @@ export default function SettingsScreen() {
                   style={styles.textInput}
                   value={tiktokDraft}
                   onChangeText={setTiktokDraft}
-                  placeholder="https://www.tiktok.com/@yourpage"
+                  placeholder={t('settings.profile.tiktokUrlPlaceholder','https://www.tiktok.com/@yourpage')}
                   placeholderTextColor={Colors.subtext}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -3280,7 +3280,7 @@ export default function SettingsScreen() {
                     style={[styles.textInput, { borderWidth: 0, backgroundColor: 'transparent', paddingVertical: 0, flex: 1 }]}
                     value={manageEmpSearch}
                     onChangeText={setManageEmpSearch}
-                    placeholder="Search by name, phone, or email"
+                    placeholder={t('common.searchByNamePhoneEmail','Search by name, phone, or email')}
                     placeholderTextColor={Colors.subtext}
                     textAlign="left"
                     autoCapitalize="none"
@@ -3472,7 +3472,7 @@ export default function SettingsScreen() {
                                   style={[styles.textInput, { borderWidth: 1, borderColor: '#E5E5EA', backgroundColor: '#F2F2F7' }]}
                                   value={clientSearch}
                                   onChangeText={searchClients}
-                                  placeholder="Search by name or phone..."
+                                  placeholder={t('common.searchByNamePhone','Search by name or phone...')}
                                   placeholderTextColor={Colors.subtext}
                                   textAlign="left"
                                 />

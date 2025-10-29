@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Image, Dimensions, FlatList, I18nManager } from 'react-native';
+import { View, Text, TouchableOpacity, Image, Dimensions, FlatList, I18nManager, StyleSheet } from 'react-native';
 import { BlurView } from 'expo-blur';
-import Animated, { useSharedValue, useAnimatedScrollHandler, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, Easing } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedScrollHandler, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, Easing, FadeIn, FadeOut } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { User } from '@/lib/supabase';
 
@@ -11,7 +11,8 @@ const ITEM_SPACING = 16;
 const ITEM_SIZE = AVATAR_SIZE + ITEM_SPACING;
 const SCREEN = Dimensions.get('window');
 const AnimatedFlatList: any = Animated.createAnimatedComponent(FlatList as any);
-const HEADER_HEIGHT = 700; // header image height with rounded top corners
+const HEADER_HEIGHT = 320; // compact card height
+const CARD_WIDTH_PERCENT = 0.72; // main card is 72% of screen width so side cards peek nicely
 
 export type BarberSelectorProps = {
   barbers: User[];
@@ -129,82 +130,146 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
     );
   };
 
+  const goPrev = React.useCallback(() => {
+    try {
+      const next = Math.max(0, Math.min(barbers.length - 1, (activeIndex || 0) - 1));
+      if (next !== activeIndex) onIndexChange(next);
+    } catch {}
+  }, [activeIndex, barbers.length]);
+
+  const goNext = React.useCallback(() => {
+    try {
+      const next = Math.max(0, Math.min(barbers.length - 1, (activeIndex || 0) + 1));
+      if (next !== activeIndex) onIndexChange(next);
+    } catch {}
+  }, [activeIndex, barbers.length]);
+
+  const prevIdx = Math.max(0, Math.min(barbers.length - 1, (activeIndex || 0) - 1));
+  const nextIdx = Math.max(0, Math.min(barbers.length - 1, (activeIndex || 0) + 1));
+  const cardWidth = SCREEN.width * CARD_WIDTH_PERCENT;
+  const cardHorizontalMargin = (SCREEN.width - cardWidth) / 2;
+  const sidePeekShift = Math.min(36, cardHorizontalMargin + 12);
+
   return (
-    <View style={{ position: 'relative', height: HEADER_HEIGHT + 200 }}>
-      <View style={{ height: HEADER_HEIGHT, marginTop: 12, marginHorizontal: 12, borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden', backgroundColor: '#F2F2F7' }}>
+    <View style={{ position: 'relative', height: HEADER_HEIGHT + 180, marginTop: 32 }}>
+      {/* Services/top overlay sits ABOVE the image, not on it */}
+      {typeof renderTopOverlay === 'function' ? (
+        <View style={{ marginTop: 12, marginHorizontal: 16 }}>
+          {renderTopOverlay()}
+        </View>
+      ) : null}
+
+      {/* Side preview cards (peeking) with elegant tilt */}
+      {barbers.length > 1 && prevIdx !== activeIndex && (
+        <View style={{ position: 'absolute', left: -sidePeekShift, top: 92, width: cardWidth * 0.8, height: HEADER_HEIGHT - 36, borderRadius: 20, overflow: 'hidden', transform: [{ rotateZ: '-4deg' }, { scale: 0.9 }], opacity: 0.75 }}>
+          {barbers[prevIdx]?.image_url ? (
+            <Image source={{ uri: barbers[prevIdx].image_url as any }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+          ) : (
+            <View style={{ width: '100%', height: '100%', backgroundColor: '#E5E5EA' }} />
+          )}
+        </View>
+      )}
+      {barbers.length > 1 && nextIdx !== activeIndex && (
+        <View style={{ position: 'absolute', right: -sidePeekShift, top: 92, width: cardWidth * 0.8, height: HEADER_HEIGHT - 36, borderRadius: 20, overflow: 'hidden', transform: [{ rotateZ: '4deg' }, { scale: 0.9 }], opacity: 0.75 }}>
+          {barbers[nextIdx]?.image_url ? (
+            <Image source={{ uri: barbers[nextIdx].image_url as any }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+          ) : (
+            <View style={{ width: '100%', height: '100%', backgroundColor: '#E5E5EA' }} />
+          )}
+        </View>
+      )}
+
+      <View style={{ height: HEADER_HEIGHT, marginTop: 48, marginHorizontal: cardHorizontalMargin, width: cardWidth, borderRadius: 20, overflow: 'hidden', backgroundColor: '#F2F2F7', zIndex: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 16, elevation: 10 }}>
         {!!bgCurrent && (
           <Animated.Image source={{ uri: bgCurrent }} style={[{ width: '100%', height: '100%' }, bgStyle]} resizeMode="cover" fadeDuration={0 as any} />
         )}
         <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.25)' }} />
-        {/* Top name glass overlay (outside carousel items) */}
-        <View style={{ position: 'absolute', top: 12, left: 12, right: 12, alignItems: 'center' }}>
+        {/* Bottom glass name pill with action icon (call) */}
+        <View style={{ position: 'absolute', left: 12, right: 12, bottom: 12, alignItems: 'center' }}>
           <BlurView intensity={28} tint="light" style={{
-            paddingVertical: 8,
+            paddingVertical: 10,
             paddingHorizontal: 14,
-            borderRadius: 16,
+            borderRadius: 20,
             overflow: 'hidden',
             borderWidth: 1,
             borderColor: 'rgba(255,255,255,0.35)',
-            backgroundColor: 'rgba(255,255,255,0.18)'
+            backgroundColor: 'rgba(255,255,255,0.16)'
           }}>
-            <Text numberOfLines={1} style={{
-              color: '#111827',
-              fontWeight: '800',
-              fontSize: 16,
-              textShadowColor: 'rgba(255,255,255,0.6)',
-              textShadowOffset: { width: 0, height: 1 },
-              textShadowRadius: 2
-            }}>
-              {barbers[activeIndex]?.name || ''}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <Text numberOfLines={1} style={{
+                color: '#FFFFFF',
+                fontWeight: '800',
+                fontSize: 16,
+                textShadowColor: 'rgba(255,255,255,0.6)',
+                textShadowOffset: { width: 0, height: 1 },
+                textShadowRadius: 2,
+                flexShrink: 1,
+              }}>
+                {barbers[activeIndex]?.name || ''}
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#2E7CF6', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="call-outline" size={18} color="#FFFFFF" />
+                </View>
+              </View>
+            </View>
           </BlurView>
         </View>
-      </View>
 
-      <View style={[styles.carouselBottomArea, { bottom: (bottomOffset ?? 28) }]}>
-        <AnimatedFlatList
-          ref={listRef as any}
-          horizontal
-          data={barbers}
-          keyExtractor={(it: User) => String(it.id)}
-          renderItem={({ item, index }) => <CarouselItem item={item} index={index} />}
-          initialScrollIndex={defaultIndex}
-          getItemLayout={(_, index) => ({ length: ITEM_SIZE, offset: ITEM_SIZE * index, index })}
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={ITEM_SIZE}
-          snapToAlignment="center"
-          disableIntervalMomentum={true}
-          decelerationRate="fast"
-          bounces={false}
-          nestedScrollEnabled={false}
-          style={styles.carouselList}
-          contentContainerStyle={contentPadding}
-          onScroll={scrollHandler}
-          onScrollToIndexFailed={(info: any) => {
-            try {
-              const wait = new Promise((resolve) => setTimeout(resolve, 60));
-              wait.then(() => (listRef.current as any)?.scrollToIndex?.({ index: info.index, animated: false, viewPosition: 0.5 }));
-            } catch {}
-          }}
-          onMomentumScrollEnd={(e: any) => {
-            const padAdjust = (contentPadding as any).paddingLeft || 0; // base for index calc
-            const x = e.nativeEvent.contentOffset.x + padAdjust;
-            const raw = x / ITEM_SIZE;
-            const idx = Math.round(raw);
-            const clamped = Math.max(0, Math.min(barbers.length - 1, idx));
-            if (clamped !== lastIndex.current) {
-              lastIndex.current = clamped;
-              onIndexChange(clamped);
-            }
-          }}
-          scrollEventThrottle={16}
-        />
-        {Number.isFinite(activeIndex) && barbers[activeIndex] && (
-          <Text style={styles.carouselActiveName} numberOfLines={1}>
-            {barbers[activeIndex]?.name || ''}
-          </Text>
-        )}
+        {/* Glassmorphic arrow buttons with beautiful styling */}
+        <View style={{ position: 'absolute', top: '50%', left: 12, transform: [{ translateY: -28 }], zIndex: 10 }}>
+          <TouchableOpacity
+            onPress={goPrev}
+            activeOpacity={0.75}
+            style={{ 
+              width: 56, 
+              height: 56, 
+              borderRadius: 28, 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              overflow: 'hidden', 
+              borderWidth: 1.5, 
+              borderColor: 'rgba(255,255,255,0.5)', 
+              shadowColor: '#000', 
+              shadowOffset: { width: 0, height: 6 }, 
+              shadowOpacity: 0.2, 
+              shadowRadius: 16, 
+              elevation: 8,
+              backgroundColor: 'transparent'
+            }}
+          >
+            <BlurView intensity={36} tint="light" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.3)' }} />
+            <Ionicons name={I18nManager?.isRTL ? 'chevron-forward' : 'chevron-back'} size={28} color="#1C1C1E" style={{ fontWeight: '800' } as any} />
+          </TouchableOpacity>
+        </View>
+        <View style={{ position: 'absolute', top: '50%', right: 12, transform: [{ translateY: -28 }], zIndex: 10 }}>
+          <TouchableOpacity
+            onPress={goNext}
+            activeOpacity={0.75}
+            style={{ 
+              width: 56, 
+              height: 56, 
+              borderRadius: 28, 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              overflow: 'hidden', 
+              borderWidth: 1.5, 
+              borderColor: 'rgba(255,255,255,0.5)', 
+              shadowColor: '#000', 
+              shadowOffset: { width: 0, height: 6 }, 
+              shadowOpacity: 0.2, 
+              shadowRadius: 16, 
+              elevation: 8,
+              backgroundColor: 'transparent'
+            }}
+          >
+            <BlurView intensity={36} tint="light" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.3)' }} />
+            <Ionicons name={I18nManager?.isRTL ? 'chevron-back' : 'chevron-forward'} size={28} color="#1C1C1E" style={{ fontWeight: '800' } as any} />
+          </TouchableOpacity>
+        </View>
       </View>
+      {/* keep extra spacing below */}
+      <View style={{ height: 18 }} />
     </View>
   );
 };

@@ -177,12 +177,12 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
                 <View style={styles.headerIconCircle}>
                   <Ionicons name="time-outline" size={18} color={colors.primary} />
                 </View>
-            <Text style={[styles.nextTitle, { color: colors.primary }]}>Next appointment</Text>
+            <Text style={[styles.nextTitle, { color: colors.primary }]}>{t('appointments.next','Your next appointment')}</Text>
               </View>
               {loading ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="small" color={colors.primary} />
-                  <Text style={styles.loadingText}>Loading...</Text>
+                  <Text style={styles.loadingText}>{t('common.loading','Loading...')}</Text>
                 </View>
               ) : nextAppointment ? (
                 <>
@@ -210,7 +210,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
                 </>
               ) : (
                 <View style={styles.emptyStateContainer}>
-                  <Text style={styles.emptyTitle}>No upcoming appointments today</Text>
+                  <Text style={styles.emptyTitle}>{t('appointments.empty.today','No upcoming appointments today')}</Text>
                 </View>
               )}
             </BlurView>

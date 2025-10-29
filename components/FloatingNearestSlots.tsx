@@ -13,7 +13,7 @@ export default function FloatingNearestSlots() {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [slots, setSlots] = useState<AvailableTimeSlot[]>([]);
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const fetchNearest = useCallback(async () => {
     setIsLoading(true);
@@ -65,7 +65,8 @@ export default function FloatingNearestSlots() {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('he-IL', { day: 'numeric', month: 'long', weekday: 'long' });
+    const locale = i18n?.language?.startsWith('he') ? 'he-IL' : 'en-US';
+    return date.toLocaleDateString(locale, { day: 'numeric', month: 'long', weekday: 'long' } as any);
   };
 
   return (

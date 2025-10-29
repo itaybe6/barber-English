@@ -444,7 +444,7 @@ export default function EditGalleryScreen() {
 
                     <TextInput
                       style={[styles.input, { marginTop: 12 }]}
-                      placeholder="Design name"
+                      placeholder={t('admin.gallery.namePlaceholder','Design name')}
                       value={editName}
                       onChangeText={setEditName}
                       returnKeyType="done"

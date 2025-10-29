@@ -301,7 +301,7 @@ export default function LoginScreen() {
                   <Ionicons name="call-outline" size={18} color="#6B7280" style={styles.iconLeft} />
                   <TextInput
                     style={[styles.input, { color: '#4B5563' }]}
-                    placeholder="Phone number"
+                    placeholder={t('profile.edit.phonePlaceholder','Phone number')}
                     placeholderTextColor="#6B7280"
                     value={phone}
                     onChangeText={setPhone}
@@ -318,7 +318,7 @@ export default function LoginScreen() {
                   <Ionicons name="lock-closed-outline" size={18} color="#6B7280" style={styles.iconLeft} />
                   <TextInput
                     style={[styles.input, styles.inputPassword, { color: '#4B5563' }]}
-                    placeholder="Password"
+                    placeholder={t('login.passwordPlaceholder','Password')}
                     placeholderTextColor="#6B7280"
                     value={password}
                     onChangeText={setPassword}
@@ -367,7 +367,7 @@ export default function LoginScreen() {
               <Ionicons name="call-outline" size={18} color="#666666" style={styles.iconLeft} />
               <TextInput
                 style={[styles.input, { color: '#000000' }]}
-                placeholder="Phone number"
+                placeholder={t('profile.edit.phonePlaceholder','Phone number')}
                 placeholderTextColor="#999999"
                 value={forgotPhone}
                 onChangeText={setForgotPhone}
@@ -381,7 +381,7 @@ export default function LoginScreen() {
               <Ionicons name="mail-outline" size={18} color="#666666" style={styles.iconLeft} />
               <TextInput
                 style={[styles.input, { color: '#000000' }]}
-                placeholder="Email"
+                placeholder={t('profile.edit.emailPlaceholder','Email')}
                 placeholderTextColor="#999999"
                 value={forgotEmail}
                 onChangeText={setForgotEmail}

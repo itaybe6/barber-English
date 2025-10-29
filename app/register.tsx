@@ -302,7 +302,7 @@ export default function RegisterScreen() {
                   <Ionicons name="person-outline" size={16} color={palette.textSecondary} style={styles.iconLeft} />
                   <TextInput
                     style={[styles.input]}
-                    placeholder="Full name"
+                    placeholder={t('profile.edit.namePlaceholder','Full Name')}
                     placeholderTextColor={palette.textSecondary}
                     value={name}
                     onChangeText={(text) => {
@@ -324,7 +324,7 @@ export default function RegisterScreen() {
                   <Ionicons name="call-outline" size={16} color={palette.textSecondary} style={styles.iconLeft} />
                   <TextInput
                     style={[styles.input]}
-                    placeholder="Phone number"
+                    placeholder={t('profile.edit.phonePlaceholder','Phone number')}
                     placeholderTextColor={palette.textSecondary}
                     value={phone}
                     onChangeText={(text) => {
@@ -347,7 +347,7 @@ export default function RegisterScreen() {
                   <Ionicons name="mail-outline" size={16} color={palette.textSecondary} style={styles.iconLeft} />
                   <TextInput
                     style={[styles.input]}
-                    placeholder="Email"
+                    placeholder={t('profile.edit.emailPlaceholder','Email')}
                     placeholderTextColor={palette.textSecondary}
                     value={email}
                     onChangeText={(text) => {
@@ -373,7 +373,7 @@ export default function RegisterScreen() {
                   <Ionicons name="lock-closed-outline" size={16} color={palette.textSecondary} style={styles.iconLeft} />
                   <TextInput
                     style={[styles.input, styles.inputPassword]}
-                    placeholder="Password (at least 6 characters)"
+                    placeholder={t('register.passwordPlaceholder','Password (at least 6 characters)')}
                     placeholderTextColor={palette.textSecondary}
                     value={password}
                     onChangeText={(text) => {
@@ -399,7 +399,7 @@ export default function RegisterScreen() {
                   <Ionicons name="lock-closed-outline" size={16} color={palette.textSecondary} style={styles.iconLeft} />
                   <TextInput
                     style={[styles.input, styles.inputPassword]}
-                    placeholder="Confirm password"
+                    placeholder={t('register.confirmPasswordPlaceholder','Confirm password')}
                     placeholderTextColor={palette.textSecondary}
                     value={confirmPassword}
                     onChangeText={(text) => {

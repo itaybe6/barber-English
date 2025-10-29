@@ -19,7 +19,7 @@ import { notificationsApi } from '@/lib/api/notifications';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
 import { User } from '@/lib/supabase';
-import Animated, { useSharedValue, useAnimatedScrollHandler, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, Easing } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedScrollHandler, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, Easing, FadeIn, FadeOut } from 'react-native-reanimated';
 
 
 // API functions for booking appointments
@@ -426,18 +426,8 @@ export default function BookAppointment() {
       if (isTransitioning.current) return;
       const y = Number(e?.nativeEvent?.contentOffset?.y || 0);
       if (currentStep === 1) {
-        if (!selectedBarber || hasTriggeredStep2.current) return;
-        if (y > 8) {
-          hasTriggeredStep2.current = true;
-          isTransitioning.current = true;
-          introFade.value = withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) }, () => {
-            runOnJS(setCurrentStep)(2);
-            // Reset for potential future returns to step 1
-            introFade.value = 1;
-            hasTriggeredStep2.current = false;
-            isTransitioning.current = false;
-          });
-        }
+        // In the new single-page flow we do not auto-advance to a separate service step.
+        return;
       } else if (currentStep === 2) {
         // Scroll up (pull) → back to barber selection
         if (y < -8) {
@@ -886,6 +876,10 @@ export default function BookAppointment() {
     setShowConfirmModal(false);
     setShowReplaceModal(false);
     setExistingAppointment(null);
+    if (selectedService?.id) {
+      // Reveal day/time section immediately in the single-page flow
+      setCurrentStep(3);
+    }
   }, [selectedService?.id]);
 
   // If navigated back from select-time asking to open dates screen
@@ -893,7 +887,8 @@ export default function BookAppointment() {
     try {
       const goto = (params as any)?.goto;
       if (goto === 'dates') {
-        setCurrentStep(2);
+        // Directly reveal the day/time section in the single-page flow
+        setCurrentStep(3);
       }
     } catch {}
   }, [params]);
@@ -926,8 +921,8 @@ export default function BookAppointment() {
       // Auto-select first barber if only one exists
       if (list.length === 1) {
         setSelectedBarber(list[0]);
-        // Skip the barber selection step and go straight to service selection
-        setCurrentStep(2);
+        // Keep user on the single-page view; services appear as an overlay above the carousel
+        setCurrentStep(1);
       }
     } catch (e) {
       setAvailableBarbers([]);
@@ -1447,7 +1442,46 @@ export default function BookAppointment() {
                     setDayAvailability({});
                   }}
                   styles={styles}
-                  renderTopOverlay={() => null}
+                  renderTopOverlay={() => {
+                    if (!selectedBarber) return null;
+                    if (!filteredServices || filteredServices.length === 0) return null;
+                    return (
+                      <Animated.View 
+                        key={`services-${selectedBarber.id}`}
+                        entering={FadeIn.duration(400).delay(100)}
+                        exiting={FadeOut.duration(200)}
+                        style={styles.serviceOverlayContainer}
+                      >
+                        <BlurView intensity={22} tint="light" style={styles.serviceOverlayBlur} />
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          contentContainerStyle={styles.serviceChipsRow}
+                        >
+                          {filteredServices.map((svc, idx) => {
+                            const active = selectedService?.id === svc.id;
+                            return (
+                              <TouchableOpacity
+                                key={String(svc.id)}
+                                onPress={() => {
+                                  setSelectedServiceIndex(idx);
+                                  setSelectedService(svc);
+                                  setCurrentStep(3);
+                                }}
+                                activeOpacity={0.9}
+                                style={[styles.serviceChip, active && styles.serviceChipActive]}
+                              >
+                                <Ionicons name="cut" size={16} color={active ? '#FFFFFF' : '#111827'} />
+                                <Text numberOfLines={1} style={[styles.serviceChipText, active && styles.serviceChipTextActive]}>
+                                  {svc.name}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                      </Animated.View>
+                    );
+                  }}
                   bottomOffset={Math.max(insets.bottom, 20) + 60}
                 />
               </View>
@@ -1892,10 +1926,10 @@ export default function BookAppointment() {
                       }
 
                       await Calendar.createEventAsync(calendarId, {
-                        title: selectedService?.name || 'Appointment',
+                        title: selectedService?.name || t('booking.calendarEventTitle','Appointment'),
                         startDate: start,
                         endDate: end,
-                        notes: 'Booked via the app',
+                        notes: t('booking.calendarNotes','Booked via the app'),
                       });
 
                       Alert.alert(t('booking.added', 'נוסף'), t('booking.eventAdded', 'האירוע נוסף ליומן שלך.'));
@@ -2029,6 +2063,45 @@ const createStyles = (colors: any) => StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.25)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
+  },
+  // Service chips overlay (single-page flow)
+  serviceOverlayContainer: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: 'transparent',
+    marginBottom: 8,
+  },
+  serviceOverlayBlur: {
+    ...StyleSheet.absoluteFillObject as any,
+    borderRadius: 16,
+  },
+  serviceChipsRow: {
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+  },
+  serviceChip: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(17,24,39,0.08)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    marginHorizontal: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  serviceChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  serviceChipText: {
+    color: '#111827',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  serviceChipTextActive: {
+    color: '#FFFFFF',
   },
   // Service carousel styles
   serviceCarouselCard: {

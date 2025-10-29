@@ -40,6 +40,7 @@
   "booking.loadingEmployees": "טוען אנשי צוות...",
   "booking.selectService": "בחר/י שירות",
   "booking.loadingServices": "טוען שירותים...",
+  "booking.noServices": "אין שירותים זמינים",
   "booking.selectDay": "בחר/י יום",
   "booking.legend.noAvailability": "* ימים ללא תורים פנויים מסומנים באדום",
   "booking.legend.waitlist": "* גם אם אין תורים פנויים – אפשר ללחוץ על היום ולהצטרף לרשימת המתנה לאותו היום",
@@ -69,6 +70,8 @@
   "booking.eventAdded": "האירוע נוסף ליומן שלך.",
   "booking.eventAddFailed": "לא ניתן להוסיף את האירוע ליומן.",
   "booking.addToCalendar": "הוסף ליומן",
+  "booking.calendarEventTitle": "תור",
+  "booking.calendarNotes": "נרשם דרך האפליקציה",
   "booking.gotIt": "הבנתי",
   "booking.cannotBook": "לא ניתן לקבוע",
   "booking.constraintMessage": "קיימים אילוצים בשעה/תאריך שבחרת. אנא בחר/י זמן אחר.",
@@ -223,21 +226,27 @@
     "loginToView": "אנא התחבר/י להצגת העיצובים המלאים",
     "subcategory": { "barber": "ספרים", "nails": "ציפורניים" },
     "noImages": { "login": "אין תמונות למסך ההתחברות", "category": "אין תמונות עבור {{subcategory}} ב-{{category}}" },
-    "loginPage": { "formatNote": "\ud83d\udcf1 תמונות מסך ההתחברות מוצגות ביחס (9:16)" }
+    "loginPage": { "formatNote": "\ud83d\udcf1 תמונות מסך ההתחברות מוצגות ביחס (9:16)" },
+    "design": "עיצוב"
   },
   "products": { "loginToViewDetails": "אנא התחבר/י להצגת פרטי המוצר" },
   "auth": { "signInNow": "התחבר/י עכשיו", "maybeLater": "אולי אחר כך" },
   "nearestSlots": { "title": "תורים זמינים בקרוב", "empty": "אין תורים זמינים בקרוב" },
   "map": { "mapsLabel": "מפות" },
-  "common": { "tryAgain": "אירעה שגיאה. נסו שוב.", "client": "לקוח", "smsOpenFailed": "לא ניתן לפתוח את אפליקציית ה-SMS במכשיר זה", "searchPlaceholder": "חפש..." },
+  "common": { "tryAgain": "אירעה שגיאה. נסו שוב.", "client": "לקוח", "smsOpenFailed": "לא ניתן לפתוח את אפליקציית ה-SMS במכשיר זה", "searchPlaceholder": "חפש...", "user": "משתמש" },
   "common.loading": "טוען...",
+  "common.eg": "למשל",
   "common.noResults": "אין תוצאות",
   "common.noName": "ללא שם",
   "common.noPrice": "ללא מחיר",
+  "common.searchByName": "חפש לפי שם...",
+  "common.searchByNamePhone": "חפש לפי שם או טלפון...",
+  "common.searchByNamePhoneEmail": "חפש לפי שם, טלפון או אימייל",
   "category": { "gel": "לק ג'ל", "feet": "לק ברגליים", "manicure": "מניקור" },
   "admin2": { "hoursAdmin": { "title": "אילוצי עבודה", "segment": { "hours": "שעות", "singleDay": "יום אחד", "multiDays": "מספר ימים" }, "pickDateShort": "בחר/י תאריך", "closedHours": "שעות סגורות", "pickDateAllDay": "בחירת תאריך (סגור כל היום)", "pickDateRangeAllDay": "בחירת טווח תאריכים (סגור כל היום)", "selectedRange": ":טווח נבחר", "allDay": "כל היום", "chooseClosedHours": "בחר/י שעות סגורות", "start": "התחלה", "end": "סיום", "upcomingConstraints": "אילוצים קרובים", "noUpcomingConstraints": "אין אילוצים קרובים", "noReason": "ללא סיבה", "saveCTA": "שמור אילוצים" } },
   "login": {
     "fillAll": "אנא מלא/י את כל השדות",
+    "passwordPlaceholder": "סיסמה",
     "blockedCannotSignIn": "החשבון חסום ואינו יכול להתחבר. אנא צרו קשר עם המנהל.",
     "invalidUserType": "סוג משתמש לא תקין",
     "incorrectCredentials": "טלפון או סיסמה שגויים",
@@ -249,7 +258,9 @@
   "register": {
     "phoneExists": { "title": "מספר הטלפון כבר קיים", "message": "מספר הטלפון הזה כבר רשום במערכת. אנא השתמש/י במספר אחר או התחבר/י לחשבון קיים." },
     "createError": "אירעה שגיאה ביצירת החשבון. אנא נסו שוב.",
-    "success": { "title": "ההרשמה הצליחה!", "message": "החשבון נוצר בהצלחה.\n\nכעת ניתן להתחבר עם מספר הטלפון והסיסמה שבחרת.\n\nמספר הטלפון: {{phone}}" }
+    "success": { "title": "ההרשמה הצליחה!", "message": "החשבון נוצר בהצלחה.\n\nכעת ניתן להתחבר עם מספר הטלפון והסיסמה שבחרת.\n\nמספר הטלפון: {{phone}}" },
+    "passwordPlaceholder": "סיסמה (לפחות 6 תווים)",
+    "confirmPasswordPlaceholder": "אימות סיסמה"
   },
   "appointments": {
     "noPhone": { "title": "אין מספר טלפון", "message": "לא נמצא מספר טלפון תקין עבור לקוח זה." },
@@ -283,6 +294,10 @@
     },
     
     "profile": {
+      "businessAddressPlaceholder": "כתובת העסק",
+      "instagramUrlPlaceholder": "https://instagram.com/yourpage",
+      "facebookUrlPlaceholder": "https://facebook.com/yourpage",
+      "tiktokUrlPlaceholder": "https://www.tiktok.com/@yourpage",
       "saveFailed": "שמירת פרופיל העסק נכשלה",
       "saveSuccess": "פרטי העסק נשמרו בהצלחה",
       "nameSaveFailed": "שמירת שם העסק נכשלה",

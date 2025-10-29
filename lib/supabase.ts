@@ -250,8 +250,10 @@ export interface BusinessProfile {
   reminder_minutes_by_user?: Record<string, number | null>;
   min_cancellation_hours?: number;
   primary_color?: string; // Hex color code for primary UI color
-  // Number of days forward to open booking window; defaults to 7 on server
+  // Number of days forward to open booking window; defaults to 7 on server (legacy - now use booking_open_days_by_user)
   booking_open_days?: number;
+  // New per-barber booking open days map: { [userId: string]: number }
+  booking_open_days_by_user?: Record<string, number>;
   created_at: string;
   updated_at: string;
 }

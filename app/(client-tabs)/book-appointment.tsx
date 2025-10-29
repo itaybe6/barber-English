@@ -530,14 +530,23 @@ export default function BookAppointment() {
 
   const [bookingOpenDays, setBookingOpenDays] = useState<number>(7);
   useEffect(() => {
-    (async () => {
+    let isMounted = true;
+    const loadBookingDays = async () => {
       try {
-        const profile = await businessProfileApi.getProfile();
-        const n = Number(((profile as any)?.booking_open_days ?? 7));
-        setBookingOpenDays(Number.isFinite(n) && n > 0 ? n : 7);
-      } catch {}
-    })();
-  }, []);
+        const days = selectedBarber?.id
+          ? await businessProfileApi.getBookingOpenDaysForUser(selectedBarber.id)
+          : 7;
+        if (isMounted) {
+          const validDays = Math.max(1, Math.min(60, Number(days ?? 7)));
+          setBookingOpenDays(validDays);
+        }
+      } catch {
+        if (isMounted) setBookingOpenDays(7);
+      }
+    };
+    loadBookingDays();
+    return () => { isMounted = false; };
+  }, [selectedBarber?.id]);
 
   const days = getNextNDays(bookingOpenDays);
   const selectedDate = selectedDay !== null ? days[selectedDay]?.fullDate : null;
@@ -1378,10 +1387,11 @@ export default function BookAppointment() {
     }
   };
 
+  const heroDynamicHeight = (currentStep >= 3) ? Math.round(HERO_TOP_HEIGHT * 0.72) : HERO_TOP_HEIGHT;
   return (
     <SafeAreaView style={styles.container} edges={(currentStep === 1 || currentStep === 2 || currentStep === 3) ? [] : ['top']}>
-      {/* Top grey hero background (40% of screen) */}
-      <View style={[styles.topHeroWrapper, { height: HERO_TOP_HEIGHT }]} pointerEvents="none" />
+      {/* Top grey hero background */}
+      <View style={[styles.topHeroWrapper, { height: heroDynamicHeight }]} pointerEvents="none" />
       {(currentStep === 1 || currentStep === 2 || currentStep === 3) && (
         <View pointerEvents="box-none" style={[styles.topOverlayHeader, { paddingTop: insets.top + 8 }] }>
           <View style={styles.topOverlayHeaderContent}>
@@ -1491,7 +1501,19 @@ export default function BookAppointment() {
                     return;
                   }
                   if (stepNum === 2) {
-                    // Allow going to day selection regardless; service may be auto-selected
+                    if (!selectedService) {
+                      const fallback = (filteredServices && filteredServices.length > 0)
+                        ? (filteredServices[selectedServiceIndex] || filteredServices[0])
+                        : null;
+                      if (fallback) {
+                        try {
+                          setSelectedServiceIndex(Math.max(0, filteredServices.indexOf(fallback)));
+                        } catch {}
+                        setSelectedService(fallback);
+                      } else {
+                        return; // no services to proceed
+                      }
+                    }
                     setCurrentStep(3 as any);
                     return;
                   }
@@ -1552,7 +1574,7 @@ export default function BookAppointment() {
         >
 
         {/* Spacer to clear the top hero background */}
-        <View style={{ height: (currentStep >= 3 ? HERO_TOP_HEIGHT + 12 : 16) }} />
+        <View style={{ height: (currentStep >= 3 ? heroDynamicHeight + 12 : 16) }} />
 
         {/* Step 1: Barber Selection */}
         {currentStep === 1 && (
@@ -1628,7 +1650,6 @@ export default function BookAppointment() {
         {/* Step 3: Day Selection */}
         {currentStep >= 3 && selectedBarber && selectedService && (
           <View style={[styles.section, styles.calendarSectionCard]}>
-            <Text style={styles.calendarSectionTitle}>{t('booking.selectDay', 'Select Day')}</Text>
             {/* Monthly calendar grid limited by booking window */}
             {(() => {
               const start = new Date();
@@ -1648,7 +1669,8 @@ export default function BookAppointment() {
               const isSameDate = (a: Date, b: Date) => a.toDateString() === b.toDateString();
 
               return (
-                <View>
+                <View style={styles.calendarFixedBox}>
+                  <ScrollView showsVerticalScrollIndicator={false}>
                   {months.map((m, mi) => {
                     const year = m.getFullYear();
                     const month = m.getMonth();
@@ -1667,9 +1689,8 @@ export default function BookAppointment() {
                     }
 
                     const monthLabel = new Date(year, month, 1).toLocaleString(i18n?.language === 'he' ? 'he-IL' : 'en-US', { month: 'long', year: 'numeric' });
-
                     return (
-                      <View key={`m-${year}-${month}`} style={{ marginBottom: 16 }}>
+                      <View key={`m-${year}-${month}`} style={{ marginBottom: 10 }}>
                         <Text style={styles.calendarMonthTitle}>{monthLabel}</Text>
                         {weeks.map((week, wi) => (
                           <View key={`w-${mi}-${wi}`} style={styles.calendarGrid}>
@@ -1700,8 +1721,8 @@ export default function BookAppointment() {
                                 >
                                   <Text style={{
                                     fontSize: 14,
-                                    fontWeight: '600',
-                                    color: isSel ? '#FFFFFF' : (!inRange ? '#C7C7CC' : '#1C1C1E'),
+                                    fontWeight: '700',
+                                    color: isSel ? '#FFFFFF' : (!inRange ? '#C7C7CC' : '#374151'),
                                   }}>
                                     {dateObj.getDate()}
                                   </Text>
@@ -1716,13 +1737,11 @@ export default function BookAppointment() {
                       </View>
                     );
                   })}
+                  </ScrollView>
                 </View>
               );
             })()}
-            <Text style={styles.daysLegendNew}>{t('booking.legend.noAvailability', '* Days with no available appointments are marked in red')}</Text>
-            <Text style={styles.daysLegendSecondaryNew}>
-              {t('booking.legend.waitlist', '* Even if there are no available appointments – you can click on the day and join the waitlist for that day')}
-            </Text>
+            {/* Legends intentionally removed for a cleaner rectangular calendar view */}
           </View>
         )}
 
@@ -1745,20 +1764,9 @@ export default function BookAppointment() {
                   (isBooking || isCheckingAppointments) && styles.bookBtnDisabled
                 ]}
                 onPress={() => {
-                const dateStr = selectedDate?.toISOString().split('T')[0] || '';
-                router.push({
-                  pathname: '/(client-tabs)/select-time' as any,
-                  params: {
-                    serviceName: selectedService?.name || '',
-                    durationMinutes: selectedService?.duration_minutes?.toString() || '60',
-                    price: selectedService?.price?.toString() || '0',
-                    selectedDate: dateStr,
-                    serviceId: selectedService?.id || '',
-                    barberId: selectedBarber?.id || '',
-                    breakMinutes: String(globalBreakMinutes ?? 0),
-                  } as any
-                });
-              }}
+                  // Stay on the same screen and advance to time selection (step 4)
+                  setCurrentStep(4 as any);
+                }}
                 disabled={isBooking || isCheckingAppointments}
               >
                 <Text style={styles.bookBtnText}>{t('booking.nextToTime', 'Continue to Time Selection')}</Text>
@@ -2551,7 +2559,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
     marginHorizontal: 16,
-    marginTop: 16,
+    marginTop: 8,
     padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
@@ -2559,12 +2567,11 @@ const createStyles = (colors: any) => StyleSheet.create({
     shadowRadius: 16,
     elevation: 8,
   },
-  calendarSectionTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#111827',
-    marginBottom: 20,
-    textAlign: 'center',
+  calendarSectionTitle: {},
+  calendarFixedBox: {
+    height: 300,
+    borderRadius: 18,
+    overflow: 'hidden',
   },
   calendarMonthTitle: {
     fontSize: 17,

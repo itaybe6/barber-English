@@ -1585,6 +1585,10 @@ export default function SettingsScreen() {
   const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
   const [manageEmpSearch, setManageEmpSearch] = useState('');
+  const [bookingOpenDaysByUser, setBookingOpenDaysByUser] = useState<Record<string, number>>({});
+  const [expandedEmployeeId, setExpandedEmployeeId] = useState<string | null>(null);
+  const [savingBookingDaysForUser, setSavingBookingDaysForUser] = useState<string | null>(null);
+  
   const filteredAdmins = useMemo(() => {
     const q = (manageEmpSearch || '').trim().toLowerCase();
     if (!q) return adminUsers;
@@ -1595,6 +1599,20 @@ export default function SettingsScreen() {
       return name.includes(q) || phone.includes(q) || email.includes(q);
     });
   }, [adminUsers, manageEmpSearch]);
+  
+  const handleSaveBookingDaysForUser = async (userId: string, days: number) => {
+    setSavingBookingDaysForUser(userId);
+    try {
+      await businessProfileApi.setBookingOpenDaysForUser(userId, days);
+      setBookingOpenDaysByUser((prev) => ({ ...prev, [userId]: days }));
+      Alert.alert(t('success.generic','Success'), t('settings.profile.bookingWindowSaved','Booking window updated successfully'));
+    } catch (error) {
+      console.error('Error saving booking days for user:', error);
+      Alert.alert(t('error.generic','Error'), t('settings.profile.bookingWindowSaveFailed','Failed to save booking window'));
+    } finally {
+      setSavingBookingDaysForUser(null);
+    }
+  };
 
   const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const timeOptions = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2,'0')}:00`);
@@ -2414,6 +2432,19 @@ export default function SettingsScreen() {
                   const list = await usersApi.getAdminUsers();
                   const filtered = (list || []).filter((u: any) => u.id !== (user as any)?.id);
                   setAdminUsers(filtered);
+                  
+                  // Load booking_open_days for each employee
+                  const daysMap: Record<string, number> = {};
+                  for (const emp of filtered) {
+                    try {
+                      const days = await businessProfileApi.getBookingOpenDaysForUser(emp.id);
+                      daysMap[emp.id] = days;
+                    } catch (e) {
+                      console.error('Error loading booking days for user:', emp.id, e);
+                      daysMap[emp.id] = 7; // default
+                    }
+                  }
+                  setBookingOpenDaysByUser(daysMap);
                 } finally {
                   setIsLoadingEmployees(false);
                 }
@@ -3302,94 +3333,164 @@ export default function SettingsScreen() {
                       <Text style={{ marginTop: 8, color: Colors.subtext }}>{t('settings.admin.noEmployees','No employees found')}</Text>
                     </View>
                   ) : (
-                    filteredAdmins.map((adm: any) => (
-                      <Swipeable
-                        key={adm.id}
-                        friction={2}
-                        rightThreshold={28}
-                        renderRightActions={() => (
-                          <TouchableOpacity
-                            style={styles.swipeDeleteAction}
-                            activeOpacity={0.85}
-                            onPress={() => {
-                              if (adm.id === user?.id) {
-                                Alert.alert(t('settings.admin.actionNotAllowed','Action not allowed'), t('settings.admin.cannotRemoveSelf','You cannot remove yourself.'));
-                                return;
-                              }
-                              Alert.alert(
-                                t('settings.admin.removeEmployeeTitle','Remove employee'),
-                                `${t('settings.admin.removeEmployeeConfirm','Are you sure you want to remove')} ${adm.name || t('settings.admin.thisEmployee','this employee')}?`,
-                                [
-                                  { text: t('cancel','Cancel'), style: 'cancel' },
-                                  {
-                                    text: t('settings.admin.remove','Remove'),
-                                    style: 'destructive',
-                                    onPress: async () => {
-                                      const ok = await usersApi.deleteUserAndAllDataById(adm.id);
-                                      if (ok) {
-                                        setAdminUsers((prev) => prev.filter((u) => u.id !== adm.id));
-                                        Alert.alert(t('success.generic','Success'), t('settings.admin.removeSuccess','Employee deleted successfully'));
-                                      } else {
-                                        Alert.alert(t('error.generic','Error'), t('settings.admin.removeFailed','Failed to remove employee'));
-                                      }
-                                    }
+                    filteredAdmins.map((adm: any) => {
+                      const isExpanded = expandedEmployeeId === adm.id;
+                      const currentBookingDays = bookingOpenDaysByUser[adm.id] ?? 7;
+                      const isSaving = savingBookingDaysForUser === adm.id;
+                      
+                      return (
+                        <View key={adm.id}>
+                          <Swipeable
+                            friction={2}
+                            rightThreshold={28}
+                            renderRightActions={() => (
+                              <TouchableOpacity
+                                style={styles.swipeDeleteAction}
+                                activeOpacity={0.85}
+                                onPress={() => {
+                                  if (adm.id === user?.id) {
+                                    Alert.alert(t('settings.admin.actionNotAllowed','Action not allowed'), t('settings.admin.cannotRemoveSelf','You cannot remove yourself.'));
+                                    return;
                                   }
-                                ]
-                              );
-                            }}
-                            accessibilityRole="button"
-                            accessibilityLabel={t('settings.services.a11yDelete','Delete service')}
-                          >
-                            <Trash2 size={20} color={'#fff'} />
-                            <Text style={styles.swipeDeleteText}>{t('settings.services.delete','Delete')}</Text>
-                          </TouchableOpacity>
-                        )}
-                      >
-                        <View style={styles.iosCard}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <Image source={adm.image_url ? { uri: adm.image_url } : require('@/assets/images/logo-03.png')} style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12 }} />
-                            <View style={{ alignItems: 'flex-start', flex: 1 }}>
-                              <Text style={styles.previewNotificationTitle}>{adm.name || 'Admin'}</Text>
-                              {!!adm.phone && <Text style={styles.previewNotificationContent}>{adm.phone}</Text>}
-                              {!!adm.email && <Text style={styles.previewNotificationContent}>{adm.email}</Text>}
-                            </View>
-                            <TouchableOpacity
-                              style={[styles.iconActionButton, { backgroundColor: '#FFECEC', borderColor: '#FFD1D1' }]}
-                              onPress={() => {
-                                if (adm.id === user?.id) {
-                                  Alert.alert(t('settings.admin.actionNotAllowed','Action not allowed'), t('settings.admin.cannotRemoveSelf','You cannot remove yourself.'));
-                                  return;
-                                }
-                                Alert.alert(
-                                  t('settings.admin.removeEmployeeTitle','Remove employee'),
-                                  `${t('settings.admin.removeEmployeeConfirm','Are you sure you want to remove')} ${adm.name || t('settings.admin.thisEmployee','this employee')}?`,
-                                  [
-                                    { text: t('cancel','Cancel'), style: 'cancel' },
-                                    {
-                                      text: t('settings.admin.remove','Remove'),
-                                      style: 'destructive',
-                                      onPress: async () => {
-                                        const ok = await usersApi.deleteUserAndAllDataById(adm.id);
-                                        if (ok) {
-                                          setAdminUsers((prev) => prev.filter((u) => u.id !== adm.id));
-                                          Alert.alert(t('success.generic','Success'), t('settings.admin.removeSuccess','Employee deleted successfully'));
-                                        } else {
-                                          Alert.alert(t('error.generic','Error'), t('settings.admin.removeFailed','Failed to remove employee'));
+                                  Alert.alert(
+                                    t('settings.admin.removeEmployeeTitle','Remove employee'),
+                                    `${t('settings.admin.removeEmployeeConfirm','Are you sure you want to remove')} ${adm.name || t('settings.admin.thisEmployee','this employee')}?`,
+                                    [
+                                      { text: t('cancel','Cancel'), style: 'cancel' },
+                                      {
+                                        text: t('settings.admin.remove','Remove'),
+                                        style: 'destructive',
+                                        onPress: async () => {
+                                          const ok = await usersApi.deleteUserAndAllDataById(adm.id);
+                                          if (ok) {
+                                            setAdminUsers((prev) => prev.filter((u) => u.id !== adm.id));
+                                            Alert.alert(t('success.generic','Success'), t('settings.admin.removeSuccess','Employee deleted successfully'));
+                                          } else {
+                                            Alert.alert(t('error.generic','Error'), t('settings.admin.removeFailed','Failed to remove employee'));
+                                          }
                                         }
                                       }
-                                    }
-                                  ]
-                                );
-                              }}
-                            accessibilityRole="button"
-                            accessibilityLabel={t('settings.recurring.a11yDelete','Delete')}
-                            >
-                              <Trash2 size={20} color="#FF3B30" />
-                            </TouchableOpacity>
-                          </View>
+                                    ]
+                                  );
+                                }}
+                                accessibilityRole="button"
+                                accessibilityLabel={t('settings.services.a11yDelete','Delete service')}
+                              >
+                                <Trash2 size={20} color={'#fff'} />
+                                <Text style={styles.swipeDeleteText}>{t('settings.services.delete','Delete')}</Text>
+                              </TouchableOpacity>
+                            )}
+                          >
+                            <View style={styles.iosCard}>
+                              <TouchableOpacity 
+                                style={{ flexDirection: 'row', alignItems: 'center' }}
+                                onPress={() => setExpandedEmployeeId(isExpanded ? null : adm.id)}
+                                activeOpacity={0.7}
+                              >
+                                <Image source={adm.image_url ? { uri: adm.image_url } : require('@/assets/images/logo-03.png')} style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12 }} />
+                                <View style={{ alignItems: 'flex-start', flex: 1 }}>
+                                  <Text style={styles.previewNotificationTitle}>{adm.name || 'Admin'}</Text>
+                                  {!!adm.phone && <Text style={styles.previewNotificationContent}>{adm.phone}</Text>}
+                                  {!!adm.email && <Text style={styles.previewNotificationContent}>{adm.email}</Text>}
+                                </View>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                  {isExpanded ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
+                                  <TouchableOpacity
+                                    style={[styles.iconActionButton, { backgroundColor: '#FFECEC', borderColor: '#FFD1D1' }]}
+                                    onPress={() => {
+                                      if (adm.id === user?.id) {
+                                        Alert.alert(t('settings.admin.actionNotAllowed','Action not allowed'), t('settings.admin.cannotRemoveSelf','You cannot remove yourself.'));
+                                        return;
+                                      }
+                                      Alert.alert(
+                                        t('settings.admin.removeEmployeeTitle','Remove employee'),
+                                        `${t('settings.admin.removeEmployeeConfirm','Are you sure you want to remove')} ${adm.name || t('settings.admin.thisEmployee','this employee')}?`,
+                                        [
+                                          { text: t('cancel','Cancel'), style: 'cancel' },
+                                          {
+                                            text: t('settings.admin.remove','Remove'),
+                                            style: 'destructive',
+                                            onPress: async () => {
+                                              const ok = await usersApi.deleteUserAndAllDataById(adm.id);
+                                              if (ok) {
+                                                setAdminUsers((prev) => prev.filter((u) => u.id !== adm.id));
+                                                Alert.alert(t('success.generic','Success'), t('settings.admin.removeSuccess','Employee deleted successfully'));
+                                              } else {
+                                                Alert.alert(t('error.generic','Error'), t('settings.admin.removeFailed','Failed to remove employee'));
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      );
+                                    }}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={t('settings.recurring.a11yDelete','Delete')}
+                                  >
+                                    <Trash2 size={20} color="#FF3B30" />
+                                  </TouchableOpacity>
+                                </View>
+                              </TouchableOpacity>
+                              
+                              {isExpanded && (
+                                <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: Colors.border }}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                                    <Calendar size={18} color={businessColors.primary} style={{ marginRight: 8 }} />
+                                    <Text style={{ fontSize: 15, color: Colors.text, fontWeight: '500' }}>
+                                      {t('settings.profile.bookingWindow','Booking window (days)')}
+                                    </Text>
+                                  </View>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                    <TextInput
+                                      style={{ 
+                                        flex: 1,
+                                        borderWidth: 1, 
+                                        borderColor: Colors.border, 
+                                        borderRadius: 8, 
+                                        paddingHorizontal: 12, 
+                                        paddingVertical: 10,
+                                        fontSize: 15,
+                                        color: Colors.text,
+                                        backgroundColor: Colors.white
+                                      }}
+                                      value={String(currentBookingDays)}
+                                      onChangeText={(text) => {
+                                        const num = Math.max(1, Math.min(60, Math.floor(Number(text) || 7)));
+                                        setBookingOpenDaysByUser((prev) => ({ ...prev, [adm.id]: num }));
+                                      }}
+                                      placeholder="7"
+                                      keyboardType="number-pad"
+                                      placeholderTextColor={Colors.subtext}
+                                    />
+                                    <TouchableOpacity
+                                      style={{
+                                        backgroundColor: businessColors.primary,
+                                        paddingHorizontal: 20,
+                                        paddingVertical: 10,
+                                        borderRadius: 8,
+                                        opacity: isSaving ? 0.6 : 1
+                                      }}
+                                      onPress={() => handleSaveBookingDaysForUser(adm.id, currentBookingDays)}
+                                      disabled={isSaving}
+                                    >
+                                      {isSaving ? (
+                                        <ActivityIndicator size="small" color="#FFFFFF" />
+                                      ) : (
+                                        <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '600' }}>
+                                          {t('save','Save')}
+                                        </Text>
+                                      )}
+                                    </TouchableOpacity>
+                                  </View>
+                                  <Text style={{ fontSize: 12, color: Colors.subtext, marginTop: 8, textAlign: i18n.language === 'he' ? 'right' : 'left' }}>
+                                    {t('settings.profile.bookingWindowHint','How many days ahead can clients book appointments with this employee?')}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                          </Swipeable>
                         </View>
-                      </Swipeable>
-                    ))
+                      );
+                    })
                   )}
                 </View>
               )}

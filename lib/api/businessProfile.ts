@@ -45,6 +45,7 @@ export const businessProfileApi = {
         image_on_page_3: null,
         login_img: null,
         break_by_user: {},
+        booking_open_days_by_user: {},
         min_cancellation_hours: 24, // Default 24 hours
         primary_color: '#000000', // Default black color
         booking_open_days: 7,
@@ -88,6 +89,7 @@ export const businessProfileApi = {
         image_on_page_3: (updates as any).image_on_page_3,
         login_img: (updates as any).login_img,
         break_by_user: (updates as any).break_by_user,
+        booking_open_days_by_user: (updates as any).booking_open_days_by_user,
         reminder_minutes_by_user: (updates as any).reminder_minutes_by_user,
         min_cancellation_hours: updates.min_cancellation_hours,
         primary_color: updates.primary_color,
@@ -119,6 +121,7 @@ export const businessProfileApi = {
           image_on_page_3: (updates as any).image_on_page_3,
           login_img: (updates as any).login_img,
           break_by_user: (updates as any).break_by_user,
+          booking_open_days_by_user: (updates as any).booking_open_days_by_user ?? {},
           reminder_minutes_by_user: (updates as any).reminder_minutes_by_user,
           min_cancellation_hours: updates.min_cancellation_hours,
           primary_color: updates.primary_color || '#000000',
@@ -240,6 +243,56 @@ export const businessProfileApi = {
       }
     } catch (e) {
       console.error('Error in setReminderMinutesForUser:', e);
+      throw e;
+    }
+  },
+  
+  async getBookingOpenDaysForUser(userId?: string | null): Promise<number> {
+    try {
+      const businessId = getBusinessId();
+      if (userId) {
+        const { data, error } = await supabase.rpc('get_booking_open_days_for_user', {
+          p_business_id: businessId,
+          p_user_id: userId,
+        });
+        if (!error && typeof data === 'number') {
+          return Math.max(1, Math.min(60, data));
+        }
+      }
+      // Fallback: read profile and extract from JSON or use default
+      const profile = await this.getProfile();
+      const days = (profile as any)?.booking_open_days_by_user && userId
+        ? Number((profile as any).booking_open_days_by_user?.[userId] ?? (profile as any)?.booking_open_days ?? 7)
+        : Number((profile as any)?.booking_open_days ?? 7);
+      return Math.max(1, Math.min(60, days));
+    } catch (e) {
+      console.error('Error in getBookingOpenDaysForUser:', e);
+      return 7;
+    }
+  },
+
+  async setBookingOpenDaysForUser(userId: string, days: number): Promise<void> {
+    const clamped = Math.max(1, Math.min(60, Math.floor(Number(days) || 7)));
+    const businessId = getBusinessId();
+    try {
+      const { error } = await supabase.rpc('set_booking_open_days_for_user', {
+        p_business_id: businessId,
+        p_user_id: userId,
+        p_days: clamped,
+      });
+      if (error) {
+        console.error('Error setting per-user booking_open_days (RPC):', error);
+        // Fallback: read-modify-write
+        const profile = await this.getProfile();
+        const currentMap = ((profile as any)?.booking_open_days_by_user ?? {}) as Record<string, number>;
+        const nextMap = { ...currentMap, [userId]: clamped };
+        await supabase
+          .from('business_profile')
+          .update({ booking_open_days_by_user: nextMap as any })
+          .eq('id', businessId);
+      }
+    } catch (e) {
+      console.error('Error in setBookingOpenDaysForUser:', e);
       throw e;
     }
   },

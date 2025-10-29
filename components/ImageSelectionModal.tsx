@@ -523,9 +523,7 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
               
               {mainCategory === 'loginPage' && (
                 <View style={styles.loginPageFormatNote}>
-                  <Text style={styles.loginPageFormatText}>
-                    📱 Login page images are displayed in (9:16 ratio)
-                  </Text>
+                  <Text style={styles.loginPageFormatText}>{t('gallery.loginPage.formatNote', '📱 Login page images are displayed in (9:16 ratio)')}</Text>
                 </View>
               )}
             </View>
@@ -594,7 +592,7 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
                         selectedSubCategory === subCategory.key && styles.selectedCategoryText,
                       ]}
                     >
-                      {subCategory.name}
+                      {t(`gallery.subcategory.${subCategory.key}`, subCategory.name)}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -627,8 +625,8 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
                 <View style={styles.noImagesContainer}>
                   <Text style={styles.noImagesText}>
                     {mainCategory === 'loginPage' 
-                      ? 'No login page images available'
-                      : `No images available for ${selectedSubCategory} in ${mainCategory}`
+                      ? t('gallery.noImages.login', 'No login page images available')
+                      : t('gallery.noImages.category', 'No images available for {{subcategory}} in {{category}}', { subcategory: selectedSubCategory, category: mainCategory })
                     }
                   </Text>
                 </View>
@@ -701,7 +699,7 @@ const ImageSelectionModal: React.FC<ImageSelectionModalProps> = ({
                     
                     <View style={[styles.imageOverlay, { opacity: 0 }]}>
                       <View style={styles.selectButton}>
-                        <Text style={styles.selectButtonText}>{t('common.select', 'Select')}</Text>
+                        <Text style={styles.selectButtonText}>{t('commonEx.select', 'Select')}</Text>
                       </View>
                     </View>
                   </View>

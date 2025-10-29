@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
+import { useTranslation } from 'react-i18next';
 
 interface ColorPickerProps {
   onColorSelect?: (color: string) => void;
@@ -86,6 +87,7 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
   onColorSelect,
   currentColor = '#000000',
 }) => {
+  const { t } = useTranslation();
   const [selectedColor, setSelectedColor] = useState(currentColor);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');

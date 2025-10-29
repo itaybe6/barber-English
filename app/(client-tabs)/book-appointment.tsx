@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Image, Modal, RefreshControl, Linking, Platform, Dimensions, FlatList, PanResponder } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { BlurView } from 'expo-blur';
@@ -911,6 +911,12 @@ export default function BookAppointment() {
     }
   };
 
+  // Filter services by selected barber (worker)
+  const filteredServices = useMemo(() => {
+    if (!selectedBarber) return [] as Service[];
+    return (availableServices || []).filter((s: any) => String(s?.worker_id || '') === String(selectedBarber.id));
+  }, [availableServices, selectedBarber?.id]);
+
   // Fetch barbers (admin users) from Supabase
   const loadBarbers = async () => {
     setIsLoadingBarbers(true);
@@ -1456,13 +1462,13 @@ export default function BookAppointment() {
               <View style={[styles.loadingContainer, { height: CAROUSEL_HEIGHT, justifyContent: 'center' }]}>
                 <Text style={[styles.loadingText, { color: '#FFFFFF' }]}>{t('booking.loadingServices', 'Loading services...')}</Text>
               </View>
-            ) : availableServices.length > 0 ? (
+            ) : filteredServices.length > 0 ? (
               <View>
                 <ServiceSelector
-                  services={availableServices}
+                  services={filteredServices}
                   activeIndex={selectedServiceIndex}
                   onIndexChange={(idx) => {
-                    const service = availableServices[idx];
+                    const service = filteredServices[idx];
                     if (!service) return;
                     setSelectedServiceIndex(idx);
                     setSelectedService(service);

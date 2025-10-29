@@ -23,6 +23,7 @@ import { servicesApi } from '@/lib/api/services';
 import type { Service } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
+import { useTranslation } from 'react-i18next';
 
 const { width } = Dimensions.get('window');
 
@@ -63,6 +64,7 @@ interface AddAppointmentModalProps {
 export default function AddAppointmentModal({ visible, onClose, onSuccess }: AddAppointmentModalProps) {
   const user = useAuthStore((state) => state.user);
   const { colors: businessColors } = useBusinessColors();
+  const { t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedClient, setSelectedClient] = useState<{ name: string; phone: string } | null>(null);

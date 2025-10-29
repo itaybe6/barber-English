@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { AvailableTimeSlot, supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { useColors } from '@/src/theme/ThemeProvider';
+import { useTranslation } from 'react-i18next';
 
 interface DailyScheduleProps {
   nextAppointment: AvailableTimeSlot | null;
@@ -22,6 +23,7 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
   const colors = useColors();
   const [clientImageUrl, setClientImageUrl] = useState<string | undefined>(undefined);
   const styles = createStyles(colors);
+  const { t } = useTranslation();
   // Remove custom font usage; rely on system/default fonts
   const getInitials = (fullName?: string | null): string => {
     if (!fullName) return '';

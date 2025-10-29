@@ -303,13 +303,13 @@ export default function AdminAppointmentsScreen() {
   // Actions
   const startPhoneCall = useCallback(async (rawPhone?: string | null) => {
     if (!rawPhone) {
-      Alert.alert('No phone number', 'No valid phone number was found for this client.');
+      Alert.alert(t('appointments.noPhone.title','No phone number'), t('appointments.noPhone.message','No valid phone number was found for this client.'));
       return;
     }
     // Sanitize phone: keep + and digits
     const phone = rawPhone.trim().replace(/[^+\d]/g, '');
     if (!phone) {
-      Alert.alert('No phone number', 'No valid phone number was found for this client.');
+      Alert.alert(t('appointments.noPhone.title','No phone number'), t('appointments.noPhone.message','No valid phone number was found for this client.'));
       return;
     }
 

@@ -189,7 +189,7 @@ export default function WaitlistScreen() {
   const [phoneToImage, setPhoneToImage] = useState<Record<string, string>>({});
   const { user } = useAuthStore();
   const colors = useColors();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   // Next 7 days (rolling from today)
   const weekDays = useMemo(() => {
@@ -204,9 +204,10 @@ export default function WaitlistScreen() {
 
   const [selectedDate, setSelectedDate] = useState<Date>(() => weekDays[0]);
   const selectedDateKey = useMemo(() => formatDateToLocalString(selectedDate), [selectedDate]);
+  
   const monthYearLabel = useMemo(() => {
-    return selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-  }, [selectedDate]);
+    return selectedDate.toLocaleDateString(i18n?.language?.startsWith('he') ? 'he-IL' : 'en-US', { month: 'long', year: 'numeric' } as any);
+  }, [selectedDate, i18n?.language]);
 
   useEffect(() => {
     loadWeekWaitlist();

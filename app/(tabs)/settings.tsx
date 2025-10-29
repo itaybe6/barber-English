@@ -852,8 +852,10 @@ export default function SettingsScreen() {
     setServicesError(null);
     try {
       const data = await servicesApi.getAllServices();
+      // Filter to only services belonging to the logged-in worker
+      const myServices = (data || []).filter((s: any) => String(s?.worker_id || '') === String(user?.id || ''));
       // Sort services by order_index if available, otherwise by name
-      const sortedServices = (data || []).sort((a, b) => {
+      const sortedServices = (myServices || []).sort((a, b) => {
         if (a.order_index !== undefined && b.order_index !== undefined) {
           return a.order_index - b.order_index;
         }
@@ -891,6 +893,9 @@ export default function SettingsScreen() {
   const [addSvcIsSaving, setAddSvcIsSaving] = useState(false);
   // category removed
   const [showDurationDropdown, setShowDurationDropdown] = useState(false);
+  // add-service image upload
+  const [addSvcImageUrl, setAddSvcImageUrl] = useState<string | null>(null);
+  const [addSvcUploadingImage, setAddSvcUploadingImage] = useState(false);
 
   // Uploading indicator for per-service image update
   const [uploadingServiceId, setUploadingServiceId] = useState<string | null>(null);
@@ -1388,6 +1393,9 @@ export default function SettingsScreen() {
         price: parseFloat(addSvcPrice) || 0,
         duration_minutes: parseInt(addSvcDuration, 10) || 60,
         is_active: true,
+        // associate the service to the logged-in worker
+        worker_id: (user?.id as any) as any,
+        image_url: addSvcImageUrl || undefined,
       } as any);
       if (created) {
         setEditableServices(prev => [created, ...prev]);
@@ -1396,6 +1404,7 @@ export default function SettingsScreen() {
         setAddSvcName('New Service');
         setAddSvcPrice('0');
         setAddSvcDuration('60');
+        setAddSvcImageUrl(null);
       } else {
         Alert.alert(t('error.generic','Error'), t('settings.services.createFailed','Failed to create service'));
       }
@@ -1468,7 +1477,9 @@ export default function SettingsScreen() {
         image_url: service.image_url,
         duration_minutes: service.duration_minutes,
         is_active: service.is_active,
-      });
+        // ensure association remains with the logged-in worker
+        worker_id: (user?.id as any) as any,
+      } as any);
       if (!updated) {
         Alert.alert('Error', 'Failed to save service');
         return;
@@ -3035,8 +3046,8 @@ export default function SettingsScreen() {
                         >
                           <Text style={styles.dropdownButtonText}>
                             {cancellationHoursDraft === '0' 
-                              ? '0 hours (No restriction)' 
-                              : `${cancellationHoursDraft} ${cancellationHoursDraft === '1' ? 'hour' : 'hours'}${parseInt(cancellationHoursDraft) >= 24 ? ` (${Math.floor(parseInt(cancellationHoursDraft) / 24)} ${Math.floor(parseInt(cancellationHoursDraft) / 24) === 1 ? 'day' : 'days'}${parseInt(cancellationHoursDraft) % 24 > 0 ? ` ${parseInt(cancellationHoursDraft) % 24} hours` : ''})` : ''}`
+                              ? t('settings.policies.noRestriction','0 hours (No restriction)') 
+                              : `${cancellationHoursDraft} ${cancellationHoursDraft === '1' ? t('settings.policies.hour','hour') : t('settings.policies.hours','hours')}${parseInt(cancellationHoursDraft) >= 24 ? ` (${Math.floor(parseInt(cancellationHoursDraft) / 24)} ${Math.floor(parseInt(cancellationHoursDraft) / 24) === 1 ? t('settings.policies.day','day') : t('settings.policies.days','days')}${parseInt(cancellationHoursDraft) % 24 > 0 ? ` ${parseInt(cancellationHoursDraft) % 24} ${t('settings.policies.hours','hours')}` : ''})` : ''}`
                             }
                           </Text>
                           {showCancellationDropdown ? (
@@ -3190,12 +3201,12 @@ export default function SettingsScreen() {
                   {isLoadingRecurring ? (
                     <View style={{ paddingVertical: 24, alignItems: 'center' }}>
                       <ActivityIndicator size="large" color={businessColors.primary} />
-                      <Text style={{ marginTop: 12, color: Colors.subtext }}>Loading...</Text>
+                      <Text style={{ marginTop: 12, color: Colors.subtext }}>{t('common.loading','Loading...')}</Text>
                     </View>
                   ) : (
                     <View>
                       {recurringList.length === 0 ? (
-                        <Text style={{ textAlign: 'center', color: Colors.subtext }}>No recurring appointments</Text>
+                        <Text style={{ textAlign: 'center', color: Colors.subtext }}>{t('settings.recurring.empty','No recurring appointments')}</Text>
                       ) : (
                         recurringList.map((item, idx) => (
                           <View key={item.id}>
@@ -3281,14 +3292,14 @@ export default function SettingsScreen() {
               {isLoadingEmployees ? (
                 <View style={{ paddingVertical: 24, alignItems: 'center' }}>
                   <ActivityIndicator size="large" color={businessColors.primary} />
-                  <Text style={{ marginTop: 12, color: Colors.subtext }}>Loading...</Text>
+                  <Text style={{ marginTop: 12, color: Colors.subtext }}>{t('common.loading','Loading...')}</Text>
                 </View>
               ) : (
                 <View>
                   {filteredAdmins.length === 0 ? (
                     <View style={{ paddingVertical: 24, alignItems: 'center' }}>
                       <Ionicons name="people-outline" size={36} color={Colors.subtext} />
-                      <Text style={{ marginTop: 8, color: Colors.subtext }}>No employees found</Text>
+                      <Text style={{ marginTop: 8, color: Colors.subtext }}>{t('settings.admin.noEmployees','No employees found')}</Text>
                     </View>
                   ) : (
                     filteredAdmins.map((adm: any) => (
@@ -3474,14 +3485,14 @@ export default function SettingsScreen() {
                                     onPress={() => { setSelectedClient(c); setShowClientDropdown(false); goToRecStep(1); }}
                                   >
                                     <View style={styles.dropdownOptionContent}>
-                                      <Text style={styles.dropdownOptionTitle}>{c.name || 'Client'}</Text>
+                                      <Text style={styles.dropdownOptionTitle}>{c.name || t('commonEx.client','Client')}</Text>
                                       <Text style={styles.dropdownOptionDescription}>{c.phone}</Text>
                                     </View>
                                   </Pressable>
                                 ))}
                                 {clientResults.length === 0 && (
                                   <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-                                    <Text style={{ textAlign: 'center', color: Colors.subtext }}>No results</Text>
+                                    <Text style={{ textAlign: 'center', color: Colors.subtext }}>{t('common.noResults','No results')}</Text>
                                   </View>
                                 )}
                               </ScrollView>
@@ -3616,13 +3627,13 @@ export default function SettingsScreen() {
                             <View style={{ padding: 12, alignItems: 'center' }}>
                               <ActivityIndicator size="small" color={businessColors.primary} />
                               <Text style={{ textAlign: 'center', color: Colors.subtext, marginTop: 8 }}>
-                                Loading available times...
+                                {t('selectTime.loadingTimes','Loading available times...')}
                               </Text>
                             </View>
                           ) : availableTimes.length === 0 ? (
                             <View style={{ padding: 12 }}>
                               <Text style={{ textAlign: 'center', color: Colors.subtext }}>
-                                No available times for this day
+                                {t('selectTime.noTimes','No available times for this day')}
                               </Text>
                             </View>
                           ) : (
@@ -3821,9 +3832,9 @@ export default function SettingsScreen() {
                           </View>
                           {/* Middle: title and subtitle */}
                           <View style={{ flex: 1, alignItems: 'flex-start' }}>
-                            <Text style={styles.accordionTitle}>{svc.name || 'No name'}</Text>
+                            <Text style={styles.accordionTitle}>{svc.name || t('common.noName','No name')}</Text>
                             <Text style={styles.accordionSubtitle}>
-                              {typeof svc.price === 'number' ? `$${svc.price}` : 'No price'}
+                              {typeof svc.price === 'number' ? `$${svc.price}` : t('common.noPrice','No price')}
                             </Text>
                           </View>
                           {/* Left: chevron */}
@@ -4008,6 +4019,60 @@ export default function SettingsScreen() {
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.modalFormContent}>
+                {/* Image picker for service */}
+                <TouchableOpacity
+                  style={styles.imagePickerButton}
+                  onPress={async () => {
+                    try {
+                      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                      if (status !== 'granted') {
+                        Alert.alert('Permission required', 'Please allow gallery access to pick an image');
+                        return;
+                      }
+                      const result = await ImagePicker.launchImageLibraryAsync({
+                        mediaTypes: 'images',
+                        allowsMultipleSelection: false,
+                        quality: 0.9,
+                        base64: true,
+                      });
+                      if (result.canceled || !result.assets?.length) return;
+                      const a: any = result.assets[0];
+                      setAddSvcUploadingImage(true);
+                      const uploadedUrl = await uploadServiceImage({
+                        uri: a.uri,
+                        base64: a.base64 ?? null,
+                        mimeType: a.mimeType ?? null,
+                        fileName: a.fileName ?? null,
+                      });
+                      if (!uploadedUrl) {
+                        Alert.alert(t('error.generic','Error'), t('settings.profile.uploadFailed','Image upload failed'));
+                        return;
+                      }
+                      setAddSvcImageUrl(uploadedUrl);
+                    } catch (e) {
+                      Alert.alert('Error', 'Image upload failed');
+                    } finally {
+                      setAddSvcUploadingImage(false);
+                    }
+                  }}
+                  activeOpacity={0.9}
+                  disabled={addSvcUploadingImage}
+                >
+                  {addSvcImageUrl ? (
+                    <Image source={{ uri: addSvcImageUrl }} style={styles.previewImage} resizeMode="cover" />
+                  ) : (
+                    <View style={styles.imagePickerPlaceholder}>
+                      <Ionicons name="image-outline" size={36} color={Colors.subtext} />
+                      <Text style={styles.imagePickerText}>{t('settings.services.uploadImage','Upload image')}</Text>
+                    </View>
+                  )}
+                  {addSvcUploadingImage && (
+                    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 16 }}>
+                      <ActivityIndicator size="small" color={businessColors.primary} />
+                    </View>
+                  )}
+                </TouchableOpacity>
+
                 <View style={styles.formSection}>
                   <Text style={styles.inputLabel}>{t('settings.services.name','Service name')} *</Text>
                   <TextInput
@@ -4067,9 +4132,9 @@ export default function SettingsScreen() {
             {/* Save Button */}
             <View style={styles.saveButtonContainer}>
               <TouchableOpacity 
-                style={[styles.saveButton, { backgroundColor: businessColors.primary, opacity: addSvcIsSaving ? 0.7 : 1 }]}
+                style={[styles.saveButton, { backgroundColor: businessColors.primary, opacity: (addSvcIsSaving || addSvcUploadingImage) ? 0.7 : 1 }]}
                 onPress={handleCreateService}
-                disabled={addSvcIsSaving}
+                disabled={addSvcIsSaving || addSvcUploadingImage}
                 activeOpacity={0.8}
               >
                 <Text style={styles.saveButtonText}>

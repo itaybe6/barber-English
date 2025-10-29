@@ -93,7 +93,7 @@ export default function ClientNotificationsScreen() {
   };
 
   if (!fontsLoaded) {
-    return <View style={{ flex: 1, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' }}><Text>{t('loading','Loading...')}</Text></View>;
+    return <View style={{ flex: 1, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' }}><Text>{t('notifications.loading','Loading notifications...')}</Text></View>;
   }
 
   return (
@@ -168,7 +168,7 @@ export default function ClientNotificationsScreen() {
                   return (
                     <TouchableOpacity
                       key={label}
-                      style={[styles.dropdownItem, idx !== TITLES.length - 1 && styles.dropdownItemBorder]}
+                      style={[styles.dropdownItem, idx !== TITLE_KEYS.length - 1 && styles.dropdownItemBorder]}
                       onPress={() => {
                         setTitle(label);
                         setShowDropdown(false);

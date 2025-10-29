@@ -24,6 +24,7 @@ import { getCurrentClientLogo } from '@/src/theme/assets';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import GradientBackground from '@/components/GradientBackground';
+import { useTranslation } from 'react-i18next';
 
 // Static colors for UI elements that don't change with business theme
 const staticColors = {
@@ -52,6 +53,7 @@ export default function LoginScreen() {
   const login = useAuthStore((state) => state.login);
   const { isAuthenticated, user } = useAuthStore();
   const { colors: businessColors } = useBusinessColors();
+  const { t } = useTranslation();
 
   // Effect to monitor authentication changes
   useEffect(() => {

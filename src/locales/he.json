@@ -219,12 +219,21 @@
   "profile.language.hebrew": "עברית",
   "profile.language.restartNote": "שינוי כיוון עשוי לדרוש הפעלת אפליקציה מחדש",
   "tabs": { "home": "בית", "gallery": "גלריה", "book": "קביעת תור", "profile": "פרופיל" },
-  "gallery": { "loginToView": "אנא התחבר/י להצגת העיצובים המלאים" },
+  "gallery": {
+    "loginToView": "אנא התחבר/י להצגת העיצובים המלאים",
+    "subcategory": { "barber": "ספרים", "nails": "ציפורניים" },
+    "noImages": { "login": "אין תמונות למסך ההתחברות", "category": "אין תמונות עבור {{subcategory}} ב-{{category}}" },
+    "loginPage": { "formatNote": "\ud83d\udcf1 תמונות מסך ההתחברות מוצגות ביחס (9:16)" }
+  },
   "products": { "loginToViewDetails": "אנא התחבר/י להצגת פרטי המוצר" },
   "auth": { "signInNow": "התחבר/י עכשיו", "maybeLater": "אולי אחר כך" },
   "nearestSlots": { "title": "תורים זמינים בקרוב", "empty": "אין תורים זמינים בקרוב" },
   "map": { "mapsLabel": "מפות" },
-  "common": { "tryAgain": "אירעה שגיאה. נסו שוב.", "client": "לקוח", "smsOpenFailed": "לא ניתן לפתוח את אפליקציית ה-SMS במכשיר זה" },
+  "common": { "tryAgain": "אירעה שגיאה. נסו שוב.", "client": "לקוח", "smsOpenFailed": "לא ניתן לפתוח את אפליקציית ה-SMS במכשיר זה", "searchPlaceholder": "חפש..." },
+  "common.loading": "טוען...",
+  "common.noResults": "אין תוצאות",
+  "common.noName": "ללא שם",
+  "common.noPrice": "ללא מחיר",
   "category": { "gel": "לק ג'ל", "feet": "לק ברגליים", "manicure": "מניקור" },
   "admin2": { "hoursAdmin": { "title": "אילוצי עבודה", "segment": { "hours": "שעות", "singleDay": "יום אחד", "multiDays": "מספר ימים" }, "pickDateShort": "בחר/י תאריך", "closedHours": "שעות סגורות", "pickDateAllDay": "בחירת תאריך (סגור כל היום)", "pickDateRangeAllDay": "בחירת טווח תאריכים (סגור כל היום)", "selectedRange": ":טווח נבחר", "allDay": "כל היום", "chooseClosedHours": "בחר/י שעות סגורות", "start": "התחלה", "end": "סיום", "upcomingConstraints": "אילוצים קרובים", "noUpcomingConstraints": "אין אילוצים קרובים", "noReason": "ללא סיבה", "saveCTA": "שמור אילוצים" } },
   "login": {
@@ -243,12 +252,14 @@
     "success": { "title": "ההרשמה הצליחה!", "message": "החשבון נוצר בהצלחה.\n\nכעת ניתן להתחבר עם מספר הטלפון והסיסמה שבחרת.\n\nמספר הטלפון: {{phone}}" }
   },
   "appointments": {
+    "noPhone": { "title": "אין מספר טלפון", "message": "לא נמצא מספר טלפון תקין עבור לקוח זה." },
     "cannotCancel": { "title": "לא ניתן לבטל תור", "message": "לא ניתן לבטל את התור. נסו שוב." },
     "cancelError": "אירעה שגיאה בעת הביטול. נסו שוב.",
     "cancelled": { "title": "ביטול תור", "content": "{{name}} ({{phone}}) ביטל/ה תור ל־\"{{service}}\" בתאריך {{date}} בשעה {{time}}" }
   },
   "settings": {
     "common": { "saving": "שומר...", "uploading": "מעלה..." },
+    "policies": { "noRestriction": "0 שעות (ללא הגבלה)", "hour": "שעה", "hours": "שעות", "day": "יום", "days": "ימים" },
     "services": {
       "title": "שירותים",
       "delete": "מחק",
@@ -270,6 +281,7 @@
       "saveFailed": "שמירת השירות נכשלה",
       "saveSuccess": "השירות נשמר בהצלחה"
     },
+    
     "profile": {
       "saveFailed": "שמירת פרופיל העסק נכשלה",
       "saveSuccess": "פרטי העסק נשמרו בהצלחה",
@@ -310,6 +322,7 @@
       "minutesBefore": "דקות לפני"
     },
     "recurring": {
+      "empty": "אין תורים מחזוריים",
       "timesLoadFailed": "נכשל בטעינת שעות זמינות. נסו שוב.",
       "fillAll": "אנא מלא/י את כל השדות: לקוח, יום, שעה ושירות",
       "slotTakenTitle": "השעה תפוסה",
@@ -320,6 +333,7 @@
       "a11yDelete": "מחק"
     },
     "admin": {
+      "noEmployees": "לא נמצאו עובדים",
       "edit": "עריכת מנהל",
       "admin": "מנהל",
       "name": "שם מנהל",

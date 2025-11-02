@@ -63,3 +63,4 @@ $$;
 -- Comment on the new column
 COMMENT ON COLUMN business_profile.booking_open_days_by_user IS 'Per-user booking window in days. Format: {"user_id": days, ...}';
 
+

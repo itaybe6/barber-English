@@ -838,7 +838,7 @@ export default function BookAppointment() {
           setAvailableSlots(slots);
         }
       } catch (error) {
-        console.error('Error fetching slots:', error);
+        console.warn('Error fetching slots (non-fatal):', (error as any)?.message || error);
       } finally {
         if (!isStale) {
           setIsLoadingSlots(false);
@@ -1189,7 +1189,7 @@ export default function BookAppointment() {
       }
       setAvailableSlots(slots);
     } catch (error) {
-      console.error('Error refreshing selected day slots:', error);
+      console.warn('Error refreshing selected day slots (non-fatal):', (error as any)?.message || error);
     } finally {
       setIsLoadingSlots(false);
     }
@@ -1387,9 +1387,7 @@ export default function BookAppointment() {
     }
   };
 
-  const heroDynamicHeight = (currentStep === 3)
-    ? Math.round(HERO_TOP_HEIGHT * 1.08)
-    : (currentStep === 4 ? Math.round(HERO_TOP_HEIGHT * 1.2) : HERO_TOP_HEIGHT);
+  const heroDynamicHeight = HERO_TOP_HEIGHT;
   return (
     <SafeAreaView style={styles.container} edges={(currentStep === 1 || currentStep === 2 || currentStep === 3 || currentStep === 4) ? [] : ['top']}>
       {/* Top grey hero background */}
@@ -1471,9 +1469,7 @@ export default function BookAppointment() {
                       )}
                       </TouchableOpacity>
                       <View style={[styles.stepperBadge, (active || done) && styles.stepperBadgeActive]}>
-                        <Text style={[styles.stepperBadgeText, (active || done) && styles.stepperBadgeTextActive]}>
-                          {s.key}
-                        </Text>
+                        <Ionicons name="clipboard-outline" size={12} color="#FFFFFF" />
                       </View>
                     {/* Removed name pill under step 1 per request */}
                     </View>
@@ -1519,6 +1515,29 @@ export default function BookAppointment() {
                     <View style={styles.floatingGlassInnerBorder} />
                     <Ionicons name="arrow-back" size={18} color="#FFFFFF" />
                     <Text style={styles.floatingPillText}>{t('booking.prev', 'הקודם')}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Book button on step 4 */}
+              {Number(currentStep) === 4 && (
+                <View style={styles.floatingNavItem}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (!selectedService || selectedTime === null || isBooking || isCheckingAppointments) return;
+                      handleBookAppointment();
+                    }}
+                    activeOpacity={0.9}
+                    style={styles.floatingPillButton}
+                    accessibilityLabel={t('booking.book', 'Book appointment')}
+                    disabled={!selectedService || selectedTime === null || isBooking || isCheckingAppointments}
+                  >
+                    <BlurView intensity={36} tint="light" style={styles.floatingGlassBlur} />
+                    <View style={styles.floatingGlassTint} />
+                    <View style={styles.floatingGlassSheen} />
+                    <View style={styles.floatingGlassInnerBorder} />
+                    <Text style={styles.floatingPillText}>{t('booking.book', 'קבע תור')}</Text>
+                    <Ionicons name="checkmark" size={18} color="#FFFFFF" />
                   </TouchableOpacity>
                 </View>
               )}
@@ -1574,25 +1593,14 @@ export default function BookAppointment() {
           )}
         </View>
       )}
-      {/* Per-step thumbnails now live directly under each step circle */}
-      {currentStep >= 3 && (
-        <View style={[styles.header, (currentStep === 3 || currentStep === 4) ? { backgroundColor: 'transparent' } : null]}>
-          <View style={styles.headerContent}>
-            <View style={{ width: 22 }} />
-            <View style={{ alignItems: 'center' }}>
-              <Text style={styles.title}>{t('booking.title', 'Appointment Booking')}</Text>
-              <Text style={styles.headerSubtitle}>{t('booking.subtitle', 'Select a service, day, and time')}</Text>
-            </View>
-            <View style={{ width: 22 }} />
-          </View>
-        </View>
-      )}
+      {/* Header removed on steps 3-4 per request */}
       <View style={[
         styles.contentWrapper,
         (currentStep === 1 || currentStep === 2 || currentStep === 3 || currentStep === 4)
           ? { backgroundColor: 'transparent', borderTopLeftRadius: 0, borderTopRightRadius: 0, paddingTop: 0 }
           : null
       ]}>
+          {currentStep !== 4 && (
           <ScrollView
           ref={scrollRef as any}
           contentContainerStyle={[
@@ -1613,8 +1621,8 @@ export default function BookAppointment() {
           nestedScrollEnabled={true}
         >
 
-        {/* Spacer to partially overlap the hero background on steps 3+ */}
-        <View style={{ height: (currentStep >= 3 ? Math.max(heroDynamicHeight - 80, 16) : 16) }} />
+        {/* Spacer to keep content below hero on steps 3 */}
+        <View style={{ height: (currentStep >= 3 ? heroDynamicHeight + 12 : 16) }} />
 
         {/* Step 1: Barber Selection */}
         {currentStep === 1 && (
@@ -1785,35 +1793,67 @@ export default function BookAppointment() {
           </View>
         )}
 
-        {/* Step 4: Time Selection (full section with hero retained) */}
-        {currentStep === 4 && selectedBarber && selectedService && selectedDay !== null && (
-          <View style={[styles.section, styles.calendarSectionCard]}> 
-            {availableTimeSlots && availableTimeSlots.length > 0 ? (
-              <View style={styles.slotsContainer}>
-                {availableTimeSlots.map((t) => (
-                  <TouchableOpacity
-                    key={`t-${t}`}
-                    style={[styles.slotBtn, selectedTime === t && styles.slotBtnSelected]}
-                    onPress={() => setSelectedTime(t)}
-                    activeOpacity={0.85}
-                  >
-                    <View style={styles.slotContent}>
-                      <Text style={[styles.slotText, selectedTime === t && styles.slotTextSelected]}>{t}</Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : (
-              <View style={styles.noSlotsContainer}>
-                <Text style={styles.noSlotsText}>{t('booking.noSlots', 'אין שעות פנויות לתאריך שנבחר')}</Text>
-                <Text style={styles.noSlotsSubtext}>{t('booking.chooseAnotherDay', 'בחר/י יום אחר או חזור/י אחורה')}</Text>
-              </View>
-            )}
-          </View>
-        )}
+        {/* Step 4 removed from inside ScrollView to avoid nested VirtualizedList */}
 
         </ScrollView>
+          )}
       </View>
+
+      {/* Step 4: Revolutionary Time Selection with Liquid Glass (outside ScrollView) */}
+      {Number(currentStep) === 4 && selectedBarber && selectedService && selectedDay !== null && (
+        <View>
+          {/* Step 4 top spacer, raised by ~50px */}
+          <View style={{ height: Math.max(0, heroDynamicHeight + 12 - 50) }} />
+          <View style={[styles.section, styles.calendarSectionCard]}> 
+          {availableTimeSlots && availableTimeSlots.length > 0 ? (
+            <View style={styles.timeScrollBox}>
+              {/* One shared blur under the grid for better performance */}
+              <BlurView intensity={18} tint="light" style={styles.timeGridSharedBlur} />
+              <FlatList
+                data={availableTimeSlots}
+                keyExtractor={(item) => `t-${item}`}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[styles.glassTimeCard, selectedTime === item && styles.glassTimeCardSelected]}
+                    onPress={() => setSelectedTime(item as any)}
+                    activeOpacity={0.92}
+                  >
+                    {/* keep light effects per-card without heavy blur */}
+                    <View style={styles.glassTimeTint} />
+                    <View style={[styles.glassTimeSheen, selectedTime === item && styles.glassTimeSheenActive]} />
+                    <View style={styles.glassTimeInnerBorder} />
+                    {selectedTime === item && (<View style={styles.glassTimeGlow} />)}
+                    <View style={styles.glassTimeContent}>
+                      <Ionicons name="time-outline" size={18} color={selectedTime === item ? colors.primary : '#374151'} />
+                      <Text style={[styles.glassTimeText, selectedTime === item && styles.glassTimeTextSelected]}>{item as any}</Text>
+                    </View>
+                    {selectedTime === item && (
+                      <View style={styles.glassTimeCheck}>
+                        <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                )}
+                numColumns={3}
+                showsVerticalScrollIndicator
+                removeClippedSubviews
+                windowSize={7}
+                initialNumToRender={21}
+                maxToRenderPerBatch={21}
+                updateCellsBatchingPeriod={50}
+                decelerationRate="fast"
+                contentContainerStyle={styles.timeGridList}
+              />
+            </View>
+          ) : (
+            <View style={styles.noSlotsContainer}>
+              <Text style={styles.noSlotsText}>{t('booking.noSlots', 'אין שעות פנויות לתאריך שנבחר')}</Text>
+              <Text style={styles.noSlotsSubtext}>{t('booking.chooseAnotherDay', 'בחר/י יום אחר או חזור/י אחורה')}</Text>
+            </View>
+          )}
+          </View>
+        </View>
+      )}
 
       {/* Footer action button per step */}
       {footerVisible && currentStep >= 3 && (
@@ -1844,7 +1884,7 @@ export default function BookAppointment() {
             </TouchableOpacity>
           );
         })()}
-        {currentStep === 4 && null}
+        {Number(currentStep) === 4 && null}
         </View>
       )}
 
@@ -1859,16 +1899,14 @@ export default function BookAppointment() {
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <View style={styles.modalIconContainer}>
-                  <Ionicons name="calendar-outline" size={32} color={colors.primary} />
-                </View>
+                {/* Removed top calendar icon per request */}
                 <Text style={styles.modalTitle}>{t('booking.confirmTitle', 'Confirm Appointment Booking')}</Text>
               </View>
               
               <View style={styles.appointmentDetails}>
                 <View style={styles.detailRow}>
                   <View style={styles.detailIcon}>
-                    <Ionicons name="cut-outline" size={20} color="#6B7280" />
+                    <Ionicons name="briefcase-outline" size={20} color="#6B7280" />
                   </View>
                   <View style={styles.detailContent}>
                     <Text style={styles.detailLabel}>{t('booking.field.service', 'Service')}</Text>
@@ -1992,8 +2030,12 @@ export default function BookAppointment() {
           onRequestClose={() => setShowSuccessModal(false)}
         >
           <View style={styles.modalOverlay}>
-            <BlurView style={StyleSheet.absoluteFill} intensity={24} tint="dark" />
-            <View style={styles.modalContent}>
+            <BlurView style={StyleSheet.absoluteFill} intensity={26} tint="dark" />
+            <View style={styles.successCard}>
+              <BlurView intensity={36} tint="light" style={styles.successBlur} />
+              <View style={styles.successTint} />
+              <View style={styles.successSheen} />
+              <View style={styles.successInnerBorder} />
               <View style={styles.modalIconWrapper}>
                 <Ionicons name="checkmark-circle" size={56} color="#34C759" />
               </View>
@@ -3303,6 +3345,50 @@ const createStyles = (colors: any) => StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     backdropFilter: 'blur(10px)',
   },
+  successCard: {
+    width: '88%',
+    maxWidth: 460,
+    borderRadius: 28,
+    paddingVertical: 22,
+    paddingHorizontal: 22,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.35,
+    shadowRadius: 30,
+    elevation: 16,
+  },
+  successBlur: {
+    ...StyleSheet.absoluteFillObject as any,
+    borderRadius: 28,
+  },
+  successTint: {
+    ...StyleSheet.absoluteFillObject as any,
+    backgroundColor: 'rgba(255,255,255,0.14)'
+  },
+  successSheen: {
+    position: 'absolute',
+    top: -24,
+    left: -12,
+    width: '70%',
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.28)',
+    opacity: 0.5,
+    transform: [{ rotate: '-18deg' }],
+  },
+  successInnerBorder: {
+    position: 'absolute',
+    top: 1,
+    left: 1,
+    right: 1,
+    bottom: 1,
+    borderRadius: 27,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)'
+  },
   modalContent: {
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
@@ -3317,6 +3403,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     elevation: 15,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
+    writingDirection: 'rtl',
   },
   modalHeader: {
     alignItems: 'center',
@@ -3336,7 +3423,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     marginBottom: 24,
   },
   detailRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
@@ -3349,17 +3436,18 @@ const createStyles = (colors: any) => StyleSheet.create({
     backgroundColor: 'rgba(107, 114, 128, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 12,
+    marginRight: 12,
   },
   detailContent: {
     flex: 1,
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
   },
   detailLabel: {
     fontSize: 14,
     color: '#6B7280',
     fontWeight: '500',
     marginBottom: 2,
+    textAlign: 'right',
   },
   detailValue: {
     fontSize: 16,
@@ -3894,5 +3982,127 @@ const createStyles = (colors: any) => StyleSheet.create({
     textAlign: 'left',
     marginBottom: 16,
     writingDirection: 'ltr',
+  },
+  // Revolutionary Glass Time Selection Styles
+  timeSelectionSection: {
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    marginHorizontal: 16,
+    marginTop: 8,
+    padding: 0,
+  },
+  timeGridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+  },
+  glassTimeCard: {
+    width: '31%',
+    minHeight: 72,
+    borderRadius: 18,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.35)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 6,
+    marginBottom: 4,
+  },
+  glassTimeCardSelected: {
+    borderWidth: 2,
+    borderColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+    transform: [{ scale: 1.02 }],
+  },
+  glassTimeBlur: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  glassTimeTint: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  glassTimeSheen: {
+    position: 'absolute',
+    top: -14,
+    left: -8,
+    width: '70%',
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    opacity: 0.45,
+    transform: [{ rotate: '-22deg' }],
+  },
+  glassTimeSheenActive: {
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    opacity: 0.7,
+  },
+  glassTimeInnerBorder: {
+    position: 'absolute',
+    top: 1,
+    left: 1,
+    right: 1,
+    bottom: 1,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  glassTimeGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.primary,
+    opacity: 0.08,
+    borderRadius: 18,
+  },
+  glassTimeContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    gap: 6,
+  },
+  glassTimeText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#111827',
+    letterSpacing: -0.3,
+  },
+  glassTimeTextSelected: {
+    color: colors.primary,
+  },
+  glassTimeCheck: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+  },
+  timeScrollBox: {
+    height: Math.round(SCREEN.height * 0.58),
+    overflow: 'hidden',
+  },
+  timeGridSharedBlur: {
+    ...StyleSheet.absoluteFillObject as any,
+    borderRadius: 20,
+  },
+  timeGridList: {
+    paddingHorizontal: 4,
+    paddingVertical: 8,
   },
 });

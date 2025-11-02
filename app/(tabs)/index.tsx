@@ -720,17 +720,24 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Hero Text Content */}
-        <View style={[styles.fullScreenHeroContent, { top: insets.top + 110 }]}>
-          <View style={styles.heroTextContainer}>
-            <Text style={styles.heroWelcome}>{t('admin.home.welcome','Welcome')}</Text>
-            <Text style={styles.heroTitle}>{user?.name || t('settings.admin.admin','Admin')}</Text>
-            <Text style={styles.heroSubtitle} numberOfLines={2} ellipsizeMode="tail">
-              {t('admin.home.subtitle.line1','Manage your day with confidence')}{'\n'}
-              {t('admin.home.subtitle.line2','This app keeps your schedule sharp')}
-            </Text>
-          </View>
-        </View>
+        {/* Hero Text Content (hidden when video is playing) */}
+        {(() => {
+          const media = businessProfile?.image_on_page_1;
+          const showVideo = isVideoUrl(media) && !heroVideoFailed;
+          if (showVideo) return null;
+          return (
+            <View style={[styles.fullScreenHeroContent, { top: insets.top + 110 }]}>
+              <View style={styles.heroTextContainer}>
+                <Text style={styles.heroWelcome}>{t('admin.home.welcome','Welcome')}</Text>
+                <Text style={styles.heroTitle}>{user?.name || t('settings.admin.admin','Admin')}</Text>
+                <Text style={styles.heroSubtitle} numberOfLines={2} ellipsizeMode="tail">
+                  {t('admin.home.subtitle.line1','Manage your day with confidence')}{'\n'}
+                  {t('admin.home.subtitle.line2','This app keeps your schedule sharp')}
+                </Text>
+              </View>
+            </View>
+          );
+        })()}
 
         {/* DailySchedule moved to content area below hero */}
       </View>

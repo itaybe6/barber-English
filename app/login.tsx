@@ -11,6 +11,7 @@ import {
   ScrollView,
   Image,
 } from 'react-native';
+import Animated, { useAnimatedKeyboard, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, Link } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -54,6 +55,30 @@ export default function LoginScreen() {
   const { isAuthenticated, user } = useAuthStore();
   const { colors: businessColors } = useBusinessColors();
   const { t } = useTranslation();
+
+  // Smooth keyboard-driven lift for the form container and overlay dim
+  const keyboard = useAnimatedKeyboard();
+  const formAnimatedStyle = useAnimatedStyle(() => {
+    const raw = keyboard.height.value;
+    const offset = Math.max(raw - insets.bottom, 0);
+    // Move much less than keyboard height so the form stays near its place
+    const reduced = offset * 0.25; // 25% of effective keyboard height
+    const clamped = Math.min(reduced, 0); // cap movement to 80px max
+    const isOpen = raw > 0;
+    return {
+      transform: [
+        { translateY: withTiming(isOpen ? -clamped : 0, { duration: 220 }) },
+        { scale: withTiming(isOpen ? 1 : 1, { duration: 220 }) }, // keep scale neutral
+      ],
+    };
+  });
+  const overlayAnimatedStyle = useAnimatedStyle(() => {
+    const isOpen = keyboard.height.value > 0;
+    return {
+      backgroundColor: 'rgba(0,0,0,1)',
+      opacity: withTiming(isOpen ? 0.35 : 0.15, { duration: 240 }),
+    };
+  });
 
   // Effect to monitor authentication changes
   useEffect(() => {
@@ -277,18 +302,23 @@ export default function LoginScreen() {
       
       {/* Dark overlay for better text readability when using custom background */}
       {businessProfile?.login_img && !isLoadingProfile && (
-        <View style={styles.darkOverlay} />
+        <Animated.View style={[styles.darkOverlay, overlayAnimatedStyle]} />
       )}
       <SafeAreaView style={styles.fullSafe}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+          contentInsetAdjustmentBehavior="never"
+        >
             {/* Branding at top (logo + optional business name) */}
             <View style={styles.titleContainer}>
               <Image source={getCurrentClientLogo()} style={styles.logoImage} resizeMode="contain" />
             </View>
 
             {/* Bottom sheet form container (like register) with slight blur and crisp rounded corners */}
-            <View style={styles.formWrapper}>
+            <Animated.View style={[styles.formWrapper, formAnimatedStyle]}>
               <BlurView intensity={18} tint="light" style={styles.formContainer}>
               <View style={styles.formHeader}>
                 <Text style={[styles.formTitle, { color: businessColors.primary }]}>Sign in your account</Text>
@@ -352,9 +382,8 @@ export default function LoginScreen() {
                   </Link>
                 </Text>
               </BlurView>
-            </View>
+            </Animated.View>
           </ScrollView>
-        </KeyboardAvoidingView>
       </SafeAreaView>
       {/* Forgot Password Modal */}
       {isForgotOpen && (

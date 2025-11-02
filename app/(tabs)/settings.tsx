@@ -912,6 +912,16 @@ export default function SettingsScreen() {
     return 'image/jpeg';
   };
 
+  // Guess mime for images and videos
+  const guessMimeFromUriForAny = (uriOrName: string): string => {
+    const ext = (uriOrName.split('.').pop() || '').toLowerCase().split('?')[0];
+    if (ext === 'mp4' || ext === 'm4v') return 'video/mp4';
+    if (ext === 'mov') return 'video/quicktime';
+    if (ext === 'webm') return 'video/webm';
+    if (ext === '3gp' || ext === '3gpp') return 'video/3gpp';
+    return guessMimeFromUri(uriOrName);
+  };
+
   const base64ToUint8Array = (base64: string): Uint8Array => {
     const clean = base64.replace(/^data:[^;]+;base64,/, '');
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
@@ -1032,6 +1042,29 @@ export default function SettingsScreen() {
       return data.publicUrl;
     } catch (e) {
       console.error('business image upload exception', e);
+      return null;
+    }
+  };
+
+  const uploadBusinessVideo = async (asset: { uri: string; mimeType?: string | null; fileName?: string | null }): Promise<string | null> => {
+    try {
+      let contentType = asset.mimeType || guessMimeFromUriForAny(asset.fileName || asset.uri);
+      const response = await fetch(asset.uri, { cache: 'no-store' });
+      const arrayBuffer = await response.arrayBuffer();
+      const fileBody = new Uint8Array(arrayBuffer);
+      contentType = response.headers.get('content-type') || contentType || 'video/mp4';
+      const extGuess = (contentType.split('/')[1] || 'mp4').toLowerCase();
+      const randomId = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+      const filePath = `business-videos/${Date.now()}_${randomId()}.${extGuess}`;
+      const { error } = await supabase.storage.from('app_design').upload(filePath, fileBody, { contentType, upsert: false });
+      if (error) {
+        console.error('business video upload error', error);
+        return null;
+      }
+      const { data } = supabase.storage.from('app_design').getPublicUrl(filePath);
+      return data.publicUrl;
+    } catch (e) {
+      console.error('business video upload exception', e);
       return null;
     }
   };
@@ -1166,6 +1199,12 @@ export default function SettingsScreen() {
         : imageType === 'page3'
           ? profileImageOnPage3
           : profileLoginImg;
+    const looksLikeVideo = typeof currentUrl === 'string' && /\.(mp4|mov|m4v|webm|3gp)(\?|$)/i.test(currentUrl);
+    if (imageType === 'page1' && looksLikeVideo) {
+      setShowImagePreviewModal(false);
+      handlePickHomeMedia();
+      return;
+    }
     const isRemote = typeof currentUrl === 'string' && /^(https?:|data:|file:)/.test(currentUrl) && !String(currentUrl).includes('unstable_path=');
     if (!isRemote) {
       setShowImagePreviewModal(false);
@@ -1195,6 +1234,62 @@ export default function SettingsScreen() {
     }, 15000);
     
     setImageLoadTimeout(timeout);
+  };
+
+  const handlePickHomeMedia = async () => {
+    if (isUploadingImagePage1) return;
+    Alert.alert(
+      t('settings.profile.homeMediaTitle','Home page media'),
+      t('settings.profile.homeMediaMessage','Choose what to upload'),
+      [
+        { text: t('cancel','Cancel'), style: 'cancel' },
+        {
+          text: t('settings.profile.uploadImage','Upload image'),
+          onPress: () => handlePickBusinessImage('page1')
+        },
+        {
+          text: t('settings.profile.uploadVideo','Upload video'),
+          onPress: async () => {
+            try {
+              const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (status !== 'granted') {
+                Alert.alert(t('profile.permissionRequired','Permission Required'), t('settings.profile.permissionVideo','Please allow gallery access to pick a video'));
+                return;
+              }
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: 'videos',
+                allowsMultipleSelection: false,
+                quality: 1,
+                base64: false,
+              });
+              if (result.canceled || !result.assets?.length) return;
+              const a: any = result.assets[0];
+              setIsUploadingImagePage1(true);
+              let contentType = a.mimeType || guessMimeFromUriForAny(a.fileName || a.uri);
+              const uploadedUrl = await uploadBusinessVideo({ uri: a.uri, mimeType: contentType, fileName: a.fileName ?? null });
+              if (!uploadedUrl) {
+                Alert.alert(t('error.generic','Error'), t('settings.profile.uploadFailed','Failed to upload image'));
+                return;
+              }
+              setProfileImageOnPage1(uploadedUrl);
+              const updated = await businessProfileApi.upsertProfile({ image_on_page_1: uploadedUrl } as any);
+              if (updated) {
+                setProfile(updated);
+                setProfileImageOnPage1((updated as any)?.image_on_page_1 || '');
+                Alert.alert(t('success.generic','Success'), t('settings.profile.imageSaveSuccess','Image saved successfully'));
+              } else {
+                Alert.alert(t('error.generic','Error'), t('settings.profile.imageSaveFailed','Failed to save image'));
+              }
+            } catch (e) {
+              console.error('pick/upload home video failed', e);
+              Alert.alert(t('error.generic','Error'), t('settings.profile.uploadFailed','Failed to upload image'));
+            } finally {
+              setIsUploadingImagePage1(false);
+            }
+          }
+        },
+      ]
+    );
   };
 
   const handlePickBusinessImage = async (imageType: 'page1' | 'page2' | 'page3' | 'login') => {
@@ -2294,12 +2389,12 @@ export default function SettingsScreen() {
               
               {renderSettingItemLTR(
                 <Home size={20} color={isUploadingImagePage1 ? Colors.subtext : businessColors.primary} />, 
-                'Home page image',
-                isUploadingImagePage1 ? 'Uploading...' : (profileImageOnPage1 ? 'Image uploaded' : 'Upload home page image'),
+                'Home page media',
+                isUploadingImagePage1 ? 'Uploading...' : (profileImageOnPage1 ? 'Media uploaded' : 'Upload home page media'),
                 isUploadingImagePage1 ? (
                   <ActivityIndicator size="small" color={businessColors.primary} />
                 ) : undefined,
-                isUploadingImagePage1 ? undefined : (profileImageOnPage1 ? () => openImagePreview('page1') : () => handlePickBusinessImage('page1')),
+                isUploadingImagePage1 ? undefined : handlePickHomeMedia,
                 false,
                 isUploadingImagePage1
               )}

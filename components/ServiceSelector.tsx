@@ -95,6 +95,25 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
           <Animated.Image source={{ uri: bgCurrent }} style={[{ width: '100%', height: '100%' }, bgStyle]} resizeMode="cover" fadeDuration={0 as any} />
         )}
         <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.25)' }} />
+        {/* Duration badge on image */}
+        <View style={{ position: 'absolute', top: 12, left: 12 }}>
+          <BlurView intensity={30} tint="light" style={{
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            borderRadius: 999,
+            overflow: 'hidden',
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.35)',
+            backgroundColor: 'rgba(255,255,255,0.18)'
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Ionicons name="time-outline" size={14} color="#111827" />
+              <Text style={{ color: '#111827', fontWeight: '800', fontSize: 13 }}>
+                {(services[activeIndex]?.duration_minutes ?? 60) + 'm'}
+              </Text>
+            </View>
+          </BlurView>
+        </View>
         <View style={{ position: 'absolute', left: 12, right: 12, bottom: 12, alignItems: 'center' }}>
           <BlurView intensity={28} tint="light" style={{
             paddingVertical: 10,

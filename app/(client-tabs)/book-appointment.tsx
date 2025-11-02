@@ -1387,12 +1387,14 @@ export default function BookAppointment() {
     }
   };
 
-  const heroDynamicHeight = (currentStep >= 3) ? Math.round(HERO_TOP_HEIGHT * 0.72) : HERO_TOP_HEIGHT;
+  const heroDynamicHeight = (currentStep === 3)
+    ? Math.round(HERO_TOP_HEIGHT * 1.08)
+    : (currentStep === 4 ? Math.round(HERO_TOP_HEIGHT * 1.2) : HERO_TOP_HEIGHT);
   return (
-    <SafeAreaView style={styles.container} edges={(currentStep === 1 || currentStep === 2 || currentStep === 3) ? [] : ['top']}>
+    <SafeAreaView style={styles.container} edges={(currentStep === 1 || currentStep === 2 || currentStep === 3 || currentStep === 4) ? [] : ['top']}>
       {/* Top grey hero background */}
       <View style={[styles.topHeroWrapper, { height: heroDynamicHeight }]} pointerEvents="none" />
-      {(currentStep === 1 || currentStep === 2 || currentStep === 3) && (
+      {(currentStep === 1 || currentStep === 2 || currentStep === 3 || currentStep === 4) && (
         <View pointerEvents="box-none" style={[styles.topOverlayHeader, { paddingTop: insets.top + 8 }] }>
           <View style={styles.topOverlayHeaderContent}>
             <TouchableOpacity
@@ -1446,6 +1448,20 @@ export default function BookAppointment() {
                           style={{ width: '100%', height: '100%' }}
                           resizeMode="cover"
                         />
+                      ) : (s.key === 3 && selectedDay !== null) ? (
+                        <Text style={styles.stepperDateText}>
+                          {(() => {
+                            try {
+                              const d = days[selectedDay!].fullDate;
+                              const dd = String(d.getDate()).padStart(2, '0');
+                              const mm = String(d.getMonth() + 1).padStart(2, '0');
+                              const yy = String(d.getFullYear()).slice(-2);
+                              return `${dd}.${mm}.${yy}`;
+                            } catch { return ''; }
+                          })()}
+                        </Text>
+                      ) : (s.key === 4 && !!selectedTime) ? (
+                        <Text style={styles.stepperDateText}>{selectedTime}</Text>
                       ) : (
                         <Ionicons
                           name={s.icon as any}
@@ -1462,26 +1478,8 @@ export default function BookAppointment() {
                     {/* Removed name pill under step 1 per request */}
                     </View>
                     {/* Thumbnails under steps 1 & 2 removed per request; only image inside circle now */}
-                    {s.key === 3 && selectedDay !== null && (
-                      <TouchableOpacity
-                        onPress={() => setCurrentStep(3 as any)}
-                        activeOpacity={0.9}
-                        style={styles.stepperThumbPill}
-                      >
-                        <Ionicons name="calendar-outline" size={14} color="#111827" />
-                        <Text style={styles.stepperThumbPillText}>{days[selectedDay]?.date || ''}</Text>
-                      </TouchableOpacity>
-                    )}
-                    {s.key === 4 && !!selectedTime && (
-                      <TouchableOpacity
-                        onPress={() => setCurrentStep(4 as any)}
-                        activeOpacity={0.9}
-                        style={styles.stepperThumbPill}
-                      >
-                        <Ionicons name="time-outline" size={14} color="#111827" />
-                        <Text style={styles.stepperThumbPillText}>{selectedTime}</Text>
-                      </TouchableOpacity>
-                    )}
+                    {/* Removed date pill under step 3 */}
+                    {/* Removed time pill under step 4 */}
                   </View>
                   {idx < 3 && <View style={[styles.stepperLine, done && styles.stepperLineDone]} />}
                 </View>
@@ -1489,54 +1487,96 @@ export default function BookAppointment() {
             })}
           </View>
 
-          {/* Floating next-step arrow in the grey area */}
-          {Number(currentStep) < 4 && (
-            <View style={styles.floatingNextWrapper}>
-              <TouchableOpacity
-                onPress={() => {
-                  const stepNum = Number(currentStep);
-                  if (stepNum === 1) {
-                    if (!selectedBarber) return;
-                    setCurrentStep(2 as any);
-                    return;
-                  }
-                  if (stepNum === 2) {
-                    if (!selectedService) {
-                      const fallback = (filteredServices && filteredServices.length > 0)
-                        ? (filteredServices[selectedServiceIndex] || filteredServices[0])
-                        : null;
-                      if (fallback) {
-                        try {
-                          setSelectedServiceIndex(Math.max(0, filteredServices.indexOf(fallback)));
-                        } catch {}
-                        setSelectedService(fallback);
-                      } else {
-                        return; // no services to proceed
+          {/* Floating navigation arrows in the grey area */}
+          {true && (
+            <View style={[styles.floatingNavRow, styles.ltr]}>
+              {/* Previous button for steps 2,3,4 */}
+              {Number(currentStep) >= 2 && (
+                <View style={styles.floatingNavItem}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const stepNum = Number(currentStep);
+                      if (stepNum === 4) {
+                        setCurrentStep(3 as any);
+                        return;
                       }
-                    }
-                    setCurrentStep(3 as any);
-                    return;
-                  }
-                  if (stepNum === 3) {
-                    if (selectedDay === null) return;
-                    setCurrentStep(4 as any);
-                    return;
-                  }
-                }}
-                activeOpacity={0.9}
-                style={styles.floatingNextButton}
-              >
-                <BlurView intensity={36} tint="light" style={styles.floatingNextBlur} />
-                <View style={styles.floatingNextInner} />
-                <Ionicons name="arrow-forward" size={22} color="#FFFFFF" />
-              </TouchableOpacity>
+                      if (stepNum === 3) {
+                        setCurrentStep(2 as any);
+                        return;
+                      }
+                      if (stepNum === 2) {
+                        setCurrentStep(1 as any);
+                        return;
+                      }
+                    }}
+                    activeOpacity={0.9}
+                    style={styles.floatingPillButton}
+                    accessibilityLabel={t('booking.prevStep', 'Previous step')}
+                  >
+                    <BlurView intensity={36} tint="light" style={styles.floatingGlassBlur} />
+                    <View style={styles.floatingGlassTint} />
+                    <View style={styles.floatingGlassSheen} />
+                    <View style={styles.floatingGlassInnerBorder} />
+                    <Ionicons name="arrow-back" size={18} color="#FFFFFF" />
+                    <Text style={styles.floatingPillText}>{t('booking.prev', 'הקודם')}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Next button for steps 1,2,3 (hidden at step 4) */}
+              {Number(currentStep) < 4 && (
+                <View style={styles.floatingNavItem}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const stepNum = Number(currentStep);
+                      if (stepNum === 1) {
+                        if (!selectedBarber) return;
+                        setCurrentStep(2 as any);
+                        return;
+                      }
+                      if (stepNum === 2) {
+                        if (!selectedService) {
+                          const fallback = (filteredServices && filteredServices.length > 0)
+                            ? (filteredServices[selectedServiceIndex] || filteredServices[0])
+                            : null;
+                          if (fallback) {
+                            try {
+                              setSelectedServiceIndex(Math.max(0, filteredServices.indexOf(fallback)));
+                            } catch {}
+                            setSelectedService(fallback);
+                          } else {
+                            return; // no services to proceed
+                          }
+                        }
+                        setCurrentStep(3 as any);
+                        return;
+                      }
+                      if (stepNum === 3) {
+                        if (selectedDay === null) return;
+                        setCurrentStep(4 as any);
+                        return;
+                      }
+                    }}
+                    activeOpacity={0.9}
+                    style={styles.floatingPillButton}
+                    accessibilityLabel={t('booking.nextStep', 'Next step')}
+                  >
+                    <BlurView intensity={36} tint="light" style={styles.floatingGlassBlur} />
+                    <View style={styles.floatingGlassTint} />
+                    <View style={styles.floatingGlassSheen} />
+                    <View style={styles.floatingGlassInnerBorder} />
+                    <Text style={styles.floatingPillText}>{t('booking.next', 'הבא')}</Text>
+                    <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           )}
         </View>
       )}
       {/* Per-step thumbnails now live directly under each step circle */}
       {currentStep >= 3 && (
-        <View style={styles.header}>
+        <View style={[styles.header, (currentStep === 3 || currentStep === 4) ? { backgroundColor: 'transparent' } : null]}>
           <View style={styles.headerContent}>
             <View style={{ width: 22 }} />
             <View style={{ alignItems: 'center' }}>
@@ -1549,7 +1589,7 @@ export default function BookAppointment() {
       )}
       <View style={[
         styles.contentWrapper,
-        (currentStep === 1 || currentStep === 2)
+        (currentStep === 1 || currentStep === 2 || currentStep === 3 || currentStep === 4)
           ? { backgroundColor: 'transparent', borderTopLeftRadius: 0, borderTopRightRadius: 0, paddingTop: 0 }
           : null
       ]}>
@@ -1573,8 +1613,8 @@ export default function BookAppointment() {
           nestedScrollEnabled={true}
         >
 
-        {/* Spacer to clear the top hero background */}
-        <View style={{ height: (currentStep >= 3 ? heroDynamicHeight + 12 : 16) }} />
+        {/* Spacer to partially overlap the hero background on steps 3+ */}
+        <View style={{ height: (currentStep >= 3 ? Math.max(heroDynamicHeight - 80, 16) : 16) }} />
 
         {/* Step 1: Barber Selection */}
         {currentStep === 1 && (
@@ -1648,7 +1688,7 @@ export default function BookAppointment() {
         )}
 
         {/* Step 3: Day Selection */}
-        {currentStep >= 3 && selectedBarber && selectedService && (
+        {currentStep === 3 && selectedBarber && selectedService && (
           <View style={[styles.section, styles.calendarSectionCard]}>
             {/* Monthly calendar grid limited by booking window */}
             {(() => {
@@ -1745,6 +1785,33 @@ export default function BookAppointment() {
           </View>
         )}
 
+        {/* Step 4: Time Selection (full section with hero retained) */}
+        {currentStep === 4 && selectedBarber && selectedService && selectedDay !== null && (
+          <View style={[styles.section, styles.calendarSectionCard]}> 
+            {availableTimeSlots && availableTimeSlots.length > 0 ? (
+              <View style={styles.slotsContainer}>
+                {availableTimeSlots.map((t) => (
+                  <TouchableOpacity
+                    key={`t-${t}`}
+                    style={[styles.slotBtn, selectedTime === t && styles.slotBtnSelected]}
+                    onPress={() => setSelectedTime(t)}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.slotContent}>
+                      <Text style={[styles.slotText, selectedTime === t && styles.slotTextSelected]}>{t}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.noSlotsContainer}>
+                <Text style={styles.noSlotsText}>{t('booking.noSlots', 'אין שעות פנויות לתאריך שנבחר')}</Text>
+                <Text style={styles.noSlotsSubtext}>{t('booking.chooseAnotherDay', 'בחר/י יום אחר או חזור/י אחורה')}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
         </ScrollView>
       </View>
 
@@ -1756,23 +1823,7 @@ export default function BookAppointment() {
         {currentStep === 3 && selectedDay !== null && (() => {
           const dateStr = selectedDate?.toISOString().split('T')[0] || '';
           const hasAvailForSelected = dateStr ? ((dayAvailability[dateStr] ?? 0) > 0) : false;
-          if (hasAvailForSelected) {
-            return (
-              <TouchableOpacity
-                style={[
-                  styles.bookBtn,
-                  (isBooking || isCheckingAppointments) && styles.bookBtnDisabled
-                ]}
-                onPress={() => {
-                  // Stay on the same screen and advance to time selection (step 4)
-                  setCurrentStep(4 as any);
-                }}
-                disabled={isBooking || isCheckingAppointments}
-              >
-                <Text style={styles.bookBtnText}>{t('booking.nextToTime', 'Continue to Time Selection')}</Text>
-              </TouchableOpacity>
-            );
-          }
+          if (hasAvailForSelected) { return null; }
           return (
             <TouchableOpacity
               style={styles.waitlistButton}
@@ -1793,24 +1844,7 @@ export default function BookAppointment() {
             </TouchableOpacity>
           );
         })()}
-        {currentStep === 4 && (
-          <TouchableOpacity 
-            style={[
-              styles.bookBtn,
-              (!selectedService || selectedTime === null || isBooking || isCheckingAppointments) && styles.bookBtnDisabled
-            ]}
-            onPress={() => {
-              handleBookAppointment();
-            }}
-            disabled={!selectedService || selectedTime === null || isBooking || isCheckingAppointments}
-          >
-            <Text style={styles.bookBtnText}>
-              {isBooking ? t('booking.bookingInProgress', 'קביעת תור...') : 
-               isCheckingAppointments ? t('booking.checkingExisting', 'בודק תורים קיימים...') : 
-               t('booking.bookWithPrice', 'קבע תור - ₪{{price}}', { price: selectedService?.price || 0 })}
-            </Text>
-          </TouchableOpacity>
-        )}
+        {currentStep === 4 && null}
         </View>
       )}
 
@@ -2234,6 +2268,12 @@ const createStyles = (colors: any) => StyleSheet.create({
     shadowRadius: 6,
     elevation: 5,
   },
+  stepperDateText: {
+    color: '#111827',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
   stepperBadge: {
     position: 'absolute',
     bottom: -4,
@@ -2326,6 +2366,28 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignSelf: 'center',
     zIndex: 50,
   },
+  floatingNavRow: {
+    marginTop: 8,
+    alignSelf: 'center',
+    zIndex: 50,
+    flexDirection: 'row',
+    gap: 12,
+  },
+  floatingNavItem: {
+    alignItems: 'center',
+  },
+  floatingNavLabel: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 6,
+  },
+  floatingNavSubLabel: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 2,
+  },
   floatingNextButton: {
     width: 56,
     height: 56,
@@ -2341,6 +2403,67 @@ const createStyles = (colors: any) => StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 16,
     elevation: 10,
+  },
+  floatingPillButton: {
+    minWidth: 120,
+    height: 44,
+    paddingHorizontal: 16,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderWidth: 1.25,
+    borderColor: 'rgba(255,255,255,0.38)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    overflow: 'hidden',
+  },
+  floatingPillText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  floatingGlassBlur: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  floatingGlassTint: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255,255,255,0.06)'
+  },
+  floatingGlassSheen: {
+    position: 'absolute',
+    top: -18,
+    left: -10,
+    width: '70%',
+    height: 46,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    opacity: 0.5,
+    transform: [{ rotate: '-18deg' }],
+  },
+  floatingGlassInnerBorder: {
+    position: 'absolute',
+    top: 1,
+    left: 1,
+    right: 1,
+    bottom: 1,
+    borderRadius: 21,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)'
   },
   floatingNextBlur: {
     position: 'absolute',

@@ -2,6 +2,7 @@ import * as React from 'react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Platform, Modal, ActivityIndicator, TextInput, FlatList, Alert, Linking, RefreshControl, Animated, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Video, ResizeMode } from 'expo-av';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import Colors from '@/constants/colors';
@@ -98,6 +99,7 @@ export default function HomeScreen() {
   const [savingClient, setSavingClient] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [heroImageFailed, setHeroImageFailed] = useState(false);
+  const [heroVideoFailed, setHeroVideoFailed] = useState(false);
   const [blockedFilter, setBlockedFilter] = useState<'all' | 'blocked' | 'unblocked'>('all');
   const categories = [
     {
@@ -149,6 +151,7 @@ export default function HomeScreen() {
 
   // Business profile for hero image
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
+  const isVideoUrl = (url?: string | null) => /\.(mp4|mov|m4v|webm|3gp)(\?|$)/i.test(String(url || ''));
   useEffect(() => {
     const loadProfile = async () => {
       try {
@@ -637,19 +640,38 @@ export default function HomeScreen() {
       <StatusBar style="light" translucent backgroundColor="transparent" />
       {/* Hero with overlay header (like client home) */}
       <View style={styles.fullScreenHero}>
-        <Image
-          source={
-            heroImageFailed
-              ? require('@/assets/images/1homePage.jpg')
-              : (businessProfile?.image_on_page_1
-                  ? { uri: businessProfile.image_on_page_1 }
-                  : require('@/assets/images/1homePage.jpg'))
+        {(() => {
+          const media = businessProfile?.image_on_page_1;
+          const showVideo = isVideoUrl(media) && !heroVideoFailed;
+          if (showVideo) {
+            return (
+              <Video
+                source={{ uri: media as string }}
+                style={styles.fullScreenHeroImage}
+                resizeMode={ResizeMode.COVER}
+                shouldPlay
+                isLooping
+                isMuted
+                onError={() => setHeroVideoFailed(true)}
+              />
+            );
           }
-          style={styles.fullScreenHeroImage}
-          resizeMode="cover"
-          onError={() => setHeroImageFailed(true)}
-          defaultSource={require('@/assets/images/1homePage.jpg')}
-        />
+          return (
+            <Image
+              source={
+                heroImageFailed
+                  ? require('@/assets/images/1homePage.jpg')
+                  : (media
+                      ? { uri: media as string }
+                      : require('@/assets/images/1homePage.jpg'))
+              }
+              style={styles.fullScreenHeroImage}
+              resizeMode="cover"
+              onError={() => setHeroImageFailed(true)}
+              defaultSource={require('@/assets/images/1homePage.jpg')}
+            />
+          );
+        })()}
         <LinearGradient
           colors={['rgba(0,0,0,0.6)', 'rgba(0,0,0,0.6)', 'rgba(0,0,0,0.6)']}
           start={{ x: 0, y: 0 }}

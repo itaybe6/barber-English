@@ -11,7 +11,8 @@ const ITEM_SPACING = 16;
 const ITEM_SIZE = AVATAR_SIZE + ITEM_SPACING;
 const SCREEN = Dimensions.get('window');
 const AnimatedFlatList: any = Animated.createAnimatedComponent(FlatList as any);
-const HEADER_HEIGHT = 380; // taller for better presence
+const HEADER_HEIGHT = 360; // expanded a bit to avoid top/bottom clipping while keeping within window
+const CENTER_NUDGE = 8; // pixels to nudge right so the selected card appears visually centered
 const CARD_WIDTH_PERCENT = 0.68; // shrink main card a bit to create more space between images
 
 export type BarberSelectorProps = {
@@ -83,6 +84,8 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
               lastIndex.current = baseIdx;
               runOnJS(onIndexChange)(baseIdx);
             }
+            // Smoothly center the tapped item (this physical index), eliminating micro-misalignment
+            try { (listRef.current as any)?.scrollToIndex?.({ index, animated: true, viewPosition: 0.5 }); } catch {}
           } catch {}
         }}
         style={{ width: HERO_ITEM_LENGTH, alignItems: 'center', paddingHorizontal: 4 }}
@@ -165,12 +168,13 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
   const cardHorizontalMargin = (SCREEN.width - cardWidth) / 2;
   const HERO_ITEM_GAP = 14;
   const HERO_ITEM_LENGTH = cardWidth + HERO_ITEM_GAP;
-  const sidePadding = Math.max(0, (SCREEN.width - HERO_ITEM_LENGTH) / 2);
+  const sidePadding = Math.max(0, (SCREEN.width - HERO_ITEM_LENGTH) / 2 - CENTER_NUDGE);
 
   // Initial scroll to the middle of the loop for seamless bi-directional scrolling
   const totalItems = baseCount * LOOP_COUNT;
   const middleBase = Math.floor(totalItems / 2) - (Math.floor(totalItems / 2) % baseCount);
   const initialIndex = middleBase + (Math.max(0, activeIndex) % baseCount);
+  // Use interval snapping with center alignment; we'll correct any sub-pixel drift on momentum end
 
   React.useEffect(() => {
     if (!didInit.current && barbers && barbers.length > 0) {
@@ -183,17 +187,19 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
     }
   }, [barbers?.length]);
 
-  // When external activeIndex changes, keep user near the middle to avoid reaching edges
+  // When external activeIndex changes (not from our own tap/scroll), center that item near middle band
   React.useEffect(() => {
     if (!barbers || barbers.length === 0) return;
+    // If this is the same item we already centered on, don't jump to another duplicate
+    if (activeIndex === lastIndex.current) return;
     try {
-      const visibleCenter = initialIndex; // keep around middle
-      (listRef.current as any)?.scrollToIndex?.({ index: visibleCenter - (visibleCenter % baseCount) + (activeIndex % baseCount), animated: true, viewPosition: 0.5 });
+      const targetIndex = middleBase + (Math.max(0, activeIndex) % baseCount);
+      (listRef.current as any)?.scrollToIndex?.({ index: targetIndex, animated: true, viewPosition: 0.5 });
     } catch {}
-  }, [activeIndex, baseCount]);
+  }, [activeIndex, baseCount, middleBase]);
 
   return (
-    <View style={{ position: 'relative', height: HEADER_HEIGHT + 220, marginTop: 20, marginBottom: 148 }}>
+    <View style={{ position: 'relative', height: HEADER_HEIGHT + 240, marginTop: 20, marginBottom: 160 }}>
       {/* Services/top overlay sits ABOVE the image, not on it */}
       {typeof renderTopOverlay === 'function' ? (
         <View style={{ marginTop: 32, marginHorizontal: 16 }}>
@@ -203,7 +209,7 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
 
       {/* Infinite, snap-to-center hero carousel */}
       {barbers.length > 0 && (
-        <View style={{ marginTop: 40, direction: 'ltr' as any }}>
+        <View style={{ marginTop: 56, direction: 'ltr' as any }}>
           <AnimatedFlatList
             ref={listRef as any}
             data={Array.from({ length: totalItems })}
@@ -215,7 +221,6 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
             bounces={false}
             snapToInterval={HERO_ITEM_LENGTH}
             snapToAlignment="center"
-            disableIntervalMomentum
             initialScrollIndex={initialIndex}
             getItemLayout={(_, index) => ({ length: HERO_ITEM_LENGTH, offset: sidePadding + HERO_ITEM_LENGTH * index, index })}
             contentContainerStyle={{ paddingLeft: sidePadding, paddingRight: sidePadding }}
@@ -227,27 +232,42 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
             }) as any}
             scrollEventThrottle={16}
             renderItem={({ index }) => <HeroItem index={index} />}
-            onScrollEndDrag={(e: any) => {
-              try {
-                const x = Math.max(0, Number(e?.nativeEvent?.contentOffset?.x || 0));
-                const idx = Math.round((x - sidePadding) / HERO_ITEM_LENGTH);
-                const exact = sidePadding + Math.max(0, Math.min(totalItems - 1, idx)) * HERO_ITEM_LENGTH;
-                if (Math.abs(x - exact) > 0.5) {
-                  (listRef.current as any)?.scrollToOffset?.({ offset: exact, animated: true });
-                }
-              } catch {}
-            }}
             onMomentumScrollEnd={(e: any) => {
               try {
                 const x = Math.max(0, Number(e?.nativeEvent?.contentOffset?.x || 0));
                 const idx = Math.round((x - sidePadding) / HERO_ITEM_LENGTH);
+                // Ensure pixel-perfect centering by aligning to the exact offset
+                const expected = sidePadding + idx * HERO_ITEM_LENGTH;
+                if (Math.abs(expected - x) > 0.5) {
+                  try { (listRef.current as any)?.scrollToOffset?.({ offset: expected, animated: true }); } catch {}
+                }
                 const baseIdx = baseCount > 0 ? ((idx % baseCount) + baseCount) % baseCount : 0;
                 if (baseIdx !== lastIndex.current) {
                   lastIndex.current = baseIdx;
                   onIndexChange(baseIdx);
                 }
 
-                // Programmatic settle to exact center
-                const exact = sidePadding + Math.max(0, Math.min(totalItems - 1, idx)) * HERO_ITEM_LENGTH;
-                if (Math.abs(x - exact) > 0.5) {
-                  (listRef.current as any)?.sc
+                // Re-center to the middle band to simulate endless loop without hitting ends
+                const guard = baseCount * 2;
+                if (idx < guard || idx > (totalItems - guard)) {
+                  const centerIndex = middleBase + baseIdx;
+                  try {
+                    (listRef.current as any)?.scrollToIndex?.({ index: centerIndex, animated: false, viewPosition: 0.5 });
+                  } catch {}
+                }
+              } catch {}
+            }}
+            removeClippedSubviews
+            windowSize={7}
+            maxToRenderPerBatch={7}
+            updateCellsBatchingPeriod={40}
+          />
+        </View>
+      )}
+      {/* keep extra spacing below */}
+      <View style={{ height: 18 }} />
+    </View>
+  );
+};
+
+export default BarberSelector;

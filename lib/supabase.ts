@@ -288,6 +288,8 @@ export interface CustomerCoupon {
   business_id: string;
   worker_id?: string | null;
   client_id?: string | null;
+  coupon_id?: string | null;
+  redeemed: boolean;
   created_at: string;
   updated_at: string;
 }

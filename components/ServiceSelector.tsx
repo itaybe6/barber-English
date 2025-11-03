@@ -7,7 +7,8 @@ import { useTranslation } from 'react-i18next';
 import { Service } from '@/lib/supabase';
 
 const SCREEN = Dimensions.get('window');
-const HEADER_HEIGHT = 380; // taller for better presence
+const HEADER_HEIGHT = 360; // expanded a bit to avoid top/bottom clipping while keeping within window
+const CENTER_NUDGE = 8; // pixels to nudge right so the selected card appears visually centered
 const CARD_WIDTH_PERCENT = 0.68;
 const AnimatedFlatList: any = Animated.createAnimatedComponent(FlatList as any);
 
@@ -54,12 +55,13 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
   const cardWidth = SCREEN.width * CARD_WIDTH_PERCENT;
   const ITEM_GAP = 14;
   const ITEM_LENGTH = cardWidth + ITEM_GAP;
-  const sidePadding = Math.max(0, (SCREEN.width - ITEM_LENGTH) / 2);
+  const sidePadding = Math.max(0, (SCREEN.width - ITEM_LENGTH) / 2 - CENTER_NUDGE);
   const baseCount = Math.max(1, services.length);
   const LOOP_COUNT = 200;
   const totalItems = baseCount * LOOP_COUNT;
   const middleBase = Math.floor(totalItems / 2) - (Math.floor(totalItems / 2) % baseCount);
   const initialIndex = middleBase + (Math.max(0, activeIndex) % baseCount);
+  // Use interval snapping with center alignment; correct drift on momentum end
 
   React.useEffect(() => {
     if (!didInit.current && services && services.length > 0) {
@@ -96,6 +98,8 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
             lastIndex.current = baseIdx;
             runOnJS(onIndexChange)(baseIdx);
           }
+          // Smoothly center the tapped item by scrolling to its exact physical index
+          try { (listRef.current as any)?.scrollToIndex?.({ index, animated: true, viewPosition: 0.5 }); } catch {}
         } catch {}
       }} style={{ width: ITEM_LENGTH, alignItems: 'center', paddingHorizontal: 4 }}>
         <Animated.View style={[{ width: cardWidth, height: HEADER_HEIGHT, borderRadius: 38, overflow: 'visible', backgroundColor: 'transparent', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.3, shadowRadius: 30, elevation: 15 }, cardStyle]}>
@@ -158,9 +162,9 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
   };
 
   return (
-    <View style={{ position: 'relative', height: HEADER_HEIGHT + 220, marginTop: -30, marginBottom: -50 }}>
+    <View style={{ position: 'relative', height: HEADER_HEIGHT + 240, marginTop: -10, marginBottom: -30 }}>
       {services.length > 0 && (
-        <View style={{ direction: 'ltr' as any, marginTop: 24 }}>
+        <View style={{ direction: 'ltr' as any, marginTop: 40 }}>
         <AnimatedFlatList
           ref={listRef as any}
           data={Array.from({ length: totalItems })}
@@ -173,7 +177,6 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
           overScrollMode="never"
           snapToInterval={ITEM_LENGTH}
           snapToAlignment="center"
-          disableIntervalMomentum
           initialScrollIndex={initialIndex}
           getItemLayout={(_, index) => ({ length: ITEM_LENGTH, offset: sidePadding + ITEM_LENGTH * index, index })}
           contentContainerStyle={{ paddingLeft: sidePadding, paddingRight: sidePadding, marginTop: 24 }}
@@ -184,6 +187,10 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
             try {
               const x = Math.max(0, Number(e?.nativeEvent?.contentOffset?.x || 0));
               const idx = Math.round((x - sidePadding) / ITEM_LENGTH);
+              const expected = sidePadding + idx * ITEM_LENGTH;
+              if (Math.abs(expected - x) > 0.5) {
+                try { (listRef.current as any)?.scrollToOffset?.({ offset: expected, animated: true }); } catch {}
+              }
               const baseIdx = baseCount > 0 ? ((idx % baseCount) + baseCount) % baseCount : 0;
               if (baseIdx !== lastIndex.current) {
                 lastIndex.current = baseIdx;

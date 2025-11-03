@@ -42,6 +42,7 @@ import { Ticket } from 'lucide-react-native';
 import { Users } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usersApi } from '@/lib/api/users';
 import AdminBroadcastComposer from '@/components/AdminBroadcastComposer';
@@ -888,6 +889,7 @@ export default function SettingsScreen() {
   const [couponNameDraft, setCouponNameDraft] = useState('');
   const [couponCountsDraft, setCouponCountsDraft] = useState('1');
   const [isSavingCoupon, setIsSavingCoupon] = useState(false);
+  const [showCountsDropdown, setShowCountsDropdown] = useState(false);
   
   
   
@@ -4398,48 +4400,56 @@ export default function SettingsScreen() {
         onRequestClose={() => setShowAddCouponModal(false)}
       >
         <View style={styles.smallModalOverlay}>
-          <View style={styles.smallModalCard}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowAddCouponModal(false)}>
-                <Text style={styles.modalCloseText}>{t('cancel','Cancel')}</Text>
-              </TouchableOpacity>
-              <Text style={styles.modalTitleLTR}>{t('settings.coupons.addTitle','Add coupon')}</Text>
-              <TouchableOpacity
-                style={[styles.modalSendButton, isSavingCoupon && styles.modalSendButtonDisabled]}
-                onPress={handleSaveCoupon}
-                disabled={isSavingCoupon}
-              >
-                <Text style={[styles.modalSendText, isSavingCoupon && styles.modalSendTextDisabled]}>
-                  {isSavingCoupon ? t('settings.common.saving','Saving...') : t('save','Save')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabelLTR}>{t('settings.coupons.name','Coupon name')}</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={couponNameDraft}
-                  onChangeText={setCouponNameDraft}
-                  placeholder={t('settings.coupons.namePlaceholder','e.g. 10th Free')}
-                  placeholderTextColor={Colors.subtext}
-                  textAlign="left"
-                />
+          <LinearGradient colors={[`${businessColors.primary}20`, `${businessColors.primary}10`]} style={styles.glassOuter}>
+            <BlurView intensity={22} tint="light" style={styles.glassCard}>
+              <View style={styles.modalHeader}>
+                <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowAddCouponModal(false)}>
+                  <Text style={styles.modalCloseText}>{t('cancel','Cancel')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.modalTitle}>{t('settings.coupons.addTitle','Add coupon')}</Text>
+                <TouchableOpacity
+                  style={[styles.modalSendButton, isSavingCoupon && styles.modalSendButtonDisabled]}
+                  onPress={handleSaveCoupon}
+                  disabled={isSavingCoupon}
+                >
+                  <Text style={[styles.modalSendText, isSavingCoupon && styles.modalSendTextDisabled]}>
+                    {isSavingCoupon ? t('settings.common.saving','Saving...') : t('save','Save')}
+                  </Text>
+                </TouchableOpacity>
               </View>
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabelLTR}>{t('settings.coupons.counts','Bookings count')}</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={couponCountsDraft}
-                  onChangeText={setCouponCountsDraft}
-                  placeholder={t('settings.coupons.countsPlaceholder','e.g. 10')}
-                  placeholderTextColor={Colors.subtext}
-                  keyboardType="number-pad"
-                  textAlign="left"
-                />
-              </View>
-            </ScrollView>
-          </View>
+              <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
+                <View style={[styles.couponRootLTR, styles.couponForm]}>
+                  <View style={styles.couponFieldGroup}>
+                    <Text style={styles.couponLabel}>{t('settings.coupons.name','Coupon name')}</Text>
+                    <TextInput
+                      style={[styles.couponInput]}
+                      value={couponNameDraft}
+                      onChangeText={setCouponNameDraft}
+                      placeholder={t('settings.coupons.namePlaceholder','e.g. 10th Free')}
+                      placeholderTextColor={Colors.subtext}
+                      textAlign="left"
+                    />
+                  </View>
+
+                  <View style={styles.couponFieldGroup}>
+                    <Text style={styles.couponLabel}>{t('settings.coupons.counts','Bookings count')}</Text>
+                    <View style={styles.chipRow}>
+                      {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                        <TouchableOpacity
+                          key={n}
+                          style={[styles.chip, couponCountsDraft === String(n) && styles.chipSelected]}
+                          onPress={() => setCouponCountsDraft(String(n))}
+                          activeOpacity={0.9}
+                        >
+                          <Text style={[styles.chipText, couponCountsDraft === String(n) && styles.chipTextSelected]}>{n}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+              </ScrollView>
+            </BlurView>
+          </LinearGradient>
         </View>
       </Modal>
 
@@ -5108,6 +5118,19 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     maxHeight: '90%',
   },
+  glassOuter: {
+    width: '100%',
+    maxWidth: 520,
+    borderRadius: 22,
+    overflow: 'hidden',
+  },
+  glassCard: {
+    width: '100%',
+    maxWidth: 520,
+    borderRadius: 22,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.55)'
+  },
   smallModalContent: {
     padding: 20,
     backgroundColor: '#F8F9FA',
@@ -5334,6 +5357,63 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     textAlign: 'left',
+  },
+  glassInput: {
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    borderColor: 'rgba(0,0,0,0.06)'
+  },
+  // Add Coupon modal – modern LTR form
+  couponForm: {
+    padding: 4,
+  },
+  couponRootLTR: {
+    direction: 'ltr',
+  },
+  couponFieldGroup: {
+    marginBottom: 18,
+  },
+  couponLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 8,
+    textAlign: 'left',
+  },
+  couponInput: {
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    color: Colors.text,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  chipSelected: {
+    backgroundColor: '#F0F8FF',
+    borderColor: Colors.primary,
+  },
+  chipText: {
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  chipTextSelected: {
+    color: Colors.primary,
   },
   textArea: {
     height: 120,

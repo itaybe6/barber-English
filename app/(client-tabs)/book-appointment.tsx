@@ -2152,19 +2152,28 @@ const DynamicBackground: React.FC<{ uri: string | null }> = ({ uri }) => {
   const [current, setCurrent] = React.useState<string | null>(null);
   const style = useAnimatedStyle(() => ({ opacity: fade.value }));
   useEffect(() => {
-    if (!uri) {
-      setCurrent(null);
-      return;
-    }
-    if (uri !== current) {
-      fade.value = withTiming(0, { duration: 200, easing: Easing.inOut(Easing.ease) }, (finished) => {
-        if (finished) {
-          runOnJS(setCurrent)(uri);
-          fade.value = 0;
-          fade.value = withTiming(1, { duration: 320, easing: Easing.inOut(Easing.ease) });
+    let cancelled = false;
+    const change = async () => {
+      try {
+        if (!uri) {
+          if (!cancelled) setCurrent(null);
+          return;
         }
-      });
-    }
+        if (uri === current) return;
+        // Prefetch to avoid visible pop
+        try { await Image.prefetch(uri); } catch {}
+        // Soften crossfade: fade only to 0.25 then back to 1
+        fade.value = withTiming(0.25, { duration: 160, easing: Easing.inOut(Easing.ease) }, (finished) => {
+          if (finished && !cancelled) {
+            runOnJS(setCurrent)(uri);
+            fade.value = 0.25;
+            fade.value = withTiming(1, { duration: 300, easing: Easing.inOut(Easing.ease) });
+          }
+        });
+      } catch {}
+    };
+    change();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uri]);
   return (

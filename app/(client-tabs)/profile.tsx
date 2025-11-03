@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Modal, TextInput, ActivityIndicator, Switch, Image, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Modal, TextInput, ActivityIndicator, Switch, Image, KeyboardAvoidingView, Platform, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -38,6 +38,15 @@ export default function ClientProfileScreen() {
   const [pushEnabled, setPushEnabled] = useState<boolean>(notificationsEnabled);
   const [isUpcomingOpen, setIsUpcomingOpen] = useState(false);
   const [upcomingAppointments, setUpcomingAppointments] = useState<AvailableTimeSlot[]>([]);
+  const [isCouponsOpen, setIsCouponsOpen] = useState(false);
+  const [isLoadingCoupons, setIsLoadingCoupons] = useState(false);
+  const [couponsProgress, setCouponsProgress] = useState<Array<{ id: string; name: string; workerId: string | null; workerName: string; total: number; done: number; granted: boolean }>>([]);
+  // Coupons sheet animation & drag
+  const couponsSheetAnim = React.useRef(new Animated.Value(0)).current; // 0 closed, 1 open
+  const couponsTranslateY = couponsSheetAnim.interpolate({ inputRange: [0, 1], outputRange: [600, 0] });
+  const couponsOverlayOpacity = couponsSheetAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
+  const couponsDragY = React.useRef(new Animated.Value(0)).current;
+  const couponsCombinedTranslateY = Animated.add(couponsTranslateY as any, couponsDragY as any);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const formatTimeHHMM = (t?: string | null): string => {
@@ -198,6 +207,103 @@ export default function ClientProfileScreen() {
       },
     },
     {
+      id: 'coupons',
+      icon: 'pricetag-outline',
+      title: t('profile.coupons.title', 'Coupons'),
+      subtitle: t('profile.coupons.subtitle', 'View your progress and rewards'),
+      onPress: async () => {
+        setIsCouponsOpen(true);
+        setIsLoadingCoupons(true);
+        couponsDragY.setValue(0);
+        couponsSheetAnim.setValue(0);
+        Animated.timing(couponsSheetAnim, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+        try {
+          const { getBusinessId } = await import('@/lib/supabase');
+          const businessId = getBusinessId();
+          // Load all coupons for this business
+          const { data: coupons, error: couponsErr } = await supabase
+            .from('coupons')
+            .select('*')
+            .eq('business_id', businessId);
+          if (couponsErr) throw couponsErr;
+
+          // Load all past appointments (including earlier today) for this client, not available
+          const today = new Date();
+          const todayStr = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString().split('T')[0];
+          const hh = String(today.getHours()).padStart(2, '0');
+          const mm = String(today.getMinutes()).padStart(2, '0');
+          const nowHHMM = `${hh}:${mm}`;
+
+          let apptQuery = supabase
+            .from('appointments')
+            .select('*')
+            .eq('business_id', businessId)
+            .eq('is_available', false)
+            .lte('slot_date', todayStr);
+          if (user?.phone?.trim()) {
+            apptQuery = apptQuery.eq('client_phone', user.phone.trim());
+          } else if (user?.name?.trim()) {
+            apptQuery = apptQuery.eq('client_name', user.name.trim());
+          }
+          const { data: pastRaw, error: pastErr } = await apptQuery;
+          if (pastErr) throw pastErr;
+          const eligiblePast = (pastRaw || []).filter((a: any) => (
+            String(a.slot_date) < todayStr || (String(a.slot_date) === todayStr && String(a.slot_time).slice(0,5) < nowHHMM)
+          ));
+
+          // Count per worker
+          const perWorkerCount = new Map<string, number>();
+          for (const a of eligiblePast) {
+            const w = String((a.user_id || a.barber_id || ''));
+            if (!w) continue;
+            // Respect status if exists
+            const statusOk = !a.status || ['confirmed','completed'].includes(String(a.status));
+            if (!statusOk) continue;
+            perWorkerCount.set(w, (perWorkerCount.get(w) || 0) + 1);
+          }
+
+          // Map worker ids to names
+          const workerIds = Array.from(new Set((coupons || []).map((c: any) => String(c.worker_id || '')).filter(Boolean)));
+          let workerMap = new Map<string, string>();
+          if (workerIds.length) {
+            const { data: workers } = await supabase
+              .from('users')
+              .select('id,name')
+              .eq('business_id', businessId)
+              .in('id', workerIds);
+            (workers || []).forEach((w: any) => workerMap.set(String(w.id), String(w.name || '')));
+          }
+
+          // Which coupons already granted to this client
+          let grantedSet = new Set<string>();
+          if (user?.id) {
+            const { data: granted } = await supabase
+              .from('customer_coupons')
+              .select('coupon_id')
+              .eq('business_id', businessId)
+              .eq('client_id', user.id);
+            (granted || []).forEach((g: any) => { if (g.coupon_id) grantedSet.add(String(g.coupon_id)); });
+          }
+
+          const items: Array<{ id: string; name: string; workerId: string | null; workerName: string; total: number; done: number; granted: boolean }> = (coupons || []).map((c: any) => {
+            const wid = c.worker_id ? String(c.worker_id) : '';
+            const done = wid ? (perWorkerCount.get(wid) || 0) : 0;
+            const total = Number(c.counts_booking || 0) || 0;
+            const workerName = wid ? (workerMap.get(wid) || t('profile.coupons.unknownBarber','Barber')) : t('profile.coupons.anyBarber','Any barber');
+            const granted = grantedSet.has(String(c.id));
+            return { id: String(c.id), name: String(c.name || t('profile.coupons.coupon','Coupon')), workerId: wid || null, workerName, total, done, granted };
+          });
+
+          setCouponsProgress(items);
+        } catch (e) {
+          console.error('load coupons progress failed', e);
+          setCouponsProgress([]);
+        } finally {
+          setIsLoadingCoupons(false);
+        }
+      },
+    },
+    {
       id: 'notifications',
       icon: 'notifications-outline',
       title: t('notifications.title', 'Notifications'),
@@ -341,6 +447,61 @@ export default function ClientProfileScreen() {
 
     loadAppointments();
   }, [user?.name, user?.phone]);
+
+  const renderProgressDots = (total: number, done: number, granted: boolean) => {
+    const cappedTotal = Math.max(1, Math.min(12, total || 1));
+    const clampedDone = Math.max(0, Math.min(cappedTotal, done || 0));
+    const dots = [] as React.ReactNode[];
+    for (let i = 0; i < cappedTotal; i++) {
+      const filled = i < clampedDone;
+      dots.push(
+        <View key={i} style={[styles.couponDot, filled ? { backgroundColor: businessColors.primary, borderColor: businessColors.primary } : { borderColor: `${businessColors.primary}55` }]} />
+      );
+    }
+    return (
+      <View style={styles.couponDotsRow}>
+        {dots}
+        {granted && (
+          <View style={styles.couponGrantedPill}>
+            <Ionicons name="checkmark" size={14} color="#fff" />
+            <Text style={styles.couponGrantedText}>{t('profile.coupons.granted','Completed')}</Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const animateCloseCoupons = (after?: () => void) => {
+    Animated.timing(couponsSheetAnim, { toValue: 0, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
+      couponsDragY.setValue(0);
+      if (finished) {
+        setIsCouponsOpen(false);
+        after && after();
+      }
+    });
+  };
+
+  const couponsPanResponder = React.useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_: GestureResponderEvent, g: PanResponderGestureState) => g.dy > 4 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderMove: (_: GestureResponderEvent, g: PanResponderGestureState) => {
+        const delta = Math.max(0, g.dy);
+        couponsDragY.setValue(delta);
+      },
+      onPanResponderRelease: (_: GestureResponderEvent, g: PanResponderGestureState) => {
+        const shouldClose = g.dy > 100 || g.vy > 0.7;
+        if (shouldClose) {
+          animateCloseCoupons();
+        } else {
+          Animated.timing(couponsDragY, { toValue: 0, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.timing(couponsDragY, { toValue: 0, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+      },
+    })
+  ).current;
 
   return (
     <View style={styles.container}>
@@ -596,7 +757,7 @@ export default function ClientProfileScreen() {
       <Modal visible={isLanguageOpen} transparent animationType="slide" onRequestClose={() => setIsLanguageOpen(false)}>
         <View style={styles.historyOverlay}>
           <View style={styles.historySheet}>
-            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHandle} {...couponsPanResponder.panHandlers} />
             <View style={styles.sheetHeader}>
               <View style={{ width: 44 }} />
               <Text style={styles.sheetTitle}>{t('profile.language.title','Language')}</Text>
@@ -776,6 +937,72 @@ export default function ClientProfileScreen() {
               <View style={{ height: 24 }} />
             </ScrollView>
           </View>
+        </View>
+      </Modal>
+
+      {/* Coupons Bottom Sheet */}
+      <Modal visible={isCouponsOpen} transparent animationType="none" onRequestClose={() => animateCloseCoupons()}>
+        <View style={styles.historyOverlay}>
+          <TouchableWithoutFeedback onPress={() => animateCloseCoupons()}>
+            <Animated.View style={[styles.couponsOverlay, { opacity: couponsOverlayOpacity }]} />
+          </TouchableWithoutFeedback>
+          <Animated.View style={[styles.historySheet, { transform: [{ translateY: couponsCombinedTranslateY }] }] }>
+            <View style={styles.sheetHandle} {...couponsPanResponder.panHandlers} />
+            <View style={styles.sheetHeader} {...couponsPanResponder.panHandlers}>
+              <View style={{ width: 44 }} />
+              <Text style={styles.sheetTitle}>{t('profile.coupons.title','Coupons')}</Text>
+              <TouchableOpacity onPress={() => animateCloseCoupons()} style={styles.sheetCloseBtn}>
+                <Ionicons name="close" size={22} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={styles.couponsList} showsVerticalScrollIndicator={true}>
+              {isLoadingCoupons ? (
+                <View style={styles.historyLoadingState}>
+                  <ActivityIndicator color={businessColors.primary} />
+                  <Text style={styles.historyLoadingText}>{t('profile.coupons.loading','Loading coupons...')}</Text>
+                </View>
+              ) : couponsProgress.length === 0 ? (
+                <View style={styles.historyEmpty}>
+                  <Ionicons name="pricetag-outline" size={56} color={businessColors.primary} />
+                  <Text style={styles.historyEmptyTitle}>{t('profile.coupons.emptyTitle','No coupons yet')}</Text>
+                  <Text style={styles.historyEmptySubtitle}>{t('profile.coupons.emptySubtitle','Your progress will appear here')}</Text>
+                </View>
+              ) : (
+                couponsProgress.map((c) => {
+                  const pct = c.total > 0 ? Math.min(100, Math.round((Math.min(c.done, c.total) / c.total) * 100)) : 0;
+                  return (
+                    <View key={c.id} style={styles.couponCard}>
+                      <LinearGradient
+                        colors={[`${businessColors.primary}10`, `${businessColors.primary}05`]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.couponHeader}
+                      >
+                        <View style={[styles.couponIconWrap, { backgroundColor: `${businessColors.primary}15` }]}>
+                          <Ionicons name="pricetag-outline" size={18} color={businessColors.primary} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.couponTitle}>{c.name}</Text>
+                          <Text style={styles.couponSubtitle}>{t('profile.coupons.byBarber','By')} {c.workerName}</Text>
+                        </View>
+                        <View style={styles.couponCounterPill}>
+                          <Text style={[styles.couponCounterText, { color: businessColors.primary }]}>{Math.min(c.done, c.total)} / {c.total}</Text>
+                        </View>
+                      </LinearGradient>
+
+                      {/* Fancy progress bar */}
+                      <View style={styles.couponProgressBarBg}>
+                        <View style={[styles.couponProgressBarFill, { width: `${pct}%`, backgroundColor: businessColors.primary }]} />
+                      </View>
+
+                      {renderProgressDots(c.total, c.done, c.granted)}
+                    </View>
+                  );
+                })
+              )}
+              <View style={{ height: 24 }} />
+            </ScrollView>
+          </Animated.View>
         </View>
       </Modal>
 
@@ -1105,6 +1332,10 @@ const styles = StyleSheet.create<any>({
     backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
   },
+  couponsOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
   historySheet: {
     backgroundColor: Colors.white,
     borderTopLeftRadius: 24,
@@ -1144,6 +1375,11 @@ const styles = StyleSheet.create<any>({
     paddingTop: 12,
     paddingBottom: 16,
   },
+  couponsList: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
+  },
   historyLoadingState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1178,6 +1414,92 @@ const styles = StyleSheet.create<any>({
     shadowOpacity: 0.08,
     shadowRadius: 12,
     elevation: 4,
+  },
+  couponCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  couponHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 10,
+  },
+  couponIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  couponTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'left',
+  },
+  couponSubtitle: {
+    fontSize: 12,
+    color: Colors.subtext,
+    textAlign: 'left',
+  },
+  couponCounterPill: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: '#F5F6F7',
+  },
+  couponCounterText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  couponProgressBarBg: {
+    width: '100%',
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: '#EEF0F3',
+    overflow: 'hidden',
+  },
+  couponProgressBarFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  couponDotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+  },
+  couponDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    backgroundColor: 'transparent',
+  },
+  couponGrantedPill: {
+    marginLeft: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: '#34C759',
+  },
+  couponGrantedText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   historyCardHeader: {
     flexDirection: 'row',

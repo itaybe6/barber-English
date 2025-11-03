@@ -1390,6 +1390,13 @@ export default function BookAppointment() {
   const heroDynamicHeight = HERO_TOP_HEIGHT;
   return (
     <SafeAreaView style={styles.container} edges={(currentStep === 1 || currentStep === 2 || currentStep === 3 || currentStep === 4) ? [] : ['top']}>
+      {/* Dynamic background based on selected barber/service */}
+      {(() => {
+        try {
+          const uri = (selectedService as any)?.image_url || (selectedService as any)?.cover_url || (selectedService as any)?.image || (selectedBarber as any)?.image_url || null;
+          return <DynamicBackground uri={uri} />;
+        } catch { return null; }
+      })()}
       {/* Top grey hero background */}
       <View style={[styles.topHeroWrapper, { height: heroDynamicHeight }]} pointerEvents="none" />
       {(currentStep === 1 || currentStep === 2 || currentStep === 3 || currentStep === 4) && (
@@ -2139,6 +2146,38 @@ export default function BookAppointment() {
   );
 }
 
+// Background that cross-fades to the provided image URI and lightly blurs/tints it
+const DynamicBackground: React.FC<{ uri: string | null }> = ({ uri }) => {
+  const fade = useSharedValue(1);
+  const [current, setCurrent] = React.useState<string | null>(null);
+  const style = useAnimatedStyle(() => ({ opacity: fade.value }));
+  useEffect(() => {
+    if (!uri) {
+      setCurrent(null);
+      return;
+    }
+    if (uri !== current) {
+      fade.value = withTiming(0, { duration: 200, easing: Easing.inOut(Easing.ease) }, (finished) => {
+        if (finished) {
+          runOnJS(setCurrent)(uri);
+          fade.value = 0;
+          fade.value = withTiming(1, { duration: 320, easing: Easing.inOut(Easing.ease) });
+        }
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uri]);
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFillObject as any}>
+      {!!current && (
+        <Animated.Image source={{ uri: current }} style={[StyleSheet.absoluteFillObject as any, style]} resizeMode="cover" />
+      )}
+      <BlurView intensity={26} tint="light" style={StyleSheet.absoluteFillObject as any} />
+      <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: 'rgba(255,255,255,0.6)' }]} />
+    </View>
+  );
+};
+
 const createStyles = (colors: any) => StyleSheet.create({
   // Carousel & background styles
   carouselContainer: {
@@ -2783,7 +2822,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
   },
   topSafeArea: {
     backgroundColor: '#FFFFFF',

@@ -1,0 +1,28 @@
+-- Create customer_coupons table
+-- Run this in your Supabase SQL editor
+
+CREATE TABLE IF NOT EXISTS public.customer_coupons (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  business_id UUID,
+  worker_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  client_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_customer_coupons_business_id ON public.customer_coupons(business_id);
+CREATE INDEX IF NOT EXISTS idx_customer_coupons_worker_id ON public.customer_coupons(worker_id);
+CREATE INDEX IF NOT EXISTS idx_customer_coupons_client_id ON public.customer_coupons(client_id);
+
+-- Trigger for updated_at
+DROP TRIGGER IF EXISTS update_customer_coupons_updated_at ON public.customer_coupons;
+CREATE TRIGGER update_customer_coupons_updated_at
+  BEFORE UPDATE ON public.customer_coupons
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_updated_at_column();
+
+-- Disable RLS to match application tables
+ALTER TABLE public.customer_coupons DISABLE ROW LEVEL SECURITY;
+
+

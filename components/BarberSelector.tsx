@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Image, Dimensions, FlatList, I18nManager } from 'react-native';
+import { View, Text, TouchableOpacity, Image, Dimensions, FlatList, I18nManager, Linking } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Animated, { useSharedValue, useAnimatedScrollHandler, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, Easing, FadeIn, FadeOut } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,7 +11,7 @@ const ITEM_SPACING = 16;
 const ITEM_SIZE = AVATAR_SIZE + ITEM_SPACING;
 const SCREEN = Dimensions.get('window');
 const AnimatedFlatList: any = Animated.createAnimatedComponent(FlatList as any);
-const HEADER_HEIGHT = 320; // compact card height
+const HEADER_HEIGHT = 380; // taller for better presence
 const CARD_WIDTH_PERCENT = 0.68; // shrink main card a bit to create more space between images
 
 export type BarberSelectorProps = {
@@ -43,51 +43,9 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
     return isRTL ? { paddingLeft: right, paddingRight: left } : { paddingLeft: left, paddingRight: right };
   }, [isRTL, centerPad]);
 
-  // Background cross-fade between current and next barber image
-  const [bgCurrent, setBgCurrent] = React.useState<string | null>(barbers[activeIndex]?.image_url || null);
-  const bgOpacity = useSharedValue(1);
-
-  React.useEffect(() => {
-    const nextUrl = barbers[activeIndex]?.image_url || null;
-    if (nextUrl && nextUrl !== bgCurrent) {
-      // Fade out current, swap instantly when invisible, fade in new
-      bgOpacity.value = withTiming(0, { duration: 200, easing: Easing.inOut(Easing.ease) }, (finished) => {
-        if (finished) {
-          runOnJS(setBgCurrent)(nextUrl);
-          bgOpacity.value = 0;
-          bgOpacity.value = withTiming(1, { duration: 300, easing: Easing.inOut(Easing.ease) });
-        }
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeIndex, barbers.length]);
-
-  React.useEffect(() => {
-    // Skip first render to avoid overriding our forced first index = 0
-    if (!didMount.current) {
-      didMount.current = true;
-      return;
-    }
-    try {
-      if (listRef.current && Number.isFinite(activeIndex)) {
-        (listRef.current as any).scrollToIndex?.({ index: Math.max(0, activeIndex), animated: true, viewPosition: 0.5 });
-      }
-    } catch {}
-  }, [activeIndex]);
-
-  // Force default to visually leftmost item on initial mount (last index in RTL, first in LTR)
-  React.useEffect(() => {
-    if (!didInit.current && barbers && barbers.length > 0) {
-      didInit.current = true;
-      try { listRef.current?.scrollToIndex?.({ index: defaultIndex, animated: false, viewPosition: 0.5 }); } catch {}
-      lastIndex.current = defaultIndex;
-      try { onIndexChange(defaultIndex); } catch {}
-      // Guard against late prop updates selecting a different index
-      setTimeout(() => {
-        try { listRef.current?.scrollToIndex?.({ index: defaultIndex, animated: false, viewPosition: 0.5 }); } catch {}
-      }, 50);
-    }
-  }, [barbers?.length, defaultIndex]);
+  // Infinite hero carousel configuration
+  const LOOP_COUNT = 200;
+  const baseCount = Math.max(1, barbers.length);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (e) => {
@@ -96,192 +54,200 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
     },
   });
 
-  const bgStyle = useAnimatedStyle(() => ({ opacity: bgOpacity.value }));
+  // Hero card item renderer (wheel-like)
+  const HeroItem: React.FC<{ index: number }> = ({ index }) => {
+    const baseIndexReal = baseCount > 0 ? (index % baseCount + baseCount) % baseCount : 0;
+    const barber = barbers[baseIndexReal];
+    const telUrl = React.useMemo(() => {
+      try {
+        const raw = (barber as any)?.phone || (barber as any)?.phone_number || '';
+        const cleaned = String(raw || '').replace(/\s+/g, '');
+        return cleaned ? `tel:${cleaned}` : '';
+      } catch { return ''; }
+    }, [barber?.id, (barber as any)?.phone, (barber as any)?.phone_number]);
 
-  const CarouselItem: React.FC<{ item: User; index: number }> = ({ item, index }) => {
     const cardStyle = (useAnimatedStyle(() => {
-      const pos = scrollX.value / ITEM_SIZE;
-      const scale = interpolate(pos, [index - 1, index, index + 1], [0.94, 1.08, 0.94], Extrapolate.CLAMP);
-      const opacity = interpolate(pos, [index - 1, index, index + 1], [0.6, 1, 0.6], Extrapolate.CLAMP);
+      const pos = (scrollX.value - sidePadding) / HERO_ITEM_LENGTH;
+      const scale = interpolate(pos, [index - 1, index, index + 1], [0.95, 1.05, 0.95], Extrapolate.CLAMP);
+      const opacity = interpolate(pos, [index - 1, index, index + 1], [0.9, 1, 0.9], Extrapolate.CLAMP);
       return { transform: [{ scale: scale as any }] as any, opacity } as any;
     }) as any);
 
     return (
       <TouchableOpacity
-        activeOpacity={0.85}
+        activeOpacity={0.9}
         onPress={() => {
           try {
-            (listRef.current as any)?.scrollToIndex?.({ index, animated: true, viewPosition: 0.5 });
+            const baseIdx = baseCount > 0 ? ((index % baseCount) + baseCount) % baseCount : 0;
+            if (baseIdx !== lastIndex.current) {
+              lastIndex.current = baseIdx;
+              runOnJS(onIndexChange)(baseIdx);
+            }
           } catch {}
-          onIndexChange(index);
         }}
+        style={{ width: HERO_ITEM_LENGTH, alignItems: 'center', paddingHorizontal: 4 }}
       >
-        <Animated.View style={[styles.carouselItem, { width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2 }, cardStyle]}>
-          {item.image_url ? (
-            <Image source={{ uri: item.image_url }} style={{ width: '100%', height: '100%', borderRadius: AVATAR_SIZE / 2 }} />
-          ) : (
-            <View style={[styles.carouselItemPlaceholder, { width: '100%', height: '100%', borderRadius: AVATAR_SIZE / 2 }]}>
-              <Ionicons name="person" size={28} color="#8E8E93" />
-            </View>
-          )}
-          {null}
+        <Animated.View style={[{ width: cardWidth, height: HEADER_HEIGHT, borderRadius: 38, overflow: 'visible', backgroundColor: 'transparent', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.3, shadowRadius: 30, elevation: 15 }, cardStyle]}>
+          {/* Outer glow ring */}
+          <View style={{ position: 'absolute', top: -3, left: -3, right: -3, bottom: -3, borderRadius: 41, borderWidth: 3, borderColor: 'rgba(255,255,255,0.15)' }} />
+          
+          {/* Main card container */}
+          <View style={{ width: '100%', height: '100%', borderRadius: 38, overflow: 'hidden' }}>
+            {/* Liquid glass effect layers */}
+            <BlurView intensity={22} tint="light" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.12)' }} />
+            
+            {/* Multiple glass shine overlays */}
+            <View style={{ position: 'absolute', top: -25, left: -15, width: '75%', height: 110, borderRadius: 70, backgroundColor: 'rgba(255,255,255,0.28)', opacity: 0.65, transform: [{ rotate: '-18deg' }] }} />
+            <View style={{ position: 'absolute', bottom: -20, right: -10, width: '60%', height: 80, borderRadius: 50, backgroundColor: 'rgba(255,255,255,0.18)', opacity: 0.5, transform: [{ rotate: '12deg' }] }} />
+            
+            {/* Triple border for depth */}
+            <View style={{ position: 'absolute', top: 3, left: 3, right: 3, bottom: 3, borderRadius: 35, borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)' }} />
+            <View style={{ position: 'absolute', top: 6, left: 6, right: 6, bottom: 6, borderRadius: 32, borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' }} />
+            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 38, borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.2)' }} />
+          
+            {barber?.image_url ? (
+              <Image source={{ uri: barber.image_url as any }} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} resizeMode="cover" />
+            ) : (
+              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#E5E5EA' }} />
+            )}
+            <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.3)' }} />
+          {/* Bottom glass name pill */}
+          <View style={{ position: 'absolute', left: 14, right: 14, bottom: 14, alignItems: 'center' }}>
+            <BlurView intensity={32} tint="light" style={{
+              paddingVertical: 12,
+              paddingHorizontal: 14,
+              borderRadius: 24,
+              overflow: 'hidden',
+              borderWidth: 1.5,
+              borderColor: 'rgba(255,255,255,0.45)',
+              backgroundColor: 'rgba(255,255,255,0.2)',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.15,
+              shadowRadius: 12,
+              elevation: 5
+            }}>
+              <View style={{ position: 'absolute', top: -8, left: -6, width: '60%', height: 32, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.3)', opacity: 0.5, transform: [{ rotate: '-12deg' }] }} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <Text numberOfLines={1} style={{
+                  color: '#FFFFFF',
+                  fontWeight: '900',
+                  fontSize: 17,
+                  textShadowColor: 'rgba(0,0,0,0.4)',
+                  textShadowOffset: { width: 0, height: 2 },
+                  textShadowRadius: 4,
+                  flexShrink: 1,
+                }}>
+                  {barber?.name || ''}
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    delayPressIn={0}
+                    onPressIn={() => { if (telUrl) Linking.openURL(telUrl).catch(() => {}); }}
+                    style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#2E7CF6', alignItems: 'center', justifyContent: 'center', shadowColor: '#2E7CF6', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 4 }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="call-outline" size={18} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </BlurView>
+          </View>
+          </View>
         </Animated.View>
       </TouchableOpacity>
     );
   };
 
-  const goPrev = React.useCallback(() => {
-    try {
-      if (!barbers || barbers.length === 0) return;
-      const length = barbers.length;
-      const next = ((activeIndex || 0) - 1 + length) % length;
-      if (next !== activeIndex) onIndexChange(next);
-    } catch {}
-  }, [activeIndex, barbers.length]);
-
-  const goNext = React.useCallback(() => {
-    try {
-      if (!barbers || barbers.length === 0) return;
-      const length = barbers.length;
-      const next = ((activeIndex || 0) + 1) % length;
-      if (next !== activeIndex) onIndexChange(next);
-    } catch {}
-  }, [activeIndex, barbers.length]);
-
-  const prevIdx = barbers.length > 0 ? (((activeIndex || 0) - 1 + barbers.length) % barbers.length) : 0;
-  const nextIdx = barbers.length > 0 ? (((activeIndex || 0) + 1) % barbers.length) : 0;
   const cardWidth = SCREEN.width * CARD_WIDTH_PERCENT;
   const cardHorizontalMargin = (SCREEN.width - cardWidth) / 2;
-  const sidePeekShift = Math.min(36, cardHorizontalMargin + 12);
-  const canGoPrev = barbers.length > 1;
-  const canGoNext = barbers.length > 1;
+  const HERO_ITEM_GAP = 14;
+  const HERO_ITEM_LENGTH = cardWidth + HERO_ITEM_GAP;
+  const sidePadding = Math.max(0, (SCREEN.width - HERO_ITEM_LENGTH) / 2);
+
+  // Initial scroll to the middle of the loop for seamless bi-directional scrolling
+  const totalItems = baseCount * LOOP_COUNT;
+  const middleBase = Math.floor(totalItems / 2) - (Math.floor(totalItems / 2) % baseCount);
+  const initialIndex = middleBase + (Math.max(0, activeIndex) % baseCount);
+
+  React.useEffect(() => {
+    if (!didInit.current && barbers && barbers.length > 0) {
+      didInit.current = true;
+      try {
+        (listRef.current as any)?.scrollToIndex?.({ index: initialIndex, animated: false, viewPosition: 0.5 });
+      } catch {}
+      lastIndex.current = 0;
+      try { onIndexChange(0); } catch {}
+    }
+  }, [barbers?.length]);
+
+  // When external activeIndex changes, keep user near the middle to avoid reaching edges
+  React.useEffect(() => {
+    if (!barbers || barbers.length === 0) return;
+    try {
+      const visibleCenter = initialIndex; // keep around middle
+      (listRef.current as any)?.scrollToIndex?.({ index: visibleCenter - (visibleCenter % baseCount) + (activeIndex % baseCount), animated: true, viewPosition: 0.5 });
+    } catch {}
+  }, [activeIndex, baseCount]);
 
   return (
-    <View style={{ position: 'relative', height: HEADER_HEIGHT + 220, marginTop: 72, marginBottom: 148 }}>
+    <View style={{ position: 'relative', height: HEADER_HEIGHT + 220, marginTop: 20, marginBottom: 148 }}>
       {/* Services/top overlay sits ABOVE the image, not on it */}
       {typeof renderTopOverlay === 'function' ? (
-        <View style={{ marginTop: 44, marginHorizontal: 16 }}>
+        <View style={{ marginTop: 32, marginHorizontal: 16 }}>
           {renderTopOverlay()}
         </View>
       ) : null}
 
-      {/* Side preview cards (peeking) with elegant tilt */}
-      {barbers.length > 1 && prevIdx !== activeIndex && (
-        <View style={{ position: 'absolute', left: -sidePeekShift - 8, top: 128, width: cardWidth * 0.74, height: HEADER_HEIGHT - 40, borderRadius: 20, overflow: 'hidden', transform: [{ rotateZ: '-2deg' }, { scale: 0.92 }], opacity: 0.65 }}>
-          {barbers[prevIdx]?.image_url ? (
-            <Image source={{ uri: barbers[prevIdx].image_url as any }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-          ) : (
-            <View style={{ width: '100%', height: '100%', backgroundColor: '#E5E5EA' }} />
-          )}
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.25)' }} />
-        </View>
-      )}
-      {barbers.length > 1 && nextIdx !== activeIndex && (
-        <View style={{ position: 'absolute', right: -sidePeekShift - 8, top: 128, width: cardWidth * 0.74, height: HEADER_HEIGHT - 40, borderRadius: 20, overflow: 'hidden', transform: [{ rotateZ: '2deg' }, { scale: 0.92 }], opacity: 0.65 }}>
-          {barbers[nextIdx]?.image_url ? (
-            <Image source={{ uri: barbers[nextIdx].image_url as any }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-          ) : (
-            <View style={{ width: '100%', height: '100%', backgroundColor: '#E5E5EA' }} />
-          )}
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.25)' }} />
-        </View>
-      )}
-
-      <View style={{ height: HEADER_HEIGHT, marginTop: 56, marginHorizontal: cardHorizontalMargin, width: cardWidth, borderRadius: 20, overflow: 'hidden', backgroundColor: '#F2F2F7', zIndex: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 16, elevation: 10 }}>
-        {!!bgCurrent && (
-          <Animated.Image source={{ uri: bgCurrent }} style={[{ width: '100%', height: '100%' }, bgStyle]} resizeMode="cover" fadeDuration={0 as any} />
-        )}
-        <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.25)' }} />
-        {/* Bottom glass name pill with action icon (call) */}
-        <View style={{ position: 'absolute', left: 12, right: 12, bottom: 12, alignItems: 'center' }}>
-          <BlurView intensity={28} tint="light" style={{
-            paddingVertical: 10,
-            paddingHorizontal: 14,
-            borderRadius: 20,
-            overflow: 'hidden',
-            borderWidth: 1,
-            borderColor: 'rgba(255,255,255,0.35)',
-            backgroundColor: 'rgba(255,255,255,0.16)'
-          }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <Text numberOfLines={1} style={{
-                color: '#FFFFFF',
-                fontWeight: '800',
-                fontSize: 16,
-                textShadowColor: 'rgba(255,255,255,0.6)',
-                textShadowOffset: { width: 0, height: 1 },
-                textShadowRadius: 2,
-                flexShrink: 1,
-              }}>
-                {barbers[activeIndex]?.name || ''}
-              </Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#2E7CF6', alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="call-outline" size={18} color="#FFFFFF" />
-                </View>
-              </View>
-            </View>
-          </BlurView>
-        </View>
-
-        {/* Glassmorphic arrow buttons with beautiful styling */}
-        <View style={{ position: 'absolute', top: '50%', left: 12, transform: [{ translateY: -28 }], zIndex: 10, opacity: canGoPrev ? 1 : 0.4 }}>
-          <TouchableOpacity
-            onPress={() => { if (canGoPrev) goPrev(); }}
-            activeOpacity={0.75}
-            style={{ 
-              width: 56, 
-              height: 56, 
-              borderRadius: 28, 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              overflow: 'hidden', 
-              borderWidth: 1.5, 
-              borderColor: 'rgba(255,255,255,0.5)', 
-              shadowColor: '#000', 
-              shadowOffset: { width: 0, height: 6 }, 
-              shadowOpacity: 0.2, 
-              shadowRadius: 16, 
-              elevation: 8,
-              backgroundColor: 'transparent'
+      {/* Infinite, snap-to-center hero carousel */}
+      {barbers.length > 0 && (
+        <View style={{ marginTop: 40, direction: 'ltr' as any }}>
+          <AnimatedFlatList
+            ref={listRef as any}
+            data={Array.from({ length: totalItems })}
+            keyExtractor={(_, idx: number) => `b-${idx}`}
+            horizontal
+            inverted={false}
+            showsHorizontalScrollIndicator={false}
+            decelerationRate="fast"
+            bounces={false}
+            snapToInterval={HERO_ITEM_LENGTH}
+            snapToAlignment="center"
+            disableIntervalMomentum
+            initialScrollIndex={initialIndex}
+            getItemLayout={(_, index) => ({ length: HERO_ITEM_LENGTH, offset: sidePadding + HERO_ITEM_LENGTH * index, index })}
+            contentContainerStyle={{ paddingLeft: sidePadding, paddingRight: sidePadding }}
+            onScroll={useAnimatedScrollHandler({
+              onScroll: (e) => {
+                'worklet';
+                scrollX.value = e.contentOffset.x;
+              },
+            }) as any}
+            scrollEventThrottle={16}
+            renderItem={({ index }) => <HeroItem index={index} />}
+            onScrollEndDrag={(e: any) => {
+              try {
+                const x = Math.max(0, Number(e?.nativeEvent?.contentOffset?.x || 0));
+                const idx = Math.round((x - sidePadding) / HERO_ITEM_LENGTH);
+                const exact = sidePadding + Math.max(0, Math.min(totalItems - 1, idx)) * HERO_ITEM_LENGTH;
+                if (Math.abs(x - exact) > 0.5) {
+                  (listRef.current as any)?.scrollToOffset?.({ offset: exact, animated: true });
+                }
+              } catch {}
             }}
-            disabled={!canGoPrev}
-          >
-            <BlurView intensity={36} tint="light" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.3)' }} />
-            <Ionicons name="chevron-back-outline" size={28} color="#1C1C1E" style={{ fontWeight: '800' } as any} />
-          </TouchableOpacity>
-        </View>
-        <View style={{ position: 'absolute', top: '50%', right: 12, transform: [{ translateY: -28 }], zIndex: 10, opacity: canGoNext ? 1 : 0.4 }}>
-          <TouchableOpacity
-            onPress={() => { if (canGoNext) goNext(); }}
-            activeOpacity={0.75}
-            style={{ 
-              width: 56, 
-              height: 56, 
-              borderRadius: 28, 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              overflow: 'hidden', 
-              borderWidth: 1.5, 
-              borderColor: 'rgba(255,255,255,0.5)', 
-              shadowColor: '#000', 
-              shadowOffset: { width: 0, height: 6 }, 
-              shadowOpacity: 0.2, 
-              shadowRadius: 16, 
-              elevation: 8,
-              backgroundColor: 'transparent'
-            }}
-            disabled={!canGoNext}
-          >
-            <BlurView intensity={36} tint="light" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.3)' }} />
-            <Ionicons name="chevron-forward-outline" size={28} color="#1C1C1E" style={{ fontWeight: '800' } as any} />
-          </TouchableOpacity>
-        </View>
-      </View>
-      {/* keep extra spacing below */}
-      <View style={{ height: 18 }} />
-    </View>
-  );
-};
+            onMomentumScrollEnd={(e: any) => {
+              try {
+                const x = Math.max(0, Number(e?.nativeEvent?.contentOffset?.x || 0));
+                const idx = Math.round((x - sidePadding) / HERO_ITEM_LENGTH);
+                const baseIdx = baseCount > 0 ? ((idx % baseCount) + baseCount) % baseCount : 0;
+                if (baseIdx !== lastIndex.current) {
+                  lastIndex.current = baseIdx;
+                  onIndexChange(baseIdx);
+                }
 
-export default BarberSelector;
+                // Programmatic settle to exact center
+                const exact = sidePadding + Math.max(0, Math.min(totalItems - 1, idx)) * HERO_ITEM_LENGTH;
+                if (Math.abs(x - exact) > 0.5) {
+                  (listRef.current as any)?.sc

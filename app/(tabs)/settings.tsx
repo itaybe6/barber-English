@@ -38,6 +38,7 @@ import {
   User,
   Repeat
 } from 'lucide-react-native';
+import { Ticket } from 'lucide-react-native';
 import { Users } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -882,6 +883,11 @@ export default function SettingsScreen() {
 
   // Add Service modal state
   const [showAddServiceModal, setShowAddServiceModal] = useState(false);
+  // Coupons add modal state
+  const [showAddCouponModal, setShowAddCouponModal] = useState(false);
+  const [couponNameDraft, setCouponNameDraft] = useState('');
+  const [couponCountsDraft, setCouponCountsDraft] = useState('1');
+  const [isSavingCoupon, setIsSavingCoupon] = useState(false);
   
   
   
@@ -1507,6 +1513,35 @@ export default function SettingsScreen() {
       Alert.alert(t('error.generic','Error'), t('settings.services.createFailed','Failed to create service'));
     } finally {
       setAddSvcIsSaving(false);
+    }
+  };
+
+  const handleSaveCoupon = async () => {
+    try {
+      const name = (couponNameDraft || '').trim();
+      const counts = Math.max(1, Math.floor(Number((couponCountsDraft || '').trim()) || 0));
+      if (!name) {
+        Alert.alert(t('error.generic','Error'), t('settings.coupons.nameRequired','Please enter a coupon name'));
+        return;
+      }
+      setIsSavingCoupon(true);
+      const { error } = await supabase
+        .from('coupons')
+        .insert({
+          name,
+          counts_booking: counts,
+          business_id: getBusinessId(),
+          worker_id: user?.id || null,
+        } as any);
+      if (error) throw error;
+      setShowAddCouponModal(false);
+      setCouponNameDraft('');
+      setCouponCountsDraft('1');
+      Alert.alert(t('success.generic','Success'), t('settings.coupons.createSuccess','Coupon created successfully'));
+    } catch (e) {
+      Alert.alert(t('error.generic','Error'), t('settings.coupons.createFailed','Failed to create coupon'));
+    } finally {
+      setIsSavingCoupon(false);
     }
   };
 
@@ -2260,6 +2295,18 @@ export default function SettingsScreen() {
             t('settings.services.editSubtitle','Update prices and durations'),
             undefined,
             openServicesModal
+          )}
+        </View>
+
+        {/* Coupons */}
+        <Text style={styles.sectionTitleNew}>{t('settings.sections.coupons','Coupons')}</Text>
+        <View style={[styles.cardNew, shadowStyle]}>
+          {renderSettingItem(
+            <Ticket size={20} color={businessColors.primary} />, 
+            t('settings.coupons.add','Add coupon'),
+            t('settings.coupons.addSubtitle','Create a coupon for clients'),
+            undefined,
+            () => setShowAddCouponModal(true)
           )}
         </View>
 
@@ -4339,6 +4386,59 @@ export default function SettingsScreen() {
               </TouchableOpacity>
             </View>
           </KeyboardAvoidingView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add Coupon Modal */}
+      <Modal
+        visible={showAddCouponModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowAddCouponModal(false)}
+      >
+        <View style={styles.smallModalOverlay}>
+          <View style={styles.smallModalCard}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowAddCouponModal(false)}>
+                <Text style={styles.modalCloseText}>{t('cancel','Cancel')}</Text>
+              </TouchableOpacity>
+              <Text style={styles.modalTitleLTR}>{t('settings.coupons.addTitle','Add coupon')}</Text>
+              <TouchableOpacity
+                style={[styles.modalSendButton, isSavingCoupon && styles.modalSendButtonDisabled]}
+                onPress={handleSaveCoupon}
+                disabled={isSavingCoupon}
+              >
+                <Text style={[styles.modalSendText, isSavingCoupon && styles.modalSendTextDisabled]}>
+                  {isSavingCoupon ? t('settings.common.saving','Saving...') : t('save','Save')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabelLTR}>{t('settings.coupons.name','Coupon name')}</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={couponNameDraft}
+                  onChangeText={setCouponNameDraft}
+                  placeholder={t('settings.coupons.namePlaceholder','e.g. 10th Free')}
+                  placeholderTextColor={Colors.subtext}
+                  textAlign="left"
+                />
+              </View>
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabelLTR}>{t('settings.coupons.counts','Bookings count')}</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={couponCountsDraft}
+                  onChangeText={setCouponCountsDraft}
+                  placeholder={t('settings.coupons.countsPlaceholder','e.g. 10')}
+                  placeholderTextColor={Colors.subtext}
+                  keyboardType="number-pad"
+                  textAlign="left"
+                />
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>

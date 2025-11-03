@@ -270,3 +270,24 @@ export interface Product {
   created_at: string;
   updated_at: string;
 }
+
+// Coupons table
+export interface Coupon {
+  id: string;
+  business_id: string;
+  worker_id?: string | null;
+  name: string;
+  counts_booking: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Customer coupons table (assignment of coupons to clients)
+export interface CustomerCoupon {
+  id: string;
+  business_id: string;
+  worker_id?: string | null;
+  client_id?: string | null;
+  created_at: string;
+  updated_at: string;
+}

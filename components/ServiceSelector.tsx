@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Image, Dimensions, FlatList, I18nManager } from 'react-native';
+import { View, Text, TouchableOpacity, Image, Dimensions, FlatList } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Animated, { useSharedValue, useAnimatedScrollHandler, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, Easing } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,10 +7,9 @@ import { useTranslation } from 'react-i18next';
 import { Service } from '@/lib/supabase';
 
 const SCREEN = Dimensions.get('window');
-const HEADER_HEIGHT = 320; // compact height to mirror BarberSelector
+const HEADER_HEIGHT = 380; // taller for better presence
 const CARD_WIDTH_PERCENT = 0.68;
-const STRIP_SHIFT = 20; // margin/offset calibration
-const STRIP_TRANSLATE = 28; // hard translate to ensure visible shift left
+const AnimatedFlatList: any = Animated.createAnimatedComponent(FlatList as any);
 
 export type ServiceSelectorProps = {
   services: Service[];
@@ -30,6 +29,10 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
 
   const [bgCurrent, setBgCurrent] = React.useState<string | null>(getCurrentImageUrl(activeIndex));
   const bgOpacity = useSharedValue(1);
+  const scrollX = useSharedValue(0);
+  const listRef = React.useRef<FlatList>(null);
+  const didInit = React.useRef(false);
+  const lastIndex = React.useRef<number>(Math.max(0, activeIndex));
 
   React.useEffect(() => {
     const nextUrl = getCurrentImageUrl(activeIndex);
@@ -49,118 +52,157 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
 
   const bgStyle = useAnimatedStyle(() => ({ opacity: bgOpacity.value }));
   const cardWidth = SCREEN.width * CARD_WIDTH_PERCENT;
-  const cardHorizontalMargin = (SCREEN.width - cardWidth) / 2;
-  const sidePeekShift = Math.min(36, cardHorizontalMargin + 12);
-  const prevIdx = services.length > 0 ? (((activeIndex || 0) - 1 + services.length) % services.length) : 0;
-  const nextIdx = services.length > 0 ? (((activeIndex || 0) + 1) % services.length) : 0;
-  const canGoPrev = services.length > 1;
-  const canGoNext = services.length > 1;
-  const goPrev = React.useCallback(() => {
-    if (!services || services.length === 0) return;
-    const length = services.length;
-    const next = ((activeIndex || 0) - 1 + length) % length;
-    if (next !== activeIndex) onIndexChange(next);
-  }, [activeIndex, services.length]);
-  const goNext = React.useCallback(() => {
-    if (!services || services.length === 0) return;
-    const length = services.length;
-    const next = ((activeIndex || 0) + 1) % length;
-    if (next !== activeIndex) onIndexChange(next);
-  }, [activeIndex, services.length]);
+  const ITEM_GAP = 14;
+  const ITEM_LENGTH = cardWidth + ITEM_GAP;
+  const sidePadding = Math.max(0, (SCREEN.width - ITEM_LENGTH) / 2);
+  const baseCount = Math.max(1, services.length);
+  const LOOP_COUNT = 200;
+  const totalItems = baseCount * LOOP_COUNT;
+  const middleBase = Math.floor(totalItems / 2) - (Math.floor(totalItems / 2) % baseCount);
+  const initialIndex = middleBase + (Math.max(0, activeIndex) % baseCount);
 
-  return (
-    <View style={{ position: 'relative', height: HEADER_HEIGHT + 220, marginBottom: -50 }}>
-      <View style={{ transform: [{ translateX: -STRIP_TRANSLATE }] }}>
-      {/* Side previews */}
-      {services.length > 1 && prevIdx !== activeIndex && (
-        <View style={{ position: 'absolute', left: -sidePeekShift - 8 - STRIP_SHIFT, top: 16, width: cardWidth * 0.74, height: HEADER_HEIGHT - 40, borderRadius: 20, overflow: 'hidden', transform: [{ rotateZ: '-2deg' }, { scale: 0.92 }], opacity: 0.65 }}>
-          {services[prevIdx] && (
-            <Image source={{ uri: getCurrentImageUrl(prevIdx) as any }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-          )}
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.25)' }} />
-        </View>
-      )}
-      {services.length > 1 && nextIdx !== activeIndex && (
-        <View style={{ position: 'absolute', right: -sidePeekShift - 8 + STRIP_SHIFT, top: 16, width: cardWidth * 0.74, height: HEADER_HEIGHT - 40, borderRadius: 20, overflow: 'hidden', transform: [{ rotateZ: '2deg' }, { scale: 0.92 }], opacity: 0.65 }}>
-          {services[nextIdx] && (
-            <Image source={{ uri: getCurrentImageUrl(nextIdx) as any }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-          )}
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.25)' }} />
-        </View>
-      )}
+  React.useEffect(() => {
+    if (!didInit.current && services && services.length > 0) {
+      didInit.current = true;
+      try { (listRef.current as any)?.scrollToIndex?.({ index: initialIndex, animated: false, viewPosition: 0.5 }); } catch {}
+      lastIndex.current = 0;
+      try { onIndexChange(0); } catch {}
+    }
+  }, [services?.length]);
 
-      {/* Main card */}
-      <View style={{ height: HEADER_HEIGHT, marginTop: 24, marginLeft: cardHorizontalMargin - STRIP_SHIFT, marginRight: cardHorizontalMargin + STRIP_SHIFT, width: cardWidth, borderRadius: 20, overflow: 'hidden', backgroundColor: '#F2F2F7', zIndex: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 16, elevation: 10 }}>
-        {!!bgCurrent && (
-          <Animated.Image source={{ uri: bgCurrent }} style={[{ width: '100%', height: '100%' }, bgStyle]} resizeMode="cover" fadeDuration={0 as any} />
-        )}
-        <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.25)' }} />
-        {/* Duration badge on image */}
-        <View style={{ position: 'absolute', top: 12, left: 12 }}>
-          <BlurView intensity={30} tint="light" style={{
-            paddingHorizontal: 10,
-            paddingVertical: 6,
-            borderRadius: 999,
-            overflow: 'hidden',
-            borderWidth: 1,
-            borderColor: 'rgba(255,255,255,0.35)',
-            backgroundColor: 'rgba(255,255,255,0.18)'
-          }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Ionicons name="time-outline" size={14} color="#111827" />
-              <Text style={{ color: '#111827', fontWeight: '800', fontSize: 13 }}>
-                {(services[activeIndex]?.duration_minutes ?? 60) + 'm'}
-              </Text>
-            </View>
-          </BlurView>
-        </View>
-        <View style={{ position: 'absolute', left: 12, right: 12, bottom: 12, alignItems: 'center' }}>
-          <BlurView intensity={28} tint="light" style={{
-            paddingVertical: 10,
-            paddingHorizontal: 14,
-            borderRadius: 20,
-            overflow: 'hidden',
-            borderWidth: 1,
-            borderColor: 'rgba(255,255,255,0.35)',
-            backgroundColor: 'rgba(255,255,255,0.16)'
-          }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <Text numberOfLines={1} style={{
-                color: '#FFFFFF',
-                fontWeight: '800',
-                fontSize: 16,
-                textShadowColor: 'rgba(255,255,255,0.6)',
-                textShadowOffset: { width: 0, height: 1 },
-                textShadowRadius: 2,
-                flexShrink: 1,
-              }}>
-                {services[activeIndex]?.name || ''}
-              </Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.85)', borderWidth: 1, borderColor: 'rgba(17,24,39,0.08)' }}>
-                <Ionicons name="pricetag-outline" size={14} color="#111827" />
-                <Text style={{ color: '#111827', fontWeight: '800', fontSize: 14 }}>
-                  {`${t('booking.price', '$')} ${services[activeIndex]?.price ?? 0}`}
+  const onScrollHandler = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      'worklet';
+      scrollX.value = e.contentOffset.x;
+    },
+  });
+
+  const HeroItem: React.FC<{ index: number }> = ({ index }) => {
+    const baseIdx = baseCount > 0 ? ((index % baseCount) + baseCount) % baseCount : 0;
+    const service = services[baseIdx];
+    const uri = getCurrentImageUrl(baseIdx);
+    const cardStyle = (useAnimatedStyle(() => {
+      const pos = (scrollX.value - sidePadding) / ITEM_LENGTH;
+      const scale = interpolate(pos, [index - 1, index, index + 1], [0.95, 1.05, 0.95], Extrapolate.CLAMP);
+      const opacity = interpolate(pos, [index - 1, index, index + 1], [0.9, 1, 0.9], Extrapolate.CLAMP);
+      return { transform: [{ scale: scale as any }] as any, opacity } as any;
+    }) as any);
+
+    return (
+      <TouchableOpacity activeOpacity={0.9} onPress={() => {
+        try {
+          const baseIdx = baseCount > 0 ? ((index % baseCount) + baseCount) % baseCount : 0;
+          if (baseIdx !== lastIndex.current) {
+            lastIndex.current = baseIdx;
+            runOnJS(onIndexChange)(baseIdx);
+          }
+        } catch {}
+      }} style={{ width: ITEM_LENGTH, alignItems: 'center', paddingHorizontal: 4 }}>
+        <Animated.View style={[{ width: cardWidth, height: HEADER_HEIGHT, borderRadius: 38, overflow: 'visible', backgroundColor: 'transparent', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.3, shadowRadius: 30, elevation: 15 }, cardStyle]}>
+          {/* Outer glow ring */}
+          <View style={{ position: 'absolute', top: -3, left: -3, right: -3, bottom: -3, borderRadius: 41, borderWidth: 3, borderColor: 'rgba(255,255,255,0.15)' }} />
+          
+          {/* Main card container */}
+          <View style={{ width: '100%', height: '100%', borderRadius: 38, overflow: 'hidden' }}>
+            {/* Liquid glass effect layers */}
+            <BlurView intensity={22} tint="light" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.12)' }} />
+            
+            {/* Multiple glass shine overlays */}
+            <View style={{ position: 'absolute', top: -25, left: -15, width: '75%', height: 110, borderRadius: 70, backgroundColor: 'rgba(255,255,255,0.28)', opacity: 0.65, transform: [{ rotate: '-18deg' }] }} />
+            <View style={{ position: 'absolute', bottom: -20, right: -10, width: '60%', height: 80, borderRadius: 50, backgroundColor: 'rgba(255,255,255,0.18)', opacity: 0.5, transform: [{ rotate: '12deg' }] }} />
+            
+            {/* Triple border for depth */}
+            <View style={{ position: 'absolute', top: 3, left: 3, right: 3, bottom: 3, borderRadius: 35, borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)' }} />
+            <View style={{ position: 'absolute', top: 6, left: 6, right: 6, bottom: 6, borderRadius: 32, borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' }} />
+            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 38, borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.2)' }} />
+          
+            {uri ? (
+              <Image source={{ uri: uri as any }} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} resizeMode="cover" />
+            ) : (
+              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#E5E5EA' }} />
+            )}
+            <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.3)' }} />
+          {/* Duration badge */}
+          <View style={{ position: 'absolute', top: 12, left: 12 }}>
+            <BlurView intensity={30} tint="light" style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)', backgroundColor: 'rgba(255,255,255,0.18)' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons name="time-outline" size={14} color="#111827" />
+                <Text style={{ color: '#111827', fontWeight: '800', fontSize: 13 }}>
+                  {(service?.duration_minutes ?? 60) + 'm'}
                 </Text>
               </View>
-            </View>
-          </BlurView>
-        </View>
+            </BlurView>
+          </View>
+          {/* Name + price */}
+          <View style={{ position: 'absolute', left: 14, right: 14, bottom: 14, alignItems: 'center' }}>
+            <BlurView intensity={32} tint="light" style={{ paddingVertical: 12, paddingHorizontal: 14, borderRadius: 24, overflow: 'hidden', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.45)', backgroundColor: 'rgba(255,255,255,0.2)', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 5 }}>
+              <View style={{ position: 'absolute', top: -8, left: -6, width: '60%', height: 32, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.3)', opacity: 0.5, transform: [{ rotate: '-12deg' }] }} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <Text numberOfLines={1} style={{ color: '#FFFFFF', fontWeight: '900', fontSize: 17, textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4, flexShrink: 1 }}>
+                  {service?.name || ''}
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.9)', borderWidth: 1, borderColor: 'rgba(17,24,39,0.08)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }}>
+                  <Ionicons name="pricetag-outline" size={14} color="#111827" />
+                  <Text style={{ color: '#111827', fontWeight: '800', fontSize: 14 }}>
+                    {`${t('booking.price', '$')} ${service?.price ?? 0}`}
+                  </Text>
+                </View>
+              </View>
+            </BlurView>
+          </View>
+          </View>
+        </Animated.View>
+      </TouchableOpacity>
+    );
+  };
 
-        {/* Arrows */}
-        <View style={{ position: 'absolute', top: '50%', left: 12, transform: [{ translateY: -28 }], zIndex: 10, opacity: canGoPrev ? 1 : 0.4 }}>
-          <TouchableOpacity onPress={goPrev} activeOpacity={0.75} disabled={!canGoPrev} style={{ width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.5)', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 8, backgroundColor: 'transparent' }}>
-            <BlurView intensity={36} tint="light" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.3)' }} />
-            <Ionicons name="chevron-back-outline" size={28} color="#1C1C1E" />
-          </TouchableOpacity>
+  return (
+    <View style={{ position: 'relative', height: HEADER_HEIGHT + 220, marginTop: -30, marginBottom: -50 }}>
+      {services.length > 0 && (
+        <View style={{ direction: 'ltr' as any, marginTop: 24 }}>
+        <AnimatedFlatList
+          ref={listRef as any}
+          data={Array.from({ length: totalItems })}
+          keyExtractor={(_, idx: number) => `s-${idx}`}
+          horizontal
+          inverted={false}
+          showsHorizontalScrollIndicator={false}
+          decelerationRate="fast"
+          bounces={false}
+          overScrollMode="never"
+          snapToInterval={ITEM_LENGTH}
+          snapToAlignment="center"
+          disableIntervalMomentum
+          initialScrollIndex={initialIndex}
+          getItemLayout={(_, index) => ({ length: ITEM_LENGTH, offset: sidePadding + ITEM_LENGTH * index, index })}
+          contentContainerStyle={{ paddingLeft: sidePadding, paddingRight: sidePadding, marginTop: 24 }}
+          onScroll={onScrollHandler as any}
+          scrollEventThrottle={16}
+          renderItem={({ index }) => <HeroItem index={index} />}
+          onMomentumScrollEnd={(e: any) => {
+            try {
+              const x = Math.max(0, Number(e?.nativeEvent?.contentOffset?.x || 0));
+              const idx = Math.round((x - sidePadding) / ITEM_LENGTH);
+              const baseIdx = baseCount > 0 ? ((idx % baseCount) + baseCount) % baseCount : 0;
+              if (baseIdx !== lastIndex.current) {
+                lastIndex.current = baseIdx;
+                onIndexChange(baseIdx);
+              }
+              const guard = baseCount * 2;
+              if (idx < guard || idx > (totalItems - guard)) {
+                const target = middleBase + baseIdx;
+                try { (listRef.current as any)?.scrollToIndex?.({ index: target, animated: false, viewPosition: 0.5 }); } catch {}
+              }
+            } catch {}
+          }}
+          removeClippedSubviews
+          windowSize={7}
+          maxToRenderPerBatch={7}
+          updateCellsBatchingPeriod={40}
+        />
         </View>
-        <View style={{ position: 'absolute', top: '50%', right: 12, transform: [{ translateY: -28 }], zIndex: 10, opacity: canGoNext ? 1 : 0.4 }}>
-          <TouchableOpacity onPress={goNext} activeOpacity={0.75} disabled={!canGoNext} style={{ width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.5)', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 8, backgroundColor: 'transparent' }}>
-            <BlurView intensity={36} tint="light" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.3)' }} />
-            <Ionicons name="chevron-forward-outline" size={28} color="#1C1C1E" />
-          </TouchableOpacity>
-        </View>
-      </View>
-      </View>
+      )}
     </View>
   );
 };

@@ -2148,94 +2148,96 @@ export default function BookAppointment() {
 
 // Background that cross-fades to the provided image URI and lightly blurs/tints it
 const DynamicBackground: React.FC<{ uri: string | null }> = ({ uri }) => {
-  const fade = useSharedValue(1);
-  const transition = useSharedValue(1);
-  const [currentUri, setCurrentUri] = React.useState<string | null>(null);
-  const [nextUri, setNextUri] = React.useState<string | null>(null);
+  const progress = useSharedValue(1);
+  const [currentUri, setCurrentUri] = React.useState<string | null>(uri ?? null);
+  const [previousUri, setPreviousUri] = React.useState<string | null>(null);
 
-  const currentStyle = useAnimatedStyle(() => ({
-    opacity: nextUri ? fade.value : 1,
-  }), [nextUri]);
-
-  const nextStyle = useAnimatedStyle(() => ({
-    opacity: 1 - fade.value,
-  }));
-
-  const blurStyle = useAnimatedStyle(() => ({
-    opacity: transition.value,
-  }));
+  const clearPrevious = React.useCallback(() => {
+    setPreviousUri(null);
+  }, []);
 
   useEffect(() => {
-    let isMounted = true;
+    let isActive = true;
 
     if (!uri) {
+      setPreviousUri(null);
       setCurrentUri(null);
-      setNextUri(null);
-      fade.value = 1;
-      transition.value = 1;
-      return () => { isMounted = false; };
+      progress.value = 1;
+      return () => {
+        isActive = false;
+      };
     }
 
     if (!currentUri) {
       setCurrentUri(uri);
-      fade.value = 1;
-      transition.value = 1;
-      return () => { isMounted = false; };
+      progress.value = 1;
+      return () => {
+        isActive = false;
+      };
     }
 
     if (uri === currentUri) {
-      return () => { isMounted = false; };
+      return () => {
+        isActive = false;
+      };
     }
 
-    const runAnimation = () => {
-      setNextUri(uri);
-      fade.value = 1;
-      transition.value = 1;
-      fade.value = withTiming(0, { duration: 600, easing: Easing.inOut(Easing.cubic) }, (finished) => {
-        if (finished && isMounted) {
-          runOnJS(setCurrentUri)(uri);
-          runOnJS(setNextUri)(null);
-          fade.value = 1;
-          transition.value = withTiming(1, { duration: 320, easing: Easing.inOut(Easing.cubic) });
+    const beginTransition = () => {
+      if (!isActive) return;
+      setPreviousUri(currentUri);
+      setCurrentUri(uri);
+      progress.value = 0;
+      progress.value = withTiming(
+        1,
+        { duration: 520, easing: Easing.out(Easing.cubic) },
+        () => {
+          runOnJS(clearPrevious)();
         }
-      });
-      transition.value = withTiming(0.6, { duration: 600, easing: Easing.inOut(Easing.cubic) });
+      );
     };
 
-    (async () => {
-      try {
-        await Image.prefetch(uri);
-      } catch {}
-      if (isMounted) {
-        runAnimation();
-      }
-    })();
+    Image.prefetch(uri)
+      .catch(() => {})
+      .finally(() => {
+        beginTransition();
+      });
 
     return () => {
-      isMounted = false;
+      isActive = false;
     };
-  }, [uri, currentUri, fade, transition]);
+  }, [uri, currentUri, progress, clearPrevious]);
+
+  const currentStyle = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    transform: [
+      {
+        scale: interpolate(progress.value, [0, 1], [1.04, 1], Extrapolate.CLAMP),
+      },
+    ],
+  }));
+
+  const previousStyle = useAnimatedStyle(() => ({
+    opacity: 1 - progress.value,
+  }));
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFillObject as any}>
-      {!!currentUri && (
+      {previousUri && (
+        <Animated.Image
+          source={{ uri: previousUri }}
+          style={[StyleSheet.absoluteFillObject as any, previousStyle]}
+          resizeMode="cover"
+        />
+      )}
+      {currentUri && (
         <Animated.Image
           source={{ uri: currentUri }}
           style={[StyleSheet.absoluteFillObject as any, currentStyle]}
           resizeMode="cover"
         />
       )}
-      {!!nextUri && (
-        <Animated.Image
-          source={{ uri: nextUri }}
-          style={[StyleSheet.absoluteFillObject as any, nextStyle]}
-          resizeMode="cover"
-        />
-      )}
-      <Animated.View style={[StyleSheet.absoluteFillObject as any, blurStyle]}>
-        <BlurView intensity={30} tint="light" style={StyleSheet.absoluteFillObject as any} />
-      </Animated.View>
-      <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: 'rgba(255,255,255,0.6)' }]} />
+      <BlurView intensity={30} tint="light" style={StyleSheet.absoluteFillObject as any} />
+      <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: 'rgba(255,255,255,0.45)' }]} />
     </View>
   );
 };

@@ -161,7 +161,7 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
                 right: 0,
                 bottom: 0,
                 height: '45%',
-                backgroundColor: 'rgba(0, 0, 0, 0)',
+                backgroundColor: 'transparent',
               }}
             />
           </View>
@@ -178,7 +178,7 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
                 overflow: 'hidden',
                 borderWidth: 1.25,
                 borderColor: 'rgba(255,255,255,0.35)',
-                backgroundColor: 'rgba(255, 255, 255, 0)',
+                backgroundColor: 'transparent',
                 shadowColor: '#000',
                 shadowOffset: { width: 0, height: 3 },
                 shadowOpacity: 0.18,
@@ -194,7 +194,7 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
                   width: '60%',
                   height: 28,
                   borderRadius: 18,
-                  backgroundColor: 'rgba(255,255,255,0.28)',
+                  backgroundColor: 'transparent',
                   opacity: 0.4,
                   transform: [{ rotate: '-12deg' }],
                 }}
@@ -279,7 +279,7 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
     <View
       style={{
         position: 'relative',
-        height: HEADER_HEIGHT + 360,
+        height: HEADER_HEIGHT + 320,
         marginTop: 0,
         marginBottom: 140,
         paddingTop: 60,

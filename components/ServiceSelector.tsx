@@ -7,8 +7,8 @@ import { useTranslation } from 'react-i18next';
 import { Service } from '@/lib/supabase';
 
 const SCREEN = Dimensions.get('window');
-const HEADER_HEIGHT = 360; // expanded a bit to avoid top/bottom clipping while keeping within window
-const CARD_WIDTH_PERCENT = 0.68;
+const HEADER_HEIGHT = 320; // match barber carousel proportions for consistent framing
+const CARD_WIDTH_PERCENT = 0.64;
 const AnimatedFlatList: any = Animated.createAnimatedComponent(FlatList as any);
 
 export type ServiceSelectorProps = {
@@ -94,26 +94,90 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
           centerToPhysicalIndex(index, true);
         } catch {}
       }} style={{ width: ITEM_LENGTH, alignItems: 'center', paddingHorizontal: 4 }}>
-        <Animated.View style={[{ width: cardWidth, height: HEADER_HEIGHT, borderRadius: 38, overflow: 'visible', backgroundColor: 'transparent', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.3, shadowRadius: 30, elevation: 15 }, cardStyle]}>
-          {/* Outer glow ring */}
-          <View style={{ position: 'absolute', top: -3, left: -3, right: -3, bottom: -3, borderRadius: 41, borderWidth: 3, borderColor: 'rgba(255,255,255,0.15)' }} />
-          
-          {/* Main card container */}
-          <View style={{ width: '100%', height: '100%', borderRadius: 38, overflow: 'hidden' }}>
-            {/* Triple border for depth */}
-            <View style={{ position: 'absolute', top: 3, left: 3, right: 3, bottom: 3, borderRadius: 35, borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)' }} />
-            <View style={{ position: 'absolute', top: 6, left: 6, right: 6, bottom: 6, borderRadius: 32, borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' }} />
-            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 38, borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.2)' }} />
-          
+        <Animated.View
+          style={[{
+            width: cardWidth,
+            height: HEADER_HEIGHT,
+            borderRadius: 34,
+            overflow: 'visible',
+            backgroundColor: 'transparent',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 16 },
+            shadowOpacity: 0.26,
+            shadowRadius: 26,
+            elevation: 14,
+          }, cardStyle]}
+        >
+          {/* Subtle border so the carousel window stays airy and lets the dynamic background shine through */}
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: -2,
+              left: -2,
+              right: -2,
+              bottom: -2,
+              borderRadius: 36,
+              borderWidth: 2,
+              borderColor: 'rgba(255,255,255,0.18)',
+            }}
+          />
+
+          <View
+            style={{
+              width: '100%',
+              height: '100%',
+              borderRadius: 34,
+              overflow: 'hidden',
+              backgroundColor: 'transparent',
+            }}
+          >
             {uri ? (
-              <Image source={{ uri: uri as any }} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} resizeMode="cover" />
+              <Image
+                source={{ uri: uri as any }}
+                style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+                resizeMode="cover"
+              />
             ) : (
-              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#E5E5EA' }} />
+              <View
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: '#E5E5EA',
+                }}
+              />
             )}
-            <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.3)' }} />
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: '45%',
+                backgroundColor: 'transparent',
+              }}
+            />
+          </View>
+
           {/* Duration badge */}
-          <View style={{ position: 'absolute', top: 12, left: 12 }}>
-            <BlurView intensity={30} tint="light" style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)', backgroundColor: 'rgba(255,255,255,0.18)' }}>
+          <View style={{ position: 'absolute', top: 16, left: 16 }}>
+            <BlurView
+              intensity={20}
+              tint="light"
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 999,
+                overflow: 'hidden',
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.28)',
+                backgroundColor: 'transparent',
+              }}
+            >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Ionicons name="time-outline" size={14} color="#111827" />
                 <Text style={{ color: '#111827', fontWeight: '800', fontSize: 13 }}>
@@ -122,23 +186,100 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
               </View>
             </BlurView>
           </View>
+
           {/* Name + price */}
-          <View style={{ position: 'absolute', left: 14, right: 14, bottom: 14, alignItems: 'center' }}>
-            <BlurView intensity={32} tint="light" style={{ paddingVertical: 12, paddingHorizontal: 14, borderRadius: 24, overflow: 'hidden', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.45)', backgroundColor: 'rgba(255,255,255,0.2)', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 5 }}>
-              <View style={{ position: 'absolute', top: -8, left: -6, width: '60%', height: 32, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.3)', opacity: 0.5, transform: [{ rotate: '-12deg' }] }} />
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <Text numberOfLines={1} style={{ color: '#FFFFFF', fontWeight: '900', fontSize: 17, textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4, flexShrink: 1 }}>
+          <View style={{ position: 'absolute', left: 18, right: 18, bottom: 18, alignItems: 'center' }}>
+            <BlurView
+              intensity={20}
+              tint="light"
+              style={{
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                borderRadius: 24,
+                overflow: 'hidden',
+                borderWidth: 1.25,
+                borderColor: 'rgba(255,255,255,0.35)',
+                backgroundColor: 'rgba(17,24,39,0.28)',
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 3 },
+                shadowOpacity: 0.18,
+                shadowRadius: 8,
+                elevation: 5,
+              }}
+            >
+              <View
+                style={{
+                  position: 'absolute',
+                  top: -8,
+                  left: -6,
+                  width: '60%',
+                  height: 28,
+                  borderRadius: 18,
+                  backgroundColor: 'rgba(255,255,255,0.22)',
+                  opacity: 0.4,
+                  transform: [{ rotate: '-12deg' }],
+                }}
+              />
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <Text
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                  style={{
+                    color: '#FFFFFF',
+                    fontWeight: '900',
+                    fontSize: 17,
+                    textShadowColor: 'rgba(0, 0, 0, 0.4)',
+                    textShadowOffset: { width: 0, height: 2 },
+                    textShadowRadius: 4,
+                    flexGrow: 1,
+                    flexShrink: 1,
+                    minWidth: 0,
+                    maxWidth: '68%',
+                    marginRight: 12,
+                  }}
+                >
                   {service?.name || ''}
                 </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.9)', borderWidth: 1, borderColor: 'rgba(17,24,39,0.08)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 }}>
-                  <Ionicons name="pricetag-outline" size={14} color="#111827" />
-                  <Text style={{ color: '#111827', fontWeight: '800', fontSize: 14 }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 999,
+                    backgroundColor: 'rgba(255,255,255,0.92)',
+                    borderWidth: 1,
+                    borderColor: 'rgba(17,24,39,0.08)',
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    flexShrink: 0,
+                  }}
+                >
+                  <Ionicons
+                    name="pricetag-outline"
+                    size={14}
+                    color="#111827"
+                    style={{ marginRight: 4 }}
+                  />
+                  <Text
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                    style={{ color: '#111827', fontWeight: '800', fontSize: 14 }}
+                  >
                     {`${t('booking.price', '$')} ${service?.price ?? 0}`}
                   </Text>
                 </View>
               </View>
             </BlurView>
-          </View>
           </View>
         </Animated.View>
       </TouchableOpacity>
@@ -146,9 +287,18 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
   };
 
   return (
-    <View style={{ position: 'relative', height: HEADER_HEIGHT + 240, marginTop: -10, marginBottom: -30 }}>
+    <View
+      style={{
+        position: 'relative',
+        height: HEADER_HEIGHT + 200,
+        marginBottom: 140,
+        paddingTop: 60,
+        paddingBottom: 56,
+        backgroundColor: 'transparent',
+      }}
+    >
       {services.length > 0 && (
-        <View style={{ direction: 'ltr' as any, marginTop: 40 }}>
+        <View style={{ flex: 1, justifyContent: 'center', direction: 'ltr' as any, paddingVertical: 12 }}>
         <AnimatedFlatList
           ref={listRef as any}
           data={Array.from({ length: totalItems })}
@@ -163,7 +313,7 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
           snapToAlignment="center"
           initialScrollIndex={initialIndex}
           getItemLayout={(_, index) => ({ length: ITEM_LENGTH, offset: ITEM_LENGTH * index, index })}
-          contentContainerStyle={{ paddingLeft: sidePadding, paddingRight: sidePadding, marginTop: 24 }}
+          contentContainerStyle={{ paddingLeft: sidePadding, paddingRight: sidePadding, paddingVertical: 24 }}
           onScroll={onScrollHandler as any}
           scrollEventThrottle={16}
           renderItem={({ index }) => <HeroItem index={index} />}

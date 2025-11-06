@@ -222,7 +222,7 @@
   "profile.language.english": "English",
   "profile.language.hebrew": "Hebrew",
   "profile.language.restartNote": "Direction changes may require app restart",
-  "tabs": { "home": "Home", "gallery": "Gallery", "book": "Book", "profile": "Profile", "booking": "Appointments" },
+  "tabs": { "home": "Home", "gallery": "Gallery", "book": "Book", "profile": "Profile", "booking": "Booking" },
   "gallery": {
     "loginToView": "Please sign in to view full designs",
     "subcategory": { "barber": "Barbers", "nails": "Nail Art" },

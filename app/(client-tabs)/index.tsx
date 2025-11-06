@@ -813,7 +813,7 @@ export default function ClientHomeScreen() {
       <SafeAreaView edges={["left","right"]} style={{ flex: 1 }}>
         <Animated.View 
           style={[
-            styles.contentWrapper,
+            styles.contentWrapperContainer,
             {
               transform: [
                 { translateY: backgroundTranslateYAnim }
@@ -822,13 +822,21 @@ export default function ClientHomeScreen() {
             }
           ]}
         >
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000" />}
-            showsVerticalScrollIndicator={false}
-            onScroll={handleScroll}
-            scrollEventThrottle={16}
+          <LinearGradient
+            colors={['rgba(255,255,255,0.92)', 'rgba(255,255,255,0.32)', 'rgba(255,255,255,0.78)']}
+            locations={[0, 0.45, 1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.contentWrapperGlassBorder}
           >
+            <View style={styles.contentWrapper}>
+              <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000" />}
+                showsVerticalScrollIndicator={false}
+                onScroll={handleScroll}
+                scrollEventThrottle={16}
+              >
 
         {/* Waitlist Section - Top Priority */}
         {waitlistEntries.length > 0 && (
@@ -1235,21 +1243,23 @@ export default function ClientHomeScreen() {
         {/* Social section merged above with Location */}
         
         {/* Footer: Slotlys logo with link */}
-        <View style={styles.footerContainer}>
-          <TouchableOpacity
-            onPress={() => Linking.openURL('https://slotlys.com/')}
-            activeOpacity={0.8}
-            accessibilityLabel={t('common.openWebsite','Open website')}
-          >
-            <Image
-              source={require('../../assets/images/ddoown-08.png')}
-              style={styles.footerLogo}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
-        </View>
-          </ScrollView>
-        </Animated.View>
+              <View style={styles.footerContainer}>
+                <TouchableOpacity
+                  onPress={() => Linking.openURL('https://slotlys.com/')}
+                  activeOpacity={0.8}
+                  accessibilityLabel={t('common.openWebsite','Open website')}
+                >
+                  <Image
+                    source={require('../../assets/images/ddoown-08.png')}
+                    style={styles.footerLogo}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </LinearGradient>
+      </Animated.View>
 
         {/* Active Broadcast Message Modal */}
         <Modal
@@ -1492,21 +1502,43 @@ const styles = StyleSheet.create<any>({
     justifyContent: 'center',
   },
   // Grey rounded container like admin home
-  contentWrapper: {
+  contentWrapperContainer: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    marginTop: -20, // Overlap with hero image
+    marginTop: -38, // Increased overlap with hero image
     paddingTop: 1, // Reduced to tighten space under hero
     paddingBottom: 0, // No bottom padding to allow full scrolling
     minHeight: '100%', // Fill the entire screen height
-    overflow: 'hidden',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    backgroundColor: 'transparent',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  contentWrapperGlassBorder: {
+    flex: 1,
+    borderTopLeftRadius: 31,
+    borderTopRightRadius: 31,
+    borderBottomLeftRadius: 31,
+    borderBottomRightRadius: 31,
+    padding: 9,
+    overflow: 'hidden',
+  },
+  contentWrapper: {
+    flex: 1,
+    backgroundColor: 'rgba(248,249,250,0.96)',
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    borderBottomLeftRadius: 26,
+    borderBottomRightRadius: 26,
+    paddingTop: 1,
+    paddingBottom: 0,
+    minHeight: '100%',
+    overflow: 'hidden',
   },
   logo: {
     width: 160,

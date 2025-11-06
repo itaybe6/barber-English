@@ -1476,7 +1476,7 @@ export default function BookAppointment() {
                       )}
                       </TouchableOpacity>
                       <View style={[styles.stepperBadge, (active || done) && styles.stepperBadgeActive]}>
-                        <Ionicons name="clipboard-outline" size={12} color="#FFFFFF" />
+                        <Text style={[styles.stepperBadgeText, (active || done) && styles.stepperBadgeTextActive]}>{s.key}</Text>
                       </View>
                     {/* Removed name pill under step 1 per request */}
                     </View>
@@ -2367,7 +2367,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     justifyContent: 'space-between',
   },
   stepperShiftLeft: {
-    transform: [{ translateX: -25 }],
+    transform: [{ translateX: -36 }],
   },
   ltr: {
     // Force LTR ordering for steps, regardless of app locale
@@ -2451,6 +2451,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     height: 2,
     backgroundColor: 'rgba(255,255,255,0.3)',
     marginHorizontal: 4,
+    marginTop: -26,
   },
   stepperLineDone: {
     backgroundColor: 'rgba(255,255,255,0.8)',

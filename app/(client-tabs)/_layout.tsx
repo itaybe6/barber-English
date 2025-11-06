@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { View, TouchableOpacity, StyleSheet, Animated, Easing, Alert, Text as RNText, I18nManager } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Animated, Easing, Alert, Text as RNText } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import Colors from '@/constants/colors';
 import { Ionicons } from '@expo/vector-icons';
@@ -115,8 +115,12 @@ export default function ClientTabsLayout() {
   const isBlocked = Boolean((user as any)?.block);
   const colors = useColors();
   const { colorUpdateTrigger } = useColorUpdate();
-  const { t } = useTranslation();
-  const isRtl = I18nManager.isRTL;
+  const { t, i18n } = useTranslation();
+  const language = (i18n?.language || 'en').toLowerCase();
+  const isHebrew = language.startsWith('he');
+  const mainTabOrder = isHebrew
+    ? ['profile', 'appointments', 'book-appointment', 'gallery', 'index']
+    : ['index', 'gallery', 'book-appointment', 'appointments', 'profile'];
   
   const [loginModal, setLoginModal] = React.useState<{ visible: boolean; title?: string; message?: string }>({ visible: false });
   
@@ -132,8 +136,9 @@ export default function ClientTabsLayout() {
   return (
     <>
     <Tabs
+      key={isHebrew ? 'tabs-rtl' : 'tabs-ltr'}
       screenOptions={({ route }) => {
-        const flexDirection = isRtl ? 'row' : 'row-reverse';
+        const flexDirection = 'row';
         return {
           tabBarHideOnKeyboard: true,
           tabBarIcon: ({ color, size, focused }) => {
@@ -302,76 +307,104 @@ export default function ClientTabsLayout() {
         };
       }}
     >
-      <Tabs.Screen 
-        name="index" 
-        options={{
-          title: t('tabs.home', 'Home'),
-        }}
-      />
-      <Tabs.Screen 
-        name="gallery" 
-        options={{
-          title: t('tabs.gallery', 'Gallery'),
-        }}
-      />
-      <Tabs.Screen 
-        name="book-appointment" 
-        options={{
-          title: t('tabs.book', 'Book'),
-          tabBarButton: (props: any) => (
-            <TouchableOpacity
-              {...props}
-              onPress={() => {
-                if (!isAuthenticated) {
-                  setLoginModal({
-                    visible: true,
-                    title: t('login.required', 'Login Required'),
-                    message: t('login.pleaseSignInToBook', 'Please sign in to book an appointment.'),
-                  });
-                  return;
-                }
-                if (isBlocked) {
-                  Alert.alert(t('account.blocked', 'Account Blocked'), t('account.blocked.message', 'Your account is blocked. You cannot book appointments.'));
-                  return;
-                }
-                router.push('/(client-tabs)/book-appointment');
+      {mainTabOrder.map((screenName) => {
+        if (screenName === 'index') {
+          return (
+            <Tabs.Screen
+              key="index"
+              name="index"
+              options={{
+                title: t('tabs.home', 'Home'),
               }}
-              style={styles.centerTabItem}
-            >
-              <FloatingBookButton 
-                onPress={() => {
-                  if (!isAuthenticated) {
-                    setLoginModal({
-                      visible: true,
-                      title: t('login.required', 'Login Required'),
-                      message: t('login.pleaseSignInToBook', 'Please sign in to book an appointment.'),
-                    });
-                    return;
-                  }
-                  if (isBlocked) {
-                    Alert.alert(t('account.blocked', 'Account Blocked'), t('account.blocked.message', 'Your account is blocked. You cannot book appointments.'));
-                    return;
-                  }
-                  router.push('/(client-tabs)/book-appointment');
-                }}
-                focused={false}
-              />
-            </TouchableOpacity>
-          ),
-        }}
-      />
-      <Tabs.Screen 
-        name="appointments" 
-        options={{
-          title: t('tabs.booking', 'Booking'),
-        }}
-      />
-      <Tabs.Screen 
-        name="profile" 
-        options={{
-          title: t('tabs.profile', 'Profile'),
-        }}
-      />
+            />
+          );
+        }
+        if (screenName === 'gallery') {
+          return (
+            <Tabs.Screen
+              key="gallery"
+              name="gallery"
+              options={{
+                title: t('tabs.gallery', 'Gallery'),
+              }}
+            />
+          );
+        }
+        if (screenName === 'appointments') {
+          return (
+            <Tabs.Screen
+              key="appointments"
+              name="appointments"
+              options={{
+                title: t('tabs.booking', 'Booking'),
+              }}
+            />
+          );
+        }
+        if (screenName === 'profile') {
+          return (
+            <Tabs.Screen
+              key="profile"
+              name="profile"
+              options={{
+                title: t('tabs.profile', 'Profile'),
+              }}
+            />
+          );
+        }
+        if (screenName === 'book-appointment') {
+          return (
+            <Tabs.Screen
+              key="book-appointment"
+              name="book-appointment"
+              options={{
+                title: t('tabs.book', 'Book'),
+                tabBarButton: (props: any) => (
+                  <TouchableOpacity
+                    {...props}
+                    onPress={() => {
+                      if (!isAuthenticated) {
+                        setLoginModal({
+                          visible: true,
+                          title: t('login.required', 'Login Required'),
+                          message: t('login.pleaseSignInToBook', 'Please sign in to book an appointment.'),
+                        });
+                        return;
+                      }
+                      if (isBlocked) {
+                        Alert.alert(t('account.blocked', 'Account Blocked'), t('account.blocked.message', 'Your account is blocked. You cannot book appointments.'));
+                        return;
+                      }
+                      router.push('/(client-tabs)/book-appointment');
+                    }}
+                    style={styles.centerTabItem}
+                  >
+                    <FloatingBookButton
+                      onPress={() => {
+                        if (!isAuthenticated) {
+                          setLoginModal({
+                            visible: true,
+                            title: t('login.required', 'Login Required'),
+                            message: t('login.pleaseSignInToBook', 'Please sign in to book an appointment.'),
+                          });
+                          return;
+                        }
+                        if (isBlocked) {
+                          Alert.alert(t('account.blocked', 'Account Blocked'), t('account.blocked.message', 'Your account is blocked. You cannot book appointments.'));
+                          return;
+                        }
+                        router.push('/(client-tabs)/book-appointment');
+                      }}
+                      focused={false}
+                    />
+                  </TouchableOpacity>
+                ),
+              }}
+            />
+          );
+        }
+        return null;
+      })}
       <Tabs.Screen 
         name="waitlist" 
         options={{

@@ -6,13 +6,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { User } from '@/lib/supabase';
 
 // Local constants (keep consistent with the booking screen)
-const AVATAR_SIZE = 112; // larger avatar for better visibility
+const AVATAR_SIZE = 100; // slightly smaller to open up more breathing room
 const ITEM_SPACING = 16;
 const ITEM_SIZE = AVATAR_SIZE + ITEM_SPACING;
 const SCREEN = Dimensions.get('window');
 const AnimatedFlatList: any = Animated.createAnimatedComponent(FlatList as any);
-const HEADER_HEIGHT = 360; // expanded a bit to avoid top/bottom clipping while keeping within window
-const CARD_WIDTH_PERCENT = 0.68; // shrink main card a bit to create more space between images
+const HEADER_HEIGHT = 320; // reduce card height so the background window feels taller
+const CARD_WIDTH_PERCENT = 0.64; // shrink main card a bit to create more space between images
 
 export type BarberSelectorProps = {
   barbers: User[];
@@ -92,66 +92,148 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
         }}
         style={{ width: HERO_ITEM_LENGTH, alignItems: 'center', paddingHorizontal: 4 }}
       >
-        <Animated.View style={[{ width: cardWidth, height: HEADER_HEIGHT, borderRadius: 38, overflow: 'visible', backgroundColor: 'transparent', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.3, shadowRadius: 30, elevation: 15 }, cardStyle]}>
-          {/* Outer glow ring */}
-          <View style={{ position: 'absolute', top: -3, left: -3, right: -3, bottom: -3, borderRadius: 41, borderWidth: 3, borderColor: 'rgba(255,255,255,0.15)' }} />
-          
-          {/* Main card container */}
-          <View style={{ width: '100%', height: '100%', borderRadius: 38, overflow: 'hidden' }}>
-            {/* Liquid glass effect layers */}
-            <BlurView intensity={22} tint="light" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
-            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.12)' }} />
-            
-            {/* Multiple glass shine overlays */}
-            <View style={{ position: 'absolute', top: -25, left: -15, width: '75%', height: 110, borderRadius: 70, backgroundColor: 'rgba(255,255,255,0.28)', opacity: 0.65, transform: [{ rotate: '-18deg' }] }} />
-            <View style={{ position: 'absolute', bottom: -20, right: -10, width: '60%', height: 80, borderRadius: 50, backgroundColor: 'rgba(255,255,255,0.18)', opacity: 0.5, transform: [{ rotate: '12deg' }] }} />
-            
-            {/* Triple border for depth */}
-            <View style={{ position: 'absolute', top: 3, left: 3, right: 3, bottom: 3, borderRadius: 35, borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)' }} />
-            <View style={{ position: 'absolute', top: 6, left: 6, right: 6, bottom: 6, borderRadius: 32, borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' }} />
-            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 38, borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.2)' }} />
-          
-            {barber?.image_url ? (
-              <Image source={{ uri: barber.image_url as any }} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} resizeMode="cover" />
-            ) : (
-              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#E5E5EA' }} />
-            )}
-            <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.3)' }} />
-          {/* Bottom glass name pill */}
-          <View style={{ position: 'absolute', left: 14, right: 14, bottom: 14, alignItems: 'center' }}>
-            <BlurView intensity={32} tint="light" style={{
-              paddingVertical: 12,
-              paddingHorizontal: 14,
-              borderRadius: 24,
-              overflow: 'hidden',
-              borderWidth: 1.5,
-              borderColor: 'rgba(255,255,255,0.45)',
-              backgroundColor: 'rgba(255,255,255,0.2)',
+        <Animated.View
+          style={[
+            {
+              width: cardWidth,
+              height: HEADER_HEIGHT,
+              borderRadius: 34,
+              overflow: 'visible',
+              backgroundColor: 'transparent',
               shadowColor: '#000',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.15,
-              shadowRadius: 12,
-              elevation: 5
-            }}>
-              <View style={{ position: 'absolute', top: -8, left: -6, width: '60%', height: 32, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.3)', opacity: 0.5, transform: [{ rotate: '-12deg' }] }} />
+              shadowOffset: { width: 0, height: 16 },
+              shadowOpacity: 0.26,
+              shadowRadius: 26,
+              elevation: 14,
+            },
+            cardStyle,
+          ]}
+        >
+          {/* Soft outline to keep the carousel window airy without hiding the background */}
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: -2,
+              left: -2,
+              right: -2,
+              bottom: -2,
+              borderRadius: 36,
+              borderWidth: 2,
+              borderColor: 'rgba(255, 255, 255, 0)',
+            }}
+          />
+
+          {/* Main card container stays fully transparent so the background hero image remains visible */}
+          <View
+            style={{
+              width: '100%',
+              height: '100%',
+              borderRadius: 34,
+              overflow: 'hidden',
+              backgroundColor: 'transparent',
+            }}
+          >
+            {barber?.image_url ? (
+              <Image
+                source={{ uri: barber.image_url as any }}
+                style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+                resizeMode="cover"
+              />
+            ) : (
+              <View
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: '#E5E5EA',
+                }}
+              />
+            )}
+            {/* Gentle gradient only on the lower portion to keep labels readable */}
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: '45%',
+                backgroundColor: 'rgba(0, 0, 0, 0)',
+              }}
+            />
+          </View>
+
+          {/* Bottom glass name pill */}
+          <View style={{ position: 'absolute', left: 18, right: 18, bottom: 18, alignItems: 'center' }}>
+            <BlurView
+              intensity={20}
+              tint="light"
+              style={{
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                borderRadius: 24,
+                overflow: 'hidden',
+                borderWidth: 1.25,
+                borderColor: 'rgba(255,255,255,0.35)',
+                backgroundColor: 'rgba(255, 255, 255, 0)',
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 3 },
+                shadowOpacity: 0.18,
+                shadowRadius: 8,
+                elevation: 5,
+              }}
+            >
+              <View
+                style={{
+                  position: 'absolute',
+                  top: -8,
+                  left: -6,
+                  width: '60%',
+                  height: 28,
+                  borderRadius: 18,
+                  backgroundColor: 'rgba(255,255,255,0.28)',
+                  opacity: 0.4,
+                  transform: [{ rotate: '-12deg' }],
+                }}
+              />
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <Text numberOfLines={1} style={{
-                  color: '#FFFFFF',
-                  fontWeight: '900',
-                  fontSize: 17,
-                  textShadowColor: 'rgba(0,0,0,0.4)',
-                  textShadowOffset: { width: 0, height: 2 },
-                  textShadowRadius: 4,
-                  flexShrink: 1,
-                }}>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: '#FFFFFF',
+                    fontWeight: '900',
+                    fontSize: 17,
+                    textShadowColor: 'rgba(0,0,0,0.4)',
+                    textShadowOffset: { width: 0, height: 2 },
+                    textShadowRadius: 4,
+                    flexShrink: 1,
+                  }}
+                >
                   {barber?.name || ''}
                 </Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <TouchableOpacity
                     activeOpacity={0.85}
                     delayPressIn={0}
-                    onPressIn={() => { if (telUrl) Linking.openURL(telUrl).catch(() => {}); }}
-                    style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#2E7CF6', alignItems: 'center', justifyContent: 'center', shadowColor: '#2E7CF6', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 4 }}
+                    onPressIn={() => {
+                      if (telUrl) Linking.openURL(telUrl).catch(() => {});
+                    }}
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      backgroundColor: '#2E7CF6',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      shadowColor: '#2E7CF6',
+                      shadowOffset: { width: 0, height: 3 },
+                      shadowOpacity: 0.35,
+                      shadowRadius: 6,
+                      elevation: 4,
+                    }}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     <Ionicons name="call-outline" size={18} color="#FFFFFF" />
@@ -159,7 +241,6 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
                 </View>
               </View>
             </BlurView>
-          </View>
           </View>
         </Animated.View>
       </TouchableOpacity>
@@ -195,7 +276,17 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
   }, [activeIndex, baseCount, centerToPhysicalIndex, middleBase]);
 
   return (
-    <View style={{ position: 'relative', height: HEADER_HEIGHT + 240, marginTop: 20, marginBottom: 160 }}>
+    <View
+      style={{
+        position: 'relative',
+        height: HEADER_HEIGHT + 360,
+        marginTop: 0,
+        marginBottom: 140,
+        paddingTop: 60,
+        paddingBottom: 56,
+        backgroundColor: 'transparent',
+      }}
+    >
       {/* Services/top overlay sits ABOVE the image, not on it */}
       {typeof renderTopOverlay === 'function' ? (
         <View style={{ marginTop: 32, marginHorizontal: 16 }}>
@@ -205,7 +296,7 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
 
       {/* Infinite, snap-to-center hero carousel */}
       {barbers.length > 0 && (
-        <View style={{ marginTop: 56, direction: 'ltr' as any }}>
+        <View style={{ flex: 1, justifyContent: 'center', direction: 'ltr' as any, paddingVertical: 12 }}>
           <AnimatedFlatList
             ref={listRef as any}
             data={Array.from({ length: totalItems })}
@@ -219,7 +310,7 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
             snapToAlignment="center"
             initialScrollIndex={initialIndex}
             getItemLayout={(_, index) => ({ length: HERO_ITEM_LENGTH, offset: HERO_ITEM_LENGTH * index, index })}
-            contentContainerStyle={{ paddingLeft: sidePadding, paddingRight: sidePadding }}
+            contentContainerStyle={{ paddingLeft: sidePadding, paddingRight: sidePadding, paddingVertical: 24 }}
             onScroll={scrollHandler as any}
             scrollEventThrottle={16}
             renderItem={({ index }) => <HeroItem index={index} />}
@@ -256,7 +347,7 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
         </View>
       )}
       {/* keep extra spacing below */}
-      <View style={{ height: 18 }} />
+      <View style={{ height: 28 }} />
     </View>
   );
 };

@@ -159,11 +159,11 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
         
         // Show success message
         Alert.alert(
-          'Color Updated Successfully! 🎨', 
-          'The new color has been saved and the app is updating automatically.',
+          t('success.generic','Success'), 
+          t('color.updateSuccess','The new color has been saved and the app is updating automatically.'),
           [
             {
-              text: 'Great!',
+              text: t('ok','OK'),
               onPress: () => {
                 // Additional refresh to ensure everything is updated
                 forceAppRefresh();
@@ -172,11 +172,11 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
           ]
         );
       } else {
-        Alert.alert('Error', 'Unable to update the color');
+        Alert.alert(t('error.generic','Error'), t('color.updateFailed','Unable to update the color'));
       }
     } catch (error) {
       console.error('Error updating color:', error);
-      Alert.alert('Error', 'An error occurred while updating the color');
+      Alert.alert(t('error.generic','Error'), t('color.updateFailed','Unable to update the color'));
     }
   };
 

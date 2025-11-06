@@ -20,6 +20,7 @@ import { ScrollView as RNScrollView } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import AdminBroadcastComposer from '@/components/AdminBroadcastComposer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { formatTimeFromDate } from '@/lib/utils/timeFormat';
 
 // Using require for images to avoid TS module resolution issues for static assets
 import CategoryBar from '@/components/CategoryBar';
@@ -194,12 +195,12 @@ export default function HomeScreen() {
   
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    return formatTimeFromDate(date);
   };
 
   const formatTimeRange = (dateString: string) => {
     const date = new Date(dateString);
-    const startTime = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const startTime = formatTimeFromDate(date);
     
     // Find the service to get duration
     const appointment = appointments.find(a => a.appointment_date === dateString);
@@ -210,7 +211,7 @@ export default function HomeScreen() {
     
     // Calculate end time
     const endDate = new Date(date.getTime() + service.duration * 60000);
-    const endTime = endDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const endTime = formatTimeFromDate(endDate);
     
     return `${startTime} — ${endTime}`;
   };

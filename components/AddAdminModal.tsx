@@ -171,11 +171,11 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
 
       if (newAdmin) {
         Alert.alert(
-          'Success',
-          'Admin user added successfully',
+          t('success.generic','Success'),
+          t('settings.admin.addSuccess','Admin user added successfully'),
           [
             {
-              text: 'OK',
+              text: t('ok','OK'),
               onPress: () => {
                 handleClose();
                 onSuccess();
@@ -184,11 +184,11 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
           ]
         );
       } else {
-        Alert.alert('Error', 'Error creating user. Phone number may already exist in the system');
+        Alert.alert(t('error.generic','Error'), t('settings.admin.createExists','Error creating user. Phone number may already exist in the system'));
       }
     } catch (error) {
       console.error('Error creating admin user:', error);
-      Alert.alert('Error', 'Error creating user');
+      Alert.alert(t('error.generic','Error'), t('settings.admin.createFailed','Error creating user'));
     } finally {
       setIsLoading(false);
     }
@@ -224,7 +224,7 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
               />
             </View>
             <View style={styles.stepperLabels}>
-              {['Basic','Email','Password','Review'].map((label, idx) => (
+              {[t('settings.admin.step.basic','Basic'), t('settings.admin.step.email','Email'), t('settings.admin.step.password','Password'), t('settings.admin.step.review','Review')].map((label, idx) => (
                 <View key={label} style={styles.stepperLabelWrap}>
                   <View style={[styles.stepDot, { borderColor: idx <= step ? businessColors.primary : '#D1D1D6', backgroundColor: idx < step ? businessColors.primary : '#FFFFFF' }]} />
                   <Text style={[styles.stepLabelText, { color: idx <= step ? businessColors.primary : '#8E8E93' }]}>{label}</Text>

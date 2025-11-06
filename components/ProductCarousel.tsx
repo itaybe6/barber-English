@@ -24,6 +24,7 @@ import { useColors } from '@/src/theme/ThemeProvider';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH * 0.42; // Slightly wider for better product display
 const CARD_HEIGHT = 280; // Taller for product cards
+const PRODUCT_IMAGE_HEIGHT = Math.max(200, CARD_HEIGHT * 0.62);
 const CARD_SPACING = 16;
 
 interface ProductCarouselProps {
@@ -189,7 +190,7 @@ export default function ProductCarousel({
                   : require('@/assets/images/default/HomePage/barber/101-min.png')
               }
               style={styles.productImage}
-              resizeMode="cover"
+              resizeMode="contain"
             />
             
             {/* Gradient Overlay */}
@@ -393,6 +394,7 @@ const styles = StyleSheet.create({
   },
   productCard: {
     width: '100%',
+    height: CARD_HEIGHT,
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     overflow: 'hidden',
@@ -406,8 +408,11 @@ const styles = StyleSheet.create({
   },
   productImageContainer: {
     position: 'relative',
-    height: 180,
+    height: PRODUCT_IMAGE_HEIGHT,
     overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F5F5F7',
   },
   productImage: {
     width: '100%',
@@ -466,6 +471,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
   productInfo: {
+    flex: 1,
     padding: 16,
     paddingTop: 12,
   },

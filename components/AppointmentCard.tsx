@@ -7,6 +7,7 @@ import { Clock, Calendar, User, CreditCard } from 'lucide-react-native';
 import { Appointment } from '@/constants/appointments';
 import { clients } from '@/constants/clients';
 import { services } from '@/constants/services';
+import { formatTimeFromDate } from '@/lib/utils/timeFormat';
 
 interface AppointmentCardProps {
   appointment: Appointment;
@@ -25,7 +26,7 @@ export default function AppointmentCard({ appointment, onPress }: AppointmentCar
   
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+    return formatTimeFromDate(date);
   };
   
   const getStatusColor = (status: string) => {

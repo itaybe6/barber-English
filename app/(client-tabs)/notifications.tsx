@@ -11,6 +11,7 @@ import { Notification } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { Bell, Clock, CheckCircle, AlertCircle, Calendar, XCircle, User } from 'lucide-react-native';
 import { useColors } from '@/src/theme/ThemeProvider';
+import { formatTimeFromDate } from '@/lib/utils/timeFormat';
 
 export default function ClientNotificationsScreen() {
   const { t, i18n } = useTranslation();
@@ -232,7 +233,7 @@ export default function ClientNotificationsScreen() {
         const [h, m] = tm.split(':');
         const fake = new Date();
         fake.setHours(Number(h), Number(m));
-        timePretty = fake.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        timePretty = formatTimeFromDate(fake);
         text = text.replace(timeMatch[0], '').trim();
       }
 

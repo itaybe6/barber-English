@@ -230,11 +230,22 @@
     "loginPage": { "formatNote": "\ud83d\udcf1 תמונות מסך ההתחברות מוצגות ביחס (9:16)" },
     "design": "עיצוב"
   },
+  "color": {
+    "primary": "צבע ראשי",
+    "current": "נוכחי",
+    "chooseApp": "בחר/י צבע לאפליקציה",
+    "chooseYourApp": "בחר/י את צבע האפליקציה",
+    "invalidTitle": "צבע לא תקין",
+    "invalidMessage": "אנא הזן/י קוד צבע תקין (למשל: #FF5733)",
+    "updateSuccess": "הצבע החדש נשמר והאפליקציה מתעדכנת אוטומטית.",
+    "updateFailed": "לא ניתן לעדכן את הצבע"
+  },
   "products": { "loginToViewDetails": "אנא התחבר/י להצגת פרטי המוצר" },
   "auth": { "signInNow": "התחבר/י עכשיו", "maybeLater": "אולי אחר כך" },
   "nearestSlots": { "title": "תורים זמינים בקרוב", "empty": "אין תורים זמינים בקרוב" },
   "map": { "mapsLabel": "מפות" },
   "common": { "tryAgain": "אירעה שגיאה. נסו שוב.", "client": "לקוח", "smsOpenFailed": "לא ניתן לפתוח את אפליקציית ה-SMS במכשיר זה", "searchPlaceholder": "חפש...", "user": "משתמש", "retry": "נסה שוב", "emailOpenFailed": "לא ניתן לפתוח את אפליקציית האימייל במכשיר זה", "phoneOpenFailed": "לא ניתן לפתוח את אפליקציית הטלפון במכשיר זה" },
+  "common.openWebsite": "פתיחת אתר",
   "common.loading": "טוען...",
   "common.eg": "למשל",
   "common.noResults": "אין תוצאות",
@@ -267,7 +278,9 @@
     "noPhone": { "title": "אין מספר טלפון", "message": "לא נמצא מספר טלפון תקין עבור לקוח זה." },
     "cannotCancel": { "title": "לא ניתן לבטל תור", "message": "לא ניתן לבטל את התור. נסו שוב." },
     "cancelError": "אירעה שגיאה בעת הביטול. נסו שוב.",
-    "cancelled": { "title": "ביטול תור", "content": "{{name}} ({{phone}}) ביטל/ה תור ל־\"{{service}}\" בתאריך {{date}} בשעה {{time}}" }
+    "cancelled": { "title": "ביטול תור", "content": "{{name}} ({{phone}}) ביטל/ה תור ל־\"{{service}}\" בתאריך {{date}} בשעה {{time}}" },
+    "contactCancelMessage": "היי, אני רוצה לבטל את התור שנקבע ליום {{date}} בשעה {{time}} עבור \"{{service}}\". אפשר לעזור?",
+    "contactShortNotice": "היי, אני צריך/ה עזרה בביטול תור בהתראה קצרה."
   },
   "settings": {
     "common": { "saving": "שומר...", "uploading": "מעלה..." },
@@ -400,7 +413,33 @@
       "thisEmployee": "עובד זה",
       "remove": "הסר",
       "removeSuccess": "העובד הוסר בהצלחה",
-      "removeFailed": "כשל בהסרת העובד"
+      "removeFailed": "כשל בהסרת העובד",
+      "nameRequired": "אנא הזן/י שם",
+      "phoneRequired": "אנא הזן/י מספר טלפון",
+      "phoneInvalid": "אנא הזן/י מספר טלפון תקין (לדוגמה: (055) 123-4567)",
+      "emailRequired": "אנא הזן/י כתובת אימייל",
+      "emailInvalid": "אנא הזן/י כתובת אימייל תקינה",
+      "passwordRequired": "אנא הזן/י סיסמה",
+      "passwordTooShort": "הסיסמה חייבת להכיל לפחות 6 תווים",
+      "passwordsMismatch": "הסיסמאות אינן תואמות",
+      "addSuccess": "מנהל נוסף בהצלחה",
+      "createExists": "שגיאה ביצירת המשתמש. ייתכן שמספר הטלפון כבר קיים במערכת",
+      "createFailed": "שגיאה ביצירת המשתמש",
+      "step": { "basic": "בסיסי", "email": "אימייל", "password": "סיסמה", "review": "סקירה" },
+      "fullNameLabel": "שם מלא *",
+      "fullNamePlaceholder": "הזן/י שם מלא",
+      "phoneLabel": "מספר טלפון *",
+      "emailLabel": "כתובת אימייל *",
+      "emailPlaceholder": "example@email.com",
+      "passwordLabel": "סיסמה *",
+      "passwordPlaceholder": "הזן/י סיסמה",
+      "passwordHint": "* לפחות 6 תווים",
+      "confirmPasswordLabel": "אימות סיסמה *",
+      "confirmPasswordPlaceholder": "אשר/י סיסמה",
+      "review": "סקירה",
+      "reviewName": "שם",
+      "reviewPhone": "טלפון",
+      "reviewEmail": "אימייל"
     }
   },
   "admin": {

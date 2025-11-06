@@ -641,7 +641,7 @@ export default function ClientProfileScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
-        <Text style={styles.versionText}>Version 1.0.0</Text>
+        <Text style={styles.versionText}>{t('settings.sections.version','Version')} 1.0.0</Text>
           </ScrollView>
         </View>
       </SafeAreaView>
@@ -1013,7 +1013,7 @@ export default function ClientProfileScreen() {
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
               <View style={{ width: 44 }} />
-              <Text style={styles.sheetTitle}>Upcoming Appointments</Text>
+              <Text style={styles.sheetTitle}>{t('profile.upcoming.title','Upcoming Appointments')}</Text>
               <TouchableOpacity onPress={() => setIsUpcomingOpen(false)} style={styles.sheetCloseBtn}>
                 <Ionicons name="close" size={22} color={Colors.text} />
               </TouchableOpacity>
@@ -1028,16 +1028,16 @@ export default function ClientProfileScreen() {
                 <View style={styles.historyEmpty}>
                   <Ionicons name="calendar-outline" size={56} color={businessColors.primary} />
                   <Text style={styles.historyEmptyTitle}>{t('profile.upcoming.emptyTitle','No upcoming appointments')}</Text>
-                  <Text style={styles.historyEmptySubtitle}>When appointments are booked, they will appear here</Text>
+                  <Text style={styles.historyEmptySubtitle}>{t('profile.upcoming.emptySubtitle','When appointments are booked, they will appear here')}</Text>
                 </View>
               ) : (
                 upcomingAppointments.map((item) => (
                   <View key={`${item.id}-${item.slot_date}-${item.slot_time}`} style={styles.historyCard}>
                     <View style={styles.historyCardHeader}>
-                      <Text style={styles.historyService}>{item.service_name || 'שירות'}</Text>
+                      <Text style={styles.historyService}>{item.service_name || t('booking.field.service','Service')}</Text>
                       <View style={[styles.statusPill, { backgroundColor: `${businessColors.primary}20` }]}>
                         <Ionicons name="calendar" size={16} color={businessColors.primary} />
-                        <Text style={[styles.statusPillText, { color: businessColors.primary }]}>Upcoming</Text>
+                        <Text style={[styles.statusPillText, { color: businessColors.primary }]}>{t('appointments.upcoming','Upcoming')}</Text>
                       </View>
                     </View>
                     <View style={styles.historyCardBody}>

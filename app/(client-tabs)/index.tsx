@@ -1239,7 +1239,7 @@ export default function ClientHomeScreen() {
           <TouchableOpacity
             onPress={() => Linking.openURL('https://slotlys.com/')}
             activeOpacity={0.8}
-            accessibilityLabel="מעבר לאתר Slotlys"
+            accessibilityLabel={t('common.openWebsite','Open website')}
           >
             <Image
               source={require('../../assets/images/ddoown-08.png')}

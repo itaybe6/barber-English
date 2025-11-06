@@ -10,6 +10,7 @@ import DaySelector from '@/components/DaySelector';
 import { useAuthStore } from '@/stores/authStore';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { useTranslation } from 'react-i18next';
+import { formatTimeFromDate } from '@/lib/utils/timeFormat';
 
 // Helper function to format date as YYYY-MM-DD in local timezone
 function formatDateToLocalString(date: Date): string {
@@ -321,7 +322,7 @@ export default function WaitlistScreen() {
           ) : selectedDayEntries.length > 0 ? (
             <View style={styles.cardsContainer}>
               {selectedDayEntries.map((entry) => {
-                const baseTime = entry.created_at ? new Date(entry.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+                const baseTime = entry.created_at ? formatTimeFromDate(new Date(entry.created_at)) : '--:--';
                 const pref = formatTimePreference(entry.time_period);
                 const time = pref ? `${baseTime} | ${pref}` : baseTime;
                 return (

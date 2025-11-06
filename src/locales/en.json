@@ -235,6 +235,7 @@
   "nearestSlots": { "title": "Available soon", "empty": "No nearby available appointments" },
   "map": { "mapsLabel": "Maps" },
   "common": { "tryAgain": "An error occurred. Please try again.", "client": "Client", "smsOpenFailed": "SMS app cannot be opened on this device", "searchPlaceholder": "Search...", "user": "User", "retry": "Retry", "emailOpenFailed": "Cannot open email client on this device", "phoneOpenFailed": "Unable to open the dialer on this device" },
+  "common.openWebsite": "Open website",
   "common.loading": "Loading...",
   "common.eg": "e.g.",
   "common.noResults": "No results",
@@ -267,7 +268,9 @@
     "noPhone": { "title": "No phone number", "message": "No valid phone number was found for this client." },
     "cannotCancel": { "title": "Cannot Cancel Appointment", "message": "Unable to cancel the appointment. Please try again." },
     "cancelError": "An error occurred while cancelling. Please try again.",
-    "cancelled": { "title": "Appointment Cancellation", "content": "{{name}} ({{phone}}) canceled an appointment for \"{{service}}\" on {{date}} at {{time}}" }
+    "cancelled": { "title": "Appointment Cancellation", "content": "{{name}} ({{phone}}) canceled an appointment for \"{{service}}\" on {{date}} at {{time}}" },
+    "contactCancelMessage": "Hi, I would like to cancel the appointment set for {{date}} at {{time}} for \"{{service}}\". Can you help?",
+    "contactShortNotice": "Hi, I need help cancelling an appointment on short notice."
   },
   "settings": {
     "common": { "saving": "Saving...", "uploading": "Uploading..." },
@@ -400,10 +403,46 @@
       "thisEmployee": "this employee",
       "remove": "Remove",
       "removeSuccess": "Employee deleted successfully",
-      "removeFailed": "Failed to remove employee"
+      "removeFailed": "Failed to remove employee",
+      "nameRequired": "Please enter a name",
+      "phoneRequired": "Please enter a phone number",
+      "phoneInvalid": "Please enter a valid phone number (US: (555) 123-4567)",
+      "emailRequired": "Please enter an email address",
+      "emailInvalid": "Please enter a valid email address",
+      "passwordRequired": "Please enter a password",
+      "passwordTooShort": "Password must be at least 6 characters",
+      "passwordsMismatch": "Passwords do not match",
+      "addSuccess": "Admin user added successfully",
+      "createExists": "Error creating user. Phone number may already exist in the system",
+      "createFailed": "Error creating user",
+      "step": { "basic": "Basic", "email": "Email", "password": "Password", "review": "Review" },
+      "fullNameLabel": "Full Name *",
+      "fullNamePlaceholder": "Enter full name",
+      "phoneLabel": "Phone Number *",
+      "emailLabel": "Email Address *",
+      "emailPlaceholder": "example@email.com",
+      "passwordLabel": "Password *",
+      "passwordPlaceholder": "Enter password",
+      "passwordHint": "* Minimum 6 characters",
+      "confirmPasswordLabel": "Confirm Password *",
+      "confirmPasswordPlaceholder": "Confirm password",
+      "review": "Review",
+      "reviewName": "Name",
+      "reviewPhone": "Phone",
+      "reviewEmail": "Email"
     }
   }
   ,
+  "color": {
+    "primary": "Primary Color",
+    "current": "Current",
+    "chooseApp": "Choose App Color",
+    "chooseYourApp": "Choose Your App Color",
+    "invalidTitle": "Invalid Color",
+    "invalidMessage": "Please enter a valid hex color (e.g., #FF5733)",
+    "updateSuccess": "The new color has been saved and the app is updating automatically.",
+    "updateFailed": "Unable to update the color"
+  },
   "admin": {
     "home": {
       "welcome": "Welcome",

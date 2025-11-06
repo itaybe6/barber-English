@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { View, TouchableOpacity, StyleSheet, Animated, Easing, Alert, Text as RNText } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Animated, Easing, Alert, Text as RNText, I18nManager } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import Colors from '@/constants/colors';
 import { Ionicons } from '@expo/vector-icons';
@@ -116,6 +116,7 @@ export default function ClientTabsLayout() {
   const colors = useColors();
   const { colorUpdateTrigger } = useColorUpdate();
   const { t } = useTranslation();
+  const isRtl = I18nManager.isRTL;
   
   const [loginModal, setLoginModal] = React.useState<{ visible: boolean; title?: string; message?: string }>({ visible: false });
   
@@ -131,172 +132,175 @@ export default function ClientTabsLayout() {
   return (
     <>
     <Tabs
-      screenOptions={({ route }) => ({
-        tabBarHideOnKeyboard: true,
-        tabBarIcon: ({ color, size, focused }) => {
-          const iconSize = focused ? 26 : 24;
-          const iconColor = focused ? '#FFFFFF' : 'rgba(255,255,255,0.7)';
-          
-          let iconName;
-          switch (route.name) {
-            case 'index':
-              iconName = focused ? 'home' : 'home-outline';
-              break;
-            case 'gallery':
-              iconName = focused ? 'images' : 'images-outline';
-              break;
-            case 'appointments':
-              iconName = focused ? 'calendar' : 'calendar-outline';
-              break;
-            case 'profile':
-              iconName = focused ? 'person' : 'person-outline';
-              break;
-            case 'book-appointment':
-              return (
-                <FloatingBookButton 
-                  onPress={() => {
+      screenOptions={({ route }) => {
+        const flexDirection = isRtl ? 'row' : 'row-reverse';
+        return {
+          tabBarHideOnKeyboard: true,
+          tabBarIcon: ({ color, size, focused }) => {
+            const iconSize = focused ? 26 : 24;
+            const iconColor = focused ? '#FFFFFF' : 'rgba(255,255,255,0.7)';
+            
+            let iconName;
+            switch (route.name) {
+              case 'index':
+                iconName = focused ? 'home' : 'home-outline';
+                break;
+              case 'gallery':
+                iconName = focused ? 'images' : 'images-outline';
+                break;
+              case 'appointments':
+                iconName = focused ? 'calendar' : 'calendar-outline';
+                break;
+              case 'profile':
+                iconName = focused ? 'person' : 'person-outline';
+                break;
+              case 'book-appointment':
+                return (
+                  <FloatingBookButton 
+                    onPress={() => {
+                      if (!isAuthenticated) {
+                        setLoginModal({
+                          visible: true,
+                          title: t('login.required', 'Login Required'),
+                          message: t('login.pleaseSignInToBook', 'Please sign in to book an appointment.'),
+                        });
+                        return;
+                      }
+                      if (isBlocked) {
+                        // Keep Alert for blocked users as it's a different use case
+                        Alert.alert(t('account.blocked', 'Account Blocked'), t('account.blocked.message', 'Your account is blocked. You cannot book appointments.'));
+                        return;
+                      }
+                      router.push('/(client-tabs)/book-appointment');
+                    }}
+                    focused={focused}
+                  />
+                );
+              default:
+                return null;
+            }
+            return (
+              <View style={[styles.iconContainer, focused && styles.iconContainerFocused]}>
+                <Ionicons 
+                  name={iconName as any} 
+                  size={iconSize} 
+                  color={iconColor}
+                  style={{ fontWeight: focused ? '700' : '400' }}
+                />
+              </View>
+            );
+          },
+          tabBarButton: (props: any) => {
+            // Intercept presses for specific routes to enforce auth
+            const originalOnPress = props.onPress;
+            
+            return (
+              <TouchableOpacity
+                {...(props as any)}
+                onPress={() => {
+                  // Check if this is a protected route based on route name
+                  if (route.name === 'appointments' || route.name === 'profile') {
                     if (!isAuthenticated) {
                       setLoginModal({
                         visible: true,
                         title: t('login.required', 'Login Required'),
-                        message: t('login.pleaseSignInToBook', 'Please sign in to book an appointment.'),
+                        message: t('login.pleaseSignInTo', 'Please sign in to {{action}}.', { action: route.name === 'appointments' ? t('appointments.title', 'Appointments') : t('profile.title', 'Settings and Profile') }),
                       });
                       return;
                     }
-                    if (isBlocked) {
-                      // Keep Alert for blocked users as it's a different use case
-                      Alert.alert(t('account.blocked', 'Account Blocked'), t('account.blocked.message', 'Your account is blocked. You cannot book appointments.'));
-                      return;
-                    }
-                    router.push('/(client-tabs)/book-appointment');
-                  }}
-                  focused={focused}
-                />
-              );
-            default:
-              return null;
-          }
-          return (
-            <View style={[styles.iconContainer, focused && styles.iconContainerFocused]}>
-              <Ionicons 
-                name={iconName as any} 
-                size={iconSize} 
-                color={iconColor}
-                style={{ fontWeight: focused ? '700' : '400' }}
-              />
-            </View>
-          );
-        },
-        tabBarButton: (props: any) => {
-          // Intercept presses for specific routes to enforce auth
-          const originalOnPress = props.onPress;
-          
-          return (
-            <TouchableOpacity
-              {...(props as any)}
-              onPress={() => {
-                // Check if this is a protected route based on route name
-                if (route.name === 'appointments' || route.name === 'profile') {
-                  if (!isAuthenticated) {
-                    setLoginModal({
-                      visible: true,
-                      title: t('login.required', 'Login Required'),
-                      message: t('login.pleaseSignInTo', 'Please sign in to {{action}}.', { action: route.name === 'appointments' ? t('appointments.title', 'Appointments') : t('profile.title', 'Settings and Profile') }),
-                    });
-                    return;
                   }
-                }
-                originalOnPress?.({} as any);
-              }}
-            />
-          );
-        },
-        tabBarActiveTintColor: '#FFFFFF',
-        tabBarInactiveTintColor: 'rgba(255,255,255,0.7)',
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '600',
-          textAlign: 'center',
-          marginTop: 4,
-          letterSpacing: -0.1,
-        },
-        tabBarItemStyle: route.name === 'book-appointment' ? styles.centerTabItem : styles.regularTabItem,
-        tabBarLabelPosition: 'below-icon',
-        tabBarLabel: route.name === 'book-appointment'
-          ? ''
-          : (
-            route.name === 'index' ? t('tabs.home', 'Home') :
-            route.name === 'gallery' ? t('tabs.gallery', 'Gallery') :
-            route.name === 'appointments' ? t('tabs.booking', 'Booking') :
-            route.name === 'profile' ? t('tabs.profile', 'Profile') :
-            route.name === 'waitlist' ? t('waitlist.title', 'Waitlist') :
-            route.name === 'notifications' ? t('notifications.title', 'Notifications') :
-            t('tabs.home', 'Home')
+                  originalOnPress?.({} as any);
+                }}
+              />
+            );
+          },
+          tabBarActiveTintColor: '#FFFFFF',
+          tabBarInactiveTintColor: 'rgba(255,255,255,0.7)',
+          tabBarLabelStyle: {
+            fontSize: 11,
+            fontWeight: '600',
+            textAlign: 'center',
+            marginTop: 4,
+            letterSpacing: -0.1,
+          },
+          tabBarItemStyle: route.name === 'book-appointment' ? styles.centerTabItem : styles.regularTabItem,
+          tabBarLabelPosition: 'below-icon',
+          tabBarLabel: route.name === 'book-appointment'
+            ? ''
+            : (
+              route.name === 'index' ? t('tabs.home', 'Home') :
+              route.name === 'gallery' ? t('tabs.gallery', 'Gallery') :
+              route.name === 'appointments' ? t('tabs.booking', 'Booking') :
+              route.name === 'profile' ? t('tabs.profile', 'Profile') :
+              route.name === 'waitlist' ? t('waitlist.title', 'Waitlist') :
+              route.name === 'notifications' ? t('notifications.title', 'Notifications') :
+              t('tabs.home', 'Home')
+            ),
+          tabBarContentContainerStyle: {
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexDirection,
+          },
+          tabBarStyle: {
+            backgroundColor: 'transparent',
+            borderTopWidth: 0,
+            height: 76,
+            paddingTop: 6,
+            paddingBottom: 12,
+            paddingHorizontal: 0,
+            position: 'absolute',
+            bottom: 18,
+            marginHorizontal:16,
+            borderTopLeftRadius: 28,
+            borderTopRightRadius: 28,
+            borderBottomLeftRadius: 28,
+            borderBottomRightRadius: 28,
+            shadowColor: '#000000',
+            shadowOffset: { width: 0, height: 22 },
+            shadowOpacity: 0.22,
+            shadowRadius: 38,
+            elevation: 28,
+            flexDirection,
+          },
+          tabBarBackground: () => (
+            <BlurView intensity={96} tint="dark" style={styles.tabBarBackground}>
+              {/* Subtle white tint for refraction */}
+              <View style={styles.glassTint} />
+              {/* Static light sweep for depth (no animation) */}
+              <LinearGradient
+                colors={['rgba(255,255,255,0.26)', 'rgba(255,255,255,0.12)', 'rgba(255,255,255,0.00)']}
+                start={{ x: 0.1, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.glassLight}
+              />
+              {/* Top edge highlight */}
+              <LinearGradient
+                colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0.0)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 0.55 }}
+                style={styles.glassTopEdge}
+              />
+              {/* Uniform subtle vertical vignette across the whole bar */}
+              <LinearGradient
+                colors={['rgba(255,255,255,0.06)', 'rgba(0,0,0,0.08)']}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+                style={styles.glassVignette}
+              />
+              {/* Thin inner edge highlight */}
+              <View style={styles.glassEdge} />
+              {/* Subtle bottom sheen for underside reflection */}
+              <LinearGradient
+                colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.0)']}
+                start={{ x: 0.5, y: 1 }}
+                end={{ x: 0.5, y: 0.8 }}
+                style={styles.glassBottomSheen}
+              />
+            </BlurView>
           ),
-        tabBarContentContainerStyle: {
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexDirection: 'row'
-        },
-        tabBarStyle: {
-          backgroundColor: 'transparent',
-          borderTopWidth: 0,
-          height: 76,
-          paddingTop: 6,
-          paddingBottom: 12,
-          paddingHorizontal: 0,
-          position: 'absolute',
-          bottom: 18,
-          marginHorizontal:16,
-          borderTopLeftRadius: 28,
-          borderTopRightRadius: 28,
-          borderBottomLeftRadius: 28,
-          borderBottomRightRadius: 28,
-          shadowColor: '#000000',
-          shadowOffset: { width: 0, height: 22 },
-          shadowOpacity: 0.22,
-          shadowRadius: 38,
-          elevation: 28,
-          flexDirection: 'row'
-        },
-        tabBarBackground: () => (
-          <BlurView intensity={96} tint="dark" style={styles.tabBarBackground}>
-            {/* Subtle white tint for refraction */}
-            <View style={styles.glassTint} />
-            {/* Static light sweep for depth (no animation) */}
-            <LinearGradient
-              colors={['rgba(255,255,255,0.26)', 'rgba(255,255,255,0.12)', 'rgba(255,255,255,0.00)']}
-              start={{ x: 0.1, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.glassLight}
-            />
-            {/* Top edge highlight */}
-            <LinearGradient
-              colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0.0)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 0, y: 0.55 }}
-              style={styles.glassTopEdge}
-            />
-            {/* Uniform subtle vertical vignette across the whole bar */}
-            <LinearGradient
-              colors={['rgba(255,255,255,0.06)', 'rgba(0,0,0,0.08)']}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={styles.glassVignette}
-            />
-            {/* Thin inner edge highlight */}
-            <View style={styles.glassEdge} />
-            {/* Subtle bottom sheen for underside reflection */}
-            <LinearGradient
-              colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.0)']}
-              start={{ x: 0.5, y: 1 }}
-              end={{ x: 0.5, y: 0.8 }}
-              style={styles.glassBottomSheen}
-            />
-          </BlurView>
-        ),
-        headerShown: false,
-      })}
+          headerShown: false,
+        };
+      }}
     >
       <Tabs.Screen 
         name="index" 
@@ -375,8 +379,7 @@ export default function ClientTabsLayout() {
           href: null
         }}
       />
-
-<Tabs.Screen 
+      <Tabs.Screen 
         name="notifications" 
         options={{
           title: t('notifications.title', 'Notifications'),

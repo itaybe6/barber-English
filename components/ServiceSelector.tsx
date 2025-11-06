@@ -1,14 +1,13 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, Image, Dimensions, FlatList } from 'react-native';
 import { BlurView } from 'expo-blur';
-import Animated, { useSharedValue, useAnimatedScrollHandler, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, Easing } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedScrollHandler, useAnimatedStyle, interpolate, Extrapolate, runOnJS } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { Service } from '@/lib/supabase';
 
 const SCREEN = Dimensions.get('window');
 const HEADER_HEIGHT = 360; // expanded a bit to avoid top/bottom clipping while keeping within window
-const CENTER_NUDGE = 8; // pixels to nudge right so the selected card appears visually centered
 const CARD_WIDTH_PERCENT = 0.68;
 const AnimatedFlatList: any = Animated.createAnimatedComponent(FlatList as any);
 
@@ -28,34 +27,17 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
     return (service as any)?.image_url || (service as any)?.cover_url || (service as any)?.image || null;
   };
 
-  const [bgCurrent, setBgCurrent] = React.useState<string | null>(getCurrentImageUrl(activeIndex));
-  const bgOpacity = useSharedValue(1);
   const scrollX = useSharedValue(0);
   const listRef = React.useRef<FlatList>(null);
   const didInit = React.useRef(false);
   const lastIndex = React.useRef<number>(Math.max(0, activeIndex));
 
-  React.useEffect(() => {
-    const nextUrl = getCurrentImageUrl(activeIndex);
-    if (nextUrl && nextUrl !== bgCurrent) {
-      bgOpacity.value = withTiming(0, { duration: 200, easing: Easing.inOut(Easing.ease) }, (finished) => {
-        if (finished) {
-          runOnJS(setBgCurrent)(nextUrl);
-          bgOpacity.value = 0;
-          bgOpacity.value = withTiming(1, { duration: 300, easing: Easing.inOut(Easing.ease) });
-        }
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeIndex, services.length]);
-
   React.useEffect(() => {}, [activeIndex]);
 
-  const bgStyle = useAnimatedStyle(() => ({ opacity: bgOpacity.value }));
   const cardWidth = SCREEN.width * CARD_WIDTH_PERCENT;
   const ITEM_GAP = 14;
   const ITEM_LENGTH = cardWidth + ITEM_GAP;
-  const sidePadding = Math.max(0, (SCREEN.width - ITEM_LENGTH) / 2 - CENTER_NUDGE);
+  const sidePadding = Math.max(0, (SCREEN.width - ITEM_LENGTH) / 2);
   const baseCount = Math.max(1, services.length);
   const LOOP_COUNT = 200;
   const totalItems = baseCount * LOOP_COUNT;
@@ -63,14 +45,24 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
   const initialIndex = middleBase + (Math.max(0, activeIndex) % baseCount);
   // Use interval snapping with center alignment; correct drift on momentum end
 
+  const centerToPhysicalIndex = React.useCallback(
+    (physicalIndex: number, animated: boolean) => {
+      try {
+        const offset = ITEM_LENGTH * physicalIndex;
+        (listRef.current as any)?.scrollToOffset?.({ offset, animated });
+      } catch {}
+    },
+    [ITEM_LENGTH]
+  );
+
   React.useEffect(() => {
     if (!didInit.current && services && services.length > 0) {
       didInit.current = true;
-      try { (listRef.current as any)?.scrollToIndex?.({ index: initialIndex, animated: false, viewPosition: 0.5 }); } catch {}
+      try { centerToPhysicalIndex(initialIndex, false); } catch {}
       lastIndex.current = 0;
       try { onIndexChange(0); } catch {}
     }
-  }, [services?.length]);
+  }, [services?.length, centerToPhysicalIndex, initialIndex, onIndexChange]);
 
   const onScrollHandler = useAnimatedScrollHandler({
     onScroll: (e) => {
@@ -84,7 +76,7 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
     const service = services[baseIdx];
     const uri = getCurrentImageUrl(baseIdx);
     const cardStyle = (useAnimatedStyle(() => {
-      const pos = (scrollX.value - sidePadding) / ITEM_LENGTH;
+      const pos = scrollX.value / ITEM_LENGTH;
       const scale = interpolate(pos, [index - 1, index, index + 1], [0.95, 1.05, 0.95], Extrapolate.CLAMP);
       const opacity = interpolate(pos, [index - 1, index, index + 1], [0.9, 1, 0.9], Extrapolate.CLAMP);
       return { transform: [{ scale: scale as any }] as any, opacity } as any;
@@ -99,7 +91,7 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
             runOnJS(onIndexChange)(baseIdx);
           }
           // Smoothly center the tapped item by scrolling to its exact physical index
-          try { (listRef.current as any)?.scrollToIndex?.({ index, animated: true, viewPosition: 0.5 }); } catch {}
+          centerToPhysicalIndex(index, true);
         } catch {}
       }} style={{ width: ITEM_LENGTH, alignItems: 'center', paddingHorizontal: 4 }}>
         <Animated.View style={[{ width: cardWidth, height: HEADER_HEIGHT, borderRadius: 38, overflow: 'visible', backgroundColor: 'transparent', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.3, shadowRadius: 30, elevation: 15 }, cardStyle]}>
@@ -178,7 +170,7 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
           snapToInterval={ITEM_LENGTH}
           snapToAlignment="center"
           initialScrollIndex={initialIndex}
-          getItemLayout={(_, index) => ({ length: ITEM_LENGTH, offset: sidePadding + ITEM_LENGTH * index, index })}
+          getItemLayout={(_, index) => ({ length: ITEM_LENGTH, offset: ITEM_LENGTH * index, index })}
           contentContainerStyle={{ paddingLeft: sidePadding, paddingRight: sidePadding, marginTop: 24 }}
           onScroll={onScrollHandler as any}
           scrollEventThrottle={16}
@@ -186,10 +178,10 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
           onMomentumScrollEnd={(e: any) => {
             try {
               const x = Math.max(0, Number(e?.nativeEvent?.contentOffset?.x || 0));
-              const idx = Math.round((x - sidePadding) / ITEM_LENGTH);
-              const expected = sidePadding + idx * ITEM_LENGTH;
+              const idx = Math.round(x / ITEM_LENGTH);
+              const expected = idx * ITEM_LENGTH;
               if (Math.abs(expected - x) > 0.5) {
-                try { (listRef.current as any)?.scrollToOffset?.({ offset: expected, animated: true }); } catch {}
+                centerToPhysicalIndex(idx, true);
               }
               const baseIdx = baseCount > 0 ? ((idx % baseCount) + baseCount) % baseCount : 0;
               if (baseIdx !== lastIndex.current) {
@@ -199,7 +191,7 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
               const guard = baseCount * 2;
               if (idx < guard || idx > (totalItems - guard)) {
                 const target = middleBase + baseIdx;
-                try { (listRef.current as any)?.scrollToIndex?.({ index: target, animated: false, viewPosition: 0.5 }); } catch {}
+                try { centerToPhysicalIndex(target, false); } catch {}
               }
             } catch {}
           }}

@@ -1526,7 +1526,7 @@ const styles = StyleSheet.create<any>({
     height: 100,
     backgroundColor: 'rgba(0, 0, 0, 0.03)',
     borderRadius: 50,
-    transform: [{ translateX: 30 }, { translateY: -30 }],
+    transform: [{ translateX: -40 }, { translateY: -30 }],
   },
   heroContent: {
     position: 'relative',
@@ -1999,7 +1999,8 @@ const styles = StyleSheet.create<any>({
   heroBarberAvatarContainer: {
     position: 'absolute',
     top: -12,
-    right: -12,
+    right: 12,
+    transform: [{ translateX: -50 }],
     zIndex: 3,
   },
   regularHeaderRight: {

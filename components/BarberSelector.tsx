@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Image, Dimensions, FlatList, I18nManager, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, Image, Dimensions, FlatList, Linking } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Animated, { useSharedValue, useAnimatedScrollHandler, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, Easing, FadeIn, FadeOut } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,7 +12,6 @@ const ITEM_SIZE = AVATAR_SIZE + ITEM_SPACING;
 const SCREEN = Dimensions.get('window');
 const AnimatedFlatList: any = Animated.createAnimatedComponent(FlatList as any);
 const HEADER_HEIGHT = 360; // expanded a bit to avoid top/bottom clipping while keeping within window
-const CENTER_NUDGE = 8; // pixels to nudge right so the selected card appears visually centered
 const CARD_WIDTH_PERCENT = 0.68; // shrink main card a bit to create more space between images
 
 export type BarberSelectorProps = {
@@ -31,22 +30,25 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
   const didInit = React.useRef(false);
   const didMount = React.useRef(false);
 
-  const isRTL = I18nManager?.isRTL ?? false;
-  const defaultIndex = React.useMemo(() => {
-    return isRTL && barbers && barbers.length > 0 ? barbers.length - 1 : 0;
-  }, [isRTL, barbers?.length]);
-
-  const centerPad = Math.max(0, (SCREEN.width - ITEM_SIZE) / 2);
-  const contentPadding = React.useMemo(() => {
-    const left = Math.max(0, centerPad - 36);
-    const right = Math.max(0, centerPad - 140);
-    // Mirror for RTL so visually leftmost item can be centered and scroll remains valid
-    return isRTL ? { paddingLeft: right, paddingRight: left } : { paddingLeft: left, paddingRight: right };
-  }, [isRTL, centerPad]);
 
   // Infinite hero carousel configuration
   const LOOP_COUNT = 200;
   const baseCount = Math.max(1, barbers.length);
+
+  const cardWidth = SCREEN.width * CARD_WIDTH_PERCENT;
+  const HERO_ITEM_GAP = 14;
+  const HERO_ITEM_LENGTH = cardWidth + HERO_ITEM_GAP;
+  const sidePadding = Math.max(0, (SCREEN.width - HERO_ITEM_LENGTH) / 2);
+
+  const centerToPhysicalIndex = React.useCallback(
+    (physicalIndex: number, animated: boolean) => {
+      try {
+        const offset = HERO_ITEM_LENGTH * physicalIndex;
+        (listRef.current as any)?.scrollToOffset?.({ offset, animated });
+      } catch {}
+    },
+    [HERO_ITEM_LENGTH]
+  );
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (e) => {
@@ -68,7 +70,7 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
     }, [barber?.id, (barber as any)?.phone, (barber as any)?.phone_number]);
 
     const cardStyle = (useAnimatedStyle(() => {
-      const pos = (scrollX.value - sidePadding) / HERO_ITEM_LENGTH;
+      const pos = scrollX.value / HERO_ITEM_LENGTH;
       const scale = interpolate(pos, [index - 1, index, index + 1], [0.95, 1.05, 0.95], Extrapolate.CLAMP);
       const opacity = interpolate(pos, [index - 1, index, index + 1], [0.9, 1, 0.9], Extrapolate.CLAMP);
       return { transform: [{ scale: scale as any }] as any, opacity } as any;
@@ -85,7 +87,7 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
               runOnJS(onIndexChange)(baseIdx);
             }
             // Smoothly center the tapped item (this physical index), eliminating micro-misalignment
-            try { (listRef.current as any)?.scrollToIndex?.({ index, animated: true, viewPosition: 0.5 }); } catch {}
+            centerToPhysicalIndex(index, true);
           } catch {}
         }}
         style={{ width: HERO_ITEM_LENGTH, alignItems: 'center', paddingHorizontal: 4 }}
@@ -164,12 +166,6 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
     );
   };
 
-  const cardWidth = SCREEN.width * CARD_WIDTH_PERCENT;
-  const cardHorizontalMargin = (SCREEN.width - cardWidth) / 2;
-  const HERO_ITEM_GAP = 14;
-  const HERO_ITEM_LENGTH = cardWidth + HERO_ITEM_GAP;
-  const sidePadding = Math.max(0, (SCREEN.width - HERO_ITEM_LENGTH) / 2 - CENTER_NUDGE);
-
   // Initial scroll to the middle of the loop for seamless bi-directional scrolling
   const totalItems = baseCount * LOOP_COUNT;
   const middleBase = Math.floor(totalItems / 2) - (Math.floor(totalItems / 2) % baseCount);
@@ -180,12 +176,12 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
     if (!didInit.current && barbers && barbers.length > 0) {
       didInit.current = true;
       try {
-        (listRef.current as any)?.scrollToIndex?.({ index: initialIndex, animated: false, viewPosition: 0.5 });
+        centerToPhysicalIndex(initialIndex, false);
       } catch {}
       lastIndex.current = 0;
       try { onIndexChange(0); } catch {}
     }
-  }, [barbers?.length]);
+  }, [barbers?.length, centerToPhysicalIndex, initialIndex, onIndexChange]);
 
   // When external activeIndex changes (not from our own tap/scroll), center that item near middle band
   React.useEffect(() => {
@@ -194,9 +190,9 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
     if (activeIndex === lastIndex.current) return;
     try {
       const targetIndex = middleBase + (Math.max(0, activeIndex) % baseCount);
-      (listRef.current as any)?.scrollToIndex?.({ index: targetIndex, animated: true, viewPosition: 0.5 });
+      centerToPhysicalIndex(targetIndex, true);
     } catch {}
-  }, [activeIndex, baseCount, middleBase]);
+  }, [activeIndex, baseCount, centerToPhysicalIndex, middleBase]);
 
   return (
     <View style={{ position: 'relative', height: HEADER_HEIGHT + 240, marginTop: 20, marginBottom: 160 }}>
@@ -222,24 +218,19 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
             snapToInterval={HERO_ITEM_LENGTH}
             snapToAlignment="center"
             initialScrollIndex={initialIndex}
-            getItemLayout={(_, index) => ({ length: HERO_ITEM_LENGTH, offset: sidePadding + HERO_ITEM_LENGTH * index, index })}
+            getItemLayout={(_, index) => ({ length: HERO_ITEM_LENGTH, offset: HERO_ITEM_LENGTH * index, index })}
             contentContainerStyle={{ paddingLeft: sidePadding, paddingRight: sidePadding }}
-            onScroll={useAnimatedScrollHandler({
-              onScroll: (e) => {
-                'worklet';
-                scrollX.value = e.contentOffset.x;
-              },
-            }) as any}
+            onScroll={scrollHandler as any}
             scrollEventThrottle={16}
             renderItem={({ index }) => <HeroItem index={index} />}
             onMomentumScrollEnd={(e: any) => {
               try {
                 const x = Math.max(0, Number(e?.nativeEvent?.contentOffset?.x || 0));
-                const idx = Math.round((x - sidePadding) / HERO_ITEM_LENGTH);
+                const idx = Math.round(x / HERO_ITEM_LENGTH);
                 // Ensure pixel-perfect centering by aligning to the exact offset
-                const expected = sidePadding + idx * HERO_ITEM_LENGTH;
+                const expected = idx * HERO_ITEM_LENGTH;
                 if (Math.abs(expected - x) > 0.5) {
-                  try { (listRef.current as any)?.scrollToOffset?.({ offset: expected, animated: true }); } catch {}
+                  centerToPhysicalIndex(idx, true);
                 }
                 const baseIdx = baseCount > 0 ? ((idx % baseCount) + baseCount) % baseCount : 0;
                 if (baseIdx !== lastIndex.current) {
@@ -252,7 +243,7 @@ const BarberSelector: React.FC<BarberSelectorProps> = ({ barbers, activeIndex, o
                 if (idx < guard || idx > (totalItems - guard)) {
                   const centerIndex = middleBase + baseIdx;
                   try {
-                    (listRef.current as any)?.scrollToIndex?.({ index: centerIndex, animated: false, viewPosition: 0.5 });
+                    centerToPhysicalIndex(centerIndex, false);
                   } catch {}
                 }
               } catch {}

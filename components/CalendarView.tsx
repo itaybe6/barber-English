@@ -4,6 +4,7 @@ import Colors from '@/constants/colors';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { Appointment } from '@/constants/appointments';
+import { formatTimeFromDate } from '@/lib/utils/timeFormat';
 
 interface CalendarViewProps {
   appointments: Appointment[];
@@ -182,7 +183,7 @@ export default function CalendarView({
       <View style={styles.appointmentsList}>
         {dateAppointments.map((appointment, index) => {
           const appointmentDate = new Date(appointment.date);
-          const time = appointmentDate.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+          const time = formatTimeFromDate(appointmentDate);
           
           return (
             <TouchableOpacity

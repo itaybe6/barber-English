@@ -481,7 +481,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
               {rangeStartISO && rangeEndISO && (
                 <View style={{ marginTop: 12, alignItems: 'flex-start' }}>
                   <Text style={{ color: '#6B7280', fontWeight: '600' }}>
-                    Selected range: <Text style={{ writingDirection: 'ltr' }}>{formatISOToMMDDYYYY(rangeStartISO)} — {formatISOToMMDDYYYY(rangeEndISO)}</Text>
+                    {t('admin2.hoursAdmin.selectedRange','Selected range:')} <Text style={{ writingDirection: 'ltr' }}>{formatISOToMMDDYYYY(rangeStartISO)} — {formatISOToMMDDYYYY(rangeEndISO)}</Text>
                   </Text>
                 </View>
               )}
@@ -490,7 +490,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
 
           <View style={styles.card}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Reason (optional)</Text>
+              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>{t('admin.hours.optionalReason','Reason (optional)')}</Text>
               <TouchableOpacity
                 onPress={() => { setTempReason(reason); setIsReasonModalOpen(true); }}
                 style={[styles.smallIconBtn, { backgroundColor: businessColors.primary }]}
@@ -510,7 +510,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
 
           <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: insets.bottom + 8 }}>
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: businessColors.primary, shadowColor: businessColors.primary }, isSaving && { opacity: 0.6 }]} onPress={save} disabled={isSaving}>
-              <Text style={styles.primaryBtnText}>{isSaving ? 'Saving...' : 'Save constraints'}</Text>
+              <Text style={styles.primaryBtnText}>{isSaving ? t('settings.common.saving','Saving...') : t('admin2.hoursAdmin.saveCTA','Save constraints')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -524,20 +524,20 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
         <SafeAreaView style={styles.container} edges={['left','right']}>
           <View style={[styles.header, { paddingTop: Math.max(16, insets.top + 8) }]}>
             <TouchableOpacity onPress={() => setIsExistingModalOpen(false)} style={styles.headerBtn}><Ionicons name="close" size={20} color={'#000'} /></TouchableOpacity>
-            <Text style={styles.headerTitle}>Upcoming constraints</Text>
+            <Text style={styles.headerTitle}>{t('admin2.hoursAdmin.upcomingConstraints','Upcoming constraints')}</Text>
             <View style={styles.headerBtn} />
           </View>
           <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
             <View style={styles.card}>
-              <Text style={styles.sectionTitle}>Upcoming constraints</Text>
+              <Text style={styles.sectionTitle}>{t('admin2.hoursAdmin.upcomingConstraints','Upcoming constraints')}</Text>
               <View style={styles.sectionUnderline} />
               <View style={{ gap: 14 }}>
                 {existing.length === 0 ? (
-                  <Text style={styles.emptyText}>No upcoming constraints</Text>
+                  <Text style={styles.emptyText}>{t('admin2.hoursAdmin.noUpcomingConstraints','No upcoming constraints')}</Text>
                 ) : (
                   (() => {
                     const groups = (existing || []).reduce((m: Record<string, any[]>, c: any) => {
-                      const key = (c.reason || '').trim() || 'No reason';
+                      const key = (c.reason || '').trim() || t('admin2.hoursAdmin.noReason','No reason');
                       (m[key] = m[key] || []).push(c);
                       return m;
                     }, {} as Record<string, any[]>);
@@ -573,7 +573,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
                                       <View style={{ marginTop: 8 }}>
                                         <View style={styles.timeChip}>
                                           <Ionicons name="time-outline" size={14} color={'#1C1C1E'} />
-                                          <Text style={styles.timeChipText}>{isFullDay ? 'All day' : `${formatTime12Hour(start)}–${formatTime12Hour(end)}`}</Text>
+                                          <Text style={styles.timeChipText}>{isFullDay ? t('admin2.hoursAdmin.allDay','All day') : `${formatTime12Hour(start)}–${formatTime12Hour(end)}`}</Text>
                                         </View>
                                       </View>
                                     </View>
@@ -601,7 +601,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
         <View style={styles.centerModal}>
           <View style={styles.centerSheet}>
             <View style={styles.sheetHeaderRow}>
-              <Text style={styles.sheetTitle}>Choose closed hours</Text>
+              <Text style={styles.sheetTitle}>{t('admin2.hoursAdmin.chooseClosedHours','Choose closed hours')}</Text>
               <TouchableOpacity onPress={() => { setStartTime(tempStartHour); setEndTime(tempEndHour); setIsHoursModalOpen(false); }} style={[styles.confirmBtn, { backgroundColor: businessColors.primary }]}>
                 <Ionicons name="checkmark" size={18} color={'#FFFFFF'} />
               </TouchableOpacity>
@@ -626,7 +626,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
               <TouchableOpacity onPress={() => { setReason(tempReason.trim()); setIsReasonModalOpen(false); }} style={[styles.confirmBtn, { backgroundColor: businessColors.primary }]}>
                 <Ionicons name="checkmark" size={18} color={'#FFFFFF'} />
               </TouchableOpacity>
-        <Text style={styles.sheetTitle}>{t('admin.hoursAdmin.enterReason', 'Enter reason')}</Text>
+        <Text style={styles.sheetTitle}>{t('admin.hours.enterReason', 'Enter reason')}</Text>
             </View>
             <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12 }}>
               <View style={styles.inputWrapper}>

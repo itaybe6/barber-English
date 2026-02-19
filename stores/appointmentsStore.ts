@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create } from 'zustand/react';
 import { Appointment } from '@/lib/supabase';
 
 interface AppointmentsState {

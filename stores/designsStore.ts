@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create } from 'zustand/react';
 import { Design } from '@/lib/supabase';
 import { designsApi } from '@/lib/api/designs';
 

@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create } from 'zustand/react';
 import { productsApi, Product } from '@/lib/api/products';
 
 interface ProductsState {

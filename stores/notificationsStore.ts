@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create } from 'zustand/react';
 import { Notification } from '@/lib/supabase';
 import { notificationsApi } from '@/lib/api/notifications';
 

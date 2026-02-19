@@ -1,8 +1,7 @@
 import * as React from 'react';
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Platform, Modal, ActivityIndicator, TextInput, FlatList, Alert, Linking, RefreshControl, Animated, Easing } from 'react-native';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Platform, Modal, ActivityIndicator, TextInput, FlatList, Alert, Linking, RefreshControl, Animated, Easing, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Video, ResizeMode } from 'expo-av';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import Colors from '@/constants/colors';
@@ -33,10 +32,29 @@ import { useNotificationsStore } from '@/stores/notificationsStore';
 import { getCurrentClientLogo } from '@/src/theme/assets';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { useProductsStore } from '@/stores/productsStore';
-import { businessProfileApi } from '@/lib/api/businessProfile';
-import type { BusinessProfile } from '@/lib/supabase';
 import { StatusBar, setStatusBarStyle, setStatusBarBackgroundColor } from 'expo-status-bar';
 import { useTranslation } from 'react-i18next';
+import { Marquee } from '@animatereactnative/marquee';
+import Reanimated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
+import { manicureImages } from '@/src/constants/manicureImages';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const HERO_ITEM_SIZE = Platform.OS === 'web' ? SCREEN_WIDTH * 0.24 : SCREEN_WIDTH * 0.45;
+const HERO_SPACING = Platform.OS === 'web' ? 12 : 8;
+const HERO_BG = '#FFFFFF';
+const HERO_INITIAL_DELAY = 200;
+const HERO_DURATION = 500;
+
+function chunkArray<T>(array: T[], size: number): T[][] {
+  const chunked: T[][] = [];
+  let index = 0;
+  const safeSize = Math.max(1, Math.floor(size));
+  while (index < array.length) {
+    chunked.push(array.slice(index, safeSize + index));
+    index += safeSize;
+  }
+  return chunked;
+}
 
 export default function HomeScreen() {
   const { t } = useTranslation();
@@ -56,6 +74,75 @@ export default function HomeScreen() {
   const fetchUnread = useNotificationsStore((state) => state.fetchUnreadCount);
   const colors = useColors();
   const styles = createStyles(colors);
+
+  const ManicureMarqueeHero = () => {
+    const columns = useMemo(() => {
+      const perColumn = Math.ceil(manicureImages.length / 3);
+      return chunkArray(manicureImages, perColumn);
+    }, []);
+
+    return (
+      <View style={styles.manicureHeroRoot} pointerEvents="box-none">
+        <View
+          style={{
+            flex: 1,
+            gap: HERO_SPACING,
+            transform: [{ rotate: '-4deg' }],
+          }}
+          pointerEvents="auto"
+        >
+          {columns.map((column, columnIndex) => (
+            <Marquee
+              key={`manicure-marquee-admin-${columnIndex}`}
+              speed={Platform.OS === 'web' ? 1 : 0.25}
+              spacing={HERO_SPACING}
+              reverse={columnIndex % 2 !== 0}
+            >
+              <View style={{ flexDirection: 'row', gap: HERO_SPACING }}>
+                {column.map((image, index) => (
+                  <Reanimated.Image
+                    key={`manicure-image-admin-${columnIndex}-${index}`}
+                    source={{ uri: image }}
+                    entering={
+                      columnIndex % 2 === 0
+                        ? FadeInRight.duration(HERO_DURATION).delay(
+                            HERO_INITIAL_DELAY * (columnIndex + 1) + Math.random() * 100
+                          )
+                        : FadeInLeft.duration(HERO_DURATION).delay(
+                            HERO_INITIAL_DELAY * (columnIndex + 1) + Math.random() * 100
+                          )
+                    }
+                    style={{
+                      width: HERO_ITEM_SIZE,
+                      aspectRatio: 1,
+                      borderRadius: HERO_SPACING,
+                    }}
+                  />
+                ))}
+              </View>
+            </Marquee>
+          ))}
+        </View>
+
+        <LinearGradient
+          colors={['rgba(255,255,255,0)', HERO_BG, HERO_BG]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          locations={[0, 0.7, 1]}
+          style={styles.manicureHeroFadeBottom}
+          pointerEvents="none"
+        />
+        <LinearGradient
+          colors={[HERO_BG, HERO_BG, 'rgba(255,255,255,0)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          locations={[0, Platform.OS === 'web' ? 0.1 : 0.3, 1]}
+          style={styles.manicureHeroFadeTop}
+          pointerEvents="none"
+        />
+      </View>
+    );
+  };
   // Ensure light status bar when this screen is focused
   useFocusEffect(
     React.useCallback(() => {
@@ -99,8 +186,6 @@ export default function HomeScreen() {
   const [editClientPhone, setEditClientPhone] = useState('');
   const [savingClient, setSavingClient] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [heroImageFailed, setHeroImageFailed] = useState(false);
-  const [heroVideoFailed, setHeroVideoFailed] = useState(false);
   const [blockedFilter, setBlockedFilter] = useState<'all' | 'blocked' | 'unblocked'>('all');
   const categories = [
     {
@@ -121,49 +206,10 @@ export default function HomeScreen() {
     },
   ];
 
-  // Animated background (match client home behavior)
-  const backgroundTranslateYAnim = useRef(new Animated.Value(0)).current;
-  const [isBackgroundExpanded, setIsBackgroundExpanded] = useState(false);
-  const [isAnimating, setIsAnimating] = useState(false);
-
-  const handleScroll = useCallback((event: any) => {
-    const scrollY = event?.nativeEvent?.contentOffset?.y ?? 0;
-    if (!isBackgroundExpanded && !isAnimating && scrollY > 5) {
-      setIsBackgroundExpanded(true);
-      setIsAnimating(true);
-      Animated.timing(backgroundTranslateYAnim, {
-        toValue: -180,
-        duration: 1000,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start(() => setIsAnimating(false));
-    }
-    if (isBackgroundExpanded && !isAnimating && scrollY <= 5) {
-      setIsBackgroundExpanded(false);
-      setIsAnimating(true);
-      Animated.timing(backgroundTranslateYAnim, {
-        toValue: 0,
-        duration: 800,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start(() => setIsAnimating(false));
-    }
-  }, [isBackgroundExpanded, isAnimating, backgroundTranslateYAnim]);
+  // Removed scroll-driven translate animation (normal scroll behavior)
 
   // Business profile for hero image
-  const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
-  const isVideoUrl = (url?: string | null) => /\.(mp4|mov|m4v|webm|3gp)(\?|$)/i.test(String(url || ''));
-  useEffect(() => {
-    const loadProfile = async () => {
-      try {
-        const p = await businessProfileApi.getProfile();
-        setBusinessProfile(p);
-      } catch {
-        setBusinessProfile(null);
-      }
-    };
-    loadProfile();
-  }, []);
+  // (hero media is now the marquee)
   
   // Get today's appointments
   const today = new Date();
@@ -641,48 +687,18 @@ export default function HomeScreen() {
       <StatusBar style="light" translucent backgroundColor="transparent" />
       {/* Hero with overlay header (like client home) */}
       <View style={styles.fullScreenHero}>
-        {(() => {
-          const media = businessProfile?.image_on_page_1;
-          const showVideo = isVideoUrl(media) && !heroVideoFailed;
-          if (showVideo) {
-            return (
-              <Video
-                source={{ uri: media as string }}
-                style={styles.fullScreenHeroImage}
-                resizeMode={ResizeMode.COVER}
-                shouldPlay
-                isLooping
-                isMuted
-                onError={() => setHeroVideoFailed(true)}
-              />
-            );
-          }
-          return (
-            <Image
-              source={
-                heroImageFailed
-                  ? require('@/assets/images/1homePage.jpg')
-                  : (media
-                      ? { uri: media as string }
-                      : require('@/assets/images/1homePage.jpg'))
-              }
-              style={styles.fullScreenHeroImage}
-              resizeMode="cover"
-              onError={() => setHeroImageFailed(true)}
-              defaultSource={require('@/assets/images/1homePage.jpg')}
-            />
-          );
-        })()}
+        <ManicureMarqueeHero />
         <LinearGradient
-          colors={['rgba(0,0,0,0.6)', 'rgba(0,0,0,0.6)', 'rgba(0,0,0,0.6)']}
+          colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0)', 'rgba(255,255,255,0)']}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
           style={styles.fullScreenHeroOverlay}
+          pointerEvents="none"
         />
 
         {/* Overlay Header */}
-        <SafeAreaView edges={['top']} style={styles.overlayHeader}>
-          <View style={styles.overlayHeaderContent}>
+        <SafeAreaView edges={['top']} style={styles.overlayHeader} pointerEvents="box-none">
+          <View style={styles.overlayHeaderContent} pointerEvents="box-none">
             {/* Left: Broadcast */}
             <View style={styles.headerSide}>
               <View style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}> 
@@ -721,34 +737,14 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Hero Text Content (hidden when video is playing) */}
-        {(() => {
-          const media = businessProfile?.image_on_page_1;
-          const showVideo = isVideoUrl(media) && !heroVideoFailed;
-          if (showVideo) return null;
-          return (
-            <View style={[styles.fullScreenHeroContent, { top: insets.top + 110 }]}>
-              <View style={styles.heroTextContainer}>
-                <Text style={styles.heroWelcome}>{t('admin.home.welcome','Welcome')}</Text>
-                <Text style={styles.heroTitle}>{user?.name || t('settings.admin.admin','Admin')}</Text>
-                <Text style={styles.heroSubtitle} numberOfLines={2} ellipsizeMode="tail">
-                  {t('admin.home.subtitle.line1','Manage your day with confidence')}{'\n'}
-                  {t('admin.home.subtitle.line2','This app keeps your schedule sharp')}
-                </Text>
-              </View>
-            </View>
-          );
-        })()}
-
         {/* DailySchedule moved to content area below hero */}
       </View>
 
       {/* Content wrapper with scroll animation */}
       <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1 }}>
-        <Animated.View
+        <View
           style={[
             styles.contentWrapper,
-            { transform: [{ translateY: backgroundTranslateYAnim }] }
           ]}
         >
           <ScrollView
@@ -757,8 +753,6 @@ export default function HomeScreen() {
               { paddingBottom: insets.bottom + 320 }
             ]}
             showsVerticalScrollIndicator={false}
-            onScroll={handleScroll}
-            scrollEventThrottle={16}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
           >
         {/* Spacer for bottom reachability */}
@@ -881,7 +875,7 @@ export default function HomeScreen() {
         <ProductsSection />
         {/* Close outer vertical ScrollView */}
           </ScrollView>
-        </Animated.View>
+        </View>
 
 
 
@@ -1031,7 +1025,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     backgroundColor: '#F8F9FA',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    marginTop: -80,
+    marginTop: -10,
     paddingTop: 8,
     paddingBottom: 0,
     minHeight: '100%',
@@ -1045,9 +1039,10 @@ const createStyles = (colors: any) => StyleSheet.create({
   // Hero styles (aligned with client home)
   fullScreenHero: {
     position: 'relative',
-    height: '50%',
+    height: '68%',
     width: '100%',
     zIndex: 0,
+    backgroundColor: HERO_BG,
   },
   fullScreenHeroImage: {
     width: '100%',
@@ -1129,6 +1124,28 @@ const createStyles = (colors: any) => StyleSheet.create({
     left: 16,
     right: 16,
     zIndex: 1,
+  },
+  manicureHeroRoot: {
+    position: 'absolute',
+    left: -SCREEN_WIDTH * 0.1,
+    right: -SCREEN_WIDTH * 0.1,
+    top: 0,
+    bottom: 0,
+    overflow: 'hidden',
+  },
+  manicureHeroFadeBottom: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '30%',
+  },
+  manicureHeroFadeTop: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: Platform.OS === 'web' ? '25%' : '15%',
   },
   heroTextContainer: {
     flex: 1,

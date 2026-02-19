@@ -8,11 +8,16 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  Animated,
   Modal,
   Pressable,
   InteractionManager,
 } from 'react-native';
+import Animated, {
+  FadeInDown,
+  FadeOut,
+  FadeOutDown,
+  LinearTransition,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -42,6 +47,20 @@ const Colors = {
   border: '#E5E5EA',
   separator: 'rgba(60, 60, 67, 0.36)',
 };
+
+type BreakWindow = { id: string; start_time: string; end_time: string };
+
+const makeBreakWindow = (start_time = '12:00', end_time = '13:00', id?: string): BreakWindow => ({
+  id: id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+  start_time,
+  end_time,
+});
+
+const _layout = LinearTransition.springify();
+const _entering = FadeInDown.springify();
+const _exiting = FadeOutDown.springify();
+const _fadeExit = FadeOut.springify();
+const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
 // Format time string to HH:MM (strip seconds if present)
 const formatHHMM = (time?: string | null): string => {
@@ -221,7 +240,7 @@ const TimePicker: React.FC<TimePickerProps & { primaryColor?: string; useAmPm?: 
 };
 
 export default function BusinessHoursScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const router = useRouter();
   const { user } = useAuthStore();
   const { colors: businessColors } = useBusinessColors();
@@ -235,7 +254,8 @@ export default function BusinessHoursScreen() {
   const [isBreakPickerOpen, setIsBreakPickerOpen] = useState<boolean>(false);
   const [isConstraintsOpen, setIsConstraintsOpen] = useState<boolean>(false);
   const [tempBreakMinutesStr, setTempBreakMinutesStr] = useState<string>('0');
-  const useAmPm = user?.user_type === 'admin';
+  const isHebrewOrRtl = (i18n?.language?.toLowerCase?.().startsWith('he') ?? false) || (i18n?.dir?.() === 'rtl');
+  const useAmPm = user?.user_type === 'admin' && !isHebrewOrRtl;
 
   const getDayName = (dayOfWeek: number) => {
     const dayNames = [
@@ -257,7 +277,7 @@ export default function BusinessHoursScreen() {
   const [tempBreakEndTime, setTempBreakEndTime] = useState('13:00');
   const [tempSlotDuration, setTempSlotDuration] = useState<string>('60');
   const [useBreaks, setUseBreaks] = useState<boolean>(false);
-  const [tempBreaks, setTempBreaks] = useState<Array<{ start_time: string; end_time: string }>>([]);
+  const [tempBreaks, setTempBreaks] = useState<BreakWindow[]>([]);
 
   // Ensure End Time is always after Start Time while editing
   useEffect(() => {
@@ -327,7 +347,11 @@ export default function BusinessHoursScreen() {
       setTempBreakEndTime(formatHHMM(dayHours.break_end_time) || '13:00');
       setTempSlotDuration(String(dayHours.slot_duration_minutes || 60));
       const loadedBreaksRaw = ((dayHours as any).breaks || []) as Array<{ start_time: string; end_time: string }>;
-      const loadedBreaks = loadedBreaksRaw.map(b => ({ start_time: formatHHMM(b.start_time), end_time: formatHHMM(b.end_time) }));
+      const loadedBreaks = loadedBreaksRaw.map((b, i) => {
+        const s = formatHHMM(b.start_time);
+        const e = formatHHMM(b.end_time);
+        return makeBreakWindow(s, e, `${s}-${e}-${i}`);
+      });
       setUseBreaks(loadedBreaks.length > 0 || (!!dayHours.break_start_time && !!dayHours.break_end_time));
       setTempBreaks(loadedBreaks);
       setEditingDay(dayOfWeek);
@@ -364,7 +388,7 @@ export default function BusinessHoursScreen() {
           end_time: tempEndTime,
           break_start_time: useBreaks ? tempBreakStartTime : undefined,
           break_end_time: useBreaks ? tempBreakEndTime : undefined,
-          breaks: useBreaks ? tempBreaks : [],
+          breaks: useBreaks ? tempBreaks.map(({ start_time, end_time }) => ({ start_time, end_time })) : [],
         }, user?.user_type === 'admin' ? user?.id : undefined);
         setBusinessHours(prev => prev.map(h => 
           h.day_of_week === editingDay ? { 
@@ -373,7 +397,7 @@ export default function BusinessHoursScreen() {
             end_time: tempEndTime, 
             break_start_time: useBreaks ? tempBreakStartTime : undefined, 
             break_end_time: useBreaks ? tempBreakEndTime : undefined,
-            breaks: useBreaks ? tempBreaks : [],
+            breaks: useBreaks ? tempBreaks.map(({ start_time, end_time }) => ({ start_time, end_time })) : [],
           } : h
         ));
         // Notify waitlist clients that match the updated working windows for this day
@@ -381,7 +405,7 @@ export default function BusinessHoursScreen() {
           await notifyWaitlistOnBusinessHoursUpdate(editingDay, {
             start_time: tempStartTime,
             end_time: tempEndTime,
-            breaks: useBreaks ? tempBreaks : [],
+            breaks: useBreaks ? tempBreaks.map(({ start_time, end_time }) => ({ start_time, end_time })) : [],
             is_active: true,
           });
         } catch {}
@@ -405,9 +429,9 @@ export default function BusinessHoursScreen() {
     const endTimeOptions = allTenMinuteOptions.filter(t => t > tempStartTime);
 
     return (
-      <TouchableOpacity key={dayOfWeek} style={styles.dayCard} activeOpacity={0.9} onPress={() => { if (!isEditing) { handleEditDay(dayOfWeek); } }} disabled={isEditing}>
-        <View style={styles.dayHeader}>
-          <View style={styles.dayInfo}>
+      <AnimatedTouchableOpacity layout={_layout} key={dayOfWeek} style={styles.dayCard} activeOpacity={0.9} onPress={() => { if (!isEditing) { handleEditDay(dayOfWeek); } }} disabled={isEditing}>
+        <Animated.View layout={_layout} style={styles.dayHeader}>
+          <Animated.View layout={_layout} style={styles.dayInfo}>
             <Text style={styles.dayName}>{getDayName(dayOfWeek)}</Text>
                       {dayHours && dayHours.is_active && !isEditing && (
             <View>
@@ -454,9 +478,9 @@ export default function BusinessHoursScreen() {
                 <Text style={styles.dayClosedText}>{t('admin.hours.closed','Closed')}</Text>
               </View>
             )}
-          </View>
+          </Animated.View>
           
-          <View style={styles.dayControls}>
+          <Animated.View layout={_layout} style={styles.dayControls}>
             <Switch
               value={dayHours?.is_active || false}
               onValueChange={(value) => handleDayToggle(dayOfWeek, value)}
@@ -465,14 +489,14 @@ export default function BusinessHoursScreen() {
               ios_backgroundColor={Colors.border}
               style={styles.switch}
             />
-          </View>
-        </View>
+          </Animated.View>
+        </Animated.View>
 
               {isEditing && (
-        <View style={styles.editContainer}>
+        <Animated.View style={styles.editContainer} layout={_layout} entering={_entering} exiting={_exiting}>
           {/* Slot Duration Section removed – now global setting */}
           {/* Work Hours Section */}
-          <View style={styles.workHoursSection}>
+          <Animated.View layout={_layout} style={styles.workHoursSection}>
             <View style={styles.sectionHeader}>
               <Ionicons name="briefcase-outline" size={18} color={Colors.primary} />
               <Text style={styles.sectionTitle}>{t('admin.hours.workHours','Work hours')}</Text>
@@ -525,21 +549,21 @@ export default function BusinessHoursScreen() {
                 />
               </View>
             </View>
-          </View>
+          </Animated.View>
 
           {/* Multiple Breaks Section */}
           {useBreaks && (
-          <View style={styles.breakHoursSection}>
+          <Animated.View layout={_layout} style={styles.breakHoursSection}>
             <View style={styles.sectionHeader}>
               <Ionicons name="cafe-outline" size={18} color={Colors.secondaryText} />
               <Text style={styles.sectionTitle}>{t('admin.hours.breaks','Breaks')}</Text>
             </View>
-            <View style={{ gap: 12 }}>
+            <Animated.View layout={_layout} style={{ gap: 12 }}>
               {tempBreaks.map((b, idx) => (
-                <View key={idx} style={styles.breakItemRow}>
+                <Animated.View key={b.id} layout={_layout} entering={_entering} exiting={_fadeExit} style={styles.breakItemRow}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                     <TouchableOpacity
-                      onPress={() => setTempBreaks(tempBreaks.filter((_, i) => i !== idx))}
+                      onPress={() => setTempBreaks(prev => prev.filter(x => x.id !== b.id))}
                       style={styles.breakDeleteButton}
                       activeOpacity={0.8}
                     >
@@ -555,9 +579,7 @@ export default function BusinessHoursScreen() {
                       <TimePicker
                         value={b.start_time}
                         onValueChange={(v) => {
-                          const next = [...tempBreaks];
-                          next[idx] = { ...next[idx], start_time: v };
-                          setTempBreaks(next);
+                          setTempBreaks(prev => prev.map(x => x.id === b.id ? { ...x, start_time: v } : x));
                         }}
                         label={t('admin.hours.start','Start')}
                         options={startTimeOptions}
@@ -573,9 +595,7 @@ export default function BusinessHoursScreen() {
                       <TimePicker
                         value={b.end_time}
                         onValueChange={(v) => {
-                          const next = [...tempBreaks];
-                          next[idx] = { ...next[idx], end_time: v };
-                          setTempBreaks(next);
+                          setTempBreaks(prev => prev.map(x => x.id === b.id ? { ...x, end_time: v } : x));
                         }}
                         label={t('admin.hours.end','End')}
                         options={endTimeOptions}
@@ -586,23 +606,23 @@ export default function BusinessHoursScreen() {
                     </View>
                   </View>
                   {idx < tempBreaks.length - 1 && <View style={styles.breakDivider} />}
-                </View>
+                </Animated.View>
               ))}
               <TouchableOpacity
-                onPress={() => setTempBreaks(prev => ([...prev, { start_time: '12:00', end_time: '13:00' }]))}
+                onPress={() => setTempBreaks(prev => ([...prev, makeBreakWindow()]))}
                 style={{ paddingVertical: 14, alignItems: 'center', borderRadius: 16, backgroundColor: 'rgba(255,149,0,0.08)', borderWidth: 1, borderColor: 'rgba(255,149,0,0.2)' }}
                 activeOpacity={0.8}
               >
                 <Text style={{ color: Colors.warning, fontWeight: '700' }}>{t('admin.hours.addBreak','Add break')}</Text>
               </TouchableOpacity>
-            </View>
-          </View>
+            </Animated.View>
+          </Animated.View>
           )}
 
           {/* Break Hours Section removed per UX – we use only the multi-breaks UI */}
 
           {/* Day Summary */}
-          <View style={styles.daySummary}>
+          <Animated.View layout={_layout} style={styles.daySummary}>
             <View style={styles.summaryHeader}>
               <Ionicons name="calendar-outline" size={16} color={Colors.primary} />
               <Text style={styles.summaryTitle}>{t('admin.hours.daySummary','Day summary')}</Text>
@@ -613,7 +633,7 @@ export default function BusinessHoursScreen() {
                 tempBreaks.length > 0 ? (
                   <View style={{ gap: 4 }}>
                     {tempBreaks.map((b, i) => (
-                      <Text key={`${b.start_time}-${b.end_time}-${i}`} style={styles.summaryBreak}>
+                      <Text key={b.id} style={styles.summaryBreak}>
                         {`Break ${tempBreaks.length > 1 ? '#' + (i + 1) + ': ' : ''}`}<Text style={styles.ltrText}>{formatRangeLtrDisplay(b.start_time, b.end_time, useAmPm)}</Text>
                       </Text>
                     ))}
@@ -627,7 +647,7 @@ export default function BusinessHoursScreen() {
                 ) : null
               )}
             </View>
-          </View>
+          </Animated.View>
           
           <View style={styles.editActions}>
             <TouchableOpacity
@@ -646,9 +666,9 @@ export default function BusinessHoursScreen() {
               <Text style={styles.saveButtonText}>{t('save','Save')}</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </Animated.View>
       )}
-      </TouchableOpacity>
+      </AnimatedTouchableOpacity>
     );
   };
 

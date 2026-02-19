@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Linking, Alert, Animated, Easing, InteractionManager, AppState, Dimensions, RefreshControl, Modal, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -25,8 +25,99 @@ import { useProductsStore } from '@/stores/productsStore';
 import { getCurrentClientLogo } from '@/src/theme/assets';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { StatusBar, setStatusBarStyle, setStatusBarBackgroundColor } from 'expo-status-bar';
-import { Video, ResizeMode } from 'expo-av';
 import { useTranslation } from 'react-i18next';
+import { Marquee } from '@animatereactnative/marquee';
+import Reanimated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
+import { manicureImages } from '@/src/constants/manicureImages';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const HERO_ITEM_SIZE = Platform.OS === 'web' ? SCREEN_WIDTH * 0.24 : SCREEN_WIDTH * 0.45;
+const HERO_SPACING = Platform.OS === 'web' ? 12 : 8;
+const HERO_BG = '#FFFFFF';
+const HERO_INITIAL_DELAY = 200;
+const HERO_DURATION = 500;
+
+const HERO_IMAGES: string[] = manicureImages;
+
+function chunkArray<T>(array: T[], size: number): T[][] {
+  const chunked: T[][] = [];
+  let index = 0;
+  const safeSize = Math.max(1, Math.floor(size));
+  while (index < array.length) {
+    chunked.push(array.slice(index, safeSize + index));
+    index += safeSize;
+  }
+  return chunked;
+}
+
+function ManicureMarqueeHero() {
+  const columns = useMemo(() => {
+    const perColumn = Math.ceil(HERO_IMAGES.length / 3);
+    return chunkArray(HERO_IMAGES, perColumn);
+  }, []);
+
+  return (
+    <View style={styles.manicureHeroRoot} pointerEvents="box-none">
+      <View
+        style={{
+          flex: 1,
+          gap: HERO_SPACING,
+          transform: [{ rotate: '-4deg' }],
+        }}
+        pointerEvents="auto"
+      >
+        {columns.map((column, columnIndex) => (
+          <Marquee
+            key={`manicure-marquee-${columnIndex}`}
+            speed={Platform.OS === 'web' ? 1 : 0.25}
+            spacing={HERO_SPACING}
+            reverse={columnIndex % 2 !== 0}
+          >
+            <View style={{ flexDirection: 'row', gap: HERO_SPACING }}>
+              {column.map((image, index) => (
+                <Reanimated.Image
+                  key={`manicure-image-${columnIndex}-${index}`}
+                  source={{ uri: image }}
+                  entering={
+                    columnIndex % 2 === 0
+                      ? FadeInRight.duration(HERO_DURATION).delay(
+                          HERO_INITIAL_DELAY * (columnIndex + 1) + Math.random() * 100
+                        )
+                      : FadeInLeft.duration(HERO_DURATION).delay(
+                          HERO_INITIAL_DELAY * (columnIndex + 1) + Math.random() * 100
+                        )
+                  }
+                  style={{
+                    width: HERO_ITEM_SIZE,
+                    aspectRatio: 1,
+                    borderRadius: HERO_SPACING,
+                  }}
+                />
+              ))}
+            </View>
+          </Marquee>
+        ))}
+      </View>
+
+      <LinearGradient
+        colors={['rgba(255,255,255,0)', HERO_BG, HERO_BG]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        locations={[0, 0.7, 1]}
+        style={styles.manicureHeroFadeBottom}
+        pointerEvents="none"
+      />
+      <LinearGradient
+        colors={[HERO_BG, HERO_BG, 'rgba(255,255,255,0)']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        locations={[0, Platform.OS === 'web' ? 0.1 : 0.3, 1]}
+        style={styles.manicureHeroFadeTop}
+        pointerEvents="none"
+      />
+    </View>
+  );
+}
 
 
 // API functions for client home
@@ -164,9 +255,6 @@ export default function ClientHomeScreen() {
   const [showMessageModal, setShowMessageModal] = useState(false);
   const [cardWidth, setCardWidth] = useState(0);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
-  const [heroImageFailed, setHeroImageFailed] = useState(false);
-  const [heroVideoFailed, setHeroVideoFailed] = useState(false);
-  const isVideoUrl = (url?: string | null) => /\.(mp4|mov|m4v|webm|3gp)(\?|$)/i.test(String(url || ''));
   const [managerPhone, setManagerPhone] = useState<string | null>(null);
   const [businessPhone, setBusinessPhone] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -192,50 +280,7 @@ export default function ClientHomeScreen() {
   // Products store
   const { products, isLoading: isLoadingProducts, fetchProducts } = useProductsStore();
 
-  // Animated background expansion effect
-  const backgroundScaleAnim = useRef(new Animated.Value(1)).current;
-  const backgroundTranslateYAnim = useRef(new Animated.Value(0)).current;
-  const [isBackgroundExpanded, setIsBackgroundExpanded] = useState(false);
-  const [isAnimating, setIsAnimating] = useState(false);
-
-  // Handle scroll for background animation
-  const handleScroll = useCallback((event: any) => {
-    const scrollY = event.nativeEvent.contentOffset.y;
-    
-    // If background is not expanded yet, trigger expansion animation
-    if (!isBackgroundExpanded && !isAnimating && scrollY > 5) {
-      setIsBackgroundExpanded(true);
-      setIsAnimating(true);
-      
-      // Smooth background expansion animation
-      Animated.timing(backgroundTranslateYAnim, {
-        toValue: -150, // Move background up significantly
-        duration: 1000, // Longer duration for smooth expansion
-        easing: Easing.out(Easing.cubic), // Smooth easing curve
-        useNativeDriver: true,
-      }).start(() => {
-        // Animation completed
-        setIsAnimating(false);
-      });
-    }
-    
-    // If background is expanded and user scrolls back to top, contract it
-    if (isBackgroundExpanded && !isAnimating && scrollY <= 5) {
-      setIsBackgroundExpanded(false);
-      setIsAnimating(true);
-      
-      // Smooth background contraction animation
-      Animated.timing(backgroundTranslateYAnim, {
-        toValue: 0, // Move background back to original position
-        duration: 800, // Slightly faster contraction
-        easing: Easing.out(Easing.cubic), // Smooth easing curve
-        useNativeDriver: true,
-      }).start(() => {
-        // Animation completed
-        setIsAnimating(false);
-      });
-    }
-  }, [isBackgroundExpanded, isAnimating, backgroundTranslateYAnim]);
+  // Removed scroll-driven translate animation (normal scroll behavior)
 
   const requireAuth = (actionDescription: string, onAuthed: () => void) => {
     if (!isAuthenticated) {
@@ -711,48 +756,18 @@ export default function ClientHomeScreen() {
       <StatusBar style="light" translucent backgroundColor="transparent" />
       {/* Full Screen Hero with Overlay Header */}
       <View style={styles.fullScreenHero}>
-        {(() => {
-          const media = businessProfile?.image_on_page_1;
-          const showVideo = isVideoUrl(media) && !heroVideoFailed;
-          if (showVideo) {
-            return (
-              <Video
-                source={{ uri: media as string }}
-                style={styles.fullScreenHeroImage}
-                resizeMode={ResizeMode.COVER}
-                shouldPlay
-                isLooping
-                isMuted
-                onError={() => setHeroVideoFailed(true)}
-              />
-            );
-          }
-          return (
-            <Image 
-              source={
-                heroImageFailed
-                  ? require('@/assets/images/1homePage.jpg')
-                  : (media
-                      ? { uri: media as string }
-                      : require('@/assets/images/1homePage.jpg'))
-              }
-              style={styles.fullScreenHeroImage}
-              resizeMode="cover"
-              onError={() => setHeroImageFailed(true)}
-              defaultSource={require('@/assets/images/1homePage.jpg')}
-            />
-          );
-        })()}
+        <ManicureMarqueeHero />
         <LinearGradient
-          colors={['rgba(0,0,0,0.6)', 'rgba(0,0,0,0.6)', 'rgba(0,0,0,0.6)']}
+          colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0)', 'rgba(255,255,255,0)']}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
           style={styles.fullScreenHeroOverlay}
+          pointerEvents="none"
         />
         
         {/* Header Overlay */}
-        <SafeAreaView edges={["top"]} style={styles.overlayHeader}>
-          <View style={styles.overlayHeaderContent}>
+        <SafeAreaView edges={["top"]} style={styles.overlayHeader} pointerEvents="box-none">
+          <View style={styles.overlayHeaderContent} pointerEvents="box-none">
             <View style={styles.headerSide}>
               <TouchableOpacity
                 style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}
@@ -791,33 +806,14 @@ export default function ClientHomeScreen() {
           </View>
         </SafeAreaView>
 
-        {/* Hero Text Content (hidden when video is playing) */}
-        {(() => {
-          const media = businessProfile?.image_on_page_1;
-          const showVideo = isVideoUrl(media) && !heroVideoFailed;
-          if (showVideo) return null;
-          return (
-            <View style={styles.fullScreenHeroContent}>
-              <View style={styles.heroTextContainer}>
-                <Text style={styles.heroWelcome}>{t('welcome')}</Text>
-                <Text style={styles.heroTitle}>{user?.name || t('valuedClient')}</Text>
-                <Text style={styles.heroSubtitle} numberOfLines={2} ellipsizeMode="tail">{t('home.subtitle')}</Text>
-              </View>
-            </View>
-          );
-        })()}
-
       </View>
 
       {/* Content Section with Rounded Top */}
       <SafeAreaView edges={["left","right"]} style={{ flex: 1 }}>
-        <Animated.View 
+        <View 
           style={[
             styles.contentWrapperContainer,
             {
-              transform: [
-                { translateY: backgroundTranslateYAnim }
-              ],
               zIndex: 10, // Always high z-index to stay above hero text
             }
           ]}
@@ -834,8 +830,6 @@ export default function ClientHomeScreen() {
                 contentContainerStyle={styles.scrollContent}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000" />}
                 showsVerticalScrollIndicator={false}
-                onScroll={handleScroll}
-                scrollEventThrottle={16}
               >
 
         {/* Waitlist Section - Top Priority */}
@@ -1259,7 +1253,7 @@ export default function ClientHomeScreen() {
             </ScrollView>
           </View>
         </LinearGradient>
-      </Animated.View>
+      </View>
 
         {/* Active Broadcast Message Modal */}
         <Modal
@@ -1348,9 +1342,10 @@ const styles = StyleSheet.create<any>({
   // Full Screen Hero Styles
   fullScreenHero: {
     position: 'relative',
-    height: '45%', // Takes up 45% of screen height
+    height: '68%', // Show more of the hero / marquee
     width: '100%',
     zIndex: 0, // Very low z-index so white background can overlap it
+    backgroundColor: HERO_BG,
   },
   fullScreenHeroImage: {
     width: '100%',
@@ -1422,6 +1417,28 @@ const styles = StyleSheet.create<any>({
     paddingHorizontal: 24,
     alignItems: 'flex-start',
     zIndex: 0, // Very low z-index so white background can overlap it
+  },
+  manicureHeroRoot: {
+    position: 'absolute',
+    left: -SCREEN_WIDTH * 0.1,
+    right: -SCREEN_WIDTH * 0.1,
+    top: 0,
+    bottom: 0,
+    overflow: 'hidden',
+  },
+  manicureHeroFadeBottom: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '30%',
+  },
+  manicureHeroFadeTop: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: Platform.OS === 'web' ? '25%' : '15%',
   },
   scrollContent: {
     paddingBottom: 400, // Extra bottom padding to see the image at the bottom
@@ -1504,7 +1521,7 @@ const styles = StyleSheet.create<any>({
   // Grey rounded container like admin home
   contentWrapperContainer: {
     flex: 1,
-    marginTop: -38, // Increased overlap with hero image
+    marginTop: -10, // Less overlap so the hero stays more visible
     paddingTop: 1, // Reduced to tighten space under hero
     paddingBottom: 0, // No bottom padding to allow full scrolling
     minHeight: '100%', // Fill the entire screen height

@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create } from 'zustand/react';
 import { Service } from '@/lib/supabase';
 import { servicesApi } from '@/lib/api/services';
 

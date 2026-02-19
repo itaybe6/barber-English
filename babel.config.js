@@ -1,21 +1,26 @@
 module.exports = function (api) {
   api.cache(true);
   return {
-    presets: ['babel-preset-expo'],
+    presets: [
+      [
+        'babel-preset-expo',
+        {
+          // Fix: web bundles are loaded as classic scripts; transform any `import.meta`
+          // usage (often from ESM dependencies) to avoid runtime SyntaxError.
+          unstable_transformImportMeta: true,
+        },
+      ],
+    ],
     plugins: [
-      'expo-router/babel',
       [
         'module-resolver',
         {
           alias: {
             '@': './',
-            // Force CJS builds to avoid import.meta in ESM on web
-            'zustand/middleware': 'zustand/middleware.js',
-            zustand: 'zustand/index.js',
           },
         },
       ],
       'react-native-reanimated/plugin', // תמיד אחרון
-    ],
+    ].filter(Boolean),
   };
 };

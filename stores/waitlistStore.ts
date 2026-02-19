@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create } from 'zustand/react';
 import { WaitlistEntry, supabase, getBusinessId } from '@/lib/supabase';
 import { notificationsApi } from '@/lib/api/notifications';
 

@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 type Props = {
   visible: boolean;
   styles: any;
-  heroDynamicHeight: number;
+  topOffset: number;
   availableTimeSlots: string[];
   selectedTime: string | null;
   primaryColor: string;
@@ -17,7 +17,7 @@ type Props = {
 export default function TimeSelection({
   visible,
   styles,
-  heroDynamicHeight,
+  topOffset,
   availableTimeSlots,
   selectedTime,
   primaryColor,
@@ -28,7 +28,7 @@ export default function TimeSelection({
 
   return (
     <View>
-      <View style={{ height: Math.max(0, heroDynamicHeight + 12 - 50) }} />
+      <View style={{ height: Math.max(0, topOffset + 12) }} />
       <View style={[styles.section, styles.calendarSectionCard]}>
         {availableTimeSlots && availableTimeSlots.length > 0 ? (
           <View style={styles.timeScrollBox}>

@@ -214,7 +214,7 @@ type Props = {
   visible: boolean;
   styles: any;
   introFadeStyle: any;
-  heroDynamicHeight: number;
+  topOffset: number;
   safeAreaBottom: number;
   isLoading: boolean;
   barbers: User[];
@@ -227,7 +227,7 @@ export default function BarberSelection({
   visible,
   styles,
   introFadeStyle,
-  heroDynamicHeight,
+  topOffset,
   safeAreaBottom,
   isLoading,
   barbers,
@@ -282,7 +282,7 @@ export default function BarberSelection({
             <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.15)' }} />
           </View>
 
-          <View style={{ height: TOP_SPACING * 0.35, justifyContent: 'flex-end', alignItems: 'center', marginTop: heroDynamicHeight - 160, paddingBottom: 40 }}>
+          <View style={{ height: TOP_SPACING * 0.35, justifyContent: 'flex-end', alignItems: 'center', marginTop: Math.max(0, topOffset - 12), paddingBottom: 40 }}>
             {barbers.map((barber, index) => (
               <BarberDetailsOverlay key={`details-${barber.id}`} index={index} barber={barber} scrollX={scrollX} />
             ))}

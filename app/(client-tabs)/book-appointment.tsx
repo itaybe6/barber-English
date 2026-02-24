@@ -11,13 +11,13 @@ import BarberSelection from '@/components/book-appointment/BarberSelection';
 import ServiceSelection from '@/components/book-appointment/ServiceSelection';
 import DaySelection from '@/components/book-appointment/DaySelection';
 import TimeSelection from '@/components/book-appointment/TimeSelection';
+import BookingStepTabs, { BOOKING_TABS_HEIGHT } from '@/components/book-appointment/BookingStepTabs';
 
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { Service } from '@/lib/supabase';
 import { servicesApi } from '@/lib/api/services';
 import { supabase, getBusinessId, Appointment } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
-import { getCurrentClientLogo } from '@/src/theme/assets';
 import { notificationsApi } from '@/lib/api/notifications';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
@@ -372,24 +372,13 @@ export default function BookAppointment() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const { user } = useAuthStore();
-  const handleOpenSettings = React.useCallback(() => {
-    try {
-      router.push('/(client-tabs)/profile');
-    } catch {}
-  }, [router]);
-
-  const handleOpenNotifications = React.useCallback(() => {
-    try {
-      router.push('/(client-tabs)/notifications');
-    } catch {}
-  }, [router]);
 
   const { colors } = useBusinessColors();
   const safeAreaInsets = useSafeAreaInsets();
   const styles = createStyles(colors);
   const footerBottom = Math.max(safeAreaInsets.bottom, 16) + 80;
   const params = (router as any).useLocalSearchParams?.() || {};
-  const HERO_TOP_HEIGHT = Math.round(Dimensions.get('window').height * 0.30);
+  // Top animated tabs replace the old grey hero/stepper
   
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
@@ -1389,7 +1378,7 @@ export default function BookAppointment() {
     }
   };
 
-  const heroDynamicHeight = HERO_TOP_HEIGHT;
+  const TOP_OFFSET = Math.round(safeAreaInsets.top + 8 + BOOKING_TABS_HEIGHT);
   return (
     <SafeAreaView style={styles.container} edges={(currentStep === 1 || currentStep === 2 || currentStep === 3 || currentStep === 4) ? [] : ['top']}>
       {/* Dynamic background based on selected barber/service */}
@@ -1399,209 +1388,21 @@ export default function BookAppointment() {
           return <DynamicBackground uri={uri} />;
         } catch { return null; }
       })()}
-      {/* Top grey hero background */}
-      <View style={[styles.topHeroWrapper, { height: heroDynamicHeight }]} pointerEvents="none" />
-      {(currentStep === 1 || currentStep === 2 || currentStep === 3 || currentStep === 4) && (
-        <View pointerEvents="box-none" style={[styles.topOverlayHeader, { paddingTop: safeAreaInsets.top + 8 }] }>
-          <View style={styles.topOverlayHeaderContent}>
-            <TouchableOpacity
-              style={[styles.topOverlayButton, { backgroundColor: 'rgba(17,24,39,0.08)', borderColor: 'rgba(255,255,255,0.35)' }]}
-              onPress={handleOpenSettings}
-              activeOpacity={0.82}
-              accessibilityLabel={t('profile.title', 'Profile')}
-            >
-              <Ionicons name="settings-outline" size={22} color="#FFFFFF" />
-            </TouchableOpacity>
-            <View style={styles.topOverlayTitleWrapper} pointerEvents="none">
-              <Image source={getCurrentClientLogo()} style={styles.topOverlayLogo} resizeMode="contain" />
-            </View>
-            <TouchableOpacity
-              style={[styles.topOverlayButton, { backgroundColor: 'rgba(17,24,39,0.08)', borderColor: 'rgba(255,255,255,0.35)' }]}
-              onPress={handleOpenNotifications}
-              activeOpacity={0.82}
-              accessibilityLabel={t('notifications.title', 'Notifications')}
-            >
-              <Ionicons name="notifications-outline" size={22} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
 
-          {/* Stepper */}
-          <View style={[styles.stepperContainer, styles.ltr, styles.stepperShiftLeft]}>
-            {[
-              { key: 1, icon: 'person-outline', label: t('booking.step.barber', 'Barber') },
-              { key: 2, icon: 'briefcase-outline', label: t('booking.step.service', 'Service') },
-              { key: 3, icon: 'calendar-outline', label: t('booking.step.day', 'Day') },
-              { key: 4, icon: 'time-outline', label: t('booking.step.time', 'Time') },
-            ].map((s, idx) => {
-              const active = currentStep === (s.key as any);
-              const done = currentStep > (s.key as any);
-              return (
-                <View key={String(s.key)} style={styles.stepperItemWrapper}>
-                  <View style={styles.stepperItemColumn}>
-                    <View style={styles.stepperCircleWrapper}>
-                      <TouchableOpacity
-                      onPress={() => setCurrentStep(s.key as any)}
-                      activeOpacity={0.85}
-                      style={[styles.stepperCircle, (active || done) && styles.stepperCircleActive]}
-                    >
-                      {(
-                        (s.key === 1 && !!selectedBarber && Number(currentStep) >= 2) ||
-                        (s.key === 2 && !!selectedService && Number(currentStep) >= 3)
-                      ) ? (
-                        <Image
-                          source={{ uri: (s.key === 1
-                            ? (selectedBarber as any)?.image_url
-                            : (((selectedService as any)?.image_url) || ((selectedService as any)?.cover_url) || ((selectedService as any)?.image))) as any }}
-                          style={{ width: '100%', height: '100%' }}
-                          resizeMode="cover"
-                        />
-                      ) : (s.key === 3 && selectedDay !== null) ? (
-                        <Text style={styles.stepperDateText}>
-                          {(() => {
-                            try {
-                              const d = days[selectedDay!].fullDate;
-                              const dd = String(d.getDate()).padStart(2, '0');
-                              const mm = String(d.getMonth() + 1).padStart(2, '0');
-                              const yy = String(d.getFullYear()).slice(-2);
-                              return `${dd}.${mm}.${yy}`;
-                            } catch { return ''; }
-                          })()}
-                        </Text>
-                      ) : (s.key === 4 && !!selectedTime) ? (
-                        <Text style={styles.stepperDateText}>{selectedTime}</Text>
-                      ) : (
-                        <Ionicons
-                          name={s.icon as any}
-                          size={20}
-                          color={(active || done) ? '#111827' : 'rgba(255,255,255,0.9)'}
-                        />
-                      )}
-                      </TouchableOpacity>
-                      <View style={[styles.stepperBadge, (active || done) && styles.stepperBadgeActive]}>
-                        <Text style={[styles.stepperBadgeText, (active || done) && styles.stepperBadgeTextActive]}>{s.key}</Text>
-                      </View>
-                    {/* Removed name pill under step 1 per request */}
-                    </View>
-                    {/* Thumbnails under steps 1 & 2 removed per request; only image inside circle now */}
-                    {/* Removed date pill under step 3 */}
-                    {/* Removed time pill under step 4 */}
-                  </View>
-                  {idx < 3 && <View style={[styles.stepperLine, done && styles.stepperLineDone]} />}
-                </View>
-              );
-            })}
-          </View>
-
-          {/* Floating navigation arrows in the grey area */}
-          {true && (
-            <View style={[styles.floatingNavRow, styles.ltr]}>
-              {/* Previous button for steps 2,3,4 */}
-              {Number(currentStep) >= 2 && (
-                <View style={styles.floatingNavItem}>
-                  <TouchableOpacity
-                    onPress={() => {
-                      const stepNum = Number(currentStep);
-                      if (stepNum === 4) {
-                        setCurrentStep(3 as any);
-                        return;
-                      }
-                      if (stepNum === 3) {
-                        setCurrentStep(2 as any);
-                        return;
-                      }
-                      if (stepNum === 2) {
-                        setCurrentStep(1 as any);
-                        return;
-                      }
-                    }}
-                    activeOpacity={0.9}
-                    style={styles.floatingPillButton}
-                    accessibilityLabel={t('booking.prevStep', 'Previous step')}
-                  >
-                    <BlurView intensity={36} tint="light" style={styles.floatingGlassBlur} />
-                    <View style={styles.floatingGlassTint} />
-                    <View style={styles.floatingGlassSheen} />
-                    <View style={styles.floatingGlassInnerBorder} />
-                    <Ionicons name="arrow-back" size={18} color="#FFFFFF" />
-                    <Text style={styles.floatingPillText}>{t('booking.prev', 'הקודם')}</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {/* Book button on step 4 */}
-              {Number(currentStep) === 4 && (
-                <View style={styles.floatingNavItem}>
-                  <TouchableOpacity
-                    onPress={() => {
-                      if (!selectedService || selectedTime === null || isBooking || isCheckingAppointments) return;
-                      handleBookAppointment();
-                    }}
-                    activeOpacity={0.9}
-                    style={styles.floatingPillButton}
-                    accessibilityLabel={t('booking.book', 'Book appointment')}
-                    disabled={!selectedService || selectedTime === null || isBooking || isCheckingAppointments}
-                  >
-                    <BlurView intensity={36} tint="light" style={styles.floatingGlassBlur} />
-                    <View style={styles.floatingGlassTint} />
-                    <View style={styles.floatingGlassSheen} />
-                    <View style={styles.floatingGlassInnerBorder} />
-                    <Text style={styles.floatingPillText}>{t('booking.book', 'קבע תור')}</Text>
-                    <Ionicons name="checkmark" size={18} color="#FFFFFF" />
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {/* Next button for steps 1,2,3 (hidden at step 4) */}
-              {Number(currentStep) < 4 && (
-                <View style={styles.floatingNavItem}>
-                  <TouchableOpacity
-                    onPress={() => {
-                      const stepNum = Number(currentStep);
-                      if (stepNum === 1) {
-                        if (!selectedBarber) return;
-                        setCurrentStep(2 as any);
-                        return;
-                      }
-                      if (stepNum === 2) {
-                        if (!selectedService) {
-                          const fallback = (filteredServices && filteredServices.length > 0)
-                            ? (filteredServices[selectedServiceIndex] || filteredServices[0])
-                            : null;
-                          if (fallback) {
-                            try {
-                              setSelectedServiceIndex(Math.max(0, filteredServices.indexOf(fallback)));
-                            } catch {}
-                            setSelectedService(fallback);
-                          } else {
-                            return; // no services to proceed
-                          }
-                        }
-                        setCurrentStep(3 as any);
-                        return;
-                      }
-                      if (stepNum === 3) {
-                        if (selectedDay === null) return;
-                        setCurrentStep(4 as any);
-                        return;
-                      }
-                    }}
-                    activeOpacity={0.9}
-                    style={styles.floatingPillButton}
-                    accessibilityLabel={t('booking.nextStep', 'Next step')}
-                  >
-                    <BlurView intensity={36} tint="light" style={styles.floatingGlassBlur} />
-                    <View style={styles.floatingGlassTint} />
-                    <View style={styles.floatingGlassSheen} />
-                    <View style={styles.floatingGlassInnerBorder} />
-                    <Text style={styles.floatingPillText}>{t('booking.next', 'הבא')}</Text>
-                    <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          )}
-        </View>
-      )}
+      <BookingStepTabs
+        currentStep={currentStep}
+        safeAreaTop={safeAreaInsets.top}
+        labels={{
+          barber: t('booking.step.barber', 'Barber'),
+          service: t('booking.step.service', 'Service'),
+          day: t('booking.step.day', 'Day'),
+          time: t('booking.step.time', 'Time'),
+        }}
+        canGoService={!!selectedBarber}
+        canGoDay={!!selectedService}
+        canGoTime={selectedDay !== null}
+        onChangeStep={(step) => setCurrentStep(step as any)}
+      />
       {/* Header removed on steps 3-4 per request */}
       <View style={[
         styles.contentWrapper,
@@ -1630,15 +1431,15 @@ export default function BookAppointment() {
           nestedScrollEnabled={true}
         >
 
-        {/* Spacer to keep content below hero on steps 3 */}
-        <View style={{ height: (currentStep >= 3 ? heroDynamicHeight + 12 : 16) }} />
+        {/* Spacer to keep content below the top tabs */}
+        <View style={{ height: TOP_OFFSET + 12 }} />
 
         {/* Step 1: Barber Selection - Wallpaper Style Carousel */}
         <BarberSelection
           visible={currentStep === 1}
           styles={styles}
           introFadeStyle={introFadeStyle}
-          heroDynamicHeight={heroDynamicHeight}
+          topOffset={TOP_OFFSET}
           safeAreaBottom={safeAreaInsets.bottom}
           isLoading={isLoadingBarbers}
           barbers={availableBarbers}
@@ -1661,7 +1462,7 @@ export default function BookAppointment() {
           visible={currentStep === 2 && !!selectedBarber}
           styles={styles}
           step2FadeStyle={step2FadeStyle}
-          heroDynamicHeight={heroDynamicHeight}
+          topOffset={TOP_OFFSET}
           safeAreaBottom={safeAreaInsets.bottom}
           isLoading={isLoadingServices}
           services={filteredServices}
@@ -1704,7 +1505,7 @@ export default function BookAppointment() {
       <TimeSelection
         visible={Number(currentStep) === 4 && !!selectedBarber && !!selectedService && selectedDay !== null}
         styles={styles}
-        heroDynamicHeight={heroDynamicHeight}
+        topOffset={TOP_OFFSET}
         availableTimeSlots={(availableTimeSlots || []) as any}
         selectedTime={selectedTime as any}
         primaryColor={colors.primary}
@@ -1998,6 +1799,13 @@ export default function BookAppointment() {
 
 // Background that cross-fades to the provided image URI and lightly blurs/tints it
 const DynamicBackground: React.FC<{ uri: string | null }> = ({ uri }) => {
+  // 'screen' dimensions include the Android status bar — wider than 'window' — so the
+  // background truly covers edge-to-edge even when rendered inside a SafeAreaView.
+  const [screenDims, setScreenDims] = React.useState(() => Dimensions.get('screen'));
+  React.useEffect(() => {
+    const sub = Dimensions.addEventListener('change', ({ screen }) => setScreenDims(screen));
+    return () => sub.remove();
+  }, []);
   const progress = useSharedValue(1);
   const [currentUri, setCurrentUri] = React.useState<string | null>(uri ?? null);
   const [previousUri, setPreviousUri] = React.useState<string | null>(null);
@@ -2032,8 +1840,9 @@ const DynamicBackground: React.FC<{ uri: string | null }> = ({ uri }) => {
       };
     }
 
-    const beginTransition = () => {
-      if (!isActive) return;
+    // Never block the transition on `Image.prefetch`:
+    // on some Android devices / URLs, prefetch can hang and prevent any updates.
+    if (isActive) {
       setPreviousUri(currentUri);
       setCurrentUri(uri);
       progress.value = 0;
@@ -2044,13 +1853,9 @@ const DynamicBackground: React.FC<{ uri: string | null }> = ({ uri }) => {
           runOnJS(clearPrevious)();
         }
       );
-    };
+    }
 
-    Image.prefetch(uri)
-      .catch(() => {})
-      .finally(() => {
-        beginTransition();
-      });
+    Image.prefetch(uri).catch(() => {});
 
     return () => {
       isActive = false;
@@ -2070,13 +1875,27 @@ const DynamicBackground: React.FC<{ uri: string | null }> = ({ uri }) => {
     opacity: 1 - progress.value,
   }));
 
+  const blurRadius = Platform.select({ ios: 60, android: 24, default: 40 }) as number;
+
+  const bgStyle: any = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: screenDims.width,
+    height: screenDims.height,
+  };
+
   return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFillObject as any}>
+    <View pointerEvents="none" style={bgStyle}>
+      {/* Dark fallback — visible while the first image loads */}
+      <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: '#0B0F14' }]} />
+
       {previousUri && (
         <Animated.Image
           source={{ uri: previousUri }}
           style={[StyleSheet.absoluteFillObject as any, previousStyle]}
           resizeMode="cover"
+          blurRadius={blurRadius}
         />
       )}
       {currentUri && (
@@ -2084,10 +1903,13 @@ const DynamicBackground: React.FC<{ uri: string | null }> = ({ uri }) => {
           source={{ uri: currentUri }}
           style={[StyleSheet.absoluteFillObject as any, currentStyle]}
           resizeMode="cover"
+          blurRadius={blurRadius}
         />
       )}
-      <BlurView intensity={30} tint="light" style={StyleSheet.absoluteFillObject as any} />
-      <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: 'rgba(255,255,255,0.45)' }]} />
+
+      {/* Wallpaper dim / vignette */}
+      <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: 'rgba(0,0,0,0.22)' }]} />
+      <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: 'rgba(255,255,255,0.04)' }]} />
     </View>
   );
 };

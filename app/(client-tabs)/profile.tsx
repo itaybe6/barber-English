@@ -876,63 +876,63 @@ export default function ClientProfileScreen() {
             </View>
             <ScrollView contentContainerStyle={styles.termsContent} showsVerticalScrollIndicator={false}>
               <Text style={styles.termsParagraph}>
-                Welcome to the appointments management app. Your use of the app and related services is subject to the terms detailed in this document and constitutes full and informed consent to all its provisions.
+                {t('profile.terms.intro', 'Welcome to the appointments management app. Your use of the app and related services is subject to the terms detailed in this document and constitutes full and informed consent to all its provisions.')}
               </Text>
-              <Text style={styles.termsHeading}>1. Account Creation and Identification</Text>
+              <Text style={styles.termsHeading}>{t('profile.terms.section1.title','1. Account Creation and Identification')}</Text>
               <Text style={styles.termsParagraph}>
-                To use the services, you may be required to provide identifying information such as name and phone number. You declare that the information provided is accurate and up to date and will update it as needed. Do not use another person's details without their permission.
+                {t('profile.terms.section1.body',"To use the services, you may be required to provide identifying information such as name and phone number. You declare that the information provided is accurate and up to date and will update it as needed. Do not use another person's details without their permission.")}
               </Text>
-              <Text style={styles.termsHeading}>2. Booking and Changes</Text>
+              <Text style={styles.termsHeading}>{t('profile.terms.section2.title','2. Booking and Changes')}</Text>
               <Text style={styles.termsParagraph}>
-                Booking, changes, or cancellation are done through the app subject to availability. The confirmed appointment details will be displayed in the app and sent as a notification per settings. Service times are approximate and may change due to operational constraints.
+                {t('profile.terms.section2.body','Booking, changes, or cancellation are done through the app subject to availability. The confirmed appointment details will be displayed in the app and sent as a notification per settings. Service times are approximate and may change due to operational constraints.')}
               </Text>
-              <Text style={styles.termsHeading}>3. Cancellations and No-Shows</Text>
+              <Text style={styles.termsHeading}>{t('profile.terms.section3.title','3. Cancellations and No-Shows')}</Text>
               <Text style={styles.termsParagraph}>
-                You may cancel or change an appointment within a reasonable time before its scheduled time. No-shows or significant delays may result in future restrictions on booking, at the business's discretion.
+                {t('profile.terms.section3.body',"You may cancel or change an appointment within a reasonable time before its scheduled time. No-shows or significant delays may result in future restrictions on booking, at the business's discretion.")}
               </Text>
-              <Text style={styles.termsHeading}>4. Payments and Receipts</Text>
+              <Text style={styles.termsHeading}>{t('profile.terms.section4.title','4. Payments and Receipts')}</Text>
               <Text style={styles.termsParagraph}>
-                If payment is made through the app, it may be processed via third-party payment providers. Payment method details are not stored on our servers beyond what is necessary to complete the transaction. If payment is made at the business, it will be settled directly between you and the business.
+                {t('profile.terms.section4.body','If payment is made through the app, it may be processed via third-party payment providers. Payment method details are not stored on our servers beyond what is necessary to complete the transaction. If payment is made at the business, it will be settled directly between you and the business.')}
               </Text>
-              <Text style={styles.termsHeading}>5. Notifications and Messaging</Text>
+              <Text style={styles.termsHeading}>{t('profile.terms.section5.title','5. Notifications and Messaging')}</Text>
               <Text style={styles.termsParagraph}>
-                You can enable or disable notifications from the app or through device settings. Disabling notifications may affect receiving reminders and important updates.
+                {t('profile.terms.section5.body','You can enable or disable notifications from the app or through device settings. Disabling notifications may affect receiving reminders and important updates.')}
               </Text>
-              <Text style={styles.termsHeading}>6. Privacy and Data Security</Text>
+              <Text style={styles.termsHeading}>{t('profile.terms.section6.title','6. Privacy and Data Security')}</Text>
               <Text style={styles.termsParagraph}>
-                We may collect and process information necessary to operate the service, including basic identification information and appointment data. Information is stored and processed in accordance with applicable law and the privacy policy. You may contact us to review, update, or delete personal information, subject to our legal obligations.
+                {t('profile.terms.section6.body','We may collect and process information necessary to operate the service, including basic identification information and appointment data. Information is stored and processed in accordance with applicable law and the privacy policy. You may contact us to review, update, or delete personal information, subject to our legal obligations.')}
               </Text>
-              <Text style={styles.termsHeading}>7. Permitted Use and Conduct</Text>
+              <Text style={styles.termsHeading}>{t('profile.terms.section7.title','7. Permitted Use and Conduct')}</Text>
               <Text style={styles.termsParagraph}>
-                Do not use the service in a way that infringes on others' rights, violates the law, or disrupts app operations. We may limit or block access in cases of misuse or violation of these terms.
+                {t('profile.terms.section7.body',"Do not use the service in a way that infringes on others' rights, violates the law, or disrupts app operations. We may limit or block access in cases of misuse or violation of these terms.")}
               </Text>
-              <Text style={styles.termsHeading}>8. Intellectual Property</Text>
+              <Text style={styles.termsHeading}>{t('profile.terms.section8.title','8. Intellectual Property')}</Text>
               <Text style={styles.termsParagraph}>
-                All rights in the app, including name, logo, designs, content, code, and images, are reserved by their owners. Do not copy, modify, distribute, or create derivative works without prior written permission.
+                {t('profile.terms.section8.body','All rights in the app, including name, logo, designs, content, code, and images, are reserved by their owners. Do not copy, modify, distribute, or create derivative works without prior written permission.')}
               </Text>
-              <Text style={styles.termsHeading}>9. Limitation of Liability</Text>
+              <Text style={styles.termsHeading}>{t('profile.terms.section9.title','9. Limitation of Liability')}</Text>
               <Text style={styles.termsParagraph}>
-                The service is provided as-is and as available. We are not liable for indirect or consequential damages or loss of profits arising from use of the app. You are solely responsible for use and for content you submit.
+                {t('profile.terms.section9.body','The service is provided as-is and as available. We are not liable for indirect or consequential damages or loss of profits arising from use of the app. You are solely responsible for use and for content you submit.')}
               </Text>
-              <Text style={styles.termsHeading}>10. Availability and Service Changes</Text>
+              <Text style={styles.termsHeading}>{t('profile.terms.section10.title','10. Availability and Service Changes')}</Text>
               <Text style={styles.termsParagraph}>
-                There may be interruptions, malfunctions, or maintenance work. We may update, change, or discontinue the service, in whole or in part, from time to time.
+                {t('profile.terms.section10.body','There may be interruptions, malfunctions, or maintenance work. We may update, change, or discontinue the service, in whole or in part, from time to time.')}
               </Text>
-              <Text style={styles.termsHeading}>11. Third Parties</Text>
+              <Text style={styles.termsHeading}>{t('profile.terms.section11.title','11. Third Parties')}</Text>
               <Text style={styles.termsParagraph}>
-                The app may include links to or services from third parties, such as payment or messaging services. We are not responsible for those sites or services, and their terms will apply to your use of them.
+                {t('profile.terms.section11.body','The app may include links to or services from third parties, such as payment or messaging services. We are not responsible for those sites or services, and their terms will apply to your use of them.')}
               </Text>
-              <Text style={styles.termsHeading}>12. Use by Minors</Text>
+              <Text style={styles.termsHeading}>{t('profile.terms.section12.title','12. Use by Minors')}</Text>
               <Text style={styles.termsParagraph}>
-                If you are not of legal age under applicable law, app use requires consent from a parent or legal guardian.
+                {t('profile.terms.section12.body','If you are not of legal age under applicable law, app use requires consent from a parent or legal guardian.')}
               </Text>
-              <Text style={styles.termsHeading}>13. Updating the Terms</Text>
+              <Text style={styles.termsHeading}>{t('profile.terms.section13.title','13. Updating the Terms')}</Text>
               <Text style={styles.termsParagraph}>
-                We may update these terms from time to time. Publishing an updated version in the app constitutes notice of change. Continued use after the update constitutes consent to the updated text.
+                {t('profile.terms.section13.body','We may update these terms from time to time. Publishing an updated version in the app constitutes notice of change. Continued use after the update constitutes consent to the updated text.')}
               </Text>
-              <Text style={styles.termsHeading}>14. Contact</Text>
+              <Text style={styles.termsHeading}>{t('profile.terms.section14.title','14. Contact')}</Text>
               <Text style={styles.termsParagraph}>
-                For questions, issues, or requests regarding these terms or the service, you can contact us using the business contact details shown in the app.
+                {t('profile.terms.section14.body','For questions, issues, or requests regarding these terms or the service, you can contact us using the business contact details shown in the app.')}
               </Text>
               <View style={{ height: 24 }} />
             </ScrollView>

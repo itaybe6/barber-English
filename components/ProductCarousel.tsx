@@ -323,7 +323,7 @@ export default function ProductCarousel({
                   
                   <View style={styles.modalRatingRow}>
                     <StarRating rating={5} size={16} />
-                    <Text style={styles.modalRatingText}>5.0 (127 reviews)</Text>
+                    <Text style={styles.modalRatingText}>{t('products.ratingSummary', { rating: '5.0', count: 127 })}</Text>
                   </View>
                   
                   <View style={styles.modalPriceRow}>

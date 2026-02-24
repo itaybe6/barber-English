@@ -261,7 +261,7 @@ export default function EditGalleryScreen() {
         }
       }
       if (finalUrls.length === 0) {
-        Alert.alert('Error', 'At least one image is required');
+        Alert.alert(t('error.generic','Error'), t('admin.gallery.atLeastOneImageRequired','At least one image is required'));
         setIsSavingEdit(false);
         return;
       }

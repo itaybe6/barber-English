@@ -409,20 +409,32 @@ export default function ClientTabsLayout() {
         name="waitlist" 
         options={{
           title: t('waitlist.title', 'Waitlist'),
-          href: null
+          href: null,
         }}
       />
       <Tabs.Screen 
         name="notifications" 
         options={{
           title: t('notifications.title', 'Notifications'),
-          href: null
+          href: null,
         }}
       />
       <Tabs.Screen 
         name="select-time" 
         options={{
-          href: null
+          href: null,
+        }}
+      />
+      <Tabs.Screen 
+        name="select-barber" 
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen 
+        name="select-service" 
+        options={{
+          href: null,
         }}
       />
     </Tabs>
@@ -468,7 +480,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     paddingHorizontal: 4,
-    maxWidth: '20%',
   },
   
   // Center tab item (floating button)

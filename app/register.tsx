@@ -293,8 +293,8 @@ export default function RegisterScreen() {
               <BlurView intensity={18} tint="light" style={styles.formContainer}>
               {/* Form header text */}
               <View style={styles.formHeader}>
-                <Text style={[styles.formTitle, { color: businessColors.primary }]}>Sign up now</Text>
-                <Text style={styles.formSubtitle}>Fill in your details to register and sign in</Text>
+                <Text style={[styles.formTitle, { color: businessColors.primary }]}>{t('register.form.title','Sign up now')}</Text>
+                <Text style={styles.formSubtitle}>{t('register.form.subtitle','Fill in your details to register and sign in')}</Text>
               </View>
               {/* Name Input */}
               <View style={styles.field}>
@@ -426,7 +426,7 @@ export default function RegisterScreen() {
                     {loading ? (
                       <ActivityIndicator color={palette.white} size="small" />
                     ) : (
-                      <Text style={styles.ctaText}>Register</Text>
+                      <Text style={styles.ctaText}>{t('register.cta.register','Register')}</Text>
                     )}
                   </LinearGradient>
                 </View>
@@ -435,8 +435,8 @@ export default function RegisterScreen() {
               {/* Login Link */}
               <View style={styles.loginSection}>
                 <Text style={styles.loginText}>
-                  Already have an account? 
-                  <Text onPress={() => router.push('/login')} style={[styles.loginLink, styles.loginLinkSpacer]}>Sign in now</Text>
+                  {t('register.haveAccount','Already have an account?')}{' '}
+                  <Text onPress={() => router.push('/login')} style={[styles.loginLink, styles.loginLinkSpacer]}>{t('auth.signInNow','Sign in now')}</Text>
                 </Text>
               </View>
               </BlurView>

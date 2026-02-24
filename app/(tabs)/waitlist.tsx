@@ -11,6 +11,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { useTranslation } from 'react-i18next';
 import { formatTimeFromDate } from '@/lib/utils/timeFormat';
+import i18n from '@/src/config/i18n';
 
 // Helper function to format date as YYYY-MM-DD in local timezone
 function formatDateToLocalString(date: Date): string {
@@ -110,11 +111,11 @@ async function makePhoneCall(phoneNumber: string) {
     if (supported) {
       await Linking.openURL(url);
     } else {
-      Alert.alert('Error', 'Unable to open the phone app');
+      Alert.alert(i18n.t('error.generic','Error'), i18n.t('common.phoneOpenFailed','Unable to open the dialer on this device'));
     }
   } catch (error) {
     console.error('Error making phone call:', error);
-    Alert.alert('Error', 'An error occurred while starting the call');
+    Alert.alert(i18n.t('error.generic','Error'), i18n.t('common.tryAgain','An error occurred. Please try again.'));
   }
 }
 
@@ -122,13 +123,13 @@ async function makePhoneCall(phoneNumber: string) {
 function formatTimePreference(period?: 'morning' | 'afternoon' | 'evening' | 'any'): string {
   switch (period) {
     case 'morning':
-      return 'Morning';
+      return i18n.t('time_period.morning','Morning');
     case 'afternoon':
-      return 'Afternoon';
+      return i18n.t('time_period.afternoon','Afternoon');
     case 'evening':
-      return 'Evening';
+      return i18n.t('time_period.evening','Evening');
     case 'any':
-      return 'Any time';
+      return i18n.t('time_period.any','Any time');
     default:
       return '';
   }

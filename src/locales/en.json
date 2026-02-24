@@ -26,6 +26,7 @@
   "waitlist.leave.message": "Are you sure you want to leave the waitlist?",
   "cancel": "Cancel",
   "confirm": "Confirm",
+  "delete": "Delete",
   "error.generic": "Error",
   "error.removing.waitlist": "An error occurred while removing from the waitlist",
   "removed.from.waitlist": "Removed from waitlist",
@@ -95,7 +96,32 @@
   "appointments.history": "History",
   "appointments.status": { "confirmed": "Confirmed", "pending": "Pending", "cancelled": "Cancelled", "completed": "Completed" },
   "appointments.payment": { "paid": "Paid", "deposit": "Deposit", "unpaid": "Unpaid" },
-  "clients": { "noVisit": "No visit yet", "lastVisit": "Last visit" },
+  "clients": {
+    "noVisit": "No visit yet",
+    "lastVisit": "Last visit",
+    "listTitle": "Clients List",
+    "loading": "Loading clients...",
+    "filter": { "all": "All", "blocked": "Blocked", "unblocked": "Unblocked" },
+    "thisClient": "this client",
+    "phoneUnavailable": "Phone number is unavailable",
+    "call": { "title": "Call", "message": "Call {{phone}}?" },
+    "block": {
+      "title": "Block Client",
+      "message": "Block {{name}}?",
+      "successTitle": "Client blocked",
+      "successMessage": "{{name}} was blocked successfully",
+      "failed": "Failed to block client"
+    },
+    "unblock": {
+      "title": "Unblock Client",
+      "message": "Unblock {{name}}?",
+      "successTitle": "Client unblocked",
+      "successMessage": "{{name}} was unblocked successfully",
+      "failed": "Failed to unblock client"
+    },
+    "update": { "failed": "Failed to update client" },
+    "delete": { "title": "Delete Client", "message": "Delete {{name}}?", "failed": "Failed to delete client" }
+  },
   "clients.client": "Client ",
   "appointments.empty.date": "No appointments for this date",
   "commonEx": { "tryAgain": "An error occurred. Please try again.", "client": "Client", "smsOpenFailed": "SMS app cannot be opened on this device", "change": "Change", "select": "Select" },
@@ -188,6 +214,35 @@
   "profile.delete.failed": "Failed to delete account",
   "profile.terms.title": "Terms of Use",
   "profile.terms.subtitle": "View the app terms of use",
+  "profile.terms.intro": "Welcome to the appointments management app. Your use of the app and related services is subject to the terms detailed in this document and constitutes full and informed consent to all its provisions.",
+  "profile.terms.section1.title": "1. Account Creation and Identification",
+  "profile.terms.section1.body": "To use the services, you may be required to provide identifying information such as name and phone number. You declare that the information provided is accurate and up to date and will update it as needed. Do not use another person's details without their permission.",
+  "profile.terms.section2.title": "2. Booking and Changes",
+  "profile.terms.section2.body": "Booking, changes, or cancellation are done through the app subject to availability. The confirmed appointment details will be displayed in the app and sent as a notification per settings. Service times are approximate and may change due to operational constraints.",
+  "profile.terms.section3.title": "3. Cancellations and No-Shows",
+  "profile.terms.section3.body": "You may cancel or change an appointment within a reasonable time before its scheduled time. No-shows or significant delays may result in future restrictions on booking, at the business's discretion.",
+  "profile.terms.section4.title": "4. Payments and Receipts",
+  "profile.terms.section4.body": "If payment is made through the app, it may be processed via third-party payment providers. Payment method details are not stored on our servers beyond what is necessary to complete the transaction. If payment is made at the business, it will be settled directly between you and the business.",
+  "profile.terms.section5.title": "5. Notifications and Messaging",
+  "profile.terms.section5.body": "You can enable or disable notifications from the app or through device settings. Disabling notifications may affect receiving reminders and important updates.",
+  "profile.terms.section6.title": "6. Privacy and Data Security",
+  "profile.terms.section6.body": "We may collect and process information necessary to operate the service, including basic identification information and appointment data. Information is stored and processed in accordance with applicable law and the privacy policy. You may contact us to review, update, or delete personal information, subject to our legal obligations.",
+  "profile.terms.section7.title": "7. Permitted Use and Conduct",
+  "profile.terms.section7.body": "Do not use the service in a way that infringes on others' rights, violates the law, or disrupts app operations. We may limit or block access in cases of misuse or violation of these terms.",
+  "profile.terms.section8.title": "8. Intellectual Property",
+  "profile.terms.section8.body": "All rights in the app, including name, logo, designs, content, code, and images, are reserved by their owners. Do not copy, modify, distribute, or create derivative works without prior written permission.",
+  "profile.terms.section9.title": "9. Limitation of Liability",
+  "profile.terms.section9.body": "The service is provided as-is and as available. We are not liable for indirect or consequential damages or loss of profits arising from use of the app. You are solely responsible for use and for content you submit.",
+  "profile.terms.section10.title": "10. Availability and Service Changes",
+  "profile.terms.section10.body": "There may be interruptions, malfunctions, or maintenance work. We may update, change, or discontinue the service, in whole or in part, from time to time.",
+  "profile.terms.section11.title": "11. Third Parties",
+  "profile.terms.section11.body": "The app may include links to or services from third parties, such as payment or messaging services. We are not responsible for those sites or services, and their terms will apply to your use of them.",
+  "profile.terms.section12.title": "12. Use by Minors",
+  "profile.terms.section12.body": "If you are not of legal age under applicable law, app use requires consent from a parent or legal guardian.",
+  "profile.terms.section13.title": "13. Updating the Terms",
+  "profile.terms.section13.body": "We may update these terms from time to time. Publishing an updated version in the app constitutes notice of change. Continued use after the update constitutes consent to the updated text.",
+  "profile.terms.section14.title": "14. Contact",
+  "profile.terms.section14.body": "For questions, issues, or requests regarding these terms or the service, you can contact us using the business contact details shown in the app.",
   "profile.phone": "Phone number",
   "profile.settings": "Settings",
   "profile.settingsSubtitle": "Manage profile details, notifications, and terms",
@@ -230,7 +285,10 @@
     "loginPage": { "formatNote": "\ud83d\udcf1 Login page images are displayed in (9:16 ratio)" },
     "design": "Design"
   },
-  "products": { "loginToViewDetails": "Please sign in to view product details" },
+  "products": {
+    "loginToViewDetails": "Please sign in to view product details",
+    "ratingSummary": "{{rating}} ({{count}} reviews)"
+  },
   "auth": { "signInNow": "Sign in now", "maybeLater": "Maybe later" },
   "nearestSlots": { "title": "Available soon", "empty": "No nearby available appointments" },
   "map": { "mapsLabel": "Maps" },
@@ -247,6 +305,19 @@
   "category": { "gel": "Gel polish", "feet": "Pedicure polish", "manicure": "Manicure" },
   "admin2": { "hoursAdmin": { "title": "Work constraints", "segment": { "hours": "Hours", "singleDay": "Single day", "multiDays": "Multiple days" }, "pickDateShort": "Pick a date", "closedHours": "Closed hours", "pickDateAllDay": "Pick a date (closed all day)", "pickDateRangeAllDay": "Pick a date range (closed all day)", "selectedRange": "Selected range:", "allDay": "All day", "chooseClosedHours": "Choose closed hours", "start": "Start", "end": "End", "upcomingConstraints": "Upcoming constraints", "noUpcomingConstraints": "No upcoming constraints", "noReason": "No reason", "saveCTA": "Save constraints" } },
   "login": {
+    "form": {
+      "title": "Sign in your account",
+      "subtitle": "Enter your details to access your account"
+    },
+    "cta": { "signIn": "Sign In", "signingIn": "Signing in…" },
+    "forgotPassword": "Forgot password",
+    "noAccount": "Don't have an account?",
+    "signUpNow": "Sign up now",
+    "reset": {
+      "title": "Reset Password",
+      "subtitle": "Enter phone and email as they appear on your account",
+      "sending": "Sending…"
+    },
     "fillAll": "Please fill in all fields",
     "passwordPlaceholder": "Password",
     "blockedCannotSignIn": "Your account is blocked and cannot sign in. Please contact the manager.",
@@ -258,6 +329,12 @@
     "emailSent": { "title": "Email Sent", "message": "We sent you a password reset email. Check your inbox." }
   },
   "register": {
+    "form": {
+      "title": "Sign up now",
+      "subtitle": "Fill in your details to register and sign in"
+    },
+    "cta": { "register": "Register" },
+    "haveAccount": "Already have an account?",
     "phoneExists": { "title": "Phone number already exists", "message": "This phone number is already registered in the system. Please use a different phone number or sign in to your existing account." },
     "createError": "An error occurred creating the account. Please try again.",
     "success": { "title": "Registration successful!", "message": "Your account was created successfully.\n\nYou can now sign in with your phone number and chosen password.\n\nPhone number: {{phone}}" },
@@ -273,8 +350,24 @@
     "contactShortNotice": "Hi, I need help cancelling an appointment on short notice."
   },
   "settings": {
-    "common": { "saving": "Saving...", "uploading": "Uploading..." },
-    "policies": { "noRestriction": "0 hours (No restriction)", "hour": "hour", "hours": "hours", "day": "day", "days": "days", "minCancellationTitle": "Minimum cancellation time", "hoursBefore": "Hours before appointment" },
+    "common": {
+      "saving": "Saving...",
+      "uploading": "Uploading...",
+      "galleryPermissionImage": "Please allow gallery access to pick an image"
+    },
+    "policies": {
+      "noRestriction": "0 hours (No restriction)",
+      "hour": "hour",
+      "hours": "hours",
+      "day": "day",
+      "days": "days",
+      "minCancellationTitle": "Minimum cancellation time",
+      "minCancellationHoursTitle": "Minimum cancellation time (hours)",
+      "hoursBefore": "Hours before appointment",
+      "customHoursTitle": "Custom Hours",
+      "customHoursMessage": "Enter number of hours (0-168):",
+      "customHoursLabel": "Custom hours..."
+    },
     "notifications": { "subtitle": "Receive notifications about appointments and updates" },
     "services": {
       "title": "Services",
@@ -287,6 +380,7 @@
       "changeImage": "Change image",
       "uploadImage": "Upload image",
       "loading": "Loading services...",
+      "loadFailed": "Error loading services",
       "add": "Add service",
       "pricePlaceholder": "0.00",
       "name": "Service name",
@@ -301,6 +395,25 @@
       "createFailed": "Failed to create service",
       "saveFailed": "Failed to save service",
       "saveSuccess": "Service saved successfully"
+    },
+    "broadcastTemplates": {
+      "promotion": { "title": "New Promotion! 🎉", "description": "Message about promotion or discount" },
+      "reminder": { "title": "Important Reminder ⏰", "description": "Reminder for appointment or event" },
+      "update": { "title": "Service Update 📢", "description": "Update about new services" },
+      "holiday": { "title": "Holiday Closure 🏖️", "description": "Message about closure or schedule change" },
+      "welcome": { "title": "Welcome! 👋", "description": "Welcome message for clients" },
+      "custom": { "title": "Custom Title ✏️", "description": "Custom title" }
+    },
+    "coupons": {
+      "add": "Add coupon",
+      "addSubtitle": "Create a coupon for clients",
+      "addTitle": "Add coupon",
+      "name": "Coupon name",
+      "namePlaceholder": "e.g. 10th Free",
+      "counts": "Bookings count",
+      "nameRequired": "Please enter a coupon name",
+      "createSuccess": "Coupon created successfully",
+      "createFailed": "Failed to create coupon"
     },
     
     "profile": {
@@ -319,18 +432,27 @@
       "tiktokSaveFailed": "Failed to save TikTok link",
       "cancellationInvalid": "Please enter a valid number between 0 and 168 hours",
       "cancellationSaveFailed": "Failed to save cancellation policy",
+      "bookingWindowSaved": "Booking window updated successfully",
       "bookingWindowSaveFailed": "Failed to save booking window",
       "reminderInvalid": "Enter a valid number between 1 and 1440 minutes",
       "addressSaveFailed": "Failed to save address",
       "addressSelectRequired": "Please select an address",
       "imageSaveSuccess": "Image saved successfully",
       "imageSaveFailed": "Failed to save image",
+      "saveImageFailed": "Failed to save image",
+      "uploadFailed": "Failed to upload image",
+      "permissionVideo": "Please allow gallery access to pick a video",
       "changeProfilePicture": "Change profile picture",
+      "addAddress": "Add address",
       "instagramUrl": "Instagram URL",
       "facebookUrl": "Facebook URL",
       "tiktokUrl": "TikTok URL",
+      "instagram": "Instagram",
+      "facebook": "Facebook",
+      "tiktok": "TikTok",
       "businessName": "Business name",
-      "businessNamePlaceholder": "For example: The Studio of Hadas"
+      "businessNamePlaceholder": "For example: The Studio of Hadas",
+      "bookingWindowDaysTitle": "Booking window (days)"
     },
     "sections": {
       "notifications": "Notifications",
@@ -338,6 +460,7 @@
       "services": "Services",
       "businessDetails": "Business details",
       "designApp": "Design App",
+      "coupons": "Coupons",
       "policies": "Policies",
       "appointmentPolicies": "Appointment policies",
       "appointments": "Appointments",
@@ -396,6 +519,8 @@
       "admin": "Admin",
       "name": "Admin name",
       "phonePlaceholder": "(555) 123-4567",
+      "fillNamePhone": "Please fill in name and phone number",
+      "saveDetailsFailed": "Failed to save admin details",
       "actionNotAllowed": "Action not allowed",
       "cannotRemoveSelf": "You cannot remove yourself.",
       "removeEmployeeTitle": "Remove employee",
@@ -475,7 +600,8 @@
       "createSuccess": "Design added to gallery",
       "createFailed": "Failed to add design",
       "saveFailed": "Failed to save design",
-      "deleteFailed": "Failed to delete design"
+      "deleteFailed": "Failed to delete design",
+      "atLeastOneImageRequired": "At least one image is required"
     },
     "products": {
       "title": "Products",

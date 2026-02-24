@@ -321,8 +321,8 @@ export default function LoginScreen() {
             <Animated.View style={[styles.formWrapper, formAnimatedStyle]}>
               <BlurView intensity={18} tint="light" style={styles.formContainer}>
               <View style={styles.formHeader}>
-                <Text style={[styles.formTitle, { color: businessColors.primary }]}>Sign in your account</Text>
-                <Text style={styles.formSubtitle}>Enter your details to access your account</Text>
+                <Text style={[styles.formTitle, { color: businessColors.primary }]}>{t('login.form.title','Sign in your account')}</Text>
+                <Text style={styles.formSubtitle}>{t('login.form.subtitle','Enter your details to access your account')}</Text>
               </View>
 
               {/* Phone */}
@@ -366,19 +366,19 @@ export default function LoginScreen() {
               <TouchableOpacity onPress={handleLogin} activeOpacity={0.9} disabled={isLoading} style={styles.ctaShadow}>
                 <View style={styles.ctaRadiusWrap}>
                   <View style={[styles.cta, styles.ctaOutlined, { backgroundColor: businessColors.primary }]}>
-                    <Text style={[styles.ctaText, { color: '#FFFFFF' }]}>{isLoading ? 'Signing in…' : 'Sign In'}</Text>
+                    <Text style={[styles.ctaText, { color: '#FFFFFF' }]}>{isLoading ? t('login.cta.signingIn','Signing in…') : t('login.cta.signIn','Sign In')}</Text>
                   </View>
                 </View>
               </TouchableOpacity>
 
                 {/* Links */}
                 <TouchableOpacity style={styles.forgotPasswordButton} onPress={() => setIsForgotOpen(true)}>
-                  <Text style={styles.forgotPasswordText}>Forgot password</Text>
+                  <Text style={styles.forgotPasswordText}>{t('login.forgotPassword','Forgot password')}</Text>
                 </TouchableOpacity>
                 <Text style={styles.registerLine}>
-                  Don't have an account? 
+                  {t('login.noAccount',"Don't have an account?")}{' '}
                   <Link href="/register" asChild>
-                    <Text style={[styles.registerAction, { color: businessColors.primary }]}>Sign up now</Text>
+                    <Text style={[styles.registerAction, { color: businessColors.primary }]}>{t('login.signUpNow','Sign up now')}</Text>
                   </Link>
                 </Text>
               </BlurView>
@@ -389,8 +389,8 @@ export default function LoginScreen() {
       {isForgotOpen && (
         <View style={styles.forgotOverlay}>
           <View style={styles.forgotCard}>
-            <Text style={styles.forgotTitle}>Reset Password</Text>
-            <Text style={styles.forgotSubtitle}>Enter phone and email as they appear on your account</Text>
+            <Text style={styles.forgotTitle}>{t('login.reset.title','Reset Password')}</Text>
+            <Text style={styles.forgotSubtitle}>{t('login.reset.subtitle','Enter phone and email as they appear on your account')}</Text>
             <View style={{ height: 10 }} />
             <View style={[styles.inputRow, { backgroundColor: '#F8F8F8', borderColor: '#E0E0E0' }]}> 
               <Ionicons name="call-outline" size={18} color="#666666" style={styles.iconLeft} />
@@ -423,10 +423,10 @@ export default function LoginScreen() {
             <View style={{ height: 14 }} />
             <View style={styles.forgotActions}>
               <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setIsForgotOpen(false)} disabled={isSendingReset}>
-                <Text style={styles.cancelBtnText}>Cancel</Text>
+                <Text style={styles.cancelBtnText}>{t('cancel','Cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.modalBtn, styles.saveBtn, { backgroundColor: businessColors.primary }]} onPress={handleForgotSubmit} disabled={isSendingReset}>
-                <Text style={[styles.saveBtnText, { color: '#FFFFFF' }]}>{isSendingReset ? 'Sending…' : 'Confirm'}</Text>
+                <Text style={[styles.saveBtnText, { color: '#FFFFFF' }]}>{isSendingReset ? t('login.reset.sending','Sending…') : t('confirm','Confirm')}</Text>
               </TouchableOpacity>
             </View>
           </View>

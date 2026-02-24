@@ -38,12 +38,13 @@ import { Marquee } from '@animatereactnative/marquee';
 import Reanimated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { manicureImages } from '@/src/constants/manicureImages';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_ITEM_SIZE = Platform.OS === 'web' ? SCREEN_WIDTH * 0.24 : SCREEN_WIDTH * 0.45;
 const HERO_SPACING = Platform.OS === 'web' ? 12 : 8;
 const HERO_BG = '#FFFFFF';
 const HERO_INITIAL_DELAY = 200;
 const HERO_DURATION = 500;
+const HERO_HEIGHT = Math.round(SCREEN_HEIGHT * 0.68);
 
 function chunkArray<T>(array: T[], size: number): T[][] {
   const chunked: T[][] = [];
@@ -453,17 +454,17 @@ export default function HomeScreen() {
   // Handle phone call
   const handlePhoneCall = (phone: string) => {
     if (!phone) {
-      Alert.alert('Error', 'Phone number is unavailable');
+      Alert.alert(t('error.generic', 'Error'), t('clients.phoneUnavailable', 'Phone number is unavailable'));
       return;
     }
 
     Alert.alert(
-      'Call',
-      `Call ${phone}?`,
+      t('clients.call.title', 'Call'),
+      t('clients.call.message', { phone }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('cancel', 'Cancel'), style: 'cancel' },
         {
-          text: 'Call',
+          text: t('clients.call.title', 'Call'),
           onPress: () => {
             Linking.openURL(`tel:${phone}`);
           },
@@ -474,12 +475,12 @@ export default function HomeScreen() {
 
   const handleBlockClient = (client: any) => {
     Alert.alert(
-      'Block Client',
-      `Block ${client?.name || 'this client'}?`,
+      t('clients.block.title', 'Block Client'),
+      t('clients.block.message', { name: client?.name || t('clients.thisClient', 'this client') }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('cancel', 'Cancel'), style: 'cancel' },
         {
-          text: 'Confirm',
+          text: t('confirm', 'Confirm'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -491,15 +492,19 @@ export default function HomeScreen() {
                 .single();
               if (error) {
                 console.error('Error blocking client:', error);
-                Alert.alert('Error', 'Failed to block client');
+                Alert.alert(t('error.generic', 'Error'), t('clients.block.failed', 'Failed to block client'));
                 return;
               }
               setClients((prev) => prev.map((c) => (c.id === client.id ? data : c)));
               setFilteredClients((prev) => prev.map((c) => (c.id === client.id ? data : c)));
-              Alert.alert('Client blocked', `${data?.name || 'Client'} was blocked successfully`);
+              const name = data?.name || t('common.client', 'Client');
+              Alert.alert(
+                t('clients.block.successTitle', 'Client blocked'),
+                t('clients.block.successMessage', { name })
+              );
             } catch (e) {
               console.error('Error blocking client:', e);
-              Alert.alert('Error', 'Failed to block client');
+              Alert.alert(t('error.generic', 'Error'), t('clients.block.failed', 'Failed to block client'));
             }
           },
         },
@@ -509,12 +514,12 @@ export default function HomeScreen() {
 
   const handleUnblockClient = (client: any) => {
     Alert.alert(
-      'Unblock Client',
-      `Unblock ${client?.name || 'this client'}?`,
+      t('clients.unblock.title', 'Unblock Client'),
+      t('clients.unblock.message', { name: client?.name || t('clients.thisClient', 'this client') }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('cancel', 'Cancel'), style: 'cancel' },
         {
-          text: 'Confirm',
+          text: t('confirm', 'Confirm'),
           style: 'default',
           onPress: async () => {
             try {
@@ -526,15 +531,19 @@ export default function HomeScreen() {
                 .single();
               if (error) {
                 console.error('Error unblocking client:', error);
-                Alert.alert('Error', 'Failed to unblock client');
+                Alert.alert(t('error.generic', 'Error'), t('clients.unblock.failed', 'Failed to unblock client'));
                 return;
               }
               setClients((prev) => prev.map((c) => (c.id === client.id ? data : c)));
               setFilteredClients((prev) => prev.map((c) => (c.id === client.id ? data : c)));
-              Alert.alert('Client unblocked', `${data?.name || 'Client'} was unblocked successfully`);
+              const name = data?.name || t('common.client', 'Client');
+              Alert.alert(
+                t('clients.unblock.successTitle', 'Client unblocked'),
+                t('clients.unblock.successMessage', { name })
+              );
             } catch (e) {
               console.error('Error unblocking client:', e);
-              Alert.alert('Error', 'Failed to unblock client');
+              Alert.alert(t('error.generic', 'Error'), t('clients.unblock.failed', 'Failed to unblock client'));
             }
           },
         },
@@ -561,7 +570,7 @@ export default function HomeScreen() {
         .single();
       if (error) {
         console.error('Error updating client:', error);
-        Alert.alert('Error', 'Failed to update client');
+        Alert.alert(t('error.generic', 'Error'), t('clients.update.failed', 'Failed to update client'));
         return;
       }
       // Update local lists
@@ -571,7 +580,7 @@ export default function HomeScreen() {
       setEditingClient(null);
     } catch (e) {
       console.error('Error saving client edit:', e);
-      Alert.alert('Error', 'Failed to update client');
+      Alert.alert(t('error.generic', 'Error'), t('clients.update.failed', 'Failed to update client'));
     } finally {
       setSavingClient(false);
     }
@@ -579,26 +588,26 @@ export default function HomeScreen() {
 
   const handleDeleteClient = (client: any) => {
     Alert.alert(
-      'Delete Client',
-      `Delete ${client?.name || 'this client'}?`,
+      t('clients.delete.title', 'Delete Client'),
+      t('clients.delete.message', { name: client?.name || t('clients.thisClient', 'this client') }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('cancel', 'Cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('delete', 'Delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               const { error } = await supabase.from('users').delete().eq('id', client.id);
               if (error) {
                 console.error('Error deleting client:', error);
-                Alert.alert('Error', 'Failed to delete client');
+                Alert.alert(t('error.generic', 'Error'), t('clients.delete.failed', 'Failed to delete client'));
                 return;
               }
               setClients((prev) => prev.filter((c) => c.id !== client.id));
               setFilteredClients((prev) => prev.filter((c) => c.id !== client.id));
             } catch (e) {
               console.error('Error deleting client:', e);
-              Alert.alert('Error', 'Failed to delete client');
+              Alert.alert(t('error.generic', 'Error'), t('clients.delete.failed', 'Failed to delete client'));
             }
           },
         },
@@ -685,76 +694,67 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <StatusBar style="light" translucent backgroundColor="transparent" />
-      {/* Hero with overlay header (like client home) */}
-      <View style={styles.fullScreenHero}>
-        <ManicureMarqueeHero />
-        <LinearGradient
-          colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0)', 'rgba(255,255,255,0)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={styles.fullScreenHeroOverlay}
-          pointerEvents="none"
-        />
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+      >
+        {/* Hero with overlay header (scrolls with the page) */}
+        <View style={styles.fullScreenHero}>
+          <ManicureMarqueeHero />
+          <LinearGradient
+            colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0)', 'rgba(255,255,255,0)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={styles.fullScreenHeroOverlay}
+            pointerEvents="none"
+          />
 
-        {/* Overlay Header */}
-        <SafeAreaView edges={['top']} style={styles.overlayHeader} pointerEvents="box-none">
-          <View style={styles.overlayHeaderContent} pointerEvents="box-none">
-            {/* Left: Broadcast */}
-            <View style={styles.headerSide}>
-              <View style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}> 
-                <AdminBroadcastComposer variant="icon" language="en" iconColor="#fff" />
+          {/* Overlay Header */}
+          <SafeAreaView edges={['top']} style={styles.overlayHeader} pointerEvents="box-none">
+            <View style={styles.overlayHeaderContent} pointerEvents="box-none">
+              {/* Left: Broadcast */}
+              <View style={styles.headerSide}>
+                <View style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}> 
+                  <AdminBroadcastComposer variant="icon" language="en" iconColor="#fff" />
+                </View>
+              </View>
+              {/* Center placeholder to keep spacing; logo is absolutely positioned */}
+              <View style={styles.headerCenter} />
+              {/* Right: Notifications */}
+              <View style={styles.headerSide}>
+                <TouchableOpacity
+                  style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}
+                  onPress={() => {
+                    router.push('/(tabs)/notifications');
+                  }}
+                  activeOpacity={0.85}
+                  accessibilityLabel={t('notifications.title','Notifications')}
+                >
+                  <Ionicons name="notifications-outline" size={24} color="#fff" />
+                  {unreadCount > 0 && (
+                    <View style={[styles.overlayNotificationBadge, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.notificationBadgeText}>
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
               </View>
             </View>
-            {/* Center placeholder to keep spacing; logo is absolutely positioned */}
-            <View style={styles.headerCenter} />
-            {/* Right: Notifications */}
-            <View style={styles.headerSide}>
-              <TouchableOpacity
-                style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}
-                onPress={() => {
-                  router.push('/(tabs)/notifications');
-                }}
-                activeOpacity={0.85}
-                accessibilityLabel={t('notifications.title','Notifications')}
-              >
-                <Ionicons name="notifications-outline" size={24} color="#fff" />
-                {unreadCount > 0 && (
-                  <View style={[styles.overlayNotificationBadge, { backgroundColor: colors.primary }]}>
-                    <Text style={styles.notificationBadgeText}>
-                      {unreadCount > 99 ? '99+' : unreadCount}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </SafeAreaView>
+          </SafeAreaView>
 
-        {/* Absolute logo overlay so size doesn't affect header layout */}
+          {/* Absolute logo overlay so size doesn't affect header layout */}
           <View pointerEvents="none" style={[styles.overlayLogoWrapper, { top: insets.top -15 }]}> 
             <View style={styles.overlayLogoInner}>
-            <Image source={getCurrentClientLogo()} style={styles.overlayLogo} resizeMode="contain" />
+              <Image source={getCurrentClientLogo()} style={styles.overlayLogo} resizeMode="contain" />
+            </View>
           </View>
         </View>
 
-        {/* DailySchedule moved to content area below hero */}
-      </View>
-
-      {/* Content wrapper with scroll animation */}
-      <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1 }}>
-        <View
-          style={[
-            styles.contentWrapper,
-          ]}
-        >
-          <ScrollView
-            contentContainerStyle={[
-              styles.scrollContent,
-              { paddingBottom: insets.bottom + 320 }
-            ]}
-            showsVerticalScrollIndicator={false}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-          >
+        {/* Content wrapper */}
+        <SafeAreaView edges={['left', 'right', 'bottom']}>
+          <View style={styles.contentWrapper}>
+            <View style={[styles.scrollContent, { paddingBottom: insets.bottom + 320 }]}>
         {/* Spacer for bottom reachability */}
         <View style={{ height: 0 }} />
 
@@ -873,11 +873,10 @@ export default function HomeScreen() {
 
         {/* Products Section */}
         <ProductsSection />
-        {/* Close outer vertical ScrollView */}
-          </ScrollView>
-        </View>
-
-
+            </View>
+          </View>
+        </SafeAreaView>
+      </ScrollView>
 
        {/* Image Preview Modal for Admin */}
        <Modal
@@ -1008,8 +1007,6 @@ export default function HomeScreen() {
        </Modal>
 
       {/* Removed floating composer */}
- 
-      </SafeAreaView>
     </View>
   );
  }
@@ -1021,14 +1018,12 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   // Grey rounded container like client home
   contentWrapper: {
-    flex: 1,
     backgroundColor: '#F8F9FA',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    marginTop: -10,
+    marginTop: 0,
     paddingTop: 8,
     paddingBottom: 0,
-    minHeight: '100%',
     overflow: 'hidden',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: -4 },
@@ -1039,7 +1034,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   // Hero styles (aligned with client home)
   fullScreenHero: {
     position: 'relative',
-    height: '68%',
+    height: HERO_HEIGHT,
     width: '100%',
     zIndex: 0,
     backgroundColor: HERO_BG,

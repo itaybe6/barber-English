@@ -822,12 +822,12 @@ export default function SettingsScreen() {
  
   // Predefined titles
   const predefinedTitles = [
-    { id: 'promotion', title: 'New Promotion! 🎉', description: 'Message about promotion or discount' },
-    { id: 'reminder', title: 'Important Reminder ⏰', description: 'Reminder for appointment or event' },
-    { id: 'update', title: 'Service Update 📢', description: 'Update about new services' },
-    { id: 'holiday', title: 'Holiday Closure 🏖️', description: 'Message about closure or schedule change' },
-    { id: 'welcome', title: 'Welcome! 👋', description: 'Welcome message for clients' },
-    { id: 'custom', title: 'Custom Title ✏️', description: 'Custom title' }
+    { id: 'promotion', title: t('settings.broadcastTemplates.promotion.title', 'New Promotion! 🎉'), description: t('settings.broadcastTemplates.promotion.description', 'Message about promotion or discount') },
+    { id: 'reminder', title: t('settings.broadcastTemplates.reminder.title', 'Important Reminder ⏰'), description: t('settings.broadcastTemplates.reminder.description', 'Reminder for appointment or event') },
+    { id: 'update', title: t('settings.broadcastTemplates.update.title', 'Service Update 📢'), description: t('settings.broadcastTemplates.update.description', 'Update about new services') },
+    { id: 'holiday', title: t('settings.broadcastTemplates.holiday.title', 'Holiday Closure 🏖️'), description: t('settings.broadcastTemplates.holiday.description', 'Message about closure or schedule change') },
+    { id: 'welcome', title: t('settings.broadcastTemplates.welcome.title', 'Welcome! 👋'), description: t('settings.broadcastTemplates.welcome.description', 'Welcome message for clients') },
+    { id: 'custom', title: t('settings.broadcastTemplates.custom.title', 'Custom Title ✏️'), description: t('settings.broadcastTemplates.custom.description', 'Custom title') }
   ];
 
   const handleLogout = () => {
@@ -865,7 +865,7 @@ export default function SettingsScreen() {
       });
       setEditableServices(sortedServices);
     } catch (e) {
-      setServicesError('Error loading services');
+      setServicesError(t('settings.services.loadFailed','Error loading services'));
     } finally {
       setIsLoadingServices(false);
       // defer to allow modal mount
@@ -2321,7 +2321,7 @@ export default function SettingsScreen() {
                 <View style={styles.settingIconLTR}><Pencil size={20} color={businessColors.primary} /></View>
                 <View style={{ flex: 1 }}>
                   <InlineEditableRow
-                    title="Business name"
+                    title={t('settings.profile.businessName','Business name')}
                     value={profileDisplayName || ''}
                     placeholder={t('settings.profile.businessNamePlaceholder','Business name')}
                     keyboardType="default"
@@ -2335,7 +2335,7 @@ export default function SettingsScreen() {
                 <View style={styles.settingIconLTR}><Calendar size={20} color={businessColors.primary} /></View>
                 <View style={{ flex: 1 }}>
                   <InlineEditableRow
-                    title="Booking window (days)"
+                    title={t('settings.profile.bookingWindowDaysTitle','Booking window (days)')}
                     value={String(profileBookingOpenDays || 7)}
                     placeholder={t('settings.profile.bookingWindowPlaceholder','7')}
                     keyboardType="default"
@@ -2350,8 +2350,8 @@ export default function SettingsScreen() {
               </View>
               {renderSettingItemLTR(
                 <MapPin size={20} color="#FF3B30" />, 
-                'Business address',
-                businessAddressDisplay || 'Add address',
+                t('settings.profile.businessAddressTitle','Business address'),
+                businessAddressDisplay || t('settings.profile.addAddress','Add address'),
                 undefined,
                 openEditAddress
               )}
@@ -2360,7 +2360,7 @@ export default function SettingsScreen() {
                 <View style={styles.settingIconLTR}><Instagram size={20} color="#E4405F" /></View>
                 <View style={{ flex: 1 }}>
                   <InlineEditableRow
-                    title="Instagram"
+                    title={t('settings.profile.instagram','Instagram')}
                     value={profileInstagram || ''}
                     placeholder={t('settings.profile.instagramUrlPlaceholder','https://instagram.com/yourpage')}
                     keyboardType="url"
@@ -2374,7 +2374,7 @@ export default function SettingsScreen() {
                 <View style={styles.settingIconLTR}><Facebook size={20} color="#1877F2" /></View>
                 <View style={{ flex: 1 }}>
                   <InlineEditableRow
-                    title="Facebook"
+                    title={t('settings.profile.facebook','Facebook')}
                     value={profileFacebook || ''}
                     placeholder={t('settings.profile.facebookUrlPlaceholder','https://facebook.com/yourpage')}
                     keyboardType="url"
@@ -2388,7 +2388,7 @@ export default function SettingsScreen() {
                 <View style={styles.settingIconLTR}><Ionicons name="logo-tiktok" size={20} color="#000000" /></View>
                 <View style={{ flex: 1 }}>
                   <InlineEditableRow
-                    title="TikTok"
+                    title={t('settings.profile.tiktok','TikTok')}
                     value={profileTiktok || ''}
                     placeholder={t('settings.profile.tiktokUrlPlaceholder','https://www.tiktok.com/@yourpage')}
                     keyboardType="url"
@@ -2404,7 +2404,7 @@ export default function SettingsScreen() {
 
         {canSeeAddEmployee && (
           <>
-            <Text style={styles.sectionTitleNew}>Design Application</Text>
+            <Text style={styles.sectionTitleNew}>{t('settings.sections.designApp','Design Application')}</Text>
             <View style={[styles.cardNew, shadowStyle]}>
               <ColorPicker 
                 currentColor={profile?.primary_color || '#000000'}
@@ -2490,7 +2490,7 @@ export default function SettingsScreen() {
             <View style={styles.settingIconLTR}><Clock size={20} color={businessColors.primary} /></View>
             <View style={{ flex: 1 }}>
               <InlineEditableRow
-                title="Minimum cancellation time (hours)"
+                title={t('settings.policies.minCancellationHoursTitle','Minimum cancellation time (hours)')}
                 value={String(profileMinCancellationHours || 24)}
                 placeholder={`${t('common.eg','e.g.')} 24`}
                 keyboardType="default"
@@ -2742,7 +2742,7 @@ export default function SettingsScreen() {
                   if (!user?.id) { setShowEditReminderModal(false); return; }
                   const mins = parseInt(reminderMinutesDraft);
                   if (!Number.isFinite(mins) || mins < 1 || mins > 1440) {
-                    Alert.alert('Error', 'Enter a valid number between 1 and 1440 minutes');
+                    Alert.alert(t('error.generic','Error'), t('settings.profile.reminderInvalid','Enter a valid number between 1 and 1440 minutes'));
                     return;
                   }
                   try {
@@ -2800,7 +2800,7 @@ export default function SettingsScreen() {
               style={[styles.modalSendButton, { backgroundColor: businessColors.primary }, (isSavingAdmin) && styles.modalSendButtonDisabled]}
               onPress={async () => {
                 if (!user?.id) { setShowEditAdminModal(false); return; }
-                if (!adminNameDraft.trim() || !adminPhoneDraft.trim()) { Alert.alert('Error', 'Please fill in name and phone number'); return; }
+                if (!adminNameDraft.trim() || !adminPhoneDraft.trim()) { Alert.alert(t('error.generic','Error'), t('settings.admin.fillNamePhone','Please fill in name and phone number')); return; }
                 try {
                   setIsSavingAdmin(true);
                   const updated = await usersApi.updateUser(
@@ -2816,7 +2816,7 @@ export default function SettingsScreen() {
                     updateUserProfile({ name: updated.name as any, phone: (updated as any).phone, email: (updated as any).email } as any);
                     setShowEditAdminModal(false);
                   } else {
-                    Alert.alert('Error', 'Failed to save admin details');
+                    Alert.alert(t('error.generic','Error'), t('settings.admin.saveDetailsFailed','Failed to save admin details'));
                   }
                 } finally {
                   setIsSavingAdmin(false);
@@ -2890,7 +2890,7 @@ export default function SettingsScreen() {
                 />
               </View>
               <View style={[styles.inputContainer, { marginBottom: 0 }]}>
-                <Text style={styles.inputLabel}>Email</Text>
+                <Text style={styles.inputLabel}>{t('profile.edit.email','Email')}</Text>
                 <TextInput
                   style={styles.textInput}
                   value={adminEmailDraft}
@@ -3078,14 +3078,14 @@ export default function SettingsScreen() {
               <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowEditInstagramModal(false)}>
                 <Text style={styles.modalCloseText}>{t('cancel','Cancel')}</Text>
               </TouchableOpacity>
-              <Text style={styles.modalTitleLTR}>Instagram URL</Text>
+              <Text style={styles.modalTitleLTR}>{t('settings.profile.instagramUrl','Instagram URL')}</Text>
               <TouchableOpacity style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]} onPress={saveInstagram} disabled={isSavingProfile}>
                 <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? t('settings.common.saving','Saving...') : t('save','Save')}</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabelLTR}>Instagram URL</Text>
+                <Text style={styles.inputLabelLTR}>{t('settings.profile.instagramUrl','Instagram URL')}</Text>
                 <TextInput
                   style={styles.textInput}
                   value={instagramDraft}
@@ -3115,14 +3115,14 @@ export default function SettingsScreen() {
               <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowEditFacebookModal(false)}>
                 <Text style={styles.modalCloseText}>{t('cancel','Cancel')}</Text>
               </TouchableOpacity>
-              <Text style={styles.modalTitleLTR}>Facebook URL</Text>
+              <Text style={styles.modalTitleLTR}>{t('settings.profile.facebookUrl','Facebook URL')}</Text>
               <TouchableOpacity style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]} onPress={saveFacebook} disabled={isSavingProfile}>
                 <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? t('settings.common.saving','Saving...') : t('save','Save')}</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabelLTR}>Facebook URL</Text>
+                <Text style={styles.inputLabelLTR}>{t('settings.profile.facebookUrl','Facebook URL')}</Text>
                 <TextInput
                   style={styles.textInput}
                   value={facebookDraft}
@@ -3150,16 +3150,16 @@ export default function SettingsScreen() {
           <View style={styles.smallModalCard}>
             <View style={styles.modalHeader}>
               <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowEditTiktokModal(false)}>
-                <Text style={styles.modalCloseText}>Cancel</Text>
+                <Text style={styles.modalCloseText}>{t('cancel','Cancel')}</Text>
               </TouchableOpacity>
-              <Text style={styles.modalTitleLTR}>TikTok URL</Text>
+              <Text style={styles.modalTitleLTR}>{t('settings.profile.tiktokUrl','TikTok URL')}</Text>
               <TouchableOpacity style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]} onPress={saveTiktok} disabled={isSavingProfile}>
                 <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? t('settings.common.saving','Saving...') : t('save','Save')}</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabelLTR}>TikTok URL</Text>
+                <Text style={styles.inputLabelLTR}>{t('settings.profile.tiktokUrl','TikTok URL')}</Text>
                 <TextInput
                   style={styles.textInput}
                   value={tiktokDraft}
@@ -3300,18 +3300,18 @@ export default function SettingsScreen() {
                           onPress={(e) => {
                             e.stopPropagation();
                             Alert.prompt(
-                              'Custom Hours',
-                              'Enter number of hours (1-168):',
+                              t('settings.policies.customHoursTitle','Custom Hours'),
+                              t('settings.policies.customHoursMessage','Enter number of hours (0-168):'),
                               [
-                                { text: 'Cancel', style: 'cancel' },
+                                { text: t('cancel','Cancel'), style: 'cancel' },
                                 {
-                                  text: 'OK',
+                                  text: t('ok','OK'),
                                   onPress: (text) => {
                                     const hours = parseInt(text || '0');
                                     if (hours >= 0 && hours <= 168) {
                                       setCancellationHoursDraft(hours.toString());
                                     } else {
-                                      Alert.alert('Error', 'Please enter a number between 0 and 168');
+                                      Alert.alert(t('error.generic','Error'), t('settings.profile.cancellationInvalid','Please enter a valid number between 0 and 168 hours'));
                                     }
                                   }
                                 }
@@ -3324,7 +3324,7 @@ export default function SettingsScreen() {
                           }}
                         >
                           <Text style={styles.cancellationDropdownItemText}>
-                            Custom hours...
+                            {t('settings.policies.customHoursLabel','Custom hours...')}
                           </Text>
                         </TouchableOpacity>
                     </ScrollView>
@@ -3441,7 +3441,7 @@ export default function SettingsScreen() {
             >
               <X size={20} color={Colors.text} />
             </TouchableOpacity>
-            <Text style={[styles.modalTitle, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>Manage employees</Text>
+            <Text style={[styles.modalTitle, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>{t('settings.admin.manageEmployees','Manage employees')}</Text>
             <View style={{ width: 44 }} />
           </View>
           <View style={styles.modalBodyRounded}>
@@ -3752,7 +3752,7 @@ export default function SettingsScreen() {
                               <Text style={styles.previewNotificationContent}>{selectedClient.phone}</Text>
                             </View>
                             <TouchableOpacity onPress={() => { setSelectedClient(null); setShowClientDropdown(false); }}>
-                              <Text style={{ color: '#FF3B30', fontWeight: '600' }}>Change</Text>
+                              <Text style={{ color: '#FF3B30', fontWeight: '600' }}>{t('commonEx.change','Change')}</Text>
                             </TouchableOpacity>
                           </View>
                         </View>
@@ -3890,7 +3890,7 @@ export default function SettingsScreen() {
                                   onPress={async () => {
                                     if (!Number.isInteger(selectedDayOfWeek as any)) return;
                                     const ok = await isTimeAvailable(selectedDayOfWeek as number, t);
-                                    if (!ok) { Alert.alert('Appointment booked', 'The selected time is already booked for this week. Please choose another time.'); return; }
+                                    if (!ok) { Alert.alert(t('settings.recurring.slotTakenTitle','Slot taken'), t('settings.recurring.slotTaken','The selected time is already booked this week. Please choose another time.')); return; }
                                     setSelectedTime(t);
                                     setShowTimeDropdown(false);
                                     goToRecStep(4);
@@ -4271,7 +4271,7 @@ export default function SettingsScreen() {
                     try {
                       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
                       if (status !== 'granted') {
-                        Alert.alert('Permission required', 'Please allow gallery access to pick an image');
+                        Alert.alert(t('permission.required','Permission Required'), t('settings.common.galleryPermissionImage','Please allow gallery access to pick an image'));
                         return;
                       }
                       const result = await ImagePicker.launchImageLibraryAsync({
@@ -4290,12 +4290,12 @@ export default function SettingsScreen() {
                         fileName: a.fileName ?? null,
                       });
                       if (!uploadedUrl) {
-                        Alert.alert(t('error.generic','Error'), t('settings.profile.uploadFailed','Image upload failed'));
+                        Alert.alert(t('error.generic','Error'), t('profile.uploadFailed','Failed to upload image'));
                         return;
                       }
                       setAddSvcImageUrl(uploadedUrl);
                     } catch (e) {
-                      Alert.alert('Error', 'Image upload failed');
+                      Alert.alert(t('error.generic','Error'), t('profile.uploadFailed','Failed to upload image'));
                     } finally {
                       setAddSvcUploadingImage(false);
                     }

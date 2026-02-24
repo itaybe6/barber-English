@@ -3,6 +3,7 @@
   "valuedClient": "לקוח יקר",
   "home.subtitle": "קבע תור במהירות ובקלות\nהזמן שלך חשוב",
   "profile.title": "הגדרות ופרופיל",
+  "notifications.title": "התראות",
   
   "appointments.title": "תורים",
   "appointments.subtitle": "נהל את ההזמנות שלך",
@@ -26,6 +27,7 @@
   "waitlist.leave.message": "האם אתה בטוח שברצונך לעזוב את רשימת ההמתנה?",
   "cancel": "ביטול",
   "confirm": "אישור",
+  "delete": "מחק",
   "error.generic": "שגיאה",
   "error.removing.waitlist": "אירעה שגיאה בעת הסרה מרשימת ההמתנה",
   "removed.from.waitlist": "הוסר מרשימת ההמתנה",
@@ -95,7 +97,32 @@
   "appointments.history": "היסטוריה",
   "appointments.status": { "confirmed": "מאושר", "pending": "ממתין", "cancelled": "בוטל", "completed": "הושלם" },
   "appointments.payment": { "paid": "שולם", "deposit": "מקדמה", "unpaid": "לא שולם" },
-  "clients": { "noVisit": "לא ביקרה עדיין", "lastVisit": "ביקור אחרון" },
+  "clients": {
+    "noVisit": "לא ביקר/ה עדיין",
+    "lastVisit": "ביקור אחרון",
+    "listTitle": "רשימת לקוחות",
+    "loading": "טוען לקוחות...",
+    "filter": { "all": "הכול", "blocked": "חסומים", "unblocked": "לא חסומים" },
+    "thisClient": "הלקוח/ה הזה/זו",
+    "phoneUnavailable": "מספר הטלפון אינו זמין",
+    "call": { "title": "התקשר/י", "message": "להתקשר ל־{{phone}}?" },
+    "block": {
+      "title": "חסימת לקוח",
+      "message": "לחסום את {{name}}?",
+      "successTitle": "הלקוח נחסם",
+      "successMessage": "{{name}} נחסם/ה בהצלחה",
+      "failed": "נכשל בחסימת הלקוח"
+    },
+    "unblock": {
+      "title": "ביטול חסימה",
+      "message": "לבטל חסימה ל־{{name}}?",
+      "successTitle": "החסימה בוטלה",
+      "successMessage": "{{name}} שוחרר/ה מחסימה בהצלחה",
+      "failed": "נכשל בביטול חסימת הלקוח"
+    },
+    "update": { "failed": "נכשל בעדכון הלקוח" },
+    "delete": { "title": "מחיקת לקוח", "message": "למחוק את {{name}}?", "failed": "נכשל במחיקת הלקוח" }
+  },
   "clients.client": "לקוחה ",
   "appointments.empty.date": "אין תורים לתאריך זה",
   "commonEx": { "tryAgain": "אירעה שגיאה. נסו שוב.", "client": "לקוח", "smsOpenFailed": "לא ניתן לפתוח את אפליקציית ה-SMS במכשיר זה", "change": "שנה", "select": "בחר/י" },
@@ -188,6 +215,35 @@
   "profile.delete.failed": "נכשל במחיקת החשבון",
   "profile.terms.title": "תנאי שימוש",
   "profile.terms.subtitle": "צפייה בתנאי השימוש של האפליקציה",
+  "profile.terms.intro": "ברוכים הבאים לאפליקציית ניהול התורים. השימוש שלך באפליקציה ובשירותים הנלווים כפוף לתנאים המפורטים במסמך זה ומהווה הסכמה מלאה ומודעת לכל הוראותיו.",
+  "profile.terms.section1.title": "1. יצירת חשבון וזיהוי",
+  "profile.terms.section1.body": "כדי להשתמש בשירותים ייתכן שתידרש/י למסור פרטי זיהוי כגון שם ומספר טלפון. הנך מצהיר/ה כי הפרטים שמסרת נכונים ומעודכנים ותעדכן/י אותם לפי הצורך. אין להשתמש בפרטים של אדם אחר ללא רשותו.",
+  "profile.terms.section2.title": "2. קביעת תור ושינויים",
+  "profile.terms.section2.body": "קביעת תור, שינוי או ביטול נעשים באמצעות האפליקציה ובהתאם לזמינות. פרטי התור המאושר יוצגו באפליקציה ויישלחו כהתראה בהתאם להגדרות. זמני השירות משוערים ועשויים להשתנות בשל אילוצים תפעוליים.",
+  "profile.terms.section3.title": "3. ביטולים ואי-הגעה",
+  "profile.terms.section3.body": "ניתן לבטל או לשנות תור בתוך זמן סביר לפני מועדו. אי-הגעה או איחור משמעותי עשויים לגרור הגבלות עתידיות על קביעת תורים, לפי שיקול דעת העסק.",
+  "profile.terms.section4.title": "4. תשלומים וקבלות",
+  "profile.terms.section4.body": "אם התשלום מתבצע דרך האפליקציה, הוא עשוי לעבור באמצעות ספקי סליקה צד שלישי. פרטי אמצעי התשלום אינם נשמרים בשרתינו מעבר לנדרש לביצוע העסקה. אם התשלום מתבצע בעסק, הוא יוסדר ישירות בינך לבין העסק.",
+  "profile.terms.section5.title": "5. התראות והודעות",
+  "profile.terms.section5.body": "ניתן להפעיל או לכבות התראות מהאפליקציה או דרך הגדרות המכשיר. כיבוי התראות עלול להשפיע על קבלת תזכורות ועדכונים חשובים.",
+  "profile.terms.section6.title": "6. פרטיות ואבטחת מידע",
+  "profile.terms.section6.body": "אנו עשויים לאסוף ולעבד מידע הנדרש להפעלת השירות, לרבות פרטי זיהוי בסיסיים ונתוני תורים. המידע נשמר ומעובד בהתאם לדין החל ולמדיניות הפרטיות. ניתן לפנות אלינו לצורך עיון, עדכון או מחיקה של מידע אישי, בכפוף לחובותינו החוקיות.",
+  "profile.terms.section7.title": "7. שימוש מותר והתנהגות",
+  "profile.terms.section7.body": "אין להשתמש בשירות באופן הפוגע בזכויות אחרים, מפר את החוק או משבש את פעילות האפליקציה. אנו רשאים להגביל או לחסום גישה במקרים של שימוש לרעה או הפרת תנאים אלו.",
+  "profile.terms.section8.title": "8. קניין רוחני",
+  "profile.terms.section8.body": "כל הזכויות באפליקציה, לרבות שם, לוגו, עיצובים, תכנים, קוד ותמונות, שמורות לבעליהן. אין להעתיק, לשנות, להפיץ או ליצור יצירות נגזרות ללא אישור מראש ובכתב.",
+  "profile.terms.section9.title": "9. הגבלת אחריות",
+  "profile.terms.section9.body": "השירות ניתן כפי שהוא (AS-IS) וכפוף לזמינות. איננו אחראים לנזקים עקיפים או תוצאתיים או לאובדן רווחים הנובעים מהשימוש באפליקציה. האחריות לשימוש ולתוכן שתמסרו מוטלת עליכם בלבד.",
+  "profile.terms.section10.title": "10. זמינות ושינויים בשירות",
+  "profile.terms.section10.body": "ייתכנו הפסקות, תקלות או עבודות תחזוקה. אנו רשאים לעדכן, לשנות או להפסיק את השירות, כולו או חלקו, מעת לעת.",
+  "profile.terms.section11.title": "11. צדדים שלישיים",
+  "profile.terms.section11.body": "האפליקציה עשויה לכלול קישורים או שירותים של צדדים שלישיים, כגון שירותי תשלום או הודעות. איננו אחראים לאתרים או שירותים אלו, והתנאים שלהם יחולו על השימוש בהם.",
+  "profile.terms.section12.title": "12. שימוש על ידי קטינים",
+  "profile.terms.section12.body": "אם אינך בגיל החוקי לפי הדין החל, השימוש באפליקציה מחייב הסכמה של הורה או אפוטרופוס חוקי.",
+  "profile.terms.section13.title": "13. עדכון התנאים",
+  "profile.terms.section13.body": "אנו רשאים לעדכן תנאים אלו מעת לעת. פרסום גרסה מעודכנת באפליקציה יהווה הודעה על שינוי. המשך שימוש לאחר העדכון מהווה הסכמה לטקסט המעודכן.",
+  "profile.terms.section14.title": "14. יצירת קשר",
+  "profile.terms.section14.body": "לשאלות, בעיות או בקשות בנוגע לתנאים אלו או לשירות, ניתן ליצור קשר באמצעות פרטי ההתקשרות של העסק המוצגים באפליקציה.",
   "profile.phone": "מספר טלפון",
   "profile.settings": "הגדרות",
   "profile.settingsSubtitle": "ניהול פרטי פרופיל, התראות ותנאים",
@@ -240,7 +296,10 @@
     "updateSuccess": "הצבע החדש נשמר והאפליקציה מתעדכנת אוטומטית.",
     "updateFailed": "לא ניתן לעדכן את הצבע"
   },
-  "products": { "loginToViewDetails": "אנא התחבר/י להצגת פרטי המוצר" },
+  "products": {
+    "loginToViewDetails": "אנא התחבר/י להצגת פרטי המוצר",
+    "ratingSummary": "{{rating}} ({{count}} ביקורות)"
+  },
   "auth": { "signInNow": "התחבר/י עכשיו", "maybeLater": "אולי אחר כך" },
   "nearestSlots": { "title": "תורים זמינים בקרוב", "empty": "אין תורים זמינים בקרוב" },
   "map": { "mapsLabel": "מפות" },
@@ -257,6 +316,19 @@
   "category": { "gel": "לק ג'ל", "feet": "לק ברגליים", "manicure": "מניקור" },
   "admin2": { "hoursAdmin": { "title": "אילוצי עבודה", "segment": { "hours": "שעות", "singleDay": "יום אחד", "multiDays": "מספר ימים" }, "pickDateShort": "בחר/י תאריך", "closedHours": "שעות סגורות", "pickDateAllDay": "בחירת תאריך (סגור כל היום)", "pickDateRangeAllDay": "בחירת טווח תאריכים (סגור כל היום)", "selectedRange": ":טווח נבחר", "allDay": "כל היום", "chooseClosedHours": "בחר/י שעות סגורות", "start": "התחלה", "end": "סיום", "upcomingConstraints": "אילוצים קרובים", "noUpcomingConstraints": "אין אילוצים קרובים", "noReason": "ללא סיבה", "saveCTA": "שמור אילוצים" } },
   "login": {
+    "form": {
+      "title": "התחברות לחשבון",
+      "subtitle": "הזן/י את הפרטים שלך כדי להיכנס לחשבון"
+    },
+    "cta": { "signIn": "התחבר/י", "signingIn": "מתחבר/ת…" },
+    "forgotPassword": "שכחת סיסמה",
+    "noAccount": "אין לך חשבון?",
+    "signUpNow": "להרשמה",
+    "reset": {
+      "title": "איפוס סיסמה",
+      "subtitle": "הזן/י טלפון ואימייל כפי שמופיעים בחשבון שלך",
+      "sending": "שולח…"
+    },
     "fillAll": "אנא מלא/י את כל השדות",
     "passwordPlaceholder": "סיסמה",
     "blockedCannotSignIn": "החשבון חסום ואינו יכול להתחבר. אנא צרו קשר עם המנהל.",
@@ -268,6 +340,12 @@
     "emailSent": { "title": "האימייל נשלח", "message": "שלחנו אימייל לאיפוס סיסמה. בדקו את תיבת הדואר." }
   },
   "register": {
+    "form": {
+      "title": "הרשמה",
+      "subtitle": "מלא/י את הפרטים כדי להירשם ולהתחבר"
+    },
+    "cta": { "register": "הרשמה" },
+    "haveAccount": "כבר יש לך חשבון?",
     "phoneExists": { "title": "מספר הטלפון כבר קיים", "message": "מספר הטלפון הזה כבר רשום במערכת. אנא השתמש/י במספר אחר או התחבר/י לחשבון קיים." },
     "createError": "אירעה שגיאה ביצירת החשבון. אנא נסו שוב.",
     "success": { "title": "ההרשמה הצליחה!", "message": "החשבון נוצר בהצלחה.\n\nכעת ניתן להתחבר עם מספר הטלפון והסיסמה שבחרת.\n\nמספר הטלפון: {{phone}}" },
@@ -283,8 +361,24 @@
     "contactShortNotice": "היי, אני צריך/ה עזרה בביטול תור בהתראה קצרה."
   },
   "settings": {
-    "common": { "saving": "שומר...", "uploading": "מעלה..." },
-    "policies": { "noRestriction": "0 שעות (ללא הגבלה)", "hour": "שעה", "hours": "שעות", "day": "יום", "days": "ימים", "minCancellationTitle": "זמן ביטול מינימלי", "hoursBefore": "שעות לפני התור" },
+    "common": {
+      "saving": "שומר...",
+      "uploading": "מעלה...",
+      "galleryPermissionImage": "אנא אשר/י גישה לגלריה כדי לבחור תמונה"
+    },
+    "policies": {
+      "noRestriction": "0 שעות (ללא הגבלה)",
+      "hour": "שעה",
+      "hours": "שעות",
+      "day": "יום",
+      "days": "ימים",
+      "minCancellationTitle": "זמן ביטול מינימלי",
+      "minCancellationHoursTitle": "זמן ביטול מינימלי (שעות)",
+      "hoursBefore": "שעות לפני התור",
+      "customHoursTitle": "שעות מותאמות",
+      "customHoursMessage": "הזן/י מספר שעות (0-168):",
+      "customHoursLabel": "שעות מותאמות..."
+    },
     "notifications": { "subtitle": "קבל/י התראות על תורים ועדכונים" },
     "services": {
       "title": "שירותים",
@@ -297,6 +391,7 @@
       "changeImage": "החלף תמונה",
       "uploadImage": "העלה תמונה",
       "loading": "טוען שירותים...",
+      "loadFailed": "שגיאה בטעינת השירותים",
       "add": "הוספת שירות",
       "pricePlaceholder": "0.00",
       "name": "שם השירות",
@@ -311,6 +406,25 @@
       "createFailed": "יצירת השירות נכשלה",
       "saveFailed": "שמירת השירות נכשלה",
       "saveSuccess": "השירות נשמר בהצלחה"
+    },
+    "broadcastTemplates": {
+      "promotion": { "title": "מבצע חדש! 🎉", "description": "הודעה על מבצע או הנחה" },
+      "reminder": { "title": "תזכורת חשובה ⏰", "description": "תזכורת לתור או אירוע" },
+      "update": { "title": "עדכון שירות 📢", "description": "עדכון על שירותים חדשים" },
+      "holiday": { "title": "סגירה בחג 🏖️", "description": "הודעה על סגירה או שינוי שעות" },
+      "welcome": { "title": "ברוך/ה הבא/ה! 👋", "description": "הודעת ברוכים הבאים ללקוחות" },
+      "custom": { "title": "כותרת מותאמת ✏️", "description": "כותרת מותאמת אישית" }
+    },
+    "coupons": {
+      "add": "הוספת קופון",
+      "addSubtitle": "יצירת קופון ללקוחות",
+      "addTitle": "הוספת קופון",
+      "name": "שם הקופון",
+      "namePlaceholder": "למשל: עשירית חינם",
+      "counts": "מספר הזמנות",
+      "nameRequired": "אנא הזן/י שם לקופון",
+      "createSuccess": "הקופון נוצר בהצלחה",
+      "createFailed": "נכשל ביצירת הקופון"
     },
     
     "profile": {
@@ -329,18 +443,27 @@
       "tiktokSaveFailed": "שמירת קישור טיקטוק נכשלה",
       "cancellationInvalid": "אנא הזן מספר בין 0 ל־168 שעות",
       "cancellationSaveFailed": "שמירת מדיניות הביטולים נכשלה",
+      "bookingWindowSaved": "חלון ההזמנות עודכן בהצלחה",
       "bookingWindowSaveFailed": "שמירת חלון הזמנות נכשלה",
       "reminderInvalid": "הזן מספר בין 1 ל־1440 דקות",
       "addressSaveFailed": "שמירת הכתובת נכשלה",
       "addressSelectRequired": "אנא בחר/י כתובת",
       "imageSaveSuccess": "התמונה נשמרה בהצלחה",
       "imageSaveFailed": "שמירת התמונה נכשלה",
+      "saveImageFailed": "שמירת התמונה נכשלה",
+      "uploadFailed": "העלאת התמונה נכשלה",
+      "permissionVideo": "אנא אשר/י גישה לגלריה כדי לבחור וידאו",
       "changeProfilePicture": "החלפת תמונת פרופיל",
+      "addAddress": "הוסף/י כתובת",
       "instagramUrl": "כתובת אינסטגרם",
       "facebookUrl": "כתובת פייסבוק",
       "tiktokUrl": "כתובת טיקטוק",
+      "instagram": "אינסטגרם",
+      "facebook": "פייסבוק",
+      "tiktok": "טיקטוק",
       "businessName": "שם העסק",
-      "businessNamePlaceholder": "לדוגמה: הסטודיו של הדס"
+      "businessNamePlaceholder": "לדוגמה: הסטודיו של הדס",
+      "bookingWindowDaysTitle": "חלון הזמנות (ימים)"
     },
     "sections": {
       "notifications": "התראות",
@@ -348,6 +471,7 @@
       "services": "שירותים",
       "businessDetails": "פרטי העסק",
       "designApp": "עיצוב האפליקציה",
+      "coupons": "קופונים",
       "policies": "מדיניות",
       "appointmentPolicies": "מדיניות תורים",
       "appointments": "תורים",
@@ -406,6 +530,8 @@
       "admin": "מנהל",
       "name": "שם מנהל",
       "phonePlaceholder": "(055) 123-4567",
+      "fillNamePhone": "אנא מלא/י שם ומספר טלפון",
+      "saveDetailsFailed": "נכשל בשמירת פרטי המנהל/ת",
       "actionNotAllowed": "פעולה לא מותרת",
       "cannotRemoveSelf": "לא ניתן להסיר את עצמך.",
       "removeEmployeeTitle": "הסרת עובד",
@@ -474,7 +600,8 @@
       "createSuccess": "העיצוב נוסף לגלריה",
       "createFailed": "כשל בהוספת העיצוב",
       "saveFailed": "כשל בשמירת העיצוב",
-      "deleteFailed": "כשל במחיקת העיצוב"
+      "deleteFailed": "כשל במחיקת העיצוב",
+      "atLeastOneImageRequired": "נדרשת לפחות תמונה אחת"
     },
     "products": {
       "title": "מוצרים",

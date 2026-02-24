@@ -30,12 +30,13 @@ import { Marquee } from '@animatereactnative/marquee';
 import Reanimated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { manicureImages } from '@/src/constants/manicureImages';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_ITEM_SIZE = Platform.OS === 'web' ? SCREEN_WIDTH * 0.24 : SCREEN_WIDTH * 0.45;
 const HERO_SPACING = Platform.OS === 'web' ? 12 : 8;
 const HERO_BG = '#FFFFFF';
 const HERO_INITIAL_DELAY = 200;
 const HERO_DURATION = 500;
+const HERO_HEIGHT = Math.round(SCREEN_HEIGHT * 0.68);
 
 const HERO_IMAGES: string[] = manicureImages;
 
@@ -754,62 +755,66 @@ export default function ClientHomeScreen() {
   return (
     <View style={styles.container}>
       <StatusBar style="light" translucent backgroundColor="transparent" />
-      {/* Full Screen Hero with Overlay Header */}
-      <View style={styles.fullScreenHero}>
-        <ManicureMarqueeHero />
-        <LinearGradient
-          colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0)', 'rgba(255,255,255,0)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={styles.fullScreenHeroOverlay}
-          pointerEvents="none"
-        />
-        
-        {/* Header Overlay */}
-        <SafeAreaView edges={["top"]} style={styles.overlayHeader} pointerEvents="box-none">
-          <View style={styles.overlayHeaderContent} pointerEvents="box-none">
-            <View style={styles.headerSide}>
-              <TouchableOpacity
-                style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}
-                onPress={() => requireAuth(t('profile.title'), () => router.push('/(client-tabs)/profile'))}
-                activeOpacity={0.85}
-                accessibilityLabel={t('profile.title')}
-              >
-                <Ionicons name="settings-outline" size={24} color="#fff" />
-              </TouchableOpacity>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000" />}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Full Screen Hero with Overlay Header */}
+        <View style={styles.fullScreenHero}>
+          <ManicureMarqueeHero />
+          <LinearGradient
+            colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0)', 'rgba(255,255,255,0)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={styles.fullScreenHeroOverlay}
+            pointerEvents="none"
+          />
+          
+          {/* Header Overlay */}
+          <SafeAreaView edges={["top"]} style={styles.overlayHeader} pointerEvents="box-none">
+            <View style={styles.overlayHeaderContent} pointerEvents="box-none">
+              <View style={styles.headerSide}>
+                <TouchableOpacity
+                  style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}
+                  onPress={() => requireAuth(t('profile.title'), () => router.push('/(client-tabs)/profile'))}
+                  activeOpacity={0.85}
+                  accessibilityLabel={t('profile.title')}
+                >
+                  <Ionicons name="settings-outline" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.headerCenter}>
+                <Image source={getCurrentClientLogo()} style={styles.overlayLogo} resizeMode="contain" />
+              </View>
+              <View style={styles.headerSide}>
+                <TouchableOpacity 
+                  style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}
+                  onPress={async () => {
+                    return requireAuth(t('notifications.title'), async () => {
+                      await router.push('/(client-tabs)/notifications');
+                      setUnreadNotificationsCount(0);
+                    });
+                  }}
+                  activeOpacity={0.85}
+                  accessibilityLabel={t('notifications.title')}
+                >
+                  <Ionicons name="notifications-outline" size={24} color="#fff" />
+                  {unreadNotificationsCount > 0 && (
+                    <View style={[styles.overlayNotificationBadge, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.notificationBadgeText}>
+                        {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={styles.headerCenter}>
-              <Image source={getCurrentClientLogo()} style={styles.overlayLogo} resizeMode="contain" />
-            </View>
-            <View style={styles.headerSide}>
-              <TouchableOpacity 
-                style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}
-                onPress={async () => {
-                  return requireAuth(t('notifications.title'), async () => {
-                    await router.push('/(client-tabs)/notifications');
-                    setUnreadNotificationsCount(0);
-                  });
-                }}
-                activeOpacity={0.85}
-                accessibilityLabel={t('notifications.title')}
-              >
-                <Ionicons name="notifications-outline" size={24} color="#fff" />
-                {unreadNotificationsCount > 0 && (
-                  <View style={[styles.overlayNotificationBadge, { backgroundColor: colors.primary }]}>
-                    <Text style={styles.notificationBadgeText}>
-                      {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </SafeAreaView>
+          </SafeAreaView>
+        </View>
 
-      </View>
-
-      {/* Content Section with Rounded Top */}
-      <SafeAreaView edges={["left","right"]} style={{ flex: 1 }}>
+        {/* Content Section with Rounded Top */}
+        <SafeAreaView edges={["left","right"]}>
         <View 
           style={[
             styles.contentWrapperContainer,
@@ -826,11 +831,7 @@ export default function ClientHomeScreen() {
             style={styles.contentWrapperGlassBorder}
           >
             <View style={styles.contentWrapper}>
-              <ScrollView
-                contentContainerStyle={styles.scrollContent}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000" />}
-                showsVerticalScrollIndicator={false}
-              >
+              <View>
 
         {/* Waitlist Section - Top Priority */}
         {waitlistEntries.length > 0 && (
@@ -1250,7 +1251,7 @@ export default function ClientHomeScreen() {
                   />
                 </TouchableOpacity>
               </View>
-            </ScrollView>
+            </View>
           </View>
         </LinearGradient>
       </View>
@@ -1329,6 +1330,7 @@ export default function ClientHomeScreen() {
         />
 
       </SafeAreaView>
+      </ScrollView>
     </View>
   );
 }
@@ -1342,7 +1344,7 @@ const styles = StyleSheet.create<any>({
   // Full Screen Hero Styles
   fullScreenHero: {
     position: 'relative',
-    height: '68%', // Show more of the hero / marquee
+    height: HERO_HEIGHT,
     width: '100%',
     zIndex: 0, // Very low z-index so white background can overlap it
     backgroundColor: HERO_BG,
@@ -1520,11 +1522,9 @@ const styles = StyleSheet.create<any>({
   },
   // Grey rounded container like admin home
   contentWrapperContainer: {
-    flex: 1,
-    marginTop: -10, // Less overlap so the hero stays more visible
+    marginTop: 0,
     paddingTop: 1, // Reduced to tighten space under hero
     paddingBottom: 0, // No bottom padding to allow full scrolling
-    minHeight: '100%', // Fill the entire screen height
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     borderBottomLeftRadius: 32,

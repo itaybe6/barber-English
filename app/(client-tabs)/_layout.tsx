@@ -239,7 +239,7 @@ export default function ClientTabsLayout() {
               route.name === 'profile' ? t('tabs.profile', 'Profile') :
               route.name === 'waitlist' ? t('waitlist.title', 'Waitlist') :
               route.name === 'notifications' ? t('notifications.title', 'Notifications') :
-              t('tabs.home', 'Home')
+              route.name
             ),
           tabBarContentContainerStyle: {
             justifyContent: 'space-between',

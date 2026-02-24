@@ -3,6 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { randomUUID } from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,6 +39,8 @@ console.log(`🆕 Creating new client: ${clientName}`);
 console.log('');
 
 try {
+  const businessId = randomUUID();
+
   // Create client directory
   fs.mkdirSync(clientPath, { recursive: true });
   console.log(`✅ Created directory: branding/${clientName}/`);
@@ -230,7 +233,7 @@ try {
 EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
-BUSINESS_ID=${clientName}-business-id-${Math.random().toString(36).substr(2, 9)}
+BUSINESS_ID=${businessId}
 CLIENT=${clientName}
 `;
   const envPath = path.join(clientPath, '.env');

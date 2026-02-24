@@ -7,8 +7,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import BarberSelector from '@/components/BarberSelector';
-import ServiceSelector from '@/components/ServiceSelector';
+import BarberSelection from '@/components/book-appointment/BarberSelection';
+import ServiceSelection from '@/components/book-appointment/ServiceSelection';
+import DaySelection from '@/components/book-appointment/DaySelection';
+import TimeSelection from '@/components/book-appointment/TimeSelection';
 
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { Service } from '@/lib/supabase';
@@ -20,7 +22,7 @@ import { notificationsApi } from '@/lib/api/notifications';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
 import { User } from '@/lib/supabase';
-import Animated, { useSharedValue, useAnimatedScrollHandler, useAnimatedStyle, interpolate, Extrapolate, Extrapolation, interpolateColor, runOnJS, withTiming, Easing, FadeIn, FadeOut, SharedValue } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, Easing } from 'react-native-reanimated';
 
 
 // API functions for booking appointments
@@ -366,462 +368,6 @@ const SERVICE_CARD_WIDTH = Math.min(SCREEN.width * 0.78, 320);
 const SERVICE_CARD_HEIGHT = 200;
 const SERVICE_ITEM_SIZE = SERVICE_CARD_WIDTH + ITEM_SPACING;
 
-// Wallpaper-style barber carousel constants
-const _slideWidth = SCREEN.width * 0.65;
-const _slideHeight = _slideWidth * 1.5;
-const _slideSpacing = 16;
-const _topSpacing = SCREEN.height - _slideHeight;
-
-// Barber Slide Component
-type BarberSlideProps = {
-  barber: User;
-  index: number;
-  scrollX: SharedValue<number>;
-  onPress: () => void;
-};
-
-function BarberSlide({ barber, index, scrollX, onPress }: BarberSlideProps) {
-  const imageUri = barber?.image_url || '';
-
-  const containerStylez = useAnimatedStyle(() => {
-    return {
-      transform: [
-        {
-          translateY: interpolate(
-            scrollX.value,
-            [index - 1, index, index + 1],
-            [40, 0, 40],
-            Extrapolation.CLAMP
-          ),
-        },
-      ],
-    } as any;
-  });
-
-  const stylez = useAnimatedStyle(() => {
-    return {
-      transform: [
-        {
-          rotateZ: `${interpolate(
-            scrollX.value,
-            [index - 1, index, index + 1],
-            [15, 0, -15],
-            Extrapolation.CLAMP
-          )}deg`,
-        },
-        {
-          scale: interpolate(
-            scrollX.value,
-            [index - 1, index, index + 1],
-            [1.6, 1, 1.6],
-            Extrapolation.CLAMP
-          ),
-        },
-      ],
-    } as any;
-  });
-
-  return (
-    <TouchableOpacity activeOpacity={0.95} onPress={onPress}>
-      <Animated.View
-        style={[
-          {
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: 0.6,
-            shadowRadius: 20,
-            elevation: 7,
-            borderRadius: 28,
-          },
-          containerStylez,
-        ]}
-      >
-        <View
-          style={{
-            width: _slideWidth,
-            height: _slideHeight,
-            borderRadius: 28,
-            overflow: 'hidden',
-            padding: 2,
-            backgroundColor: 'rgba(0,0,0,0.1)',
-          }}
-        >
-          {imageUri ? (
-            <Animated.Image
-              source={{ uri: imageUri }}
-              style={[{ flex: 1, borderRadius: 26 }, stylez]}
-              resizeMode="cover"
-            />
-          ) : (
-            <Animated.View
-              style={[
-                {
-                  flex: 1,
-                  borderRadius: 26,
-                  backgroundColor: '#667eea',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                },
-                stylez,
-              ]}
-            >
-              <Ionicons name="person" size={80} color="rgba(255,255,255,0.5)" />
-            </Animated.View>
-          )}
-        </View>
-      </Animated.View>
-    </TouchableOpacity>
-  );
-}
-
-// Barber Backdrop Component
-function BarberBackdrop({
-  barber,
-  index,
-  scrollX,
-}: {
-  barber: User;
-  index: number;
-  scrollX: SharedValue<number>;
-}) {
-  const imageUri = barber?.image_url || '';
-
-  const stylez = useAnimatedStyle(() => {
-    return {
-      opacity: interpolate(
-        scrollX.value,
-        [index - 1, index, index + 1],
-        [0, 0.8, 0]
-      ),
-    } as any;
-  });
-
-  if (!imageUri) {
-    return (
-      <Animated.View
-        style={[StyleSheet.absoluteFillObject as any, { backgroundColor: '#1a1a2e' }, stylez]}
-      />
-    );
-  }
-
-  return (
-    <Animated.Image
-      source={{ uri: imageUri }}
-      style={[StyleSheet.absoluteFillObject as any, stylez]}
-      blurRadius={50}
-      resizeMode="cover"
-    />
-  );
-}
-
-// Barber Details Component
-function BarberDetailsOverlay({
-  barber,
-  index,
-  scrollX,
-}: {
-  barber: User;
-  index: number;
-  scrollX: SharedValue<number>;
-}) {
-  const stylez = useAnimatedStyle(() => {
-    return {
-      transform: [
-        {
-          translateX: interpolate(
-            scrollX.value,
-            [index - 1, index, index + 1],
-            [SCREEN.width / 2, 0, -SCREEN.width / 2]
-          ),
-        },
-      ],
-      opacity: interpolate(
-        scrollX.value,
-        [index - 0.5, index, index + 0.5],
-        [0, 1, 0]
-      ),
-    } as any;
-  });
-
-  return (
-    <Animated.View
-      style={[
-        {
-          gap: 6,
-          position: 'absolute',
-          height: '100%',
-          width: '100%',
-          alignItems: 'center',
-          justifyContent: 'center',
-          paddingHorizontal: SCREEN.width * 0.1,
-        },
-        stylez,
-      ]}
-    >
-      <Text
-        style={{
-          fontSize: 26,
-          color: 'white',
-          fontWeight: '800',
-          textTransform: 'capitalize',
-          textAlign: 'center',
-          letterSpacing: -0.5,
-          textShadowColor: 'rgba(0,0,0,0.5)',
-          textShadowOffset: { width: 0, height: 2 },
-          textShadowRadius: 8,
-        }}
-      >
-        {barber?.name || ''}
-      </Text>
-      {(barber as any)?.role && (
-        <Text
-          style={{
-            color: '#fff',
-            opacity: 0.7,
-            textAlign: 'center',
-            fontSize: 15,
-            fontWeight: '500',
-          }}
-        >
-          {(barber as any)?.role || 'Professional Barber'}
-        </Text>
-      )}
-    </Animated.View>
-  );
-}
-
-// Service Slide Component
-type ServiceSlideProps = {
-  service: Service;
-  index: number;
-  scrollX: SharedValue<number>;
-  onPress: () => void;
-};
-
-function ServiceSlide({ service, index, scrollX, onPress }: ServiceSlideProps) {
-  const imageUri = (service as any)?.image_url || (service as any)?.cover_url || (service as any)?.image || '';
-
-  const containerStylez = useAnimatedStyle(() => {
-    return {
-      transform: [
-        {
-          translateY: interpolate(
-            scrollX.value,
-            [index - 1, index, index + 1],
-            [40, 0, 40],
-            Extrapolation.CLAMP
-          ),
-        },
-      ],
-    } as any;
-  });
-
-  const stylez = useAnimatedStyle(() => {
-    return {
-      transform: [
-        {
-          rotateZ: `${interpolate(
-            scrollX.value,
-            [index - 1, index, index + 1],
-            [15, 0, -15],
-            Extrapolation.CLAMP
-          )}deg`,
-        },
-        {
-          scale: interpolate(
-            scrollX.value,
-            [index - 1, index, index + 1],
-            [1.6, 1, 1.6],
-            Extrapolation.CLAMP
-          ),
-        },
-      ],
-    } as any;
-  });
-
-  return (
-    <TouchableOpacity activeOpacity={0.95} onPress={onPress}>
-      <Animated.View
-        style={[
-          {
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: 0.6,
-            shadowRadius: 20,
-            elevation: 7,
-            borderRadius: 28,
-          },
-          containerStylez,
-        ]}
-      >
-        <View
-          style={{
-            width: _slideWidth,
-            height: _slideHeight,
-            borderRadius: 28,
-            overflow: 'hidden',
-            padding: 2,
-            backgroundColor: 'rgba(0,0,0,0.1)',
-          }}
-        >
-          {imageUri ? (
-            <Animated.Image
-              source={{ uri: imageUri }}
-              style={[{ flex: 1, borderRadius: 26 }, stylez]}
-              resizeMode="cover"
-            />
-          ) : (
-            <Animated.View
-              style={[
-                {
-                  flex: 1,
-                  borderRadius: 26,
-                  backgroundColor: '#8B5CF6',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                },
-                stylez,
-              ]}
-            >
-              <Ionicons name="cut" size={80} color="rgba(255,255,255,0.5)" />
-            </Animated.View>
-          )}
-        </View>
-      </Animated.View>
-    </TouchableOpacity>
-  );
-}
-
-// Service Backdrop Component
-function ServiceBackdrop({
-  service,
-  index,
-  scrollX,
-}: {
-  service: Service;
-  index: number;
-  scrollX: SharedValue<number>;
-}) {
-  const imageUri = (service as any)?.image_url || (service as any)?.cover_url || (service as any)?.image || '';
-
-  const stylez = useAnimatedStyle(() => {
-    return {
-      opacity: interpolate(
-        scrollX.value,
-        [index - 1, index, index + 1],
-        [0, 0.8, 0]
-      ),
-    } as any;
-  });
-
-  if (!imageUri) {
-    return (
-      <Animated.View
-        style={[StyleSheet.absoluteFillObject as any, { backgroundColor: '#1a1a2e' }, stylez]}
-      />
-    );
-  }
-
-  return (
-    <Animated.Image
-      source={{ uri: imageUri }}
-      style={[StyleSheet.absoluteFillObject as any, stylez]}
-      blurRadius={50}
-      resizeMode="cover"
-    />
-  );
-}
-
-// Service Details Component
-function ServiceDetailsOverlay({
-  service,
-  index,
-  scrollX,
-}: {
-  service: Service;
-  index: number;
-  scrollX: SharedValue<number>;
-}) {
-  const stylez = useAnimatedStyle(() => {
-    return {
-      transform: [
-        {
-          translateX: interpolate(
-            scrollX.value,
-            [index - 1, index, index + 1],
-            [SCREEN.width / 2, 0, -SCREEN.width / 2]
-          ),
-        },
-      ],
-      opacity: interpolate(
-        scrollX.value,
-        [index - 0.5, index, index + 0.5],
-        [0, 1, 0]
-      ),
-    } as any;
-  });
-
-  return (
-    <Animated.View
-      style={[
-        {
-          gap: 6,
-          position: 'absolute',
-          height: '100%',
-          width: '100%',
-          alignItems: 'center',
-          justifyContent: 'center',
-          paddingHorizontal: SCREEN.width * 0.1,
-        },
-        stylez,
-      ]}
-    >
-      <Text
-        style={{
-          fontSize: 24,
-          color: 'white',
-          fontWeight: '800',
-          textAlign: 'center',
-          letterSpacing: -0.5,
-          textShadowColor: 'rgba(0,0,0,0.5)',
-          textShadowOffset: { width: 0, height: 2 },
-          textShadowRadius: 8,
-        }}
-      >
-        {service?.name || ''}
-      </Text>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 4 }}>
-        {typeof service?.price === 'number' && (
-          <Text
-            style={{
-              color: '#fff',
-              fontSize: 18,
-              fontWeight: '700',
-              textShadowColor: 'rgba(0,0,0,0.5)',
-              textShadowOffset: { width: 0, height: 1 },
-              textShadowRadius: 4,
-            }}
-          >
-            ₪{service.price}
-          </Text>
-        )}
-        {typeof service?.duration_minutes === 'number' && (
-          <Text
-            style={{
-              color: '#fff',
-              opacity: 0.8,
-              fontSize: 15,
-              fontWeight: '500',
-            }}
-          >
-            {service.duration_minutes} min
-          </Text>
-        )}
-      </View>
-    </Animated.View>
-  );
-}
-
 export default function BookAppointment() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
@@ -839,9 +385,9 @@ export default function BookAppointment() {
   }, [router]);
 
   const { colors } = useBusinessColors();
-  const insets = useSafeAreaInsets();
+  const safeAreaInsets = useSafeAreaInsets();
   const styles = createStyles(colors);
-  const footerBottom = Math.max(insets.bottom, 16) + 80;
+  const footerBottom = Math.max(safeAreaInsets.bottom, 16) + 80;
   const params = (router as any).useLocalSearchParams?.() || {};
   const HERO_TOP_HEIGHT = Math.round(Dimensions.get('window').height * 0.30);
   
@@ -870,22 +416,6 @@ export default function BookAppointment() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const scrollRef = React.useRef<ScrollView | null>(null);
-  const [barberActiveIndex, setBarberActiveIndex] = useState(0);
-  const barberScrollX = useSharedValue(0);
-  const barberFlatListRef = React.useRef<any>(null);
-  
-  const onBarberScroll = useAnimatedScrollHandler((e) => {
-    barberScrollX.value = e.contentOffset.x / (_slideWidth + _slideSpacing);
-  });
-
-  // Service carousel state
-  const [serviceActiveIndex, setServiceActiveIndex] = useState(0);
-  const serviceScrollX = useSharedValue(0);
-  const serviceFlatListRef = React.useRef<any>(null);
-  
-  const onServiceScroll = useAnimatedScrollHandler((e) => {
-    serviceScrollX.value = e.contentOffset.x / (_slideWidth + _slideSpacing);
-  });
   // Step 1 → Step 2 animated transition on initial scroll
   const introFade = useSharedValue(1);
   const introFadeStyle = useAnimatedStyle(() => ({
@@ -975,10 +505,6 @@ export default function BookAppointment() {
       setShowReplaceModal(false);
       setExistingAppointment(null);
       setDayAvailability({});
-      setBarberActiveIndex(0);
-      barberScrollX.value = 0;
-      setServiceActiveIndex(0);
-      serviceScrollX.value = 0;
       return () => {};
     }, [])
   );
@@ -1407,8 +933,6 @@ export default function BookAppointment() {
       // Auto-select first barber and reset scroll position
       if (list.length > 0) {
         setSelectedBarber(list[0]);
-        setBarberActiveIndex(0);
-        barberScrollX.value = 0;
       }
       // Keep user on the single-page view if only one barber
       if (list.length === 1) {
@@ -1878,7 +1402,7 @@ export default function BookAppointment() {
       {/* Top grey hero background */}
       <View style={[styles.topHeroWrapper, { height: heroDynamicHeight }]} pointerEvents="none" />
       {(currentStep === 1 || currentStep === 2 || currentStep === 3 || currentStep === 4) && (
-        <View pointerEvents="box-none" style={[styles.topOverlayHeader, { paddingTop: insets.top + 8 }] }>
+        <View pointerEvents="box-none" style={[styles.topOverlayHeader, { paddingTop: safeAreaInsets.top + 8 }] }>
           <View style={styles.topOverlayHeaderContent}>
             <TouchableOpacity
               style={[styles.topOverlayButton, { backgroundColor: 'rgba(17,24,39,0.08)', borderColor: 'rgba(255,255,255,0.35)' }]}
@@ -2090,7 +1614,7 @@ export default function BookAppointment() {
           ref={scrollRef as any}
           contentContainerStyle={[
             styles.scrollContent, 
-            { paddingBottom: (currentStep === 1 || currentStep === 2) ? Math.max(insets.bottom, 20) : contentBottomPadding },
+            { paddingBottom: (currentStep === 1 || currentStep === 2) ? Math.max(safeAreaInsets.bottom, 20) : contentBottomPadding },
             (currentStep === 1) ? { minHeight: CAROUSEL_HEIGHT + 100 } : null,
             (currentStep === 1 || currentStep === 2) ? { flexGrow: 1, justifyContent: 'flex-end' } : null
           ]}
@@ -2110,304 +1634,65 @@ export default function BookAppointment() {
         <View style={{ height: (currentStep >= 3 ? heroDynamicHeight + 12 : 16) }} />
 
         {/* Step 1: Barber Selection - Wallpaper Style Carousel */}
-        {currentStep === 1 && (
-          <Animated.View style={[styles.section, styles.sectionFullBleed, introFadeStyle, { flex: 1, minHeight: SCREEN.height * 0.7 }]}>
-            {isLoadingBarbers ? (
-              <View style={[styles.loadingContainer, { flex: 1, justifyContent: 'center' }]}>
-                <Text style={[styles.loadingText, { color: '#FFFFFF' }]}>{t('booking.loadingEmployees', 'Loading Employees...')}</Text>
-              </View>
-            ) : (
-              <View style={{ flex: 1, justifyContent: 'center', backgroundColor: 'transparent' }}>
-                {/* Backdrop Images */}
-                <View style={StyleSheet.absoluteFillObject}>
-                  {availableBarbers.map((barber, index) => (
-                    <BarberBackdrop
-                      key={`bg-barber-${barber.id}`}
-                      index={index}
-                      barber={barber}
-                      scrollX={barberScrollX}
-                    />
-                  ))}
-                  <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.15)' }} />
-                </View>
-
-                {/* Barber Details in Top Area */}
-                <View style={{ height: _topSpacing * 0.35, justifyContent: 'flex-end', alignItems: 'center', marginTop: heroDynamicHeight - 160, paddingBottom: 40 }}>
-                  {availableBarbers.map((barber, index) => (
-                    <BarberDetailsOverlay
-                      key={`details-${barber.id}`}
-                      index={index}
-                      barber={barber}
-                      scrollX={barberScrollX}
-                    />
-                  ))}
-                </View>
-
-                {/* Carousel */}
-                <Animated.FlatList
-                  ref={barberFlatListRef}
-                  data={availableBarbers}
-                  keyExtractor={(item) => String(item.id)}
-                  style={{ flexGrow: 0, marginTop: -40 }}
-                  contentContainerStyle={{
-                    gap: _slideSpacing,
-                    paddingHorizontal: (SCREEN.width - _slideWidth) / 2,
-                    alignItems: 'center',
-                    paddingBottom: Math.max(insets.bottom, 20) + 140,
-                  }}
-                  renderItem={({ item, index }) => (
-                    <BarberSlide
-                      index={index}
-                      barber={item}
-                      scrollX={barberScrollX}
-                      onPress={() => {
-                        setBarberActiveIndex(index);
-                        const barber = availableBarbers[index];
-                        if (barber) {
-                          setSelectedBarber(barber);
-                          setSelectedService(null);
-                          setSelectedServiceIndex(0);
-                          setSelectedDay(null);
-                          setSelectedTime(null);
-                          setAvailableSlots([]);
-                          setIsLoadingSlots(false);
-                          setDayAvailability({});
-                        }
-                      }}
-                    />
-                  )}
-                  snapToInterval={_slideWidth + _slideSpacing}
-                  decelerationRate="fast"
-                  showsHorizontalScrollIndicator={false}
-                  horizontal
-                  onScroll={onBarberScroll}
-                  scrollEventThrottle={1000 / 60}
-                  onMomentumScrollEnd={(e) => {
-                    const newIndex = Math.round(
-                      e.nativeEvent.contentOffset.x / (_slideWidth + _slideSpacing)
-                    );
-                    if (newIndex >= 0 && newIndex < availableBarbers.length) {
-                      setBarberActiveIndex(newIndex);
-                      const barber = availableBarbers[newIndex];
-                      if (barber && barber.id !== selectedBarber?.id) {
-                        setSelectedBarber(barber);
-                        setSelectedService(null);
-                        setSelectedServiceIndex(0);
-                        setSelectedDay(null);
-                        setSelectedTime(null);
-                        setAvailableSlots([]);
-                        setIsLoadingSlots(false);
-                        setDayAvailability({});
-                      }
-                    }
-                  }}
-                />
-              </View>
-            )}
-          </Animated.View>
-        )}
+        <BarberSelection
+          visible={currentStep === 1}
+          styles={styles}
+          introFadeStyle={introFadeStyle}
+          heroDynamicHeight={heroDynamicHeight}
+          safeAreaBottom={safeAreaInsets.bottom}
+          isLoading={isLoadingBarbers}
+          barbers={availableBarbers}
+          selectedBarberId={selectedBarber?.id}
+          t={t}
+          onSelectBarber={(barber) => {
+            setSelectedBarber(barber);
+            setSelectedService(null);
+            setSelectedServiceIndex(0);
+            setSelectedDay(null);
+            setSelectedTime(null);
+            setAvailableSlots([]);
+            setIsLoadingSlots(false);
+            setDayAvailability({});
+          }}
+        />
 
         {/* Step 2: Service Selection - Wallpaper Style Carousel */}
-        {currentStep === 2 && selectedBarber && (
-          <Animated.View style={[styles.section, styles.sectionFullBleed, step2FadeStyle, { flex: 1, minHeight: SCREEN.height * 0.7 }]}>
-            {isLoadingServices ? (
-              <View style={[styles.loadingContainer, { flex: 1, justifyContent: 'center' }]}>
-                <Text style={[styles.loadingText, { color: '#FFFFFF' }]}>{t('booking.loadingServices', 'Loading services...')}</Text>
-              </View>
-            ) : filteredServices.length > 0 ? (
-              <View style={{ flex: 1, justifyContent: 'center', backgroundColor: 'transparent' }}>
-                {/* Backdrop Images */}
-                <View style={StyleSheet.absoluteFillObject}>
-                  {filteredServices.map((service, index) => (
-                    <ServiceBackdrop
-                      key={`bg-service-${service.id}`}
-                      index={index}
-                      service={service}
-                      scrollX={serviceScrollX}
-                    />
-                  ))}
-                  <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.15)' }} />
-                </View>
-
-                {/* Service Details in Top Area */}
-                <View style={{ height: _topSpacing * 0.35, justifyContent: 'flex-end', alignItems: 'center', marginTop: heroDynamicHeight - 160, paddingBottom: 40 }}>
-                  {filteredServices.map((service, index) => (
-                    <ServiceDetailsOverlay
-                      key={`details-${service.id}`}
-                      index={index}
-                      service={service}
-                      scrollX={serviceScrollX}
-                    />
-                  ))}
-                </View>
-
-                {/* Carousel */}
-                <Animated.FlatList
-                  ref={serviceFlatListRef}
-                  data={filteredServices}
-                  keyExtractor={(item) => String(item.id)}
-                  style={{ flexGrow: 0, marginTop: -40 }}
-                  contentContainerStyle={{
-                    gap: _slideSpacing,
-                    paddingHorizontal: (SCREEN.width - _slideWidth) / 2,
-                    alignItems: 'center',
-                    paddingBottom: Math.max(insets.bottom, 20) + 140,
-                  }}
-                  renderItem={({ item, index }) => (
-                    <ServiceSlide
-                      index={index}
-                      service={item}
-                      scrollX={serviceScrollX}
-                      onPress={() => {
-                        setServiceActiveIndex(index);
-                        const service = filteredServices[index];
-                        if (service) {
-                          setSelectedServiceIndex(index);
-                          setSelectedService(service);
-                          setSelectedDay(null);
-                          setSelectedTime(null);
-                          setAvailableSlots([]);
-                          setIsLoadingSlots(false);
-                          setShowConfirmModal(false);
-                          setShowReplaceModal(false);
-                          setExistingAppointment(null);
-                        }
-                      }}
-                    />
-                  )}
-                  snapToInterval={_slideWidth + _slideSpacing}
-                  decelerationRate="fast"
-                  showsHorizontalScrollIndicator={false}
-                  horizontal
-                  onScroll={onServiceScroll}
-                  scrollEventThrottle={1000 / 60}
-                  onMomentumScrollEnd={(e) => {
-                    const newIndex = Math.round(
-                      e.nativeEvent.contentOffset.x / (_slideWidth + _slideSpacing)
-                    );
-                    if (newIndex >= 0 && newIndex < filteredServices.length) {
-                      setServiceActiveIndex(newIndex);
-                      const service = filteredServices[newIndex];
-                      if (service && service.id !== selectedService?.id) {
-                        setSelectedServiceIndex(newIndex);
-                        setSelectedService(service);
-                        setSelectedDay(null);
-                        setSelectedTime(null);
-                        setAvailableSlots([]);
-                        setIsLoadingSlots(false);
-                        setShowConfirmModal(false);
-                        setShowReplaceModal(false);
-                        setExistingAppointment(null);
-                      }
-                    }
-                  }}
-                />
-              </View>
-            ) : (
-              <View style={[styles.loadingContainer, { flex: 1, justifyContent: 'center' }]}>
-                <Text style={[styles.loadingText, { color: '#FFFFFF' }]}>{t('booking.noServices', 'No services available')}</Text>
-              </View>
-            )}
-          </Animated.View>
-        )}
+        <ServiceSelection
+          visible={currentStep === 2 && !!selectedBarber}
+          styles={styles}
+          step2FadeStyle={step2FadeStyle}
+          heroDynamicHeight={heroDynamicHeight}
+          safeAreaBottom={safeAreaInsets.bottom}
+          isLoading={isLoadingServices}
+          services={filteredServices}
+          selectedServiceId={(selectedService as any)?.id}
+          t={t}
+          onSelectService={(service, index) => {
+            setSelectedServiceIndex(index);
+            setSelectedService(service);
+            setSelectedDay(null);
+            setSelectedTime(null);
+            setAvailableSlots([]);
+            setIsLoadingSlots(false);
+            setShowConfirmModal(false);
+            setShowReplaceModal(false);
+            setExistingAppointment(null);
+          }}
+        />
 
         {/* Step 3: Day Selection */}
-        {currentStep === 3 && selectedBarber && selectedService && (
-          <View style={[styles.section, styles.calendarSectionCard]}>
-            {/* Monthly calendar grid limited by booking window */}
-            {(() => {
-              const start = new Date();
-              const end = new Date();
-              end.setDate(start.getDate() + Math.max(0, bookingOpenDays - 1));
-
-              const monthStart = new Date(start.getFullYear(), start.getMonth(), 1);
-              const monthEnd = new Date(end.getFullYear(), end.getMonth(), 1);
-
-              const months: Date[] = [];
-              const cursor = new Date(monthStart);
-              while (cursor <= monthEnd) {
-                months.push(new Date(cursor));
-                cursor.setMonth(cursor.getMonth() + 1);
-              }
-
-              const isSameDate = (a: Date, b: Date) => a.toDateString() === b.toDateString();
-
-              return (
-                <View style={styles.calendarFixedBox}>
-                  <ScrollView showsVerticalScrollIndicator={false}>
-                  {months.map((m, mi) => {
-                    const year = m.getFullYear();
-                    const month = m.getMonth();
-                    const firstDayIdx = new Date(year, month, 1).getDay(); // 0..6, 0=Sun
-                    const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-                    // Build grid cells with leading blanks
-                    const cells: (Date | null)[] = Array(firstDayIdx).fill(null);
-                    for (let d = 1; d <= daysInMonth; d++) {
-                      cells.push(new Date(year, month, d));
-                    }
-                    // chunk into weeks
-                    const weeks: (Date | null)[][] = [];
-                    for (let i = 0; i < cells.length; i += 7) {
-                      weeks.push(cells.slice(i, i + 7));
-                    }
-
-                    const monthLabel = new Date(year, month, 1).toLocaleString(i18n?.language === 'he' ? 'he-IL' : 'en-US', { month: 'long', year: 'numeric' });
-                    return (
-                      <View key={`m-${year}-${month}`} style={{ marginBottom: 10 }}>
-                        <Text style={styles.calendarMonthTitle}>{monthLabel}</Text>
-                        {weeks.map((week, wi) => (
-                          <View key={`w-${mi}-${wi}`} style={styles.calendarGrid}>
-                            {week.map((dateObj, di) => {
-                              if (!dateObj) {
-                                return <View key={`c-${mi}-${wi}-${di}`} style={[styles.calendarCell, { backgroundColor: 'transparent' }]} />;
-                              }
-                              // within range?
-                              const inRange = dateObj >= new Date(start.getFullYear(), start.getMonth(), start.getDate()) && dateObj <= end;
-                              const dsIso = dateObj.toISOString().split('T')[0];
-                              const hasAvail = (dayAvailability[dsIso] ?? 0) > 0;
-                              const isSel = selectedDate ? isSameDate(dateObj, selectedDate) : false;
-                              return (
-                                <TouchableOpacity
-                                  key={`c-${mi}-${wi}-${di}`}
-                                  disabled={!inRange}
-                                  onPress={() => {
-                                    const idx = days.findIndex(d => d.fullDate.toDateString() === dateObj.toDateString());
-                                    setSelectedDay(idx >= 0 ? idx : null);
-                                    setSelectedTime(null);
-                                  }}
-                                  style={[
-                                    styles.calendarCell,
-                                    !inRange && styles.calendarCellDisabled,
-                                    isSel && styles.calendarCellSelected,
-                                  ]}
-                                  activeOpacity={0.7}
-                                >
-                                  <Text style={{
-                                    fontSize: 14,
-                                    fontWeight: '700',
-                                    color: isSel ? '#FFFFFF' : (!inRange ? '#C7C7CC' : '#374151'),
-                                  }}>
-                                    {dateObj.getDate()}
-                                  </Text>
-                                  {inRange && (
-                                    <View style={[styles.calendarAvailDot, { backgroundColor: hasAvail ? '#34C759' : '#FF3B30' }]} />
-                                  )}
-                                </TouchableOpacity>
-                              );
-                            })}
-                          </View>
-                        ))}
-                      </View>
-                    );
-                  })}
-                  </ScrollView>
-                </View>
-              );
-            })()}
-            {/* Legends intentionally removed for a cleaner rectangular calendar view */}
-          </View>
-        )}
+        <DaySelection
+          visible={currentStep === 3 && !!selectedBarber && !!selectedService}
+          styles={styles}
+          days={days}
+          bookingOpenDays={bookingOpenDays}
+          selectedDate={selectedDate}
+          selectedDayIndex={selectedDay}
+          dayAvailability={dayAvailability}
+          language={i18n?.language || 'he'}
+          onSelectDayIndex={(idx) => setSelectedDay(idx)}
+          onClearTime={() => setSelectedTime(null)}
+        />
 
         {/* Step 4 removed from inside ScrollView to avoid nested VirtualizedList */}
 
@@ -2416,60 +1701,16 @@ export default function BookAppointment() {
       </View>
 
       {/* Step 4: Revolutionary Time Selection with Liquid Glass (outside ScrollView) */}
-      {Number(currentStep) === 4 && selectedBarber && selectedService && selectedDay !== null && (
-        <View>
-          {/* Step 4 top spacer, raised by ~50px */}
-          <View style={{ height: Math.max(0, heroDynamicHeight + 12 - 50) }} />
-          <View style={[styles.section, styles.calendarSectionCard]}> 
-          {availableTimeSlots && availableTimeSlots.length > 0 ? (
-            <View style={styles.timeScrollBox}>
-              {/* One shared blur under the grid for better performance */}
-              <BlurView intensity={18} tint="light" style={styles.timeGridSharedBlur} />
-              <FlatList
-                data={availableTimeSlots}
-                keyExtractor={(item) => `t-${item}`}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={[styles.glassTimeCard, selectedTime === item && styles.glassTimeCardSelected]}
-                    onPress={() => setSelectedTime(item as any)}
-                    activeOpacity={0.92}
-                  >
-                    {/* keep light effects per-card without heavy blur */}
-                    <View style={styles.glassTimeTint} />
-                    <View style={[styles.glassTimeSheen, selectedTime === item && styles.glassTimeSheenActive]} />
-                    <View style={styles.glassTimeInnerBorder} />
-                    {selectedTime === item && (<View style={styles.glassTimeGlow} />)}
-                    <View style={styles.glassTimeContent}>
-                      <Ionicons name="time-outline" size={18} color={selectedTime === item ? colors.primary : '#374151'} />
-                      <Text style={[styles.glassTimeText, selectedTime === item && styles.glassTimeTextSelected]}>{item as any}</Text>
-                    </View>
-                    {selectedTime === item && (
-                      <View style={styles.glassTimeCheck}>
-                        <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                )}
-                numColumns={3}
-                showsVerticalScrollIndicator
-                removeClippedSubviews
-                windowSize={7}
-                initialNumToRender={21}
-                maxToRenderPerBatch={21}
-                updateCellsBatchingPeriod={50}
-                decelerationRate="fast"
-                contentContainerStyle={styles.timeGridList}
-              />
-            </View>
-          ) : (
-            <View style={styles.noSlotsContainer}>
-              <Text style={styles.noSlotsText}>{t('booking.noSlots', 'אין שעות פנויות לתאריך שנבחר')}</Text>
-              <Text style={styles.noSlotsSubtext}>{t('booking.chooseAnotherDay', 'בחר/י יום אחר או חזור/י אחורה')}</Text>
-            </View>
-          )}
-          </View>
-        </View>
-      )}
+      <TimeSelection
+        visible={Number(currentStep) === 4 && !!selectedBarber && !!selectedService && selectedDay !== null}
+        styles={styles}
+        heroDynamicHeight={heroDynamicHeight}
+        availableTimeSlots={(availableTimeSlots || []) as any}
+        selectedTime={selectedTime as any}
+        primaryColor={colors.primary}
+        t={t}
+        onSelectTime={(time) => setSelectedTime(time as any)}
+      />
 
       {/* Footer action button per step */}
       {footerVisible && currentStep >= 3 && (

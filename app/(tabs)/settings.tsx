@@ -143,9 +143,6 @@ export default function SettingsScreen() {
   const [profileInstagram, setProfileInstagram] = useState('');
   const [profileFacebook, setProfileFacebook] = useState('');
   const [profileTiktok, setProfileTiktok] = useState('');
-  const [profileImageOnPage1, setProfileImageOnPage1] = useState('');
-  const [profileImageOnPage2, setProfileImageOnPage2] = useState('');
-  const [profileImageOnPage3, setProfileImageOnPage3] = useState('');
   const [profileLoginImg, setProfileLoginImg] = useState('');
   const [profileMinCancellationHours, setProfileMinCancellationHours] = useState(24);
   const [profileBookingOpenDays, setProfileBookingOpenDays] = useState(7);
@@ -155,19 +152,14 @@ export default function SettingsScreen() {
   const [showEditInstagramModal, setShowEditInstagramModal] = useState(false);
   const [showEditFacebookModal, setShowEditFacebookModal] = useState(false);
   const [showEditTiktokModal, setShowEditTiktokModal] = useState(false);
-  const [showEditImagePage1Modal, setShowEditImagePage1Modal] = useState(false);
-  const [showEditImagePage2Modal, setShowEditImagePage2Modal] = useState(false);
   const [showEditCancellationModal, setShowEditCancellationModal] = useState(false);
   const [showCancellationDropdown, setShowCancellationDropdown] = useState(false);
   const [cancellationDropdownDirection, setCancellationDropdownDirection] = useState<'up' | 'down'>('down');
-  const [isUploadingImagePage1, setIsUploadingImagePage1] = useState(false);
-  const [isUploadingImagePage2, setIsUploadingImagePage2] = useState(false);
-  const [isUploadingImagePage3, setIsUploadingImagePage3] = useState(false);
   const [isUploadingLoginImg, setIsUploadingLoginImg] = useState(false);
   const [showImagePreviewModal, setShowImagePreviewModal] = useState(false);
-  const [previewImageType, setPreviewImageType] = useState<'page1' | 'page2' | 'page3' | 'login' | null>(null);
+  const [previewImageType, setPreviewImageType] = useState<'login' | null>(null);
   const [showImageSelectionModal, setShowImageSelectionModal] = useState(false);
-  const [currentImageType, setCurrentImageType] = useState<'page1' | 'page2' | 'page3' | 'login' | null>(null);
+  const [currentImageType, setCurrentImageType] = useState<'login' | null>(null);
   const [imageTranslateX, setImageTranslateX] = useState(0);
   const [imageTranslateY, setImageTranslateY] = useState(0);
   const [isImageLoading, setIsImageLoading] = useState(false);
@@ -237,9 +229,6 @@ export default function SettingsScreen() {
         setProfileInstagram(p?.instagram_url || '');
         setProfileFacebook(p?.facebook_url || '');
         setProfileTiktok((p as any)?.tiktok_url || '');
-        setProfileImageOnPage1(isBadLocalAssetRef((p as any)?.image_on_page_1) ? '' : ((p as any)?.image_on_page_1 || ''));
-        setProfileImageOnPage2(isBadLocalAssetRef((p as any)?.image_on_page_2) ? '' : ((p as any)?.image_on_page_2 || ''));
-        setProfileImageOnPage3(isBadLocalAssetRef((p as any)?.image_on_page_3) ? '' : ((p as any)?.image_on_page_3 || ''));
         setProfileLoginImg(isBadLocalAssetRef((p as any)?.login_img) ? '' : ((p as any)?.login_img || ''));
         setProfileMinCancellationHours(p?.min_cancellation_hours || 24);
         setProfileBookingOpenDays(Number(((p as any)?.booking_open_days ?? 7)));
@@ -257,9 +246,6 @@ export default function SettingsScreen() {
 
   const preloadImages = (profile: any) => {
     const images = [
-      profile?.image_on_page_1,
-      profile?.image_on_page_2,
-      profile?.image_on_page_3,
       profile?.login_img
     ].filter(Boolean);
     
@@ -361,9 +347,6 @@ export default function SettingsScreen() {
         instagram_url: profileInstagram.trim() || null as any,
         facebook_url: profileFacebook.trim() || null as any,
         tiktok_url: profileTiktok.trim() || null as any,
-        image_on_page_1: profileImageOnPage1.trim() || null as any,
-        image_on_page_2: profileImageOnPage2.trim() || null as any,
-        image_on_page_3: profileImageOnPage3.trim() || null as any,
         login_img: profileLoginImg.trim() || null as any,
       });
       if (!updated) {
@@ -1166,7 +1149,7 @@ export default function SettingsScreen() {
   };
 
 
-  const openImagePreview = (imageType: 'page1' | 'page2' | 'page3' | 'login') => {
+  const openImagePreview = (imageType: 'login') => {
     // Clear any existing timeout
     if (imageLoadTimeout) {
       clearTimeout(imageLoadTimeout);
@@ -1200,19 +1183,7 @@ export default function SettingsScreen() {
     
     // If the stored image is a non-remote relative asset path (e.g. './assets/...'),
     // skip preview and open the picker directly to let the user choose a valid image.
-    const currentUrl = imageType === 'page1'
-      ? profileImageOnPage1
-      : imageType === 'page2'
-        ? profileImageOnPage2
-        : imageType === 'page3'
-          ? profileImageOnPage3
-          : profileLoginImg;
-    const looksLikeVideo = typeof currentUrl === 'string' && /\.(mp4|mov|m4v|webm|3gp)(\?|$)/i.test(currentUrl);
-    if (imageType === 'page1' && looksLikeVideo) {
-      setShowImagePreviewModal(false);
-      handlePickHomeMedia();
-      return;
-    }
+    const currentUrl = profileLoginImg;
     const isRemote = typeof currentUrl === 'string' && /^(https?:|data:|file:)/.test(currentUrl) && !String(currentUrl).includes('unstable_path=');
     if (!isRemote) {
       setShowImagePreviewModal(false);
@@ -1244,63 +1215,7 @@ export default function SettingsScreen() {
     setImageLoadTimeout(timeout);
   };
 
-  const handlePickHomeMedia = async () => {
-    if (isUploadingImagePage1) return;
-    Alert.alert(
-      t('settings.profile.homeMediaTitle','Home page media'),
-      t('settings.profile.homeMediaMessage','Choose what to upload'),
-      [
-        { text: t('cancel','Cancel'), style: 'cancel' },
-        {
-          text: t('settings.profile.uploadImage','Upload image'),
-          onPress: () => handlePickBusinessImage('page1')
-        },
-        {
-          text: t('settings.profile.uploadVideo','Upload video'),
-          onPress: async () => {
-            try {
-              const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-              if (status !== 'granted') {
-                Alert.alert(t('profile.permissionRequired','Permission Required'), t('settings.profile.permissionVideo','Please allow gallery access to pick a video'));
-                return;
-              }
-              const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: 'videos',
-                allowsMultipleSelection: false,
-                quality: 1,
-                base64: false,
-              });
-              if (result.canceled || !result.assets?.length) return;
-              const a: any = result.assets[0];
-              setIsUploadingImagePage1(true);
-              let contentType = a.mimeType || guessMimeFromUriForAny(a.fileName || a.uri);
-              const uploadedUrl = await uploadBusinessVideo({ uri: a.uri, mimeType: contentType, fileName: a.fileName ?? null });
-              if (!uploadedUrl) {
-                Alert.alert(t('error.generic','Error'), t('settings.profile.uploadFailed','Failed to upload image'));
-                return;
-              }
-              setProfileImageOnPage1(uploadedUrl);
-              const updated = await businessProfileApi.upsertProfile({ image_on_page_1: uploadedUrl } as any);
-              if (updated) {
-                setProfile(updated);
-                setProfileImageOnPage1((updated as any)?.image_on_page_1 || '');
-                Alert.alert(t('success.generic','Success'), t('settings.profile.imageSaveSuccess','Image saved successfully'));
-              } else {
-                Alert.alert(t('error.generic','Error'), t('settings.profile.imageSaveFailed','Failed to save image'));
-              }
-            } catch (e) {
-              console.error('pick/upload home video failed', e);
-              Alert.alert(t('error.generic','Error'), t('settings.profile.uploadFailed','Failed to upload image'));
-            } finally {
-              setIsUploadingImagePage1(false);
-            }
-          }
-        },
-      ]
-    );
-  };
-
-  const handlePickBusinessImage = async (imageType: 'page1' | 'page2' | 'page3' | 'login') => {
+  const handlePickBusinessImage = async (imageType: 'login') => {
     setCurrentImageType(imageType);
     setShowImageSelectionModal(true);
   };
@@ -1310,15 +1225,7 @@ export default function SettingsScreen() {
 
     try {
       // Set loading state
-      if (currentImageType === 'page1') {
-        setIsUploadingImagePage1(true);
-      } else if (currentImageType === 'page2') {
-        setIsUploadingImagePage2(true);
-      } else if (currentImageType === 'page3') {
-        setIsUploadingImagePage3(true);
-      } else if (currentImageType === 'login') {
-        setIsUploadingLoginImg(true);
-      }
+      setIsUploadingLoginImg(true);
 
       let uploadedUrl: string;
 
@@ -1395,35 +1302,19 @@ export default function SettingsScreen() {
         return;
       }
 
-      // Sanitize: never persist device-local file:// URIs in DB for page images
-      if (/^file:/i.test(uploadedUrl) && currentImageType !== 'login') {
+      // Sanitize: never persist device-local file:// URIs in DB
+      if (/^file:/i.test(uploadedUrl)) {
         const guessType = guessMimeFromUri(uploadedUrl);
         const up2 = await uploadBusinessImage({ uri: uploadedUrl, base64: null, mimeType: guessType, fileName: null });
         if (up2) uploadedUrl = up2;
       }
 
       // Update the appropriate image state
-      if (currentImageType === 'page1') {
-        setProfileImageOnPage1(uploadedUrl);
-      } else if (currentImageType === 'page2') {
-        setProfileImageOnPage2(uploadedUrl);
-      } else if (currentImageType === 'page3') {
-        setProfileImageOnPage3(uploadedUrl);
-      } else if (currentImageType === 'login') {
-        setProfileLoginImg(uploadedUrl);
-      }
+      setProfileLoginImg(uploadedUrl);
 
       // Save ONLY the changed image field to avoid overwriting others
       const imagePayload: Partial<BusinessProfile> = {} as any;
-      if (currentImageType === 'page1') {
-        (imagePayload as any).image_on_page_1 = uploadedUrl;
-      } else if (currentImageType === 'page2') {
-        (imagePayload as any).image_on_page_2 = uploadedUrl;
-      } else if (currentImageType === 'page3') {
-        (imagePayload as any).image_on_page_3 = uploadedUrl;
-      } else if (currentImageType === 'login') {
-        (imagePayload as any).login_img = uploadedUrl;
-      }
+      (imagePayload as any).login_img = uploadedUrl;
 
       const updated = await businessProfileApi.upsertProfile(imagePayload);
 
@@ -1435,9 +1326,6 @@ export default function SettingsScreen() {
         setProfileInstagram(updated?.instagram_url || '');
         setProfileFacebook(updated?.facebook_url || '');
         setProfileTiktok((updated as any)?.tiktok_url || '');
-        setProfileImageOnPage1((updated as any)?.image_on_page_1 || '');
-        setProfileImageOnPage2((updated as any)?.image_on_page_2 || '');
-        setProfileImageOnPage3((updated as any)?.image_on_page_3 || '');
         setProfileLoginImg((updated as any)?.login_img || '');
         setProfileMinCancellationHours(updated?.min_cancellation_hours || 24);
         
@@ -1456,9 +1344,6 @@ export default function SettingsScreen() {
       Alert.alert(t('error.generic','Error'), t('settings.profile.imageSaveFailed','Failed to save image'));
     } finally {
       // Clear all image-related states
-      setIsUploadingImagePage1(false);
-      setIsUploadingImagePage2(false);
-      setIsUploadingImagePage3(false);
       setIsUploadingLoginImg(false);
       setCurrentImageType(null);
       setShowImageSelectionModal(false);
@@ -2437,38 +2322,15 @@ export default function SettingsScreen() {
               />
               
               {renderSettingItemLTR(
-                <Home size={20} color={isUploadingImagePage1 ? Colors.subtext : businessColors.primary} />, 
-                'Home page media',
-                isUploadingImagePage1 ? 'Uploading...' : (profileImageOnPage1 ? 'Media uploaded' : 'Upload home page media'),
-                isUploadingImagePage1 ? (
-                  <ActivityIndicator size="small" color={businessColors.primary} />
-                ) : undefined,
-                isUploadingImagePage1 ? undefined : handlePickHomeMedia,
+                <Ionicons name="images-outline" size={20} color={businessColors.primary} />,
+                'Home animation images',
+                'Edit the images in the top home animation',
+                undefined,
+                () => router.push('/(tabs)/edit-home-hero'),
                 false,
-                isUploadingImagePage1
+                false
               )}
-              {renderSettingItemLTR(
-                <ImageIcon size={20} color={isUploadingImagePage2 ? Colors.subtext : businessColors.primary} />, 
-                'Booking page image',
-                isUploadingImagePage2 ? 'Uploading...' : (profileImageOnPage2 ? 'Image uploaded' : 'Upload booking page image'),
-                isUploadingImagePage2 ? (
-                  <ActivityIndicator size="small" color={businessColors.primary} />
-                ) : undefined,
-                isUploadingImagePage2 ? undefined : (profileImageOnPage2 ? () => openImagePreview('page2') : () => handlePickBusinessImage('page2')),
-                false,
-                isUploadingImagePage2
-              )}
-              {renderSettingItemLTR(
-                <ImageIcon size={20} color={isUploadingImagePage3 ? Colors.subtext : businessColors.primary} />, 
-                'Existing Booking',
-                isUploadingImagePage3 ? 'Uploading...' : (profileImageOnPage3 ? 'Image uploaded' : 'Upload existing booking image'),
-                isUploadingImagePage3 ? (
-                  <ActivityIndicator size="small" color={businessColors.primary} />
-                ) : undefined,
-                isUploadingImagePage3 ? undefined : (profileImageOnPage3 ? () => openImagePreview('page3') : () => handlePickBusinessImage('page3')),
-                false,
-                isUploadingImagePage3
-              )}
+
               {renderSettingItemLTR(
                 <Ionicons name="log-in-outline" size={20} color={isUploadingLoginImg ? Colors.subtext : businessColors.primary} />, 
                 'Login page image',
@@ -4503,10 +4365,7 @@ export default function SettingsScreen() {
               <X size={24} color="#000000" />
             </TouchableOpacity>
             <Text style={[styles.modalTitle, { color: '#000000' }]}>
-              {previewImageType === 'page1' ? 'Home page image' : 
-               previewImageType === 'page2' ? 'Booking page image' :
-               previewImageType === 'page3' ? 'Existing Booking image' :
-               'Login page image'}
+              {'Login page image'}
             </Text>
             <TouchableOpacity 
               style={[styles.modalSendButton, { backgroundColor: businessColors.primary }]}
@@ -4657,18 +4516,7 @@ export default function SettingsScreen() {
                 />
               ) : (
               <Image
-                  source={(() => {
-                    if (previewImageType === 'page1') {
-                      return (imageLoadError ? require('@/assets/images/1homePage.jpg') : { uri: profileImageOnPage1 });
-                    }
-                    if (previewImageType === 'page2') {
-                      return (imageLoadError ? require('@/assets/images/bookApp.jpg') : { uri: profileImageOnPage2 });
-                    }
-                    if (previewImageType === 'page3') {
-                      return (imageLoadError ? require('@/assets/images/nextApp.jpg') : { uri: profileImageOnPage3 });
-                    }
-                    return { uri: profileLoginImg };
-                  })()}
+                  source={imageLoadError ? require('@/assets/images/1homePage.jpg') : { uri: profileLoginImg }}
                   style={previewImageType === 'login' ? styles.loginImagePreview : styles.imagePreviewImage}
                   resizeMode={previewImageType === 'login' ? "cover" : "contain"}
                   onLoadStart={() => setIsImageLoading(true)}
@@ -4692,7 +4540,7 @@ export default function SettingsScreen() {
                     setImageLoadTimeout(null);
                   }
                 }}
-                defaultSource={previewImageType === 'page1' ? require('@/assets/images/1homePage.jpg') : (previewImageType === 'page2' ? require('@/assets/images/bookApp.jpg') : (previewImageType === 'page3' ? require('@/assets/images/nextApp.jpg') : undefined))}
+                defaultSource={undefined}
                 />
               )}
             </ScrollView>
@@ -4721,14 +4569,8 @@ export default function SettingsScreen() {
           setCurrentImageType(null);
         }}
         onImageSelected={handleImageSelected}
-        title={currentImageType === 'page1' ? 'Select Home Page Image' : 
-               currentImageType === 'page2' ? 'Select Booking Page Image' : 
-               currentImageType === 'page3' ? 'Select Existing Booking Image' :
-               'Select Login Page Image'}
-        mainCategory={currentImageType === 'page1' ? 'homePage' : 
-                     currentImageType === 'page2' ? 'bookingPage' : 
-                     currentImageType === 'page3' ? 'existingBooking' :
-                     'loginPage'}
+        title={'Select Login Page Image'}
+        mainCategory={'loginPage'}
       />
 
     </SafeAreaView>

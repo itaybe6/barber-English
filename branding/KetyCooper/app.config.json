@@ -57,6 +57,7 @@
       },
       "locale": "en",
       "CLIENT": "KetyCooper",
+      "BUSINESS_ID": "91036074-55af-4f5d-883e-47b5804a465c",
       "eas": { "projectId": "98671cac-90d9-42b1-8228-225df1dc4f9e" },
       "logo": "./branding/KetyCooper/logo.png",
       "logoWhite": "./branding/KetyCooper/logo-white.png"

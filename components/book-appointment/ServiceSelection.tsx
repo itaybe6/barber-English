@@ -229,6 +229,7 @@ type Props = {
   isLoading: boolean;
   services: Service[];
   selectedServiceId?: string | number | null;
+  externalScrollX?: SharedValue<number>;
   t: any;
   onSelectService: (service: Service, index: number) => void;
 };
@@ -242,6 +243,7 @@ export default function ServiceSelection({
   isLoading,
   services,
   selectedServiceId,
+  externalScrollX,
   t,
   onSelectService,
 }: Props) {
@@ -250,7 +252,9 @@ export default function ServiceSelection({
 
   const onScroll = useAnimatedScrollHandler((e) => {
     const raw = e.contentOffset?.x ?? 0;
-    scrollX.value = raw / INTERVAL;
+    const v = raw / INTERVAL;
+    scrollX.value = v;
+    if (externalScrollX) externalScrollX.value = v;
   });
 
   const handleSelectIndex = React.useCallback(
@@ -280,17 +284,7 @@ export default function ServiceSelection({
         </View>
       ) : services.length > 0 ? (
         <View style={{ flex: 1, justifyContent: 'center', backgroundColor: 'transparent', direction: 'ltr' } as any}>
-          <View style={StyleSheet.absoluteFillObject}>
-            {services.map((service, index) => (
-              <ServiceBackdrop
-                key={`bg-service-${(service as any).id ?? index}`}
-                index={index}
-                service={service}
-                scrollX={scrollX}
-              />
-            ))}
-            <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.15)' }} />
-          </View>
+          {/* No local backdrop — the parent screen renders a full-screen backdrop based on scrollX */}
 
           <View style={{ height: TOP_SPACING * 0.35, justifyContent: 'flex-end', alignItems: 'center', marginTop: Math.max(0, topOffset - 12), paddingBottom: 40 }}>
             {services.map((service, index) => (

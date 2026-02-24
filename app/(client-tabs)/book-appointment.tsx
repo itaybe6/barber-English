@@ -23,6 +23,7 @@ import { businessProfileApi } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
 import { User } from '@/lib/supabase';
 import Animated, { useSharedValue, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, Easing } from 'react-native-reanimated';
+import type { SharedValue } from 'react-native-reanimated';
 
 
 // API functions for booking appointments
@@ -418,6 +419,9 @@ export default function BookAppointment() {
   }, []);
   // Step 2 ↔ transitions via scroll (up to step 1, down to step 3)
   const step2Fade = useSharedValue(1);
+  // Shared scroll progress for full-screen backdrops (like the reference animation)
+  const barberBgScrollX = useSharedValue(0);
+  const serviceBgScrollX = useSharedValue(0);
   const step2FadeStyle = useAnimatedStyle(() => ({
     opacity: step2Fade.value,
     transform: [{ translateY: interpolate(step2Fade.value, [0, 1], [20, 0], Extrapolate.CLAMP) }],
@@ -1380,29 +1384,60 @@ export default function BookAppointment() {
 
   const TOP_OFFSET = Math.round(safeAreaInsets.top + 8 + BOOKING_TABS_HEIGHT);
   return (
-    <SafeAreaView style={styles.container} edges={(currentStep === 1 || currentStep === 2 || currentStep === 3 || currentStep === 4) ? [] : ['top']}>
-      {/* Dynamic background based on selected barber/service */}
+    <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+      {/* Background (changes with scroll for steps 1-2, cross-fade for steps 3-4) */}
       {(() => {
         try {
-          const uri = (selectedService as any)?.image_url || (selectedService as any)?.cover_url || (selectedService as any)?.image || (selectedBarber as any)?.image_url || null;
-          return <DynamicBackground uri={uri} />;
-        } catch { return null; }
+          if (currentStep === 1 && (availableBarbers || []).length > 0) {
+            return (
+              <ScrollBackdrop
+                items={availableBarbers.map((b) => ({ id: String(b.id), uri: (b as any)?.image_url || '' }))}
+                scrollX={barberBgScrollX}
+                safeTop={safeAreaInsets.top}
+                safeBottom={safeAreaInsets.bottom}
+              />
+            );
+          }
+          if (currentStep === 2 && (filteredServices || []).length > 0) {
+            return (
+              <ScrollBackdrop
+                items={filteredServices.map((s: any, idx: number) => ({
+                  id: String(s?.id ?? idx),
+                  uri: s?.image_url || s?.cover_url || s?.image || '',
+                }))}
+                scrollX={serviceBgScrollX}
+                safeTop={safeAreaInsets.top}
+                safeBottom={safeAreaInsets.bottom}
+              />
+            );
+          }
+          const uri =
+            (selectedService as any)?.image_url ||
+            (selectedService as any)?.cover_url ||
+            (selectedService as any)?.image ||
+            (selectedBarber as any)?.image_url ||
+            null;
+          return <DynamicBackground uri={uri} safeTop={safeAreaInsets.top} safeBottom={safeAreaInsets.bottom} />;
+        } catch {
+          return null;
+        }
       })()}
 
-      <BookingStepTabs
-        currentStep={currentStep}
-        safeAreaTop={safeAreaInsets.top}
-        labels={{
-          barber: t('booking.step.barber', 'Barber'),
-          service: t('booking.step.service', 'Service'),
-          day: t('booking.step.day', 'Day'),
-          time: t('booking.step.time', 'Time'),
-        }}
-        canGoService={!!selectedBarber}
-        canGoDay={!!selectedService}
-        canGoTime={selectedDay !== null}
-        onChangeStep={(step) => setCurrentStep(step as any)}
-      />
+      <SafeAreaView style={styles.container} edges={[]}>
+        <BookingStepTabs
+          currentStep={currentStep}
+          safeAreaTop={safeAreaInsets.top}
+          labels={{
+            barber: t('booking.step.barber', 'Barber'),
+            service: t('booking.step.service', 'Service'),
+            day: t('booking.step.day', 'Day'),
+            time: t('booking.step.time', 'Time'),
+          }}
+          canGoService={!!selectedBarber}
+          canGoDay={!!selectedService}
+          canGoTime={selectedDay !== null}
+          onChangeStep={(step) => setCurrentStep(Number(step) as any)}
+        />
       {/* Header removed on steps 3-4 per request */}
       <View style={[
         styles.contentWrapper,
@@ -1444,6 +1479,7 @@ export default function BookAppointment() {
           isLoading={isLoadingBarbers}
           barbers={availableBarbers}
           selectedBarberId={selectedBarber?.id}
+          externalScrollX={barberBgScrollX}
           t={t}
           onSelectBarber={(barber) => {
             setSelectedBarber(barber);
@@ -1467,6 +1503,7 @@ export default function BookAppointment() {
           isLoading={isLoadingServices}
           services={filteredServices}
           selectedServiceId={(selectedService as any)?.id}
+          externalScrollX={serviceBgScrollX}
           t={t}
           onSelectService={(service, index) => {
             setSelectedServiceIndex(index);
@@ -1793,19 +1830,19 @@ export default function BookAppointment() {
           </View>
         </Modal>
       )}
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 // Background that cross-fades to the provided image URI and lightly blurs/tints it
-const DynamicBackground: React.FC<{ uri: string | null }> = ({ uri }) => {
-  // 'screen' dimensions include the Android status bar — wider than 'window' — so the
-  // background truly covers edge-to-edge even when rendered inside a SafeAreaView.
-  const [screenDims, setScreenDims] = React.useState(() => Dimensions.get('screen'));
-  React.useEffect(() => {
-    const sub = Dimensions.addEventListener('change', ({ screen }) => setScreenDims(screen));
-    return () => sub.remove();
-  }, []);
+const DynamicBackground: React.FC<{ uri: string | null; safeTop: number; safeBottom: number }> = ({
+  uri,
+  safeTop,
+  safeBottom,
+}) => {
+  // On some Android setups, the screen root is already shifted down by the safe-area inset.
+  // Offsetting by negative insets ensures the background truly reaches the physical screen edges.
   const progress = useSharedValue(1);
   const [currentUri, setCurrentUri] = React.useState<string | null>(uri ?? null);
   const [previousUri, setPreviousUri] = React.useState<string | null>(null);
@@ -1837,6 +1874,8 @@ const DynamicBackground: React.FC<{ uri: string | null }> = ({ uri }) => {
     if (uri === currentUri) {
       return () => {
         isActive = false;
+  // Use explicit screen dimensions so the background truly covers edge-to-edge,
+  // including the Android status bar area (which SafeAreaView absoluteFillObject misses).
       };
     }
 
@@ -1875,20 +1914,21 @@ const DynamicBackground: React.FC<{ uri: string | null }> = ({ uri }) => {
     opacity: 1 - progress.value,
   }));
 
-  const blurRadius = Platform.select({ ios: 60, android: 24, default: 40 }) as number;
+  // Mild blur so the photo is clearly recognisable as a background
+  const blurRadius = Platform.select({ ios: 28, android: 10, default: 20 }) as number;
 
   const bgStyle: any = {
     position: 'absolute',
-    top: 0,
+    top: -safeTop,
     left: 0,
-    width: screenDims.width,
-    height: screenDims.height,
+    right: 0,
+    bottom: -safeBottom,
   };
 
   return (
     <View pointerEvents="none" style={bgStyle}>
-      {/* Dark fallback — visible while the first image loads */}
-      <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: '#0B0F14' }]} />
+      {/* Dark fallback while first image loads */}
+      <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: '#1a1a2e' }]} />
 
       {previousUri && (
         <Animated.Image
@@ -1907,9 +1947,64 @@ const DynamicBackground: React.FC<{ uri: string | null }> = ({ uri }) => {
         />
       )}
 
-      {/* Wallpaper dim / vignette */}
-      <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: 'rgba(0,0,0,0.22)' }]} />
-      <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: 'rgba(255,255,255,0.04)' }]} />
+      {/* Very light tint so the photo stays dominant */}
+      <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: 'rgba(0,0,0,0.12)' }]} />
+    </View>
+  );
+};
+
+type BackdropItem = { id: string; uri: string };
+
+const BackdropLayer: React.FC<{
+  item: BackdropItem;
+  index: number;
+  scrollX: SharedValue<number>;
+}> = ({ item, index, scrollX }) => {
+  const stylez = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      scrollX.value,
+      [index - 1, index, index + 1],
+      [0, 0.9, 0],
+      Extrapolate.CLAMP
+    ),
+  }));
+
+  if (!item.uri) {
+    return <Animated.View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: '#1a1a2e' }, stylez]} />;
+  }
+
+  return (
+    <Animated.Image
+      source={{ uri: item.uri }}
+      style={[StyleSheet.absoluteFillObject as any, stylez]}
+      resizeMode="cover"
+      blurRadius={Platform.select({ ios: 40, android: 18, default: 26 }) as number}
+    />
+  );
+};
+
+const ScrollBackdrop: React.FC<{
+  items: BackdropItem[];
+  scrollX: SharedValue<number>;
+  safeTop: number;
+  safeBottom: number;
+}> = ({ items, scrollX, safeTop, safeBottom }) => {
+  const bgStyle: any = {
+    position: 'absolute',
+    top: -safeTop,
+    left: 0,
+    right: 0,
+    bottom: -safeBottom,
+  };
+
+  return (
+    <View pointerEvents="none" style={bgStyle}>
+      <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: '#0B0F14' }]} />
+      {items.map((item, index) => (
+        <BackdropLayer key={`bg-${item.id}`} item={item} index={index} scrollX={scrollX} />
+      ))}
+      {/* keep it readable but photo-forward */}
+      <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: 'rgba(0,0,0,0.10)' }]} />
     </View>
   );
 };

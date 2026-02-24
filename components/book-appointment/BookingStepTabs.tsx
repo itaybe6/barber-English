@@ -1,6 +1,5 @@
 import React from 'react';
 import { View } from 'react-native';
-import { BlurView } from 'expo-blur';
 
 import AnimatedTabs, { TabsPropsData } from '@/components/book-appointment/AnimatedTabs';
 
@@ -8,8 +7,10 @@ type Step = 1 | 2 | 3 | 4;
 
 type Props = {
   currentStep: Step;
+  // guards
   onChangeStep: (step: Step) => void;
   safeAreaTop: number;
+  activeColor?: string;
   labels: { barber: string; service: string; day: string; time: string };
   canGoService: boolean;
   canGoDay: boolean;
@@ -22,6 +23,7 @@ export const BOOKING_TABS_HEIGHT = 64;
 export default function BookingStepTabs({
   currentStep,
   onChangeStep,
+  activeColor = '#111827',
   safeAreaTop,
   labels,
   canGoService,
@@ -54,36 +56,15 @@ export default function BookingStepTabs({
         zIndex: 100,
       }}
     >
-      {/* Glass pill container */}
       <View
         style={{
           borderRadius: 20,
           overflow: 'hidden',
           borderWidth: 1,
           borderColor: 'rgba(255,255,255,0.28)',
+          backgroundColor: 'transparent',
         }}
       >
-        {/* Blur layer */}
-        <BlurView
-          intensity={20}
-          tint="dark"
-          style={{
-            position: 'absolute',
-            top: 0, left: 0, right: 0, bottom: 0,
-            borderRadius: 20,
-          }}
-        />
-        {/* Semi-transparent dark tint */}
-        <View
-          style={{
-            position: 'absolute',
-            top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(10,10,20,0.38)',
-            borderRadius: 20,
-          }}
-        />
-
-        {/* Tabs */}
         <View style={{ padding: 6 }}>
           <AnimatedTabs
             data={data}
@@ -96,10 +77,11 @@ export default function BookingStepTabs({
               if (step === 4 && canGoTime) return onChangeStep(4);
             }}
             activeColor="#111827"
-            inactiveColor="rgba(255,255,255,0.75)"
+            inactiveColor="rgba(255,255,255,0.92)"
             activeBackgroundColor="rgba(255,255,255,0.97)"
-            inactiveBackgroundColor="rgba(255,255,255,0.06)"
+            inactiveBackgroundColor="rgba(255,255,255,0)"
           />
+
         </View>
       </View>
     </View>

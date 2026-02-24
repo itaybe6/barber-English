@@ -219,6 +219,7 @@ type Props = {
   isLoading: boolean;
   barbers: User[];
   selectedBarberId?: string | number | null;
+  externalScrollX?: SharedValue<number>;
   t: any;
   onSelectBarber: (barber: User) => void;
 };
@@ -232,6 +233,7 @@ export default function BarberSelection({
   isLoading,
   barbers,
   selectedBarberId,
+  externalScrollX,
   t,
   onSelectBarber,
 }: Props) {
@@ -243,7 +245,9 @@ export default function BarberSelection({
   // Force LTR on the FlatList so this formula is always correct regardless of app locale.
   const onScroll = useAnimatedScrollHandler((e) => {
     const raw = e.contentOffset?.x ?? 0;
-    scrollX.value = raw / INTERVAL;
+    const v = raw / INTERVAL;
+    scrollX.value = v;
+    if (externalScrollX) externalScrollX.value = v;
   });
 
   const handleSelectIndex = React.useCallback(
@@ -275,12 +279,7 @@ export default function BarberSelection({
       ) : (
         // direction: 'ltr' fixes RTL (Hebrew) apps where FlatList horizontal offset goes negative/reversed
         <View style={{ flex: 1, justifyContent: 'center', backgroundColor: 'transparent', direction: 'ltr' } as any}>
-          <View style={StyleSheet.absoluteFillObject}>
-            {barbers.map((barber, index) => (
-              <BarberBackdrop key={`bg-barber-${barber.id}`} index={index} barber={barber} scrollX={scrollX} />
-            ))}
-            <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.15)' }} />
-          </View>
+          {/* No local backdrop — DynamicBackground in the parent already handles the full-screen blur */}
 
           <View style={{ height: TOP_SPACING * 0.35, justifyContent: 'flex-end', alignItems: 'center', marginTop: Math.max(0, topOffset - 12), paddingBottom: 40 }}>
             {barbers.map((barber, index) => (

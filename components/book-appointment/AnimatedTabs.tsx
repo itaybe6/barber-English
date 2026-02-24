@@ -104,9 +104,8 @@ export default function AnimatedTabs({
               <AnimatedIcon
                 name={item.icon}
                 size={20}
-                animate={{
-                  color: isSelected ? activeColor : inactiveColor,
-                }}
+                // We avoid animating initial entering via LayoutAnimationConfig below
+                animate={{ color: isSelected ? activeColor : inactiveColor }}
               />
               <LayoutAnimationConfig skipEntering>
                 {isSelected && (
@@ -129,6 +128,7 @@ export default function AnimatedTabs({
           </MotiView>
         );
       })}
+
     </Animated.View>
   );
 }

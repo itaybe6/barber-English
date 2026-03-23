@@ -913,10 +913,16 @@ export default function BookAppointment() {
     }
   };
 
-  // Filter services by selected barber (worker)
+  // Filter services by selected barber (worker).
+  // If no service has worker_id set at all, treat all services as available for any barber.
   const filteredServices = useMemo(() => {
     if (!selectedBarber) return [] as Service[];
-    return (availableServices || []).filter((s: any) => String(s?.worker_id || '') === String(selectedBarber.id));
+    const all = availableServices || [];
+    const hasWorkerIds = all.some((s: any) => !!s?.worker_id);
+    if (!hasWorkerIds) return all;
+    const byWorker = all.filter((s: any) => String(s?.worker_id || '') === String(selectedBarber.id));
+    // Fallback: if this barber has no assigned services at all, show all services
+    return byWorker.length > 0 ? byWorker : all;
   }, [availableServices, selectedBarber?.id]);
 
   // Do not auto-select a service on entering step 2; user must choose explicitly
@@ -1404,18 +1410,11 @@ export default function BookAppointment() {
             const barberUri = (selectedBarber as any)?.image_url || null;
             return <DynamicBackground uri={barberUri} safeTop={safeAreaInsets.top} safeBottom={safeAreaInsets.bottom} />;
           }
-          if (currentStep === 2 && (filteredServices || []).length > 0) {
-            return (
-              <ScrollBackdrop
-                items={filteredServices.map((s: any, idx: number) => ({
-                  id: String(s?.id ?? idx),
-                  uri: s?.image_url || s?.cover_url || s?.image || '',
-                }))}
-                scrollX={serviceBgScrollX}
-                safeTop={safeAreaInsets.top}
-                safeBottom={safeAreaInsets.bottom}
-              />
-            );
+          if (currentStep === 2) {
+            const svcUri = selectedServices.length > 0
+              ? ((selectedServices[0] as any)?.image_url || (selectedServices[0] as any)?.cover_url || (selectedServices[0] as any)?.image || null)
+              : null;
+            return <DynamicBackground uri={svcUri} safeTop={safeAreaInsets.top} safeBottom={safeAreaInsets.bottom} />;
           }
           const uri =
             (selectedService as any)?.image_url ||
@@ -1475,7 +1474,7 @@ export default function BookAppointment() {
         {/* Spacer to keep content below the top tabs */}
         <View style={{ height: TOP_OFFSET + 12 }} />
 
-        {/* Step 1: Barber Selection - Wallpaper Style Carousel */}
+        {/* Step 1: Barber Selection */}
         <BarberSelection
           visible={currentStep === 1}
           styles={styles}
@@ -1497,9 +1496,10 @@ export default function BookAppointment() {
             setIsLoadingSlots(false);
             setDayAvailability({});
           }}
+          onContinue={selectedBarber ? () => setCurrentStep(2) : undefined}
         />
 
-        {/* Step 2: Service Selection - Wallpaper Style Carousel */}
+        {/* Step 2: Service Selection - Multi-select grid */}
         <ServiceSelection
           visible={currentStep === 2 && !!selectedBarber}
           styles={styles}
@@ -1508,12 +1508,16 @@ export default function BookAppointment() {
           safeAreaBottom={safeAreaInsets.bottom}
           isLoading={isLoadingServices}
           services={filteredServices}
-          selectedServiceId={(selectedService as any)?.id}
+          selectedServiceIds={selectedServices.map((s: any) => String(s.id))}
           externalScrollX={serviceBgScrollX}
           t={t}
-          onSelectService={(service, index) => {
-            setSelectedServiceIndex(index);
-            setSelectedServices([service]);
+          onSelectService={(service) => {
+            setSelectedServices(prev => {
+              const id = String((service as any).id);
+              const exists = prev.find((s: any) => String(s.id) === id);
+              if (exists) return prev.filter((s: any) => String(s.id) !== id);
+              return [...prev, service];
+            });
             setSelectedDay(null);
             setSelectedTime(null);
             setAvailableSlots([]);
@@ -1522,6 +1526,7 @@ export default function BookAppointment() {
             setShowReplaceModal(false);
             setExistingAppointment(null);
           }}
+          onContinue={selectedServices.length > 0 ? () => setCurrentStep(3) : undefined}
         />
 
         {/* Step 3: Day Selection */}
@@ -1975,8 +1980,8 @@ const DynamicBackground: React.FC<{ uri: string | null; safeTop: number; safeBot
 
   return (
     <View pointerEvents="none" style={bgStyle}>
-      {/* Dark fallback while first image loads */}
-      <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: '#1a1a2e' }]} />
+      {/* Light fallback while first image loads */}
+      <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: '#F2F2F7' }]} />
 
       {previousUri && (
         <Animated.Image
@@ -1995,8 +2000,8 @@ const DynamicBackground: React.FC<{ uri: string | null; safeTop: number; safeBot
         />
       )}
 
-      {/* Very light tint so the photo stays dominant */}
-      <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: 'rgba(0,0,0,0.12)' }]} />
+      {/* Tint only when an image is showing */}
+      {currentUri && <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: 'rgba(0,0,0,0.12)' }]} />}
     </View>
   );
 };
@@ -2172,7 +2177,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
     zIndex: 0,
-    backgroundColor: '#23272F',
+    backgroundColor: '#F2F2F7',
   },
   topHeroImage: {},
   stepperContainer: {

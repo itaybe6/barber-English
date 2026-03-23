@@ -90,7 +90,8 @@
   "booking.field.services": "שירותים",
   "booking.price": "₪",
   "booking.selectBarber": "בחר/י איש שירות",
-  "booking.selectBarberHint": "עם מי תרצה/י לקבוע?"
+  "booking.selectBarberHint": "עם מי תרצה/י לקבוע?",
+  "booking.continue": "המשך"
   ,
   "booking.chooseTime": "בחר/י שעה",
   "booking.chooseDateHint": "בחר/י ספר ושירות כדי לראות תאריכים זמינים.",

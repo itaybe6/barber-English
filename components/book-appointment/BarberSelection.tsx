@@ -31,6 +31,7 @@ type Props = {
   externalScrollX?: SharedValue<number>;
   t: any;
   onSelectBarber: (barber: User) => void;
+  onContinue?: () => void;
 };
 
 export default function BarberSelection({
@@ -44,6 +45,7 @@ export default function BarberSelection({
   selectedBarberId,
   t,
   onSelectBarber,
+  onContinue,
 }: Props) {
   const { colors } = useBusinessColors();
 
@@ -60,7 +62,7 @@ export default function BarberSelection({
     >
       {isLoading ? (
         <View style={[parentStyles.loadingContainer, { flex: 1, justifyContent: 'center' }]}>
-          <Text style={[parentStyles.loadingText, { color: '#FFFFFF' }]}>
+          <Text style={[parentStyles.loadingText, { color: '#6B7280' }]}>
             {t('booking.loadingEmployees', 'Loading Employees...')}
           </Text>
         </View>
@@ -89,7 +91,7 @@ export default function BarberSelection({
 
           {/* Barber cards */}
           <View style={s.grid}>
-            {barbers.map((barber, idx) => {
+            {(barbers || []).map((barber, idx) => {
               const isSelected = String(barber.id) === String(selectedBarberId ?? '');
               const imageUri = barber?.image_url || '';
 
@@ -155,6 +157,25 @@ export default function BarberSelection({
               );
             })}
           </View>
+
+          {/* Continue button */}
+          {onContinue && selectedBarberId && (
+            <Animated.View
+              entering={FadeInDown.delay(200).duration(380)}
+              style={s.continueBtnWrap}
+            >
+              <TouchableOpacity
+                onPress={onContinue}
+                activeOpacity={0.88}
+                style={[s.continueBtn, { backgroundColor: colors.primary }]}
+              >
+                <Text style={s.continueBtnText}>
+                  {t('booking.continue', 'Continue')}
+                </Text>
+                <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+            </Animated.View>
+          )}
         </ScrollView>
       )}
     </Animated.View>
@@ -167,17 +188,14 @@ const s = StyleSheet.create({
     marginBottom: 24,
   },
   headerTitle: {
-    color: '#FFFFFF',
+    color: '#1C1C1E',
     fontSize: 22,
     fontWeight: '800',
     textAlign: 'center',
     letterSpacing: -0.3,
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
   },
   headerSub: {
-    color: 'rgba(255,255,255,0.65)',
+    color: '#6B7280',
     fontSize: 14,
     fontWeight: '500',
     textAlign: 'center',
@@ -265,5 +283,30 @@ const s = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 12,
     elevation: 0,
+  },
+  continueBtnWrap: {
+    marginTop: 24,
+    alignItems: 'center',
+  },
+  continueBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 36,
+    borderRadius: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 8,
+    width: '100%',
+  },
+  continueBtnText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: -0.3,
   },
 });

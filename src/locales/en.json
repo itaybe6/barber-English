@@ -89,8 +89,8 @@
   "booking.field.services": "Services",
   "booking.price": "₪",
   "booking.selectBarber": "Choose your specialist",
-  "booking.selectBarberHint": "Who would you like to book with?"
-  ,
+  "booking.selectBarberHint": "Who would you like to book with?",
+  "booking.continue": "Continue",
   "booking.chooseTime": "Choose Time",
   "booking.chooseDateHint": "Select a barber and service to see available dates.",
   "booking.loadingWindow": "Loading...",

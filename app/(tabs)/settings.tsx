@@ -131,9 +131,10 @@ export default function SettingsScreen() {
   const [editableServices, setEditableServices] = useState<Service[]>([]);
   const [isLoadingServices, setIsLoadingServices] = useState(false);
   const [savingServiceId, setSavingServiceId] = useState<string | null>(null);
+  const [savedServiceId, setSavedServiceId] = useState<string | null>(null);
   const [servicesError, setServicesError] = useState<string | null>(null);
   const [expandedServiceId, setExpandedServiceId] = useState<string | null>(null);
-  const [editDurationDropdownFor, setEditDurationDropdownFor] = useState<string | null>(null);
+  const [isAddingService, setIsAddingService] = useState(false);
 
   // Business profile state
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
@@ -828,6 +829,8 @@ export default function SettingsScreen() {
     setShowServicesModal(true);
     setIsLoadingServices(true);
     setServicesError(null);
+    setIsAddingService(false);
+    setExpandedServiceId(null);
     try {
       const data = await servicesApi.getAllServices();
       // Filter to only services belonging to the logged-in worker
@@ -844,13 +847,11 @@ export default function SettingsScreen() {
       setServicesError(t('settings.services.loadFailed','Error loading services'));
     } finally {
       setIsLoadingServices(false);
-      // defer to allow modal mount
-      setTimeout(() => animateOpenSheet(), 0);
     }
   };
 
   const closeServicesModal = () => {
-    animateCloseSheet(() => setShowServicesModal(false));
+    setShowServicesModal(false);
   };
 
 
@@ -1350,16 +1351,12 @@ export default function SettingsScreen() {
   };
 
 
-  const handleOpenAddService = async () => {
-    // Close the services bottom sheet first to avoid overlay blocking touches
-    if (showServicesModal) {
-      animateCloseSheet(() => setShowServicesModal(false));
-    }
-    // Small delay to ensure sheet closed before opening new modal
-    setTimeout(async () => {
-      setShowAddServiceModal(true);
-      // category selection removed
-    }, 250);
+  const handleOpenAddService = () => {
+    setAddSvcName('');
+    setAddSvcPrice('0');
+    setAddSvcDuration('60');
+    setAddSvcImageUrl(null);
+    setIsAddingService(true);
   };
 
   const handleCreateService = async () => {
@@ -1374,15 +1371,13 @@ export default function SettingsScreen() {
         price: parseFloat(addSvcPrice) || 0,
         duration_minutes: parseInt(addSvcDuration, 10) || 60,
         is_active: true,
-        // associate the service to the logged-in worker
         worker_id: (user?.id as any) as any,
         image_url: addSvcImageUrl || undefined,
       } as any);
       if (created) {
         setEditableServices(prev => [created, ...prev]);
-        setShowAddServiceModal(false);
-        // reset
-        setAddSvcName('New Service');
+        setIsAddingService(false);
+        setAddSvcName('');
         setAddSvcPrice('0');
         setAddSvcDuration('60');
         setAddSvcImageUrl(null);
@@ -1487,7 +1482,6 @@ export default function SettingsScreen() {
         image_url: service.image_url,
         duration_minutes: service.duration_minutes,
         is_active: service.is_active,
-        // ensure association remains with the logged-in worker
         worker_id: (user?.id as any) as any,
       } as any);
       if (!updated) {
@@ -1495,7 +1489,9 @@ export default function SettingsScreen() {
         return;
       }
       setEditableServices(prev => prev.map(s => (s.id === service.id ? updated : s)));
-      Alert.alert(t('success.generic','Success'), t('settings.services.saveSuccess','Service saved successfully'));
+      setExpandedServiceId(null);
+      setSavedServiceId(service.id);
+      setTimeout(() => setSavedServiceId(null), 2000);
     } catch (e) {
       Alert.alert(t('error.generic','Error'), t('settings.services.saveFailed','Failed to save service'));
     } finally {
@@ -2125,7 +2121,12 @@ export default function SettingsScreen() {
       </LinearGradient>
       
       <View style={styles.contentWrapper}>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          automaticallyAdjustKeyboardInsets
+        >
         
         <Text style={styles.sectionTitleNew}>{t('settings.sections.notificationsMessages','Notifications & messages')}</Text>
         
@@ -3867,30 +3868,14 @@ export default function SettingsScreen() {
           </View>
         </SafeAreaView>
       </Modal>
-      {/* Services Edit Modal as animated bottom sheet */}
+      {/* Services Edit Modal */}
       <Modal
         visible={showServicesModal}
-        transparent
-        animationType="fade"
+        animationType="slide"
+        presentationStyle="pageSheet"
         onRequestClose={closeServicesModal}
       >
-        <KeyboardAvoidingView 
-          style={{ flex: 1 }} 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-        >
-          <View style={styles.sheetRoot}>
-            <TouchableWithoutFeedback onPress={closeServicesModal}>
-              <Animated.View style={[styles.sheetOverlay, { opacity: overlayOpacity }]} />
-            </TouchableWithoutFeedback>
-            <Animated.View
-              style={[styles.sheetContainer, { transform: [{ translateY: combinedTranslateY }] } ] }
-            >
-            <View style={styles.dragHandleArea}>
-              <View style={styles.sheetGrabberWrapper} {...panResponder.panHandlers}>
-                <View style={styles.sheetGrabber} />
-              </View>
-            </View>
+        <SafeAreaView style={{ flex: 1, backgroundColor: Colors.white }}>
             <View style={styles.servicesModalHeader}>
               <TouchableOpacity 
                 style={styles.servicesModalCloseButton}
@@ -3901,29 +3886,33 @@ export default function SettingsScreen() {
                 <X size={20} color={Colors.text} />
               </TouchableOpacity>
               <Text style={styles.servicesModalTitle}>{t('settings.services.edit','Edit services')}</Text>
-              <TouchableOpacity 
-                style={styles.modalActionButton}
-                onPress={handleOpenAddService}
-                accessibilityRole="button"
-                accessibilityLabel={t('settings.services.add','Add service')}
-              >
-                <Text style={styles.modalActionText}>+</Text>
-              </TouchableOpacity>
+              {!isAddingService ? (
+                <TouchableOpacity 
+                  style={styles.svcAddButton}
+                  onPress={handleOpenAddService}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('settings.services.add','Add service')}
+                >
+                  <Text style={[styles.svcAddButtonText, { color: businessColors.primary }]}>+ {t('settings.services.add','Add')}</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={{ width: 60 }} />
+              )}
             </View>
-            <View style={styles.sheetBody}>
+            <View style={[styles.sheetBody, { flex: 1 }]}>
               <ScrollView
                 style={{ flex: 1 }}
-                contentContainerStyle={[styles.modalContentContainer, { paddingBottom: insets.bottom + 8 }]}
-                showsVerticalScrollIndicator={true}
+                contentContainerStyle={[styles.modalContentContainer, { paddingBottom: insets.bottom + 40 }]}
+                showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
-                nestedScrollEnabled={false}
-                scrollIndicatorInsets={{ bottom: 0 }}
-                alwaysBounceVertical
+                keyboardDismissMode="interactive"
+                nestedScrollEnabled
+                automaticallyAdjustKeyboardInsets
               >
                 {isLoadingServices && (
-                  <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                  <View style={{ paddingVertical: 32, alignItems: 'center' }}>
                     <ActivityIndicator size="large" color={businessColors.primary} />
-                    <Text style={{ marginTop: 12, color: Colors.subtext }}>{t('settings.services.loading','Loading services...')}</Text>
+                    <Text style={{ marginTop: 12, color: Colors.subtext, fontSize: 14 }}>{t('settings.services.loading','Loading services...')}</Text>
                   </View>
                 )}
 
@@ -3931,363 +3920,324 @@ export default function SettingsScreen() {
                   <Text style={{ color: 'red', textAlign: 'center', marginVertical: 12 }}>{servicesError}</Text>
                 )}
 
-                {!isLoadingServices && !servicesError && editableServices.map((svc, index) => (
-                  <Swipeable
-                    key={svc.id}
-                    friction={2}
-                    rightThreshold={28}
-                    renderRightActions={(progress, dragX) => (
-                      <TouchableOpacity
-                        style={styles.swipeDeleteAction}
-                        activeOpacity={0.85}
-                        onPress={() => handleDeleteService(svc.id)}
-                      >
-                        <Trash2 size={20} color={'#fff'} />
-                        <Text style={styles.swipeDeleteText}>{t('settings.services.delete','Delete')}</Text>
+                {/* Inline Add Service Form */}
+                {isAddingService && (
+                  <View style={styles.svcAddCard}>
+                    <View style={styles.svcAddCardHeader}>
+                      <Text style={styles.svcAddCardTitle}>{t('settings.services.newService','New service')}</Text>
+                      <TouchableOpacity onPress={() => setIsAddingService(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <X size={18} color={Colors.subtext} />
                       </TouchableOpacity>
-                    )}
-                  >
-                    <View style={styles.iosCard}>
+                    </View>
+
+                    {/* Image picker row */}
+                    <TouchableOpacity
+                      style={styles.svcAddImageRow}
+                      onPress={async () => {
+                        try {
+                          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                          if (status !== 'granted') { Alert.alert(t('permission.required','Permission Required'), t('settings.common.galleryPermissionImage','Please allow gallery access')); return; }
+                          const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', allowsMultipleSelection: false, quality: 0.9, base64: true });
+                          if (result.canceled || !result.assets?.length) return;
+                          const a: any = result.assets[0];
+                          setAddSvcUploadingImage(true);
+                          const uploadedUrl = await uploadServiceImage({ uri: a.uri, base64: a.base64 ?? null, mimeType: a.mimeType ?? null, fileName: a.fileName ?? null });
+                          if (uploadedUrl) setAddSvcImageUrl(uploadedUrl);
+                        } catch { } finally { setAddSvcUploadingImage(false); }
+                      }}
+                      activeOpacity={0.85}
+                      disabled={addSvcUploadingImage}
+                    >
+                      {addSvcImageUrl ? (
+                        <Image source={{ uri: addSvcImageUrl }} style={styles.svcAddImageThumb} resizeMode="cover" />
+                      ) : (
+                        <View style={styles.svcAddImagePlaceholder}>
+                          {addSvcUploadingImage ? (
+                            <ActivityIndicator size="small" color={businessColors.primary} />
+                          ) : (
+                            <Ionicons name="camera-outline" size={22} color={Colors.subtext} />
+                          )}
+                        </View>
+                      )}
+                      <Text style={[styles.svcAddImageLabel, { color: businessColors.primary }]}>
+                        {addSvcUploadingImage ? t('settings.common.uploading','Uploading...') : addSvcImageUrl ? t('settings.services.changeImage','Change image') : t('settings.services.uploadImage','Add photo')}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <View style={styles.formGroup}>
+                      <Text style={styles.formLabel}>{t('settings.services.name','Service name')} *</Text>
+                      <TextInput
+                        style={styles.formInput}
+                        value={addSvcName}
+                        onChangeText={setAddSvcName}
+                        placeholder={t('settings.services.enterName','e.g. Haircut')}
+                        placeholderTextColor={Colors.subtext}
+                      />
+                    </View>
+
+                    <View style={[styles.twoColumnRow, { flexDirection: 'row', marginBottom: 12 }]}>
+                      <View style={[styles.formGroup, styles.twoColumnItem, { marginBottom: 0 }]}>
+                        <Text style={styles.formLabel}>{t('settings.services.price','Price (₪)')} *</Text>
+                        <TextInput
+                          style={styles.formInput}
+                          value={addSvcPrice}
+                          onChangeText={(v) => setAddSvcPrice(v.replace(/[^0-9.]/g, ''))}
+                          placeholder="0"
+                          placeholderTextColor={Colors.subtext}
+                          keyboardType="numeric"
+                        />
+                      </View>
+                      <View style={[styles.formGroup, styles.twoColumnItem, { marginBottom: 0 }]}>
+                        <Text style={styles.formLabel}>{t('settings.services.duration','Duration')} *</Text>
+                        <TextInput
+                          style={styles.formInput}
+                          value={addSvcDuration}
+                          onChangeText={(v) => setAddSvcDuration(v.replace(/[^0-9]/g, ''))}
+                          placeholder="60"
+                          placeholderTextColor={Colors.subtext}
+                          keyboardType="numeric"
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.svcDurationChipRow}>
+                      {[15, 20, 30, 45, 60, 90, 120].map(mins => (
+                        <TouchableOpacity
+                          key={mins}
+                          style={[styles.svcDurationChip, addSvcDuration === String(mins) && { backgroundColor: businessColors.primary, borderColor: businessColors.primary }]}
+                          onPress={() => setAddSvcDuration(String(mins))}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={[styles.svcDurationChipText, addSvcDuration === String(mins) && { color: '#fff' }]}>{mins}'</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <View style={styles.svcAddActions}>
                       <TouchableOpacity
-                        style={[styles.accordionHeader, { flexDirection: 'row' }]}
-                        activeOpacity={0.85}
-                        onPress={() => setExpandedServiceId(prev => prev === svc.id ? null : svc.id)}
+                        style={[styles.svcCancelButton]}
+                        onPress={() => setIsAddingService(false)}
+                        activeOpacity={0.8}
                       >
-                          {/* Right: thumbnail */}
-                          <View style={{ marginLeft: 0, marginRight: 12, position: 'relative' }}>
-                            <TouchableOpacity onPress={() => handlePickServiceImage(svc.id)} activeOpacity={0.85}>
-                              {svc.image_url ? (
-                                <Image source={{ uri: svc.image_url }} style={[styles.accordionThumb]} />
-                              ) : (
-                                <View style={[styles.accordionThumbPlaceholder]}>
-                                  <Text style={styles.accordionThumbPlaceholderText}>
-                                    {(svc.name || '').slice(0, 1)}
-                                  </Text>
-                                </View>
-                              )}
-                            </TouchableOpacity>
-                            {uploadingServiceId === svc.id && (
-                              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 8 }}>
-                                <ActivityIndicator size="small" color={businessColors.primary} />
+                        <Text style={styles.svcCancelButtonText}>{t('cancel','Cancel')}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.svcSaveButton, { backgroundColor: businessColors.primary, opacity: (addSvcIsSaving || addSvcUploadingImage) ? 0.7 : 1 }]}
+                        onPress={handleCreateService}
+                        disabled={addSvcIsSaving || addSvcUploadingImage}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.svcSaveButtonText}>
+                          {addSvcIsSaving ? t('settings.common.saving','Saving...') : t('settings.services.add','Add service')}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {/* Empty state */}
+                {!isLoadingServices && !servicesError && editableServices.length === 0 && !isAddingService && (
+                  <View style={styles.svcEmptyState}>
+                    <View style={[styles.svcEmptyIcon, { backgroundColor: `${businessColors.primary}15` }]}>
+                      <Ionicons name="cut-outline" size={32} color={businessColors.primary} />
+                    </View>
+                    <Text style={styles.svcEmptyTitle}>{t('settings.services.emptyTitle','No services yet')}</Text>
+                    <Text style={styles.svcEmptySubtitle}>{t('settings.services.emptySubtitle','Add your first service to get started')}</Text>
+                    <TouchableOpacity
+                      style={[styles.svcSaveButton, { backgroundColor: businessColors.primary, marginTop: 16 }]}
+                      onPress={handleOpenAddService}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.svcSaveButtonText}>+ {t('settings.services.add','Add service')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Service cards list */}
+                {!isLoadingServices && !servicesError && editableServices.map((svc) => {
+                  const isExpanded = expandedServiceId === svc.id;
+                  const isSaving = savingServiceId === svc.id;
+                  const justSaved = savedServiceId === svc.id;
+                  return (
+                    <Swipeable
+                      key={svc.id}
+                      friction={2}
+                      rightThreshold={40}
+                      renderRightActions={() => (
+                        <TouchableOpacity
+                          style={styles.swipeDeleteAction}
+                          activeOpacity={0.85}
+                          onPress={() => handleDeleteService(svc.id)}
+                        >
+                          <Trash2 size={20} color={'#fff'} />
+                          <Text style={styles.swipeDeleteText}>{t('settings.services.delete','Delete')}</Text>
+                        </TouchableOpacity>
+                      )}
+                    >
+                      <View style={[styles.svcCard, justSaved && styles.svcCardSaved]}>
+                        {/* Collapsed header row */}
+                        <TouchableOpacity
+                          style={styles.svcCardHeader}
+                          activeOpacity={0.85}
+                          onPress={() => setExpandedServiceId(prev => prev === svc.id ? null : svc.id)}
+                        >
+                          {/* Thumbnail */}
+                          <TouchableOpacity
+                            onPress={() => handlePickServiceImage(svc.id)}
+                            activeOpacity={0.85}
+                            style={{ position: 'relative' }}
+                          >
+                            {svc.image_url ? (
+                              <Image source={{ uri: svc.image_url }} style={styles.svcThumb} />
+                            ) : (
+                              <View style={[styles.svcThumbPlaceholder, { backgroundColor: `${businessColors.primary}20` }]}>
+                                <Text style={[styles.svcThumbInitial, { color: businessColors.primary }]}>
+                                  {(svc.name || '?').slice(0, 1).toUpperCase()}
+                                </Text>
                               </View>
                             )}
-                          </View>
-                          {/* Middle: title and subtitle */}
-                          <View style={{ flex: 1, alignItems: 'flex-start' }}>
-                            <Text style={styles.accordionTitle}>{svc.name || t('common.noName','No name')}</Text>
-                            <Text style={styles.accordionSubtitle}>
-                              {typeof svc.price === 'number' ? `$${svc.price}` : t('common.noPrice','No price')}
+                            {uploadingServiceId === svc.id && (
+                              <View style={styles.svcThumbUploadOverlay}>
+                                <ActivityIndicator size="small" color="#fff" />
+                              </View>
+                            )}
+                          </TouchableOpacity>
+
+                          {/* Info */}
+                          <View style={styles.svcCardInfo}>
+                            <Text style={styles.svcCardName} numberOfLines={1}>{svc.name || t('common.noName','No name')}</Text>
+                            <Text style={styles.svcCardMeta}>
+                              {typeof svc.price === 'number' ? `₪${svc.price}` : '—'}
+                              {svc.duration_minutes ? `  ·  ${svc.duration_minutes} ${t('settings.services.minShort','min')}` : ''}
                             </Text>
                           </View>
-                          {/* Left: chevron */}
-                          <View style={styles.accordionChevron}>
-                            {expandedServiceId === svc.id ? (
-                              <ChevronUp size={18} color={businessColors.primary} />
+
+                          {/* Right side */}
+                          <View style={styles.svcCardRight}>
+                            {justSaved ? (
+                              <View style={[styles.svcSavedBadge, { backgroundColor: `${businessColors.primary}15` }]}>
+                                <Check size={14} color={businessColors.primary} />
+                                <Text style={[styles.svcSavedText, { color: businessColors.primary }]}>{t('saved','Saved')}</Text>
+                              </View>
                             ) : (
-                              <ChevronDown size={18} color={businessColors.primary} />
+                              isExpanded ? <ChevronUp size={18} color={businessColors.primary} /> : <ChevronDown size={18} color={Colors.subtext} />
                             )}
                           </View>
                         </TouchableOpacity>
 
-                    {expandedServiceId === svc.id && (
-                      <View>
-                        <View style={styles.imageHeaderContainer}>
-                          <View style={{ width: 120, height: 120, borderRadius: 16, overflow: 'hidden' }}>
-                            {svc.image_url ? (
-                              <Image source={{ uri: svc.image_url }} style={styles.serviceImagePreview} resizeMode="cover" />
-                            ) : (
-                              <View style={[styles.accordionThumbPlaceholder, { width: 120, height: 120, borderRadius: 16 }]}>
-                                <Text style={styles.accordionThumbPlaceholderText}>
-                                  {(svc.name || '').slice(0, 1)}
-                                </Text>
+                        {/* Expanded edit form */}
+                        {isExpanded && (
+                          <View style={styles.svcExpandedForm}>
+                            <View style={styles.svcFormDivider} />
+
+                            <View style={styles.formGroup}>
+                              <Text style={styles.formLabel}>{t('settings.services.name','Service name')}</Text>
+                              <TextInput
+                                style={styles.formInput}
+                                value={svc.name}
+                                onChangeText={(v) => updateLocalServiceField(svc.id, 'name', v)}
+                                textAlign="left"
+                              />
+                            </View>
+
+                            <View style={[styles.twoColumnRow, { flexDirection: 'row', marginBottom: 4 }]}>
+                              <View style={[styles.formGroup, styles.twoColumnItem]}>
+                                <Text style={styles.formLabel}>{t('settings.services.price','Price (₪)')}</Text>
+                                <TextInput
+                                  style={styles.formInput}
+                                  value={String(svc.price ?? '')}
+                                  onChangeText={(v) => {
+                                    const num = parseFloat(v.replace(/[^0-9.]/g, ''));
+                                    updateLocalServiceField(svc.id, 'price', isNaN(num) ? 0 : num);
+                                  }}
+                                  keyboardType="numeric"
+                                  textAlign="left"
+                                />
                               </View>
-                            )}
-                            {uploadingServiceId === svc.id && (
-                              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.15)' }}>
-                                <ActivityIndicator size="small" color={businessColors.primary} />
+                              <View style={[styles.formGroup, styles.twoColumnItem]}>
+                                <Text style={styles.formLabel}>{t('settings.services.duration','Duration (min)')}</Text>
+                                <TextInput
+                                  style={styles.formInput}
+                                  value={String(svc.duration_minutes ?? '')}
+                                  onChangeText={(v) => {
+                                    const num = parseInt(v.replace(/[^0-9]/g, ''), 10);
+                                    updateLocalServiceField(svc.id, 'duration_minutes', isNaN(num) ? 0 : num as any);
+                                  }}
+                                  keyboardType="numeric"
+                                  textAlign="left"
+                                />
                               </View>
-                            )}
-                          </View>
-                          <TouchableOpacity
-                            onPress={() => handlePickServiceImage(svc.id)}
-                            style={[styles.pickButton, { alignSelf: 'center' }]}
-                            activeOpacity={0.85}
-                            disabled={uploadingServiceId === svc.id}
-                          >
-                            <Text style={styles.pickButtonText}>
-                              {uploadingServiceId === svc.id
-                                ? t('settings.common.uploading','Uploading...')
-                                : (svc.image_url ? t('settings.services.changeImage','Change image') : t('settings.services.uploadImage','Upload image'))}
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
+                            </View>
 
-                        <View style={styles.formGroup}>
-                          <Text style={styles.formLabel}>{t('settings.services.name','Service name')}</Text>
-                          <TextInput
-                            style={styles.formInput}
-                            value={svc.name}
-                            onChangeText={(t) => updateLocalServiceField(svc.id, 'name', t)}
-                            textAlign="left"
-                          />
-                        </View>
+                            {/* Duration quick chips */}
+                            <View style={styles.svcDurationChipRow}>
+                              {[15, 20, 30, 45, 60, 90, 120].map(mins => {
+                                const selected = svc.duration_minutes === mins;
+                                return (
+                                  <TouchableOpacity
+                                    key={mins}
+                                    style={[styles.svcDurationChip, selected && { backgroundColor: businessColors.primary, borderColor: businessColors.primary }]}
+                                    onPress={() => updateLocalServiceField(svc.id, 'duration_minutes', mins as any)}
+                                    activeOpacity={0.8}
+                                  >
+                                    <Text style={[styles.svcDurationChipText, selected && { color: '#fff' }]}>{mins}'</Text>
+                                  </TouchableOpacity>
+                                );
+                              })}
+                            </View>
 
-                        
-
-                        <View style={[styles.twoColumnRow, { flexDirection: 'row' }]}>
-                          <View style={[styles.formGroup, styles.twoColumnItem]}>
-                            <Text style={[styles.formLabel, { textAlign: 'left' }]}>{t('settings.services.price','Price ($)')}</Text>
-                            <TextInput
-                              style={styles.formInput}
-                              value={String(svc.price ?? '')}
-                              onChangeText={(t) => {
-                                const num = parseFloat(t.replace(/[^0-9.]/g, ''));
-                                updateLocalServiceField(svc.id, 'price', isNaN(num) ? 0 : num);
-                              }}
-                              keyboardType="numeric"
-                              textAlign="left"
-                            />
-                          </View>
-                          <View style={[styles.formGroup, styles.twoColumnItem]}>
-                            <Text style={styles.formLabel}>{t('settings.services.duration','Duration (minutes)')}</Text>
-                            <Pressable
-                              style={styles.dropdownContainer}
-                              onPress={() => setEditDurationDropdownFor(prev => prev === svc.id ? null : svc.id)}
+                            {/* Image row */}
+                            <TouchableOpacity
+                              style={styles.svcImageEditRow}
+                              onPress={() => handlePickServiceImage(svc.id)}
+                              activeOpacity={0.85}
+                              disabled={uploadingServiceId === svc.id}
                             >
-                              <View style={styles.dropdownHeader}>
-                                <Text style={[styles.dropdownText, { textAlign: 'left' }, !svc.duration_minutes && styles.dropdownPlaceholder]}> 
-                                  {svc.duration_minutes ? `${svc.duration_minutes} ${t('settings.services.minutes','minutes')}` : t('settings.services.selectDuration','Select duration...')}
+                              {svc.image_url ? (
+                                <Image source={{ uri: svc.image_url }} style={styles.svcImageEditThumb} resizeMode="cover" />
+                              ) : (
+                                <View style={[styles.svcImageEditPlaceholder, { backgroundColor: `${businessColors.primary}10` }]}>
+                                  <Ionicons name="image-outline" size={20} color={businessColors.primary} />
+                                </View>
+                              )}
+                              <Text style={[styles.svcImageEditLabel, { color: businessColors.primary }]}>
+                                {uploadingServiceId === svc.id ? t('settings.common.uploading','Uploading...') : svc.image_url ? t('settings.services.changeImage','Change image') : t('settings.services.uploadImage','Add photo')}
+                              </Text>
+                              {uploadingServiceId === svc.id && <ActivityIndicator size="small" color={businessColors.primary} style={{ marginLeft: 8 }} />}
+                            </TouchableOpacity>
+
+                            {/* Actions */}
+                            <View style={styles.svcExpandedActions}>
+                              <TouchableOpacity
+                                style={styles.svcDeleteButton}
+                                onPress={() => handleDeleteService(svc.id)}
+                                activeOpacity={0.85}
+                              >
+                                <Trash2 size={16} color="#FF3B30" />
+                                <Text style={styles.svcDeleteButtonText}>{t('settings.services.delete','Delete')}</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={[styles.svcSaveButton, { backgroundColor: businessColors.primary, opacity: isSaving ? 0.7 : 1, flex: 1 }]}
+                                onPress={() => handleSaveService(svc)}
+                                disabled={isSaving}
+                                activeOpacity={0.85}
+                              >
+                                <Text style={styles.svcSaveButtonText}>
+                                  {isSaving ? t('settings.common.saving','Saving...') : t('settings.services.saveChanges','Save changes')}
                                 </Text>
-                                {editDurationDropdownFor === svc.id ? (
-                                  <ChevronUp size={20} color={businessColors.primary} />
-                                ) : (
-                                  <ChevronDown size={20} color={businessColors.primary} />
-                                )}
-                              </View>
-                            </Pressable>
-                            {editDurationDropdownFor === svc.id && (
-                              <View style={styles.dropdownOptions}>
-                                <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                                  {durationOptions.map((mins, idx) => (
-                                    <Pressable
-                                      key={mins}
-                                      style={[styles.dropdownOption, idx === durationOptions.length - 1 && styles.dropdownOptionLast]}
-                                      onPress={() => { updateLocalServiceField(svc.id, 'duration_minutes', mins as any); setEditDurationDropdownFor(null); }}
-                                    >
-                                      <Text style={[styles.dropdownOptionTitle, { textAlign: 'left' }]}>{`${mins} ${t('settings.services.minutes','minutes')}`}</Text>
-                                    </Pressable>
-                                  ))}
-                                </ScrollView>
-                              </View>
-                            )}
+                              </TouchableOpacity>
+                            </View>
                           </View>
-                        </View>
-
-                        
-
-                        <View style={styles.actionsRowInline}>
-                          <TouchableOpacity
-                            style={[styles.primaryPillButton, { opacity: savingServiceId === svc.id ? 0.7 : 1 }]}
-                            onPress={() => handleSaveService(svc)}
-                            disabled={savingServiceId === svc.id}
-                            activeOpacity={0.85}
-                          >
-                            <Text style={styles.primaryPillButtonText}>
-                              {savingServiceId === svc.id ? t('settings.common.saving','Saving...') : t('settings.services.saveChanges','Save changes')}
-                            </Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={styles.deleteIconButton}
-                            onPress={() => handleDeleteService(svc.id)}
-                            activeOpacity={0.85}
-                            accessibilityRole="button"
-                            accessibilityLabel={t('settings.services.a11yDelete','Delete service')}
-                          >
-                            <Trash2 size={20} color="#FF3B30" />
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    )}
+                        )}
                       </View>
                     </Swipeable>
-                ))}
+                  );
+                })}
               </ScrollView>
             </View>
-          </Animated.View>
-        </View>
-        </KeyboardAvoidingView>
+        </SafeAreaView>
       </Modal>
 
-      {/* Add Service Modal */}
-      <Modal
-        visible={showAddServiceModal}
-        animationType="slide"
-        presentationStyle="overFullScreen"
-        transparent={true}
-        onRequestClose={() => setShowAddServiceModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <TouchableWithoutFeedback onPress={() => setShowAddServiceModal(false)}>
-            <View style={{ flex: 1 }} />
-          </TouchableWithoutFeedback>
-          <View style={styles.modalBottomSheet}>
-            <KeyboardAvoidingView
-              behavior={Platform.select({ ios: 'padding', android: undefined })}
-              keyboardVerticalOffset={Platform.select({ ios: 0, android: 0 }) as number}
-              style={{ flex: 1 }}
-            >
-            <View style={styles.dragHandleArea}>
-              <View style={styles.sheetGrabberWrapper}>
-                <View style={styles.sheetGrabber} />
-              </View>
-            </View>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity 
-                style={[styles.modalCloseButton, { marginLeft: -10, paddingLeft: 0 }]}
-                onPress={() => setShowAddServiceModal(false)}
-                accessibilityRole="button"
-                accessibilityLabel={t('close','Close')}
-              >
-                <X size={20} color={Colors.text} />
-              </TouchableOpacity>
-              <Text style={[styles.modalTitle, { textAlign: 'center', flex: 1, marginLeft: -44 }]}>
-                Add Service
-              </Text>
-              <View style={{ width: 44 }} />
-            </View>
-            <ScrollView 
-              style={styles.modalContent}
-              contentContainerStyle={{ paddingBottom: 30 }}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.modalFormContent}>
-                {/* Image picker for service */}
-                <TouchableOpacity
-                  style={styles.imagePickerButton}
-                  onPress={async () => {
-                    try {
-                      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-                      if (status !== 'granted') {
-                        Alert.alert(t('permission.required','Permission Required'), t('settings.common.galleryPermissionImage','Please allow gallery access to pick an image'));
-                        return;
-                      }
-                      const result = await ImagePicker.launchImageLibraryAsync({
-                        mediaTypes: 'images',
-                        allowsMultipleSelection: false,
-                        quality: 0.9,
-                        base64: true,
-                      });
-                      if (result.canceled || !result.assets?.length) return;
-                      const a: any = result.assets[0];
-                      setAddSvcUploadingImage(true);
-                      const uploadedUrl = await uploadServiceImage({
-                        uri: a.uri,
-                        base64: a.base64 ?? null,
-                        mimeType: a.mimeType ?? null,
-                        fileName: a.fileName ?? null,
-                      });
-                      if (!uploadedUrl) {
-                        Alert.alert(t('error.generic','Error'), t('profile.uploadFailed','Failed to upload image'));
-                        return;
-                      }
-                      setAddSvcImageUrl(uploadedUrl);
-                    } catch (e) {
-                      Alert.alert(t('error.generic','Error'), t('profile.uploadFailed','Failed to upload image'));
-                    } finally {
-                      setAddSvcUploadingImage(false);
-                    }
-                  }}
-                  activeOpacity={0.9}
-                  disabled={addSvcUploadingImage}
-                >
-                  {addSvcImageUrl ? (
-                    <Image source={{ uri: addSvcImageUrl }} style={styles.previewImage} resizeMode="cover" />
-                  ) : (
-                    <View style={styles.imagePickerPlaceholder}>
-                      <Ionicons name="image-outline" size={36} color={Colors.subtext} />
-                      <Text style={styles.imagePickerText}>{t('settings.services.uploadImage','Upload image')}</Text>
-                    </View>
-                  )}
-                  {addSvcUploadingImage && (
-                    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 16 }}>
-                      <ActivityIndicator size="small" color={businessColors.primary} />
-                    </View>
-                  )}
-                </TouchableOpacity>
-
-                <View style={styles.formSection}>
-                  <Text style={styles.inputLabel}>{t('settings.services.name','Service name')} *</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    value={addSvcName}
-                    onChangeText={setAddSvcName}
-                    placeholder={t('settings.services.enterName','Enter service name')}
-                    placeholderTextColor={Colors.subtext}
-                  />
-                </View>
-
-                <View style={styles.formSection}>
-                  <Text style={styles.inputLabel}>{t('settings.services.price','Price ($)')} *</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    value={addSvcPrice}
-                    onChangeText={(t) => {
-                      const num = t.replace(/[^0-9.]/g, '');
-                      setAddSvcPrice(num);
-                    }}
-                    placeholder={t('settings.services.pricePlaceholder','0.00')}
-                    placeholderTextColor={Colors.subtext}
-                    keyboardType="numeric"
-                  />
-                </View>
-
-                <View style={styles.formSectionLast}>
-                  <Text style={styles.inputLabel}>{t('settings.services.duration','Duration (minutes)')} *</Text>
-              <Pressable style={styles.dropdownContainer} onPress={() => setShowDurationDropdown(!showDurationDropdown)}>
-                <View style={styles.dropdownHeader}>
-                  <Text style={[styles.dropdownText, { textAlign: 'left' }, !addSvcDuration && styles.dropdownPlaceholder]}>
-                    {addSvcDuration ? `${addSvcDuration} ${t('settings.services.minutes','minutes')}` : t('settings.services.selectDuration','Select duration...')}
-                  </Text>
-                  {showDurationDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
-                </View>
-              </Pressable>
-              {showDurationDropdown && (
-                <View style={styles.dropdownOptions}>
-                  <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                    {durationOptions.map((mins, idx) => (
-                      <Pressable
-                        key={mins}
-                        style={[styles.dropdownOption, idx === durationOptions.length - 1 && styles.dropdownOptionLast]}
-                        onPress={() => { setAddSvcDuration(String(mins)); setShowDurationDropdown(false); }}
-                      >
-                        <Text style={[styles.dropdownOptionTitle, { textAlign: 'left' }]}>{`${mins} minutes`}</Text>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
-            </View>
-            {/* category selection removed */}
-            </View>
-            </ScrollView>
-            
-            {/* Save Button */}
-            <View style={styles.saveButtonContainer}>
-              <TouchableOpacity 
-                style={[styles.saveButton, { backgroundColor: businessColors.primary, opacity: (addSvcIsSaving || addSvcUploadingImage) ? 0.7 : 1 }]}
-                onPress={handleCreateService}
-                disabled={addSvcIsSaving || addSvcUploadingImage}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.saveButtonText}>
-                  {addSvcIsSaving ? 'Saving...' : 'Add Service'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </KeyboardAvoidingView>
-          </View>
-        </View>
-      </Modal>
 
       {/* Add Coupon Modal */}
       <Modal
@@ -5147,9 +5097,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 0,
-    borderBottomColor: 'transparent',
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E5EA',
     backgroundColor: Colors.white,
   },
   servicesModalCloseButton: {
@@ -5834,7 +5784,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF3B30',
     borderTopRightRadius: 16,
     borderBottomRightRadius: 16,
-    marginVertical: 8,
+    marginVertical: 6,
   },
   swipeDeleteText: {
     color: '#fff',
@@ -5842,6 +5792,284 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontWeight: '600',
   },
+
+  // Services "Add" button in header
+  svcAddButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'transparent',
+    minWidth: 60,
+    alignItems: 'center',
+  },
+  svcAddButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+
+  // Inline Add Service card
+  svcAddCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 4,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: '#E5E5EA',
+    borderStyle: 'dashed',
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 },
+      android: { elevation: 2 },
+    }),
+  },
+  svcAddCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  svcAddCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  svcAddImageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+    gap: 10,
+  },
+  svcAddImageThumb: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: '#F2F2F7',
+  },
+  svcAddImagePlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: '#F2F2F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  svcAddImageLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  svcDurationChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 14,
+  },
+  svcDurationChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#E5E5EA',
+    backgroundColor: '#F2F2F7',
+  },
+  svcDurationChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  svcAddActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  svcCancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: '#F2F2F7',
+  },
+  svcCancelButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  svcSaveButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  svcSaveButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
+  },
+
+  // Service card (list item)
+  svcCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    marginHorizontal: 4,
+    marginVertical: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E5EA',
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4 },
+      android: { elevation: 1 },
+    }),
+  },
+  svcCardSaved: {
+    borderColor: '#34C759',
+    borderWidth: 1.5,
+  },
+  svcCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    gap: 12,
+  },
+  svcThumb: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: '#F2F2F7',
+  },
+  svcThumbPlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  svcThumbInitial: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  svcThumbUploadOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  svcCardInfo: {
+    flex: 1,
+  },
+  svcCardName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 2,
+  },
+  svcCardMeta: {
+    fontSize: 13,
+    color: Colors.subtext,
+  },
+  svcCardRight: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 32,
+  },
+  svcSavedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  svcSavedText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // Expanded form inside service card
+  svcExpandedForm: {
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+  },
+  svcFormDivider: {
+    height: 1,
+    backgroundColor: '#F2F2F7',
+    marginBottom: 12,
+  },
+  svcImageEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    marginBottom: 4,
+  },
+  svcImageEditThumb: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: '#F2F2F7',
+  },
+  svcImageEditPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  svcImageEditLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  svcExpandedActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+  },
+  svcDeleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,59,48,0.08)',
+  },
+  svcDeleteButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FF3B30',
+  },
+
+  // Empty state
+  svcEmptyState: {
+    alignItems: 'center',
+    paddingVertical: 48,
+    paddingHorizontal: 32,
+  },
+  svcEmptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  svcEmptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.text,
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  svcEmptySubtitle: {
+    fontSize: 14,
+    color: Colors.subtext,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+
   // deleteIconText removed in favor of vector icon
 
   // Image Preview Modal Styles

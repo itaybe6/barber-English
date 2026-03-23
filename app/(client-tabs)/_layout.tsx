@@ -14,10 +14,6 @@ export default function ClientTabsLayout() {
 
   const [loginModal, setLoginModal] = React.useState<{ visible: boolean; title?: string; message?: string }>({ visible: false });
 
-  React.useEffect(() => {
-    // re-render when colorUpdateTrigger changes
-  }, [colorUpdateTrigger]);
-
   return (
     <MenuProvider>
       <View style={{ flex: 1 }}>

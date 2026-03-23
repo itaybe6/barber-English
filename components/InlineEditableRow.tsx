@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet, Animated, Easing, Platform, KeyboardAvoidingView, I18nManager } from 'react-native';
-import { ChevronRight, Check } from 'lucide-react-native';
+import { ChevronLeft, Check } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useTranslation } from 'react-i18next';
@@ -135,7 +135,7 @@ export default function InlineEditableRow({
           <Text style={styles.title}>{title}</Text>
         </View>
         <Animated.View style={[styles.chevronWrap, { transform: [{ rotate: chevronRotate }] }]}>
-          <ChevronRight size={20} color={chevronColor || Colors.primary} />
+          <ChevronLeft size={20} color={chevronColor || Colors.primary} />
         </Animated.View>
       </TouchableOpacity>
       <Animated.View style={[styles.expandWrap, { maxHeight, opacity: opacityAnim }]}>

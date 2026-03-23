@@ -2,7 +2,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
-import { Text, View, I18nManager } from 'react-native';
+import { Text, View } from 'react-native';
 import i18n from '@/src/config/i18n';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as Notifications from 'expo-notifications';
@@ -15,9 +15,7 @@ import { ThemeProvider } from '@/src/theme/ThemeProvider';
 import { ColorUpdateProvider } from '@/lib/contexts/ColorUpdateContext';
 import { StatusBar } from 'expo-status-bar';
 
-// Configure RTL layout properly
-I18nManager.allowRTL(false);
-I18nManager.forceRTL(false);
+// RTL is configured by i18n.ensureLayoutDirection() based on language (he → RTL)
 
 export const unstable_settings = {
   // Remove initialRouteName to let the navigation logic handle routing

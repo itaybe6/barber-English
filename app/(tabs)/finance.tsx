@@ -326,6 +326,7 @@ export default function FinanceScreen() {
 
           {/* ── Expenses ── */}
           <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>הוצאות</Text>
             <TouchableOpacity
               style={[styles.addExpenseBtn, { backgroundColor: primaryColor }]}
               onPress={() => setShowAddExpense(true)}
@@ -334,7 +335,6 @@ export default function FinanceScreen() {
               <Plus size={16} color="#fff" />
               <Text style={styles.addExpenseBtnText}>הוסף הוצאה</Text>
             </TouchableOpacity>
-            <Text style={styles.sectionTitle}>הוצאות</Text>
           </View>
 
           <View style={styles.card}>
@@ -583,7 +583,7 @@ const styles = StyleSheet.create({
 
   // ── Top bar ──
   topBar: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
@@ -652,7 +652,7 @@ const styles = StyleSheet.create({
     right: 20,
   },
   monthRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 20,
@@ -696,7 +696,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   heroMiniRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     backgroundColor: 'rgba(255,255,255,0.14)',
     borderRadius: 16,
     padding: 16,
@@ -756,7 +756,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
   },
   addExpenseBtn: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 16,
@@ -801,7 +801,7 @@ const styles = StyleSheet.create({
 
   // ── Income rows ──
   incomeRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 13,
   },
@@ -816,7 +816,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F4F6FB',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginLeft: 12,
   },
   incomeBadgeText: {
     fontSize: 15,
@@ -842,11 +842,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     color: '#16A34A',
-    marginLeft: 4,
+    marginRight: 4,
     textAlign: 'right',
   },
   totalRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     paddingTop: 14,
     paddingBottom: 2,
     justifyContent: 'space-between',
@@ -874,7 +874,7 @@ const styles = StyleSheet.create({
 
   // ── Expense rows ──
   expenseRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 13,
   },
@@ -882,10 +882,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   expenseTopRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
   },
   expenseDescription: {
     fontSize: 15,
@@ -911,10 +911,10 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   expenseActions: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginLeft: 4,
+    marginLeft: 12,
   },
   expenseAmount: {
     fontSize: 15,
@@ -955,7 +955,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
   },
   fieldInputRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
@@ -1026,7 +1026,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   modalTopRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 24,
@@ -1048,7 +1048,7 @@ const styles = StyleSheet.create({
 
   // Amount entry
   amountBox: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F4F6FB',
@@ -1094,11 +1094,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   categoryGrid: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
     marginBottom: 24,
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
   },
   categoryGridItem: {
     paddingHorizontal: 18,

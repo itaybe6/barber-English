@@ -268,6 +268,7 @@ export interface BusinessExpense {
   description?: string;
   category: ExpenseCategory;
   expense_date: string; // YYYY-MM-DD
+  receipt_url?: string | null;
   created_at: string;
 }
 

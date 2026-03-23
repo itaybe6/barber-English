@@ -315,6 +315,7 @@ const bookingApi = {
       const { data, error } = await supabase
         .from('appointments')
         .update({
+          status: 'cancelled',
           is_available: true,
           client_name: null,
           client_phone: null,

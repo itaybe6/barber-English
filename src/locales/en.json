@@ -691,6 +691,19 @@
       "pricePlaceholder": "0.00",
       "step": { "image": "Image", "details": "Details", "price": "Price" }
     },
+    "appointments": {
+      "loadingForDate": "Loading appointments for {{date}}...",
+      "emptyTitle": "No appointments for this day",
+      "emptySubtitle": "Choose another day from the top bar",
+      "chooseAction": "Choose an action",
+      "callClient": "Call client",
+      "cancelMessage": "This will free the time, mark as cancelled, and make the slot available for rebooking.",
+      "cancelAndFree": "Cancel and free slot",
+      "deleteAppointment": "Delete appointment",
+      "deleteTitle": "Delete appointment",
+      "deleteMessage": "This will permanently remove the appointment. This action cannot be undone.",
+      "openActions": "Open appointment actions"
+    },
     "appointmentsAdmin": {
       "loadingForDate": "Loading appointments for {{date}}...",
       "emptyTitle": "No appointments for this day",
@@ -698,6 +711,10 @@
       "chooseAction": "Choose an action",
       "callClient": "Call client",
       "cancelMessage": "This will free the time and remove the client details for the selected appointment.",
+      "cancelAndFree": "Cancel and free slot",
+      "deleteAppointment": "Delete appointment",
+      "deleteTitle": "Delete appointment",
+      "deleteMessage": "This will permanently remove the appointment. This action cannot be undone.",
       "openActions": "Open appointment actions"
     },
     "hoursAdmin": {

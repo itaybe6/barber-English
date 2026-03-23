@@ -1,10 +1,20 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Image, Dimensions, FlatList } from 'react-native';
+import { View, Text, TouchableOpacity, Image, Dimensions, FlatList, Platform, StyleSheet } from 'react-native';
 import { BlurView } from 'expo-blur';
-import Animated, { useSharedValue, useAnimatedScrollHandler, useAnimatedStyle, interpolate, Extrapolate, runOnJS } from 'react-native-reanimated';
+import Animated, {
+  useSharedValue,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useAnimatedProps,
+  interpolate,
+  Extrapolate,
+  runOnJS,
+} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { Service } from '@/lib/supabase';
+
+const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 
 const SCREEN = Dimensions.get('window');
 const HEADER_HEIGHT = 320; // match barber carousel proportions for consistent framing
@@ -75,12 +85,56 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
     const baseIdx = baseCount > 0 ? ((index % baseCount) + baseCount) % baseCount : 0;
     const service = services[baseIdx];
     const uri = getCurrentImageUrl(baseIdx);
-    const cardStyle = (useAnimatedStyle(() => {
-      const pos = scrollX.value / ITEM_LENGTH;
-      const scale = interpolate(pos, [index - 1, index, index + 1], [0.95, 1.05, 0.95], Extrapolate.CLAMP);
-      const opacity = interpolate(pos, [index - 1, index, index + 1], [0.9, 1, 0.9], Extrapolate.CLAMP);
-      return { transform: [{ scale: scale as any }] as any, opacity } as any;
-    }) as any);
+
+    // Distance-from-center animation: center = 1.0, edges = 0.88 (opal-horizontal-carousel style)
+    const cardStyle = useAnimatedStyle(() => {
+      const screenCenter = SCREEN.width / 2;
+      const itemLeftEdge = sidePadding + index * ITEM_LENGTH - scrollX.value;
+      const itemCenter = itemLeftEdge + ITEM_LENGTH / 2;
+      const distanceFromCenter = Math.abs(itemCenter - screenCenter);
+
+      const fullyVisibleRange = ITEM_LENGTH;
+      const partiallyVisibleRange = ITEM_LENGTH * 1.5;
+
+      const scale = interpolate(
+        distanceFromCenter,
+        [0, fullyVisibleRange, partiallyVisibleRange],
+        [1, 1, 0.88],
+        Extrapolate.CLAMP
+      );
+
+      const opacity = interpolate(
+        distanceFromCenter,
+        [0, fullyVisibleRange, partiallyVisibleRange],
+        [1, 1, 0.9],
+        Extrapolate.CLAMP
+      );
+
+      return {
+        transform: [{ scale }],
+        opacity,
+      };
+    });
+
+    // iOS-only blur: increases as item moves away from center (focus metaphor)
+    const rBlurProps = useAnimatedProps(() => {
+      const screenCenter = SCREEN.width / 2;
+      const itemLeftEdge = sidePadding + index * ITEM_LENGTH - scrollX.value;
+      const itemCenter = itemLeftEdge + ITEM_LENGTH / 2;
+      const distanceFromCenter = Math.abs(itemCenter - screenCenter);
+
+      const fullyVisibleRange = ITEM_LENGTH;
+      const partiallyVisibleRange = ITEM_LENGTH * 1.5;
+
+      const blurIntensity = interpolate(
+        distanceFromCenter,
+        [0, fullyVisibleRange, partiallyVisibleRange],
+        [0, 0, 15],
+        Extrapolate.CLAMP
+      );
+
+      return { intensity: blurIntensity };
+    });
 
     return (
       <TouchableOpacity activeOpacity={0.9} onPress={() => {
@@ -186,6 +240,28 @@ const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex
               </View>
             </BlurView>
           </View>
+
+          {/* Platform: iOS blur adds depth cue when card is away from center */}
+          {Platform.OS === 'ios' && (
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                borderRadius: 34,
+                overflow: 'hidden',
+              }}
+            >
+              <AnimatedBlurView
+                animatedProps={rBlurProps}
+                tint="systemThinMaterialLight"
+                style={StyleSheet.absoluteFill}
+              />
+            </View>
+          )}
 
           {/* Name + price */}
           <View style={{ position: 'absolute', left: 18, right: 18, bottom: 18, alignItems: 'center' }}>

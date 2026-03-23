@@ -2410,8 +2410,8 @@ export default function SettingsScreen() {
         <View style={[styles.cardNew, shadowStyle]}>
           {renderSettingItem(
             <DollarSign size={20} color={businessColors.primary} />,
-            t('finance.title','מעקב פיננסי'),
-            t('finance.subtitle','מעקב הכנסות, הוצאות ושליחת דוח חודשי לרואה חשבון'),
+            t('finance.title','פיננסים'),
+            t('finance.subtitle','מעקב אחר הכנסות, הוצאות ושליחת דוחות'),
             undefined,
             () => router.push('/(tabs)/finance')
           )}

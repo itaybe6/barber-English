@@ -12,7 +12,10 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Dimensions,
+  Image,
+  Linking,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -36,6 +39,8 @@ import {
   X,
   ArrowUpRight,
   ArrowDownRight,
+  CheckCircle,
+  FileImage,
 } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -78,8 +83,10 @@ export default function FinanceScreen() {
   const [newExpenseAmount, setNewExpenseAmount] = useState('');
   const [newExpenseDescription, setNewExpenseDescription] = useState('');
   const [newExpenseCategory, setNewExpenseCategory] = useState<ExpenseCategory>('other');
+  const [newExpenseReceipt, setNewExpenseReceipt] = useState<{ uri: string; base64?: string } | null>(null);
   const [savingExpense, setSavingExpense] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -121,6 +128,24 @@ export default function FinanceScreen() {
   const formatCurrency = (amount: number) =>
     `₪${Math.round(amount).toLocaleString('he-IL')}`;
 
+  const pickReceipt = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('הרשאה נדרשת', 'יש לאפשר גישה לגלריה כדי להוסיף תמונת קבלה');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      allowsMultipleSelection: false,
+      quality: 0.8,
+      base64: true,
+    });
+    if (!result.canceled && result.assets[0]) {
+      const a = result.assets[0];
+      setNewExpenseReceipt({ uri: a.uri, base64: a.base64 ?? undefined });
+    }
+  };
+
   const handleAddExpense = async () => {
     const amount = parseFloat(newExpenseAmount.replace(',', '.'));
     if (isNaN(amount) || amount <= 0) {
@@ -129,6 +154,13 @@ export default function FinanceScreen() {
     }
     setSavingExpense(true);
     try {
+      let receiptUrl: string | null = null;
+      if (newExpenseReceipt) {
+        receiptUrl = await expensesApi.uploadReceipt({
+          uri: newExpenseReceipt.uri,
+          base64: newExpenseReceipt.base64,
+        });
+      }
       const today = new Date();
       const expenseDate = `${year}-${String(month).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
       const result = await expensesApi.createExpense({
@@ -136,11 +168,13 @@ export default function FinanceScreen() {
         description: newExpenseDescription.trim() || undefined,
         category: newExpenseCategory,
         expense_date: expenseDate,
+        receipt_url: receiptUrl || undefined,
       });
       if (result) {
         setNewExpenseAmount('');
         setNewExpenseDescription('');
         setNewExpenseCategory('other');
+        setNewExpenseReceipt(null);
         setShowAddExpense(false);
         loadData();
       } else {
@@ -180,7 +214,7 @@ export default function FinanceScreen() {
       } as any);
       if (result) {
         setProfile(result);
-        Alert.alert('נשמר', 'פרטי רואה החשבון עודכנו בהצלחה');
+        setShowSuccessModal(true);
       } else {
         Alert.alert('שגיאה', 'לא ניתן לשמור את הפרטים');
       }
@@ -224,6 +258,8 @@ export default function FinanceScreen() {
           contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
           bounces
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
         >
 
           {/* ── Hero Summary Card ── */}
@@ -279,7 +315,7 @@ export default function FinanceScreen() {
             </LinearGradient>
           </View>
 
-          {/* ── Income Breakdown ── */}
+          {/* ── Income Breakdown ── RTL: מימין לשמאל */}
           <View style={styles.sectionTitleWrap}>
             <Text style={styles.sectionTitle}>פירוט הכנסות</Text>
           </View>
@@ -295,25 +331,27 @@ export default function FinanceScreen() {
                 {incomeBreakdown.map((item, index) => (
                   <View
                     key={item.service_id || item.service_name}
-                    style={[styles.incomeRow, index < incomeBreakdown.length - 1 && styles.rowDivider]}
+                    style={[styles.incomeRow, index < incomeBreakdown.length - 1 && styles.incomeRowDivider]}
                   >
-                    {/* In RTL row: name block on RIGHT, total on LEFT */}
-                    <View style={styles.incomeBadge}>
-                      <Text style={[styles.incomeBadgeText, { color: primaryColor }]}>
-                        {item.count}
+                    <View style={styles.incomeLeftBlock}>
+                      <View style={[styles.incomeBadge, { backgroundColor: `${primaryColor}18` }]}>
+                        <Text style={[styles.incomeBadgeText, { color: primaryColor }]}>
+                          {item.count}
+                        </Text>
+                      </View>
+                      <Text style={styles.incomeServiceName} numberOfLines={1}>
+                        {item.service_name}
                       </Text>
                     </View>
-                    <View style={styles.incomeTextBlock}>
-                      <Text style={styles.incomeServiceName}>{item.service_name}</Text>
+                    <View style={styles.incomeTotalBlock}>
+                      <Text style={styles.incomeServiceTotal}>{formatCurrency(item.total)}</Text>
                       <Text style={styles.incomeServiceSub}>
                         {item.count} תורים × {formatCurrency(item.price)}
                       </Text>
                     </View>
-                    <Text style={styles.incomeServiceTotal}>{formatCurrency(item.total)}</Text>
                   </View>
                 ))}
-                <View style={styles.rowDivider} />
-                <View style={[styles.incomeRow, styles.totalRow]}>
+                <View style={styles.incomeTotalRow}>
                   <Text style={styles.totalLabel}>סך הכל הכנסות</Text>
                   <Text style={[styles.totalAmount, { color: '#16A34A' }]}>
                     {formatCurrency(totalIncome)}
@@ -367,6 +405,15 @@ export default function FinanceScreen() {
                         </View>
                         <Text style={styles.expenseDate}>{expense.expense_date}</Text>
                       </View>
+                      {expense.receipt_url && (
+                        <TouchableOpacity
+                          onPress={() => Linking.openURL(expense.receipt_url!)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          style={styles.expenseReceiptBtn}
+                        >
+                          <Image source={{ uri: expense.receipt_url }} style={styles.expenseReceiptThumb} />
+                        </TouchableOpacity>
+                      )}
                       <View style={styles.expenseActions}>
                         <Text style={styles.expenseAmount}>
                           -{formatCurrency(Number(expense.amount))}
@@ -469,7 +516,7 @@ export default function FinanceScreen() {
             {/* Modal header — in RTL: title on RIGHT, close on LEFT */}
             <View style={styles.modalTopRow}>
               <Text style={styles.modalTitle}>הוספת הוצאה</Text>
-              <TouchableOpacity onPress={() => setShowAddExpense(false)} style={styles.modalCloseBtn}>
+              <TouchableOpacity onPress={() => { setShowAddExpense(false); setNewExpenseReceipt(null); }} style={styles.modalCloseBtn}>
                 <X size={22} color={Colors.subtext} />
               </TouchableOpacity>
             </View>
@@ -528,6 +575,33 @@ export default function FinanceScreen() {
               })}
             </View>
 
+            {/* Receipt / proof */}
+            <Text style={styles.modalSectionLabel}>קבלה / אסמכתא (אופציונלי)</Text>
+            {newExpenseReceipt ? (
+              <View style={styles.receiptPreviewRow}>
+                <View style={styles.receiptThumbWrap}>
+                  <Image source={{ uri: newExpenseReceipt.uri }} style={styles.receiptThumb} />
+                  <TouchableOpacity
+                    style={styles.receiptRemoveBtn}
+                    onPress={() => setNewExpenseReceipt(null)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <X size={16} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.receiptAddedText}>תמונה נוספה</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[styles.receiptAddBtn, { borderColor: primaryColor }]}
+                onPress={pickReceipt}
+                activeOpacity={0.7}
+              >
+                <FileImage size={22} color={primaryColor} />
+                <Text style={[styles.receiptAddBtnText, { color: primaryColor }]}>הוסף תמונת קבלה</Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               style={[styles.modalAddBtn, { backgroundColor: primaryColor }]}
               onPress={handleAddExpense}
@@ -541,6 +615,34 @@ export default function FinanceScreen() {
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── Success Modal ── RTL */}
+      <Modal visible={showSuccessModal} animationType="fade" transparent statusBarTranslucent>
+        <TouchableOpacity
+          activeOpacity={1}
+          style={styles.successModalOverlay}
+          onPress={() => setShowSuccessModal(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[styles.successModalBox, { borderTopColor: primaryColor }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 12 }}>
+              <CheckCircle size={48} color={primaryColor} />
+            </View>
+            <Text style={styles.successModalTitle}>נשמר</Text>
+            <Text style={styles.successModalMessage}>פרטי רואה החשבון עודכנו בהצלחה</Text>
+            <TouchableOpacity
+              style={[styles.successModalBtn, { backgroundColor: primaryColor }]}
+              onPress={() => setShowSuccessModal(false)}
+              activeOpacity={0.82}
+            >
+              <Text style={styles.successModalBtnText}>אישור</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
@@ -734,11 +836,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // ── Sections ──
+  // ── Sections ── (RTL: flex-start = right)
   sectionTitleWrap: {
     width: '100%',
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     paddingHorizontal: 16,
     marginBottom: 10,
     marginTop: 22,
@@ -751,9 +853,12 @@ const styles = StyleSheet.create({
   },
   sectionHeaderRow: {
     flexDirection: 'row',
+    direction: 'rtl',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 10,
   },
   addExpenseBtn: {
     flexDirection: 'row',
@@ -775,7 +880,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 20,
     marginHorizontal: 16,
-    marginBottom: 4,
+    marginBottom: 20,
     padding: 20,
     direction: 'rtl',
     ...cardShadow,
@@ -799,54 +904,70 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // ── Income rows ──
-  incomeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 13,
-  },
+  // ── Income breakdown ── RTL: row-reverse = ראשון בימין
   rowDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#F0F2F7',
   },
+  incomeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+  },
+  incomeRowDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#F0F2F7',
+  },
+  incomeLeftBlock: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   incomeBadge: {
-    width: 36,
-    height: 36,
+    width: 34,
+    height: 34,
     borderRadius: 10,
-    backgroundColor: '#F4F6FB',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 12,
   },
   incomeBadgeText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
-    textAlign: 'center',
-  },
-  incomeTextBlock: {
-    flex: 1,
   },
   incomeServiceName: {
+    flex: 1,
     fontSize: 15,
     fontWeight: '700',
     color: Colors.text,
-    textAlign: 'right',
+    textAlign: 'left',
   },
-  incomeServiceSub: {
-    fontSize: 12,
-    color: Colors.subtext,
-    textAlign: 'right',
-    marginTop: 2,
+  incomeTotalBlock: {
+    alignItems: 'center',
   },
   incomeServiceTotal: {
-    fontSize: 16,
+    fontSize: 19,
     fontWeight: '800',
     color: '#16A34A',
-    marginRight: 4,
-    textAlign: 'right',
+  },
+  incomeServiceSub: {
+    fontSize: 11,
+    color: Colors.subtext,
+    marginTop: 2,
+  },
+  incomeTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 14,
+    paddingBottom: 2,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#F0F2F7',
   },
   totalRow: {
     flexDirection: 'row',
+    direction: 'rtl',
     paddingTop: 14,
     paddingBottom: 2,
     justifyContent: 'space-between',
@@ -910,6 +1031,15 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginTop: 3,
   },
+  expenseReceiptBtn: {
+    marginLeft: 8,
+  },
+  expenseReceiptThumb: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: '#F4F6FB',
+  },
   expenseActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -952,7 +1082,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.text,
     textAlign: 'right',
-    alignSelf: 'flex-end',
+    alignSelf: 'flex-start',
   },
   fieldInputRow: {
     flexDirection: 'row',
@@ -1097,8 +1227,55 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-    marginBottom: 24,
+    marginBottom: 20,
     justifyContent: 'flex-start',
+  },
+  receiptAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    marginBottom: 24,
+  },
+  receiptAddBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  receiptPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 24,
+  },
+  receiptThumbWrap: {
+    position: 'relative',
+  },
+  receiptThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: 10,
+    backgroundColor: '#F4F6FB',
+  },
+  receiptRemoveBtn: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  receiptAddedText: {
+    fontSize: 14,
+    color: Colors.subtext,
+    fontWeight: '600',
   },
   categoryGridItem: {
     paddingHorizontal: 18,
@@ -1132,5 +1309,51 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.3,
     textAlign: 'center',
+  },
+
+  // ── Success Modal ── RTL
+  successModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  successModalBox: {
+    backgroundColor: Colors.white,
+    borderRadius: 24,
+    padding: 28,
+    width: '100%',
+    maxWidth: 320,
+    alignItems: 'stretch',
+    borderTopWidth: 4,
+    direction: 'rtl',
+  },
+  successModalTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: Colors.text,
+    marginBottom: 8,
+    textAlign: 'right',
+  },
+  successModalMessage: {
+    fontSize: 15,
+    color: Colors.subtext,
+    lineHeight: 22,
+    marginBottom: 24,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  successModalBtn: {
+    height: 50,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'stretch',
+  },
+  successModalBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
   },
 });

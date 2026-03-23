@@ -10,6 +10,7 @@ import {
   Image,
   Dimensions,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import Animated, {
   useAnimatedKeyboard,
@@ -30,13 +31,11 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router, Link } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { useAuthStore } from '@/stores/authStore';
 import { usersApi } from '@/lib/api/users';
-import { supabase, getBusinessId, BusinessProfile } from '@/lib/supabase';
+import { supabase, getBusinessId } from '@/lib/supabase';
 import { findUserByCredentials, isValidUserType, UserType } from '@/constants/auth';
 import { getCurrentClientLogo } from '@/src/theme/assets';
-import { businessProfileApi } from '@/lib/api/businessProfile';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { superAdminApi } from '@/lib/api/superAdmin';
 import { useTranslation } from 'react-i18next';
@@ -181,8 +180,6 @@ export default function LoginScreen() {
   const [forgotPhone, setForgotPhone] = useState('');
   const [forgotEmail, setForgotEmail] = useState('');
   const [isSendingReset, setIsSendingReset] = useState(false);
-  const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
-  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [phoneFocused, setPhoneFocused] = useState(false);
   const [passFocused, setPassFocused] = useState(false);
 
@@ -235,21 +232,6 @@ export default function LoginScreen() {
   const btnAnimStyle = useAnimatedStyle(() => ({
     transform: [{ scale: btnScale.value }],
   }));
-
-  // ── Load business profile ──
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const profile = await businessProfileApi.getProfile();
-        setBusinessProfile(profile);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setIsLoadingProfile(false);
-      }
-    };
-    load();
-  }, []);
 
   useEffect(() => {}, [isAuthenticated, user]);
 
@@ -344,51 +326,54 @@ export default function LoginScreen() {
   return (
     <View style={styles.root}>
 
-      {/* ── Dark background ─────────────────────────────────────────────── */}
-      <View style={StyleSheet.absoluteFill}>
-        {/* Base dark gradient */}
+      {/* ── White background + drifting circles (pointerEvents none) ───── */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
         <LinearGradient
-          colors={['#0a0d0a', '#0d100d', '#080a08']}
+          colors={['#FFFFFF', '#FAFAFA', '#F5F5F5']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
-
-        {/* Drifting animated circles */}
         <DriftingCircle
           size={320} left={-80} top={-60}
-          color={hexToRgba(primary, 0.75)}
+          color={hexToRgba(primary, 0.22)}
           driftMs={5000} delayMs={0} driftX={50} driftY={40}
         />
         <DriftingCircle
           size={260} left={SW * 0.5} top={SH * 0.05}
-          color={hexToRgba(shiftHex(primary, 30), 0.6)}
+          color={hexToRgba(shiftHex(primary, 30), 0.18)}
           driftMs={6200} delayMs={700} driftX={-45} driftY={55}
         />
         <DriftingCircle
           size={200} left={-40} top={SH * 0.3}
-          color={hexToRgba(shiftHex(primary, -20), 0.55)}
+          color={hexToRgba(shiftHex(primary, -20), 0.16)}
           driftMs={4800} delayMs={1200} driftX={60} driftY={-35}
         />
         <DriftingCircle
           size={150} left={SW * 0.65} top={SH * 0.38}
-          color={hexToRgba(shiftHex(primary, 50), 0.5)}
+          color={hexToRgba(shiftHex(primary, 50), 0.14)}
           driftMs={5500} delayMs={400} driftX={-30} driftY={-50}
         />
         <DriftingCircle
           size={100} left={SW * 0.2} top={SH * 0.55}
-          color={hexToRgba(primary, 0.45)}
+          color={hexToRgba(primary, 0.12)}
           driftMs={4200} delayMs={1800} driftX={40} driftY={30}
         />
       </View>
 
-      {/* ── Content ─────────────────────────────────────────────────────── */}
+      {/* ── Content (no BlurView — fixes Android keyboard / focus) ─────── */}
       <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView
+          style={styles.keyboardAvoid}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+        >
         <ScrollView
           contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
+          bounces={false}
         >
 
           {/* Logo top section */}
@@ -407,16 +392,12 @@ export default function LoginScreen() {
             </Animated.View>
           </Animated.View>
 
-          {/* ── Dark form card ─────────────────────────────────────────── */}
+          {/* ── Light form card (solid View — TextInput focus works everywhere) ─ */}
           <Animated.View
             style={[styles.cardWrapper, formLiftStyle]}
             entering={FadeInUp.delay(200).springify()}
           >
-            <BlurView
-              intensity={Platform.OS === 'ios' ? 18 : 6}
-              tint="dark"
-              style={[styles.card, { paddingBottom: bottomPad + 8 }]}
-            >
+            <View style={[styles.card, { paddingBottom: bottomPad + 8 }]}>
               {/* Top accent line */}
               <View style={[styles.accentLine, { backgroundColor: hexToRgba(primary, 0.8) }]} />
 
@@ -446,18 +427,19 @@ export default function LoginScreen() {
                   <Ionicons
                     name="call-outline"
                     size={19}
-                    color={phoneFocused ? primary : 'rgba(255,255,255,0.35)'}
+                    color={phoneFocused ? primary : '#9CA3AF'}
                     style={styles.iconLeft}
                   />
                   <TextInput
                     style={styles.input}
                     placeholder={t('profile.edit.phonePlaceholder', 'מספר טלפון')}
-                    placeholderTextColor="rgba(255,255,255,0.28)"
+                    placeholderTextColor="#B0B8C4"
                     value={phone}
                     onChangeText={setPhone}
                     keyboardType="phone-pad"
                     autoCorrect={false}
                     textAlign="left"
+                    editable
                     onFocus={() => setPhoneFocused(true)}
                     onBlur={() => setPhoneFocused(false)}
                   />
@@ -480,18 +462,19 @@ export default function LoginScreen() {
                   <Ionicons
                     name="lock-closed-outline"
                     size={19}
-                    color={passFocused ? primary : 'rgba(255,255,255,0.35)'}
+                    color={passFocused ? primary : '#9CA3AF'}
                     style={styles.iconLeft}
                   />
                   <TextInput
                     style={[styles.input, styles.inputPass]}
                     placeholder={t('login.passwordPlaceholder', 'סיסמה')}
-                    placeholderTextColor="rgba(255,255,255,0.28)"
+                    placeholderTextColor="#B0B8C4"
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
                     textAlign="left"
+                    editable
                     onFocus={() => setPassFocused(true)}
                     onBlur={() => setPassFocused(false)}
                   />
@@ -503,7 +486,7 @@ export default function LoginScreen() {
                     <Ionicons
                       name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                       size={19}
-                      color={passFocused ? primary : 'rgba(255,255,255,0.4)'}
+                      color={passFocused ? primary : '#9CA3AF'}
                     />
                   </TouchableOpacity>
                 </View>
@@ -542,7 +525,7 @@ export default function LoginScreen() {
               {/* Links */}
               <Animated.View entering={FadeIn.delay(820)} style={styles.linksWrap}>
                 <TouchableOpacity onPress={() => setIsForgotOpen(true)} hitSlop={{ top: 8, bottom: 8 }}>
-                  <Text style={[styles.forgotText, { color: 'rgba(255,255,255,0.55)' }]}>
+                  <Text style={[styles.forgotText, { color: '#6B7280' }]}>
                     {t('login.forgotPassword', 'שכחת סיסמה?')}
                   </Text>
                 </TouchableOpacity>
@@ -565,9 +548,10 @@ export default function LoginScreen() {
                 </View>
               </Animated.View>
 
-            </BlurView>
+            </View>
           </Animated.View>
         </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
 
       {/* ── Forgot Password Modal ────────────────────────────────────────── */}
@@ -657,9 +641,12 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#080a08',
+    backgroundColor: '#FFFFFF',
   },
   safeArea: {
+    flex: 1,
+  },
+  keyboardAvoid: {
     flex: 1,
   },
   scroll: {
@@ -688,21 +675,25 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
 
-  // ── Dark card ──
+  // ── Light card ──
   cardWrapper: {
     borderTopLeftRadius: 36,
     borderTopRightRadius: 36,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOpacity: 0.6,
-    shadowRadius: 30,
-    shadowOffset: { width: 0, height: -8 },
-    elevation: 20,
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 12,
   },
   card: {
     paddingHorizontal: 24,
     paddingTop: 0,
-    backgroundColor: 'rgba(14,17,14,0.88)',
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.06)',
   },
 
   // ── Accent line top of card ──
@@ -723,13 +714,13 @@ const styles = StyleSheet.create({
   titleText: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: '#111827',
     marginBottom: 6,
     letterSpacing: -0.3,
   },
   subtitleText: {
     fontSize: 13.5,
-    color: 'rgba(255,255,255,0.45)',
+    color: '#6B7280',
     textAlign: 'center',
   },
 
@@ -740,12 +731,12 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: '#F9FAFB',
     borderRadius: 16,
     height: 56,
     paddingHorizontal: 16,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: '#E5E7EB',
   },
   iconLeft: {
     marginRight: 10,
@@ -753,7 +744,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 15,
-    color: '#FFFFFF',
+    color: '#111827',
     fontWeight: '500',
   },
   inputPass: {
@@ -805,14 +796,14 @@ const styles = StyleSheet.create({
   divider: {
     width: '100%',
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#E5E7EB',
   },
   registerRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   registerText: {
-    color: 'rgba(255,255,255,0.45)',
+    color: '#6B7280',
     fontSize: 14,
   },
   registerAction: {

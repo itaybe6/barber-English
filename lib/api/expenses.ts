@@ -1,7 +1,45 @@
 import { supabase, getBusinessId } from '@/lib/supabase';
 import type { BusinessExpense, ExpenseCategory } from '@/lib/supabase';
 
+function guessMimeFromUri(uriOrName: string): string {
+  const ext = uriOrName.split('.').pop()?.toLowerCase().split('?')[0] || 'jpg';
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+  if (ext === 'png') return 'image/png';
+  if (ext === 'heic' || ext === 'heif') return 'image/heic';
+  if (ext === 'webp') return 'image/webp';
+  return 'image/jpeg';
+}
+
 export const expensesApi = {
+  async uploadReceipt(asset: { uri: string; base64?: string | null; mimeType?: string | null }): Promise<string | null> {
+    try {
+      let contentType = asset.mimeType || guessMimeFromUri(asset.uri);
+      let fileBody: Uint8Array;
+      if (asset.base64) {
+        const clean = asset.base64.replace(/^data:[^;]+;base64,/, '');
+        const bytes = new Uint8Array(atob(clean).split('').map((c) => c.charCodeAt(0)));
+        fileBody = bytes;
+      } else {
+        const response = await fetch(asset.uri, { cache: 'no-store' });
+        const arrayBuffer = await response.arrayBuffer();
+        fileBody = new Uint8Array(arrayBuffer);
+        contentType = response.headers.get('content-type') || contentType;
+      }
+      const ext = (contentType.split('/')[1] || 'jpg').toLowerCase().split(';')[0];
+      const filePath = `expense-receipts/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error } = await supabase.storage.from('designs').upload(filePath, fileBody as any, { contentType, upsert: false });
+      if (error) {
+        console.error('Error uploading receipt:', error);
+        return null;
+      }
+      const { data } = supabase.storage.from('designs').getPublicUrl(filePath);
+      return data.publicUrl;
+    } catch (err) {
+      console.error('Error in uploadReceipt:', err);
+      return null;
+    }
+  },
+
   async getExpensesByMonth(year: number, month: number): Promise<BusinessExpense[]> {
     try {
       const businessId = getBusinessId();
@@ -34,18 +72,23 @@ export const expensesApi = {
     description?: string;
     category: ExpenseCategory;
     expense_date: string;
+    receipt_url?: string | null;
   }): Promise<BusinessExpense | null> {
     try {
       const businessId = getBusinessId();
+      const insertData: Record<string, unknown> = {
+        business_id: businessId,
+        amount: expense.amount,
+        description: expense.description || null,
+        category: expense.category,
+        expense_date: expense.expense_date,
+      };
+      if (expense.receipt_url != null) {
+        insertData.receipt_url = expense.receipt_url;
+      }
       const { data, error } = await supabase
         .from('business_expenses')
-        .insert({
-          business_id: businessId,
-          amount: expense.amount,
-          description: expense.description || null,
-          category: expense.category,
-          expense_date: expense.expense_date,
-        })
+        .insert(insertData)
         .select('*')
         .single();
 

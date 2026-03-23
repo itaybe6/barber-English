@@ -90,10 +90,11 @@ const clientAppointmentsApi = {
       // Note: Cancellation time validation is already done in the component
       // before calling this function, so we skip the validation here
 
-      // Cancel the appointment
+      // Cancel the appointment — keep status=cancelled for tracking, free the slot for rebooking
       const { error } = await supabase
         .from('appointments')
         .update({
+          status: 'cancelled',
           is_available: true,
           client_name: null,
           client_phone: null,

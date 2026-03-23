@@ -523,6 +523,7 @@
       "recurring": "מחזורי",
       "recurringTitle": "תורים מחזוריים",
       "security": "אבטחה",
+      "financeAccounting": "פיננסי וחשבונאות",
       "securitySupport": "אבטחה ותמיכה",
       "account": "חשבון",
       "accountManagement": "ניהול חשבון",
@@ -691,6 +692,19 @@
       "pricePlaceholder": "0.00",
       "step": { "image": "תמונה", "details": "פרטים", "price": "מחיר" }
     },
+    "appointments": {
+      "loadingForDate": "טוען תורים עבור {{date}}...",
+      "emptyTitle": "אין תורים ליום זה",
+      "emptySubtitle": "בחר/י יום אחר מהסרגל העליון",
+      "chooseAction": "בחר/י פעולה",
+      "callClient": "חייג ללקוח",
+      "cancelMessage": "פעולה זו תפנה את הזמן ותסמן את התור כבוטל. המשבצת תהיה זמינה להזמנה.",
+      "cancelAndFree": "ביטול ושחרור משבצת",
+      "deleteAppointment": "מחיקת תור",
+      "deleteTitle": "מחיקת תור",
+      "deleteMessage": "פעולה זו תמחק את התור לצמיתות. לא ניתן לבטל פעולה זו.",
+      "openActions": "פתח/י אפשרויות לתור"
+    },
     "appointmentsAdmin": {
       "loadingForDate": "טוען תורים עבור {{date}}...",
       "emptyTitle": "אין תורים ליום זה",
@@ -698,6 +712,10 @@
       "chooseAction": "בחר/י פעולה",
       "callClient": "חייג ללקוח",
       "cancelMessage": "פעולה זו תפנה את הזמן ותסיר את פרטי הלקוח מהתור הנבחר.",
+      "cancelAndFree": "ביטול ושחרור משבצת",
+      "deleteAppointment": "מחיקת תור",
+      "deleteTitle": "מחיקת תור",
+      "deleteMessage": "פעולה זו תמחק את התור לצמיתות. לא ניתן לבטל פעולה זו.",
       "openActions": "פתח/י אפשרויות לתור"
     },
     "hoursAdmin": {
@@ -784,6 +802,10 @@
       "selectClientPlaceholder": "בחר/י לקוח..."
     }
     
+  },
+  "finance": {
+    "title": "פיננסים",
+    "subtitle": "מעקב אחר הכנסות, הוצאות ושליחת דוחות"
   }
 }
 

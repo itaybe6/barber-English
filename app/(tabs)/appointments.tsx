@@ -21,6 +21,7 @@ import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import DaySelector from '@/components/DaySelector';
 import { AvailableTimeSlot, supabase, getBusinessId } from '@/lib/supabase';
 import { businessHoursApi } from '@/lib/api/businessHours';
+import { checkWaitlistAndNotify, notifyServiceWaitlistClients } from '@/lib/api/waitlistNotifications';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -639,6 +640,7 @@ export default function AdminAppointmentsScreen() {
       const { error } = await supabase
         .from('appointments')
         .update({
+          status: 'cancelled',
           is_available: true,
           client_name: null,
           client_phone: null,
@@ -650,6 +652,10 @@ export default function AdminAppointmentsScreen() {
       if (error) {
         console.error('Error canceling appointment:', error);
       } else {
+        try {
+          await checkWaitlistAndNotify(selectedAppointment);
+          await notifyServiceWaitlistClients(selectedAppointment);
+        } catch (e) {}
         setAppointments((prev) => prev.filter((a) => a.id !== selectedAppointment.id));
         setShowCancelModal(false);
         setSelectedAppointment(null);
@@ -660,6 +666,40 @@ export default function AdminAppointmentsScreen() {
       setIsCancelling(false);
     }
   }, [selectedAppointment]);
+
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [appointmentToDelete, setAppointmentToDelete] = useState<AvailableTimeSlot | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const askDeleteAppointment = useCallback((apt: AvailableTimeSlot) => {
+    setAppointmentToDelete(apt);
+    setShowDeleteModal(true);
+  }, []);
+
+  const confirmDeleteAppointment = useCallback(async () => {
+    if (!appointmentToDelete) return;
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .delete()
+        .eq('id', appointmentToDelete.id)
+        .eq('business_id', appointmentToDelete.business_id);
+
+      if (error) {
+        console.error('Error deleting appointment:', error);
+      } else {
+        setAppointments((prev) => prev.filter((a) => a.id !== appointmentToDelete.id));
+        setShowDeleteModal(false);
+        setAppointmentToDelete(null);
+        closeActionsMenu();
+      }
+    } catch (e) {
+      console.error('Error in confirmDeleteAppointment:', e);
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [appointmentToDelete]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -921,7 +961,7 @@ export default function AdminAppointmentsScreen() {
             <View style={styles.actionsDivider} />
             <PressableScale
               style={styles.actionsOption}
-              accessibilityLabel={t('appointments.cancel.title','Cancel Appointment')}
+              accessibilityLabel={t('admin.appointments.cancelAndFree','Cancel and free slot')}
               onPress={() => {
                 if (actionsAppointment) {
                   askCancelAppointment(actionsAppointment);
@@ -930,9 +970,24 @@ export default function AdminAppointmentsScreen() {
               }}
             >
               <View style={[styles.actionsIconCircle, { backgroundColor: '#FFECEC' }]}>
-                <Ionicons name="close" size={18} color="#FF3B30" />
+                <Ionicons name="close-circle-outline" size={18} color="#FF9500" />
               </View>
-              <Text style={[styles.actionsOptionText, { color: Colors.error }]}>{t('appointments.cancel.title','Cancel Appointment')}</Text>
+              <Text style={[styles.actionsOptionText, { color: '#FF9500' }]}>{t('admin.appointments.cancelAndFree','Cancel and free slot')}</Text>
+            </PressableScale>
+            <PressableScale
+              style={styles.actionsOption}
+              accessibilityLabel={t('admin.appointments.deleteAppointment','Delete appointment')}
+              onPress={() => {
+                if (actionsAppointment) {
+                  askDeleteAppointment(actionsAppointment);
+                }
+                closeActionsMenu();
+              }}
+            >
+              <View style={[styles.actionsIconCircle, { backgroundColor: '#FFECEC' }]}>
+                <Ionicons name="trash-outline" size={18} color="#FF3B30" />
+              </View>
+              <Text style={[styles.actionsOptionText, { color: Colors.error }]}>{t('admin.appointments.deleteAppointment','Delete appointment')}</Text>
             </PressableScale>
             <PressableScale
               style={styles.actionsCancelButton}
@@ -984,6 +1039,52 @@ export default function AdminAppointmentsScreen() {
                   <ActivityIndicator size="small" color="#FF3B30" />
                 ) : (
                   <Text style={styles.iosAlertButtonDestructiveText}>{t('confirm','Confirm')}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Delete confirmation modal */}
+      <Modal
+        visible={showDeleteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowDeleteModal(false);
+          setAppointmentToDelete(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.iosAlertContainer}>
+            <Text style={styles.iosAlertTitle}>{t('admin.appointments.deleteTitle','Delete appointment')}</Text>
+            <Text style={styles.iosAlertMessage}>
+              {t('admin.appointments.deleteMessage','This will permanently remove the appointment. This action cannot be undone.')}
+            </Text>
+            <View style={styles.iosAlertButtonsRow}>
+              <TouchableOpacity
+                style={styles.iosAlertButton}
+                activeOpacity={0.8}
+                onPress={() => {
+                  setShowDeleteModal(false);
+                  setAppointmentToDelete(null);
+                }}
+                disabled={isDeleting}
+              >
+                <Text style={styles.iosAlertButtonDefaultText}>{t('cancel','Cancel')}</Text>
+              </TouchableOpacity>
+              <View style={styles.iosAlertButtonDivider} />
+              <TouchableOpacity
+                style={styles.iosAlertButton}
+                activeOpacity={0.8}
+                onPress={confirmDeleteAppointment}
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <ActivityIndicator size="small" color="#FF3B30" />
+                ) : (
+                  <Text style={styles.iosAlertButtonDestructiveText}>{t('delete','Delete')}</Text>
                 )}
               </TouchableOpacity>
             </View>

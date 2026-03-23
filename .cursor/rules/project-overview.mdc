@@ -1,0 +1,42 @@
+---
+description: Project overview - what this app is, tech stack, and architecture
+alwaysApply: true
+---
+
+# Salon Booking App — Project Overview
+
+White-label salon/beauty booking app serving both **clients** (end-users) and **admins** (business owners/staff).
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Framework | React Native 0.81 + Expo SDK 54 |
+| Routing | Expo Router 6 (file-based, route groups) |
+| Backend | Supabase (DB, Auth, Realtime, Edge Functions) |
+| State | Zustand + AsyncStorage persistence |
+| i18n | i18next (EN/HE) |
+| UI | StyleSheet + ThemeProvider, Reanimated, Gesture Handler, @gorhom/bottom-sheet, lucide-react-native |
+| Calendar | react-native-calendars (admin), expo-calendar (client booking) |
+
+## Architecture — Key Directories
+
+- `app/(client-tabs)/` — Client-facing screens (home, gallery, book appointment, my appointments, profile)
+- `app/(tabs)/` — Admin screens (dashboard, waitlist, appointments/calendar, business hours, settings)
+- `app/(auth)/`, `app/login.tsx`, `app/register.tsx` — Auth flows
+- `lib/api/` — Supabase API modules (businessProfile, services, appointments, notifications, etc.)
+- `lib/supabase.ts` — Single Supabase client + `getBusinessId()` for multi-tenant scoping
+- `stores/` — Zustand stores (auth, appointments, designs, products, notifications, waitlist, services)
+- `src/theme/` — ThemeProvider, theme types, per-client logo mapping
+- `branding/<CLIENT>/` — Per-client assets (.env, app.config.json, theme.json, images)
+- `components/` — Shared UI components (selectors, modals, cards, carousels, calendars)
+- `constants/` — Theme colors, mock data, service helpers
+- `scripts/` — Build/switch/add client scripts
+
+## Key Patterns
+
+- **Role-based routing**: `app/_layout.tsx` checks `user.type` → redirects to `(client-tabs)` or `(tabs)`
+- **Multi-tenant**: `getBusinessId()` scopes all Supabase queries to the active business
+- **White-label builds**: `CLIENT` env var → `app.config.js` loads branding/<CLIENT>/ files at build time
+- **Theme layering**: build-time `theme.json` + runtime `useBusinessColors()` from Supabase profile
+- **LTR forced**: `I18nManager.allowRTL(false)` in root layout — app is always LTR

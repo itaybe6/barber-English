@@ -1,11 +1,8 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { View, TouchableOpacity, StyleSheet, Animated, Easing, Alert, Text as RNText } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Animated, Easing, Alert } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import Colors from '@/constants/colors';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import LoginRequiredModal from '@/components/LoginRequiredModal';
@@ -27,83 +24,29 @@ function hexToRgba(hex: string, alpha: number): string {
 const FloatingBookButton = ({ onPress, focused }: { onPress: () => void; focused: boolean }) => {
   const colors = useColors();
   
-  // Distinct animation: wobble (rotate) + bob (translateY) + brief pop (scale) with pauses
-  const wobble = React.useRef(new Animated.Value(0)).current; // -1 .. 1
-  const bob = React.useRef(new Animated.Value(0)).current;    // -1 .. 1
-  const pop = React.useRef(new Animated.Value(0)).current;    // 0 .. 1
+  const scale = React.useRef(new Animated.Value(1)).current;
 
   React.useEffect(() => {
-    const sequence = Animated.sequence([
-      Animated.delay(500),
-      Animated.parallel([
-        // wobble
-        Animated.sequence([
-          Animated.timing(wobble, { toValue: 1, duration: 240, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-          Animated.timing(wobble, { toValue: -1, duration: 420, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }),
-          Animated.timing(wobble, { toValue: 0, duration: 240, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-        ]),
-        // bob
-        Animated.sequence([
-          Animated.timing(bob, { toValue: -1, duration: 240, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-          Animated.timing(bob, { toValue: 1, duration: 420, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }),
-          Animated.timing(bob, { toValue: 0, duration: 240, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-        ]),
-        // pop
-        Animated.sequence([
-          Animated.timing(pop, { toValue: 1, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-          Animated.timing(pop, { toValue: 0, duration: 520, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }),
-        ]),
-      ]),
-      Animated.delay(1100),
-    ]);
-    const loop = Animated.loop(sequence);
-    loop.start();
-    return () => {
-      loop.stop();
-    };
-  }, [wobble, bob, pop]);
-
-  const motionStyle = {
-    transform: [
-      { translateY: bob.interpolate({ inputRange: [-1, 0, 1], outputRange: [-4, 0, -2] }) },
-      { rotate: wobble.interpolate({ inputRange: [-1, 0, 1], outputRange: ['-14deg', '0deg', '14deg'] }) },
-      { scale: pop.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] }) },
-    ],
-  } as const;
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(scale, { toValue: 1.07, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.delay(1200),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [scale]);
 
   return (
     <TouchableOpacity 
       style={styles.floatingButton} 
       onPress={onPress}
-      activeOpacity={0.8}
+      activeOpacity={0.85}
     >
-      <Animated.View style={motionStyle}>
-        <LinearGradient
-          // Stronger color presence, lighter blur
-          colors={[hexToRgba(colors.primary, 0.9), hexToRgba(colors.primary, 0.78)]}
-          style={styles.floatingGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-        >
-          {/* Subtle blur only to soften edges */}
-          <BlurView intensity={12} tint="light" style={StyleSheet.absoluteFillObject} />
-          {/* Subtle inner highlight for glass edge */}
-          <View style={styles.floatingGlassEdge} />
-          <View style={[styles.floatingIcon, focused && styles.floatingIconFocused]}>
-            <Ionicons 
-              name="add" 
-              size={28} 
-              color="#FFFFFF" 
-              style={{ 
-                transform: [{ scale: focused ? 1.1 : 1 }],
-                fontWeight: '700'
-              }} 
-            />
-          </View>
-        </LinearGradient>
+      <Animated.View style={[styles.floatingCircle, { backgroundColor: colors.primary, transform: [{ scale }] }]}>
+        <Ionicons name="add" size={28} color="#FFFFFF" />
       </Animated.View>
-      {/* Floating shadow effect */}
-      <View style={styles.floatingShadow} />
     </TouchableOpacity>
   );
 };
@@ -143,7 +86,7 @@ export default function ClientTabsLayout() {
           tabBarHideOnKeyboard: true,
           tabBarIcon: ({ color, size, focused }) => {
             const iconSize = focused ? 26 : 24;
-            const iconColor = focused ? '#FFFFFF' : 'rgba(255,255,255,0.7)';
+            const iconColor = focused ? colors.primary : '#AAAAAA';
             
             let iconName;
             switch (route.name) {
@@ -219,8 +162,8 @@ export default function ClientTabsLayout() {
               />
             );
           },
-          tabBarActiveTintColor: '#FFFFFF',
-          tabBarInactiveTintColor: 'rgba(255,255,255,0.7)',
+          tabBarActiveTintColor: colors.primary,
+          tabBarInactiveTintColor: '#AAAAAA',
           tabBarLabelStyle: {
             fontSize: 11,
             fontWeight: '600',
@@ -233,13 +176,13 @@ export default function ClientTabsLayout() {
           tabBarLabel: route.name === 'book-appointment'
             ? ''
             : (
-              route.name === 'index' ? t('tabs.home', 'Home') :
-              route.name === 'gallery' ? t('tabs.gallery', 'Gallery') :
-              route.name === 'appointments' ? t('tabs.booking', 'Booking') :
-              route.name === 'profile' ? t('tabs.profile', 'Profile') :
-              route.name === 'waitlist' ? t('waitlist.title', 'Waitlist') :
-              route.name === 'notifications' ? t('notifications.title', 'Notifications') :
-              t('tabs.home', 'Home')
+              route.name === 'index' ? 'בית' :
+              route.name === 'gallery' ? 'גלריה' :
+              route.name === 'appointments' ? 'הזמנות' :
+              route.name === 'profile' ? 'פרופיל' :
+              route.name === 'waitlist' ? 'רשימת המתנה' :
+              route.name === 'notifications' ? 'התראות' :
+              'בית'
             ),
           tabBarContentContainerStyle: {
             justifyContent: 'space-between',
@@ -247,7 +190,7 @@ export default function ClientTabsLayout() {
             flexDirection,
           },
           tabBarStyle: {
-            backgroundColor: 'transparent',
+            backgroundColor: '#FFFFFF',
             borderTopWidth: 0,
             height: 76,
             paddingTop: 6,
@@ -255,53 +198,17 @@ export default function ClientTabsLayout() {
             paddingHorizontal: 0,
             position: 'absolute',
             bottom: 18,
-            marginHorizontal:16,
-            borderTopLeftRadius: 28,
-            borderTopRightRadius: 28,
-            borderBottomLeftRadius: 28,
-            borderBottomRightRadius: 28,
+            marginHorizontal: 16,
+            borderRadius: 36,
             shadowColor: '#000000',
-            shadowOffset: { width: 0, height: 22 },
-            shadowOpacity: 0.22,
-            shadowRadius: 38,
-            elevation: 28,
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.12,
+            shadowRadius: 24,
+            elevation: 16,
             flexDirection,
           },
           tabBarBackground: () => (
-            <BlurView intensity={96} tint="dark" style={styles.tabBarBackground}>
-              {/* Subtle white tint for refraction */}
-              <View style={styles.glassTint} />
-              {/* Static light sweep for depth (no animation) */}
-              <LinearGradient
-                colors={['rgba(255,255,255,0.26)', 'rgba(255,255,255,0.12)', 'rgba(255,255,255,0.00)']}
-                start={{ x: 0.1, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.glassLight}
-              />
-              {/* Top edge highlight */}
-              <LinearGradient
-                colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0.0)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 0, y: 0.55 }}
-                style={styles.glassTopEdge}
-              />
-              {/* Uniform subtle vertical vignette across the whole bar */}
-              <LinearGradient
-                colors={['rgba(255,255,255,0.06)', 'rgba(0,0,0,0.08)']}
-                start={{ x: 0.5, y: 0 }}
-                end={{ x: 0.5, y: 1 }}
-                style={styles.glassVignette}
-              />
-              {/* Thin inner edge highlight */}
-              <View style={styles.glassEdge} />
-              {/* Subtle bottom sheen for underside reflection */}
-              <LinearGradient
-                colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.0)']}
-                start={{ x: 0.5, y: 1 }}
-                end={{ x: 0.5, y: 0.8 }}
-                style={styles.glassBottomSheen}
-              />
-            </BlurView>
+            <View style={styles.tabBarBackground} />
           ),
           headerShown: false,
         };
@@ -482,15 +389,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   
-  // Center tab item (floating button)
+  // Center tab item (inline, not floating)
   centerTabItem: {
-    marginTop: -10,
-    marginBottom: 8,
     flex: 0,
     width: 72,
     alignItems: 'center',
+    justifyContent: 'center',
     marginHorizontal: 8,
-    zIndex: 1000,
   },
   
   // Icon containers with subtle effects
@@ -508,169 +413,33 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.1 }],
   },
   
-  // Floating button styles
+  // Center button styles (sits inside the tab bar)
   floatingButton: {
-    position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
-    width: 64,
-    height: 64,
-    marginBottom: 8,
-    zIndex: 1000,
-  },
-  
-  floatingGradient: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 12,
-  },
-  
-  floatingIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  
-  floatingIconFocused: {
-    transform: [{ scale: 1.05 }],
-  },
-  
-  // Subtle inner edge/highlight for glass look
-  floatingGlassEdge: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: 32,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.35)'
+    width: 52,
+    height: 52,
   },
 
-  floatingShadow: {
-    position: 'absolute',
-    top: 4,
-    left: 4,
-    right: 4,
-    bottom: 4,
-    borderRadius: 26,
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+  floatingCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 15,
-    zIndex: -1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
   },
 
   // (removed) previous pulse styles
   
-  // Tab bar background with blur effect
   tabBarBackground: {
     flex: 1,
-    backgroundColor: 'transparent',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 24,
-    elevation: 20,
-  },
-  
-  // Subtle translucent tint over the blur to simulate refraction
-  glassTint: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255, 255, 255, 0.09)',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-  },
-
-  // Static light gradient for depth (Apple-like lighting)
-  glassLight: {
-    ...StyleSheet.absoluteFillObject,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-  },
-
-  // Top edge highlight (soft inner glow at the top)
-  glassTopEdge: {
-    ...StyleSheet.absoluteFillObject,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-  },
-
-  // Side vignettes to suggest glass thickness
-  glassSideVignetteLeft: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    width: '36%',
-    borderTopLeftRadius: 28,
-    borderBottomLeftRadius: 28,
-  },
-  glassSideVignetteRight: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    right: 0,
-    width: '36%',
-    borderTopRightRadius: 28,
-    borderBottomRightRadius: 28,
-  },
-
-  // Bottom inner shadow
-  glassVignette: {
-    ...StyleSheet.absoluteFillObject,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-  },
-
-  // Thin inner edge highlight to catch light
-  glassEdge: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.38)',
-  },
-
-  // Bottom sheen overlay
-  glassBottomSheen: {
-    ...StyleSheet.absoluteFillObject,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-  },
-
-  tabBarBlur: {
-    flex: 1,
-    backgroundColor: 'rgba(248, 248, 248, 0.8)',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 36,
   },
   
   // Manual label style for custom tab buttons (matches tabBarLabelStyle)

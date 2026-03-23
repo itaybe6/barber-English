@@ -78,7 +78,16 @@
   "booking.constraintMessage": "There are constraints at the selected date/time. Please choose another time.",
   "booking.cancelExistingFailed": "Failed to cancel the existing appointment. Please try again.",
   "booking.bookingFailed": "Booking failed. Please try again.",
-  "booking.selectAllBeforeBooking": "Please select a date, time, and service before booking the appointment"
+  "booking.selectAllBeforeBooking": "Please select a date, time, and service before booking the appointment",
+  "booking.selectServices": "Select Services",
+  "booking.selectMultipleHint": "Tap to select one or more services",
+  "booking.selectServiceTitle": "Select a Service",
+  "booking.selectAtLeastOne": "Please select at least one service to continue",
+  "booking.servicesSelected": "services selected",
+  "booking.min": "min",
+  "booking.total": "Total",
+  "booking.field.services": "Services",
+  "booking.price": "₪"
   ,
   "appointments.managerPhoneUnavailable": "Manager phone number is currently unavailable",
   "appointments.whatsappOpenFailed": "WhatsApp cannot be opened on this device",

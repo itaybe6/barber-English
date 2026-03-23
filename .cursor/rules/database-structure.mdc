@@ -1,0 +1,59 @@
+---
+description: Supabase database structure and multi-tenant scoping rules
+alwaysApply: true
+---
+
+# Database Structure — Multi-Tenant Supabase
+
+This is a **white-label app** — multiple businesses share **one Supabase database**.
+Each business is identified by a unique `BUSINESS_ID` (UUID).
+**Every query MUST be scoped by `business_id`** to prevent data leaking between tenants.
+
+## How Tenant Scoping Works
+
+- `getBusinessId()` from `lib/supabase.ts` returns the current tenant's UUID (set at build time via `branding/<CLIENT>/.env`)
+- RLS is **disabled** — isolation is **application-enforced** via `.eq('business_id', getBusinessId())` on every query
+- On INSERT: always include `business_id: getBusinessId()` in the row
+- On SELECT/UPDATE/DELETE: always add `.eq('business_id', businessId)` to the query
+- `business_profile` is the exception: scoped by `.eq('id', businessId)` (its `id` IS the business_id)
+
+## Tables Overview
+
+| Table | Purpose | Scoping |
+|-------|---------|---------|
+| `business_profile` | One row per tenant — name, address, phone, colors, settings | `.eq('id', businessId)` |
+| `users` | All users (admins + clients), auth, push tokens | `.eq('business_id', ...)` |
+| `appointments` | Booking slots and reservations | `.eq('business_id', ...)` |
+| `services` | Bookable services (name, price, duration) | `.eq('business_id', ...)` |
+| `business_hours` | Weekly schedule per day (optionally per barber) | `.eq('business_id', ...)` |
+| `business_constraints` | Date-specific blocked time windows | `.eq('business_id', ...)` |
+| `designs` | Gallery images / nail designs | `.eq('business_id', ...)` |
+| `products` | Product catalog | `.eq('business_id', ...)` |
+| `waitlist_entries` | Client waitlist requests | `.eq('business_id', ...)` |
+| `notifications` | In-app notifications | `.eq('business_id', ...)` |
+| `messages` | Broadcast messages on home screen | `.eq('business_id', ...)` |
+| `recurring_appointments` | Repeating booking rules | `.eq('business_id', ...)` |
+| `coupons` | Coupon definitions | `.eq('business_id', ...)` |
+| `customer_coupons` | Coupon grants to specific clients | `.eq('business_id', ...)` |
+
+## Key Relationships
+
+- `appointments.user_id` / `barber_id` → `users.id`
+- `appointments.service_id` → `services.id`
+- `designs.user_id` → `users.id` (creator)
+- `waitlist_entries.user_id` → `users.id`
+- `notifications.user_id` → `users.id`, `.appointment_id` → `appointments.id`
+- `messages.user_id` → `users.id` (sender)
+- `recurring_appointments.admin_id` → `users.id` (barber)
+- `customer_coupons.coupon_id` → `coupons.id`, `.worker_id` / `.client_id` → `users.id`
+- `business_hours.user_id` → `users.id` (null = global hours for business, set = per-barber hours)
+
+## Critical Rules — חוקים קריטיים
+
+1. **NEVER** write a Supabase query without `business_id` filtering — this will affect ALL tenants
+2. **NEVER** use `getBusinessId()` result as a hardcoded string — always call the function
+3. **ALWAYS** check existing queries in `lib/api/` before writing new ones — follow the same pattern
+4. API modules in `lib/api/` are the preferred place for database queries — avoid querying directly from screens
+5. Types are hand-written in `lib/supabase.ts` — there are no auto-generated Supabase types
+6. Storage buckets `designs` and `app_design` are used for image uploads
+7. Edge function `reset-password` uses service role (bypasses all security) — handle with care

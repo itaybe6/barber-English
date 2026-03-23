@@ -1,21 +1,21 @@
 {
   "expo": {
-    "name": "Itay",
-    "slug": "itay",
+    "name": "Aide",
+    "slug": "adirapp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./branding/Itay/icon.png",
-    "scheme": "itay",
+    "icon": "./branding/adirApp/icon.png",
+    "scheme": "adirapp",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./branding/Itay/splash.png",
+      "image": "./branding/adirApp/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
       "buildNumber": "1",
       "supportsTablet": true,
-      "bundleIdentifier": "com.itay.app",
+      "bundleIdentifier": "com.adirapp.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "CFBundleDevelopmentRegion": "en",
@@ -27,10 +27,10 @@
       "jsEngine": "hermes"
     },
     "android": {
-      "package": "com.itay.app",
+      "package": "com.adirapp.app",
       "versionCode": 1,
       "adaptiveIcon": {
-        "foregroundImage": "./branding/Itay/icon.png",
+        "foregroundImage": "./branding/adirApp/icon.png",
         "backgroundColor": "#ffffff"
       },
       "intentFilters": [
@@ -39,7 +39,7 @@
           "action": "VIEW",
           "data": {
             "scheme": "https",
-            "host": "itay.com"
+            "host": "adirapp.com"
           },
           "category": [
             "BROWSABLE",
@@ -50,13 +50,13 @@
       "supportsRtl": false
     },
     "web": {
-      "favicon": "./branding/Itay/icon.png"
+      "favicon": "./branding/adirApp/icon.png"
     },
     "plugins": [
       [
         "expo-router",
         {
-          "origin": "https://itay.com/"
+          "origin": "https://adirapp.com/"
         }
       ],
       [
@@ -77,16 +77,16 @@
     },
     "extra": {
       "router": {
-        "origin": "https://itay.com/"
+        "origin": "https://adirapp.com/"
       },
       "eas": {
         "projectId": ""
       },
       "locale": "en",
-      "CLIENT": "Itay",
-      "BUSINESS_ID": "ed863830-bcfe-4932-b5ba-55c92a1d0ace",
-      "logo": "./branding/Itay/logo.png",
-      "logoWhite": "./branding/Itay/logo-white.png"
+      "CLIENT": "adirApp",
+      "BUSINESS_ID": "28c6d6a7-7daa-4c95-a969-0171c998cf42",
+      "logo": "./branding/adirApp/logo.png",
+      "logoWhite": "./branding/adirApp/logo-white.png"
     }
   }
 }

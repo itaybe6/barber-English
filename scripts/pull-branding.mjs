@@ -49,7 +49,7 @@ async function listClients() {
     console.error('❌ Error listing branding folders:', error.message);
     return [];
   }
-  return (data || []).filter(item => item.id && !item.name.includes('.')).map(item => item.name);
+  return (data || []).filter(item => !item.name.includes('.')).map(item => item.name);
 }
 
 function scaffoldClient(clientName) {
@@ -173,15 +173,10 @@ CLIENT_NAME=${clientName}
   fs.writeFileSync(path.join(localPath, 'theme.json'), JSON.stringify(theme, null, 2));
   console.log(`  ✅ Created: branding/${clientName}/theme.json`);
 
-  const placeholders = [
-    { name: 'icon.png', desc: 'App icon (1024x1024px)' },
-    { name: 'splash.png', desc: 'Splash screen (1242x2436px)' },
-    { name: 'logo.png', desc: 'Company logo' },
-    { name: 'logo-white.png', desc: 'White version of logo' },
-  ];
-  for (const ph of placeholders) {
-    fs.writeFileSync(path.join(localPath, ph.name), `# ${ph.desc}\n# Replace this file with your actual image\n`);
-    console.log(`  ✅ Created placeholder: branding/${clientName}/${ph.name}`);
+  const requiredImages = ['icon.png', 'splash.png', 'logo.png', 'logo-white.png'];
+  console.log(`\n  ⚠️  Missing image files (add them manually):`);
+  for (const img of requiredImages) {
+    console.log(`     - branding/${clientName}/${img}`);
   }
 
   addNpmScripts(clientName);

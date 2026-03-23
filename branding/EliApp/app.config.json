@@ -1,21 +1,21 @@
 {
   "expo": {
-    "name": "Adie",
-    "slug": "adie",
+    "name": "Eliya",
+    "slug": "eliapp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./branding/Adie/icon.png",
-    "scheme": "adie",
+    "icon": "./branding/EliApp/icon.png",
+    "scheme": "eliapp",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./branding/Adie/splash.png",
+      "image": "./branding/EliApp/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
       "buildNumber": "1",
       "supportsTablet": true,
-      "bundleIdentifier": "com.adie.app",
+      "bundleIdentifier": "com.eliapp.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "CFBundleDevelopmentRegion": "en",
@@ -27,10 +27,10 @@
       "jsEngine": "hermes"
     },
     "android": {
-      "package": "com.adie.app",
+      "package": "com.eliapp.app",
       "versionCode": 1,
       "adaptiveIcon": {
-        "foregroundImage": "./branding/Adie/icon.png",
+        "foregroundImage": "./branding/EliApp/icon.png",
         "backgroundColor": "#ffffff"
       },
       "intentFilters": [
@@ -39,7 +39,7 @@
           "action": "VIEW",
           "data": {
             "scheme": "https",
-            "host": "adie.com"
+            "host": "eliapp.com"
           },
           "category": [
             "BROWSABLE",
@@ -50,13 +50,13 @@
       "supportsRtl": false
     },
     "web": {
-      "favicon": "./branding/Adie/icon.png"
+      "favicon": "./branding/EliApp/icon.png"
     },
     "plugins": [
       [
         "expo-router",
         {
-          "origin": "https://adie.com/"
+          "origin": "https://eliapp.com/"
         }
       ],
       [
@@ -77,16 +77,16 @@
     },
     "extra": {
       "router": {
-        "origin": "https://adie.com/"
+        "origin": "https://eliapp.com/"
       },
       "eas": {
         "projectId": ""
       },
       "locale": "en",
-      "CLIENT": "Adie",
-      "BUSINESS_ID": "f51d2553-2433-4a74-ad75-873e3c8407ee",
-      "logo": "./branding/Adie/logo.png",
-      "logoWhite": "./branding/Adie/logo-white.png"
+      "CLIENT": "EliApp",
+      "BUSINESS_ID": "69b7cf47-d66c-4567-9014-8acb22fd3016",
+      "logo": "./branding/EliApp/logo.png",
+      "logoWhite": "./branding/EliApp/logo-white.png"
     }
   }
 }

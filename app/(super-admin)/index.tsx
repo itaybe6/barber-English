@@ -145,6 +145,31 @@ export default function SuperAdminDashboard() {
     setSplashAsset(null);
   };
 
+  const handleDelete = (item: BusinessOverview) => {
+    Alert.alert(
+      'מחיקת אפליקציה',
+      `בטוח שברצונך למחוק את "${item.display_name || 'עסק ללא שם'}"?\n\nפעולה זו תמחק את כל הנתונים: משתמשים, תורים, שירותים, וקבצי ברנדינג.\n\nלא ניתן לבטל פעולה זו!`,
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'מחק',
+          style: 'destructive',
+          onPress: async () => {
+            setLoading(true);
+            const success = await superAdminApi.deleteBusiness(item.id);
+            if (success) {
+              Alert.alert('נמחק', 'האפליקציה נמחקה בהצלחה.');
+              await loadBusinesses();
+            } else {
+              Alert.alert('שגיאה', 'מחיקת האפליקציה נכשלה.');
+            }
+            setLoading(false);
+          },
+        },
+      ],
+    );
+  };
+
   const handleLogout = () => {
     Alert.alert('התנתקות', 'בטוח שברצונך להתנתק?', [
       { text: 'ביטול', style: 'cancel' },
@@ -280,8 +305,33 @@ export default function SuperAdminDashboard() {
         ) : null}
       </View>
 
+      {(item.adminPhone || item.adminPassword) ? (
+        <View style={styles.adminCredentials}>
+          <View style={styles.adminCredentialsHeader}>
+            <Text style={styles.adminCredentialsTitle}>פרטי התחברות מנהל</Text>
+            <Ionicons name="key" size={14} color={ACCENT} />
+          </View>
+          {item.adminPhone ? (
+            <View style={styles.credentialRow}>
+              <Text style={styles.credentialValue} selectable>{item.adminPhone}</Text>
+              <Text style={styles.credentialLabel}>טלפון:</Text>
+            </View>
+          ) : null}
+          {item.adminPassword ? (
+            <View style={styles.credentialRow}>
+              <Text style={styles.credentialValue} selectable>{item.adminPassword}</Text>
+              <Text style={styles.credentialLabel}>סיסמה:</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
       <View style={styles.bizFooter}>
-        <Text style={styles.bizId} numberOfLines={1}>{item.id}</Text>
+        <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item)} activeOpacity={0.7}>
+          <Text style={styles.deleteBtnText}>מחק</Text>
+          <Ionicons name="trash-outline" size={14} color="#FF6B6B" />
+        </TouchableOpacity>
+        <Text style={styles.bizId} selectable numberOfLines={1}>{item.id}</Text>
       </View>
     </View>
   );
@@ -516,8 +566,24 @@ const styles = StyleSheet.create({
   bizChip: { flexDirection: 'row-reverse', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
   bizChipText: { fontSize: 12, fontWeight: '600' },
 
-  bizFooter: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: CARD_BORDER, alignItems: 'flex-end' },
-  bizId: { fontSize: 10, color: TEXT_MUTED, fontFamily: 'monospace' },
+  adminCredentials: {
+    marginTop: 12,
+    backgroundColor: 'rgba(108,92,231,0.05)',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(108,92,231,0.12)',
+  },
+  adminCredentialsHeader: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginBottom: 8 },
+  adminCredentialsTitle: { fontSize: 12, fontWeight: '700', color: ACCENT },
+  credentialRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginTop: 4 },
+  credentialLabel: { fontSize: 12, fontWeight: '600', color: TEXT_SECONDARY },
+  credentialValue: { fontSize: 13, fontWeight: '700', color: TEXT_PRIMARY, fontFamily: 'monospace' },
+
+  bizFooter: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: CARD_BORDER, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' },
+  bizId: { fontSize: 10, color: TEXT_MUTED, fontFamily: 'monospace', flex: 1, textAlign: 'right' },
+  deleteBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, backgroundColor: '#FFF0F0', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#FFE0E0' },
+  deleteBtnText: { fontSize: 12, fontWeight: '600', color: '#FF6B6B' },
 
   emptyState: { alignItems: 'center', paddingVertical: 50, gap: 10 },
   emptyIconWrap: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#ECEEF4', alignItems: 'center', justifyContent: 'center', marginBottom: 6 },

@@ -1,7 +1,7 @@
 {
   "colors": {
-    "primary": "#007AFF",
-    "secondary": "#5856D6",
+    "primary": "#000000",
+    "secondary": "#000000CC",
     "accent": "#FF3B30",
     "background": "#FFFFFF",
     "surface": "#F2F2F7",
@@ -14,11 +14,11 @@
     "info": "#007AFF"
   },
   "branding": {
-    "logo": "./branding/Adie/logo.png",
-    "logoWhite": "./branding/Adie/logo-white.png",
-    "companyName": "Adie",
-    "website": "https://adie.com",
-    "supportEmail": "support@adie.com"
+    "logo": "./branding/adirApp/logo.png",
+    "logoWhite": "./branding/adirApp/logo-white.png",
+    "companyName": "Aide",
+    "website": "https://adirapp.com",
+    "supportEmail": "support@adirapp.com"
   },
   "fonts": {
     "primary": "System",

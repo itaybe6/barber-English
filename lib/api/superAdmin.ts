@@ -21,6 +21,8 @@ export interface BusinessOverview {
   created_at: string;
   clientCount: number;
   adminCount: number;
+  adminPhone: string | null;
+  adminPassword: string | null;
 }
 
 export const superAdminApi = {
@@ -45,24 +47,34 @@ export const superAdminApi = {
 
       const { data: users, error: usersError } = await supabase
         .from('users')
-        .select('business_id, user_type')
+        .select('business_id, user_type, phone, password_hash')
         .in('business_id', businessIds);
 
       if (usersError) {
         console.error('Error fetching user counts:', usersError);
       }
 
-      const countMap: Record<string, { clients: number; admins: number }> = {};
+      const countMap: Record<string, { clients: number; admins: number; adminPhone: string | null; adminPassword: string | null }> = {};
       for (const u of users || []) {
-        if (!countMap[u.business_id]) countMap[u.business_id] = { clients: 0, admins: 0 };
-        if (u.user_type === 'client') countMap[u.business_id].clients++;
-        else if (u.user_type === 'admin') countMap[u.business_id].admins++;
+        if (!countMap[u.business_id]) countMap[u.business_id] = { clients: 0, admins: 0, adminPhone: null, adminPassword: null };
+        if (u.user_type === 'client') {
+          countMap[u.business_id].clients++;
+        } else if (u.user_type === 'admin') {
+          countMap[u.business_id].admins++;
+          if (!countMap[u.business_id].adminPhone) {
+            countMap[u.business_id].adminPhone = u.phone || null;
+            const hash = u.password_hash || '';
+            countMap[u.business_id].adminPassword = hash === 'default_hash' ? '123456' : hash.startsWith('hash_') ? hash.slice(5) : null;
+          }
+        }
       }
 
       return profiles.map((p: any) => ({
         ...p,
         clientCount: countMap[p.id]?.clients || 0,
         adminCount: countMap[p.id]?.admins || 0,
+        adminPhone: countMap[p.id]?.adminPhone || null,
+        adminPassword: countMap[p.id]?.adminPassword || null,
       }));
     } catch (err) {
       console.error('Error in getAllBusinesses:', err);
@@ -302,6 +314,65 @@ export const superAdminApi = {
     } catch (err) {
       console.error('Error in createBusiness:', err);
       return null;
+    }
+  },
+
+  async deleteBusiness(businessId: string): Promise<boolean> {
+    const client = adminSupabase || supabase;
+    try {
+      const tables = [
+        'notifications',
+        'waitlist_entries',
+        'appointments',
+        'recurring_appointments',
+        'services',
+        'business_hours',
+        'business_constraints',
+        'designs',
+        'products',
+        'messages',
+        'customer_coupons',
+        'coupons',
+        'users',
+      ];
+
+      for (const table of tables) {
+        const { error } = await client.from(table).delete().eq('business_id', businessId);
+        if (error) console.error(`Error deleting from ${table}:`, error.message);
+      }
+
+      const { error: profileError } = await client.from('business_profile').delete().eq('id', businessId);
+      if (profileError) {
+        console.error('Error deleting business_profile:', profileError.message);
+        return false;
+      }
+
+      const { data: brandingFiles } = await client.storage.from('app_design').list(`branding`);
+      if (brandingFiles) {
+        for (const folder of brandingFiles) {
+          const { data: files } = await client.storage.from('app_design').list(`branding/${folder.name}`);
+          if (!files) continue;
+
+          const envFile = files.find((f: any) => f.name === '.env');
+          if (!envFile) continue;
+
+          const { data: envBlob } = await client.storage.from('app_design').download(`branding/${folder.name}/.env`);
+          if (!envBlob) continue;
+
+          const envText = await envBlob.text();
+          if (envText.includes(businessId)) {
+            const filePaths = files.map((f: any) => `branding/${folder.name}/${f.name}`);
+            await client.storage.from('app_design').remove(filePaths);
+            console.log(`Deleted storage folder: branding/${folder.name}/`);
+            break;
+          }
+        }
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Error in deleteBusiness:', err);
+      return false;
     }
   },
 

@@ -10,6 +10,7 @@ import { services } from '@/constants/services';
 import { clients } from '@/constants/clients';
 // import { AvailableTimeSlot } from '@/lib/supabase'; // Not used in this file
 import { supabase } from '@/lib/supabase';
+import { businessProfileApi } from '@/lib/api/businessProfile';
 import Card from '@/components/Card';
 import { Calendar, Clock, ChevronLeft, ChevronRight, Star } from 'lucide-react-native';
 import DaySelector from '@/components/DaySelector';
@@ -57,6 +58,13 @@ function chunkArray<T>(array: T[], size: number): T[][] {
   return chunked;
 }
 
+function sanitizeUrlArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((x) => (typeof x === 'string' ? x.trim() : ''))
+    .filter((x) => x.length > 0);
+}
+
 export default function HomeScreen() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -76,11 +84,34 @@ export default function HomeScreen() {
   const colors = useColors();
   const styles = createStyles(colors);
 
+  const [heroImages, setHeroImages] = useState<string[] | null>(null);
+
+  const loadHeroImages = useCallback(async () => {
+    try {
+      const p = await businessProfileApi.getProfile();
+      const list = sanitizeUrlArray((p as any)?.home_hero_images);
+      setHeroImages(list.length > 0 ? list : null);
+    } catch {
+      setHeroImages(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadHeroImages();
+  }, [loadHeroImages]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadHeroImages();
+    }, [loadHeroImages])
+  );
+
   const ManicureMarqueeHero = () => {
+    const images = heroImages && heroImages.length > 0 ? heroImages : manicureImages;
     const columns = useMemo(() => {
-      const perColumn = Math.ceil(manicureImages.length / 3);
-      return chunkArray(manicureImages, perColumn);
-    }, []);
+      const perColumn = Math.ceil(images.length / 3);
+      return chunkArray(images, perColumn);
+    }, [images]);
 
     return (
       <View style={styles.manicureHeroRoot} pointerEvents="box-none">
@@ -808,6 +839,28 @@ export default function HomeScreen() {
             </View>
           </View>
         </View>
+
+        {/* Admin: Home hero / marquee images */}
+        {isAdmin && (
+          <View style={{ paddingHorizontal: 8, marginBottom: 8 }}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={styles.sectionHeaderTexts}>
+                <Text style={styles.sectionHeaderTitle}>{t('admin.hero.title','Home animation')}</Text>
+                <Text style={styles.sectionHeaderSubtitle}>{t('admin.hero.subtitle','Manage top animation images')}</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => router.push('/(tabs)/edit-home-hero')}
+                activeOpacity={0.85}
+                style={styles.editGalleryButton}
+              >
+                <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20`, width: 28, height: 28, borderRadius: 14, marginRight: 0 }]}>
+                  <Ionicons name="create-outline" size={18} color={colors.primary} />
+                </View>
+                <Text style={styles.editGalleryButtonText}>{t('admin.hero.edit','Edit hero')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* Admin: Gallery header with title/subtext (left) and edit button (right) */}
         {isAdmin && (

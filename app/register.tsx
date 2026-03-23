@@ -28,6 +28,8 @@ import { businessProfileApi } from '@/lib/api/businessProfile';
 import GradientBackground from '@/components/GradientBackground';
 import { getCurrentClientLogo } from '@/src/theme/assets';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
+import { useTranslation } from 'react-i18next';
+import * as ImagePicker from 'expo-image-picker';
 
 // Local palette (male, dark-neutral accents)
 const palette = {
@@ -50,6 +52,7 @@ export default function RegisterScreen() {
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const { colors: businessColors } = useBusinessColors();
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -59,6 +62,13 @@ export default function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
+  const [avatarAsset, setAvatarAsset] = useState<{
+    uri: string;
+    base64?: string | null;
+    mimeType?: string | null;
+    fileName?: string | null;
+  } | null>(null);
+  const [isPickingAvatar, setIsPickingAvatar] = useState(false);
   const router = useRouter();
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => setIsKeyboardVisible(true));
@@ -96,6 +106,10 @@ export default function RegisterScreen() {
   const validateForm = () => {
     const newErrors: {[key: string]: string} = {};
 
+    if (!avatarAsset?.uri) {
+      newErrors.avatar = t('register.avatarRequired', 'Profile photo is required');
+    }
+
     if (!name.trim()) {
       newErrors.name = 'Full name is required';
     }
@@ -130,6 +144,118 @@ export default function RegisterScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const guessMimeFromUri = (uriOrName: string): string => {
+    const ext = uriOrName.split('.').pop()?.toLowerCase().split('?')[0] || 'jpg';
+    if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+    if (ext === 'png') return 'image/png';
+    if (ext === 'heic' || ext === 'heif') return 'image/heic';
+    if (ext === 'webp') return 'image/webp';
+    return 'image/jpeg';
+  };
+
+  const base64ToUint8Array = (base64: string): Uint8Array => {
+    const clean = base64.replace(/^data:[^;]+;base64,/, '');
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    let outputLength = (clean.length / 4) * 3;
+    if (clean.endsWith('==')) outputLength -= 2; else if (clean.endsWith('=')) outputLength -= 1;
+    const bytes = new Uint8Array(outputLength);
+    let p = 0;
+    for (let i = 0; i < clean.length; i += 4) {
+      const enc1 = chars.indexOf(clean.charAt(i));
+      const enc2 = chars.indexOf(clean.charAt(i + 1));
+      const enc3 = chars.indexOf(clean.charAt(i + 2));
+      const enc4 = chars.indexOf(clean.charAt(i + 3));
+      const chr1 = (enc1 << 2) | (enc2 >> 4);
+      const chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+      const chr3 = ((enc3 & 3) << 6) | enc4;
+      bytes[p++] = chr1;
+      if (enc3 !== 64) bytes[p++] = chr2;
+      if (enc4 !== 64) bytes[p++] = chr3;
+    }
+    return bytes;
+  };
+
+  const uploadAvatar = async (asset: { uri: string; base64?: string | null; mimeType?: string | null; fileName?: string | null }): Promise<string | null> => {
+    try {
+      let contentType = asset.mimeType || guessMimeFromUri(asset.fileName || asset.uri);
+      let fileBody: Blob | Uint8Array;
+      if (asset.base64) {
+        fileBody = base64ToUint8Array(asset.base64);
+      } else {
+        const response = await fetch(asset.uri, { cache: 'no-store' });
+        const fetched = await response.blob();
+        fileBody = fetched;
+        contentType = fetched.type || contentType;
+      }
+
+      const extGuess = (contentType.split('/')[1] || 'jpg').toLowerCase();
+      const randomId = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+      const safePhone = phone.trim().replace(/[^\d+]/g, '') || 'unknown';
+      const filePath = `pending/${safePhone}/${Date.now()}_${randomId()}.${extGuess}`;
+      let bucketUsed = 'avatars';
+      const firstAttempt = await supabase.storage.from(bucketUsed).upload(filePath, fileBody as any, { contentType, upsert: false });
+      if (firstAttempt.error) {
+        const msg = String((firstAttempt.error as any)?.message || '').toLowerCase();
+        if (msg.includes('bucket') && msg.includes('not found')) {
+          // Fallback to 'designs' bucket if 'avatars' bucket is missing
+          bucketUsed = 'designs';
+          const retry = await supabase.storage.from(bucketUsed).upload(filePath, fileBody as any, { contentType, upsert: false });
+          if (retry.error) {
+            console.error('avatar upload error (retry)', retry.error);
+            return null;
+          }
+        } else {
+          console.error('avatar upload error', firstAttempt.error);
+          return null;
+        }
+      }
+      const { data } = supabase.storage.from(bucketUsed).getPublicUrl(filePath);
+      return data.publicUrl;
+    } catch (e) {
+      console.error('avatar upload exception', e);
+      return null;
+    }
+  };
+
+  const pickAvatarFromGallery = async () => {
+    try {
+      if (loading || isPickingAvatar) return;
+      setIsPickingAvatar(true);
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          t('profile.permissionRequired', 'Permission Required'),
+          t('profile.permissionGallery', 'Please allow gallery access to pick a profile picture')
+        );
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images',
+        allowsMultipleSelection: false,
+        quality: 0.9,
+        base64: true,
+        allowsEditing: true,
+        aspect: [1, 1],
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const a = result.assets[0] as any;
+      setAvatarAsset({
+        uri: a.uri,
+        base64: a.base64 ?? null,
+        mimeType: a.mimeType ?? null,
+        fileName: a.fileName ?? null,
+      });
+      if (errors.avatar) {
+        setErrors(prev => ({ ...prev, avatar: '' }));
+      }
+    } catch (e) {
+      console.error('pick avatar failed', e);
+      Alert.alert(t('error.generic', 'Error'), t('common.tryAgain', 'A system error occurred. Please try again.'));
+    } finally {
+      setIsPickingAvatar(false);
+    }
+  };
+
   const handleRegister = async () => {
     if (!validateForm()) {
       return;
@@ -152,12 +278,24 @@ export default function RegisterScreen() {
         return;
       }
 
+      if (!avatarAsset?.uri) {
+        setErrors(prev => ({ ...prev, avatar: t('register.avatarRequired', 'Profile photo is required') }));
+        return;
+      }
+
+      const uploadedAvatarUrl = await uploadAvatar(avatarAsset);
+      if (!uploadedAvatarUrl) {
+        Alert.alert(t('error.generic', 'Error'), t('profile.uploadFailed', 'Failed to upload image'));
+        return;
+      }
+
       // Create new user in custom table with chosen password
       const newUser = await usersApi.createUserWithPassword({
         name: name.trim(),
         user_type: 'client', // כל ההרשמות החדשות הן לקוחות
         phone: phone.trim(),
         email: email.trim(),
+        image_url: uploadedAvatarUrl,
       } as any, password);
 
       if (!newUser) {
@@ -296,6 +434,38 @@ export default function RegisterScreen() {
                 <Text style={[styles.formTitle, { color: businessColors.primary }]}>{t('register.form.title','Sign up now')}</Text>
                 <Text style={styles.formSubtitle}>{t('register.form.subtitle','Fill in your details to register and sign in')}</Text>
               </View>
+              {/* Required Profile Photo */}
+              <View style={styles.field}>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={pickAvatarFromGallery}
+                  disabled={loading || isPickingAvatar}
+                  style={[styles.avatarPickerRow, { backgroundColor: palette.inputBg, borderColor: palette.inputBorder }]}
+                >
+                  <View style={styles.avatarCircle}>
+                    {avatarAsset?.uri ? (
+                      <Image source={{ uri: avatarAsset.uri }} style={styles.avatarCircleImage} />
+                    ) : (
+                      <Ionicons name="person-outline" size={22} color={palette.textSecondary} />
+                    )}
+                    <View style={[styles.avatarPlusBadge, { backgroundColor: businessColors.primary }]}>
+                      {isPickingAvatar ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <Ionicons name="add" size={14} color="#fff" />
+                      )}
+                    </View>
+                  </View>
+                  <View style={styles.avatarTextCol}>
+                    <Text style={styles.avatarTitle}>{t('register.avatar.title', 'Profile photo')}</Text>
+                    <Text style={styles.avatarSubtitle}>
+                      {avatarAsset?.uri ? t('register.avatar.change', 'Tap to change') : t('register.avatar.required', 'Required — tap to upload')}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward-outline" size={18} color={palette.textSecondary} />
+                </TouchableOpacity>
+                {errors.avatar && <Text style={styles.errorText}>{errors.avatar}</Text>}
+              </View>
               {/* Name Input */}
               <View style={styles.field}>
                 <View style={[styles.inputRow, { backgroundColor: palette.inputBg, borderColor: palette.inputBorder }]}>
@@ -420,7 +590,12 @@ export default function RegisterScreen() {
               </View>
 
               {/* Register Button - styled like login CTA */}
-              <TouchableOpacity onPress={handleRegister} activeOpacity={0.9} disabled={loading} style={styles.ctaShadow}>
+              <TouchableOpacity
+                onPress={handleRegister}
+                activeOpacity={0.9}
+                disabled={loading || !avatarAsset?.uri}
+                style={[styles.ctaShadow, (loading || !avatarAsset?.uri) ? { opacity: 0.65 } : null]}
+              >
                 <View style={styles.ctaRadiusWrap}>
                   <LinearGradient colors={[ businessColors.primary, businessColors.primary ]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cta}>
                     {loading ? (
@@ -592,6 +767,59 @@ const styles = StyleSheet.create({
   },
   field: {
     marginBottom: 12,
+  },
+  avatarPickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 20,
+    minHeight: 62,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    position: 'relative',
+    width: '92%',
+    alignSelf: 'center',
+    gap: 12,
+  },
+  avatarCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  avatarCircleImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  avatarPlusBadge: {
+    position: 'absolute',
+    bottom: -2,
+    left: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  avatarTextCol: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  avatarTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: palette.textPrimary,
+  },
+  avatarSubtitle: {
+    fontSize: 12,
+    color: palette.textSecondary,
+    marginTop: 2,
   },
   inputRow: {
     flexDirection: 'row',

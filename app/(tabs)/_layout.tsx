@@ -215,6 +215,13 @@ export default function TabsLayout() {
           href: null
         }}
       />
+      <Tabs.Screen
+        name="edit-home-hero"
+        options={{
+          title: 'Edit Home Hero',
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

@@ -517,7 +517,27 @@ export default function SelectTimeScreen() {
         <ScrollView contentContainerStyle={{ paddingBottom: footerBottom + 80 }}>
           <View style={styles.sectionHeaderRow}>
             <TouchableOpacity
-              onPress={() => router.replace({ pathname: '/(client-tabs)/book-appointment' as any, params: { goto: 'dates', serviceName, selectedDate } as any } as any)}
+              onPress={() => {
+                // Prefer going back to preserve full selection state.
+                // If opened directly (no history), fall back to replacing with full params.
+                try {
+                  router.back();
+                  return;
+                } catch {}
+                router.replace({
+                  pathname: '/(client-tabs)/book-appointment' as any,
+                  params: {
+                    goto: 'dates',
+                    barberId: params.barberId,
+                    barberName: (params as any).barberName,
+                    serviceId: params.serviceId,
+                    serviceName,
+                    servicePrice: params.price,
+                    serviceDuration: String(durationMinutes),
+                    selectedDate,
+                  } as any,
+                } as any);
+              }}
               style={styles.backCircle}
               activeOpacity={0.8}
             >

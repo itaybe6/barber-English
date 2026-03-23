@@ -173,6 +173,8 @@ ALTER TABLE business_hours DISABLE ROW LEVEL SECURITY;
     instagram_url TEXT,
     facebook_url TEXT,
     tiktok_url TEXT,
+    -- Home page marquee / hero images (array of public URLs)
+    home_hero_images JSONB DEFAULT '[]'::jsonb,
     break INT DEFAULT 0 CHECK (break >= 0 AND break <= 180),
     booking_open_days INT NOT NULL DEFAULT 7 CHECK (booking_open_days BETWEEN 1 AND 60),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -191,6 +193,8 @@ ALTER TABLE business_hours DISABLE ROW LEVEL SECURITY;
     ADD COLUMN IF NOT EXISTS phone TEXT;
   ALTER TABLE business_profile 
     ADD COLUMN IF NOT EXISTS booking_open_days INT NOT NULL DEFAULT 7;
+  ALTER TABLE business_profile
+    ADD COLUMN IF NOT EXISTS home_hero_images JSONB DEFAULT '[]'::jsonb;
 
   -- Disable RLS for business_profile
   ALTER TABLE business_profile DISABLE ROW LEVEL SECURITY;

@@ -1,12 +1,14 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
+  Dimensions,
+  I18nManager,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  Animated,
+  Animated as RNAnimated,
   TouchableOpacity,
   View,
   Modal,
@@ -25,9 +27,18 @@ import { BlurView } from 'expo-blur';
 import { ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react-native';
 import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from 'react-i18next';
+import dayjs from 'dayjs';
+import { FlashList, FlashListProps } from '@shopify/flash-list';
+import Animated, {
+  setNativeProps,
+  useAnimatedRef,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated';
 
 // Press feedback: scale-on-press animated touchable
-const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
+const AnimatedTouchable = RNAnimated.createAnimatedComponent(TouchableOpacity);
 type PressableScaleProps = {
   onPress: () => void;
   style?: any;
@@ -38,10 +49,10 @@ type PressableScaleProps = {
   children?: React.ReactNode;
 };
 const PressableScale = ({ onPress, style, children, disabled, hitSlop, pressRetentionOffset, accessibilityLabel }: PressableScaleProps) => {
-  const scale = React.useRef(new Animated.Value(1)).current;
+  const scale = React.useRef(new RNAnimated.Value(1)).current;
 
   const handlePressIn = React.useCallback(() => {
-    Animated.spring(scale, {
+    RNAnimated.spring(scale, {
       toValue: 0.94,
       useNativeDriver: true,
       stiffness: 300,
@@ -51,7 +62,7 @@ const PressableScale = ({ onPress, style, children, disabled, hitSlop, pressRete
   }, [scale]);
 
   const handlePressOut = React.useCallback(() => {
-    Animated.spring(scale, {
+    RNAnimated.spring(scale, {
       toValue: 1,
       useNativeDriver: true,
       stiffness: 300,
@@ -79,10 +90,215 @@ const PressableScale = ({ onPress, style, children, disabled, hitSlop, pressRete
   );
 };
 
+type DayBlock = {
+  date: Date;
+  formatted: string; // YYYY-MM-DD
+};
+
+const { width: _screenWidth } = Dimensions.get('window');
+const _daysInWeekToDisplay = 7;
+// +1 is for the hours column
+const _baseDaySize = _screenWidth / (_daysInWeekToDisplay + 1);
+// When showing all 7 days, the grid gets too cramped on phones.
+// Keep all days, but allow horizontal scroll with a readable minimum width.
+const _daySize = Math.max(_baseDaySize, 64);
+const _hourSize = Math.max(_daySize * 1.35, 78);
+const _extraPaddingBottom = _hourSize;
+const _startOfDay = dayjs().startOf('day').set('hour', 0).set('minute', 0);
+const _hourBlocks = [...Array(25).keys()].map((hour) => _startOfDay.add(hour, 'hour'));
+
+Animated.addWhitelistedNativeProps?.({
+  contentOffset: true,
+});
+
+const AnimatedFlashList = Animated.createAnimatedComponent<FlashListProps<DayBlock>>(FlashList);
+
+function _formatLocalYyyyMmDd(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const da = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${da}`;
+}
+
+function _getStartOfWeek(date: Date) {
+  // Israel typically starts week on Sunday (0)
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay(); // 0 (Sun) -> 6 (Sat)
+  d.setDate(d.getDate() - day);
+  return d;
+}
+
+function _buildDays(start: Date, count: number): DayBlock[] {
+  const out: DayBlock[] = [];
+  for (let i = 0; i < count; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    d.setHours(0, 0, 0, 0);
+    out.push({ date: d, formatted: _formatLocalYyyyMmDd(d) });
+  }
+  return out;
+}
+
+function _safeIntl(locale: string, options: Intl.DateTimeFormatOptions) {
+  try {
+    return new Intl.DateTimeFormat(locale, options);
+  } catch {
+    return null;
+  }
+}
+
+function _hebrewHeaderParts(date: Date) {
+  const fmt =
+    _safeIntl('he-IL-u-ca-hebrew', { weekday: 'short', day: 'numeric' }) ||
+    _safeIntl('he-IL', { weekday: 'short', day: 'numeric' });
+  if (!fmt?.formatToParts) {
+    const raw = fmt?.format(date) ?? '';
+    return { dayNum: raw, weekday: '' };
+  }
+  const parts = fmt.formatToParts(date);
+  const dayNum = parts.find((p) => p.type === 'day')?.value ?? '';
+  const weekday = parts.find((p) => p.type === 'weekday')?.value ?? '';
+  return { dayNum, weekday };
+}
+
+function _formatGregorianMonthYear(date: Date) {
+  // Keep Hebrew UI, but force Gregorian calendar ("לועזי")
+  const fmt =
+    _safeIntl('he-IL-u-ca-gregory', { month: 'long', year: 'numeric' }) ||
+    _safeIntl('he-IL', { month: 'long', year: 'numeric' });
+  return fmt?.format(date) ?? '';
+}
+
+function _formatHebrewTimeLabel(date: Date) {
+  const fmt =
+    _safeIntl('he-IL', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }) ||
+    _safeIntl('he-IL', { hour: '2-digit', minute: '2-digit' });
+  return fmt?.format(date) ?? '';
+}
+
+const HeaderDay = memo(({ day }: { day: DayBlock }) => {
+  const { dayNum, weekday } = _hebrewHeaderParts(day.date);
+  return (
+    <View
+      style={[
+        {
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          width: _daySize,
+          height: _hourSize,
+        },
+        weekStyles.borderRight,
+        weekStyles.borderBottom,
+      ]}
+    >
+      <Text style={{ fontWeight: '800', fontSize: 22, writingDirection: 'rtl' }}>{dayNum}</Text>
+      <Text style={{ writingDirection: 'rtl' }}>{weekday}</Text>
+    </View>
+  );
+});
+
+const WeekDayColumn = memo(
+  ({
+    day,
+    index,
+    appts,
+    onPressAppointment,
+    minutesFromMidnight,
+  }: {
+    day: DayBlock;
+    index: number;
+    appts: AvailableTimeSlot[];
+    onPressAppointment: (apt: AvailableTimeSlot) => void;
+    minutesFromMidnight: (time?: string | null) => number;
+  }) => {
+    return (
+      <View
+        style={[
+          {
+            width: _daySize,
+            backgroundColor: index % 2 === 1 ? '#f6f6f6' : '#fff',
+          },
+          weekStyles.borderRight,
+        ]}
+      >
+        <View style={{ height: _hourSize * 24, position: 'relative' }}>
+          {_hourBlocks.map((hourBlock, i) => {
+            const hourDate = hourBlock.toDate();
+            return (
+              <View
+                key={`day-${day.formatted}-hour-${i}`}
+                style={[
+                  {
+                    height: _hourSize,
+                    justifyContent: 'flex-start',
+                    alignItems: 'flex-end',
+                    padding: 2,
+                  },
+                  weekStyles.borderBottom,
+                ]}
+              >
+                <Text style={{ fontSize: 10, opacity: 0.08, writingDirection: 'rtl' }}>
+                  {_formatHebrewTimeLabel(hourDate)}
+                </Text>
+              </View>
+            );
+          })}
+
+          {appts.map((apt) => {
+            const aptMinutes = minutesFromMidnight(apt.slot_time);
+            const durationMinutes = apt.duration_minutes || 30;
+            const top = (aptMinutes / 60) * _hourSize;
+            const height = (durationMinutes / 60) * _hourSize;
+            const clientName = apt.client_name || 'לקוח';
+            const serviceName = apt.service_name || 'שירות';
+            return (
+              <PressableScale
+                key={`wk-${apt.id}-${apt.slot_date}-${apt.slot_time}`}
+                onPress={() => onPressAppointment(apt)}
+                style={[
+                  weekStyles.weekAptCard,
+                  {
+                    top: Math.max(0, top + 2),
+                    height: Math.max(42, height - 4),
+                    left: 4,
+                    right: 4,
+                  },
+                ]}
+              >
+                <BlurView intensity={85} tint="light" style={weekStyles.weekAptBlur} />
+                <View style={weekStyles.weekAptTint} />
+                <View style={weekStyles.weekAptInner}>
+                  <Text numberOfLines={1} style={weekStyles.weekAptClient}>
+                    {clientName}
+                  </Text>
+                  <Text numberOfLines={1} style={weekStyles.weekAptService}>
+                    {serviceName}
+                  </Text>
+                  <View style={weekStyles.weekAptMetaRow}>
+                    {!!apt.slot_time && (
+                      <Text numberOfLines={1} style={weekStyles.weekAptTime}>
+                        {_formatHebrewTimeLabel(new Date(`${apt.slot_date}T${apt.slot_time}`))}
+                      </Text>
+                    )}
+                    <Ionicons name="time-outline" size={12} color="#6B7280" />
+                  </View>
+                </View>
+              </PressableScale>
+            );
+          })}
+        </View>
+      </View>
+    );
+  }
+);
+
 export default function AdminAppointmentsScreen() {
   const { t } = useTranslation();
+  const isRtl = I18nManager.isRTL;
   const user = useAuthStore((state) => state.user);
   const { colors: businessColors } = useBusinessColors();
+  const [viewMode, setViewMode] = useState<'day' | 'week'>('week');
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -99,6 +315,7 @@ export default function AdminAppointmentsScreen() {
   const [markedDates, setMarkedDates] = useState<Set<string>>(new Set());
   const [showActionsModal, setShowActionsModal] = useState<boolean>(false);
   const [actionsAppointment, setActionsAppointment] = useState<AvailableTimeSlot | null>(null);
+  const [rangeAppointments, setRangeAppointments] = useState<Map<string, AvailableTimeSlot[]>>(new Map());
 
 
   const scrollRef = useRef<ScrollView | null>(null);
@@ -155,6 +372,46 @@ export default function AdminAppointmentsScreen() {
       }
     }
   }, []);
+
+  const loadAppointmentsForRange = useCallback(
+    async (startDateStr: string, endDateStr: string) => {
+      try {
+        if (!user?.id) {
+          setRangeAppointments(new Map());
+          return;
+        }
+        const { data, error } = await supabase
+          .from('appointments')
+          .select('*')
+          .eq('is_available', false)
+          .eq('barber_id', user.id)
+          .gte('slot_date', startDateStr)
+          .lte('slot_date', endDateStr)
+          .order('slot_date', { ascending: true })
+          .order('slot_time', { ascending: true });
+
+        if (error) {
+          console.error('Error loading range appointments:', error);
+          setRangeAppointments(new Map());
+          return;
+        }
+
+        const map = new Map<string, AvailableTimeSlot[]>();
+        ((data as unknown as AvailableTimeSlot[]) || []).forEach((apt) => {
+          const key = (apt as any).slot_date as string;
+          if (!key) return;
+          const arr = map.get(key) ?? [];
+          arr.push(apt);
+          map.set(key, arr);
+        });
+        setRangeAppointments(map);
+      } catch (e) {
+        console.error('Error in loadAppointmentsForRange:', e);
+        setRangeAppointments(new Map());
+      }
+    },
+    [user?.id]
+  );
 
   useEffect(() => {
     // Load business hours for selected day to drive the grid
@@ -300,6 +557,36 @@ export default function AdminAppointmentsScreen() {
     return labels;
   }, [dayStart, dayEnd]);
 
+  const weekDays = useMemo(() => {
+    const start = _getStartOfWeek(selectedDate);
+    // show 30 days like the sample so you can pan forward
+    return _buildDays(start, 30);
+  }, [selectedDateStr]);
+
+  useEffect(() => {
+    if (viewMode !== 'week') return;
+    if (weekDays.length === 0) return;
+    void loadAppointmentsForRange(weekDays[0]!.formatted, weekDays[weekDays.length - 1]!.formatted);
+  }, [viewMode, weekDays, loadAppointmentsForRange]);
+
+  const hoursScrollViewRef = useAnimatedRef<any>();
+  const scrollX = useSharedValue(0);
+  const scrollY = useSharedValue(0);
+  const onScrollX = useAnimatedScrollHandler((e) => {
+    scrollX.value = e.contentOffset.x;
+  });
+  const headerStylez = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateX: -scrollX.value }],
+    };
+  });
+  const onScrollY = useAnimatedScrollHandler((e) => {
+    scrollY.value = e.contentOffset.y;
+    setNativeProps(hoursScrollViewRef, {
+      contentOffset: { x: 0, y: scrollY.value },
+    });
+  });
+
   // Actions
   const startPhoneCall = useCallback(async (rawPhone?: string | null) => {
     if (!rawPhone) {
@@ -388,10 +675,12 @@ export default function AdminAppointmentsScreen() {
           }} style={styles.monthNavBtn} activeOpacity={0.7}>
             <ChevronLeft size={16} color={'#1C1C1E'} />
           </TouchableOpacity>
-          <Text style={styles.monthText}>{(() => {
-            const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-            return `${months[selectedDate.getMonth()]} ${selectedDate.getFullYear()}`;
-          })()}</Text>
+          <Text style={[styles.monthText, { writingDirection: isRtl ? 'rtl' : 'ltr' }]}>
+            {_formatGregorianMonthYear(selectedDate) || (() => {
+              const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+              return `${months[selectedDate.getMonth()]} ${selectedDate.getFullYear()}`;
+            })()}
+          </Text>
           <TouchableOpacity onPress={() => {
             const d = new Date(selectedDate);
             d.setDate(1);
@@ -412,119 +701,195 @@ export default function AdminAppointmentsScreen() {
           <Text style={styles.loadingText}>{t('admin.appointments.loadingForDate','Loading appointments for {{date}}...', { date: selectedDateStr })}</Text>
         </View>
       ) : (
-        <ScrollView
-          ref={scrollRef}
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="always"
-
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={[Colors.text]}
-              tintColor={Colors.text}
-              title={t('refreshing','Refreshing...')}
-              titleColor={Colors.text}
-            />
-          }
-        >
-          <View style={styles.timelineContainer}>
-            {/* Grid rows for each 30 minutes */}
-            {halfHourLabels.map((label, idx) => (
-              <View key={idx} style={[styles.gridRow, { height: HALF_HOUR_BLOCK_HEIGHT }]}> 
-                <Text style={styles.timeLabel} numberOfLines={1} adjustsFontSizeToFit={true}>{label}</Text>
-                <View style={styles.gridLine} />
-              </View>
-            ))}
-
-            {/* Appointments overlay */}
-            <View
-              pointerEvents="box-none"
-              style={[styles.overlayContainer, { height: halfHourLabels.length * HALF_HOUR_BLOCK_HEIGHT }]}
+        <>
+          <View style={styles.viewModeRow}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setViewMode('week')}
+              style={[styles.viewModeBtn, viewMode === 'week' && styles.viewModeBtnActive]}
             >
-              {appointments.map((apt) => {
-                // Calculate exact position using minutes from midnight
-                const aptMinutes = minutesFromMidnight(apt.slot_time);
-                const dayStartMinutes = minutesFromMidnight(dayStart);
-                
-                // Calculate the exact offset in minutes from day start
-                const offsetMinutes = aptMinutes - dayStartMinutes;
-                
-                // Convert to precise grid position (30-min per row)
-                // Grid line is centered in each row, so add half-row to align to the line
-                const top = (offsetMinutes / 30) * HALF_HOUR_BLOCK_HEIGHT + (HALF_HOUR_BLOCK_HEIGHT / 2);
-                
-                // Calculate height based on duration
-                const durationMinutes = apt.duration_minutes || 30;
-                const height = (durationMinutes / 30) * HALF_HOUR_BLOCK_HEIGHT;
-                
-                const startTime = formatTime(apt.slot_time);
-                const endTime = formatTime(addMinutes(apt.slot_time, durationMinutes));
-                
-                return (
-                  <PressableScale
-                    key={`${apt.id}-${apt.slot_time}`}
-                    onPress={() => openActionsMenu(apt)}
-                    accessibilityLabel={t('admin.appointments.openActions','Open appointment actions')}
-                    style={[
-                      styles.appointmentCard,
-                      {
-                        top,
-                        height,
-                        left: LABELS_WIDTH + 8,
-                        right: 8,
-                      },
-                    ]}
-                  >
-                    {/* Strong blur background */}
-                    <BlurView intensity={95} tint="light" style={styles.appointmentBlur} />
-                    <View style={styles.appointmentBlurTint} />
-                    {/* Accent bar removed per request */}
-
-                    {/* Content */}
-                    <View style={styles.appointmentInner}>
-                      <View style={styles.infoContainer}> 
-                        <BlurView intensity={28} tint="light" style={styles.pillBlur} />
-                        <View style={styles.pillTint} />
-
-                        {/* Title row with green check icon on the right */}
-                        <View style={styles.titleRow}>
-                          <Text
-                            numberOfLines={2}
-                            ellipsizeMode="tail"
-                            style={[styles.titleText, styles.titleTextFlex]}
-                          >
-                            {[
-                              apt.client_name || 'לקוח',
-                              apt.service_name || 'שירות'
-                            ].filter(Boolean).join(' - ')}
-                          </Text>
-                          <CheckCircle size={18} color="#34C759" />
-                        </View>
-
-                        {/* Time range row with grey rounded background */}
-                        <View style={styles.durationRow}>
-                          <Text numberOfLines={1} style={styles.durationText}>
-                            {`${startTime} - ${endTime}`}
-                          </Text>
-                          <Ionicons name="time-outline" size={16} color="#8E8E93" />
-                        </View>
-                      </View>
-                    </View>
-                  </PressableScale>
-                );
-              })}
-            </View>
+              <Text style={[styles.viewModeText, viewMode === 'week' && styles.viewModeTextActive, { writingDirection: 'rtl' }]}>
+                שבוע
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setViewMode('day')}
+              style={[styles.viewModeBtn, viewMode === 'day' && styles.viewModeBtnActive]}
+            >
+              <Text style={[styles.viewModeText, viewMode === 'day' && styles.viewModeTextActive, { writingDirection: 'rtl' }]}>
+                יום
+              </Text>
+            </TouchableOpacity>
           </View>
 
-          {appointments.length === 0 && (
-            <View style={styles.emptyState}> 
-              <Text style={styles.emptyTitle}>{t('admin.appointments.emptyTitle','No appointments for this day')}</Text>
-              <Text style={styles.emptySubtitle}>{t('admin.appointments.emptySubtitle','Choose another day from the top bar')}</Text>
+          {viewMode === 'week' ? (
+            <View style={weekStyles.container}>
+              <View style={weekStyles.row}>
+                <Animated.ScrollView
+                  ref={hoursScrollViewRef}
+                  style={[weekStyles.hoursCol, { marginTop: _hourSize - 9 }]}
+                  contentContainerStyle={{ paddingBottom: _extraPaddingBottom * 10 }}
+                  scrollEnabled={false}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {_hourBlocks.map((hourBlock, idx) => {
+                    const hourDate = hourBlock.toDate();
+                    return (
+                      <View key={`wk-hour-${idx}`} style={weekStyles.hourRow}>
+                        <Text style={weekStyles.hourText}>{_formatHebrewTimeLabel(hourDate)}</Text>
+                      </View>
+                    );
+                  })}
+                </Animated.ScrollView>
+
+                <View style={weekStyles.gridOuter}>
+                  <Animated.View style={[weekStyles.headerRow, headerStylez]}>
+                    {weekDays.map((d) => (
+                      <HeaderDay day={d} key={`hdr-${d.formatted}`} />
+                    ))}
+                  </Animated.View>
+
+                  <Animated.ScrollView
+                    bounces={false}
+                    onScroll={onScrollY}
+                    scrollEventThrottle={16}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{ paddingBottom: _extraPaddingBottom }}
+                  >
+                    <AnimatedFlashList
+                      data={weekDays}
+                      horizontal
+                      keyExtractor={(item) => item.formatted}
+                      estimatedItemSize={_hourSize}
+                      snapToInterval={_daySize * 2}
+                      decelerationRate={'fast'}
+                      bounces={false}
+                      contentContainerStyle={{ paddingBottom: _extraPaddingBottom }}
+                      showsHorizontalScrollIndicator={false}
+                      renderItem={({ item, index }) => (
+                        <WeekDayColumn
+                          day={item}
+                          index={index}
+                          appts={rangeAppointments.get(item.formatted) ?? []}
+                          onPressAppointment={openActionsMenu}
+                          minutesFromMidnight={minutesFromMidnight}
+                        />
+                      )}
+                      onScroll={onScrollX}
+                      scrollEventThrottle={16}
+                    />
+                  </Animated.ScrollView>
+                </View>
+              </View>
             </View>
+          ) : (
+            <ScrollView
+              ref={scrollRef}
+              style={styles.scroll}
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="always"
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  colors={[Colors.text]}
+                  tintColor={Colors.text}
+                  title={t('refreshing','Refreshing...')}
+                  titleColor={Colors.text}
+                />
+              }
+            >
+              <View style={styles.timelineContainer}>
+                {/* Grid rows for each 30 minutes */}
+                {halfHourLabels.map((label, idx) => (
+                  <View key={idx} style={[styles.gridRow, { height: HALF_HOUR_BLOCK_HEIGHT }]}>
+                    <Text style={styles.timeLabel} numberOfLines={1} adjustsFontSizeToFit={true}>
+                      {label}
+                    </Text>
+                    <View style={styles.gridLine} />
+                  </View>
+                ))}
+
+                {/* Appointments overlay */}
+                <View pointerEvents="box-none" style={[styles.overlayContainer, { height: halfHourLabels.length * HALF_HOUR_BLOCK_HEIGHT }]}>
+                  {appointments.map((apt) => {
+                    // Calculate exact position using minutes from midnight
+                    const aptMinutes = minutesFromMidnight(apt.slot_time);
+                    const dayStartMinutes = minutesFromMidnight(dayStart);
+
+                    // Calculate the exact offset in minutes from day start
+                    const offsetMinutes = aptMinutes - dayStartMinutes;
+
+                    // Convert to precise grid position (30-min per row)
+                    // Grid line is centered in each row, so add half-row to align to the line
+                    const top = (offsetMinutes / 30) * HALF_HOUR_BLOCK_HEIGHT + HALF_HOUR_BLOCK_HEIGHT / 2;
+
+                    // Calculate height based on duration
+                    const durationMinutes = apt.duration_minutes || 30;
+                    const height = (durationMinutes / 30) * HALF_HOUR_BLOCK_HEIGHT;
+
+                    const startTime = formatTime(apt.slot_time);
+                    const endTime = formatTime(addMinutes(apt.slot_time, durationMinutes));
+
+                    return (
+                      <PressableScale
+                        key={`${apt.id}-${apt.slot_time}`}
+                        onPress={() => openActionsMenu(apt)}
+                        accessibilityLabel={t('admin.appointments.openActions','Open appointment actions')}
+                        style={[
+                          styles.appointmentCard,
+                          {
+                            top,
+                            height,
+                            left: LABELS_WIDTH + 8,
+                            right: 8,
+                          },
+                        ]}
+                      >
+                        {/* Strong blur background */}
+                        <BlurView intensity={95} tint="light" style={styles.appointmentBlur} />
+                        <View style={styles.appointmentBlurTint} />
+                        {/* Accent bar removed per request */}
+
+                        {/* Content */}
+                        <View style={styles.appointmentInner}>
+                          <View style={styles.infoContainer}>
+                            <BlurView intensity={28} tint="light" style={styles.pillBlur} />
+                            <View style={styles.pillTint} />
+
+                            {/* Title row with green check icon on the right */}
+                            <View style={styles.titleRow}>
+                              <Text numberOfLines={2} ellipsizeMode="tail" style={[styles.titleText, styles.titleTextFlex]}>
+                                {[apt.client_name || 'לקוח', apt.service_name || 'שירות'].filter(Boolean).join(' - ')}
+                              </Text>
+                              <CheckCircle size={18} color="#34C759" />
+                            </View>
+
+                            {/* Time range row with grey rounded background */}
+                            <View style={styles.durationRow}>
+                              <Text numberOfLines={1} style={styles.durationText}>
+                                {`${startTime} - ${endTime}`}
+                              </Text>
+                              <Ionicons name="time-outline" size={16} color="#8E8E93" />
+                            </View>
+                          </View>
+                        </View>
+                      </PressableScale>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {appointments.length === 0 && (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyTitle}>{t('admin.appointments.emptyTitle','No appointments for this day')}</Text>
+                  <Text style={styles.emptySubtitle}>{t('admin.appointments.emptySubtitle','Choose another day from the top bar')}</Text>
+                </View>
+              )}
+            </ScrollView>
           )}
-        </ScrollView>
+        </>
       )}
 
       {/* Actions menu modal */}
@@ -705,6 +1070,36 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 120,
+  },
+  viewModeRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 6,
+    backgroundColor: Colors.white,
+  },
+  viewModeBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#F2F2F7',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E5EA',
+  },
+  viewModeBtnActive: {
+    backgroundColor: '#1C1C1E',
+    borderColor: '#1C1C1E',
+  },
+  viewModeText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1C1C1E',
+  },
+  viewModeTextActive: {
+    color: '#FFFFFF',
   },
   timelineContainer: {
     marginTop: 8,
@@ -1117,6 +1512,98 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: '#FF3B30',
     fontWeight: '700',
+  },
+});
+
+const weekStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F2F2F7',
+  },
+  row: {
+    flexDirection: 'row',
+    width: '100%',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+  },
+  hoursCol: {
+    width: _daySize,
+    flexGrow: 0,
+  },
+  hourRow: {
+    height: _hourSize,
+    alignItems: 'flex-end',
+    paddingRight: 8,
+  },
+  hourText: {
+    fontWeight: '800',
+    opacity: 0.22,
+    fontSize: 12,
+    writingDirection: 'rtl',
+  },
+  gridOuter: {
+    flex: 1,
+    overflow: 'hidden',
+    borderLeftColor: '#ddd',
+    borderLeftWidth: 1,
+    backgroundColor: '#fff',
+  },
+  headerRow: {
+    flexDirection: 'row',
+  },
+  borderBottom: {
+    borderBottomColor: '#ddd',
+    borderBottomWidth: 1,
+  },
+  borderRight: {
+    borderRightColor: '#ddd',
+    borderRightWidth: 1,
+  },
+  weekAptCard: {
+    position: 'absolute',
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.25)',
+  },
+  weekAptBlur: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  weekAptTint: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+  },
+  weekAptInner: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 3,
+  },
+  weekAptClient: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#000',
+    writingDirection: 'rtl',
+  },
+  weekAptService: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#111827',
+    opacity: 0.9,
+    writingDirection: 'rtl',
+  },
+  weekAptMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  weekAptTime: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#374151',
+    writingDirection: 'rtl',
   },
 });
 

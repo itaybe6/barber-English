@@ -38,7 +38,12 @@ const HERO_INITIAL_DELAY = 200;
 const HERO_DURATION = 500;
 const HERO_HEIGHT = Math.round(SCREEN_HEIGHT * 0.68);
 
-const HERO_IMAGES: string[] = manicureImages;
+function sanitizeUrlArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((x) => (typeof x === 'string' ? x.trim() : ''))
+    .filter((x) => x.length > 0);
+}
 
 function chunkArray<T>(array: T[], size: number): T[][] {
   const chunked: T[][] = [];
@@ -51,11 +56,11 @@ function chunkArray<T>(array: T[], size: number): T[][] {
   return chunked;
 }
 
-function ManicureMarqueeHero() {
+function ManicureMarqueeHero({ images }: { images: string[] }) {
   const columns = useMemo(() => {
-    const perColumn = Math.ceil(HERO_IMAGES.length / 3);
-    return chunkArray(HERO_IMAGES, perColumn);
-  }, []);
+    const perColumn = Math.ceil(images.length / 3);
+    return chunkArray(images, perColumn);
+  }, [images]);
 
   return (
     <View style={styles.manicureHeroRoot} pointerEvents="box-none">
@@ -256,6 +261,11 @@ export default function ClientHomeScreen() {
   const [showMessageModal, setShowMessageModal] = useState(false);
   const [cardWidth, setCardWidth] = useState(0);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
+  const heroImages = useMemo(() => {
+    const list = sanitizeUrlArray((businessProfile as any)?.home_hero_images);
+    return list.length > 0 ? list : manicureImages;
+  }, [businessProfile]);
+
   const [managerPhone, setManagerPhone] = useState<string | null>(null);
   const [businessPhone, setBusinessPhone] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -762,7 +772,7 @@ export default function ClientHomeScreen() {
       >
         {/* Full Screen Hero with Overlay Header */}
         <View style={styles.fullScreenHero}>
-          <ManicureMarqueeHero />
+          <ManicureMarqueeHero images={heroImages} />
           <LinearGradient
             colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0)', 'rgba(255,255,255,0)']}
             start={{ x: 0, y: 0 }}
@@ -945,7 +955,7 @@ export default function ClientHomeScreen() {
               style={styles.nextAppointmentContainer}
             >
               <Image 
-                source={businessProfile?.image_on_page_3 ? { uri: businessProfile.image_on_page_3 } : require('@/assets/images/nextApp.jpg')} 
+                source={require('@/assets/images/nextApp.jpg')} 
                 style={styles.nextAppointmentImage}
                 resizeMode="cover"
               />
@@ -985,7 +995,7 @@ export default function ClientHomeScreen() {
           ) : (
             <View style={styles.bookAppointmentContainer}>
               <Image 
-                source={businessProfile?.image_on_page_2 ? { uri: businessProfile.image_on_page_2 } : require('@/assets/images/bookApp.jpg')} 
+                source={require('@/assets/images/bookApp.jpg')} 
                 style={styles.bookAppointmentImage}
                 resizeMode="cover"
               />

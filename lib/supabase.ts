@@ -238,9 +238,8 @@ export interface BusinessProfile {
   instagram_url?: string;
   facebook_url?: string;
   tiktok_url?: string;
-  image_on_page_1?: string;
-  image_on_page_2?: string;
-  image_on_page_3?: string;
+  // Home page marquee / hero images (public URLs)
+  home_hero_images?: string[];
   login_img?: string; // Image URL for login page
   // Legacy global break minutes (int column named "break" in DB)
   break?: number;

@@ -1878,7 +1878,6 @@ export default function BookAppointment() {
           </View>
         </Modal>
       )}
-      </SafeAreaView>
     </View>
   );
 }

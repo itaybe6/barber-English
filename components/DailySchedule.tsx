@@ -1,13 +1,19 @@
-
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, I18nManager } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-// import { useFonts } from 'expo-font';
 import { AvailableTimeSlot, supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { useTranslation } from 'react-i18next';
+import i18n from '@/src/config/i18n';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  cancelAnimation,
+} from 'react-native-reanimated';
 
 interface DailyScheduleProps {
   nextAppointment: AvailableTimeSlot | null;
@@ -18,42 +24,19 @@ interface DailyScheduleProps {
   variant?: 'card' | 'frosted';
 }
 
-export default function DailySchedule({ nextAppointment, loading, onRefresh, todayAppointmentsCount, loadingTodayCount, variant = 'card' }: DailyScheduleProps) {
+export default function DailySchedule({
+  nextAppointment,
+  loading,
+  onRefresh,
+  todayAppointmentsCount,
+  loadingTodayCount,
+  variant = 'card',
+}: DailyScheduleProps) {
   const router = useRouter();
   const colors = useColors();
   const [clientImageUrl, setClientImageUrl] = useState<string | undefined>(undefined);
   const styles = createStyles(colors);
   const { t } = useTranslation();
-  // Remove custom font usage; rely on system/default fonts
-  const getInitials = (fullName?: string | null): string => {
-    if (!fullName) return '';
-    const parts = fullName.trim().split(/\s+/).filter(Boolean);
-    if (parts.length === 0) return '';
-    const first = parts[0]?.[0] || '';
-    const second = parts[1]?.[0] || '';
-    return `${first}${second}`.toUpperCase();
-  };
-
-  const getColorForName = (name?: string | null): string => {
-    const palette = [
-      '#7B61FF', // purple
-      '#34C759', // green
-      '#FF9500', // orange
-      '#FF2D55', // pink/red
-      '#007AFF', // blue
-      '#AF52DE', // violet
-      '#5AC8FA', // light blue
-      '#FF9F0A', // amber
-    ];
-    if (!name) return palette[0];
-    let hash = 0;
-    for (let i = 0; i < name.length; i += 1) {
-      hash = (hash << 5) - hash + name.charCodeAt(i);
-      hash |= 0;
-    }
-    const idx = Math.abs(hash) % palette.length;
-    return palette[idx];
-  };
 
   const formatTimeToHoursMinutes = (time?: string | null): string => {
     if (!time) return '';
@@ -68,7 +51,6 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
     return time;
   };
 
-  // Load client's profile image for the next appointment
   useEffect(() => {
     let isMounted = true;
     setClientImageUrl(undefined);
@@ -80,7 +62,6 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
           .select('image_url')
           .eq('phone', nextAppointment.client_phone)
           .maybeSingle?.() ?? { data: null, error: null };
-        // Fallback if maybeSingle is not available
         let finalData = data;
         if (!finalData && !error) {
           const { data: singleData } = await supabase
@@ -93,576 +74,335 @@ export default function DailySchedule({ nextAppointment, loading, onRefresh, tod
         if (isMounted && finalData?.image_url) {
           setClientImageUrl(finalData.image_url);
         }
-      } catch (e) {
-        // ignore
-      }
+      } catch (e) {}
     };
     fetchImage();
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [nextAppointment?.client_phone]);
 
-  const isFrosted = variant === 'frosted';
+  const isRTL = I18nManager.isRTL;
+  const dateLocale = i18n.language === 'he' ? 'he-IL' : 'en-US';
+
+  // Decorative circle animations
+  const circle1X = useSharedValue(0);
+  const circle1Y = useSharedValue(0);
+  const circle2X = useSharedValue(0);
+  const circle2Y = useSharedValue(0);
+
+  useEffect(() => {
+    circle1X.value = withRepeat(withTiming(16, { duration: 3400 }), -1, true);
+    circle1Y.value = withRepeat(withTiming(-10, { duration: 4200 }), -1, true);
+    circle2X.value = withRepeat(withTiming(-14, { duration: 3800 }), -1, true);
+    circle2Y.value = withRepeat(withTiming(12, { duration: 4600 }), -1, true);
+    return () => {
+      cancelAnimation(circle1X);
+      cancelAnimation(circle1Y);
+      cancelAnimation(circle2X);
+      cancelAnimation(circle2Y);
+    };
+  }, []);
+
+  const circle1Style = useAnimatedStyle(() => ({
+    transform: [{ translateX: circle1X.value }, { translateY: circle1Y.value }],
+  }));
+  const circle2Style = useAnimatedStyle(() => ({
+    transform: [{ translateX: circle2X.value }, { translateY: circle2Y.value }],
+  }));
+
+  const timeFormatted = formatTimeToHoursMinutes(nextAppointment?.slot_time);
+  const timeParts = timeFormatted.split(' ');
 
   return (
-    <View style={isFrosted ? styles.frostedContainer : styles.container}>
-      <View style={styles.dailyTitleWrapper}>
-        <Text style={[styles.dailyTitle, { color: colors.primary }]}>{t('appointments.mySchedule', 'My Schedule')}</Text>
-        <View style={styles.dailyTitleAccent} />
-      </View>
-      <View style={styles.cardsRow}>
-        {/* Appointments Today Card (top) */}
-        <TouchableOpacity 
-          style={[isFrosted ? styles.frostedCard : styles.card, styles.cardAppointments]} 
-          activeOpacity={0.85}
-          onPress={() => router.push('/appointments')}
+    <View style={styles.wrapper}>
+      {/* ── TODAY BANNER ── */}
+      <TouchableOpacity activeOpacity={0.85} onPress={() => router.push('/appointments')}>
+        <LinearGradient
+          colors={[colors.primary, `${colors.primary}CC`]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.todayBanner, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}
         >
-          {isFrosted ? (
-            <BlurView intensity={30} tint="light" style={styles.frostedInnerBlur}>
-              <View style={styles.cardHeaderRow}>
-                <View style={styles.headerIconCircle}>
-                  <Ionicons name="calendar-outline" size={18} color={colors.primary} />
-                </View>
-            <Text style={[styles.dateText, { color: colors.primary }]}>
-                  {new Date().toLocaleDateString('en-US', {
-                    month: '2-digit',
-                    day: '2-digit'
-                  })} {new Date().toLocaleDateString('en-US', { weekday: 'short' })}
-                </Text>
-                {loadingTodayCount ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
+          {/* Date side — always on the "start" side */}
+          <View style={[styles.todayLeft, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
+            <Text style={[styles.todayWeekday, { textAlign: isRTL ? 'right' : 'left' }]}>
+              {new Date().toLocaleDateString(dateLocale, { weekday: 'long' })}
+            </Text>
+            <Text style={[styles.todayDate, { textAlign: isRTL ? 'right' : 'left' }]}>
+              {new Date().toLocaleDateString(dateLocale, { month: 'short', day: 'numeric' })}
+            </Text>
+          </View>
+
+          {/* Count side — always on the "end" side */}
+          <View style={[styles.todayRight, { alignItems: isRTL ? 'flex-start' : 'flex-end' }]}>
+            {loadingTodayCount ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Text style={[styles.todayCount, { textAlign: isRTL ? 'left' : 'right' }]}>{todayAppointmentsCount}</Text>
+                <Text style={[styles.todayCountLabel, { textAlign: isRTL ? 'left' : 'right' }]}>{t('appointments.title', 'Appointments')}</Text>
+              </>
+            )}
+          </View>
+
+          {/* Animated decorative circles */}
+          <Animated.View style={[styles.todayDecorCircle, circle1Style]} />
+          <Animated.View style={[styles.todayDecorCircle2, circle2Style]} />
+        </LinearGradient>
+      </TouchableOpacity>
+
+      {/* ── NEXT APPOINTMENT ── */}
+      <TouchableOpacity activeOpacity={0.85} onPress={onRefresh} style={styles.nextCard}>
+        {/* Header row */}
+        <View style={[styles.nextHeader, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+          <View style={[styles.nextHeaderIcon, { backgroundColor: `${colors.primary}15` }]}>
+            <Ionicons name="time-outline" size={16} color={colors.primary} />
+          </View>
+          <Text style={[styles.nextHeaderTitle, { textAlign: isRTL ? 'right' : 'left' }]}>
+            {t('appointments.next', 'Next appointment')}
+          </Text>
+          <Ionicons
+            name={isRTL ? 'chevron-forward' : 'chevron-back'}
+            size={16}
+            color="#CBD5E1"
+            style={{ marginRight: isRTL ? undefined : 'auto', marginLeft: isRTL ? 'auto' : undefined }}
+          />
+        </View>
+
+        {/* Content */}
+        {loading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.loadingText}>{t('common.loading', 'Loading...')}</Text>
+          </View>
+        ) : nextAppointment ? (
+          <View style={[styles.nextContent, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+            {/* Client */}
+            <View style={[styles.clientBlock, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+              <View style={styles.clientAvatar}>
+                {clientImageUrl ? (
+                  <Image source={{ uri: clientImageUrl }} style={styles.avatarImg} />
                 ) : (
-              <View style={[styles.timePillHeader, { backgroundColor: `${colors.primary}20` }] }>
-                <Text style={[styles.timeTextPill, { color: colors.primary }]}>
-                      {todayAppointmentsCount} today
+                  <Image source={require('@/assets/images/user.png')} style={styles.avatarImg} />
+                )}
+              </View>
+              <View style={[styles.clientInfo, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
+                <Text style={[styles.clientName, { textAlign: isRTL ? 'right' : 'left' }]} numberOfLines={1}>
+                  {nextAppointment.client_name || t('booking.unknown', 'Unknown')}
+                </Text>
+                {nextAppointment.service_name && (
+                  <View style={[styles.servicePill, { backgroundColor: `${colors.primary}12` }]}>
+                    <Text style={[styles.serviceText, { color: colors.primary }]}>
+                      {nextAppointment.service_name}
                     </Text>
                   </View>
                 )}
               </View>
-            </BlurView>
-          ) : (
-            <View style={styles.cardHeaderRow}>
-              <View style={styles.headerIconCircle}>
-                <Ionicons name="calendar-outline" size={18} color={colors.primary} />
-              </View>
-              <Text style={styles.dateText}>
-                {new Date().toLocaleDateString('en-US', {
-                  month: '2-digit',
-                  day: '2-digit'
-                })} {new Date().toLocaleDateString('en-US', { weekday: 'short' })}
-              </Text>
-              {loadingTodayCount ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <View style={styles.timePillHeader}>
-                  <Text style={styles.timeTextPill}>
-                    {todayAppointmentsCount} {t('today', 'Today')}
-                  </Text>
-                </View>
+            </View>
+
+            {/* Time */}
+            <View style={[styles.timeBadge, { backgroundColor: `${colors.primary}10`, borderColor: `${colors.primary}25` }]}>
+              <Text style={[styles.timeBadgeHour, { color: colors.primary }]}>{timeParts[0]}</Text>
+              {timeParts[1] && (
+                <Text style={[styles.timeBadgePeriod, { color: `${colors.primary}99` }]}>{timeParts[1]}</Text>
               )}
             </View>
-          )}
-        </TouchableOpacity>
-
-        {/* Time Card (bottom) */}
-        <TouchableOpacity
-          style={isFrosted ? styles.frostedCard : styles.card}
-          activeOpacity={0.85}
-          onPress={onRefresh}
-        >
-          {isFrosted ? (
-            <BlurView intensity={30} tint="light" style={styles.frostedInnerBlur}>
-              <View style={styles.cardHeaderRow}>
-                <View style={styles.headerIconCircle}>
-                  <Ionicons name="time-outline" size={18} color={colors.primary} />
-                </View>
-            <Text style={[styles.nextTitle, { color: colors.primary }]}>{t('appointments.next','Your next appointment')}</Text>
-              </View>
-              {loading ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="small" color={colors.primary} />
-                  <Text style={styles.loadingText}>{t('common.loading','Loading...')}</Text>
-                </View>
-              ) : nextAppointment ? (
-                <>
-                  <View style={styles.nextInfoRow}>
-                    <View style={styles.nextInfoRightColumn}>
-                      <View style={styles.clientRow}>
-                        <View style={styles.clientAvatar}>
-                          {clientImageUrl ? (
-                            <Image source={{ uri: clientImageUrl }} style={styles.clientAvatarImage} />
-                          ) : (
-                            <Image source={require('@/assets/images/user.png')} style={styles.clientAvatarImage} />
-                          )}
-                        </View>
-                    <Text style={[styles.clientNameBlack, { color: colors.primary }]}>
-                          {nextAppointment.client_name || 'Unknown client'} {nextAppointment.service_name && ` - ${nextAppointment.service_name}`}
-                        </Text>
-                      </View>
-                      
-                    </View>
-                <Text style={[styles.bigTimeText, { color: '#fff' }]}>
-                      {formatTimeToHoursMinutes(nextAppointment.slot_time).split(' ')[0]}
-                  <Text style={[styles.periodText, { color: '#fff' }]}> {formatTimeToHoursMinutes(nextAppointment.slot_time).split(' ')[1]}</Text>
-                    </Text>
-                  </View>
-                </>
-              ) : (
-                <View style={styles.emptyStateContainer}>
-                  <Text style={styles.emptyTitle}>{t('appointments.empty.today','No upcoming appointments today')}</Text>
-                </View>
-              )}
-            </BlurView>
-          ) : (
-            <>
-            <View style={styles.cardHeaderRow}>
-                <View style={styles.headerIconCircle}>
-                  <Ionicons name="time-outline" size={18} color={colors.primary} />
-                </View>
-              <Text style={styles.nextTitle}>{t('appointments.next', 'Your next appointment')}</Text>
-              </View>
-              {loading ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={styles.loadingText}>{t('appointments.loading', 'Loading appointments...')}</Text>
-                </View>
-              ) : nextAppointment ? (
-                <>
-                  <View style={styles.nextInfoRow}>
-                    <View style={styles.nextInfoRightColumn}>
-                      <View style={styles.clientRow}>
-                        <View style={styles.clientAvatar}>
-                          {clientImageUrl ? (
-                            <Image source={{ uri: clientImageUrl }} style={styles.clientAvatarImage} />
-                          ) : (
-                            <Image source={require('@/assets/images/user.png')} style={styles.clientAvatarImage} />
-                          )}
-                        </View>
-                        <Text style={styles.clientNameBlack}>
-                          {nextAppointment.client_name || t('booking.unknown', 'Unknown')}
-                        </Text>
-                      </View>
-                      {nextAppointment.service_name && (
-                        <Text style={styles.serviceText}>
-                          {nextAppointment.service_name}
-                        </Text>
-                      )}
-                    </View>
-                    <Text style={styles.bigTimeText}>
-                      {formatTimeToHoursMinutes(nextAppointment.slot_time).split(' ')[0]}
-                      <Text style={styles.periodText}> {formatTimeToHoursMinutes(nextAppointment.slot_time).split(' ')[1]}</Text>
-                    </Text>
-                  </View>
-                </>
-              ) : (
-                <View style={styles.emptyStateContainer}>
-                  <Text style={styles.emptyTitle}>{t('appointments.empty.today', 'No upcoming appointments today')}</Text>
-                </View>
-              )}
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
+          </View>
+        ) : (
+          <View style={styles.emptyRow}>
+            <Text style={styles.emptyText}>{t('appointments.empty.today', 'No upcoming appointments today')}</Text>
+            <Ionicons name="calendar-outline" size={18} color="#CBD5E1" />
+          </View>
+        )}
+      </TouchableOpacity>
     </View>
   );
 }
 
 const createStyles = (colors: any) => StyleSheet.create({
-  container: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-    marginBottom: 18,
-    marginHorizontal: 8,
+  wrapper: {
+    gap: 10,
   },
-  frostedContainer: {
-    backgroundColor: 'transparent',
+
+  /* ── Today Banner ── */
+  todayBanner: {
     borderRadius: 20,
-    padding: 6,
-    marginBottom: 12,
-    marginHorizontal: 0,
-  },
-  title: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    color: colors.primary,
-    textAlign: 'center',
-    marginBottom: 12,
-    letterSpacing: 0.5,
-  },
-  cardsRow: {
-    flexDirection: 'column',
-    gap: 12,
-  },
-  card: {
-    alignSelf: 'stretch',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    minHeight: 86,
-    marginHorizontal: 0,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-  },
-  frostedCard: {
-    alignSelf: 'stretch',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    minHeight: 72,
-    marginHorizontal: 0,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    shadowColor: 'transparent',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.28)',
-    overflow: 'hidden',
-  },
-  frostedInnerBlur: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-  },
-  cardNext: {},
-  cardAppointments: {
-    minHeight: 58,
-  },
-  cardHeaderRow: {
+    paddingVertical: 18,
+    paddingHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
-    width: '100%',
+    overflow: 'hidden',
   },
-  // align icon and text to same baseline
-  dateText: {
-    fontSize: 15,
-    color: '#222',
+  todayLeft: {
+    flex: 1,
+  },
+  todayWeekday: {
+    fontSize: 13,
     fontWeight: '600',
-    marginLeft: 6,
-    textAlign: 'left',
-    lineHeight: 20,
+    color: 'rgba(255,255,255,0.8)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
-  nextTitle: {
-    fontSize: 15,
-    color: '#222',
-    fontWeight: '600',
-    marginLeft: 6,
-    textAlign: 'left',
-    lineHeight: 20,
-  },
-  icon: {
-    marginLeft: 6,
-  },
-  headerIconCircle: {
-    backgroundColor: `${colors.primary}15`, // 15% opacity of primary color
-    borderRadius: 16,
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 6,
-  },
-  cardLabel: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1C1C1E',
-    marginBottom: 4,
-    textAlign: 'left',
-  },
-  cardLabelBlack: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#222',
-    marginBottom: 4,
-    textAlign: 'left',
-  },
-  updatesRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  todayDate: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
     marginTop: 2,
   },
-  redDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: '#FF3B30',
-    marginLeft: 5,
+  todayRight: {
+    alignItems: 'center',
+    zIndex: 1,
   },
-  updatesText: {
+  todayCount: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -1,
+    lineHeight: 38,
+  },
+  todayCountLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.75)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  todayDecorCircle: {
+    position: 'absolute',
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    right: 50,
+    top: -20,
+  },
+  todayDecorCircle2: {
+    position: 'absolute',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    right: 10,
+    bottom: -15,
+  },
+
+  /* ── Next Appointment Card ── */
+  nextCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  nextHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  nextHeaderIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  nextHeaderTitle: {
     fontSize: 13,
-    color: '#888',
-    textAlign: 'left',
+    fontWeight: '600',
+    color: '#64748B',
+    letterSpacing: 0.1,
+  },
+  nextContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  clientBlock: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  clientAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    overflow: 'hidden',
+    backgroundColor: '#F1F5F9',
+  },
+  avatarImg: {
+    width: '100%',
+    height: '100%',
+  },
+  clientInfo: {
+    flex: 1,
+    gap: 4,
   },
   clientName: {
     fontSize: 15,
-    color: '#222',
-    fontWeight: '500',
-    marginLeft: 6,
-    textAlign: 'left',
-    flex: 1,
-  },
-  clientNameBlack: {
-    fontSize: 15,
-    color: '#222',
     fontWeight: '700',
-    marginLeft: 4,
-    textAlign: 'left',
-    flex: 1,
+    color: '#1E293B',
   },
-  timeText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#222',
-    marginTop: 8,
-    textAlign: 'left',
-  },
-  bigTimeText: {
-    fontSize: 30,
-    fontWeight: '900',
-    color: '#000',
-    letterSpacing: 0.5,
-    marginTop: -44,
-    marginRight: 1,
-    textAlign: 'right',
-  },
-  periodText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#000',
-    letterSpacing: 0.2,
-  },
-  nextInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-    gap: 12,
-    marginTop: 2,
-  },
-  nextInfoRightColumn: {
-    flex: 1,
-    alignItems: 'flex-start',
-  },
-  timeTextSmall: {
-    fontSize: 16, // smaller font size for time
-    fontWeight: 'bold',
-    color: '#222',
-    marginTop: 8,
-    textAlign: 'left',
-  },
-  avatarsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-    marginLeft: 0,
-  },
-  avatarWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatarCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#fff',
-    borderWidth: 1.5,
-    borderColor: '#eee',
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarImg: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-  },
-  
-  avatarPlusText: {
-    color: '#222',
-    fontSize: 15,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  
-  clientRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 2,
-    width: '100%',
-  },
-  detailsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-    gap: 12,
-  },
-  detailsRight: {
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-  },
-  detailsLeft: {
-    flex: 1,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-  },
-  clientAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    marginRight: 4,
-    marginLeft: 0,
-    overflow: 'hidden',
-  },
-  initialAvatar: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  clientAvatarImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 14,
-  },
-  initialsText: {
-    color: '#fff',
-    fontWeight: '800',
-    fontSize: 12,
-    textAlign: 'center',
-  },
-  timePill: {
-    backgroundColor: '#f2f2f7',
-    borderRadius: 16,
-    paddingVertical: 4,
-    paddingHorizontal: 14,
+  servicePill: {
     alignSelf: 'flex-start',
-    marginTop: 2,
-    marginBottom: 10,
-  },
-  timePillHeader: {
-    backgroundColor: '#f2f2f7',
-    borderRadius: 16,
-    paddingVertical: 2,
-    paddingHorizontal: 10,
-    marginLeft: 8,
-    maxWidth: 120,
-    flexShrink: 1,
-  },
-  timePillAppointments: {
-    backgroundColor: '#f2f2f7',
-    borderRadius: 16,
-    paddingVertical: 4,
-    paddingHorizontal: 14,
-    alignSelf: 'flex-start',
-    marginTop: 0,
-    marginBottom: 10,
-  },
-  timeTextPill: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#222',
-    textAlign: 'center',
-    letterSpacing: 0.3,
-    flexShrink: 1,
-  },
-  cardLabelMargin: {
-    marginBottom: 10,
-  },
-  avatarsRowMargin: {
-    marginTop: 0,
-  },
-  dailyTitleWrapper: {
-    alignSelf: 'stretch',
-    alignItems: 'flex-start',
-    marginTop: 6,
-    marginBottom: 14,
-    marginLeft: 12,
-  },
-  dailyTitle: {
-    fontSize: 22,
-    color: '#222',
-    fontWeight: '800',
-    textAlign: 'left',
-    letterSpacing: 0.2,
-    marginBottom: 2,
-  },
-  dailyTitleAccent: {
-    width: 38,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.primary,
-    marginTop: 0,
-    marginLeft: 2,
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 20,
-  },
-  loadingText: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  noAppointmentContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 20,
-  },
-  noAppointmentText: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  emptyStateContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    gap: 8,
-    alignSelf: 'center',
-    width: '100%',
-  },
-  emptyIconCircle: {
-    backgroundColor: `${colors.primary}20`, // 20% opacity of primary color
-    borderRadius: 18,
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
-  emptySubtitle: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    textAlign: 'center',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   serviceText: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'left',
-    marginTop: 4,
-    marginLeft: 8,
+    fontSize: 11,
+    fontWeight: '600',
   },
-}); 
+  timeBadge: {
+    borderRadius: 14,
+    borderWidth: 1.5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  timeBadgeHour: {
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  timeBadgePeriod: {
+    fontSize: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 1,
+  },
+
+  /* ── States ── */
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
+  },
+  loadingText: {
+    fontSize: 13,
+    color: '#94A3B8',
+  },
+  emptyRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    paddingVertical: 4,
+    width: '100%',
+  },
+  emptyText: {
+    fontSize: 13,
+    color: '#94A3B8',
+    textAlign: 'right',
+  },
+});

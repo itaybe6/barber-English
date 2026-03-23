@@ -291,7 +291,7 @@ export default function WaitlistScreen() {
   const selectedDayEntries = useMemo(() => waitlistByDate[selectedDateKey] || [], [waitlistByDate, selectedDateKey]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff', marginTop: 8 }}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: '#fff', marginTop: 8 }}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       {/* Header styled similarly to appointments screen */}
       <View style={styles.headerLikeAppointments}>

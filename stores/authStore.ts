@@ -7,11 +7,13 @@ interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isSuperAdmin: boolean;
   hasHydrated: boolean;
   notificationsEnabled: boolean;
   login: (user: User) => void;
   logout: () => void;
   isAdminUser: () => boolean;
+  isSuperAdminUser: () => boolean;
   updateUserProfile: (updates: Partial<User>) => void;
   setNotificationsEnabled: (enabled: boolean) => void;
 }
@@ -23,13 +25,18 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       hasHydrated: false,
       isAdmin: false,
+      isSuperAdmin: false,
       notificationsEnabled: true,
       login: (user: User) => {
         const rawRole: unknown = (user as any)?.type ?? (user as any)?.user_type;
         const role = typeof rawRole === 'string' ? rawRole.trim().toLowerCase() : undefined;
-        // If blocked, prevent authenticating
         const isBlocked = Boolean((user as any)?.block);
-        set({ user: isBlocked ? null : user, isAuthenticated: !isBlocked, isAdmin: !isBlocked && role === 'admin' });
+        set({
+          user: isBlocked ? null : user,
+          isAuthenticated: !isBlocked,
+          isAdmin: !isBlocked && (role === 'admin' || role === 'super_admin'),
+          isSuperAdmin: !isBlocked && role === 'super_admin',
+        });
         
         // Force a re-render by getting the state immediately
         setTimeout(() => {
@@ -37,17 +44,21 @@ export const useAuthStore = create<AuthState>()(
         }, 100);
       },
       logout: () => {
-        // Clear in-memory auth state
-        set({ user: null, isAuthenticated: false, isAdmin: false, notificationsEnabled: true });
+        set({ user: null, isAuthenticated: false, isAdmin: false, isSuperAdmin: false, notificationsEnabled: true });
         // Proactively clear persisted auth to avoid race conditions when the app is killed quickly
         AsyncStorage.removeItem('auth-storage').catch(() => {});
       },
       isAdminUser: () => {
         const { user } = get();
-        // Support both the current shape (user.type) and legacy persisted shape (user.user_type)
         const rawRole: unknown = (user as any)?.type ?? (user as any)?.user_type;
         const role = typeof rawRole === 'string' ? rawRole.trim().toLowerCase() : undefined;
-        return role === 'admin';
+        return role === 'admin' || role === 'super_admin';
+      },
+      isSuperAdminUser: () => {
+        const { user } = get();
+        const rawRole: unknown = (user as any)?.type ?? (user as any)?.user_type;
+        const role = typeof rawRole === 'string' ? rawRole.trim().toLowerCase() : undefined;
+        return role === 'super_admin';
       },
       updateUserProfile: (updates: Partial<User>) => {
         const current = get().user;
@@ -55,7 +66,7 @@ export const useAuthStore = create<AuthState>()(
         const updatedUser = { ...current, ...updates } as User;
         const rawRole: unknown = (updatedUser as any)?.type ?? (updatedUser as any)?.user_type;
         const role = typeof rawRole === 'string' ? rawRole.trim().toLowerCase() : undefined;
-        set({ user: updatedUser, isAdmin: role === 'admin' });
+        set({ user: updatedUser, isAdmin: role === 'admin' || role === 'super_admin', isSuperAdmin: role === 'super_admin' });
       },
       setNotificationsEnabled: (enabled: boolean) => {
         set({ notificationsEnabled: enabled });
@@ -71,14 +82,12 @@ export const useAuthStore = create<AuthState>()(
           state.hasHydrated = false as any;
         }
         return (rehydratedState: AuthState | undefined) => {
-          // After rehydration completes
           if (rehydratedState) {
             rehydratedState.hasHydrated = true as any;
-            // Backfill isAdmin if missing or inconsistent
             const rawRole: unknown = (rehydratedState.user as any)?.type ?? (rehydratedState.user as any)?.user_type;
             const role = typeof rawRole === 'string' ? rawRole.trim().toLowerCase() : undefined;
-            rehydratedState.isAdmin = role === 'admin';
-            // Ensure isAuthenticated reflects presence of user
+            rehydratedState.isAdmin = role === 'admin' || role === 'super_admin';
+            rehydratedState.isSuperAdmin = role === 'super_admin';
             rehydratedState.isAuthenticated = Boolean(rehydratedState.user);
           }
         };
@@ -91,10 +100,10 @@ export const useAuthStore = create<AuthState>()(
           if (nextState.user && !nextState.user.type && nextState.user.user_type) {
             nextState.user = { ...nextState.user, type: nextState.user.user_type };
           }
-          // Compute isAdmin during migration
           const rawRole: unknown = nextState.user?.type ?? nextState.user?.user_type;
           const role = typeof rawRole === 'string' ? rawRole.trim().toLowerCase() : undefined;
-          nextState.isAdmin = role === 'admin';
+          nextState.isAdmin = role === 'admin' || role === 'super_admin';
+          nextState.isSuperAdmin = role === 'super_admin';
           return nextState;
         }
         return persistedState;

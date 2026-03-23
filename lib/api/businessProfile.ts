@@ -90,6 +90,8 @@ export const businessProfileApi = {
         min_cancellation_hours: updates.min_cancellation_hours,
         primary_color: updates.primary_color,
             booking_open_days: (updates as any).booking_open_days,
+            business_number: (updates as any).business_number,
+            accountant_email: (updates as any).accountant_email,
           })
           .eq('id', businessId)
           .select('*')
@@ -105,7 +107,7 @@ export const businessProfileApi = {
       const { data, error } = await supabase
         .from('business_profile')
         .insert({
-          id: businessId, // Use the current business_id
+          id: businessId,
           display_name: updates.display_name,
           description: (updates as any).description,
           address: updates.address,
@@ -120,6 +122,8 @@ export const businessProfileApi = {
           min_cancellation_hours: updates.min_cancellation_hours,
           primary_color: updates.primary_color || '#000000',
           booking_open_days: (updates as any).booking_open_days ?? 7,
+          business_number: (updates as any).business_number,
+          accountant_email: (updates as any).accountant_email,
         })
         .select('*')
         .single();

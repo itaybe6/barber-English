@@ -64,10 +64,7 @@
         },
         "locale": "en",
         "CLIENT": "KetyCooper",
-<<<<<<< HEAD
-=======
         "BUSINESS_ID": "91036074-55af-4f5d-883e-47b5804a465c",
->>>>>>> 2e0469c30b23b9a7cd88cb15a3097985ef60c79d
         "eas": {
           "projectId": "98671cac-90d9-42b1-8228-225df1dc4f9e"
         },
@@ -100,16 +97,10 @@
             "secondary": "System"
           }
         },
-<<<<<<< HEAD
-        "BUSINESS_ID": "91036074-55af-4f5d-883e-47b5804a465c",
         "EXPO_PUBLIC_SUPABASE_URL": "https://vqstsrobzbykfivlahxa.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxc3Rzcm9iemJ5a2ZpdmxhaHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc2MDM1MjUsImV4cCI6MjA3MzE3OTUyNX0.iW4vYBC3usEqACGug6BNDkB7PJdHZ75lXo8TJO2x30k",
         "EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY": "AIzaSyAVHoNZSAuWDnCArgFn1gAqA9bxkSuhdJ8",
         "EXPO_PUBLIC_GOOGLE_PLACES_KEY": "AIzaSyAVHoNZSAuWDnCArgFn1gAqA9bxkSuhdJ8",
-=======
-        "EXPO_PUBLIC_SUPABASE_URL": "https://vqstsrobzbykfivlahxa.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxc3Rzcm9iemJ5a2ZpdmxhaHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc2MDM1MjUsImV4cCI6MjA3MzE3OTUyNX0.iW4vYBC3usEqACGug6BNDkB7PJdHZ75lXo8TJO2x30k",
->>>>>>> 2e0469c30b23b9a7cd88cb15a3097985ef60c79d
         "EXPO_PUBLIC_PROJECT_ID": "98671cac-90d9-42b1-8228-225df1dc4f9e"
       }
     }
@@ -141,9 +132,5 @@
       "secondary": "System"
     }
   },
-<<<<<<< HEAD
-  "timestamp": "2026-03-23T16:00:54.558Z"
-=======
-  "timestamp": "2026-02-24T14:58:55.755Z"
->>>>>>> 2e0469c30b23b9a7cd88cb15a3097985ef60c79d
+  "timestamp": "2026-03-23T17:13:32.494Z"
 }

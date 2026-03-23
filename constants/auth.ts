@@ -1,6 +1,7 @@
 export enum UserType {
   ADMIN = 'admin',
-  CLIENT = 'client'
+  CLIENT = 'client',
+  SUPER_ADMIN = 'super_admin'
 }
 
 // Type guard to check if a string is a valid UserType

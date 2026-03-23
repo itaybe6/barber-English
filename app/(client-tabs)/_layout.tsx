@@ -176,15 +176,6 @@ export default function ClientTabsLayout() {
           tabBarLabel: route.name === 'book-appointment'
             ? ''
             : (
-<<<<<<< HEAD
-              route.name === 'index' ? 'בית' :
-              route.name === 'gallery' ? 'גלריה' :
-              route.name === 'appointments' ? 'הזמנות' :
-              route.name === 'profile' ? 'פרופיל' :
-              route.name === 'waitlist' ? 'רשימת המתנה' :
-              route.name === 'notifications' ? 'התראות' :
-              'בית'
-=======
               route.name === 'index' ? t('tabs.home', 'Home') :
               route.name === 'gallery' ? t('tabs.gallery', 'Gallery') :
               route.name === 'appointments' ? t('tabs.booking', 'Booking') :
@@ -192,7 +183,6 @@ export default function ClientTabsLayout() {
               route.name === 'waitlist' ? t('waitlist.title', 'Waitlist') :
               route.name === 'notifications' ? t('notifications.title', 'Notifications') :
               route.name
->>>>>>> 2e0469c30b23b9a7cd88cb15a3097985ef60c79d
             ),
           tabBarContentContainerStyle: {
             justifyContent: 'space-between',

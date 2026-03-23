@@ -53,7 +53,9 @@ export default function RootLayout() {
   // Compute desired group upfront (do not place hooks after conditional returns!)
   const rawRole: unknown = (user as any)?.type ?? (user as any)?.user_type;
   const normalizedRole = typeof rawRole === 'string' ? rawRole.trim().toLowerCase() : '';
-  const desiredGroup = (normalizedRole === 'admin' || isAdminUser()) ? '/(tabs)' : '/(client-tabs)';
+  const desiredGroup = normalizedRole === 'super_admin'
+    ? '/(super-admin)'
+    : (normalizedRole === 'admin' || isAdminUser()) ? '/(tabs)' : '/(client-tabs)';
 
   // Enforce correct top-level group using segments (groups are hidden from pathname)
   React.useEffect(() => {
@@ -189,6 +191,7 @@ export default function RootLayout() {
         <Stack.Screen name="(client-tabs)" />
         <Stack.Screen name="login" />
         <Stack.Screen name="register" />
+        <Stack.Screen name="(super-admin)" />
       </Stack>
     );
   } else if (!user) {
@@ -196,11 +199,11 @@ export default function RootLayout() {
     content = null;
   } else {
     // אם המשתמש מחובר, בדוק איזה סוג משתמש הוא
-    // Render a stack that includes both groups; effect above ensures correct group is shown
     content = (
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(client-tabs)" />
+        <Stack.Screen name="(super-admin)" />
       </Stack>
     );
   }

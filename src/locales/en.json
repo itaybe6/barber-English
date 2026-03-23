@@ -91,6 +91,8 @@
   "booking.selectBarber": "Choose your specialist",
   "booking.selectBarberHint": "Who would you like to book with?",
   "booking.continue": "Continue",
+  "booking.bookNow": "Book Appointment",
+  "booking.checking": "Checking...",
   "booking.chooseTime": "Choose Time",
   "booking.chooseDateHint": "Select a barber and service to see available dates.",
   "booking.loadingWindow": "Loading...",

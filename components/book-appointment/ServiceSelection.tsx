@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,84 @@ import type { Service } from '@/lib/supabase';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 
 const SCREEN = Dimensions.get('window');
+
+type ServiceCardProps = {
+  service: Service;
+  idx: number;
+  isSelected: boolean;
+  primaryColor: string;
+  t: any;
+  onPress: () => void;
+};
+
+function ServiceCard({ service, idx, isSelected, primaryColor, t, onPress }: ServiceCardProps) {
+  const [imgError, setImgError] = useState(false);
+  const imageUri =
+    (service as any)?.image_url ||
+    (service as any)?.cover_url ||
+    (service as any)?.image ||
+    '';
+  const showImage = !!imageUri && !imgError;
+
+  return (
+    <Animated.View
+      key={(service as any).id ?? idx}
+      entering={FadeInDown.delay(120 + idx * 55).duration(400)}
+      style={s.cardOuter}
+    >
+      <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.88}
+        style={[
+          s.card,
+          isSelected && [s.cardSelected, { borderColor: primaryColor, shadowColor: primaryColor }],
+        ]}
+      >
+        {/* Image */}
+        <View style={s.imageWrap}>
+          {showImage ? (
+            <Image
+              source={{ uri: imageUri }}
+              style={s.cardImage}
+              resizeMode="cover"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <View style={[s.cardImage, s.imagePlaceholder]}>
+              <Ionicons name="cut" size={32} color="rgba(255,255,255,0.55)" />
+            </View>
+          )}
+          {/* Price badge */}
+          <View style={s.priceBadge}>
+            <Text style={s.priceText}>₪{(service as any).price ?? 0}</Text>
+          </View>
+          {/* Selected checkmark */}
+          {isSelected && (
+            <View style={[s.checkBadge, { backgroundColor: primaryColor }]}>
+              <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+            </View>
+          )}
+        </View>
+
+        {/* Card info */}
+        <View style={s.info}>
+          <Text
+            numberOfLines={2}
+            style={[s.name, isSelected && { color: primaryColor }]}
+          >
+            {(service as any).name}
+          </Text>
+          <View style={s.metaRow}>
+            <Ionicons name="time-outline" size={13} color="#8E8E93" />
+            <Text style={s.duration}>
+              {(service as any).duration_minutes ?? 60} {t('booking.min', 'min')}
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
 
 type Props = {
   visible: boolean;
@@ -98,68 +176,16 @@ export default function ServiceSelection({
               const isSelected = selectedServiceIds
                 ? selectedServiceIds.includes(svcId)
                 : svcId === String(selectedServiceId ?? '');
-              const imageUri =
-                (service as any)?.image_url ||
-                (service as any)?.cover_url ||
-                (service as any)?.image ||
-                '';
-
               return (
-                <Animated.View
-                  key={(service as any).id ?? idx}
-                  entering={FadeInDown.delay(120 + idx * 55).duration(400)}
-                  style={s.cardOuter}
-                >
-                  <TouchableOpacity
-                    onPress={() => onSelectService(service, idx)}
-                    activeOpacity={0.88}
-                    style={[
-                      s.card,
-                      isSelected && [s.cardSelected, { borderColor: colors.primary, shadowColor: colors.primary }],
-                    ]}
-                  >
-                    {/* Image */}
-                    <View style={s.imageWrap}>
-                      {imageUri ? (
-                        <Image
-                          source={{ uri: imageUri }}
-                          style={s.cardImage}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View style={[s.cardImage, s.imagePlaceholder]}>
-                          <Ionicons name="cut" size={32} color="rgba(255,255,255,0.55)" />
-                        </View>
-                      )}
-                      {/* Price badge */}
-                      <View style={s.priceBadge}>
-                        <Text style={s.priceText}>₪{(service as any).price ?? 0}</Text>
-                      </View>
-                      {/* Selected checkmark */}
-                      {isSelected && (
-                        <View style={[s.checkBadge, { backgroundColor: colors.primary }]}>
-                          <Ionicons name="checkmark" size={14} color="#FFFFFF" />
-                        </View>
-                      )}
-                    </View>
-
-                    {/* Card info */}
-                    <View style={s.info}>
-                      <Text
-                        numberOfLines={2}
-                        style={[s.name, isSelected && { color: colors.primary }]}
-                      >
-                        {(service as any).name}
-                      </Text>
-                      <View style={s.metaRow}>
-                        <Ionicons name="time-outline" size={13} color="#8E8E93" />
-                        <Text style={s.duration}>
-                          {(service as any).duration_minutes ?? 60} {t('booking.min', 'min')}
-                        </Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                </Animated.View>
+                <ServiceCard
+                  key={svcId || idx}
+                  service={service}
+                  idx={idx}
+                  isSelected={isSelected}
+                  primaryColor={colors.primary}
+                  t={t}
+                  onPress={() => onSelectService(service, idx)}
+                />
               );
             })}
           </View>

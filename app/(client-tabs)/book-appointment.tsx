@@ -11,6 +11,7 @@ import BarberSelection from '@/components/book-appointment/BarberSelection';
 import ServiceSelection from '@/components/book-appointment/ServiceSelection';
 import DaySelection from '@/components/book-appointment/DaySelection';
 import TimeSelection from '@/components/book-appointment/TimeSelection';
+import BookingSuccessAnimation from '@/components/book-appointment/BookingSuccessAnimation';
 import BookingStepTabs, { BOOKING_TABS_HEIGHT } from '@/components/book-appointment/BookingStepTabs';
 
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
@@ -1590,7 +1591,27 @@ export default function BookAppointment() {
             </TouchableOpacity>
           );
         })()}
-        {Number(currentStep) === 4 && null}
+        {Number(currentStep) === 4 && selectedTime && (
+          <TouchableOpacity
+            style={[
+              styles.bookButton,
+              { backgroundColor: colors.primary },
+              isCheckingAppointments && { opacity: 0.65 },
+            ]}
+            onPress={handleBookAppointment}
+            activeOpacity={0.88}
+            disabled={isCheckingAppointments}
+          >
+            {isCheckingAppointments ? (
+              <Text style={styles.bookButtonText}>{t('booking.checking', 'Checking...')}</Text>
+            ) : (
+              <>
+                <Ionicons name="calendar-outline" size={20} color="#FFFFFF" />
+                <Text style={styles.bookButtonText}>{t('booking.bookNow', 'Book Appointment')}</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
         </View>
       )}
 
@@ -1768,7 +1789,7 @@ export default function BookAppointment() {
               <View style={styles.successSheen} />
               <View style={styles.successInnerBorder} />
               <View style={styles.modalIconWrapper}>
-                <Ionicons name="checkmark-circle" size={56} color="#34C759" />
+                <BookingSuccessAnimation color="#34C759" />
               </View>
               <Text style={styles.modalTitle}>{t('booking.successTitle', 'Appointment Successfully Booked!')}</Text>
               <Text style={styles.modalMessage} numberOfLines={0} allowFontScaling={false}>
@@ -2863,6 +2884,26 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingHorizontal: 16,
     alignItems: 'center',
     zIndex: 10,
+  },
+  bookButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  bookButtonText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: -0.3,
   },
   sectionFixedTitle: {
     marginTop: 16,

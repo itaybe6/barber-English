@@ -8,30 +8,41 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
-  Modal,
   ScrollView,
   RefreshControl,
+  Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '@/stores/authStore';
 import { superAdminApi, BusinessOverview } from '@/lib/api/superAdmin';
 
 const ACCENT = '#6C5CE7';
-const ACCENT_LIGHT = '#A29BFE';
-const BG = '#F8F9FD';
+const ACCENT_DARK = '#5A4BD1';
+const GREEN = '#00B894';
+const ORANGE = '#E17055';
+const PINK = '#FD79A8';
+const BG = '#F5F6FA';
 const CARD_BG = '#FFFFFF';
+const CARD_BORDER = '#ECEEF4';
 const TEXT_PRIMARY = '#1A1A2E';
 const TEXT_SECONDARY = '#6B7280';
+const TEXT_MUTED = '#9CA3AF';
+
+type TabKey = 'dashboard' | 'add' | 'settings';
 
 export default function SuperAdminDashboard() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const logout = useAuthStore((s) => s.logout);
+  const [activeTab, setActiveTab] = useState<TabKey>('dashboard');
   const [businesses, setBusinesses] = useState<BusinessOverview[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
   const [creating, setCreating] = useState(false);
 
   const [newBizName, setNewBizName] = useState('');
@@ -40,6 +51,9 @@ export default function SuperAdminDashboard() {
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [newAddress, setNewAddress] = useState('');
   const [newColor, setNewColor] = useState('#000000');
+  const [logoUri, setLogoUri] = useState<string | null>(null);
+  const [iconUri, setIconUri] = useState<string | null>(null);
+  const [splashUri, setSplashUri] = useState<string | null>(null);
 
   const loadBusinesses = useCallback(async () => {
     const data = await superAdminApi.getAllBusinesses();
@@ -63,9 +77,20 @@ export default function SuperAdminDashboard() {
   const totalClients = businesses.reduce((sum, b) => sum + b.clientCount, 0);
   const totalAdmins = businesses.reduce((sum, b) => sum + b.adminCount, 0);
 
+  const pickImage = async (setter: (uri: string | null) => void) => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.9,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setter(result.assets[0].uri);
+    }
+  };
+
   const handleCreate = async () => {
     if (!newBizName.trim() || !newAdminName.trim() || !newAdminPhone.trim() || !newAdminPassword.trim()) {
-      Alert.alert('Missing Fields', 'Please fill in all required fields.');
+      Alert.alert('שדות חסרים', 'יש למלא את כל השדות המסומנים בכוכבית.');
       return;
     }
 
@@ -77,16 +102,19 @@ export default function SuperAdminDashboard() {
       adminPassword: newAdminPassword.trim(),
       address: newAddress.trim(),
       primaryColor: newColor.trim(),
+      logoUri: logoUri || undefined,
+      iconUri: iconUri || undefined,
+      splashUri: splashUri || undefined,
     });
     setCreating(false);
 
     if (result) {
-      Alert.alert('Success', `Business "${newBizName}" created successfully!\n\nBusiness ID:\n${result.businessId}\n\n3 default services were added.`);
-      setShowAddModal(false);
+      Alert.alert('נוצר בהצלחה!', `העסק "${newBizName}" נוצר בהצלחה.\n\nמזהה עסק:\n${result.businessId}\n\n3 שירותים נוצרו אוטומטית.`);
       resetForm();
       await loadBusinesses();
+      setActiveTab('dashboard');
     } else {
-      Alert.alert('Error', 'Failed to create business. Check console for details.');
+      Alert.alert('שגיאה', 'יצירת העסק נכשלה. נסה שוב.');
     }
   };
 
@@ -97,13 +125,16 @@ export default function SuperAdminDashboard() {
     setNewAdminPassword('');
     setNewAddress('');
     setNewColor('#000000');
+    setLogoUri(null);
+    setIconUri(null);
+    setSplashUri(null);
   };
 
   const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert('התנתקות', 'בטוח שברצונך להתנתק?', [
+      { text: 'ביטול', style: 'cancel' },
       {
-        text: 'Logout',
+        text: 'התנתק',
         style: 'destructive',
         onPress: () => {
           logout();
@@ -113,499 +144,455 @@ export default function SuperAdminDashboard() {
     ]);
   };
 
-  const renderStatCard = (label: string, value: number, icon: string, color: string) => (
-    <View style={[styles.statCard, { borderLeftColor: color }]}>
-      <View style={[styles.statIconWrap, { backgroundColor: color + '18' }]}>
-        <Ionicons name={icon as any} size={22} color={color} />
-      </View>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-
-  const renderBusinessCard = ({ item }: { item: BusinessOverview }) => (
-    <View style={styles.bizCard}>
-      <View style={styles.bizHeader}>
-        <View style={[styles.bizAvatar, { backgroundColor: item.primary_color || ACCENT }]}>
-          <Text style={styles.bizAvatarText}>
-            {(item.display_name || '?')[0].toUpperCase()}
-          </Text>
-        </View>
-        <View style={styles.bizInfo}>
-          <Text style={styles.bizName} numberOfLines={1}>
-            {item.display_name || 'Unnamed Business'}
-          </Text>
-          {item.address ? (
-            <Text style={styles.bizAddress} numberOfLines={1}>
-              {item.address}
-            </Text>
-          ) : null}
-        </View>
-      </View>
-
-      <View style={styles.bizStats}>
-        <View style={styles.bizStatItem}>
-          <Ionicons name="people" size={16} color={ACCENT} />
-          <Text style={styles.bizStatText}>{item.clientCount} clients</Text>
-        </View>
-        <View style={styles.bizStatItem}>
-          <Ionicons name="shield-checkmark" size={16} color="#E17055" />
-          <Text style={styles.bizStatText}>{item.adminCount} admins</Text>
-        </View>
-        {item.phone ? (
-          <View style={styles.bizStatItem}>
-            <Ionicons name="call" size={16} color="#00B894" />
-            <Text style={styles.bizStatText}>{item.phone}</Text>
+  // ─── Image Picker Tile ───
+  const renderImagePicker = (label: string, uri: string | null, setter: (v: string | null) => void, hint: string) => (
+    <View style={styles.imgPickerWrap}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <TouchableOpacity style={styles.imgPickerBtn} onPress={() => pickImage(setter)} activeOpacity={0.7}>
+        {uri ? (
+          <Image source={{ uri }} style={styles.imgPickerPreview} />
+        ) : (
+          <View style={styles.imgPickerEmpty}>
+            <Ionicons name="cloud-upload-outline" size={28} color={ACCENT} />
+            <Text style={styles.imgPickerHint}>{hint}</Text>
           </View>
-        ) : null}
-      </View>
-
-      <View style={styles.bizFooter}>
-        <Text style={styles.bizId} numberOfLines={1}>ID: {item.id}</Text>
-      </View>
+        )}
+      </TouchableOpacity>
+      {uri && (
+        <TouchableOpacity style={styles.imgRemoveBtn} onPress={() => setter(null)}>
+          <Ionicons name="trash-outline" size={14} color="#FF6B6B" />
+          <Text style={styles.imgRemoveText}>הסר</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={ACCENT} />
-        <Text style={styles.loadingText}>Loading businesses...</Text>
-      </View>
-    );
-  }
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Super Admin</Text>
-          <Text style={styles.headerSubtitle}>Business Management Dashboard</Text>
+  // ─── Tab: Dashboard ───
+  const renderDashboard = () => {
+    if (loading) {
+      return (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={ACCENT} />
+          <Text style={styles.loadingText}>טוען נתונים...</Text>
         </View>
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
-          <Ionicons name="log-out-outline" size={22} color="#FF6B6B" />
-        </TouchableOpacity>
-      </View>
+      );
+    }
 
+    return (
       <FlatList
         data={businesses}
         keyExtractor={(item) => item.id}
         renderItem={renderBusinessCard}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingBottom: 100 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={ACCENT} />}
         ListHeaderComponent={
           <View>
             <View style={styles.statsRow}>
-              {renderStatCard('Apps', businesses.length, 'apps', ACCENT)}
-              {renderStatCard('Clients', totalClients, 'people', '#00B894')}
-              {renderStatCard('Admins', totalAdmins, 'shield-checkmark', '#E17055')}
+              <LinearGradient colors={['#6C5CE7', '#A29BFE']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.statCard}>
+                <Ionicons name="apps" size={24} color="#FFFFFF" />
+                <Text style={styles.statValue}>{businesses.length}</Text>
+                <Text style={styles.statLabel}>אפליקציות</Text>
+              </LinearGradient>
+
+              <LinearGradient colors={['#00B894', '#55EFC4']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.statCard}>
+                <Ionicons name="people" size={24} color="#FFFFFF" />
+                <Text style={styles.statValue}>{totalClients}</Text>
+                <Text style={styles.statLabel}>לקוחות</Text>
+              </LinearGradient>
+
+              <LinearGradient colors={['#E17055', '#FAB1A0']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.statCard}>
+                <Ionicons name="shield-checkmark" size={24} color="#FFFFFF" />
+                <Text style={styles.statValue}>{totalAdmins}</Text>
+                <Text style={styles.statLabel}>מנהלים</Text>
+              </LinearGradient>
             </View>
 
-            <TouchableOpacity style={styles.addButton} onPress={() => setShowAddModal(true)} activeOpacity={0.85}>
-              <Ionicons name="add-circle" size={24} color="#FFFFFF" />
-              <Text style={styles.addButtonText}>Add New Business</Text>
-            </TouchableOpacity>
-
-            <Text style={styles.sectionTitle}>All Businesses</Text>
+            <Text style={styles.sectionTitle}>כל העסקים</Text>
           </View>
         }
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Ionicons name="business-outline" size={48} color={TEXT_SECONDARY} />
-            <Text style={styles.emptyText}>No businesses yet</Text>
-            <Text style={styles.emptySubtext}>Tap the button above to add your first business</Text>
+            <View style={styles.emptyIconWrap}>
+              <Ionicons name="business-outline" size={44} color={TEXT_MUTED} />
+            </View>
+            <Text style={styles.emptyText}>אין עסקים עדיין</Text>
+            <Text style={styles.emptySubtext}>עבור ללשונית "הוספה" כדי ליצור את העסק הראשון</Text>
           </View>
         }
       />
+    );
+  };
 
-      <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet">
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => { setShowAddModal(false); resetForm(); }}>
-              <Ionicons name="close" size={28} color={TEXT_PRIMARY} />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Add New Business</Text>
-            <View style={{ width: 28 }} />
+  const renderBusinessCard = ({ item }: { item: BusinessOverview }) => (
+    <View style={styles.bizCard}>
+      <View style={styles.bizHeader}>
+        <View style={styles.bizInfo}>
+          <Text style={styles.bizName} numberOfLines={1}>
+            {item.display_name || 'עסק ללא שם'}
+          </Text>
+          {item.address ? (
+            <View style={styles.bizAddressRow}>
+              <Text style={styles.bizAddress} numberOfLines={1}>{item.address}</Text>
+              <Ionicons name="location-outline" size={13} color={TEXT_MUTED} />
+            </View>
+          ) : null}
+        </View>
+        <LinearGradient
+          colors={[item.primary_color || ACCENT, (item.primary_color || ACCENT) + 'AA']}
+          style={styles.bizAvatar}
+        >
+          <Text style={styles.bizAvatarText}>
+            {(item.display_name || '?')[0].toUpperCase()}
+          </Text>
+        </LinearGradient>
+      </View>
+
+      <View style={styles.bizStatsRow}>
+        <View style={[styles.bizChip, { backgroundColor: 'rgba(108,92,231,0.1)' }]}>
+          <Text style={[styles.bizChipText, { color: ACCENT }]}>{item.clientCount} לקוחות</Text>
+          <Ionicons name="people" size={14} color={ACCENT} />
+        </View>
+        <View style={[styles.bizChip, { backgroundColor: 'rgba(225,112,85,0.1)' }]}>
+          <Text style={[styles.bizChipText, { color: ORANGE }]}>{item.adminCount} מנהלים</Text>
+          <Ionicons name="shield-checkmark" size={14} color={ORANGE} />
+        </View>
+        {item.phone ? (
+          <View style={[styles.bizChip, { backgroundColor: 'rgba(0,184,148,0.1)' }]}>
+            <Text style={[styles.bizChipText, { color: GREEN }]}>{item.phone}</Text>
+            <Ionicons name="call" size={14} color={GREEN} />
           </View>
+        ) : null}
+      </View>
 
-          <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            <Text style={styles.fieldLabel}>Business Name *</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="e.g. Sarah's Nail Studio"
-              placeholderTextColor="#9CA3AF"
-              value={newBizName}
-              onChangeText={setNewBizName}
-            />
+      <View style={styles.bizFooter}>
+        <Text style={styles.bizId} numberOfLines={1}>{item.id}</Text>
+      </View>
+    </View>
+  );
 
-            <Text style={styles.fieldLabel}>Admin Name *</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="e.g. Sarah Cohen"
-              placeholderTextColor="#9CA3AF"
-              value={newAdminName}
-              onChangeText={setNewAdminName}
-            />
+  // ─── Tab: Add Business ───
+  const renderAddBusiness = () => (
+    <ScrollView
+      style={styles.addScroll}
+      contentContainerStyle={[styles.addContent, { paddingBottom: 120 }]}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
+      <View style={styles.addHeader}>
+        <LinearGradient colors={[ACCENT, ACCENT_DARK]} style={styles.addIconCircle}>
+          <Ionicons name="add-circle" size={32} color="#FFFFFF" />
+        </LinearGradient>
+        <Text style={styles.addTitle}>הוספת עסק חדש</Text>
+        <Text style={styles.addSubtitle}>מלא את הפרטים כדי ליצור אפליקציה חדשה</Text>
+      </View>
 
-            <Text style={styles.fieldLabel}>Admin Phone *</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="e.g. 0501234567"
-              placeholderTextColor="#9CA3AF"
-              value={newAdminPhone}
-              onChangeText={setNewAdminPhone}
-              keyboardType="phone-pad"
-            />
+      {/* Business Details */}
+      <View style={styles.formCard}>
+        <Text style={styles.formSectionLabel}>פרטי העסק</Text>
 
-            <Text style={styles.fieldLabel}>Admin Password *</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Password for the admin account"
-              placeholderTextColor="#9CA3AF"
-              value={newAdminPassword}
-              onChangeText={setNewAdminPassword}
-              secureTextEntry
-            />
+        <Text style={styles.fieldLabel}>שם העסק *</Text>
+        <TextInput style={styles.input} placeholder="לדוגמה: הסטודיו של שרה" placeholderTextColor={TEXT_MUTED} value={newBizName} onChangeText={setNewBizName} textAlign="right" />
 
-            <Text style={styles.fieldLabel}>Address</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="e.g. Tel Aviv, Dizengoff 50"
-              placeholderTextColor="#9CA3AF"
-              value={newAddress}
-              onChangeText={setNewAddress}
-            />
+        <Text style={styles.fieldLabel}>כתובת</Text>
+        <TextInput style={styles.input} placeholder="לדוגמה: תל אביב, דיזנגוף 50" placeholderTextColor={TEXT_MUTED} value={newAddress} onChangeText={setNewAddress} textAlign="right" />
 
-            <Text style={styles.fieldLabel}>Primary Color</Text>
-            <View style={styles.colorRow}>
-              <TextInput
-                style={[styles.modalInput, { flex: 1 }]}
-                placeholder="#000000"
-                placeholderTextColor="#9CA3AF"
-                value={newColor}
-                onChangeText={setNewColor}
-                autoCapitalize="none"
-              />
-              <View style={[styles.colorPreview, { backgroundColor: newColor }]} />
-            </View>
+        <Text style={styles.fieldLabel}>צבע ראשי</Text>
+        <View style={styles.colorRow}>
+          <View style={[styles.colorPreview, { backgroundColor: newColor }]} />
+          <TextInput style={[styles.input, { flex: 1 }]} placeholder="#000000" placeholderTextColor={TEXT_MUTED} value={newColor} onChangeText={setNewColor} autoCapitalize="none" textAlign="right" />
+        </View>
+      </View>
 
-            <View style={styles.infoBox}>
-              <Ionicons name="information-circle" size={20} color={ACCENT} />
-              <Text style={styles.infoText}>
-                3 default services will be created automatically: Gel Nails, Gel Removal, and Manicure.
-              </Text>
-            </View>
+      {/* Admin Details */}
+      <View style={styles.formCard}>
+        <Text style={styles.formSectionLabel}>פרטי מנהל</Text>
 
-            <TouchableOpacity
-              style={[styles.createButton, creating && styles.createButtonDisabled]}
-              onPress={handleCreate}
-              disabled={creating}
-              activeOpacity={0.85}
-            >
-              {creating ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <>
-                  <Ionicons name="rocket" size={20} color="#FFFFFF" />
-                  <Text style={styles.createButtonText}>Create Business</Text>
-                </>
-              )}
-            </TouchableOpacity>
+        <Text style={styles.fieldLabel}>שם מנהל *</Text>
+        <TextInput style={styles.input} placeholder="לדוגמה: שרה כהן" placeholderTextColor={TEXT_MUTED} value={newAdminName} onChangeText={setNewAdminName} textAlign="right" />
 
-            <View style={{ height: 40 }} />
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-    </SafeAreaView>
+        <Text style={styles.fieldLabel}>טלפון מנהל *</Text>
+        <TextInput style={styles.input} placeholder="לדוגמה: 0501234567" placeholderTextColor={TEXT_MUTED} value={newAdminPhone} onChangeText={setNewAdminPhone} keyboardType="phone-pad" textAlign="right" />
+
+        <Text style={styles.fieldLabel}>סיסמת מנהל *</Text>
+        <TextInput style={styles.input} placeholder="סיסמה לחשבון המנהל" placeholderTextColor={TEXT_MUTED} value={newAdminPassword} onChangeText={setNewAdminPassword} secureTextEntry textAlign="right" />
+      </View>
+
+      {/* Brand Assets */}
+      <View style={styles.formCard}>
+        <Text style={styles.formSectionLabel}>נכסי מיתוג</Text>
+        <Text style={styles.brandHint}>התמונות יישמרו בתיקיית branding של האפליקציה</Text>
+
+        <View style={styles.imgRow}>
+          {renderImagePicker('לוגו', logoUri, setLogoUri, 'העלה לוגו')}
+          {renderImagePicker('אייקון', iconUri, setIconUri, 'העלה אייקון')}
+          {renderImagePicker('ספלאש', splashUri, setSplashUri, 'העלה ספלאש')}
+        </View>
+      </View>
+
+      <View style={styles.infoBox}>
+        <Text style={styles.infoText}>
+          3 שירותים יווצרו אוטומטית: לק ג'ל, הסרת ג'ל, ומניקור.
+        </Text>
+        <Ionicons name="sparkles" size={18} color={ACCENT} />
+      </View>
+
+      <TouchableOpacity
+        style={[styles.createBtn, creating && { opacity: 0.6 }]}
+        onPress={handleCreate}
+        disabled={creating}
+        activeOpacity={0.85}
+      >
+        <LinearGradient colors={[ACCENT, ACCENT_DARK]} style={styles.createBtnGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+          {creating ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <>
+              <Text style={styles.createBtnText}>צור עסק</Text>
+              <Ionicons name="rocket" size={20} color="#FFFFFF" />
+            </>
+          )}
+        </LinearGradient>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+
+  // ─── Tab: Settings ───
+  const renderSettings = () => (
+    <ScrollView contentContainerStyle={[styles.settingsContent, { paddingBottom: 120 }]}>
+      <View style={styles.settingsHeader}>
+        <View style={styles.settingsAvatarWrap}>
+          <LinearGradient colors={[ACCENT, PINK]} style={styles.settingsAvatar}>
+            <Ionicons name="person" size={36} color="#FFFFFF" />
+          </LinearGradient>
+        </View>
+        <Text style={styles.settingsName}>סופר אדמין</Text>
+        <Text style={styles.settingsRole}>ניהול כלל-מערכתי</Text>
+      </View>
+
+      <View style={styles.settingsCard}>
+        <View style={styles.settingsRow}>
+          <Text style={styles.settingsRowValue}>{businesses.length}</Text>
+          <Text style={styles.settingsRowLabel}>סה"כ אפליקציות</Text>
+          <Ionicons name="apps" size={20} color={ACCENT} />
+        </View>
+        <View style={styles.settingsDivider} />
+        <View style={styles.settingsRow}>
+          <Text style={styles.settingsRowValue}>{totalClients}</Text>
+          <Text style={styles.settingsRowLabel}>סה"כ לקוחות</Text>
+          <Ionicons name="people" size={20} color={GREEN} />
+        </View>
+        <View style={styles.settingsDivider} />
+        <View style={styles.settingsRow}>
+          <Text style={styles.settingsRowValue}>{totalAdmins}</Text>
+          <Text style={styles.settingsRowLabel}>סה"כ מנהלים</Text>
+          <Ionicons name="shield-checkmark" size={20} color={ORANGE} />
+        </View>
+      </View>
+
+      <TouchableOpacity style={styles.logoutCard} onPress={handleLogout} activeOpacity={0.8}>
+        <Ionicons name="chevron-back" size={18} color={TEXT_MUTED} />
+        <Text style={styles.logoutText}>התנתקות</Text>
+        <Ionicons name="log-out-outline" size={22} color="#FF6B6B" />
+      </TouchableOpacity>
+    </ScrollView>
+  );
+
+  // ─── Bottom Tab Bar ───
+  const tabs: { key: TabKey; icon: string; iconFocused: string; label: string }[] = [
+    { key: 'dashboard', icon: 'grid-outline', iconFocused: 'grid', label: 'דשבורד' },
+    { key: 'add', icon: 'add-circle-outline', iconFocused: 'add-circle', label: 'הוספה' },
+    { key: 'settings', icon: 'settings-outline', iconFocused: 'settings', label: 'הגדרות' },
+  ];
+
+  return (
+    <View style={styles.root}>
+      <LinearGradient colors={['#FFFFFF', '#F5F6FA']} style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <Text style={styles.headerTitle}>לוח בקרה</Text>
+        <Text style={styles.headerSubtitle}>ניהול כל האפליקציות</Text>
+      </LinearGradient>
+
+      <View style={styles.body}>
+        {activeTab === 'dashboard' && renderDashboard()}
+        {activeTab === 'add' && renderAddBusiness()}
+        {activeTab === 'settings' && renderSettings()}
+      </View>
+
+      <View style={[styles.tabBarOuter, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+        <BlurView intensity={90} tint="light" style={styles.tabBarBlur}>
+          <View style={styles.tabBarOverlay} />
+          <View style={styles.tabBarRow}>
+            {tabs.map((tab) => {
+              const focused = activeTab === tab.key;
+              return (
+                <TouchableOpacity key={tab.key} style={styles.tabItem} onPress={() => setActiveTab(tab.key)} activeOpacity={0.7}>
+                  {tab.key === 'add' ? (
+                    <View style={[styles.addTabBtn, focused && styles.addTabBtnFocused]}>
+                      <Ionicons name={focused ? tab.iconFocused : tab.icon} size={28} color="#FFFFFF" />
+                    </View>
+                  ) : (
+                    <>
+                      <Ionicons name={(focused ? tab.iconFocused : tab.icon) as any} size={24} color={focused ? ACCENT : TEXT_MUTED} />
+                      <Text style={[styles.tabLabel, focused && styles.tabLabelFocused]}>{tab.label}</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </BlurView>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: BG,
-  },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: BG,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  loadingText: {
-    fontSize: 15,
-    color: TEXT_SECONDARY,
-  },
+  root: { flex: 1, backgroundColor: BG },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  loadingText: { fontSize: 15, color: TEXT_SECONDARY },
+
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: CARD_BG,
+    paddingBottom: 18,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F5',
+    borderBottomColor: '#ECEEF4',
+    alignItems: 'flex-end',
   },
-  headerTitle: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: TEXT_PRIMARY,
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: TEXT_SECONDARY,
-    marginTop: 2,
-  },
-  logoutBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FFF0F0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  listContent: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 20,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: CARD_BG,
-    borderRadius: 16,
-    padding: 14,
-    borderLeftWidth: 3,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  statIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: TEXT_PRIMARY,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: TEXT_SECONDARY,
-    marginTop: 2,
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: ACCENT,
-    borderRadius: 16,
-    paddingVertical: 16,
-    gap: 8,
-    marginBottom: 24,
-    shadowColor: ACCENT,
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
-  },
-  addButtonText: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: TEXT_PRIMARY,
-    marginBottom: 12,
-  },
+  headerTitle: { fontSize: 28, fontWeight: '800', color: TEXT_PRIMARY, textAlign: 'right' },
+  headerSubtitle: { fontSize: 14, color: TEXT_SECONDARY, marginTop: 4, textAlign: 'right' },
+
+  body: { flex: 1 },
+
+  // ── Dashboard ──
+  listContent: { padding: 16 },
+  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
+  statCard: { flex: 1, borderRadius: 18, padding: 16, alignItems: 'flex-end', gap: 6 },
+  statValue: { fontSize: 28, fontWeight: '900', color: '#FFFFFF' },
+  statLabel: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.8)' },
+
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: TEXT_PRIMARY, marginBottom: 14, textAlign: 'right', alignSelf: 'stretch' },
+
   bizCard: {
     backgroundColor: CARD_BG,
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 16,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
     shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
-  bizHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  bizAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bizAvatarText: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  bizInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  bizName: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: TEXT_PRIMARY,
-  },
-  bizAddress: {
-    fontSize: 13,
-    color: TEXT_SECONDARY,
-    marginTop: 2,
-  },
-  bizStats: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F5',
-  },
-  bizStatItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  bizStatText: {
-    fontSize: 13,
-    color: TEXT_SECONDARY,
-    fontWeight: '500',
-  },
-  bizFooter: {
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F5',
-  },
-  bizId: {
-    fontSize: 11,
-    color: '#9CA3AF',
-    fontFamily: 'monospace',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    gap: 8,
-  },
-  emptyText: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: TEXT_PRIMARY,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: TEXT_SECONDARY,
-    textAlign: 'center',
-  },
+  bizHeader: { flexDirection: 'row-reverse', alignItems: 'center', marginBottom: 14 },
+  bizAvatar: { width: 50, height: 50, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  bizAvatarText: { fontSize: 22, fontWeight: '800', color: '#FFFFFF' },
+  bizInfo: { flex: 1, marginRight: 12, alignItems: 'flex-end' },
+  bizName: { fontSize: 17, fontWeight: '700', color: TEXT_PRIMARY, textAlign: 'right' },
+  bizAddressRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, marginTop: 3 },
+  bizAddress: { fontSize: 13, color: TEXT_MUTED, textAlign: 'right' },
 
-  // Modal styles
-  modalContainer: {
-    flex: 1,
-    backgroundColor: BG,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+  bizStatsRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8 },
+  bizChip: { flexDirection: 'row-reverse', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
+  bizChipText: { fontSize: 12, fontWeight: '600' },
+
+  bizFooter: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: CARD_BORDER, alignItems: 'flex-end' },
+  bizId: { fontSize: 10, color: TEXT_MUTED, fontFamily: 'monospace' },
+
+  emptyState: { alignItems: 'center', paddingVertical: 50, gap: 10 },
+  emptyIconWrap: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#ECEEF4', alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  emptyText: { fontSize: 18, fontWeight: '700', color: TEXT_PRIMARY },
+  emptySubtext: { fontSize: 14, color: TEXT_SECONDARY, textAlign: 'center', paddingHorizontal: 20 },
+
+  // ── Add Business ──
+  addScroll: { flex: 1 },
+  addContent: { padding: 20 },
+  addHeader: { alignItems: 'center', marginBottom: 28, gap: 8 },
+  addIconCircle: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  addTitle: { fontSize: 22, fontWeight: '800', color: TEXT_PRIMARY },
+  addSubtitle: { fontSize: 14, color: TEXT_SECONDARY, textAlign: 'center' },
+
+  formCard: {
     backgroundColor: CARD_BG,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F5',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    padding: 18,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: TEXT_PRIMARY,
-  },
-  modalBody: {
-    flex: 1,
-    padding: 20,
-  },
-  fieldLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: TEXT_PRIMARY,
-    marginBottom: 6,
-    marginTop: 14,
-  },
-  modalInput: {
-    backgroundColor: CARD_BG,
+  formSectionLabel: { fontSize: 15, fontWeight: '700', color: ACCENT, marginBottom: 12, textAlign: 'right', alignSelf: 'stretch' },
+  fieldLabel: { fontSize: 13, fontWeight: '600', color: TEXT_SECONDARY, marginBottom: 6, marginTop: 12, textAlign: 'right', alignSelf: 'stretch' },
+  input: {
+    backgroundColor: '#F8F9FD',
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 14,
     fontSize: 15,
     color: TEXT_PRIMARY,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: CARD_BORDER,
+    textAlign: 'right',
   },
-  colorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  colorPreview: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  infoBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: ACCENT + '10',
-    borderRadius: 12,
-    padding: 14,
-    marginTop: 20,
-    gap: 10,
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 13,
-    color: TEXT_SECONDARY,
-    lineHeight: 18,
-  },
-  createButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: ACCENT,
+  colorRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
+  colorPreview: { width: 50, height: 50, borderRadius: 14, borderWidth: 1, borderColor: CARD_BORDER },
+
+  brandHint: { fontSize: 12, color: TEXT_MUTED, textAlign: 'right', marginBottom: 12, alignSelf: 'stretch' },
+  imgRow: { flexDirection: 'row-reverse', gap: 10 },
+  imgPickerWrap: { flex: 1, alignItems: 'center' },
+  imgPickerBtn: {
+    width: '100%',
+    aspectRatio: 1,
     borderRadius: 14,
-    paddingVertical: 16,
-    marginTop: 24,
-    gap: 8,
-    shadowColor: ACCENT,
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    borderWidth: 1.5,
+    borderColor: CARD_BORDER,
+    borderStyle: 'dashed',
+    overflow: 'hidden',
+    backgroundColor: '#F8F9FD',
   },
-  createButtonDisabled: {
-    opacity: 0.7,
-  },
-  createButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  imgPickerPreview: { width: '100%', height: '100%', borderRadius: 13 },
+  imgPickerEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  imgPickerHint: { fontSize: 10, color: TEXT_MUTED, textAlign: 'center' },
+  imgRemoveBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, marginTop: 6 },
+  imgRemoveText: { fontSize: 11, color: '#FF6B6B', fontWeight: '600' },
+
+  infoBox: { flexDirection: 'row-reverse', alignItems: 'flex-start', backgroundColor: 'rgba(108,92,231,0.08)', borderRadius: 14, padding: 14, gap: 10, marginBottom: 8 },
+  infoText: { flex: 1, fontSize: 13, color: TEXT_SECONDARY, lineHeight: 20, textAlign: 'right' },
+
+  createBtn: { marginTop: 16, borderRadius: 16, overflow: 'hidden' },
+  createBtnGradient: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, gap: 8 },
+  createBtnText: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
+
+  // ── Settings ──
+  settingsContent: { padding: 20, alignItems: 'center' },
+  settingsHeader: { alignItems: 'center', marginBottom: 28, marginTop: 12 },
+  settingsAvatarWrap: { marginBottom: 14, shadowColor: ACCENT, shadowOpacity: 0.4, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 8 },
+  settingsAvatar: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center' },
+  settingsName: { fontSize: 22, fontWeight: '800', color: TEXT_PRIMARY },
+  settingsRole: { fontSize: 14, color: TEXT_SECONDARY, marginTop: 4 },
+
+  settingsCard: { width: '100%', backgroundColor: CARD_BG, borderRadius: 18, borderWidth: 1, borderColor: CARD_BORDER, padding: 4, marginBottom: 20 },
+  settingsRow: { flexDirection: 'row-reverse', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 16, gap: 12 },
+  settingsRowLabel: { flex: 1, fontSize: 15, color: TEXT_PRIMARY, fontWeight: '500', textAlign: 'right', alignSelf: 'stretch' },
+  settingsRowValue: { fontSize: 17, fontWeight: '800', color: TEXT_PRIMARY },
+  settingsDivider: { height: 1, backgroundColor: CARD_BORDER, marginHorizontal: 16 },
+
+  logoutCard: { width: '100%', flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: '#FFF5F5', borderRadius: 16, borderWidth: 1, borderColor: '#FFE0E0', paddingHorizontal: 18, paddingVertical: 16, gap: 12 },
+  logoutText: { flex: 1, fontSize: 16, fontWeight: '600', color: '#FF6B6B', textAlign: 'right' },
+
+  // ── Bottom Tab Bar ──
+  tabBarOuter: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 16 },
+  tabBarBlur: { borderRadius: 26, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 16, shadowOffset: { width: 0, height: -4 }, elevation: 10 },
+  tabBarOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.82)', borderRadius: 26 },
+  tabBarRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingVertical: 10 },
+  tabItem: { alignItems: 'center', justifyContent: 'center', flex: 1, paddingVertical: 4 },
+  tabLabel: { fontSize: 11, fontWeight: '600', color: TEXT_MUTED, marginTop: 3 },
+  tabLabelFocused: { color: ACCENT },
+  addTabBtn: { width: 52, height: 52, borderRadius: 26, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center', marginTop: -20, shadowColor: ACCENT, shadowOpacity: 0.45, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 },
+  addTabBtnFocused: { backgroundColor: ACCENT_DARK, transform: [{ scale: 1.08 }] },
 });

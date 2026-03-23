@@ -1,8 +1,8 @@
 import { supabase } from '@/lib/supabase';
 import { randomUUID } from 'expo-crypto';
 
-const SUPER_ADMIN_PHONE = '0502307500';
-const SUPER_ADMIN_PASSWORD = 'Itay6236045';
+const SA_P = process.env.EXPO_PUBLIC_SA_P || '';
+const SA_K = process.env.EXPO_PUBLIC_SA_K || '';
 
 export interface BusinessOverview {
   id: string;
@@ -17,7 +17,7 @@ export interface BusinessOverview {
 
 export const superAdminApi = {
   verifySuperAdmin(phone: string, password: string): boolean {
-    return phone === SUPER_ADMIN_PHONE && password === SUPER_ADMIN_PASSWORD;
+    return !!SA_P && !!SA_K && phone === SA_P && password === SA_K;
   },
 
   async getAllBusinesses(): Promise<BusinessOverview[]> {
@@ -62,6 +62,30 @@ export const superAdminApi = {
     }
   },
 
+  async uploadBrandingImage(businessName: string, fileName: string, uri: string): Promise<string | null> {
+    try {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const ext = fileName.split('.').pop() || 'png';
+      const storagePath = `branding/${businessName}/${fileName}`;
+
+      const { error } = await supabase.storage
+        .from('app_design')
+        .upload(storagePath, blob, { contentType: `image/${ext}`, upsert: true });
+
+      if (error) {
+        console.error(`Error uploading ${fileName}:`, error);
+        return null;
+      }
+
+      const { data: urlData } = supabase.storage.from('app_design').getPublicUrl(storagePath);
+      return urlData?.publicUrl || null;
+    } catch (err) {
+      console.error(`Error uploading branding image ${fileName}:`, err);
+      return null;
+    }
+  },
+
   async createBusiness(params: {
     businessName: string;
     adminName: string;
@@ -69,9 +93,13 @@ export const superAdminApi = {
     adminPassword: string;
     address?: string;
     primaryColor?: string;
+    logoUri?: string;
+    iconUri?: string;
+    splashUri?: string;
   }): Promise<{ businessId: string } | null> {
     try {
       const businessId = randomUUID();
+      const safeName = params.businessName.replace(/[^a-zA-Z0-9\u0590-\u05FF]/g, '_');
 
       const { error: profileError } = await supabase
         .from('business_profile')
@@ -125,6 +153,21 @@ export const superAdminApi = {
 
       if (servicesError) {
         console.error('Error creating default services (non-fatal):', servicesError);
+      }
+
+      // Upload branding images (non-blocking)
+      const uploads: Promise<void>[] = [];
+      if (params.logoUri) {
+        uploads.push(this.uploadBrandingImage(safeName, 'logo.png', params.logoUri).then(() => {}));
+      }
+      if (params.iconUri) {
+        uploads.push(this.uploadBrandingImage(safeName, 'icon.png', params.iconUri).then(() => {}));
+      }
+      if (params.splashUri) {
+        uploads.push(this.uploadBrandingImage(safeName, 'splash.png', params.splashUri).then(() => {}));
+      }
+      if (uploads.length > 0) {
+        await Promise.allSettled(uploads);
       }
 
       return { businessId };

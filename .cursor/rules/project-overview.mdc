@@ -39,4 +39,4 @@ White-label salon/beauty booking app serving both **clients** (end-users) and **
 - **Multi-tenant**: `getBusinessId()` scopes all Supabase queries to the active business
 - **White-label builds**: `CLIENT` env var → `app.config.js` loads branding/<CLIENT>/ files at build time
 - **Theme layering**: build-time `theme.json` + runtime `useBusinessColors()` from Supabase profile
-- **LTR forced**: `I18nManager.allowRTL(false)` in root layout — app is always LTR
+- **RTL Hebrew-first**: The app is in Hebrew, RTL layout — use `I18nManager.forceRTL(true)` and `allowRTL(true)`

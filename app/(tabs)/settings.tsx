@@ -38,7 +38,7 @@ import {
   User,
   Repeat
 } from 'lucide-react-native';
-import { Ticket } from 'lucide-react-native';
+import { Ticket, DollarSign } from 'lucide-react-native';
 import { Users } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -2405,6 +2405,16 @@ export default function SettingsScreen() {
         )}
         
         
+        <Text style={styles.sectionTitleNew}>{t('settings.sections.financeAccounting','Finance & Accounting')}</Text>
+        <View style={[styles.cardNew, shadowStyle]}>
+          {renderSettingItem(
+            <DollarSign size={20} color={businessColors.primary} />,
+            t('finance.title','Finance'),
+            t('finance.subtitle','Track income, expenses, and send reports'),
+            undefined,
+            () => router.push('/(tabs)/finance')
+          )}
+        </View>
         
         <Text style={styles.sectionTitleNew}>{t('settings.sections.securitySupport','Security & support')}</Text>
         

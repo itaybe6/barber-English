@@ -1,214 +1,23 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Image,
+  StyleSheet,
+  Dimensions,
+  ScrollView,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
-  Extrapolation,
+  FadeInDown,
   SharedValue,
-  interpolate,
-  useAnimatedScrollHandler,
-  useAnimatedStyle,
-  useSharedValue,
 } from 'react-native-reanimated';
 
 import type { User } from '@/lib/supabase';
+import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 
 const SCREEN = Dimensions.get('window');
-const SLIDE_WIDTH = SCREEN.width * 0.65;
-const SLIDE_HEIGHT = SLIDE_WIDTH * 1.5;
-const SLIDE_SPACING = 16;
-const INTERVAL = SLIDE_WIDTH + SLIDE_SPACING;
-const TOP_SPACING = SCREEN.height - SLIDE_HEIGHT;
-
-type BarberSlideProps = {
-  barber: User;
-  index: number;
-  scrollX: SharedValue<number>;
-  onPress: () => void;
-};
-
-function BarberSlide({ barber, index, scrollX, onPress }: BarberSlideProps) {
-  const imageUri = barber?.image_url || '';
-
-  const containerStylez = useAnimatedStyle(() => ({
-    transform: [
-      {
-        translateY: interpolate(
-          scrollX.value,
-          [index - 1, index, index + 1],
-          [40, 0, 40],
-          Extrapolation.CLAMP
-        ),
-      },
-    ],
-  }) as any);
-
-  const stylez = useAnimatedStyle(() => ({
-    transform: [
-      {
-        scale: interpolate(
-          scrollX.value,
-          [index - 1, index, index + 1],
-          [0.92, 1, 0.92],
-          Extrapolation.CLAMP
-        ),
-      },
-    ],
-  }) as any);
-
-  return (
-    <TouchableOpacity activeOpacity={0.95} onPress={onPress}>
-      <Animated.View
-        style={[
-          {
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: 0.6,
-            shadowRadius: 20,
-            elevation: 7,
-            borderRadius: 28,
-          },
-          containerStylez,
-        ]}
-      >
-        <View
-          style={{
-            width: SLIDE_WIDTH,
-            height: SLIDE_HEIGHT,
-            borderRadius: 28,
-            overflow: 'hidden',
-            padding: 2,
-            backgroundColor: 'rgba(0,0,0,0.1)',
-          }}
-        >
-          {imageUri ? (
-            <Animated.Image
-              source={{ uri: imageUri }}
-              style={[{ flex: 1, borderRadius: 26 }, stylez]}
-              resizeMode="cover"
-            />
-          ) : (
-            <Animated.View
-              style={[
-                {
-                  flex: 1,
-                  borderRadius: 26,
-                  backgroundColor: '#667eea',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                },
-                stylez,
-              ]}
-            >
-              <Ionicons name="person" size={80} color="rgba(255,255,255,0.5)" />
-            </Animated.View>
-          )}
-        </View>
-      </Animated.View>
-    </TouchableOpacity>
-  );
-}
-
-function BarberBackdrop({
-  barber,
-  index,
-  scrollX,
-}: {
-  barber: User;
-  index: number;
-  scrollX: SharedValue<number>;
-}) {
-  const imageUri = barber?.image_url || '';
-
-  const stylez = useAnimatedStyle(() => ({
-    opacity: interpolate(scrollX.value, [index - 1, index, index + 1], [0, 0.8, 0]),
-  }) as any);
-
-  if (!imageUri) {
-    return (
-      <Animated.View
-        style={[StyleSheet.absoluteFillObject as any, { backgroundColor: '#1a1a2e' }, stylez]}
-      />
-    );
-  }
-
-  return (
-    <Animated.Image
-      source={{ uri: imageUri }}
-      style={[StyleSheet.absoluteFillObject as any, stylez]}
-      blurRadius={50}
-      resizeMode="cover"
-    />
-  );
-}
-
-function BarberDetailsOverlay({
-  barber,
-  index,
-  scrollX,
-}: {
-  barber: User;
-  index: number;
-  scrollX: SharedValue<number>;
-}) {
-  const stylez = useAnimatedStyle(() => ({
-    transform: [
-      {
-        translateX: interpolate(
-          scrollX.value,
-          [index - 1, index, index + 1],
-          [SCREEN.width / 2, 0, -SCREEN.width / 2]
-        ),
-      },
-    ],
-    opacity: interpolate(scrollX.value, [index - 0.5, index, index + 0.5], [0, 1, 0]),
-  }) as any);
-
-  return (
-    <Animated.View
-      style={[
-        {
-          gap: 6,
-          position: 'absolute',
-          height: '100%',
-          width: '100%',
-          alignItems: 'center',
-          justifyContent: 'center',
-          paddingHorizontal: SCREEN.width * 0.1,
-        },
-        stylez,
-      ]}
-    >
-      <Text
-        style={{
-          fontSize: 26,
-          color: 'white',
-          fontWeight: '800',
-          textTransform: 'capitalize',
-          textAlign: 'center',
-          letterSpacing: -0.5,
-          textShadowColor: 'rgba(0,0,0,0.5)',
-          textShadowOffset: { width: 0, height: 2 },
-          textShadowRadius: 8,
-        }}
-      >
-        {barber?.name || ''}
-      </Text>
-      {(barber as any)?.role && (
-        <Text
-          style={{
-            color: '#fff',
-            opacity: 0.7,
-            textAlign: 'center',
-            fontSize: 15,
-            fontWeight: '500',
-          }}
-        >
-          {(barber as any)?.role || 'Professional Barber'}
-        </Text>
-      )}
-    </Animated.View>
-  );
-}
 
 type Props = {
   visible: boolean;
@@ -226,110 +35,235 @@ type Props = {
 
 export default function BarberSelection({
   visible,
-  styles,
+  styles: parentStyles,
   introFadeStyle,
   topOffset,
   safeAreaBottom,
   isLoading,
   barbers,
   selectedBarberId,
-  externalScrollX,
   t,
   onSelectBarber,
 }: Props) {
-  // scrollX: integer index of the centered card (0 = first barber, 1 = second, etc.)
-  const scrollX = useSharedValue(0);
-  const flatListRef = React.useRef<any>(null);
-
-  // Simple, reliable: contentOffset.x / INTERVAL = card index centered.
-  // Force LTR on the FlatList so this formula is always correct regardless of app locale.
-  const onScroll = useAnimatedScrollHandler((e) => {
-    const raw = e.contentOffset?.x ?? 0;
-    const v = raw / INTERVAL;
-    scrollX.value = v;
-    if (externalScrollX) externalScrollX.value = v;
-  });
-
-  const handleSelectIndex = React.useCallback(
-    (index: number) => {
-      const barber = barbers[index];
-      if (!barber) return;
-      // Scroll to center the tapped card
-      try {
-        flatListRef.current?.scrollToOffset?.({
-          offset: index * INTERVAL,
-          animated: true,
-        });
-      } catch {}
-      onSelectBarber(barber);
-    },
-    [barbers, onSelectBarber]
-  );
+  const { colors } = useBusinessColors();
 
   if (!visible) return null;
 
-  const padding = (SCREEN.width - SLIDE_WIDTH) / 2;
-
   return (
-    <Animated.View style={[styles.section, styles.sectionFullBleed, introFadeStyle, { flex: 1, minHeight: SCREEN.height * 0.7 }]}>
+    <Animated.View
+      style={[
+        parentStyles.section,
+        parentStyles.sectionFullBleed,
+        introFadeStyle,
+        { flex: 1, minHeight: SCREEN.height * 0.7 },
+      ]}
+    >
       {isLoading ? (
-        <View style={[styles.loadingContainer, { flex: 1, justifyContent: 'center' }]}>
-          <Text style={[styles.loadingText, { color: '#FFFFFF' }]}>{t('booking.loadingEmployees', 'Loading Employees...')}</Text>
+        <View style={[parentStyles.loadingContainer, { flex: 1, justifyContent: 'center' }]}>
+          <Text style={[parentStyles.loadingText, { color: '#FFFFFF' }]}>
+            {t('booking.loadingEmployees', 'Loading Employees...')}
+          </Text>
         </View>
       ) : (
-        // direction: 'ltr' fixes RTL (Hebrew) apps where FlatList horizontal offset goes negative/reversed
-        <View style={{ flex: 1, justifyContent: 'center', backgroundColor: 'transparent', direction: 'ltr' } as any}>
-          {/* No local backdrop — DynamicBackground in the parent already handles the full-screen blur */}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            paddingTop: 16,
+            paddingHorizontal: 20,
+            paddingBottom: Math.max(safeAreaBottom, 20) + 160,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header */}
+          <Animated.View
+            entering={FadeInDown.delay(80).duration(400)}
+            style={s.headerWrap}
+          >
+            <Text style={s.headerTitle}>
+              {t('booking.selectBarber', 'Choose your specialist')}
+            </Text>
+            <Text style={s.headerSub}>
+              {t('booking.selectBarberHint', 'Who would you like to book with?')}
+            </Text>
+          </Animated.View>
 
-          <View style={{ height: TOP_SPACING * 0.35, justifyContent: 'flex-end', alignItems: 'center', marginTop: Math.max(0, topOffset - 12), paddingBottom: 40 }}>
-            {barbers.map((barber, index) => (
-              <BarberDetailsOverlay key={`details-${barber.id}`} index={index} barber={barber} scrollX={scrollX} />
-            ))}
-          </View>
+          {/* Barber cards */}
+          <View style={s.grid}>
+            {barbers.map((barber, idx) => {
+              const isSelected = String(barber.id) === String(selectedBarberId ?? '');
+              const imageUri = barber?.image_url || '';
 
-          <Animated.FlatList
-            ref={flatListRef}
-            data={barbers}
-            keyExtractor={(item) => String(item.id)}
-            style={{ flexGrow: 0, marginTop: -40 }}
-            contentContainerStyle={{
-              paddingHorizontal: padding,
-              alignItems: 'center',
-              paddingBottom: Math.max(safeAreaBottom, 20) + 140,
-            }}
-            renderItem={({ item, index }) => (
-              <BarberSlide
-                index={index}
-                barber={item}
-                scrollX={scrollX}
-                onPress={() => handleSelectIndex(index)}
-              />
-            )}
-            ItemSeparatorComponent={() => <View style={{ width: SLIDE_SPACING }} />}
-            snapToInterval={INTERVAL}
-            snapToAlignment="start"
-            decelerationRate="fast"
-            showsHorizontalScrollIndicator={false}
-            horizontal
-            onScroll={onScroll}
-            scrollEventThrottle={1}
-            getItemLayout={(_, index) => ({
-              length: INTERVAL,
-              offset: INTERVAL * index,
-              index,
+              return (
+                <Animated.View
+                  key={barber.id}
+                  entering={FadeInDown.delay(120 + idx * 60).duration(400)}
+                >
+                  <TouchableOpacity
+                    onPress={() => onSelectBarber(barber)}
+                    activeOpacity={0.88}
+                    style={[
+                      s.card,
+                      isSelected && [s.cardSelected, { borderColor: colors.primary }],
+                    ]}
+                  >
+                    {/* Photo */}
+                    <View style={s.avatarWrap}>
+                      {imageUri ? (
+                        <Image
+                          source={{ uri: imageUri }}
+                          style={s.avatarImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={[s.avatarImage, s.avatarPlaceholder]}>
+                          <Ionicons name="person" size={44} color="rgba(255,255,255,0.5)" />
+                        </View>
+                      )}
+                      {isSelected && (
+                        <View style={[s.checkBadge, { backgroundColor: colors.primary }]}>
+                          <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Info */}
+                    <View style={s.info}>
+                      <Text
+                        numberOfLines={1}
+                        style={[s.name, isSelected && { color: colors.primary }]}
+                      >
+                        {barber.name}
+                      </Text>
+                      {(barber as any)?.role ? (
+                        <Text numberOfLines={1} style={s.role}>
+                          {(barber as any).role}
+                        </Text>
+                      ) : null}
+                    </View>
+
+                    {/* Selected glow ring */}
+                    {isSelected && (
+                      <View
+                        style={[
+                          s.glowRing,
+                          { borderColor: colors.primary, shadowColor: colors.primary },
+                        ]}
+                      />
+                    )}
+                  </TouchableOpacity>
+                </Animated.View>
+              );
             })}
-            onMomentumScrollEnd={(e) => {
-              // After scroll settles, pick the centered index and notify parent
-              const idx = Math.round((e.nativeEvent.contentOffset?.x ?? 0) / INTERVAL);
-              const safeIdx = Math.max(0, Math.min(idx, barbers.length - 1));
-              const barber = barbers[safeIdx];
-              if (barber && String(barber.id) !== String(selectedBarberId ?? '')) {
-                onSelectBarber(barber);
-              }
-            }}
-          />
-        </View>
+          </View>
+        </ScrollView>
       )}
     </Animated.View>
   );
 }
+
+const s = StyleSheet.create({
+  headerWrap: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  headerTitle: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '800',
+    textAlign: 'center',
+    letterSpacing: -0.3,
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  headerSub: {
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 6,
+  },
+  grid: {
+    gap: 14,
+  },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: 22,
+    padding: 14,
+    borderWidth: 2.5,
+    borderColor: 'transparent',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.10,
+    shadowRadius: 18,
+    elevation: 6,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  cardSelected: {
+    backgroundColor: '#FFFFFF',
+    shadowOpacity: 0.18,
+    shadowRadius: 22,
+    elevation: 10,
+    transform: [{ scale: 1.015 }],
+  },
+  avatarWrap: {
+    position: 'relative',
+  },
+  avatarImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    backgroundColor: '#E5E7EB',
+  },
+  avatarPlaceholder: {
+    backgroundColor: '#667eea',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2.5,
+    borderColor: '#FFFFFF',
+    zIndex: 2,
+  },
+  info: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  name: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1C1C1E',
+    letterSpacing: -0.3,
+  },
+  role: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#8E8E93',
+    marginTop: 3,
+  },
+  glowRing: {
+    position: 'absolute',
+    top: -1,
+    left: -1,
+    right: -1,
+    bottom: -1,
+    borderRadius: 23,
+    borderWidth: 2.5,
+    opacity: 0.25,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+    elevation: 0,
+  },
+});

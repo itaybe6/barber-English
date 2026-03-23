@@ -19,6 +19,21 @@ The app uses a layered theme: build-time `theme.json` → runtime Supabase busin
 
 `primary`, `secondary`, `accent`, `background`, `surface`, `text`, `textSecondary`, `border`, `success`, `warning`, `error`, `info`
 
+## RTL & Hebrew — עברית מימין לשמאל
+
+The app is **Hebrew-first, RTL (right-to-left)**. Every screen must be designed accordingly.
+
+- **Text alignment**: default `textAlign: 'right'` — text flows right-to-left
+- **Flex direction**: use `flexDirection: 'row-reverse'` for horizontal layouts (icon + text, label + value, etc.)
+- **Icons placement**: icons that appear before text in LTR should appear AFTER text in RTL (right side)
+- **Padding/Margin**: when asymmetric, flip — `paddingStart` / `paddingEnd` instead of `paddingLeft` / `paddingRight`
+- **Use logical properties**: prefer `start`/`end` over `left`/`right` (e.g. `alignSelf: 'flex-end'` for right alignment in RTL is actually left — use `flex-start` for right in RTL)
+- **Navigation back arrow**: should point right (→) not left
+- **Lists and cards**: content should be right-aligned, numbers/badges on the left side
+- **Input fields**: text input with `textAlign: 'right'` and placeholder aligned right
+- **I18nManager**: `allowRTL(true)` and `forceRTL(true)` must be set in root layout
+- **All user-facing strings** must be in Hebrew via i18n `t()` function (`src/locales/he.json`)
+
 ## Styling Rules
 
 - Use `StyleSheet.create()` for all styles — no inline style objects in JSX
@@ -37,12 +52,36 @@ The app uses a layered theme: build-time `theme.json` → runtime Supabase busin
 - Loading states: show skeleton/spinner, never a blank screen
 - Error states: show user-friendly message with retry option
 
-## Design Aesthetic — מראה כללי
+## Design Aesthetic — Apple-Level Premium UI
 
-- Modern, clean, rounded corners (borderRadius: 12-16 for cards)
-- Soft shadows for elevation on cards
-- Generous padding and spacing (16-24 units)
-- Gradient hero sections on home screens
+The app should look and feel like a native Apple/iOS app — clean, polished, and delightful.
+
+### Visual Language
+- **Minimalist and airy**: generous whitespace, no visual clutter, let content breathe
+- **Rounded corners**: borderRadius 12-16 for cards, 20-24 for modals and bottom sheets
+- **Soft depth**: subtle shadows (shadowOpacity: 0.06-0.12, shadowRadius: 8-16), no harsh borders
+- **Glass/Blur effects**: use `expo-blur` for overlays, modal backgrounds, and navigation bars
+- **Gradient accents**: subtle linear gradients on hero sections and primary buttons (never too saturated)
+- **Typography hierarchy**: clear size/weight contrast — bold titles, regular body, light captions
+
+### Animations — Everything Should Feel Alive
+- **Every interaction must have feedback**: press → scale down (0.96-0.98), release → spring back
+- Use `react-native-reanimated` with spring configs for natural motion (damping: 15, stiffness: 150)
+- **Screen transitions**: smooth fade/slide with `withTiming` or `withSpring`
+- **List items**: staggered entrance animations (fade up with delay per item)
+- **Loading**: skeleton shimmer animations, not static spinners where possible
+- **Micro-interactions**: button press ripples, toggle switches with spring, swipe actions with haptic feel
+- **Shared element transitions** where possible (e.g. card → detail screen)
+
+### Layout Principles
 - Card-based layouts for lists (appointments, services, products)
 - Floating action buttons for primary actions (e.g. book appointment "+")
-- Blur effects (`expo-blur`) for overlays and modals
+- Generous padding: 16-20 horizontal, 12-16 between items, 24-32 section spacing
+- Safe area awareness on all screens
+- Bottom sheet modals over fullscreen modals when possible (feels more native)
+
+### Color & Contrast
+- Background should feel light and fresh (`colors.background` / `colors.surface`)
+- Primary color used sparingly — CTAs, active states, key accents (not everywhere)
+- Disabled states: reduce opacity to 0.4-0.5, never use grey as a replacement for primary
+- Dark text on light backgrounds, high contrast for readability

@@ -1400,15 +1400,9 @@ export default function BookAppointment() {
       {/* Background (changes with scroll for steps 1-2, cross-fade for steps 3-4) */}
       {(() => {
         try {
-          if (currentStep === 1 && (availableBarbers || []).length > 0) {
-            return (
-              <ScrollBackdrop
-                items={availableBarbers.map((b) => ({ id: String(b.id), uri: (b as any)?.image_url || '' }))}
-                scrollX={barberBgScrollX}
-                safeTop={safeAreaInsets.top}
-                safeBottom={safeAreaInsets.bottom}
-              />
-            );
+          if (currentStep === 1) {
+            const barberUri = (selectedBarber as any)?.image_url || null;
+            return <DynamicBackground uri={barberUri} safeTop={safeAreaInsets.top} safeBottom={safeAreaInsets.bottom} />;
           }
           if (currentStep === 2 && (filteredServices || []).length > 0) {
             return (

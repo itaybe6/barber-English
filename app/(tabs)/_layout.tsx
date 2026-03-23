@@ -1,361 +1,45 @@
-import React from 'react';
-import { Tabs } from 'expo-router';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { BlurView } from 'expo-blur';
-import Colors from '@/constants/colors';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import { useColors } from '@/src/theme/ThemeProvider';
-import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
+import React from "react";
+import { Tabs } from "expo-router";
+import { View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { MenuProvider } from "@/components/shopify-tab-bar/menu-provider";
+import { AnimatedTabsContainer } from "@/components/shopify-tab-bar/animated-tabs-container";
+import { AdminFloatingTabBar } from "@/components/shopify-tab-bar/admin-floating-tab-bar";
 
-// Custom floating button component
-const FloatingCalendarButton = ({ onPress, focused }: { onPress: () => void; focused: boolean }) => {
-  const colors = useColors();
-  
-  return (
-    <TouchableOpacity 
-      style={styles.floatingButton} 
-      onPress={onPress}
-      activeOpacity={0.8}
-    >
-      <LinearGradient
-        colors={[colors.primary, colors.primary]}
-        style={styles.floatingGradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-      >
-        <View style={[styles.floatingIcon, focused && styles.floatingIconFocused]}>
-          <Ionicons 
-            name="calendar" 
-            size={28} 
-            color="#FFFFFF" 
-            style={{ 
-              transform: [{ scale: focused ? 1.1 : 1 }],
-              fontWeight: '700'
-            }} 
-          />
-        </View>
-      </LinearGradient>
-      {/* Floating shadow effect */}
-      <View style={styles.floatingShadow} />
-    </TouchableOpacity>
-  );
-};
+const TAB_BAR_HEIGHT = 84;
 
 export default function TabsLayout() {
-  const router = useRouter();
-  const colors = useColors();
-  const { colorUpdateTrigger } = useColorUpdate();
-  
-  // Force re-render when colors change
-  React.useEffect(() => {
-    // This effect will trigger re-render when colorUpdateTrigger changes
-  }, [colorUpdateTrigger]);
-  
-  // RTL debug removed; rely on explicit layout directions
-
-
+  const insets = useSafeAreaInsets();
 
   return (
-    <Tabs
-      screenOptions={({ route }) => ({
-        tabBarHideOnKeyboard: true,
-        tabBarIcon: ({ color, size, focused }) => {
-          const iconSize = focused ? 26 : 24;
-          const iconColor = focused ? '#FFFFFF' : 'rgba(255,255,255,0.7)';
-          
-          let iconName;
-          switch (route.name) {
-            case 'index':
-              iconName = focused ? 'home' : 'home-outline';
-              break;
-            case 'waitlist':
-              iconName = focused ? 'people' : 'people-outline';
-              break;
-            case 'settings':
-              iconName = focused ? 'settings' : 'settings-outline';
-              break;
-            case 'business-hours':
-              iconName = focused ? 'time' : 'time-outline';
-              break;
-            case 'appointments':
-              return null;
-            default:
-              return null;
-          }
-          return (
-            <View style={[styles.iconContainer, focused && styles.iconContainerFocused]}>
-              <Ionicons 
-                name={iconName as any} 
-                size={iconSize} 
-                color={iconColor}
-                style={{ fontWeight: focused ? '700' : '400' }}
-              />
-            </View>
-          );
-        },
-        tabBarActiveTintColor: '#FFFFFF',
-        tabBarInactiveTintColor: 'rgba(255,255,255,0.7)',
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '600',
-          textAlign: 'center',
-          marginTop: 4,
-          letterSpacing: -0.1,
-        },
-        tabBarItemStyle: route.name === 'appointments' ? styles.centerTabItem : styles.regularTabItem,
-        tabBarLabelPosition: 'below-icon',
-        tabBarLabel: route.name === 'appointments' ? '' : getTabLabel(route.name),
-        tabBarContentContainerStyle: {
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexDirection: 'row'
-        },
-        tabBarStyle: {
-          backgroundColor: 'transparent',
-          borderTopWidth: 0,
-          height: 76,
-          paddingTop: 6,
-          paddingBottom: 12,
-          paddingHorizontal: 0,
-          position: 'absolute',
-          bottom: 18,
-          marginHorizontal: 16,
-          borderTopLeftRadius: 28,
-          borderTopRightRadius: 28,
-          borderBottomLeftRadius: 28,
-          borderBottomRightRadius: 28,
-          shadowColor: '#000000',
-          shadowOffset: { width: 0, height: 18 },
-          shadowOpacity: 0.25,
-          shadowRadius: 34,
-          elevation: 30,
-          flexDirection: 'row'
-        },
-        tabBarBackground: () => (
-          <BlurView intensity={80} tint="dark" style={styles.tabBarBackground}>
-            <View style={styles.tabBarDarkOverlay} />
-          </BlurView>
-        ),
-        headerShown: false,
-      })}
-    >
-      <Tabs.Screen 
-        name="index" 
-        options={{
-          title: 'Home',
-        }}
-      />
-      <Tabs.Screen 
-        name="waitlist" 
-        options={{
-          title: 'Waitlist',
-        }}
-      />
-      <Tabs.Screen 
-        name="appointments" 
-        options={{
-          title: 'Calendar',
-          tabBarButton: () => (
-            <TouchableOpacity style={styles.centerTabItem}>
-              <FloatingCalendarButton 
-                onPress={() => router.push('/(tabs)/appointments')}
-                focused={false}
-              />
-            </TouchableOpacity>
-          ),
-        }}
-      />
-      <Tabs.Screen 
-        name="business-hours" 
-        options={{
-          title: 'Hours',
-        }}
-      />
-      <Tabs.Screen 
-        name="settings" 
-        options={{
-          title: 'Settings',
-        }}
-      />
-      <Tabs.Screen 
-        name="gallery" 
-        options={{
-          title: 'Gallery',
-          href: null
-        }}
-      />
-      
-      <Tabs.Screen 
-        name="client-notifications" 
-        options={{
-          title: 'Notifications',
-          href: null
-        }}
-      />
-           <Tabs.Screen 
-        name="notifications" 
-        options={{
-          title: 'התראות',
-          href: null
-        }}
-      />
-      <Tabs.Screen 
-        name="edit-gallery" 
-        options={{
-          title: 'Edit Gallery',
-          href: null
-        }}
-      />
-      <Tabs.Screen 
-        name="edit-products" 
-        options={{
-          title: 'Edit Products',
-          href: null
-        }}
-      />
-      <Tabs.Screen
-        name="edit-home-hero"
-        options={{
-          title: 'Edit Home Hero',
-          href: null,
-        }}
-      />
-    </Tabs>
+    <MenuProvider>
+      <View style={{ flex: 1 }}>
+        <AnimatedTabsContainer>
+          <Tabs
+            tabBar={() => null}
+            sceneContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_HEIGHT }}
+            screenOptions={{
+              headerShown: false,
+              tabBarStyle: { display: "none" },
+            }}
+          >
+            <Tabs.Screen name="index" options={{ title: "Home" }} />
+            <Tabs.Screen name="waitlist" options={{ title: "Waitlist" }} />
+            <Tabs.Screen name="appointments" options={{ title: "Calendar" }} />
+            <Tabs.Screen name="business-hours" options={{ title: "Hours" }} />
+            <Tabs.Screen name="settings" options={{ title: "Settings" }} />
+            <Tabs.Screen name="gallery" options={{ title: "Gallery", href: null }} />
+            <Tabs.Screen name="client-notifications" options={{ title: "Notifications", href: null }} />
+            <Tabs.Screen name="notifications" options={{ title: "התראות", href: null }} />
+            <Tabs.Screen name="edit-gallery" options={{ title: "Edit Gallery", href: null }} />
+            <Tabs.Screen name="edit-products" options={{ title: "Edit Products", href: null }} />
+            <Tabs.Screen name="edit-home-hero" options={{ title: "Edit Home Hero", href: null }} />
+          </Tabs>
+        </AnimatedTabsContainer>
+
+        {/* Floating tab bar rendered as overlay at the layout level */}
+        <AdminFloatingTabBar />
+      </View>
+    </MenuProvider>
   );
 }
-
-// Helper function to get tab labels
-function getTabLabel(routeName: string): string {
-  switch (routeName) {
-    case 'index':
-      return 'Home';
-    case 'waitlist':
-      return 'Waitlist';
-    case 'appointments':
-      return 'Calendar';
-    case 'settings':
-      return 'Settings';
-    case 'business-hours':
-      return 'Hours';
-    default:
-      return routeName;
-  }
-}
-
-const styles = StyleSheet.create({
-  // Regular tab items
-  regularTabItem: {
-    marginTop: 0,
-    flex: 1,
-    minWidth: 0,
-    paddingHorizontal: 4,
-    maxWidth: '20%',
-  },
-  
-  // Center tab item (floating button)
-  centerTabItem: {
-    marginTop: -10,
-    marginBottom: 8,
-    flex: 0,
-    width: 72,
-    alignItems: 'center',
-    marginHorizontal: 8,
-    zIndex: 1000,
-  },
-  
-  // Icon containers with subtle effects
-  iconContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'transparent',
-  },
-  
-  iconContainerFocused: {
-    backgroundColor: 'transparent',
-    transform: [{ scale: 1.1 }],
-  },
-  
-  // Floating button styles
-  floatingButton: {
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 64,
-    height: 64,
-    marginBottom: 8,
-    zIndex: 1000,
-  },
-  
-  floatingGradient: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 12,
-  },
-  
-  floatingIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  
-  floatingIconFocused: {
-    transform: [{ scale: 1.05 }],
-  },
-  
-  floatingShadow: {
-    position: 'absolute',
-    top: 4,
-    left: 4,
-    right: 4,
-    bottom: 4,
-    borderRadius: 26,
-    backgroundColor: 'rgba(0, 0, 0, 0.18)',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 15,
-    zIndex: -1,
-  },
-  
-  // Tab bar background with blur effect
-  tabBarBackground: {
-    flex: 1,
-    backgroundColor: 'transparent',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 24,
-    elevation: 20,
-  },
-
-  // Light gray translucent overlay above the blur for glass look
-  tabBarDarkOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(172, 172, 172, 0.26)',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-  },
-});

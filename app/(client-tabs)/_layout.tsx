@@ -1,82 +1,73 @@
-import React from 'react';
-import { Tabs } from 'expo-router';
-import { View, TouchableOpacity, StyleSheet, Animated, Easing, Alert } from 'react-native';
-import { useTranslation } from 'react-i18next';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useAuthStore } from '@/stores/authStore';
-import LoginRequiredModal from '@/components/LoginRequiredModal';
-import { useColors } from '@/src/theme/ThemeProvider';
-import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
+import React from "react";
+import { Tabs, useRouter } from "expo-router";
+import { View } from "react-native";
+import { useTranslation } from "react-i18next";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import LoginRequiredModal from "@/components/LoginRequiredModal";
+import { MenuProvider } from "@/components/shopify-tab-bar/menu-provider";
+import { AnimatedTabsContainer } from "@/components/shopify-tab-bar/animated-tabs-container";
+import { ClientFloatingTabBar } from "@/components/shopify-tab-bar/client-floating-tab-bar";
+import { Menu, CLIENT_MENU_ITEMS } from "@/components/shopify-tab-bar/menu";
 
-// Utility to convert hex color to rgba string with alpha for translucent tints
-function hexToRgba(hex: string, alpha: number): string {
-  const normalized = hex.replace('#', '');
-  const isShort = normalized.length === 3;
-  const r = parseInt(isShort ? normalized[0] + normalized[0] : normalized.slice(0, 2), 16);
-  const g = parseInt(isShort ? normalized[1] + normalized[1] : normalized.slice(2, 4), 16);
-  const b = parseInt(isShort ? normalized[2] + normalized[2] : normalized.slice(4, 6), 16);
-  const clampedAlpha = Math.max(0, Math.min(1, alpha));
-  return `rgba(${r}, ${g}, ${b}, ${clampedAlpha})`;
-}
-
-// Custom floating button component
-const FloatingBookButton = ({ onPress, focused }: { onPress: () => void; focused: boolean }) => {
-  const colors = useColors();
-  
-  const scale = React.useRef(new Animated.Value(1)).current;
-
-  React.useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(scale, { toValue: 1.07, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(scale, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.delay(1200),
-      ])
-    );
-    pulse.start();
-    return () => pulse.stop();
-  }, [scale]);
-
-  return (
-    <TouchableOpacity 
-      style={styles.floatingButton} 
-      onPress={onPress}
-      activeOpacity={0.85}
-    >
-      <Animated.View style={[styles.floatingCircle, { backgroundColor: colors.primary, transform: [{ scale }] }]}>
-        <Ionicons name="add" size={28} color="#FFFFFF" />
-      </Animated.View>
-    </TouchableOpacity>
-  );
-};
+const TAB_BAR_HEIGHT = 84;
 
 export default function ClientTabsLayout() {
   const router = useRouter();
-  const user = useAuthStore((state) => state.user);
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const isBlocked = Boolean((user as any)?.block);
-  const colors = useColors();
-  const { colorUpdateTrigger } = useColorUpdate();
-  const { t, i18n } = useTranslation();
-  const language = (i18n?.language || 'en').toLowerCase();
-  const isHebrew = language.startsWith('he');
-  const mainTabOrder = isHebrew
-    ? ['profile', 'appointments', 'book-appointment', 'gallery', 'index']
-    : ['index', 'gallery', 'book-appointment', 'appointments', 'profile'];
-  
-  const [loginModal, setLoginModal] = React.useState<{ visible: boolean; title?: string; message?: string }>({ visible: false });
-  
-  // Force re-render when colors change
-  React.useEffect(() => {
-    // This effect will trigger re-render when colorUpdateTrigger changes
-  }, [colorUpdateTrigger]);
-  
-  // RTL debug removed; rely on explicit layout directions
+  const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
 
-
+  const [loginModal, setLoginModal] = React.useState<{
+    visible: boolean;
+    title?: string;
+    message?: string;
+  }>({ visible: false });
 
   return (
+<<<<<<< HEAD
+    <MenuProvider>
+      <View style={{ flex: 1 }}>
+        <AnimatedTabsContainer>
+          <Tabs
+            tabBar={() => null}
+            sceneContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_HEIGHT }}
+            screenOptions={{
+              headerShown: false,
+              tabBarStyle: { display: "none" },
+            }}
+          >
+            <Tabs.Screen name="index" options={{ title: t("tabs.home", "Home") }} />
+            <Tabs.Screen name="gallery" options={{ title: t("tabs.gallery", "Gallery") }} />
+            <Tabs.Screen name="book-appointment" options={{ title: t("tabs.book", "Book") }} />
+            <Tabs.Screen name="appointments" options={{ title: t("tabs.booking", "Booking") }} />
+            <Tabs.Screen name="profile" options={{ title: t("tabs.profile", "Profile") }} />
+            <Tabs.Screen name="waitlist" options={{ title: t("waitlist.title", "Waitlist"), href: null }} />
+            <Tabs.Screen name="notifications" options={{ title: t("notifications.title", "Notifications"), href: null }} />
+            <Tabs.Screen name="select-time" options={{ href: null }} />
+            <Tabs.Screen name="select-barber" options={{ href: null }} />
+            <Tabs.Screen name="select-service" options={{ href: null }} />
+          </Tabs>
+        </AnimatedTabsContainer>
+
+        {/* Floating tab bar rendered as overlay at the layout level */}
+        <ClientFloatingTabBar setLoginModal={setLoginModal} />
+
+        <Menu items={CLIENT_MENU_ITEMS} />
+
+        <LoginRequiredModal
+          visible={loginModal.visible}
+          title={loginModal.title}
+          message={loginModal.message}
+          onClose={() => setLoginModal({ visible: false })}
+          onLogin={() => {
+            setLoginModal({ visible: false });
+            router.push("/login");
+          }}
+        />
+      </View>
+    </MenuProvider>
+  );
+}
+=======
     <>
     <Tabs
       key={isHebrew ? 'tabs-rtl' : 'tabs-ltr'}
@@ -451,3 +442,4 @@ const styles = StyleSheet.create({
     letterSpacing: -0.1,
   },
 });
+>>>>>>> ba2a041786b371adf61181466dda19db3258b603

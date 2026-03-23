@@ -674,7 +674,7 @@ export default function BusinessHoursScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>{t('admin.hours.loading','Loading working hours...')}</Text>
@@ -693,7 +693,7 @@ export default function BusinessHoursScreen() {
         </View>
       </SafeAreaView>
 
-      <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1 }}>
+      <SafeAreaView edges={['left', 'right']} style={{ flex: 1 }}>
         <View style={styles.contentWrapper}>
           <ScrollView 
             style={styles.content}

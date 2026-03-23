@@ -525,7 +525,7 @@ const styles = StyleSheet.create({
     paddingBottom: 18,
     borderBottomWidth: 1,
     borderBottomColor: '#ECEEF4',
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
   },
   headerTitle: { fontSize: 28, fontWeight: '800', color: TEXT_PRIMARY, textAlign: 'right' },
   headerSubtitle: { fontSize: 14, color: TEXT_SECONDARY, marginTop: 4, textAlign: 'right' },
@@ -535,7 +535,7 @@ const styles = StyleSheet.create({
   // ── Dashboard ──
   listContent: { padding: 16 },
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
-  statCard: { flex: 1, borderRadius: 18, padding: 16, alignItems: 'flex-end', gap: 6 },
+  statCard: { flex: 1, borderRadius: 18, padding: 16, alignItems: 'flex-start', gap: 6 },
   statValue: { fontSize: 28, fontWeight: '900', color: '#FFFFFF' },
   statLabel: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.8)' },
 
@@ -554,16 +554,16 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 3,
   },
-  bizHeader: { flexDirection: 'row-reverse', alignItems: 'center', marginBottom: 14 },
+  bizHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
   bizAvatar: { width: 50, height: 50, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   bizAvatarText: { fontSize: 22, fontWeight: '800', color: '#FFFFFF' },
-  bizInfo: { flex: 1, marginRight: 12, alignItems: 'flex-end' },
+  bizInfo: { flex: 1, marginLeft: 12, alignItems: 'flex-start' },
   bizName: { fontSize: 17, fontWeight: '700', color: TEXT_PRIMARY, textAlign: 'right' },
-  bizAddressRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, marginTop: 3 },
+  bizAddressRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
   bizAddress: { fontSize: 13, color: TEXT_MUTED, textAlign: 'right' },
 
-  bizStatsRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8 },
-  bizChip: { flexDirection: 'row-reverse', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
+  bizStatsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  bizChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
   bizChipText: { fontSize: 12, fontWeight: '600' },
 
   adminCredentials: {
@@ -574,15 +574,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(108,92,231,0.12)',
   },
-  adminCredentialsHeader: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginBottom: 8 },
+  adminCredentialsHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   adminCredentialsTitle: { fontSize: 12, fontWeight: '700', color: ACCENT },
-  credentialRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginTop: 4 },
+  credentialRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
   credentialLabel: { fontSize: 12, fontWeight: '600', color: TEXT_SECONDARY },
   credentialValue: { fontSize: 13, fontWeight: '700', color: TEXT_PRIMARY, fontFamily: 'monospace' },
 
-  bizFooter: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: CARD_BORDER, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' },
-  bizId: { fontSize: 10, color: TEXT_MUTED, fontFamily: 'monospace', flex: 1, textAlign: 'right' },
-  deleteBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, backgroundColor: '#FFF0F0', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#FFE0E0' },
+  bizFooter: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: CARD_BORDER, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  bizId: { fontSize: 10, color: TEXT_MUTED, fontFamily: 'monospace', flex: 1, textAlign: 'left' },
+  deleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FFF0F0', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#FFE0E0' },
   deleteBtnText: { fontSize: 12, fontWeight: '600', color: '#FF6B6B' },
 
   emptyState: { alignItems: 'center', paddingVertical: 50, gap: 10 },
@@ -624,12 +624,12 @@ const styles = StyleSheet.create({
     borderColor: CARD_BORDER,
     textAlign: 'right',
   },
-  clientNameHint: { fontSize: 11, color: TEXT_MUTED, marginTop: 4, textAlign: 'left' },
-  colorRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
+  clientNameHint: { fontSize: 11, color: TEXT_MUTED, marginTop: 4, textAlign: 'right' },
+  colorRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   colorPreview: { width: 50, height: 50, borderRadius: 14, borderWidth: 1, borderColor: CARD_BORDER },
 
   brandHint: { fontSize: 12, color: TEXT_MUTED, textAlign: 'right', marginBottom: 12, alignSelf: 'stretch' },
-  imgRow: { flexDirection: 'row-reverse', gap: 10 },
+  imgRow: { flexDirection: 'row', gap: 10 },
   imgPickerWrap: { flex: 1, alignItems: 'center' },
   imgPickerBtn: {
     width: '100%',
@@ -644,14 +644,14 @@ const styles = StyleSheet.create({
   imgPickerPreview: { width: '100%', height: '100%', borderRadius: 13 },
   imgPickerEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 },
   imgPickerHint: { fontSize: 10, color: TEXT_MUTED, textAlign: 'center' },
-  imgRemoveBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, marginTop: 6 },
+  imgRemoveBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
   imgRemoveText: { fontSize: 11, color: '#FF6B6B', fontWeight: '600' },
 
-  infoBox: { flexDirection: 'row-reverse', alignItems: 'flex-start', backgroundColor: 'rgba(108,92,231,0.08)', borderRadius: 14, padding: 14, gap: 10, marginBottom: 8 },
+  infoBox: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: 'rgba(108,92,231,0.08)', borderRadius: 14, padding: 14, gap: 10, marginBottom: 8 },
   infoText: { flex: 1, fontSize: 13, color: TEXT_SECONDARY, lineHeight: 20, textAlign: 'right' },
 
   createBtn: { marginTop: 16, borderRadius: 16, overflow: 'hidden' },
-  createBtnGradient: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, gap: 8 },
+  createBtnGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, gap: 8 },
   createBtnText: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
 
   // ── Settings ──
@@ -663,12 +663,12 @@ const styles = StyleSheet.create({
   settingsRole: { fontSize: 14, color: TEXT_SECONDARY, marginTop: 4 },
 
   settingsCard: { width: '100%', backgroundColor: CARD_BG, borderRadius: 18, borderWidth: 1, borderColor: CARD_BORDER, padding: 4, marginBottom: 20 },
-  settingsRow: { flexDirection: 'row-reverse', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 16, gap: 12 },
-  settingsRowLabel: { flex: 1, fontSize: 15, color: TEXT_PRIMARY, fontWeight: '500', textAlign: 'right', alignSelf: 'stretch' },
+  settingsRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 16, gap: 12 },
+  settingsRowLabel: { flex: 1, fontSize: 15, color: TEXT_PRIMARY, fontWeight: '500', textAlign: 'right' },
   settingsRowValue: { fontSize: 17, fontWeight: '800', color: TEXT_PRIMARY },
   settingsDivider: { height: 1, backgroundColor: CARD_BORDER, marginHorizontal: 16 },
 
-  logoutCard: { width: '100%', flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: '#FFF5F5', borderRadius: 16, borderWidth: 1, borderColor: '#FFE0E0', paddingHorizontal: 18, paddingVertical: 16, gap: 12 },
+  logoutCard: { width: '100%', flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF5F5', borderRadius: 16, borderWidth: 1, borderColor: '#FFE0E0', paddingHorizontal: 18, paddingVertical: 16, gap: 12 },
   logoutText: { flex: 1, fontSize: 16, fontWeight: '600', color: '#FF6B6B', textAlign: 'right' },
 
   // ── Bottom Tab Bar ──

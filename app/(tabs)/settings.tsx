@@ -2406,12 +2406,12 @@ export default function SettingsScreen() {
         )}
         
         
-        <Text style={styles.sectionTitleNew}>{t('settings.sections.financeAccounting','Finance & Accounting')}</Text>
+        <Text style={styles.sectionTitleNew}>{t('settings.sections.financeAccounting','פיננסי וחשבונאות')}</Text>
         <View style={[styles.cardNew, shadowStyle]}>
           {renderSettingItem(
             <DollarSign size={20} color={businessColors.primary} />,
-            t('finance.title','Finance'),
-            t('finance.subtitle','Track income, expenses, and send reports'),
+            t('finance.title','מעקב פיננסי'),
+            t('finance.subtitle','מעקב הכנסות, הוצאות ושליחת דוח חודשי לרואה חשבון'),
             undefined,
             () => router.push('/(tabs)/finance')
           )}

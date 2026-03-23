@@ -38,6 +38,7 @@ import { useTranslation } from 'react-i18next';
 import { Marquee } from '@animatereactnative/marquee';
 import Reanimated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { manicureImages } from '@/src/constants/manicureImages';
+import MonthlyInsightsCard from '@/components/MonthlyInsightsCard';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_ITEM_SIZE = Platform.OS === 'web' ? SCREEN_WIDTH * 0.24 : SCREEN_WIDTH * 0.45;
@@ -215,6 +216,8 @@ export default function HomeScreen() {
   const [editClientName, setEditClientName] = useState('');
   const [editClientPhone, setEditClientPhone] = useState('');
   const [savingClient, setSavingClient] = useState(false);
+  const [insightsData, setInsightsData] = useState({ completed: 0, cancelled: 0, noShow: 0 });
+  const [loadingInsights, setLoadingInsights] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [innerScrollEnabled, setInnerScrollEnabled] = useState(false);
   const innerScrollEnabledRef = useRef(false);
@@ -443,6 +446,41 @@ export default function HomeScreen() {
     }
   };
 
+  const fetchInsightsData = async () => {
+    if (isSuperAdmin) { setLoadingInsights(false); return; }
+    try {
+      setLoadingInsights(true);
+      const { getBusinessId } = await import('@/lib/supabase');
+      const businessId = getBusinessId();
+      const now = new Date();
+      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('id, status')
+        .eq('business_id', businessId)
+        .gte('slot_date', firstDayOfMonth)
+        .lte('slot_date', lastDayOfMonth)
+        .in('status', ['confirmed', 'completed', 'cancelled', 'no_show']);
+
+      if (error) {
+        console.error('Error fetching insights data:', error);
+        return;
+      }
+
+      setInsightsData({
+        completed: data?.filter(a => a.status === 'completed' || a.status === 'confirmed').length || 0,
+        cancelled: data?.filter(a => a.status === 'cancelled').length || 0,
+        noShow: data?.filter(a => a.status === 'no_show').length || 0,
+      });
+    } catch (error) {
+      console.error('Error in fetchInsightsData:', error);
+    } finally {
+      setLoadingInsights(false);
+    }
+  };
+
   // Fetch clients
   const fetchClients = async () => {
     try {
@@ -656,6 +694,7 @@ export default function HomeScreen() {
     fetchNextAppointment();
     fetchTodayAppointmentsCount();
     fetchMonthlyStats();
+    fetchInsightsData();
     fetchDesigns();
     fetchProducts();
   }, []);
@@ -667,6 +706,7 @@ export default function HomeScreen() {
         fetchNextAppointment(),
         fetchTodayAppointmentsCount(),
         fetchMonthlyStats(),
+        fetchInsightsData(),
         (async () => { try { await fetchDesigns(); } catch {} })(),
         (async () => { try { await fetchProducts(); } catch {} })(),
       ]);
@@ -839,6 +879,17 @@ export default function HomeScreen() {
             </View>
           </View>
         </View>
+
+        {/* ── MONTHLY INSIGHTS CHART ── */}
+        {isAdmin && (
+          <MonthlyInsightsCard
+            completed={insightsData.completed}
+            cancelled={insightsData.cancelled}
+            noShow={insightsData.noShow}
+            loading={loadingInsights}
+            colors={colors}
+          />
+        )}
 
         {/* ── QUICK ACTIONS ── */}
         {isAdmin && (

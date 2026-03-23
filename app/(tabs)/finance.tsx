@@ -11,12 +11,13 @@ import {
   Modal,
   ActivityIndicator,
   KeyboardAvoidingView,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
-import { useTranslation } from 'react-i18next';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { expensesApi } from '@/lib/api/expenses';
 import { financeApi } from '@/lib/api/finance';
@@ -33,34 +34,31 @@ import {
   Briefcase,
   Mail,
   X,
+  ArrowUpRight,
+  ArrowDownRight,
 } from 'lucide-react-native';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const CATEGORIES: ExpenseCategory[] = ['rent', 'supplies', 'equipment', 'marketing', 'other'];
 
-const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
-  rent: '#6366F1',
-  supplies: '#F59E0B',
-  equipment: '#10B981',
-  marketing: '#EC4899',
-  other: '#6B7280',
+const CATEGORY_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  rent:      { label: 'שכירות',  color: '#6366F1', bg: '#EEF2FF' },
+  supplies:  { label: 'חומרים',  color: '#F59E0B', bg: '#FFFBEB' },
+  equipment: { label: 'ציוד',    color: '#10B981', bg: '#ECFDF5' },
+  marketing: { label: 'שיווק',   color: '#EC4899', bg: '#FDF2F8' },
+  other:     { label: 'אחר',     color: '#6B7280', bg: '#F9FAFB' },
 };
 
-const shadowStyle = Platform.select({
-  ios: {
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.09,
-    shadowRadius: 8,
-  },
-  android: {
-    elevation: 3,
-  },
-});
+const MONTH_NAMES_HE = [
+  'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
+  'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר',
+];
 
 export default function FinanceScreen() {
   const router = useRouter();
   const { colors: businessColors } = useBusinessColors();
-  const { t } = useTranslation();
+  const primaryColor = businessColors.primary || '#000000';
 
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -83,11 +81,6 @@ export default function FinanceScreen() {
   const [savingExpense, setSavingExpense] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
-  ];
-
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -95,100 +88,82 @@ export default function FinanceScreen() {
         financeApi.getMonthlyReport(year, month),
         businessProfileApi.getProfile(),
       ]);
-
       setTotalIncome(report.totalIncome);
       setTotalExpenses(report.totalExpenses);
       setIncomeBreakdown(report.incomeBreakdown);
       setExpenses(report.expenses);
-
       if (prof) {
         setProfile(prof);
-        setBusinessNumber(prof.business_number || '');
-        setAccountantEmail(prof.accountant_email || '');
+        setBusinessNumber((prof as any).business_number || '');
+        setAccountantEmail((prof as any).accountant_email || '');
       }
     } catch (err) {
-      console.error('Error loading finance data:', err);
+      console.error('שגיאה בטעינת נתונים פיננסיים:', err);
     } finally {
       setLoading(false);
     }
   }, [year, month]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useEffect(() => { loadData(); }, [loadData]);
 
   const goToPreviousMonth = () => {
-    if (month === 1) {
-      setMonth(12);
-      setYear(y => y - 1);
-    } else {
-      setMonth(m => m - 1);
-    }
+    if (month === 1) { setMonth(12); setYear(y => y - 1); }
+    else { setMonth(m => m - 1); }
   };
 
   const goToNextMonth = () => {
-    if (month === 12) {
-      setMonth(1);
-      setYear(y => y + 1);
-    } else {
-      setMonth(m => m + 1);
-    }
+    if (month === 12) { setMonth(1); setYear(y => y + 1); }
+    else { setMonth(m => m + 1); }
   };
 
   const netProfit = totalIncome - totalExpenses;
 
+  const formatCurrency = (amount: number) =>
+    `₪${Math.round(amount).toLocaleString('he-IL')}`;
+
   const handleAddExpense = async () => {
-    const amount = parseFloat(newExpenseAmount);
+    const amount = parseFloat(newExpenseAmount.replace(',', '.'));
     if (isNaN(amount) || amount <= 0) {
-      Alert.alert(t('error.generic'), t('finance.amountPlaceholder'));
+      Alert.alert('שגיאה', 'יש להזין סכום תקין');
       return;
     }
-
     setSavingExpense(true);
     try {
       const today = new Date();
       const expenseDate = `${year}-${String(month).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-
       const result = await expensesApi.createExpense({
         amount,
         description: newExpenseDescription.trim() || undefined,
         category: newExpenseCategory,
         expense_date: expenseDate,
       });
-
       if (result) {
-        Alert.alert(t('success.generic'), t('finance.expenseAdded'));
         setNewExpenseAmount('');
         setNewExpenseDescription('');
         setNewExpenseCategory('other');
         setShowAddExpense(false);
         loadData();
       } else {
-        Alert.alert(t('error.generic'), t('finance.expenseAddFailed'));
+        Alert.alert('שגיאה', 'לא ניתן להוסיף את ההוצאה, נסה שנית');
       }
-    } catch (err) {
-      Alert.alert(t('error.generic'), t('finance.expenseAddFailed'));
     } finally {
       setSavingExpense(false);
     }
   };
 
   const handleDeleteExpense = (expense: BusinessExpense) => {
+    const cat = CATEGORY_CONFIG[expense.category] || CATEGORY_CONFIG.other;
     Alert.alert(
-      t('finance.deleteExpense'),
-      t('finance.deleteExpenseConfirm'),
+      'מחיקת הוצאה',
+      `למחוק את "${expense.description || cat.label}" (${formatCurrency(Number(expense.amount))})?`,
       [
-        { text: t('cancel'), style: 'cancel' },
+        { text: 'ביטול', style: 'cancel' },
         {
-          text: t('delete'),
-          style: 'destructive',
+          text: 'מחק', style: 'destructive',
           onPress: async () => {
             const ok = await expensesApi.deleteExpense(expense.id);
-            if (ok) {
-              loadData();
-            } else {
-              Alert.alert(t('error.generic'), t('finance.expenseDeleteFailed'));
-            }
+            if (ok) loadData();
+            else Alert.alert('שגיאה', 'לא ניתן למחוק את ההוצאה');
           },
         },
       ],
@@ -203,600 +178,959 @@ export default function FinanceScreen() {
         business_number: businessNumber.trim() || undefined,
         accountant_email: accountantEmail.trim() || undefined,
       } as any);
-
       if (result) {
         setProfile(result);
-        Alert.alert(t('success.generic'), t('finance.settingsSaved'));
+        Alert.alert('נשמר', 'פרטי רואה החשבון עודכנו בהצלחה');
       } else {
-        Alert.alert(t('error.generic'), t('finance.settingsSaveFailed'));
+        Alert.alert('שגיאה', 'לא ניתן לשמור את הפרטים');
       }
-    } catch (err) {
-      Alert.alert(t('error.generic'), t('finance.settingsSaveFailed'));
     } finally {
       setSavingSettings(false);
     }
   };
 
-  const formatCurrency = (amount: number) => `$${amount.toFixed(2)}`;
+  const netColor = netProfit >= 0 ? '#16A34A' : '#EF4444';
 
+  // --- Loading State ---
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: Colors.white }]} edges={['top']}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={businessColors.primary} />
-          <Text style={styles.loadingText}>{t('finance.loading')}</Text>
-        </View>
-      </SafeAreaView>
+      <View style={{ flex: 1, direction: 'rtl' }}>
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="large" color={primaryColor} />
+            <Text style={styles.loadingText}>טוען נתונים פיננסיים...</Text>
+          </View>
+        </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: '#F7F8FA' }]} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ChevronLeft size={24} color={Colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('finance.title')}</Text>
-        <View style={{ width: 40 }} />
-      </View>
+    // direction: 'rtl' makes all flex-row layouts render right→left automatically
+    <View style={styles.rtlRoot}>
+      <SafeAreaView style={styles.container} edges={['top']}>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Month Picker */}
-        <View style={styles.monthPicker}>
-          <TouchableOpacity onPress={goToPreviousMonth} style={styles.monthArrow}>
-            <ChevronLeft size={22} color={businessColors.primary} />
+        {/* ── Header ── */}
+        <View style={styles.topBar}>
+          {/* In RTL row: first element is rightmost → back button on right */}
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <ChevronRight size={26} color={Colors.text} />
           </TouchableOpacity>
-          <Text style={styles.monthText}>
-            {monthNames[month - 1]} {year}
-          </Text>
-          <TouchableOpacity onPress={goToNextMonth} style={styles.monthArrow}>
-            <ChevronRight size={22} color={businessColors.primary} />
-          </TouchableOpacity>
+          <Text style={styles.topBarTitle}>מעקב פיננסי</Text>
+          <View style={{ width: 44 }} />
         </View>
 
-        {/* Summary Cards */}
-        <View style={styles.summaryRow}>
-          <View style={[styles.summaryCard, { backgroundColor: '#ECFDF5' }, shadowStyle]}>
-            <TrendingUp size={20} color="#16A34A" />
-            <Text style={styles.summaryLabel}>{t('finance.totalIncome')}</Text>
-            <Text style={[styles.summaryAmount, { color: '#16A34A' }]}>
-              {formatCurrency(totalIncome)}
-            </Text>
-          </View>
-          <View style={[styles.summaryCard, { backgroundColor: '#FEF2F2' }, shadowStyle]}>
-            <TrendingDown size={20} color="#DC2626" />
-            <Text style={styles.summaryLabel}>{t('finance.totalExpenses')}</Text>
-            <Text style={[styles.summaryAmount, { color: '#DC2626' }]}>
-              {formatCurrency(totalExpenses)}
-            </Text>
-          </View>
-        </View>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          bounces
+        >
 
-        <View style={[styles.netProfitCard, shadowStyle]}>
-          <DollarSign size={22} color={netProfit >= 0 ? '#16A34A' : '#DC2626'} />
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.netProfitLabel}>{t('finance.netProfit')}</Text>
-            <Text
-              style={[
-                styles.netProfitAmount,
-                { color: netProfit >= 0 ? '#16A34A' : '#DC2626' },
-              ]}
+          {/* ── Hero Summary Card ── */}
+          <View style={styles.heroWrapper}>
+            <LinearGradient
+              colors={[primaryColor, primaryColor, `${primaryColor}CC`]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.heroCard}
             >
-              {netProfit >= 0 ? '+' : ''}{formatCurrency(netProfit)}
-            </Text>
-          </View>
-        </View>
+              {/* Decorative circle */}
+              <View style={styles.heroBubble} />
+              <View style={styles.heroBubbleSmall} />
 
-        {/* Income Breakdown */}
-        <Text style={styles.sectionTitle}>{t('finance.incomeBreakdown')}</Text>
-        <View style={[styles.card, shadowStyle]}>
-          {incomeBreakdown.length === 0 ? (
-            <Text style={styles.emptyText}>{t('finance.noIncome')}</Text>
-          ) : (
-            incomeBreakdown.map((item, index) => (
-              <View
-                key={item.service_id || item.service_name}
-                style={[
-                  styles.incomeRow,
-                  index < incomeBreakdown.length - 1 && styles.rowBorder,
-                ]}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.incomeServiceName}>{item.service_name}</Text>
-                  <Text style={styles.incomeServiceDetail}>
-                    {item.count} {t('finance.appointments')} x {formatCurrency(item.price)}
-                  </Text>
+              {/* Month Navigator — in RTL row: prev on RIGHT, next on LEFT */}
+              <View style={styles.monthRow}>
+                <TouchableOpacity onPress={goToPreviousMonth} style={styles.monthArrowBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                  <ChevronRight size={22} color="rgba(255,255,255,0.85)" />
+                </TouchableOpacity>
+                <View style={styles.monthCenter}>
+                  <Text style={styles.monthNameHe}>{MONTH_NAMES_HE[month - 1]}</Text>
+                  <Text style={styles.monthYearHe}>{year}</Text>
                 </View>
-                <Text style={[styles.incomeServiceTotal, { color: '#16A34A' }]}>
-                  {formatCurrency(item.total)}
-                </Text>
-              </View>
-            ))
-          )}
-          {incomeBreakdown.length > 0 && (
-            <Text style={styles.priceNote}>{t('finance.priceNote')}</Text>
-          )}
-        </View>
-
-        {/* Expenses */}
-        <View style={styles.expensesHeader}>
-          <Text style={styles.sectionTitle}>{t('finance.expensesList')}</Text>
-          <TouchableOpacity
-            style={[styles.addExpenseButton, { backgroundColor: businessColors.primary }]}
-            onPress={() => setShowAddExpense(true)}
-          >
-            <Plus size={18} color={Colors.white} />
-            <Text style={styles.addExpenseText}>{t('finance.addExpense')}</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={[styles.card, shadowStyle]}>
-          {expenses.length === 0 ? (
-            <Text style={styles.emptyText}>{t('finance.noExpenses')}</Text>
-          ) : (
-            expenses.map((expense, index) => (
-              <View
-                key={expense.id}
-                style={[
-                  styles.expenseRow,
-                  index < expenses.length - 1 && styles.rowBorder,
-                ]}
-              >
-                <View
-                  style={[
-                    styles.categoryDot,
-                    { backgroundColor: CATEGORY_COLORS[expense.category as ExpenseCategory] || CATEGORY_COLORS.other },
-                  ]}
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.expenseDescription}>
-                    {expense.description || t(`finance.categories.${expense.category}`)}
-                  </Text>
-                  <Text style={styles.expenseCategory}>
-                    {t(`finance.categories.${expense.category}`)} &middot; {expense.expense_date}
-                  </Text>
-                </View>
-                <Text style={[styles.expenseAmount, { color: '#DC2626' }]}>
-                  -{formatCurrency(Number(expense.amount))}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => handleDeleteExpense(expense)}
-                  style={styles.deleteButton}
-                >
-                  <Trash2 size={16} color="#DC2626" />
+                <TouchableOpacity onPress={goToNextMonth} style={styles.monthArrowBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                  <ChevronLeft size={22} color="rgba(255,255,255,0.85)" />
                 </TouchableOpacity>
               </View>
-            ))
-          )}
-        </View>
 
-        {/* Accountant Settings */}
-        <Text style={styles.sectionTitle}>{t('finance.accountantSettings')}</Text>
-        <View style={[styles.card, shadowStyle]}>
-          <View style={styles.inputGroup}>
-            <View style={styles.inputLabel}>
-              <Briefcase size={18} color={businessColors.primary} />
-              <Text style={styles.inputLabelText}>{t('finance.businessNumber')}</Text>
-            </View>
-            <TextInput
-              style={styles.textInput}
-              value={businessNumber}
-              onChangeText={setBusinessNumber}
-              placeholder={t('finance.businessNumberPlaceholder')}
-              placeholderTextColor="#999"
-              keyboardType="default"
-            />
+              {/* Net Profit */}
+              <Text style={styles.heroNetLabel}>רווח נקי</Text>
+              <Text style={[styles.heroNetAmount, { color: netProfit >= 0 ? '#A7F3D0' : '#FCA5A5' }]}>
+                {netProfit >= 0 ? '+' : ''}{formatCurrency(netProfit)}
+              </Text>
+
+              {/* Income / Expenses mini cards */}
+              <View style={styles.heroMiniRow}>
+                <View style={styles.heroMiniCard}>
+                  <View style={styles.heroMiniIcon}>
+                    <ArrowUpRight size={14} color="#16A34A" />
+                  </View>
+                  <Text style={styles.heroMiniLabel}>הכנסות</Text>
+                  <Text style={styles.heroMiniValue}>{formatCurrency(totalIncome)}</Text>
+                </View>
+                <View style={styles.heroMiniDivider} />
+                <View style={styles.heroMiniCard}>
+                  <View style={[styles.heroMiniIcon, { backgroundColor: '#FEE2E2' }]}>
+                    <ArrowDownRight size={14} color="#EF4444" />
+                  </View>
+                  <Text style={styles.heroMiniLabel}>הוצאות</Text>
+                  <Text style={styles.heroMiniValue}>{formatCurrency(totalExpenses)}</Text>
+                </View>
+              </View>
+            </LinearGradient>
           </View>
 
-          <View style={[styles.inputGroup, { marginTop: 16 }]}>
-            <View style={styles.inputLabel}>
-              <Mail size={18} color={businessColors.primary} />
-              <Text style={styles.inputLabelText}>{t('finance.accountantEmail')}</Text>
-            </View>
-            <TextInput
-              style={styles.textInput}
-              value={accountantEmail}
-              onChangeText={setAccountantEmail}
-              placeholder={t('finance.accountantEmailPlaceholder')}
-              placeholderTextColor="#999"
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
+          {/* ── Income Breakdown ── */}
+          <View style={styles.sectionTitleWrap}>
+            <Text style={styles.sectionTitle}>פירוט הכנסות</Text>
           </View>
-
-          <TouchableOpacity
-            style={[styles.saveButton, { backgroundColor: businessColors.primary }]}
-            onPress={handleSaveSettings}
-            disabled={savingSettings}
-          >
-            {savingSettings ? (
-              <ActivityIndicator size="small" color={Colors.white} />
+          <View style={styles.card}>
+            {incomeBreakdown.length === 0 ? (
+              <View style={styles.emptyState}>
+                <TrendingUp size={36} color="#E5E7EB" />
+                <Text style={styles.emptyTitle}>אין הכנסות החודש</Text>
+                <Text style={styles.emptySubtitle}>תורים שהושלמו יופיעו כאן</Text>
+              </View>
             ) : (
-              <Text style={styles.saveButtonText}>{t('save')}</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        <View style={{ height: 120 }} />
-      </ScrollView>
-
-      {/* Add Expense Modal */}
-      <Modal visible={showAddExpense} animationType="slide" transparent>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
-        >
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('finance.addExpense')}</Text>
-              <TouchableOpacity onPress={() => setShowAddExpense(false)}>
-                <X size={24} color={Colors.text} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.modalLabel}>{t('finance.amount')}</Text>
-              <TextInput
-                style={styles.textInput}
-                value={newExpenseAmount}
-                onChangeText={setNewExpenseAmount}
-                placeholder={t('finance.amountPlaceholder')}
-                placeholderTextColor="#999"
-                keyboardType="decimal-pad"
-                autoFocus
-              />
-            </View>
-
-            <View style={[styles.inputGroup, { marginTop: 16 }]}>
-              <Text style={styles.modalLabel}>{t('finance.description')}</Text>
-              <TextInput
-                style={styles.textInput}
-                value={newExpenseDescription}
-                onChangeText={setNewExpenseDescription}
-                placeholder={t('finance.descriptionPlaceholder')}
-                placeholderTextColor="#999"
-              />
-            </View>
-
-            <View style={[styles.inputGroup, { marginTop: 16 }]}>
-              <Text style={styles.modalLabel}>{t('finance.category')}</Text>
-              <View style={styles.categoryPicker}>
-                {CATEGORIES.map((cat) => (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[
-                      styles.categoryChip,
-                      newExpenseCategory === cat && {
-                        backgroundColor: CATEGORY_COLORS[cat],
-                        borderColor: CATEGORY_COLORS[cat],
-                      },
-                    ]}
-                    onPress={() => setNewExpenseCategory(cat)}
+              <>
+                {incomeBreakdown.map((item, index) => (
+                  <View
+                    key={item.service_id || item.service_name}
+                    style={[styles.incomeRow, index < incomeBreakdown.length - 1 && styles.rowDivider]}
                   >
-                    <Text
-                      style={[
-                        styles.categoryChipText,
-                        newExpenseCategory === cat && { color: '#FFFFFF' },
-                      ]}
-                    >
-                      {t(`finance.categories.${cat}`)}
-                    </Text>
-                  </TouchableOpacity>
+                    {/* In RTL row: name block on RIGHT, total on LEFT */}
+                    <View style={styles.incomeBadge}>
+                      <Text style={[styles.incomeBadgeText, { color: primaryColor }]}>
+                        {item.count}
+                      </Text>
+                    </View>
+                    <View style={styles.incomeTextBlock}>
+                      <Text style={styles.incomeServiceName}>{item.service_name}</Text>
+                      <Text style={styles.incomeServiceSub}>
+                        {item.count} תורים × {formatCurrency(item.price)}
+                      </Text>
+                    </View>
+                    <Text style={styles.incomeServiceTotal}>{formatCurrency(item.total)}</Text>
+                  </View>
                 ))}
+                <View style={styles.rowDivider} />
+                <View style={[styles.incomeRow, styles.totalRow]}>
+                  <Text style={styles.totalLabel}>סך הכל הכנסות</Text>
+                  <Text style={[styles.totalAmount, { color: '#16A34A' }]}>
+                    {formatCurrency(totalIncome)}
+                  </Text>
+                </View>
+                <Text style={styles.priceNote}>* ההכנסות מחושבות לפי המחיר הנוכחי של השירות</Text>
+              </>
+            )}
+          </View>
+
+          {/* ── Expenses ── */}
+          <View style={styles.sectionHeaderRow}>
+            <TouchableOpacity
+              style={[styles.addExpenseBtn, { backgroundColor: primaryColor }]}
+              onPress={() => setShowAddExpense(true)}
+              activeOpacity={0.82}
+            >
+              <Plus size={16} color="#fff" />
+              <Text style={styles.addExpenseBtnText}>הוסף הוצאה</Text>
+            </TouchableOpacity>
+            <Text style={styles.sectionTitle}>הוצאות</Text>
+          </View>
+
+          <View style={styles.card}>
+            {expenses.length === 0 ? (
+              <View style={styles.emptyState}>
+                <DollarSign size={36} color="#E5E7EB" />
+                <Text style={styles.emptyTitle}>אין הוצאות רשומות</Text>
+                <Text style={styles.emptySubtitle}>לחץ "הוסף הוצאה" להוספת רשומה חדשה</Text>
+              </View>
+            ) : (
+              <>
+                {expenses.map((expense, index) => {
+                  const cat = CATEGORY_CONFIG[expense.category] || CATEGORY_CONFIG.other;
+                  return (
+                    <View
+                      key={expense.id}
+                      style={[styles.expenseRow, index < expenses.length - 1 && styles.rowDivider]}
+                    >
+                      {/* In RTL: text block on RIGHT, amount+delete on LEFT */}
+                      <View style={styles.expenseTextBlock}>
+                        <View style={styles.expenseTopRow}>
+                          <Text style={styles.expenseDescription}>
+                            {expense.description || cat.label}
+                          </Text>
+                          <View style={[styles.categoryPill, { backgroundColor: cat.bg }]}>
+                            <Text style={[styles.categoryPillText, { color: cat.color }]}>
+                              {cat.label}
+                            </Text>
+                          </View>
+                        </View>
+                        <Text style={styles.expenseDate}>{expense.expense_date}</Text>
+                      </View>
+                      <View style={styles.expenseActions}>
+                        <Text style={styles.expenseAmount}>
+                          -{formatCurrency(Number(expense.amount))}
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => handleDeleteExpense(expense)}
+                          style={styles.deleteBtn}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Trash2 size={17} color="#EF4444" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })}
+                <View style={styles.rowDivider} />
+                <View style={[styles.expenseRow, styles.totalRow]}>
+                  <Text style={styles.totalLabel}>סך הכל הוצאות</Text>
+                  <Text style={[styles.totalAmount, { color: '#EF4444' }]}>
+                    {formatCurrency(totalExpenses)}
+                  </Text>
+                </View>
+              </>
+            )}
+          </View>
+
+          {/* ── Accountant Settings ── */}
+          <View style={styles.sectionTitleWrap}>
+            <Text style={styles.sectionTitle}>הגדרות רואה חשבון</Text>
+          </View>
+          <View style={styles.card}>
+            <Text style={styles.settingsHint}>
+              הדוח החודשי יישלח אוטומטית בתחילת כל חודש לכתובת המייל שתוזן כאן
+            </Text>
+
+            {/* Business number field — in RTL: icon on LEFT, text on RIGHT */}
+            <View style={styles.fieldBlock}>
+              <Text style={styles.fieldLabel}>מספר עוסק / ח.פ.</Text>
+              <View style={styles.fieldInputRow}>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={businessNumber}
+                  onChangeText={setBusinessNumber}
+                  placeholder="לדוגמה: 514788017"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="default"
+                  textAlign="right"
+                />
+                <View style={[styles.fieldIcon, { backgroundColor: `${primaryColor}15` }]}>
+                  <Briefcase size={18} color={primaryColor} />
+                </View>
+              </View>
+            </View>
+
+            <View style={[styles.fieldBlock, { marginTop: 16 }]}>
+              <Text style={styles.fieldLabel}>מייל רואה חשבון</Text>
+              <View style={styles.fieldInputRow}>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={accountantEmail}
+                  onChangeText={setAccountantEmail}
+                  placeholder="accountant@example.com"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  textAlign="right"
+                />
+                <View style={[styles.fieldIcon, { backgroundColor: `${primaryColor}15` }]}>
+                  <Mail size={18} color={primaryColor} />
+                </View>
               </View>
             </View>
 
             <TouchableOpacity
-              style={[styles.modalSaveButton, { backgroundColor: businessColors.primary }]}
+              style={[styles.saveBtn, { backgroundColor: primaryColor }]}
+              onPress={handleSaveSettings}
+              disabled={savingSettings}
+              activeOpacity={0.82}
+            >
+              {savingSettings
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={styles.saveBtnText}>שמור פרטים</Text>
+              }
+            </TouchableOpacity>
+          </View>
+
+          <View style={{ height: 110 }} />
+        </ScrollView>
+      </SafeAreaView>
+
+      {/* ── Add Expense Modal ── */}
+      <Modal visible={showAddExpense} animationType="slide" transparent statusBarTranslucent>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+
+            {/* Modal header — in RTL: title on RIGHT, close on LEFT */}
+            <View style={styles.modalTopRow}>
+              <Text style={styles.modalTitle}>הוספת הוצאה</Text>
+              <TouchableOpacity onPress={() => setShowAddExpense(false)} style={styles.modalCloseBtn}>
+                <X size={22} color={Colors.subtext} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Big amount field */}
+            <View style={styles.amountBox}>
+              <Text style={styles.amountCurrency}>₪</Text>
+              <TextInput
+                style={styles.amountInput}
+                value={newExpenseAmount}
+                onChangeText={setNewExpenseAmount}
+                placeholder="0"
+                placeholderTextColor="#D1D5DB"
+                keyboardType="decimal-pad"
+                autoFocus
+                textAlign="center"
+              />
+            </View>
+
+            {/* Description */}
+            <TextInput
+              style={styles.descInput}
+              value={newExpenseDescription}
+              onChangeText={setNewExpenseDescription}
+              placeholder="תיאור ההוצאה (אופציונלי)"
+              placeholderTextColor="#9CA3AF"
+              textAlign="right"
+              returnKeyType="done"
+            />
+
+            {/* Category grid */}
+            <Text style={styles.modalSectionLabel}>בחר קטגוריה</Text>
+            <View style={styles.categoryGrid}>
+              {CATEGORIES.map((cat) => {
+                const cfg = CATEGORY_CONFIG[cat];
+                const selected = newExpenseCategory === cat;
+                return (
+                  <TouchableOpacity
+                    key={cat}
+                    onPress={() => setNewExpenseCategory(cat)}
+                    activeOpacity={0.75}
+                    style={[
+                      styles.categoryGridItem,
+                      {
+                        backgroundColor: selected ? cfg.color : cfg.bg,
+                        borderColor: selected ? cfg.color : 'transparent',
+                        borderWidth: selected ? 0 : 1.5,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.categoryGridText, { color: selected ? '#fff' : cfg.color }]}>
+                      {cfg.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.modalAddBtn, { backgroundColor: primaryColor }]}
               onPress={handleAddExpense}
               disabled={savingExpense}
+              activeOpacity={0.82}
             >
-              {savingExpense ? (
-                <ActivityIndicator size="small" color={Colors.white} />
-              ) : (
-                <Text style={styles.modalSaveButtonText}>{t('finance.addExpense')}</Text>
-              )}
+              {savingExpense
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={styles.modalAddBtnText}>הוסף הוצאה</Text>
+              }
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+// STYLES
+// ─────────────────────────────────────────────────────────────
+const cardShadow = Platform.select({
+  ios: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.07,
+    shadowRadius: 16,
+  },
+  android: { elevation: 4 },
+});
+
 const styles = StyleSheet.create({
+  rtlRoot: {
+    flex: 1,
+    direction: 'rtl',
+    backgroundColor: '#F4F6FB',
+  },
   container: {
     flex: 1,
+    backgroundColor: '#F4F6FB',
   },
-  loadingContainer: {
+  loadingWrap: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 14,
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 15,
+    fontSize: 16,
     color: Colors.subtext,
+    textAlign: 'right',
   },
-  header: {
-    flexDirection: 'row',
+
+  // ── Top bar ──
+  topBar: {
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
     backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
   },
-  backButton: {
-    width: 40,
-    height: 40,
+  backBtn: {
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 22,
+    backgroundColor: '#F4F6FB',
   },
-  headerTitle: {
+  topBarTitle: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '800',
     color: Colors.text,
-  },
-  scrollContent: {
-    paddingTop: 8,
-  },
-  monthPicker: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-  },
-  monthArrow: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 20,
-    backgroundColor: Colors.white,
-  },
-  monthText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.text,
-    marginHorizontal: 20,
-    minWidth: 160,
     textAlign: 'center',
   },
-  summaryRow: {
-    flexDirection: 'row',
+
+  // ── ScrollView ──
+  scroll: {
+    paddingTop: 0,
+    direction: 'rtl',
+  },
+
+  // ── Hero card ──
+  heroWrapper: {
     paddingHorizontal: 16,
-    gap: 12,
-    marginBottom: 12,
+    paddingTop: 20,
+    paddingBottom: 4,
   },
-  summaryCard: {
-    flex: 1,
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'flex-start',
-    gap: 6,
+  heroCard: {
+    borderRadius: 24,
+    padding: 24,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.25,
+        shadowRadius: 24,
+      },
+      android: { elevation: 12 },
+    }),
   },
-  summaryLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.subtext,
+  heroBubble: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    top: -60,
+    left: -40,
   },
-  summaryAmount: {
+  heroBubbleSmall: {
+    position: 'absolute',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    bottom: -30,
+    right: 20,
+  },
+  monthRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  monthArrowBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  monthCenter: {
+    alignItems: 'center',
+  },
+  monthNameHe: {
     fontSize: 22,
     fontWeight: '800',
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
-  netProfitCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 16,
-    marginBottom: 20,
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 18,
-  },
-  netProfitLabel: {
+  monthYearHe: {
     fontSize: 14,
-    fontWeight: '600',
-    color: Colors.subtext,
-  },
-  netProfitAmount: {
-    fontSize: 24,
-    fontWeight: '800',
+    color: 'rgba(255,255,255,0.75)',
+    textAlign: 'center',
     marginTop: 2,
+  },
+  heroNetLabel: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.7)',
+    fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  heroNetAmount: {
+    fontSize: 46,
+    fontWeight: '800',
+    textAlign: 'center',
+    letterSpacing: -1,
+    marginBottom: 24,
+  },
+  heroMiniRow: {
+    flexDirection: 'row-reverse',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+  },
+  heroMiniCard: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  heroMiniDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    marginHorizontal: 8,
+  },
+  heroMiniIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroMiniLabel: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.75)',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  heroMiniValue: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+
+  // ── Sections ──
+  sectionTitleWrap: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    marginTop: 22,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: Colors.text,
-    marginLeft: 24,
-    marginBottom: 10,
-    marginTop: 8,
+    textAlign: 'right',
   },
-  card: {
-    backgroundColor: Colors.white,
-    borderRadius: 18,
-    marginHorizontal: 16,
-    marginBottom: 18,
-    padding: 18,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: Colors.subtext,
-    textAlign: 'center',
-    paddingVertical: 12,
-  },
-  incomeRow: {
+  sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
   },
-  rowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+  addExpenseBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 22,
+  },
+  addExpenseBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+
+  // ── Card ──
+  card: {
+    backgroundColor: Colors.white,
+    borderRadius: 20,
+    marginHorizontal: 16,
+    marginBottom: 4,
+    padding: 20,
+    direction: 'rtl',
+    ...cardShadow,
+  },
+
+  // ── Empty state ──
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    gap: 8,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#9CA3AF',
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    color: '#C4C9D4',
+    textAlign: 'center',
+  },
+
+  // ── Income rows ──
+  incomeRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    paddingVertical: 13,
+  },
+  rowDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#F0F2F7',
+  },
+  incomeBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#F4F6FB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  incomeBadgeText: {
+    fontSize: 15,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  incomeTextBlock: {
+    flex: 1,
   },
   incomeServiceName: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
     color: Colors.text,
+    textAlign: 'right',
   },
-  incomeServiceDetail: {
-    fontSize: 13,
+  incomeServiceSub: {
+    fontSize: 12,
     color: Colors.subtext,
+    textAlign: 'right',
     marginTop: 2,
   },
   incomeServiceTotal: {
     fontSize: 16,
+    fontWeight: '800',
+    color: '#16A34A',
+    marginLeft: 4,
+    textAlign: 'right',
+  },
+  totalRow: {
+    flexDirection: 'row-reverse',
+    paddingTop: 14,
+    paddingBottom: 2,
+    justifyContent: 'space-between',
+  },
+  totalLabel: {
+    fontSize: 15,
     fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'right',
+  },
+  totalAmount: {
+    fontSize: 20,
+    fontWeight: '900',
+    textAlign: 'right',
   },
   priceNote: {
-    fontSize: 12,
-    color: Colors.subtext,
+    fontSize: 11,
+    color: '#C4C9D4',
+    textAlign: 'right',
+    marginTop: 12,
     fontStyle: 'italic',
-    marginTop: 10,
-    textAlign: 'center',
+    alignSelf: 'stretch',
+    writingDirection: 'rtl',
   },
-  expensesHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginRight: 20,
-  },
-  addExpenseButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 6,
-  },
-  addExpenseText: {
-    color: Colors.white,
-    fontSize: 14,
-    fontWeight: '600',
-  },
+
+  // ── Expense rows ──
   expenseRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 13,
   },
-  categoryDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: 12,
+  expenseTextBlock: {
+    flex: 1,
+  },
+  expenseTopRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    justifyContent: 'flex-end',
   },
   expenseDescription: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
     color: Colors.text,
+    textAlign: 'right',
+    flexShrink: 1,
   },
-  expenseCategory: {
-    fontSize: 13,
+  categoryPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 20,
+  },
+  categoryPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  expenseDate: {
+    fontSize: 12,
     color: Colors.subtext,
-    marginTop: 2,
+    textAlign: 'right',
+    marginTop: 3,
+  },
+  expenseActions: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 4,
   },
   expenseAmount: {
     fontSize: 15,
-    fontWeight: '700',
-    marginRight: 8,
+    fontWeight: '800',
+    color: '#EF4444',
+    textAlign: 'right',
   },
-  deleteButton: {
-    padding: 8,
-  },
-  inputGroup: {
-    marginBottom: 0,
-  },
-  inputLabel: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  inputLabelText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.text,
-  },
-  textInput: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    fontSize: 15,
-    color: Colors.text,
-    backgroundColor: '#F9F9F9',
-  },
-  saveButton: {
-    marginTop: 20,
-    height: 48,
-    borderRadius: 12,
+  deleteBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FEF2F2',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  saveButtonText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: '700',
+
+  // ── Accountant settings ──
+  settingsHint: {
+    fontSize: 13,
+    color: Colors.subtext,
+    textAlign: 'right',
+    lineHeight: 20,
+    marginBottom: 20,
+    backgroundColor: '#F4F6FB',
+    borderRadius: 12,
+    padding: 12,
+    alignSelf: 'stretch',
+    writingDirection: 'rtl',
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 40,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.text,
-  },
-  modalLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 8,
-  },
-  categoryPicker: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  fieldBlock: {
     gap: 8,
   },
-  categoryChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#E5E5EA',
-    backgroundColor: Colors.white,
-  },
-  categoryChipText: {
+  fieldLabel: {
     fontSize: 14,
-    fontWeight: '600',
-    color: Colors.subtext,
+    fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'right',
+    alignSelf: 'flex-end',
   },
-  modalSaveButton: {
-    marginTop: 28,
-    height: 52,
+  fieldInputRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+  },
+  fieldInput: {
+    flex: 1,
+    height: 50,
+    borderWidth: 1.5,
+    borderColor: '#E8EAF0',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    fontSize: 15,
+    color: Colors.text,
+    backgroundColor: '#FAFBFD',
+    textAlign: 'right',
+  },
+  fieldIcon: {
+    width: 50,
+    height: 50,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modalSaveButtonText: {
-    color: Colors.white,
+  saveBtn: {
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 22,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 10,
+      },
+      android: { elevation: 5 },
+    }),
+  },
+  saveBtnText: {
+    color: '#fff',
     fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    textAlign: 'center',
+  },
+
+  // ── Modal ──
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 40,
+    direction: 'rtl',
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E5E7EB',
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  modalTopRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: Colors.text,
+    textAlign: 'right',
+  },
+  modalCloseBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F4F6FB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Amount entry
+  amountBox: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F4F6FB',
+    borderRadius: 20,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  amountCurrency: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: Colors.subtext,
+    marginLeft: 6,
+  },
+  amountInput: {
+    fontSize: 52,
+    fontWeight: '900',
+    color: Colors.text,
+    minWidth: 100,
+    textAlign: 'center',
+    direction: 'ltr',
+  },
+
+  // Description
+  descInput: {
+    height: 50,
+    borderWidth: 1.5,
+    borderColor: '#E8EAF0',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    fontSize: 15,
+    color: Colors.text,
+    backgroundColor: '#FAFBFD',
+    marginBottom: 20,
+    textAlign: 'right',
+  },
+
+  // Category grid
+  modalSectionLabel: {
+    fontSize: 14,
     fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'right',
+    marginBottom: 12,
+  },
+  categoryGrid: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 24,
+    justifyContent: 'flex-end',
+  },
+  categoryGridItem: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 24,
+  },
+  categoryGridText: {
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+
+  modalAddBtn: {
+    height: 56,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.22,
+        shadowRadius: 14,
+      },
+      android: { elevation: 6 },
+    }),
+  },
+  modalAddBtnText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    textAlign: 'center',
   },
 });

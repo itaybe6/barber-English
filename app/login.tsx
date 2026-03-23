@@ -6,12 +6,26 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   Image,
+  Dimensions,
+  Platform,
 } from 'react-native';
-import Animated, { useAnimatedKeyboard, useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import Animated, {
+  useAnimatedKeyboard,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  withRepeat,
+  withSequence,
+  withDelay,
+  useSharedValue,
+  interpolate,
+  Easing,
+  FadeIn,
+  FadeInDown,
+  FadeInUp,
+} from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, Link } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,23 +39,140 @@ import { getCurrentClientLogo } from '@/src/theme/assets';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { superAdminApi } from '@/lib/api/superAdmin';
-import GradientBackground from '@/components/GradientBackground';
 import { useTranslation } from 'react-i18next';
 
-// Static colors for UI elements that don't change with business theme
-const staticColors = {
-  textPrimary: '#FFFFFF',
-  textSecondary: 'rgba(255,255,255,0.8)',
-  inputBg: 'rgba(0,0,0,0.2)',
-  inputBorder: 'rgba(255,255,255,0.3)',
-  white: '#FFFFFF',
-  backgroundStart: '#FFFFFF',
-  backgroundEnd: '#F5F5F5',
-};
+const { width: SW, height: SH } = Dimensions.get('window');
 
+// ─── Color helpers ────────────────────────────────────────────────────────────
+function hexToRgba(hex: string, a: number): string {
+  const h = hex.replace('#', '');
+  if (h.length < 6) return `rgba(0,0,0,${a})`;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  if (isNaN(r + g + b)) return `rgba(0,0,0,${a})`;
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+function shiftHex(hex: string, delta: number): string {
+  const h = hex.replace('#', '');
+  if (h.length < 6) return hex;
+  const clamp = (v: number) => Math.min(255, Math.max(0, v));
+  const r = clamp(parseInt(h.slice(0, 2), 16) + delta);
+  const g = clamp(parseInt(h.slice(2, 4), 16) + delta);
+  const b = clamp(parseInt(h.slice(4, 6), 16) + delta);
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
+// ─── Animated drifting circle ─────────────────────────────────────────────────
+interface CircleProps {
+  size: number;
+  left: number;
+  top: number;
+  color: string;
+  driftMs: number;
+  delayMs: number;
+  driftX: number;
+  driftY: number;
+}
+
+function DriftingCircle({ size, left, top, color, driftMs, delayMs, driftX, driftY }: CircleProps) {
+  const tx = useSharedValue(0);
+  const ty = useSharedValue(0);
+  const op = useSharedValue(0.15);
+
+  useEffect(() => {
+    tx.value = withDelay(
+      delayMs,
+      withRepeat(
+        withSequence(
+          withTiming(driftX, { duration: driftMs, easing: Easing.inOut(Easing.ease) }),
+          withTiming(-driftX * 0.6, { duration: driftMs * 0.8, easing: Easing.inOut(Easing.ease) }),
+          withTiming(0, { duration: driftMs * 0.7, easing: Easing.inOut(Easing.ease) }),
+        ),
+        -1,
+        false,
+      ),
+    );
+    ty.value = withDelay(
+      delayMs + 400,
+      withRepeat(
+        withSequence(
+          withTiming(-driftY, { duration: driftMs * 0.9, easing: Easing.inOut(Easing.ease) }),
+          withTiming(driftY * 0.7, { duration: driftMs, easing: Easing.inOut(Easing.ease) }),
+          withTiming(0, { duration: driftMs * 0.8, easing: Easing.inOut(Easing.ease) }),
+        ),
+        -1,
+        false,
+      ),
+    );
+    op.value = withDelay(
+      delayMs,
+      withRepeat(
+        withSequence(
+          withTiming(0.55, { duration: driftMs * 1.1, easing: Easing.inOut(Easing.ease) }),
+          withTiming(0.12, { duration: driftMs * 1.1, easing: Easing.inOut(Easing.ease) }),
+        ),
+        -1,
+        false,
+      ),
+    );
+  }, []);
+
+  const s = useAnimatedStyle(() => ({
+    transform: [{ translateX: tx.value }, { translateY: ty.value }],
+    opacity: op.value,
+  }));
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[{
+        position: 'absolute',
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: color,
+        left,
+        top,
+      }, s]}
+    />
+  );
+}
+
+// ─── Button shimmer ───────────────────────────────────────────────────────────
+function ButtonShimmer() {
+  const x = useSharedValue(-160);
+
+  useEffect(() => {
+    const run = () => {
+      x.value = -160;
+      x.value = withDelay(1800, withTiming(SW + 160, { duration: 700, easing: Easing.linear }));
+    };
+    run();
+    const id = setInterval(run, 2800);
+    return () => clearInterval(id);
+  }, []);
+
+  const s = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
+
+  return (
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: 'hidden' }, s]}>
+      <LinearGradient
+        colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.45)', 'rgba(255,255,255,0)']}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={{ width: 160, height: '100%' }}
+      />
+    </Animated.View>
+  );
+}
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
-  const bottomWhiteHeight = Math.max(insets.bottom, 20);
+  const bottomPad = Math.max(insets.bottom, 24);
+
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -52,747 +183,723 @@ export default function LoginScreen() {
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [phoneFocused, setPhoneFocused] = useState(false);
+  const [passFocused, setPassFocused] = useState(false);
+
   const login = useAuthStore((state) => state.login);
   const { isAuthenticated, user } = useAuthStore();
   const { colors: businessColors } = useBusinessColors();
   const { t } = useTranslation();
 
-  // Smooth keyboard-driven lift for the form container and overlay dim
+  const primary = businessColors.primary;
+
+  // ── Keyboard ──
   const keyboard = useAnimatedKeyboard();
-  const formAnimatedStyle = useAnimatedStyle(() => {
+  const formLiftStyle = useAnimatedStyle(() => {
     const raw = keyboard.height.value;
     const offset = Math.max(raw - insets.bottom, 0);
-    // Move much less than keyboard height so the form stays near its place
-    const reduced = offset * 0.25; // 25% of effective keyboard height
-    const clamped = Math.min(reduced, 0); // cap movement to 80px max
-    const isOpen = raw > 0;
     return {
-      transform: [
-        { translateY: withTiming(isOpen ? -clamped : 0, { duration: 220 }) },
-        { scale: withTiming(isOpen ? 1 : 1, { duration: 220 }) }, // keep scale neutral
-      ],
-    };
-  });
-  const overlayAnimatedStyle = useAnimatedStyle(() => {
-    const isOpen = keyboard.height.value > 0;
-    return {
-      backgroundColor: 'rgba(0,0,0,1)',
-      opacity: withTiming(isOpen ? 0.35 : 0.15, { duration: 240 }),
+      transform: [{ translateY: withTiming(raw > 0 ? -(offset * 0.3) : 0, { duration: 220 }) }],
     };
   });
 
-  // Effect to monitor authentication changes
-  useEffect(() => {
-    // Authentication state monitoring
-  }, [isAuthenticated, user]);
+  // ── Logo float ──
+  const logoFloat = useSharedValue(0);
+  const logoGlow = useSharedValue(0);
 
-  // Load business profile for login background
   useEffect(() => {
-    const loadBusinessProfile = async () => {
+    logoFloat.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 2800, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 2800, easing: Easing.inOut(Easing.ease) }),
+      ), -1, false
+    );
+    logoGlow.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+      ), -1, false
+    );
+  }, []);
+
+  const logoFloatStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: interpolate(logoFloat.value, [0, 1], [0, -10]) }],
+  }));
+  const logoGlowStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(logoGlow.value, [0, 1], [0.08, 0.45]),
+    transform: [{ scale: interpolate(logoGlow.value, [0, 1], [0.9, 1.25]) }],
+  }));
+
+  // ── Button press ──
+  const btnScale = useSharedValue(1);
+  const btnAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: btnScale.value }],
+  }));
+
+  // ── Load business profile ──
+  useEffect(() => {
+    const load = async () => {
       try {
-        setIsLoadingProfile(true);
         const profile = await businessProfileApi.getProfile();
         setBusinessProfile(profile);
-      } catch (error) {
-        console.error('Failed to load business profile:', error);
+      } catch (e) {
+        console.error(e);
       } finally {
         setIsLoadingProfile(false);
       }
     };
-
-    loadBusinessProfile();
+    load();
   }, []);
 
+  useEffect(() => {}, [isAuthenticated, user]);
+
+  // ── Login handler ──
   const handleLogin = async () => {
     if (!phone.trim() || !password.trim()) {
-      Alert.alert(t('error.generic', 'Error'), t('login.fillAll', 'Please fill in all fields'));
+      Alert.alert(t('error.generic', 'שגיאה'), t('login.fillAll', 'יש למלא את כל השדות'));
       return;
     }
-
     setIsLoading(true);
-    
     try {
-      // Super admin bypass — works from any business app
       if (superAdminApi.verifySuperAdmin(phone.trim(), password)) {
         const superUser = {
-          id: 'super-admin',
-          phone: phone.trim(),
-          type: UserType.SUPER_ADMIN,
-          name: 'Super Admin',
-          user_type: 'super_admin',
+          id: 'super-admin', phone: phone.trim(),
+          type: UserType.SUPER_ADMIN, name: 'Super Admin', user_type: 'super_admin',
         } as any;
         login(superUser);
         router.replace('/(super-admin)' as any);
         return;
       }
-
-      // Try authenticating via the real API
-      const user = await usersApi.authenticateUserByPhone(phone.trim(), password);
-      
-      if (user) {
-        // Blocked user cannot log in
-        if ((user as any)?.block) {
-          Alert.alert(t('account.blocked', 'Account Blocked'), t('login.blockedCannotSignIn', 'Your account is blocked and cannot sign in. Please contact the manager.'));
+      const authUser = await usersApi.authenticateUserByPhone(phone.trim(), password);
+      if (authUser) {
+        if ((authUser as any)?.block) {
+          Alert.alert(t('account.blocked', 'חשבון חסום'), t('login.blockedCannotSignIn', 'החשבון שלך חסום. פנה למנהל.'));
           return;
         }
-        // Validate user type
-        if (!isValidUserType(user.user_type)) {
-          Alert.alert(t('error.generic', 'Error'), t('login.invalidUserType', 'Invalid user type'));
+        if (!isValidUserType(authUser.user_type)) {
+          Alert.alert(t('error.generic', 'שגיאה'), t('login.invalidUserType', 'סוג משתמש לא תקין'));
           return;
         }
-        
-        // Convert Supabase user to app user format for the store
         const appUser = {
-          id: user.id,
-          phone: user.phone,
-          type: user.user_type,
-          name: user.name,
-          email: user.email ?? null,
-          image_url: user.image_url ?? null,
-          user_type: user.user_type,
-          block: (user as any)?.block ?? false,
+          id: authUser.id, phone: authUser.phone,
+          type: authUser.user_type, name: authUser.name,
+          email: authUser.email ?? null, image_url: authUser.image_url ?? null,
+          user_type: authUser.user_type, block: (authUser as any)?.block ?? false,
         } as any;
         login(appUser);
-        // Force navigation to the appropriate screen
-        if (appUser.type === 'admin') {
-          router.replace('/(tabs)');
-        } else {
-          router.replace('/(client-tabs)');
-        }
+        router.replace(appUser.type === 'admin' ? '/(tabs)' : '/(client-tabs)');
       } else {
-        // Check if user exists in different business
         const businessId = getBusinessId();
-        const { data: userInOtherBusiness } = await supabase
-          .from('users')
-          .select('*')
-          .eq('phone', phone.trim())
-          .neq('business_id', businessId)
-          .single();
-
-        if (userInOtherBusiness) {
-          // Don't reveal that user exists in another business - just show generic error
-          Alert.alert(t('error.generic', 'Error'), t('login.incorrectCredentials', 'Incorrect phone or password'));
+        const { data: other } = await supabase.from('users').select('*')
+          .eq('phone', phone.trim()).neq('business_id', businessId).single();
+        if (other) {
+          Alert.alert(t('error.generic', 'שגיאה'), t('login.incorrectCredentials', 'טלפון או סיסמה שגויים'));
           return;
         }
-
-        // If API fails, try demo users
         const demoUser = findUserByCredentials(phone.trim(), password);
         if (demoUser) {
           login(demoUser);
-          // Force navigation to the appropriate screen
-          if (demoUser.type === 'admin') {
-            router.replace('/(tabs)');
-          } else {
-            router.replace('/(client-tabs)');
-          }
+          router.replace(demoUser.type === 'admin' ? '/(tabs)' : '/(client-tabs)');
         } else {
-          Alert.alert(t('error.generic', 'Error'), t('login.incorrectCredentials', 'Incorrect phone or password'));
+          Alert.alert(t('error.generic', 'שגיאה'), t('login.incorrectCredentials', 'טלפון או סיסמה שגויים'));
         }
       }
-    } catch (error) {
-      console.error('API Login error:', error);
-      
-      // If API fails, try demo users
-      try {
-        const demoUser = findUserByCredentials(phone.trim(), password);
-        if (demoUser) {
-          login(demoUser);
-          // Force navigation to the appropriate screen
-          if (demoUser.type === 'admin') {
-            router.replace('/(tabs)');
-          } else {
-            router.replace('/(client-tabs)');
-          }
-        } else {
-          Alert.alert(t('error.generic', 'Error'), t('login.incorrectCredentials', 'Incorrect phone or password'));
-        }
-      } catch (demoError) {
-        console.error('Demo login error:', demoError);
-        Alert.alert(t('error.generic', 'Error'), t('login.signInError', 'An error occurred during sign-in'));
+    } catch {
+      const demoUser = findUserByCredentials(phone.trim(), password);
+      if (demoUser) {
+        login(demoUser);
+        router.replace(demoUser.type === 'admin' ? '/(tabs)' : '/(client-tabs)');
+      } else {
+        Alert.alert(t('error.generic', 'שגיאה'), t('login.incorrectCredentials', 'טלפון או סיסמה שגויים'));
       }
     } finally {
       setIsLoading(false);
     }
   };
 
-
+  // ── Forgot password handler ──
   const handleForgotSubmit = async () => {
     const e = (forgotEmail || '').trim();
-    if (!e) { Alert.alert(t('error.generic', 'Error'), t('login.enterEmail', 'Please enter an email')); return; }
+    if (!e) { Alert.alert(t('error.generic', 'שגיאה'), t('login.enterEmail', 'יש להזין כתובת מייל')); return; }
     setIsSendingReset(true);
     try {
-      // 1) Try Edge Function first
-      const { data: fnData, error: fnErr } = await supabase.functions.invoke('reset-password', {
-        body: { email: e },
-      });
+      const { error: fnErr } = await supabase.functions.invoke('reset-password', { body: { email: e } });
       if (fnErr) {
-        // 2) Fallback: call Supabase Auth directly from client
-        console.warn('[ForgotPassword] edge failed, falling back to auth.resetPasswordForEmail', fnErr);
         const { error: rpErr } = await supabase.auth.resetPasswordForEmail(e);
         if (rpErr) {
-          const msg = (rpErr as any)?.message || t('login.resetError', 'Error requesting password reset');
-          Alert.alert(t('error.generic', 'Error'), String(msg));
+          Alert.alert(t('error.generic', 'שגיאה'), String((rpErr as any)?.message || t('common.tryAgain', 'נסה שוב')));
           return;
         }
       }
-
-      Alert.alert(t('login.emailSent.title', 'Email Sent'), t('login.emailSent.message', 'We sent you a password reset email. Check your inbox.'), [
-        { text: t('ok', 'OK'), onPress: () => setIsForgotOpen(false) },
+      Alert.alert(t('login.emailSent.title', 'מייל נשלח'), t('login.emailSent.message', 'בדוק את תיבת הדואר שלך'), [
+        { text: t('ok', 'אישור'), onPress: () => setIsForgotOpen(false) },
       ]);
-    } catch (err) {
-      console.error('Forgot password error (invoke/catch):', err);
-      // Last resort fallback just in case invoke threw before returning error
-      try {
-        const { error: rpErr } = await supabase.auth.resetPasswordForEmail(e);
-        if (rpErr) {
-          Alert.alert(t('error.generic', 'Error'), String((rpErr as any)?.message || t('common.tryAgain', 'An error occurred. Please try again.')));
-          return;
-        }
-        Alert.alert(t('login.emailSent.title', 'Email Sent'), t('login.emailSent.message', 'We sent you a password reset email. Check your inbox.'), [
-          { text: t('ok', 'OK'), onPress: () => setIsForgotOpen(false) },
-        ]);
-      } catch (subErr) {
-        console.error('Forgot password fallback error:', subErr);
-        Alert.alert(t('error.generic', 'Error'), t('common.tryAgain', 'An error occurred. Please try again.'));
-      }
+    } catch {
+      Alert.alert(t('error.generic', 'שגיאה'), t('common.tryAgain', 'אירעה שגיאה, נסה שוב'));
     } finally {
       setIsSendingReset(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      {/* Custom login background image */}
-      {businessProfile?.login_img && !isLoadingProfile ? (
-        (businessProfile.login_img === 'gradient-background' || 
-         businessProfile.login_img === 'solid-blue-background' ||
-         businessProfile.login_img === 'solid-purple-background' ||
-         businessProfile.login_img === 'solid-green-background' ||
-         businessProfile.login_img === 'solid-orange-background' ||
-         businessProfile.login_img === 'light-silver-background' ||
-         businessProfile.login_img === 'light-white-background' ||
-         businessProfile.login_img === 'light-gray-background' ||
-         businessProfile.login_img === 'light-pink-background' ||
-         businessProfile.login_img === 'light-cyan-background' ||
-         businessProfile.login_img === 'light-lavender-background' ||
-         businessProfile.login_img === 'light-coral-background' ||
-         businessProfile.login_img === 'dark-black-background' ||
-         businessProfile.login_img === 'dark-charcoal-background') ? (
-          <GradientBackground 
-            style={styles.backgroundImage}
-            backgroundType={businessProfile.login_img}
-          />
-        ) : (
-          <Image 
-            source={{ uri: businessProfile.login_img }} 
-            style={styles.backgroundImage}
-            resizeMode="cover"
-          />
-        )
-      ) : (
+    <View style={styles.root}>
+
+      {/* ── Dark background ─────────────────────────────────────────────── */}
+      <View style={StyleSheet.absoluteFill}>
+        {/* Base dark gradient */}
         <LinearGradient
-          colors={[ '#FFFFFF', '#F6F6F6', '#EFEFEF' ]}
-          locations={[0, 0.55, 1]}
-          start={{ x: 0.2, y: 0 }}
-          end={{ x: 0.8, y: 1 }}
-          style={styles.bgGradient}
-        >
-          {/* modern subtle gradient beams instead of circular blobs */}
-          <LinearGradient
-            colors={[ '#00000022', '#00000000' ]}
-            start={{ x: 1, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={styles.beamRight}
-            pointerEvents="none"
-          />
-          <LinearGradient
-            colors={[ '#00000026', '#FFFFFF00' ]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.beamTop}
-            pointerEvents="none"
-          />
-        </LinearGradient>
-      )}
-      
-      {/* Dark overlay for better text readability when using custom background */}
-      {businessProfile?.login_img && !isLoadingProfile && (
-        <Animated.View style={[styles.darkOverlay, overlayAnimatedStyle]} />
-      )}
-      <SafeAreaView style={styles.fullSafe}>
+          colors={['#0a0d0a', '#0d100d', '#080a08']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+
+        {/* Drifting animated circles */}
+        <DriftingCircle
+          size={320} left={-80} top={-60}
+          color={hexToRgba(primary, 0.75)}
+          driftMs={5000} delayMs={0} driftX={50} driftY={40}
+        />
+        <DriftingCircle
+          size={260} left={SW * 0.5} top={SH * 0.05}
+          color={hexToRgba(shiftHex(primary, 30), 0.6)}
+          driftMs={6200} delayMs={700} driftX={-45} driftY={55}
+        />
+        <DriftingCircle
+          size={200} left={-40} top={SH * 0.3}
+          color={hexToRgba(shiftHex(primary, -20), 0.55)}
+          driftMs={4800} delayMs={1200} driftX={60} driftY={-35}
+        />
+        <DriftingCircle
+          size={150} left={SW * 0.65} top={SH * 0.38}
+          color={hexToRgba(shiftHex(primary, 50), 0.5)}
+          driftMs={5500} delayMs={400} driftX={-30} driftY={-50}
+        />
+        <DriftingCircle
+          size={100} left={SW * 0.2} top={SH * 0.55}
+          color={hexToRgba(primary, 0.45)}
+          driftMs={4200} delayMs={1800} driftX={40} driftY={30}
+        />
+      </View>
+
+      {/* ── Content ─────────────────────────────────────────────────────── */}
+      <SafeAreaView style={styles.safeArea}>
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
-          contentInsetAdjustmentBehavior="never"
         >
-            {/* Branding at top (logo + optional business name) */}
-            <View style={styles.titleContainer}>
-              <Image source={getCurrentClientLogo()} style={styles.logoImage} resizeMode="contain" />
-            </View>
 
-            {/* Bottom sheet form container (like register) with slight blur and crisp rounded corners */}
-            <Animated.View style={[styles.formWrapper, formAnimatedStyle]}>
-              <BlurView intensity={18} tint="light" style={styles.formContainer}>
-              <View style={styles.formHeader}>
-                <Text style={[styles.formTitle, { color: businessColors.primary }]}>{t('login.form.title','Sign in your account')}</Text>
-                <Text style={styles.formSubtitle}>{t('login.form.subtitle','Enter your details to access your account')}</Text>
-              </View>
+          {/* Logo top section */}
+          <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.logoSection}>
+            <Animated.View style={logoFloatStyle}>
+              {/* Glow behind logo */}
+              <Animated.View
+                pointerEvents="none"
+                style={[styles.logoGlow, { backgroundColor: hexToRgba(primary, 1) }, logoGlowStyle]}
+              />
+              <Image
+                source={getCurrentClientLogo()}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+            </Animated.View>
+          </Animated.View>
 
-              {/* Phone */}
-              <View style={styles.field}>
-                <View style={[styles.inputRow, { backgroundColor: 'rgba(255,255,255,0.6)', borderColor: '#E5E7EB' }]}>
-                  <Ionicons name="call-outline" size={18} color="#6B7280" style={styles.iconLeft} />
+          {/* ── Dark form card ─────────────────────────────────────────── */}
+          <Animated.View
+            style={[styles.cardWrapper, formLiftStyle]}
+            entering={FadeInUp.delay(200).springify()}
+          >
+            <BlurView
+              intensity={Platform.OS === 'ios' ? 18 : 6}
+              tint="dark"
+              style={[styles.card, { paddingBottom: bottomPad + 8 }]}
+            >
+              {/* Top accent line */}
+              <View style={[styles.accentLine, { backgroundColor: hexToRgba(primary, 0.8) }]} />
+
+              {/* Header */}
+              <Animated.View entering={FadeIn.delay(380)} style={styles.header}>
+                <Text style={styles.titleText}>
+                  {t('login.form.title', 'כניסה לחשבון')}
+                </Text>
+                <Text style={styles.subtitleText}>
+                  {t('login.form.subtitle', 'הכנס את הפרטים שלך כדי להמשיך')}
+                </Text>
+              </Animated.View>
+
+              {/* Phone field */}
+              <Animated.View entering={FadeInDown.delay(500).springify()} style={styles.fieldWrap}>
+                <View style={[
+                  styles.inputRow,
+                  phoneFocused && {
+                    borderColor: primary,
+                    borderWidth: 1.8,
+                    shadowColor: primary,
+                    shadowOpacity: 0.35,
+                    shadowRadius: 10,
+                    elevation: 6,
+                  },
+                ]}>
+                  <Ionicons
+                    name="call-outline"
+                    size={19}
+                    color={phoneFocused ? primary : 'rgba(255,255,255,0.35)'}
+                    style={styles.iconLeft}
+                  />
                   <TextInput
-                    style={[styles.input, { color: '#4B5563' }]}
-                    placeholder={t('profile.edit.phonePlaceholder','Phone number')}
-                    placeholderTextColor="#6B7280"
+                    style={styles.input}
+                    placeholder={t('profile.edit.phonePlaceholder', 'מספר טלפון')}
+                    placeholderTextColor="rgba(255,255,255,0.28)"
                     value={phone}
                     onChangeText={setPhone}
                     keyboardType="phone-pad"
                     autoCorrect={false}
                     textAlign="left"
+                    onFocus={() => setPhoneFocused(true)}
+                    onBlur={() => setPhoneFocused(false)}
                   />
                 </View>
-              </View>
+              </Animated.View>
 
-              {/* Password */}
-              <View style={styles.field}>
-                <View style={[styles.inputRow, { backgroundColor: 'rgba(255,255,255,0.6)', borderColor: '#E5E7EB' }]}>
-                  <Ionicons name="lock-closed-outline" size={18} color="#6B7280" style={styles.iconLeft} />
+              {/* Password field */}
+              <Animated.View entering={FadeInDown.delay(600).springify()} style={styles.fieldWrap}>
+                <View style={[
+                  styles.inputRow,
+                  passFocused && {
+                    borderColor: primary,
+                    borderWidth: 1.8,
+                    shadowColor: primary,
+                    shadowOpacity: 0.35,
+                    shadowRadius: 10,
+                    elevation: 6,
+                  },
+                ]}>
+                  <Ionicons
+                    name="lock-closed-outline"
+                    size={19}
+                    color={passFocused ? primary : 'rgba(255,255,255,0.35)'}
+                    style={styles.iconLeft}
+                  />
                   <TextInput
-                    style={[styles.input, styles.inputPassword, { color: '#4B5563' }]}
-                    placeholder={t('login.passwordPlaceholder','Password')}
-                    placeholderTextColor="#6B7280"
+                    style={[styles.input, styles.inputPass]}
+                    placeholder={t('login.passwordPlaceholder', 'סיסמה')}
+                    placeholderTextColor="rgba(255,255,255,0.28)"
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
                     textAlign="left"
+                    onFocus={() => setPassFocused(true)}
+                    onBlur={() => setPassFocused(false)}
                   />
-                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButtonRight}>
-                    <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color="#6B7280" />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword(v => !v)}
+                    style={styles.eyeBtn}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Ionicons
+                      name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={19}
+                      color={passFocused ? primary : 'rgba(255,255,255,0.4)'}
+                    />
                   </TouchableOpacity>
                 </View>
+              </Animated.View>
+
+              {/* Login button */}
+              <Animated.View
+                entering={FadeInUp.delay(700).springify()}
+                style={btnAnimStyle}
+              >
+                <TouchableOpacity
+                  onPressIn={() => { btnScale.value = withTiming(0.96, { duration: 80 }); }}
+                  onPressOut={() => { btnScale.value = withSpring(1, { damping: 12, stiffness: 220 }); }}
+                  onPress={handleLogin}
+                  disabled={isLoading}
+                  activeOpacity={1}
+                >
+                  <View style={styles.btnOuter}>
+                    <LinearGradient
+                      colors={[shiftHex(primary, 40), primary, shiftHex(primary, -40)]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.btn}
+                    >
+                      <ButtonShimmer />
+                      <Text style={styles.btnText}>
+                        {isLoading
+                          ? t('login.cta.signingIn', 'מתחבר...')
+                          : t('login.cta.signIn', 'כניסה')}
+                      </Text>
+                    </LinearGradient>
+                  </View>
+                </TouchableOpacity>
+              </Animated.View>
+
+              {/* Links */}
+              <Animated.View entering={FadeIn.delay(820)} style={styles.linksWrap}>
+                <TouchableOpacity onPress={() => setIsForgotOpen(true)} hitSlop={{ top: 8, bottom: 8 }}>
+                  <Text style={[styles.forgotText, { color: 'rgba(255,255,255,0.55)' }]}>
+                    {t('login.forgotPassword', 'שכחת סיסמה?')}
+                  </Text>
+                </TouchableOpacity>
+
+                <View style={styles.dividerRow}>
+                  <View style={styles.divider} />
+                </View>
+
+                <View style={styles.registerRow}>
+                  <Text style={styles.registerText}>
+                    {t('login.noAccount', 'אין לך חשבון?')}
+                  </Text>
+                  <Link href="/register" asChild>
+                    <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
+                      <Text style={[styles.registerAction, { color: primary }]}>
+                        {' '}{t('login.signUpNow', 'הרשם עכשיו')}
+                      </Text>
+                    </TouchableOpacity>
+                  </Link>
+                </View>
+              </Animated.View>
+
+            </BlurView>
+          </Animated.View>
+        </ScrollView>
+      </SafeAreaView>
+
+      {/* ── Forgot Password Modal ────────────────────────────────────────── */}
+      {isForgotOpen && (
+        <Animated.View style={styles.modalOverlay} entering={FadeIn.duration(200)}>
+          <Animated.View style={styles.modalCard} entering={FadeInUp.delay(60).springify()}>
+
+            {/* Colored top stripe */}
+            <LinearGradient
+              colors={[shiftHex(primary, 40), primary]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.modalStripe}
+            />
+
+            <View style={styles.modalBody}>
+              <Text style={[styles.modalTitle, { color: primary }]}>
+                {t('login.reset.title', 'איפוס סיסמה')}
+              </Text>
+              <Text style={styles.modalSubtitle}>
+                {t('login.reset.subtitle', 'הכנס טלפון ומייל כפי שמופיעים בחשבון שלך')}
+              </Text>
+
+              {/* Phone */}
+              <View style={[styles.modalInputRow, { marginBottom: 12 }]}>
+                <Ionicons name="call-outline" size={18} color="#9CA3AF" style={styles.iconLeft} />
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder={t('profile.edit.phonePlaceholder', 'מספר טלפון')}
+                  placeholderTextColor="#B0B8C4"
+                  value={forgotPhone}
+                  onChangeText={setForgotPhone}
+                  keyboardType="phone-pad"
+                  autoCorrect={false}
+                  textAlign="left"
+                />
               </View>
 
-              {/* CTA */}
-              <TouchableOpacity onPress={handleLogin} activeOpacity={0.9} disabled={isLoading} style={styles.ctaShadow}>
-                <View style={styles.ctaRadiusWrap}>
-                  <View style={[styles.cta, styles.ctaOutlined, { backgroundColor: businessColors.primary }]}>
-                    <Text style={[styles.ctaText, { color: '#FFFFFF' }]}>{isLoading ? t('login.cta.signingIn','Signing in…') : t('login.cta.signIn','Sign In')}</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
+              {/* Email */}
+              <View style={styles.modalInputRow}>
+                <Ionicons name="mail-outline" size={18} color="#9CA3AF" style={styles.iconLeft} />
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder={t('profile.edit.emailPlaceholder', 'כתובת מייל')}
+                  placeholderTextColor="#B0B8C4"
+                  value={forgotEmail}
+                  onChangeText={setForgotEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  textAlign="left"
+                />
+              </View>
 
-                {/* Links */}
-                <TouchableOpacity style={styles.forgotPasswordButton} onPress={() => setIsForgotOpen(true)}>
-                  <Text style={styles.forgotPasswordText}>{t('login.forgotPassword','Forgot password')}</Text>
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalBtn, styles.cancelBtn]}
+                  onPress={() => setIsForgotOpen(false)}
+                  disabled={isSendingReset}
+                >
+                  <Text style={styles.cancelBtnText}>{t('cancel', 'ביטול')}</Text>
                 </TouchableOpacity>
-                <Text style={styles.registerLine}>
-                  {t('login.noAccount',"Don't have an account?")}{' '}
-                  <Link href="/register" asChild>
-                    <Text style={[styles.registerAction, { color: businessColors.primary }]}>{t('login.signUpNow','Sign up now')}</Text>
-                  </Link>
-                </Text>
-              </BlurView>
-            </Animated.View>
-          </ScrollView>
-      </SafeAreaView>
-      {/* Forgot Password Modal */}
-      {isForgotOpen && (
-        <View style={styles.forgotOverlay}>
-          <View style={styles.forgotCard}>
-            <Text style={styles.forgotTitle}>{t('login.reset.title','Reset Password')}</Text>
-            <Text style={styles.forgotSubtitle}>{t('login.reset.subtitle','Enter phone and email as they appear on your account')}</Text>
-            <View style={{ height: 10 }} />
-            <View style={[styles.inputRow, { backgroundColor: '#F8F8F8', borderColor: '#E0E0E0' }]}> 
-              <Ionicons name="call-outline" size={18} color="#666666" style={styles.iconLeft} />
-              <TextInput
-                style={[styles.input, { color: '#000000' }]}
-                placeholder={t('profile.edit.phonePlaceholder','Phone number')}
-                placeholderTextColor="#999999"
-                value={forgotPhone}
-                onChangeText={setForgotPhone}
-                keyboardType="phone-pad"
-                autoCorrect={false}
-                textAlign="left"
-              />
+                <TouchableOpacity
+                  style={[styles.modalBtn, { overflow: 'hidden' }]}
+                  onPress={handleForgotSubmit}
+                  disabled={isSendingReset}
+                >
+                  <LinearGradient
+                    colors={[shiftHex(primary, 30), primary]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <Text style={styles.confirmBtnText}>
+                    {isSendingReset ? t('login.reset.sending', 'שולח...') : t('confirm', 'אישור')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={{ height: 10 }} />
-            <View style={[styles.inputRow, { backgroundColor: '#F8F8F8', borderColor: '#E0E0E0' }]}> 
-              <Ionicons name="mail-outline" size={18} color="#666666" style={styles.iconLeft} />
-              <TextInput
-                style={[styles.input, { color: '#000000' }]}
-                placeholder={t('profile.edit.emailPlaceholder','Email')}
-                placeholderTextColor="#999999"
-                value={forgotEmail}
-                onChangeText={setForgotEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                textAlign="left"
-              />
-            </View>
-            <View style={{ height: 14 }} />
-            <View style={styles.forgotActions}>
-              <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setIsForgotOpen(false)} disabled={isSendingReset}>
-                <Text style={styles.cancelBtnText}>{t('cancel','Cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalBtn, styles.saveBtn, { backgroundColor: businessColors.primary }]} onPress={handleForgotSubmit} disabled={isSendingReset}>
-                <Text style={[styles.saveBtnText, { color: '#FFFFFF' }]}>{isSendingReset ? t('login.reset.sending','Sending…') : t('confirm','Confirm')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+          </Animated.View>
+        </Animated.View>
       )}
-      {/* Bottom white safe-area inset to match register screen */}
-      <View pointerEvents="none" style={[styles.bottomWhiteInset, { height: bottomWhiteHeight }]} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    backgroundColor: staticColors.white,
+    backgroundColor: '#080a08',
   },
-  backgroundImage: {
-    position: 'absolute',
-    top: -20, // Extend beyond safe area
-    left: 0,
-    right: 0,
-    bottom: -20, // Extend beyond safe area
-    width: '100%',
-    height: '110%', // Slightly taller
-    flex: 1, // Ensure it takes full available space
-  },
-  darkOverlay: {
-    position: 'absolute',
-    top: -50, // Extend beyond safe area
-    left: 0,
-    right: 0,
-    bottom: -50, // Extend beyond safe area
-    backgroundColor: 'rgba(0, 0, 0, 0.15)',
-  },
-  bgGradient: {
-    position: 'absolute',
-    top: -50, // Extend beyond safe area
-    left: 0,
-    right: 0,
-    bottom: -50, // Extend beyond safe area
-    width: '100%',
-    height: '120%', // Ensure full coverage
-  },
-  fullSafe: {
+  safeArea: {
     flex: 1,
   },
-  headerContent: {
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  beamRight: {
-    position: 'absolute',
-    right: -120,
-    top: -40,
-    width: 300,
-    height: 500,
-    transform: [{ rotate: '18deg' }],
-    opacity: 1,
-    borderRadius: 24,
-  },
-  beamTop: {
-    position: 'absolute',
-    left: -80,
-    top: -60,
-    width: 380,
-    height: 240,
-    transform: [{ rotate: '-10deg' }],
-    opacity: 1,
-    borderRadius: 24,
-  },
-  logoBadge: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  logoImage: {
-    width: '85%',
-    height: 120,
-    marginBottom: 12,
-    alignSelf: 'center',
-  },
-  appTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: staticColors.textPrimary,
-    marginBottom: 4,
-  },
-  appSubtitle: {
-    fontSize: 14,
-    color: staticColors.textSecondary,
-    opacity: 1,
-    marginBottom: 14,
-  },
-  businessName: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: staticColors.textPrimary,
-    textAlign: 'center',
-    marginTop: 0,
-    marginBottom: 8,
-  },
-  safeBottom: {
-    flex: 1,
-    backgroundColor: staticColors.white,
-  },
-  scrollContent: {
+  scroll: {
     flexGrow: 1,
     justifyContent: 'flex-end',
-    paddingHorizontal: 0,
-    paddingVertical: 0,
   },
-  titleContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 24,
+
+  // ── Logo ──
+  logoSection: {
     alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 18,
+    paddingTop: 20,
   },
-  formWrapper: {
-    backgroundColor: 'rgba(255,255,255,0.55)',
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    overflow: 'hidden',
-    paddingHorizontal: 0,
-    paddingTop: 0,
-    paddingBottom: 0,
-    minHeight: '70%',
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: -2 },
-    elevation: 2,
-  },
-  formContainer: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 32,
-    minHeight: '70%',
-  },
-  formHeader: {
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  formTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1F2937',
-    marginBottom: 4,
-  },
-  formSubtitle: {
-    fontSize: 13,
-    color: '#6B7280',
-  },
-  bottomWhiteInset: {
+  logoGlow: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(255,255,255,0.55)',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    alignSelf: 'center',
+    top: -40,
+  },
+  logo: {
+    width: SW * 0.65,
+    height: 115,
+    alignSelf: 'center',
+  },
+
+  // ── Dark card ──
+  cardWrapper: {
+    borderTopLeftRadius: 36,
+    borderTopRightRadius: 36,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.6,
+    shadowRadius: 30,
+    shadowOffset: { width: 0, height: -8 },
+    elevation: 20,
   },
   card: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 24,
-    marginTop: 0,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
-    overflow: 'hidden',
+    paddingHorizontal: 24,
+    paddingTop: 0,
+    backgroundColor: 'rgba(14,17,14,0.88)',
   },
-  field: {
-    marginBottom: 16,
+
+  // ── Accent line top of card ──
+  accentLine: {
+    width: 48,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 14,
+    marginBottom: 24,
+  },
+
+  // ── Header ──
+  header: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  titleText: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 6,
+    letterSpacing: -0.3,
+  },
+  subtitleText: {
+    fontSize: 13.5,
+    color: 'rgba(255,255,255,0.45)',
+    textAlign: 'center',
+  },
+
+  // ── Input ──
+  fieldWrap: {
+    marginBottom: 14,
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 20,
-    height: 52,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    position: 'relative',
-  },
-  iconRight: {
-    position: 'absolute',
-    right: 12,
-    zIndex: 1,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 16,
+    height: 56,
+    paddingHorizontal: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   iconLeft: {
-    position: 'absolute',
-    left: 12,
-    zIndex: 1,
+    marginRight: 10,
   },
   input: {
     flex: 1,
-    fontSize: 16,
-    color: staticColors.textPrimary,
-    paddingHorizontal: 8,
-    paddingLeft: 36,
-    paddingRight: 36,
-    textAlign: 'left',
+    fontSize: 15,
+    color: '#FFFFFF',
+    fontWeight: '500',
   },
-  inputPassword: {
-    paddingRight: 36, // space for eye icon on right
-    paddingLeft: 36,  // space for lock icon on left
+  inputPass: {
+    paddingRight: 38,
   },
-  eyeButton: {
-    padding: 6,
-    marginLeft: 0,
-    marginRight: 8,
+  eyeBtn: {
     position: 'absolute',
-    left: 8,
-    zIndex: 1,
+    right: 16,
+    padding: 4,
   },
-  eyeButtonRight: {
-    padding: 6,
-    marginLeft: 0,
-    marginRight: 8,
-    position: 'absolute',
-    right: 8,
-    zIndex: 1,
-  },
-  ctaShadow: {
-    marginTop: 12,
-    borderRadius: 24,
-    shadowColor: 'transparent',
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 0,
-  },
-  ctaRadiusWrap: {
-    borderRadius: 24,
+
+  // ── Button ──
+  btnOuter: {
+    borderRadius: 16,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.4,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
   },
-  cta: {
-    height: 48,
+  btn: {
+    height: 56,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
-  ctaOutlined: {
-    backgroundColor: 'rgba(255,255,255,0.88)',
-    borderWidth: 0,
-    borderColor: 'transparent',
-    borderRadius: 24,
-    shadowColor: 'rgba(0,0,0,0.25)',
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
+  btnText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
-  ctaText: {
-    color: '#000000',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  forgotPasswordButton: {
+
+  // ── Links ──
+  linksWrap: {
     alignItems: 'center',
-    marginTop: 14,
+    marginTop: 20,
+    gap: 10,
   },
-  forgotPasswordText: {
-    color: '#000000',
+  forgotText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '500',
   },
-  registerLine: {
-    marginTop: 8,
-    textAlign: 'center',
-    color: '#000000',
+  dividerRow: {
+    width: '50%',
+    alignItems: 'center',
+  },
+  divider: {
+    width: '100%',
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  registerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  registerText: {
+    color: 'rgba(255,255,255,0.45)',
     fontSize: 14,
   },
   registerAction: {
-    fontWeight: '700',
-    fontSize: 16,
-    marginRight: 4,
+    fontWeight: '800',
+    fontSize: 14,
   },
-  // Reuse modal button styles similar to other screens
+
+  // ── Modal ──
+  modalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 22,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 26,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.4,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 16,
+  },
+  modalStripe: {
+    height: 5,
+    width: '100%',
+  },
+  modalBody: {
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 21,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: '#8A9AB2',
+    textAlign: 'center',
+    marginBottom: 18,
+    lineHeight: 19,
+  },
+  modalInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 14,
+    height: 52,
+    paddingHorizontal: 14,
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+  },
+  modalInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#1F2937',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 18,
+  },
   modalBtn: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
+    height: 50,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cancelBtn: {
-    backgroundColor: '#F5F5F5',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
   },
   cancelBtnText: {
-    color: '#666666',
-    fontSize: 16,
+    color: '#4B5563',
+    fontSize: 15,
     fontWeight: '600',
   },
-  saveBtn: {
-    backgroundColor: staticColors.textPrimary, // Will be overridden by inline style
-  },
-  saveBtnText: {
+  confirmBtnText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-  },
-  forgotOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  forgotCard: {
-    width: '100%',
-    maxWidth: 420,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 8,
-  },
-  forgotTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#000000',
-    textAlign: 'center',
-    marginBottom: 6,
-  },
-  forgotSubtitle: {
-    fontSize: 13,
-    color: '#666666',
-    textAlign: 'center',
-  },
-  forgotActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 10,
   },
 });

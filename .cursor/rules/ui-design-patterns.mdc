@@ -1,0 +1,48 @@
+---
+description: UI design patterns and styling guidelines for the salon booking app
+globs: "**/*.tsx"
+alwaysApply: false
+---
+
+# UI & Design Guidelines
+
+## Theme System
+
+The app uses a layered theme: build-time `theme.json` → runtime Supabase business colors.
+
+- Access colors via `useColors()` hook from `src/theme/ThemeProvider`
+- Access branding (logo, company name) via `useBranding()` hook
+- Access fonts via `useFonts()` hook
+- Full theme context via `useTheme()`
+
+### Color Tokens (ThemeColors interface)
+
+`primary`, `secondary`, `accent`, `background`, `surface`, `text`, `textSecondary`, `border`, `success`, `warning`, `error`, `info`
+
+## Styling Rules
+
+- Use `StyleSheet.create()` for all styles — no inline style objects in JSX
+- Use theme color tokens, never hardcode colors (e.g. `colors.primary` not `'#007AFF'`)
+- Use `LinearGradient` from expo-linear-gradient for gradient backgrounds
+- Animations: use `react-native-reanimated` for performant animations
+- Bottom sheets: use `@gorhom/bottom-sheet`
+- Icons: use `lucide-react-native` as primary icon library, `@expo/vector-icons` as fallback
+
+## Component Patterns
+
+- Functional components only — no class components
+- Extract reusable UI into `components/` folder
+- Screens should compose from smaller components, not contain all UI inline
+- Modals: use BottomSheet or React Native Modal — follow existing patterns in `components/`
+- Loading states: show skeleton/spinner, never a blank screen
+- Error states: show user-friendly message with retry option
+
+## Design Aesthetic — מראה כללי
+
+- Modern, clean, rounded corners (borderRadius: 12-16 for cards)
+- Soft shadows for elevation on cards
+- Generous padding and spacing (16-24 units)
+- Gradient hero sections on home screens
+- Card-based layouts for lists (appointments, services, products)
+- Floating action buttons for primary actions (e.g. book appointment "+")
+- Blur effects (`expo-blur`) for overlays and modals

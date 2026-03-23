@@ -1,0 +1,43 @@
+---
+description: Multi-client branding system — how white-label builds work
+globs: "branding/**,app.config.js,eas.json,scripts/**"
+alwaysApply: false
+---
+
+# White-Label Branding System
+
+## How It Works
+
+Each client/business has a folder under `branding/<CLIENT>/` containing:
+
+| File | Purpose |
+|------|---------|
+| `.env` | Supabase URL, anon key, BUSINESS_ID, Google API keys |
+| `app.config.json` | App name, bundle IDs, icon paths, splash config |
+| `theme.json` | Colors, branding (logo, company name), fonts |
+| `logo.png`, `splash.png` | Client-specific images |
+
+## Build Flow (app.config.js)
+
+1. `CLIENT` env var selects the tenant (default: `JamesBarber`)
+2. Loads `branding/<CLIENT>/.env` → injects into `process.env`
+3. Loads `branding/<CLIENT>/app.config.json` → merges into Expo config
+4. Loads `branding/<CLIENT>/theme.json` → writes to `expo.extra.theme`
+5. Writes `branding/current.json` (debug snapshot)
+6. Writes `src/config/currentClient.ts` (static import for bundler)
+
+## Adding a New Client — הוספת לקוח חדש
+
+1. Create `branding/<NewClient>/` with `.env`, `app.config.json`, `theme.json`, images
+2. Add logo mapping in `src/theme/assets.ts` → `clientLogos` object
+3. Add npm scripts in `package.json`: `start:<NewClient>`, `build:<NewClient>:*`
+4. Add EAS build profiles in `eas.json` for the new client
+5. Or use the helper script: `node scripts/add-client.mjs <NewClient>`
+
+## Important Rules
+
+- **Never hardcode** `BUSINESS_ID` or Supabase credentials — they come from branding/.env
+- **Never reference a specific client** in shared code — use `CURRENT_CLIENT` or `getBusinessId()`
+- Logo references in `assets.ts` must be **static require()** calls (Metro bundler limitation)
+- The `branding/current.json` and `src/config/currentClient.ts` are **auto-generated** — don't edit manually
+- Keep `theme.json` structure consistent with the `Theme` interface in `ThemeProvider.tsx`

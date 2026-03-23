@@ -1,0 +1,48 @@
+---
+description: Coding conventions and patterns for the salon booking app
+alwaysApply: true
+---
+
+# Coding Conventions
+
+## File & Import Conventions
+
+- Use `@/` alias for project root imports (configured in babel.config.js)
+- API modules live in `lib/api/` — one file per domain (e.g. `businessHours.ts`, `services.ts`)
+- Zustand stores live in `stores/` — one file per domain with AsyncStorage persist
+- Shared components live in `components/`
+
+## Supabase & Data Access
+
+- Always use `getBusinessId()` from `lib/supabase.ts` to scope queries to the current tenant
+- Never hardcode business IDs — they come from the `.env` / `BUSINESS_ID` extra config
+- API functions return typed data; use existing patterns in `lib/api/` as reference
+- Handle loading/error states in hooks or stores, not in screen components directly
+
+## State Management (Zustand)
+
+- Each store uses `persist` middleware with AsyncStorage
+- Auth store (`stores/authStore`) gates navigation — check `isHydrated` before routing
+- Don't duplicate Supabase data in multiple stores; pick one source of truth
+
+## Navigation (Expo Router)
+
+- Route groups: `(client-tabs)` for clients, `(tabs)` for admins
+- Hidden tabs use `href: null` in layout options
+- Stack-style sub-routes (e.g. `select-time`, `select-barber`) are nested inside tab groups
+- Use `router.replace()` for auth redirects, `router.push()` for normal navigation
+
+## TypeScript
+
+- Define interfaces for all props, API responses, and store shapes
+- Export types from where they're defined (e.g. `ThemeColors` from `ThemeProvider.tsx`)
+- Prefer `interface` over `type` for object shapes
+
+## Do's and Don'ts
+
+- **DO** use the `useTheme()` / `useColors()` hooks for colors — never hardcode hex values
+- **DO** use i18n `t()` function for user-facing strings
+- **DO** keep screens relatively thin — extract logic to hooks or API modules
+- **DON'T** import directly from `expo-constants` — use `getExpoExtra()` wrapper
+- **DON'T** add RTL support code — the app explicitly forces LTR
+- **DON'T** create new Supabase client instances — use the shared one from `lib/supabase.ts`

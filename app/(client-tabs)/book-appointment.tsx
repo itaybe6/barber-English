@@ -382,7 +382,11 @@ export default function BookAppointment() {
   // Top animated tabs replace the old grey hero/stepper
   
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [selectedServices, setSelectedServices] = useState<Service[]>([]);
+  const selectedService = selectedServices.length > 0 ? selectedServices[0] : null;
+  const totalDuration = selectedServices.reduce((sum, s) => sum + (s.duration_minutes ?? 60), 0);
+  const totalPrice = selectedServices.reduce((sum, s) => sum + (s.price ?? 0), 0);
+  const selectedServicesKey = selectedServices.map(s => s.id).join(',');
   const [selectedServiceIndex, setSelectedServiceIndex] = useState<number>(0);
   const [availableServices, setAvailableServices] = useState<Service[]>([]);
   const [isLoadingServices, setIsLoadingServices] = useState<boolean>(false);
@@ -439,7 +443,7 @@ export default function BookAppointment() {
         // Disabled: Do not navigate back to barber selection on pull-down in step 2
         // Keep content fixed; only allow forward navigation by user action
         // Scroll down → to day selection, only if a service is selected
-        if (y > 16 && selectedService && !hasTriggeredStep3.current) {
+        if (y > 16 && selectedServices.length > 0 && !hasTriggeredStep3.current) {
           hasTriggeredStep3.current = true;
           isTransitioning.current = true;
           step2Fade.value = withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) }, () => {
@@ -451,7 +455,7 @@ export default function BookAppointment() {
         }
       }
     } catch {}
-  }, [currentStep, selectedBarber?.id, selectedService?.id]);
+  }, [currentStep, selectedBarber?.id, selectedServicesKey]);
 
   useEffect(() => {
     if (currentStep === 1) {
@@ -487,7 +491,7 @@ export default function BookAppointment() {
       }
 
       setCurrentStep(1);
-      setSelectedService(null);
+      setSelectedServices([]);
       setSelectedServiceIndex(0);
       setSelectedBarber(null);
       setSelectedDay(null);
@@ -554,7 +558,7 @@ export default function BookAppointment() {
   // Compute available start times dynamically for the selected service and date using business_hours
   const getAvailableTimeSlotsForDate = () => {
     if (!selectedDate) return [];
-    const serviceDuration = selectedService?.duration_minutes || 60;
+    const serviceDuration = totalDuration || 60;
     const dateStr = selectedDate.toISOString().split('T')[0];
     const dow = selectedDate.getDay(); // 0..6
 
@@ -874,7 +878,7 @@ export default function BookAppointment() {
     }
   }, [selectedBarber?.id]);
 
-  // When service changes, reset day and time selections (do not auto-advance step)
+  // When services change, reset day and time selections (do not auto-advance step)
   useEffect(() => {
     setSelectedDay(null);
     setSelectedTime(null);
@@ -883,7 +887,7 @@ export default function BookAppointment() {
     setShowConfirmModal(false);
     setShowReplaceModal(false);
     setExistingAppointment(null);
-  }, [selectedService?.id]);
+  }, [selectedServicesKey]);
 
   // If navigated back from select-time asking to open dates screen
   useEffect(() => {
@@ -947,7 +951,7 @@ export default function BookAppointment() {
   useEffect(() => {
     let isStale = false;
     const prefetch = async () => {
-      if (currentStep !== 3 || !selectedService || !selectedBarber) return;
+      if (currentStep !== 3 || selectedServices.length === 0 || !selectedBarber) return;
       try {
         const toMinutes = (time: string) => {
           const [h, m] = String(time).split(':');
@@ -1048,7 +1052,7 @@ export default function BookAppointment() {
             .map(w => ({ startMin: toMinutes(w.start), endMin: toMinutes(w.end) }))
             .filter(w => w.startMin < w.endMin)
             .sort((a, b) => a.startMin - b.startMin);
-          const serviceDuration = selectedService.duration_minutes ?? 60;
+          const serviceDuration = totalDuration || 60;
           let availableCount = 0;
           const now = new Date();
           const isSameDay = d.fullDate.toDateString() === now.toDateString();
@@ -1108,7 +1112,7 @@ export default function BookAppointment() {
     };
     prefetch();
     return () => { isStale = true; };
-  }, [currentStep, selectedService, selectedBarber, refreshTick, globalBreakMinutes]);
+  }, [currentStep, selectedServicesKey, totalDuration, selectedBarber, refreshTick, globalBreakMinutes]);
 
   // Explicitly refresh slots for the currently selected day (used by pull-to-refresh)
   const refreshSelectedDaySlots = async () => {
@@ -1204,15 +1208,18 @@ export default function BookAppointment() {
     }
   };
 
-  // Function to actually book the appointment
+  // Helper to convert HH:MM to minutes and back
+  const _toMinutes = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const _toHHMM = (mins: number) => `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+
+  // Function to actually book the appointment (supports multi-service consecutive booking)
   const proceedWithBooking = async (existingAppointmentToCancel?: any) => {
     
-    if (!selectedService || selectedTime === null || selectedDay === null) {
+    if (selectedServices.length === 0 || selectedTime === null || selectedDay === null) {
       return;
     }
 
     const dateString = selectedDate?.toISOString().split('T')[0];
-    
     
     // Guard: disallow booking in constrained windows
     try {
@@ -1230,11 +1237,11 @@ export default function BookAppointment() {
         constraintsQuery = constraintsQuery.is('user_id', null);
       }
       const { data: constraintsRows } = await constraintsQuery;
-      const withinConstraint = (t: string) => {
+      const withinConstraint = (tStr: string) => {
         return (constraintsRows || []).some((c: any) => {
           const s = String(c.start_time).slice(0,5);
           const e = String(c.end_time).slice(0,5);
-          return s <= t && t < e;
+          return s <= tStr && tStr < e;
         });
       };
       if (withinConstraint(selectedTime)) {
@@ -1242,21 +1249,9 @@ export default function BookAppointment() {
         return;
       }
     } catch {}
-    
-    // קיימים שני תרחישים:
-    // 1) יש שורה זמינה עבור התאריך/שעה → נעדכן אותה ל-booked
-    // 2) אין שורה זמינה → ניצור שורה חדשה כ-booked
-    const slotToBook = availableSlots.find(
-      slot => slot.slot_date === dateString && 
-              slot.slot_time === selectedTime && 
-              slot.is_available &&
-              (selectedBarber?.id ? slot.barber_id === selectedBarber.id : !slot.barber_id)
-    );
-
 
     setIsBooking(true);
     try {
-      // Cancel existing appointment if provided
       if (existingAppointmentToCancel) {
         const cancelSuccess = await bookingApi.cancelTimeSlot(existingAppointmentToCancel.id);
         if (!cancelSuccess) {
@@ -1265,37 +1260,58 @@ export default function BookAppointment() {
         }
       }
 
-      // Book slot (update existing if available, else insert new row)
-      const durationMinutes = selectedService.duration_minutes ?? 60;
-      
-      
-      const success = slotToBook
-        ? await bookingApi.bookTimeSlot(
-            slotToBook.id,
-            user?.name || 'לקוח',
-            user?.phone || '',
-            selectedService.name,
-            durationMinutes,
-            selectedBarber?.id,
-            selectedService.id,
-            user?.id
-          )
-        : await bookingApi.bookByDateTime(
-            dateString!,
-            selectedTime,
-            user?.name || 'לקוח',
-            user?.phone || '',
-            selectedService.name,
-            durationMinutes,
-            selectedBarber?.id,
-            selectedService.id,
-            user?.id
-          );
+      // Book each service consecutively (first starts at selectedTime, each subsequent follows)
+      let currentStartMin = _toMinutes(selectedTime);
+      let allBooked = true;
 
+      for (const svc of selectedServices) {
+        const svcTime = _toHHMM(currentStartMin);
+        const svcDuration = svc.duration_minutes ?? 60;
 
-      if (success) {
+        const slotForSvc = availableSlots.find(
+          slot => slot.slot_date === dateString &&
+                  slot.slot_time === svcTime &&
+                  slot.is_available &&
+                  (selectedBarber?.id ? slot.barber_id === selectedBarber.id : !slot.barber_id)
+        );
+
+        const success = slotForSvc
+          ? await bookingApi.bookTimeSlot(
+              slotForSvc.id,
+              user?.name || 'לקוח',
+              user?.phone || '',
+              svc.name,
+              svcDuration,
+              selectedBarber?.id,
+              svc.id,
+              user?.id
+            )
+          : await bookingApi.bookByDateTime(
+              dateString!,
+              svcTime,
+              user?.name || 'לקוח',
+              user?.phone || '',
+              svc.name,
+              svcDuration,
+              selectedBarber?.id,
+              svc.id,
+              user?.id
+            );
+
+        if (!success) {
+          allBooked = false;
+          break;
+        }
+        currentStartMin += svcDuration;
+      }
+
+      if (allBooked) {
+        const allNames = selectedServices.map(s => s.name).join(' + ');
         const dateUs = selectedDate ? new Date(selectedDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '';
-        const baseMessage = `Your appointment for\n"${selectedService.name}"\n\nhas been scheduled for\n${dateUs}\n${selectedTime}`;
+        const endTime = _toHHMM(_toMinutes(selectedTime) + totalDuration);
+        const baseMessage = selectedServices.length === 1
+          ? `Your appointment for\n"${allNames}"\n\nhas been scheduled for\n${dateUs}\n${selectedTime}`
+          : `Your appointment for\n"${allNames}"\n\nhas been scheduled for\n${dateUs}\n${selectedTime} - ${endTime}`;
         const message = existingAppointmentToCancel
           ? `התור הקודם בוטל והתור החדש נקבע בהצלחה!\n\n${baseMessage}`
           : baseMessage;
@@ -1303,11 +1319,10 @@ export default function BookAppointment() {
         setSuccessMessage(message);
         setShowSuccessModal(true);
 
-        // Notify the assigned admin (barber) about the new booking
         try {
           const title = 'נקבע תור חדש';
-          const dateString = selectedDate?.toISOString().split('T')[0];
-          const content = `${user?.name || 'לקוח'} (${user?.phone || ''}) קבע/ה תור ל"${selectedService.name}" בתאריך ${dateString} בשעה ${selectedTime}`;
+          const dateFmt = selectedDate?.toISOString().split('T')[0];
+          const content = `${user?.name || 'לקוח'} (${user?.phone || ''}) קבע/ה תור ל"${allNames}" בתאריך ${dateFmt} בשעה ${selectedTime}`;
           if (selectedBarber?.id) {
             notificationsApi.createAdminNotificationForUserId(selectedBarber.id, title, content, 'system').catch(() => {});
           } else {
@@ -1315,11 +1330,10 @@ export default function BookAppointment() {
           }
         } catch {}
 
-        // Create a notification for the client
         try {
           if (user?.phone && user.phone.trim() !== '') {
             const notifTitle = 'התור שלך נקבע';
-            const notifContent = `התור שלך ל"${selectedService.name}" נקבע ליום ${days[selectedDay].dayName} ${days[selectedDay].date} בשעה ${selectedTime}`;
+            const notifContent = `התור שלך ל"${allNames}" נקבע ליום ${days[selectedDay].dayName} ${days[selectedDay].date} בשעה ${selectedTime}`;
             await notificationsApi.createNotification({
               title: notifTitle,
               content: notifContent,
@@ -1330,8 +1344,6 @@ export default function BookAppointment() {
             });
           }
         } catch {}
-
-        // הניווט יתבצע לאחר אישור בחלון ההצלחה
       } else {
         Alert.alert(t('error.generic', 'שגיאה'), t('booking.bookingFailed', 'קביעת התור נכשלה. אנא נסה שוב.'));
       }
@@ -1346,7 +1358,7 @@ export default function BookAppointment() {
   // Move the booking logic to execute only after confirmation in the modal
   const handleBookAppointment = async () => {
     
-    if (!selectedService || selectedTime === null || selectedDay === null) {
+    if (selectedServices.length === 0 || selectedTime === null || selectedDay === null) {
       Alert.alert(t('error.generic', 'Error'), t('booking.selectAllBeforeBooking', 'Please select a date, time, and service before booking the appointment'));
       return;
     }
@@ -1388,6 +1400,12 @@ export default function BookAppointment() {
       {/* Background (changes with scroll for steps 1-2, cross-fade for steps 3-4) */}
       {(() => {
         try {
+<<<<<<< HEAD
+          const firstSvc = selectedServices.length > 0 ? selectedServices[0] : null;
+          const uri = (firstSvc as any)?.image_url || (firstSvc as any)?.cover_url || (firstSvc as any)?.image || (selectedBarber as any)?.image_url || null;
+          return <DynamicBackground uri={uri} />;
+        } catch { return null; }
+=======
           if (currentStep === 1 && (availableBarbers || []).length > 0) {
             return (
               <ScrollBackdrop
@@ -1421,8 +1439,188 @@ export default function BookAppointment() {
         } catch {
           return null;
         }
+>>>>>>> 2e0469c30b23b9a7cd88cb15a3097985ef60c79d
       })()}
 
+<<<<<<< HEAD
+          {/* Stepper */}
+          <View style={[styles.stepperContainer, styles.ltr, styles.stepperShiftLeft]}>
+            {[
+              { key: 1, icon: 'person-outline', label: t('booking.step.barber', 'Barber') },
+              { key: 2, icon: 'briefcase-outline', label: t('booking.step.service', 'Service') },
+              { key: 3, icon: 'calendar-outline', label: t('booking.step.day', 'Day') },
+              { key: 4, icon: 'time-outline', label: t('booking.step.time', 'Time') },
+            ].map((s, idx) => {
+              const active = currentStep === (s.key as any);
+              const done = currentStep > (s.key as any);
+              return (
+                <View key={String(s.key)} style={styles.stepperItemWrapper}>
+                  <View style={styles.stepperItemColumn}>
+                    <View style={styles.stepperCircleWrapper}>
+                      <TouchableOpacity
+                      onPress={() => setCurrentStep(s.key as any)}
+                      activeOpacity={0.85}
+                      style={[styles.stepperCircle, (active || done) && styles.stepperCircleActive]}
+                    >
+                      {(
+                        (s.key === 1 && !!selectedBarber && Number(currentStep) >= 2) ||
+                        (s.key === 2 && selectedServices.length > 0 && Number(currentStep) >= 3)
+                      ) ? (
+                        s.key === 2 && selectedServices.length > 1 ? (
+                          <View style={{ width: '100%', height: '100%', backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
+                            <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '900' }}>{selectedServices.length}</Text>
+                          </View>
+                        ) : (
+                          <Image
+                            source={{ uri: (s.key === 1
+                              ? (selectedBarber as any)?.image_url
+                              : (((selectedService as any)?.image_url) || ((selectedService as any)?.cover_url) || ((selectedService as any)?.image))) as any }}
+                            style={{ width: '100%', height: '100%' }}
+                            resizeMode="cover"
+                          />
+                        )
+                      ) : (s.key === 3 && selectedDay !== null) ? (
+                        <Text style={styles.stepperDateText}>
+                          {(() => {
+                            try {
+                              const d = days[selectedDay!].fullDate;
+                              const dd = String(d.getDate()).padStart(2, '0');
+                              const mm = String(d.getMonth() + 1).padStart(2, '0');
+                              const yy = String(d.getFullYear()).slice(-2);
+                              return `${dd}.${mm}.${yy}`;
+                            } catch { return ''; }
+                          })()}
+                        </Text>
+                      ) : (s.key === 4 && !!selectedTime) ? (
+                        <Text style={styles.stepperDateText}>{selectedTime}</Text>
+                      ) : (
+                        <Ionicons
+                          name={s.icon as any}
+                          size={20}
+                          color={(active || done) ? '#111827' : 'rgba(255,255,255,0.9)'}
+                        />
+                      )}
+                      </TouchableOpacity>
+                      <View style={[styles.stepperBadge, (active || done) && styles.stepperBadgeActive]}>
+                        <Text style={[styles.stepperBadgeText, (active || done) && styles.stepperBadgeTextActive]}>{s.key}</Text>
+                      </View>
+                    {/* Removed name pill under step 1 per request */}
+                    </View>
+                    {/* Thumbnails under steps 1 & 2 removed per request; only image inside circle now */}
+                    {/* Removed date pill under step 3 */}
+                    {/* Removed time pill under step 4 */}
+                  </View>
+                  {idx < 3 && <View style={[styles.stepperLine, done && styles.stepperLineDone]} />}
+                </View>
+              );
+            })}
+          </View>
+
+          {/* Floating navigation arrows in the grey area */}
+          {true && (
+            <View style={[styles.floatingNavRow, styles.ltr]}>
+              {/* Previous button for steps 2,3,4 */}
+              {Number(currentStep) >= 2 && (
+                <View style={styles.floatingNavItem}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const stepNum = Number(currentStep);
+                      if (stepNum === 4) {
+                        setCurrentStep(3 as any);
+                        return;
+                      }
+                      if (stepNum === 3) {
+                        setCurrentStep(2 as any);
+                        return;
+                      }
+                      if (stepNum === 2) {
+                        setCurrentStep(1 as any);
+                        return;
+                      }
+                    }}
+                    activeOpacity={0.9}
+                    style={styles.floatingPillButton}
+                    accessibilityLabel={t('booking.prevStep', 'Previous step')}
+                  >
+                    <BlurView intensity={36} tint="light" style={styles.floatingGlassBlur} />
+                    <View style={styles.floatingGlassTint} />
+                    <View style={styles.floatingGlassSheen} />
+                    <View style={styles.floatingGlassInnerBorder} />
+                    <Ionicons name="arrow-back" size={18} color="#FFFFFF" />
+                    <Text style={styles.floatingPillText}>{t('booking.prev', 'הקודם')}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Book button on step 4 */}
+              {Number(currentStep) === 4 && (
+                <View style={styles.floatingNavItem}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (selectedServices.length === 0 || selectedTime === null || isBooking || isCheckingAppointments) return;
+                      handleBookAppointment();
+                    }}
+                    activeOpacity={0.9}
+                    style={styles.floatingPillButton}
+                    accessibilityLabel={t('booking.book', 'Book appointment')}
+                    disabled={selectedServices.length === 0 || selectedTime === null || isBooking || isCheckingAppointments}
+                  >
+                    <BlurView intensity={36} tint="light" style={styles.floatingGlassBlur} />
+                    <View style={styles.floatingGlassTint} />
+                    <View style={styles.floatingGlassSheen} />
+                    <View style={styles.floatingGlassInnerBorder} />
+                    <Text style={styles.floatingPillText}>{t('booking.book', 'קבע תור')}</Text>
+                    <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Next button for steps 1,2,3 (hidden at step 4) */}
+              {Number(currentStep) < 4 && (
+                <View style={styles.floatingNavItem}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const stepNum = Number(currentStep);
+                      if (stepNum === 1) {
+                        if (!selectedBarber) return;
+                        setCurrentStep(2 as any);
+                        return;
+                      }
+                      if (stepNum === 2) {
+                        if (selectedServices.length === 0) {
+                          Alert.alert(
+                            t('booking.selectServiceTitle', 'Select a Service'),
+                            t('booking.selectAtLeastOne', 'Please select at least one service to continue')
+                          );
+                          return;
+                        }
+                        setCurrentStep(3 as any);
+                        return;
+                      }
+                      if (stepNum === 3) {
+                        if (selectedDay === null) return;
+                        setCurrentStep(4 as any);
+                        return;
+                      }
+                    }}
+                    activeOpacity={0.9}
+                    style={styles.floatingPillButton}
+                    accessibilityLabel={t('booking.nextStep', 'Next step')}
+                  >
+                    <BlurView intensity={36} tint="light" style={styles.floatingGlassBlur} />
+                    <View style={styles.floatingGlassTint} />
+                    <View style={styles.floatingGlassSheen} />
+                    <View style={styles.floatingGlassInnerBorder} />
+                    <Text style={styles.floatingPillText}>{t('booking.next', 'הבא')}</Text>
+                    <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+      )}
+=======
       <SafeAreaView style={styles.container} edges={[]}>
         <BookingStepTabs
           currentStep={currentStep}
@@ -1438,6 +1636,7 @@ export default function BookAppointment() {
           canGoTime={selectedDay !== null}
           onChangeStep={(step) => setCurrentStep(Number(step) as any)}
         />
+>>>>>>> 2e0469c30b23b9a7cd88cb15a3097985ef60c79d
       {/* Header removed on steps 3-4 per request */}
       <View style={[
         styles.contentWrapper,
@@ -1470,6 +1669,334 @@ export default function BookAppointment() {
         <View style={{ height: TOP_OFFSET + 12 }} />
 
         {/* Step 1: Barber Selection - Wallpaper Style Carousel */}
+<<<<<<< HEAD
+        {currentStep === 1 && (
+          <Animated.View style={[styles.section, styles.sectionFullBleed, introFadeStyle, { flex: 1, minHeight: SCREEN.height * 0.7 }]}>
+            {isLoadingBarbers ? (
+              <View style={[styles.loadingContainer, { flex: 1, justifyContent: 'center' }]}>
+                <Text style={[styles.loadingText, { color: '#FFFFFF' }]}>{t('booking.loadingEmployees', 'Loading Employees...')}</Text>
+              </View>
+            ) : (
+              <View style={{ flex: 1, justifyContent: 'center', backgroundColor: 'transparent' }}>
+                {/* Backdrop Images */}
+                <View style={StyleSheet.absoluteFillObject}>
+                  {availableBarbers.map((barber, index) => (
+                    <BarberBackdrop
+                      key={`bg-barber-${barber.id}`}
+                      index={index}
+                      barber={barber}
+                      scrollX={barberScrollX}
+                    />
+                  ))}
+                  <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.15)' }} />
+                </View>
+
+                {/* Barber Details in Top Area */}
+                <View style={{ height: _topSpacing * 0.35, justifyContent: 'flex-end', alignItems: 'center', marginTop: heroDynamicHeight - 160, paddingBottom: 40 }}>
+                  {availableBarbers.map((barber, index) => (
+                    <BarberDetailsOverlay
+                      key={`details-${barber.id}`}
+                      index={index}
+                      barber={barber}
+                      scrollX={barberScrollX}
+                    />
+                  ))}
+                </View>
+
+                {/* Carousel */}
+                <Animated.FlatList
+                  ref={barberFlatListRef}
+                  data={availableBarbers}
+                  keyExtractor={(item) => String(item.id)}
+                  style={{ flexGrow: 0, marginTop: -40 }}
+                  contentContainerStyle={{
+                    gap: _slideSpacing,
+                    paddingHorizontal: (SCREEN.width - _slideWidth) / 2,
+                    alignItems: 'center',
+                    paddingBottom: Math.max(insets.bottom, 20) + 140,
+                  }}
+                  renderItem={({ item, index }) => (
+                    <BarberSlide
+                      index={index}
+                      barber={item}
+                      scrollX={barberScrollX}
+                      onPress={() => {
+                        setBarberActiveIndex(index);
+                        const barber = availableBarbers[index];
+                        if (barber) {
+                          setSelectedBarber(barber);
+                          setSelectedServices([]);
+                          setSelectedServiceIndex(0);
+                          setSelectedDay(null);
+                          setSelectedTime(null);
+                          setAvailableSlots([]);
+                          setIsLoadingSlots(false);
+                          setDayAvailability({});
+                        }
+                      }}
+                    />
+                  )}
+                  snapToInterval={_slideWidth + _slideSpacing}
+                  decelerationRate="fast"
+                  showsHorizontalScrollIndicator={false}
+                  horizontal
+                  onScroll={onBarberScroll}
+                  scrollEventThrottle={1000 / 60}
+                  onMomentumScrollEnd={(e) => {
+                    const newIndex = Math.round(
+                      e.nativeEvent.contentOffset.x / (_slideWidth + _slideSpacing)
+                    );
+                    if (newIndex >= 0 && newIndex < availableBarbers.length) {
+                      setBarberActiveIndex(newIndex);
+                      const barber = availableBarbers[newIndex];
+                      if (barber && barber.id !== selectedBarber?.id) {
+                        setSelectedBarber(barber);
+                        setSelectedServices([]);
+                        setSelectedServiceIndex(0);
+                        setSelectedDay(null);
+                        setSelectedTime(null);
+                        setAvailableSlots([]);
+                        setIsLoadingSlots(false);
+                        setDayAvailability({});
+                      }
+                    }
+                  }}
+                />
+              </View>
+            )}
+          </Animated.View>
+        )}
+
+        {/* Step 2: Service Selection - Multi-Select Grid */}
+        {currentStep === 2 && selectedBarber && (
+          <Animated.View style={[styles.section, styles.sectionFullBleed, step2FadeStyle, { flex: 1, minHeight: SCREEN.height * 0.7 }]}>
+            {isLoadingServices ? (
+              <View style={[styles.loadingContainer, { flex: 1, justifyContent: 'center' }]}>
+                <Text style={[styles.loadingText, { color: '#FFFFFF' }]}>{t('booking.loadingServices', 'Loading services...')}</Text>
+              </View>
+            ) : filteredServices.length > 0 ? (
+              <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+                {/* Blurred backdrop from last selected service */}
+                <View style={StyleSheet.absoluteFillObject}>
+                  {selectedServices.length > 0 ? (
+                    <>
+                      {(() => {
+                        const lastSvc = selectedServices[selectedServices.length - 1];
+                        const bgUri = (lastSvc as any)?.image_url || '';
+                        return bgUri ? (
+                          <Image source={{ uri: bgUri }} style={[StyleSheet.absoluteFillObject as any]} blurRadius={50} resizeMode="cover" />
+                        ) : (
+                          <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: '#1a1a2e' }]} />
+                        );
+                      })()}
+                    </>
+                  ) : (
+                    <View style={[StyleSheet.absoluteFillObject as any, { backgroundColor: '#1a1a2e' }]} />
+                  )}
+                  <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' }} />
+                </View>
+
+                <ScrollView
+                  style={{ flex: 1 }}
+                  contentContainerStyle={{ paddingTop: heroDynamicHeight + 16, paddingHorizontal: 16, paddingBottom: Math.max(insets.bottom, 20) + 200 }}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {/* Header */}
+                  <View style={{ alignItems: 'center', marginBottom: 20 }}>
+                    <Text style={{ color: '#FFFFFF', fontSize: 22, fontWeight: '800', textAlign: 'center', letterSpacing: -0.3 }}>
+                      {t('booking.selectServices', 'Select Services')}
+                    </Text>
+                    <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: '500', textAlign: 'center', marginTop: 6 }}>
+                      {t('booking.selectMultipleHint', 'Tap to select one or more services')}
+                    </Text>
+                  </View>
+
+                  {/* Service Cards Grid */}
+                  <View style={styles.multiServiceGrid}>
+                    {filteredServices.map((service) => {
+                      const isSelected = selectedServices.some(s => s.id === service.id);
+                      const imageUri = (service as any)?.image_url || (service as any)?.cover_url || '';
+                      return (
+                        <TouchableOpacity
+                          key={service.id}
+                          onPress={() => {
+                            setSelectedServices(prev => {
+                              const exists = prev.find(s => s.id === service.id);
+                              if (exists) return prev.filter(s => s.id !== service.id);
+                              return [...prev, service];
+                            });
+                          }}
+                          activeOpacity={0.85}
+                          style={[styles.multiServiceCard, isSelected && styles.multiServiceCardSelected]}
+                        >
+                          {/* Card image */}
+                          <View style={styles.multiServiceImageWrap}>
+                            {imageUri ? (
+                              <Image source={{ uri: imageUri }} style={styles.multiServiceImage} resizeMode="cover" />
+                            ) : (
+                              <View style={[styles.multiServiceImage, { backgroundColor: '#8B5CF6', alignItems: 'center', justifyContent: 'center' }]}>
+                                <Ionicons name="cut" size={32} color="rgba(255,255,255,0.5)" />
+                              </View>
+                            )}
+                            {/* Selection checkmark */}
+                            {isSelected && (
+                              <View style={styles.multiServiceCheck}>
+                                <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                              </View>
+                            )}
+                            {/* Price badge */}
+                            <View style={styles.multiServicePriceBadge}>
+                              <Text style={styles.multiServicePriceText}>
+                                {`₪${service.price ?? 0}`}
+                              </Text>
+                            </View>
+                          </View>
+                          {/* Card info */}
+                          <View style={styles.multiServiceInfo}>
+                            <Text numberOfLines={2} style={[styles.multiServiceName, isSelected && { color: colors.primary }]}>
+                              {service.name}
+                            </Text>
+                            <View style={styles.multiServiceMeta}>
+                              <Ionicons name="time-outline" size={13} color="#8E8E93" />
+                              <Text style={styles.multiServiceDuration}>
+                                {(service.duration_minutes ?? 60)} {t('booking.min', 'min')}
+                              </Text>
+                            </View>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+
+                {/* Floating summary bar */}
+                {selectedServices.length > 0 && (
+                  <View style={styles.multiServiceSummaryBar}>
+                    <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFillObject as any} />
+                    <View style={styles.multiServiceSummaryContent}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.multiServiceSummaryTitle}>
+                          {selectedServices.length === 1
+                            ? selectedServices[0].name
+                            : `${selectedServices.length} ${t('booking.servicesSelected', 'services selected')}`}
+                        </Text>
+                        <Text style={styles.multiServiceSummaryMeta}>
+                          {totalDuration} {t('booking.min', 'min')}  ·  ₪{totalPrice}
+                        </Text>
+                      </View>
+                      <View style={[styles.multiServiceCountBadge, { backgroundColor: colors.primary }]}>
+                        <Text style={styles.multiServiceCountText}>{selectedServices.length}</Text>
+                      </View>
+                    </View>
+                  </View>
+                )}
+              </View>
+            ) : (
+              <View style={[styles.loadingContainer, { flex: 1, justifyContent: 'center' }]}>
+                <Text style={[styles.loadingText, { color: '#FFFFFF' }]}>{t('booking.noServices', 'No services available')}</Text>
+              </View>
+            )}
+          </Animated.View>
+        )}
+
+        {/* Step 3: Day Selection */}
+        {currentStep === 3 && selectedBarber && selectedServices.length > 0 && (
+          <View style={[styles.section, styles.calendarSectionCard]}>
+            {/* Monthly calendar grid limited by booking window */}
+            {(() => {
+              const start = new Date();
+              const end = new Date();
+              end.setDate(start.getDate() + Math.max(0, bookingOpenDays - 1));
+
+              const monthStart = new Date(start.getFullYear(), start.getMonth(), 1);
+              const monthEnd = new Date(end.getFullYear(), end.getMonth(), 1);
+
+              const months: Date[] = [];
+              const cursor = new Date(monthStart);
+              while (cursor <= monthEnd) {
+                months.push(new Date(cursor));
+                cursor.setMonth(cursor.getMonth() + 1);
+              }
+
+              const isSameDate = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+
+              return (
+                <View style={styles.calendarFixedBox}>
+                  <ScrollView showsVerticalScrollIndicator={false}>
+                  {months.map((m, mi) => {
+                    const year = m.getFullYear();
+                    const month = m.getMonth();
+                    const firstDayIdx = new Date(year, month, 1).getDay(); // 0..6, 0=Sun
+                    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+                    // Build grid cells with leading blanks
+                    const cells: (Date | null)[] = Array(firstDayIdx).fill(null);
+                    for (let d = 1; d <= daysInMonth; d++) {
+                      cells.push(new Date(year, month, d));
+                    }
+                    // chunk into weeks
+                    const weeks: (Date | null)[][] = [];
+                    for (let i = 0; i < cells.length; i += 7) {
+                      weeks.push(cells.slice(i, i + 7));
+                    }
+
+                    const monthLabel = new Date(year, month, 1).toLocaleString(i18n?.language === 'he' ? 'he-IL' : 'en-US', { month: 'long', year: 'numeric' });
+                    return (
+                      <View key={`m-${year}-${month}`} style={{ marginBottom: 10 }}>
+                        <Text style={styles.calendarMonthTitle}>{monthLabel}</Text>
+                        {weeks.map((week, wi) => (
+                          <View key={`w-${mi}-${wi}`} style={styles.calendarGrid}>
+                            {week.map((dateObj, di) => {
+                              if (!dateObj) {
+                                return <View key={`c-${mi}-${wi}-${di}`} style={[styles.calendarCell, { backgroundColor: 'transparent' }]} />;
+                              }
+                              // within range?
+                              const inRange = dateObj >= new Date(start.getFullYear(), start.getMonth(), start.getDate()) && dateObj <= end;
+                              const dsIso = dateObj.toISOString().split('T')[0];
+                              const hasAvail = (dayAvailability[dsIso] ?? 0) > 0;
+                              const isSel = selectedDate ? isSameDate(dateObj, selectedDate) : false;
+                              return (
+                                <TouchableOpacity
+                                  key={`c-${mi}-${wi}-${di}`}
+                                  disabled={!inRange}
+                                  onPress={() => {
+                                    const idx = days.findIndex(d => d.fullDate.toDateString() === dateObj.toDateString());
+                                    setSelectedDay(idx >= 0 ? idx : null);
+                                    setSelectedTime(null);
+                                  }}
+                                  style={[
+                                    styles.calendarCell,
+                                    !inRange && styles.calendarCellDisabled,
+                                    isSel && styles.calendarCellSelected,
+                                  ]}
+                                  activeOpacity={0.7}
+                                >
+                                  <Text style={{
+                                    fontSize: 14,
+                                    fontWeight: '700',
+                                    color: isSel ? '#FFFFFF' : (!inRange ? '#C7C7CC' : '#374151'),
+                                  }}>
+                                    {dateObj.getDate()}
+                                  </Text>
+                                  {inRange && (
+                                    <View style={[styles.calendarAvailDot, { backgroundColor: hasAvail ? '#34C759' : '#FF3B30' }]} />
+                                  )}
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                        ))}
+                      </View>
+                    );
+                  })}
+                  </ScrollView>
+                </View>
+              );
+            })()}
+            {/* Legends intentionally removed for a cleaner rectangular calendar view */}
+          </View>
+        )}
+=======
         <BarberSelection
           visible={currentStep === 1}
           styles={styles}
@@ -1531,6 +2058,7 @@ export default function BookAppointment() {
           onSelectDayIndex={(idx) => setSelectedDay(idx)}
           onClearTime={() => setSelectedTime(null)}
         />
+>>>>>>> 2e0469c30b23b9a7cd88cb15a3097985ef60c79d
 
         {/* Step 4 removed from inside ScrollView to avoid nested VirtualizedList */}
 
@@ -1539,6 +2067,62 @@ export default function BookAppointment() {
       </View>
 
       {/* Step 4: Revolutionary Time Selection with Liquid Glass (outside ScrollView) */}
+<<<<<<< HEAD
+      {Number(currentStep) === 4 && selectedBarber && selectedServices.length > 0 && selectedDay !== null && (
+        <View>
+          {/* Step 4 top spacer, raised by ~50px */}
+          <View style={{ height: Math.max(0, heroDynamicHeight + 12 - 50) }} />
+          <View style={[styles.section, styles.calendarSectionCard]}> 
+          {availableTimeSlots && availableTimeSlots.length > 0 ? (
+            <View style={styles.timeScrollBox}>
+              {/* One shared blur under the grid for better performance */}
+              <BlurView intensity={18} tint="light" style={styles.timeGridSharedBlur} />
+              <FlatList
+                data={availableTimeSlots}
+                keyExtractor={(item) => `t-${item}`}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[styles.glassTimeCard, selectedTime === item && styles.glassTimeCardSelected]}
+                    onPress={() => setSelectedTime(item as any)}
+                    activeOpacity={0.92}
+                  >
+                    {/* keep light effects per-card without heavy blur */}
+                    <View style={styles.glassTimeTint} />
+                    <View style={[styles.glassTimeSheen, selectedTime === item && styles.glassTimeSheenActive]} />
+                    <View style={styles.glassTimeInnerBorder} />
+                    {selectedTime === item && (<View style={styles.glassTimeGlow} />)}
+                    <View style={styles.glassTimeContent}>
+                      <Ionicons name="time-outline" size={18} color={selectedTime === item ? colors.primary : '#374151'} />
+                      <Text style={[styles.glassTimeText, selectedTime === item && styles.glassTimeTextSelected]}>{item as any}</Text>
+                    </View>
+                    {selectedTime === item && (
+                      <View style={styles.glassTimeCheck}>
+                        <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                )}
+                numColumns={3}
+                showsVerticalScrollIndicator
+                removeClippedSubviews
+                windowSize={7}
+                initialNumToRender={21}
+                maxToRenderPerBatch={21}
+                updateCellsBatchingPeriod={50}
+                decelerationRate="fast"
+                contentContainerStyle={styles.timeGridList}
+              />
+            </View>
+          ) : (
+            <View style={styles.noSlotsContainer}>
+              <Text style={styles.noSlotsText}>{t('booking.noSlots', 'אין שעות פנויות לתאריך שנבחר')}</Text>
+              <Text style={styles.noSlotsSubtext}>{t('booking.chooseAnotherDay', 'בחר/י יום אחר או חזור/י אחורה')}</Text>
+            </View>
+          )}
+          </View>
+        </View>
+      )}
+=======
       <TimeSelection
         visible={Number(currentStep) === 4 && !!selectedBarber && !!selectedService && selectedDay !== null}
         styles={styles}
@@ -1549,6 +2133,7 @@ export default function BookAppointment() {
         t={t}
         onSelectTime={(time) => setSelectedTime(time as any)}
       />
+>>>>>>> 2e0469c30b23b9a7cd88cb15a3097985ef60c79d
 
       {/* Footer action button per step */}
       {footerVisible && currentStep >= 3 && (
@@ -1599,13 +2184,35 @@ export default function BookAppointment() {
               </View>
               
               <View style={styles.appointmentDetails}>
+                {/* Services list */}
                 <View style={styles.detailRow}>
                   <View style={styles.detailIcon}>
                     <Ionicons name="briefcase-outline" size={20} color="#6B7280" />
                   </View>
                   <View style={styles.detailContent}>
-                    <Text style={styles.detailLabel}>{t('booking.field.service', 'Service')}</Text>
-                    <Text style={styles.detailValue}>{selectedService?.name}</Text>
+                    <Text style={styles.detailLabel}>
+                      {selectedServices.length > 1
+                        ? t('booking.field.services', 'Services')
+                        : t('booking.field.service', 'Service')}
+                    </Text>
+                    {selectedServices.map((svc, idx) => (
+                      <View key={svc.id} style={{ flexDirection: 'row', alignItems: 'center', marginTop: idx > 0 ? 4 : 0 }}>
+                        {selectedServices.length > 1 && (
+                          <Text style={{ color: '#9CA3AF', fontSize: 13, marginRight: 6 }}>{idx + 1}.</Text>
+                        )}
+                        <Text style={styles.detailValue}>{svc.name}</Text>
+                        <Text style={{ color: '#9CA3AF', fontSize: 13, marginLeft: 8 }}>
+                          {svc.duration_minutes ?? 60}{t('booking.min', 'min')}
+                        </Text>
+                      </View>
+                    ))}
+                    {selectedServices.length > 1 && (
+                      <View style={{ flexDirection: 'row', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#F3F4F6' }}>
+                        <Text style={{ color: '#374151', fontSize: 14, fontWeight: '700' }}>
+                          {t('booking.total', 'Total')}: {totalDuration} {t('booking.min', 'min')}  ·  ₪{totalPrice}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 </View>
                 
@@ -1636,7 +2243,10 @@ export default function BookAppointment() {
                   </View>
                   <View style={styles.detailContent}>
                     <Text style={styles.detailLabel}>{t('booking.field.time', 'Time')}</Text>
-                    <Text style={styles.detailValue}>{selectedTime}</Text>
+                    <Text style={styles.detailValue}>
+                      {selectedTime}
+                      {selectedServices.length > 1 && ` - ${_toHHMM(_toMinutes(selectedTime || '00:00') + totalDuration)}`}
+                    </Text>
                   </View>
                 </View>
               </View>
@@ -1747,10 +2357,22 @@ export default function BookAppointment() {
               </View>
               <View style={styles.modalInfoSection}>
                 <Text style={styles.modalInfoTitle}>{t('booking.yourInfo', 'Your info')}</Text>
-                {!!selectedService?.name && (
+                {selectedServices.length > 0 && (
                   <View style={styles.modalInfoRow}>
                     <Ionicons name="pricetag-outline" size={18} color="#8E8E93" style={styles.modalInfoIcon} />
-                    <Text style={styles.modalInfoText}><Text style={styles.modalInfoLabel}>{t('booking.field.service', 'Service')}: </Text>{selectedService?.name}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.modalInfoText}>
+                        <Text style={styles.modalInfoLabel}>
+                          {selectedServices.length > 1 ? t('booking.field.services', 'Services') : t('booking.field.service', 'Service')}:{' '}
+                        </Text>
+                        {selectedServices.map(s => s.name).join(' + ')}
+                      </Text>
+                      {selectedServices.length > 1 && (
+                        <Text style={[styles.modalInfoText, { marginTop: 2, color: '#8E8E93', fontSize: 13 }]}>
+                          {totalDuration} {t('booking.min', 'min')}  ·  ₪{totalPrice}
+                        </Text>
+                      )}
+                    </View>
                   </View>
                 )}
                 <View style={styles.modalInfoRow}>
@@ -1759,7 +2381,11 @@ export default function BookAppointment() {
                 </View>
                 <View style={styles.modalInfoRow}>
                   <Ionicons name="time-outline" size={18} color="#8E8E93" style={styles.modalInfoIcon} />
-                  <Text style={styles.modalInfoText}><Text style={styles.modalInfoLabel}>{t('booking.field.time', 'Time')}: </Text>{selectedTime || '-'}</Text>
+                  <Text style={styles.modalInfoText}>
+                    <Text style={styles.modalInfoLabel}>{t('booking.field.time', 'Time')}: </Text>
+                    {selectedTime || '-'}
+                    {selectedServices.length > 1 && selectedTime ? ` - ${_toHHMM(_toMinutes(selectedTime) + totalDuration)}` : ''}
+                  </Text>
                 </View>
               </View>
               <View style={styles.modalButtons}>
@@ -1767,7 +2393,7 @@ export default function BookAppointment() {
                   style={[styles.modalButton, styles.modalButtonCalendar]}
                   onPress={async () => {
                     try {
-                      const duration = selectedService?.duration_minutes ?? 60;
+                      const duration = totalDuration || 60;
                       const dateStr = selectedDate?.toISOString().split('T')[0] || '';
                       const timeStr = selectedTime || '00:00';
                       const start = new Date(`${dateStr}T${timeStr}:00`);
@@ -1793,8 +2419,9 @@ export default function BookAppointment() {
                         return;
                       }
 
+                      const allNames = selectedServices.map(s => s.name).join(' + ');
                       await Calendar.createEventAsync(calendarId, {
-                        title: selectedService?.name || t('booking.calendarEventTitle','Appointment'),
+                        title: allNames || t('booking.calendarEventTitle','Appointment'),
                         startDate: start,
                         endDate: end,
                         notes: t('booking.calendarNotes','Booked via the app'),
@@ -2590,6 +3217,141 @@ const createStyles = (colors: any) => StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 4,
     elevation: 4,
+  },
+  // Multi-Service Selection Grid styles
+  multiServiceGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  multiServiceCard: {
+    width: '47.5%',
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 2.5,
+    borderColor: 'transparent',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    elevation: 6,
+    marginBottom: 4,
+  },
+  multiServiceCardSelected: {
+    borderColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 10,
+    transform: [{ scale: 1.02 }],
+  },
+  multiServiceImageWrap: {
+    width: '100%',
+    height: 120,
+    backgroundColor: '#F2F2F7',
+    position: 'relative',
+  },
+  multiServiceImage: {
+    width: '100%',
+    height: '100%',
+  },
+  multiServiceCheck: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 6,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.8)',
+  },
+  multiServicePriceBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(17,24,39,0.06)',
+  },
+  multiServicePriceText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  multiServiceInfo: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  multiServiceName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    letterSpacing: -0.2,
+    marginBottom: 4,
+  },
+  multiServiceMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  multiServiceDuration: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+  },
+  multiServiceSummaryBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingBottom: 100,
+    paddingTop: 16,
+    paddingHorizontal: 20,
+    overflow: 'hidden',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  multiServiceSummaryContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  multiServiceSummaryTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  multiServiceSummaryMeta: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  multiServiceCountBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  multiServiceCountText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '900',
   },
   calendarSectionCard: {
     backgroundColor: '#FFFFFF',

@@ -79,7 +79,16 @@
   "booking.constraintMessage": "קיימים אילוצים בשעה/תאריך שבחרת. אנא בחר/י זמן אחר.",
   "booking.cancelExistingFailed": "שגיאה בביטול התור הקיים. אנא נסה שוב.",
   "booking.bookingFailed": "קביעת התור נכשלה. אנא נסה שוב.",
-  "booking.selectAllBeforeBooking": "יש לבחור תאריך, שעה ושירות לפני קביעת התור"
+  "booking.selectAllBeforeBooking": "יש לבחור תאריך, שעה ושירות לפני קביעת התור",
+  "booking.selectServices": "בחירת שירותים",
+  "booking.selectMultipleHint": "ניתן לבחור שירות אחד או יותר",
+  "booking.selectServiceTitle": "בחר/י שירות",
+  "booking.selectAtLeastOne": "יש לבחור לפחות שירות אחד כדי להמשיך",
+  "booking.servicesSelected": "שירותים נבחרו",
+  "booking.min": "דק׳",
+  "booking.total": "סה״כ",
+  "booking.field.services": "שירותים",
+  "booking.price": "₪"
   ,
   "booking.chooseTime": "בחר/י שעה",
   "booking.chooseDateHint": "בחר/י ספר ושירות כדי לראות תאריכים זמינים.",

@@ -1,23 +1,17 @@
 import React from "react";
 import { Tabs } from "expo-router";
 import { View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MenuProvider } from "@/components/shopify-tab-bar/menu-provider";
 import { AnimatedTabsContainer } from "@/components/shopify-tab-bar/animated-tabs-container";
 import { AdminFloatingTabBar } from "@/components/shopify-tab-bar/admin-floating-tab-bar";
 
-const TAB_BAR_HEIGHT = 84;
-
 export default function TabsLayout() {
-  const insets = useSafeAreaInsets();
-
   return (
     <MenuProvider>
       <View style={{ flex: 1 }}>
         <AnimatedTabsContainer>
           <Tabs
             tabBar={() => null}
-            sceneContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_HEIGHT }}
             screenOptions={{
               headerShown: false,
               tabBarStyle: { display: "none" },
@@ -37,7 +31,6 @@ export default function TabsLayout() {
           </Tabs>
         </AnimatedTabsContainer>
 
-        {/* Floating tab bar rendered as overlay at the layout level */}
         <AdminFloatingTabBar />
       </View>
     </MenuProvider>

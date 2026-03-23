@@ -46,6 +46,7 @@ const HERO_BG = '#FFFFFF';
 const HERO_INITIAL_DELAY = 200;
 const HERO_DURATION = 500;
 const HERO_HEIGHT = Math.round(SCREEN_HEIGHT * 0.68);
+const HERO_OVERLAP = 100; // how far the white sheet overlaps the hero
 
 function chunkArray<T>(array: T[], size: number): T[][] {
   const chunked: T[][] = [];
@@ -57,6 +58,67 @@ function chunkArray<T>(array: T[], size: number): T[][] {
   }
   return chunked;
 }
+
+const manicureHeroRootStyle = {
+  position: 'absolute' as const,
+  left: -SCREEN_WIDTH * 0.1,
+  right: -SCREEN_WIDTH * 0.1,
+  top: 0,
+  bottom: 0,
+  overflow: 'hidden' as const,
+};
+
+const ManicureMarqueeHero = React.memo(({ images }: { images: string[] }) => {
+  const columns = useMemo(() => {
+    const perColumn = Math.ceil(images.length / 3);
+    return chunkArray(images, perColumn);
+  }, [images]);
+
+  return (
+    <View style={manicureHeroRootStyle} pointerEvents="box-none">
+      <View
+        style={{
+          flex: 1,
+          gap: HERO_SPACING,
+          transform: [{ rotate: '-4deg' }],
+        }}
+        pointerEvents="auto"
+      >
+        {columns.map((column, columnIndex) => (
+          <Marquee
+            key={`manicure-marquee-admin-${columnIndex}`}
+            speed={Platform.OS === 'web' ? 1 : 0.25}
+            spacing={HERO_SPACING}
+            reverse={columnIndex % 2 !== 0}
+          >
+            <View style={{ flexDirection: 'row', gap: HERO_SPACING }}>
+              {column.map((image, index) => (
+                <Reanimated.Image
+                  key={`manicure-image-admin-${columnIndex}-${index}`}
+                  source={{ uri: image }}
+                  entering={
+                    columnIndex % 2 === 0
+                      ? FadeInRight.duration(HERO_DURATION).delay(
+                          HERO_INITIAL_DELAY * (columnIndex + 1) + Math.random() * 100
+                        )
+                      : FadeInLeft.duration(HERO_DURATION).delay(
+                          HERO_INITIAL_DELAY * (columnIndex + 1) + Math.random() * 100
+                        )
+                  }
+                  style={{
+                    width: HERO_ITEM_SIZE,
+                    aspectRatio: 1,
+                    borderRadius: HERO_SPACING,
+                  }}
+                />
+              ))}
+            </View>
+          </Marquee>
+        ))}
+      </View>
+    </View>
+  );
+});
 
 function sanitizeUrlArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -106,75 +168,10 @@ export default function HomeScreen() {
     }, [loadHeroImages])
   );
 
-  const ManicureMarqueeHero = () => {
-    const images = heroImages && heroImages.length > 0 ? heroImages : manicureImages;
-    const columns = useMemo(() => {
-      const perColumn = Math.ceil(images.length / 3);
-      return chunkArray(images, perColumn);
-    }, [images]);
-
-    return (
-      <View style={styles.manicureHeroRoot} pointerEvents="box-none">
-        <View
-          style={{
-            flex: 1,
-            gap: HERO_SPACING,
-            transform: [{ rotate: '-4deg' }],
-          }}
-          pointerEvents="auto"
-        >
-          {columns.map((column, columnIndex) => (
-            <Marquee
-              key={`manicure-marquee-admin-${columnIndex}`}
-              speed={Platform.OS === 'web' ? 1 : 0.25}
-              spacing={HERO_SPACING}
-              reverse={columnIndex % 2 !== 0}
-            >
-              <View style={{ flexDirection: 'row', gap: HERO_SPACING }}>
-                {column.map((image, index) => (
-                  <Reanimated.Image
-                    key={`manicure-image-admin-${columnIndex}-${index}`}
-                    source={{ uri: image }}
-                    entering={
-                      columnIndex % 2 === 0
-                        ? FadeInRight.duration(HERO_DURATION).delay(
-                            HERO_INITIAL_DELAY * (columnIndex + 1) + Math.random() * 100
-                          )
-                        : FadeInLeft.duration(HERO_DURATION).delay(
-                            HERO_INITIAL_DELAY * (columnIndex + 1) + Math.random() * 100
-                          )
-                    }
-                    style={{
-                      width: HERO_ITEM_SIZE,
-                      aspectRatio: 1,
-                      borderRadius: HERO_SPACING,
-                    }}
-                  />
-                ))}
-              </View>
-            </Marquee>
-          ))}
-        </View>
-
-        <LinearGradient
-          colors={['rgba(255,255,255,0)', HERO_BG, HERO_BG]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          locations={[0, 0.7, 1]}
-          style={styles.manicureHeroFadeBottom}
-          pointerEvents="none"
-        />
-        <LinearGradient
-          colors={[HERO_BG, HERO_BG, 'rgba(255,255,255,0)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          locations={[0, Platform.OS === 'web' ? 0.1 : 0.3, 1]}
-          style={styles.manicureHeroFadeTop}
-          pointerEvents="none"
-        />
-      </View>
-    );
-  };
+  const heroImagesResolved = useMemo(
+    () => (heroImages && heroImages.length > 0 ? heroImages : manicureImages),
+    [heroImages]
+  );
   // Ensure light status bar when this screen is focused
   useFocusEffect(
     React.useCallback(() => {
@@ -218,6 +215,10 @@ export default function HomeScreen() {
   const [editClientPhone, setEditClientPhone] = useState('');
   const [savingClient, setSavingClient] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [innerScrollEnabled, setInnerScrollEnabled] = useState(false);
+  const innerScrollEnabledRef = useRef(false);
+  const innerScrollRef = useRef<ScrollView>(null);
+  const maxOuterScroll = HERO_HEIGHT - HERO_OVERLAP - insets.top - 60;
   const [blockedFilter, setBlockedFilter] = useState<'all' | 'blocked' | 'unblocked'>('all');
   const categories = [
     {
@@ -725,72 +726,60 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <StatusBar style="light" translucent backgroundColor="transparent" />
+      {/* Hero - fixed behind scroll */}
+      <View style={styles.fullScreenHero}>
+        <ManicureMarqueeHero images={heroImagesResolved} />
+        <LinearGradient
+          colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0)', 'rgba(255,255,255,0)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.fullScreenHeroOverlay}
+          pointerEvents="none"
+        />
+      </View>
+
+      {/* Content ScrollView - scrolls over the fixed hero */}
       <ScrollView
+        style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+        contentContainerStyle={{ paddingTop: HERO_HEIGHT - HERO_OVERLAP }}
+        scrollEventThrottle={16}
+        onScroll={(e) => {
+          const y = e.nativeEvent.contentOffset.y;
+          const atTop = y >= maxOuterScroll - 4;
+          if (atTop !== innerScrollEnabledRef.current) {
+            innerScrollEnabledRef.current = atTop;
+            setInnerScrollEnabled(atTop);
+            if (!atTop) {
+              innerScrollRef.current?.scrollTo({ y: 0, animated: false });
+            }
+          }
+        }}
       >
-        {/* Hero with overlay header (scrolls with the page) */}
-        <View style={styles.fullScreenHero}>
-          <ManicureMarqueeHero />
+        {/* Content wrapper — fixed height so outer scroll stops below header */}
+        <View style={[styles.contentWrapper, { height: SCREEN_HEIGHT - insets.top - 60 }]}>
+          {/* Drag handle indicator */}
+          <View style={styles.dragHandle} />
+          {/* Subtle top-edge shadow line for separation */}
           <LinearGradient
-            colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0)', 'rgba(255,255,255,0)']}
+            colors={['rgba(0,0,0,0.06)', 'rgba(0,0,0,0)']}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
-            style={styles.fullScreenHeroOverlay}
+            style={styles.sheetTopShadow}
             pointerEvents="none"
           />
+          <ScrollView
+            ref={innerScrollRef}
+            nestedScrollEnabled
+            scrollEnabled={innerScrollEnabled}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+          >
+            <View style={styles.scrollContent}>
 
-          {/* Overlay Header */}
-          <SafeAreaView edges={['top']} style={styles.overlayHeader} pointerEvents="box-none">
-            <View style={styles.overlayHeaderContent} pointerEvents="box-none">
-              {/* Left: Broadcast */}
-              <View style={styles.headerSide}>
-                <View style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}> 
-                  <AdminBroadcastComposer variant="icon" language="en" iconColor="#fff" />
-                </View>
-              </View>
-              {/* Center placeholder to keep spacing; logo is absolutely positioned */}
-              <View style={styles.headerCenter} />
-              {/* Right: Notifications */}
-              <View style={styles.headerSide}>
-                <TouchableOpacity
-                  style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}
-                  onPress={() => {
-                    router.push('/(tabs)/notifications');
-                  }}
-                  activeOpacity={0.85}
-                  accessibilityLabel={t('notifications.title','Notifications')}
-                >
-                  <Ionicons name="notifications-outline" size={24} color="#fff" />
-                  {unreadCount > 0 && (
-                    <View style={[styles.overlayNotificationBadge, { backgroundColor: colors.primary }]}>
-                      <Text style={styles.notificationBadgeText}>
-                        {unreadCount > 99 ? '99+' : unreadCount}
-                      </Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          </SafeAreaView>
-
-          {/* Absolute logo overlay so size doesn't affect header layout */}
-          <View pointerEvents="none" style={[styles.overlayLogoWrapper, { top: insets.top -15 }]}> 
-            <View style={styles.overlayLogoInner}>
-              <Image source={getCurrentClientLogo()} style={styles.overlayLogo} resizeMode="contain" />
-            </View>
-          </View>
-        </View>
-
-        {/* Content wrapper */}
-        <SafeAreaView edges={['left', 'right', 'bottom']}>
-          <View style={styles.contentWrapper}>
-            <View style={[styles.scrollContent, { paddingBottom: insets.bottom + 320 }]}>
-        {/* Spacer for bottom reachability */}
-        <View style={{ height: 0 }} />
-
-        {/* DailySchedule below hero, above stats */}
-        <View style={{ paddingHorizontal: 8, marginTop: 12, marginBottom: 8 }}>
+        {/* ── DAILY SCHEDULE ── */}
+        <View style={styles.dailyScheduleWrap}>
           <DailySchedule
             nextAppointment={nextAppointment}
             loading={loadingNextAppointment}
@@ -801,135 +790,155 @@ export default function HomeScreen() {
           />
         </View>
 
-        <View style={styles.statsBox}>
-          <View style={styles.statsButtonsRow}>
-            <TouchableOpacity
-              style={styles.statsButton}
-              onPress={() => {
-                setShowClientsModal(true);
-                fetchClients();
-              }}
-              activeOpacity={0.85}
-            >
-              <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20` }]}> 
-                <Ionicons name="people-outline" size={22} color={colors.primary} />
+        {/* ── STAT CARDS (3 in a row) ── */}
+        <View style={styles.statCardsRow}>
+          {/* Clients */}
+          <TouchableOpacity
+            style={styles.statCard}
+            activeOpacity={0.82}
+            onPress={() => { setShowClientsModal(true); fetchClients(); }}
+          >
+            <View style={[styles.statCardInner, { backgroundColor: `${colors.primary}12` }]}>
+              <View style={[styles.statCardIconWrap, { backgroundColor: `${colors.primary}22` }]}>
+                <Ionicons name="people-outline" size={16} color={colors.primary} />
               </View>
-              <View style={styles.statsButtonContent}>
-                {loadingStats ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Text style={[styles.statsNumber, { color: colors.primary }]}>{monthlyStats.totalClients}</Text>
-                )}
-                <Text style={styles.statsLabelSecondary}>{t('admin.home.clients','Clients')}</Text>
-              </View>
-            </TouchableOpacity>
+              {loadingStats
+                ? <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 3 }} />
+                : <Text style={[styles.statCardNumber, { color: colors.primary }]}>{monthlyStats.totalClients}</Text>}
+              <Text style={[styles.statCardLabel, { color: `${colors.primary}BB` }]}>{t('admin.home.clients', 'Clients')}</Text>
+            </View>
+          </TouchableOpacity>
 
-            <View style={styles.statsButton}>
-              <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20` }]}> 
-                <Ionicons name="checkmark-done-outline" size={22} color={colors.primary} />
+          {/* Today */}
+          <View style={styles.statCard}>
+            <View style={[styles.statCardInner, { backgroundColor: `${colors.primary}12` }]}>
+              <View style={[styles.statCardIconWrap, { backgroundColor: `${colors.primary}22` }]}>
+                <Ionicons name="calendar-outline" size={16} color={colors.primary} />
               </View>
-              <View style={styles.statsButtonContent}>
-                {loadingStats ? (
-                  <ActivityIndicator size="small" color={colors.success} />
-                ) : (
-                  <Text style={[styles.statsNumber, { color: colors.primary }]}>{monthlyStats.completedAppointments}</Text>
-                )}
-                <Text style={styles.statsLabelSecondary}>{t('admin.home.thisMonth','This month')}</Text>
+              {loadingTodayCount
+                ? <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 3 }} />
+                : <Text style={[styles.statCardNumber, { color: colors.primary }]}>{todayAppointmentsCount}</Text>}
+              <Text style={[styles.statCardLabel, { color: `${colors.primary}BB` }]}>{t('today', 'Today')}</Text>
+            </View>
+          </View>
+
+          {/* Completed */}
+          <View style={styles.statCard}>
+            <View style={[styles.statCardInner, { backgroundColor: `${colors.primary}12` }]}>
+              <View style={[styles.statCardIconWrap, { backgroundColor: `${colors.primary}22` }]}>
+                <Ionicons name="checkmark-done-outline" size={16} color={colors.primary} />
               </View>
+              {loadingStats
+                ? <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 3 }} />
+                : <Text style={[styles.statCardNumber, { color: colors.primary }]}>{monthlyStats.completedAppointments}</Text>}
+              <Text style={[styles.statCardLabel, { color: `${colors.primary}BB` }]}>{t('admin.home.thisMonth', 'Month')}</Text>
             </View>
           </View>
         </View>
 
-        {/* Admin: Home hero / marquee images */}
+        {/* ── QUICK ACTIONS ── */}
         {isAdmin && (
-          <View style={{ paddingHorizontal: 8, marginBottom: 8 }}>
-            <View style={styles.sectionHeaderRow}>
-              <View style={styles.sectionHeaderTexts}>
-                <Text style={styles.sectionHeaderTitle}>{t('admin.hero.title','Home animation')}</Text>
-                <Text style={styles.sectionHeaderSubtitle}>{t('admin.hero.subtitle','Manage top animation images')}</Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => router.push('/(tabs)/edit-home-hero')}
-                activeOpacity={0.85}
-                style={styles.editGalleryButton}
-              >
-                <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20`, width: 28, height: 28, borderRadius: 14, marginRight: 0 }]}>
-                  <Ionicons name="create-outline" size={18} color={colors.primary} />
+          <View style={styles.quickActionsSection}>
+            <Text style={styles.quickActionsTitle}>{t('admin.home.quickActions', 'Quick Actions')}</Text>
+            <View style={styles.quickActionsStack}>
+
+              <TouchableOpacity style={styles.quickActionCard} activeOpacity={0.8} onPress={() => router.push('/(tabs)/edit-home-hero')}>
+                <View style={[styles.quickActionCardIcon, { backgroundColor: `${colors.primary}15` }]}>
+                  <Ionicons name="images-outline" size={22} color={colors.primary} />
                 </View>
-                <Text style={styles.editGalleryButtonText}>{t('admin.hero.edit','Edit hero')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* Admin: Gallery header with title/subtext (left) and edit button (right) */}
-        {isAdmin && (
-          <View style={{ paddingHorizontal: 8, marginBottom: 8 }}>
-            <View style={styles.sectionHeaderRow}>
-              <View style={styles.sectionHeaderTexts}>
-                <Text style={styles.sectionHeaderTitle}>{t('admin.gallery.title','Gallery')}</Text>
-                <Text style={styles.sectionHeaderSubtitle}>{t('admin.gallery.subtitle','Manage your designs')}</Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => router.push('/(tabs)/edit-gallery')}
-                activeOpacity={0.85}
-                style={styles.editGalleryButton}
-              >
-                <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20`, width: 28, height: 28, borderRadius: 14, marginRight: 0 }]}> 
-                  <Ionicons name="create-outline" size={18} color={colors.primary} />
+                <View style={styles.quickActionCardText}>
+                  <Text style={[styles.quickActionCardTitle, { color: colors.text }]}>{t('admin.hero.edit', 'Main Media')}</Text>
+                  <Text style={styles.quickActionCardSub}>{t('admin.hero.subtitle', 'Manage top animation images')}</Text>
                 </View>
-                <Text style={styles.editGalleryButtonText}>{t('admin.gallery.edit','Edit Gallery')}</Text>
+                <Ionicons name="chevron-back" size={16} color="#CBD5E1" />
               </TouchableOpacity>
-            </View>
-          </View>
-        )}
 
-        {/* Admin: Story-style gallery like client home */}
-        {isLoadingDesigns ? (
-          <View style={{ paddingHorizontal: 16, justifyContent: 'center' }}>
-            <ActivityIndicator size="small" color={colors.primary} />
-          </View>
-        ) : (
-          <DesignCarousel designs={designsFromStore as any} showHeader={false} />
-        )}
-
-        {/* Spacing and divider between Gallery and Products sections for Admin */}
-        {isAdmin && (
-          <>
-            <View style={styles.sectionSpacerLarge} />
-            <View style={styles.sectionDivider} />
-            <View style={styles.sectionSpacerLarge} />
-          </>
-        )}
-
-        {/* Admin: Products header with title/subtext (left) and edit button (right) */}
-        {isAdmin && (
-          <View style={{ paddingHorizontal: 8, marginBottom: 8 }}>
-            <View style={styles.sectionHeaderRow}>
-              <View style={styles.sectionHeaderTexts}>
-                <Text style={styles.sectionHeaderTitle}>{t('admin.products.title','Products')}</Text>
-                <Text style={styles.sectionHeaderSubtitle}>{t('admin.products.subtitle','Manage your products')}</Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => router.push('/(tabs)/edit-products')}
-                activeOpacity={0.85}
-                style={styles.editGalleryButton}
-              >
-                <View style={[styles.statsButtonIconCircle, { backgroundColor: `${colors.primary}20`, width: 28, height: 28, borderRadius: 14, marginRight: 12 }]}> 
-                  <Ionicons name="create-outline" size={18} color={colors.primary} />
+              <TouchableOpacity style={styles.quickActionCard} activeOpacity={0.8} onPress={() => router.push('/(tabs)/edit-gallery')}>
+                <View style={[styles.quickActionCardIcon, { backgroundColor: `${colors.primary}15` }]}>
+                  <Ionicons name="grid-outline" size={22} color={colors.primary} />
                 </View>
-                <Text style={styles.editGalleryButtonText}>{t('admin.products.edit','Edit Products')}</Text>
+                <View style={styles.quickActionCardText}>
+                  <Text style={[styles.quickActionCardTitle, { color: colors.text }]}>{t('admin.gallery.edit', 'Gallery')}</Text>
+                  <Text style={styles.quickActionCardSub}>{t('admin.gallery.subtitle', 'Manage your designs')}</Text>
+                </View>
+                <Ionicons name="chevron-back" size={16} color="#CBD5E1" />
               </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.quickActionCard, { borderBottomWidth: 0 }]} activeOpacity={0.8} onPress={() => router.push('/(tabs)/edit-products')}>
+                <View style={[styles.quickActionCardIcon, { backgroundColor: `${colors.primary}15` }]}>
+                  <Ionicons name="bag-handle-outline" size={22} color={colors.primary} />
+                </View>
+                <View style={styles.quickActionCardText}>
+                  <Text style={[styles.quickActionCardTitle, { color: colors.text }]}>{t('admin.products.edit', 'Products')}</Text>
+                  <Text style={styles.quickActionCardSub}>{t('admin.products.subtitle', 'Manage your products')}</Text>
+                </View>
+                <Ionicons name="chevron-back" size={16} color="#CBD5E1" />
+              </TouchableOpacity>
+
             </View>
           </View>
         )}
 
-        {/* Products Section */}
-        <ProductsSection />
-            </View>
+        {/* ── GALLERY SECTION ── */}
+        {isAdmin && (
+          <View style={styles.contentSection}>
+            {isLoadingDesigns
+              ? <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 12 }} />
+              : <DesignCarousel designs={designsFromStore as any} showHeader={false} />}
           </View>
-        </SafeAreaView>
+        )}
+
+        {/* ── PRODUCTS SECTION ── */}
+        {isAdmin && (
+          <View style={styles.contentSection}>
+            <ProductsSection />
+          </View>
+        )}
+
+        {!isAdmin && <ProductsSection />}
+            </View>
+          </ScrollView>
+        </View>
       </ScrollView>
+
+      {/* Overlay Header - always on top of scroll */}
+      <SafeAreaView edges={['top']} style={styles.overlayHeader} pointerEvents="box-none">
+        <View style={styles.overlayHeaderContent} pointerEvents="box-none">
+          {/* Left: Broadcast */}
+          <View style={styles.headerSide}>
+            <View style={[styles.overlayButton, { backgroundColor: colors.primary }]}>
+              <AdminBroadcastComposer variant="icon" language="en" iconColor="#fff" />
+            </View>
+          </View>
+          {/* Center placeholder */}
+          <View style={styles.headerCenter} />
+          {/* Right: Notifications */}
+          <View style={styles.headerSide}>
+            <TouchableOpacity
+              style={[styles.overlayButton, { backgroundColor: colors.primary }]}
+              onPress={() => { router.push('/(tabs)/notifications'); }}
+              activeOpacity={0.85}
+              accessibilityLabel={t('notifications.title', 'Notifications')}
+            >
+              <Ionicons name="notifications-outline" size={24} color="#fff" />
+              {unreadCount > 0 && (
+                <View style={[styles.overlayNotificationBadge, { backgroundColor: colors.primary }]}>
+                  <Text style={styles.notificationBadgeText}>
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SafeAreaView>
+
+      {/* Logo overlay */}
+      <View pointerEvents="none" style={[styles.overlayLogoWrapper, { top: insets.top - 15 }]}>
+        <View style={styles.overlayLogoInner}>
+          <Image source={getCurrentClientLogo()} style={styles.overlayLogo} resizeMode="contain" />
+        </View>
+      </View>
 
        {/* Image Preview Modal for Admin */}
        <Modal
@@ -1067,28 +1076,206 @@ export default function HomeScreen() {
 const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#FFFFFF',
   },
-  // Grey rounded container like client home
   contentWrapper: {
-    backgroundColor: '#F8F9FA',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    marginTop: 0,
-    paddingTop: 8,
-    paddingBottom: 0,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     overflow: 'hidden',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    elevation: 18,
+  },
+  dragHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#CBD5E1',
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  sheetTopShadow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 20,
+  },
+  /* ─── Stat Cards ─── */
+  statCardsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  statCardInner: {
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    gap: 3,
+    borderRadius: 18,
+  },
+  statCardGradient: {
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    alignItems: 'flex-start',
+    gap: 4,
+  },
+  statCardIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  statCardNumber: {
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
+  statCardLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  /* ─── Daily Schedule ─── */
+  dailyScheduleWrap: {
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  /* ─── Quick Actions ─── */
+  quickActionsSection: {
+    marginTop: 20,
+    marginBottom: 4,
+  },
+  quickActionsTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 10,
+    textAlign: 'left',
+    width: '100%',
+  },
+  quickActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignSelf: 'stretch',
+  },
+  quickActionsStack: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 },
+      android: { elevation: 2 },
+    }),
+  },
+  quickActionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  quickActionCardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionCardText: {
+    flex: 1,
+    alignItems: 'flex-start',
+  },
+  quickActionCardTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'right',
+  },
+  quickActionCardSub: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginTop: 2,
+    textAlign: 'right',
+  },
+  quickActionPill: {
+    flex: 1,
+    backgroundColor: '#F8FAFF',
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#EEF2FF',
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
+      android: { elevation: 2 },
+    }),
+  },
+  quickActionIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  /* ─── Content Sections ─── */
+  contentSection: {
+    marginTop: 24,
+  },
+  newSectionHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  sectionAccentBar: {
+    width: 4,
+    height: 36,
+    borderRadius: 2,
+  },
+  newSectionTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.text,
+    letterSpacing: -0.2,
+    textAlign: 'right',
+  },
+  newSectionSubtitle: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+    textAlign: 'right',
   },
   // Hero styles (aligned with client home)
   fullScreenHero: {
-    position: 'relative',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     height: HERO_HEIGHT,
-    width: '100%',
     zIndex: 0,
     backgroundColor: HERO_BG,
   },
@@ -1264,8 +1451,8 @@ const createStyles = (colors: any) => StyleSheet.create({
     justifyContent: 'center',
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 6,
+    paddingHorizontal: 16,
+    paddingTop: 0,
   },
   featuredImageContainer: {
     position: 'relative',

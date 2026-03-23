@@ -1400,49 +1400,12 @@ export default function BookAppointment() {
       {/* Background (changes with scroll for steps 1-2, cross-fade for steps 3-4) */}
       {(() => {
         try {
-<<<<<<< HEAD
           const firstSvc = selectedServices.length > 0 ? selectedServices[0] : null;
           const uri = (firstSvc as any)?.image_url || (firstSvc as any)?.cover_url || (firstSvc as any)?.image || (selectedBarber as any)?.image_url || null;
           return <DynamicBackground uri={uri} />;
         } catch { return null; }
-=======
-          if (currentStep === 1 && (availableBarbers || []).length > 0) {
-            return (
-              <ScrollBackdrop
-                items={availableBarbers.map((b) => ({ id: String(b.id), uri: (b as any)?.image_url || '' }))}
-                scrollX={barberBgScrollX}
-                safeTop={safeAreaInsets.top}
-                safeBottom={safeAreaInsets.bottom}
-              />
-            );
-          }
-          if (currentStep === 2 && (filteredServices || []).length > 0) {
-            return (
-              <ScrollBackdrop
-                items={filteredServices.map((s: any, idx: number) => ({
-                  id: String(s?.id ?? idx),
-                  uri: s?.image_url || s?.cover_url || s?.image || '',
-                }))}
-                scrollX={serviceBgScrollX}
-                safeTop={safeAreaInsets.top}
-                safeBottom={safeAreaInsets.bottom}
-              />
-            );
-          }
-          const uri =
-            (selectedService as any)?.image_url ||
-            (selectedService as any)?.cover_url ||
-            (selectedService as any)?.image ||
-            (selectedBarber as any)?.image_url ||
-            null;
-          return <DynamicBackground uri={uri} safeTop={safeAreaInsets.top} safeBottom={safeAreaInsets.bottom} />;
-        } catch {
-          return null;
-        }
->>>>>>> 2e0469c30b23b9a7cd88cb15a3097985ef60c79d
       })()}
 
-<<<<<<< HEAD
           {/* Stepper */}
           <View style={[styles.stepperContainer, styles.ltr, styles.stepperShiftLeft]}>
             {[
@@ -1618,25 +1581,6 @@ export default function BookAppointment() {
               )}
             </View>
           )}
-        </View>
-      )}
-=======
-      <SafeAreaView style={styles.container} edges={[]}>
-        <BookingStepTabs
-          currentStep={currentStep}
-          safeAreaTop={safeAreaInsets.top}
-          labels={{
-            barber: t('booking.step.barber', 'Barber'),
-            service: t('booking.step.service', 'Service'),
-            day: t('booking.step.day', 'Day'),
-            time: t('booking.step.time', 'Time'),
-          }}
-          canGoService={!!selectedBarber}
-          canGoDay={!!selectedService}
-          canGoTime={selectedDay !== null}
-          onChangeStep={(step) => setCurrentStep(Number(step) as any)}
-        />
->>>>>>> 2e0469c30b23b9a7cd88cb15a3097985ef60c79d
       {/* Header removed on steps 3-4 per request */}
       <View style={[
         styles.contentWrapper,
@@ -1669,7 +1613,6 @@ export default function BookAppointment() {
         <View style={{ height: TOP_OFFSET + 12 }} />
 
         {/* Step 1: Barber Selection - Wallpaper Style Carousel */}
-<<<<<<< HEAD
         {currentStep === 1 && (
           <Animated.View style={[styles.section, styles.sectionFullBleed, introFadeStyle, { flex: 1, minHeight: SCREEN.height * 0.7 }]}>
             {isLoadingBarbers ? (
@@ -1996,69 +1939,6 @@ export default function BookAppointment() {
             {/* Legends intentionally removed for a cleaner rectangular calendar view */}
           </View>
         )}
-=======
-        <BarberSelection
-          visible={currentStep === 1}
-          styles={styles}
-          introFadeStyle={introFadeStyle}
-          topOffset={TOP_OFFSET}
-          safeAreaBottom={safeAreaInsets.bottom}
-          isLoading={isLoadingBarbers}
-          barbers={availableBarbers}
-          selectedBarberId={selectedBarber?.id}
-          externalScrollX={barberBgScrollX}
-          t={t}
-          onSelectBarber={(barber) => {
-            setSelectedBarber(barber);
-            setSelectedService(null);
-            setSelectedServiceIndex(0);
-            setSelectedDay(null);
-            setSelectedTime(null);
-            setAvailableSlots([]);
-            setIsLoadingSlots(false);
-            setDayAvailability({});
-          }}
-        />
-
-        {/* Step 2: Service Selection - Wallpaper Style Carousel */}
-        <ServiceSelection
-          visible={currentStep === 2 && !!selectedBarber}
-          styles={styles}
-          step2FadeStyle={step2FadeStyle}
-          topOffset={TOP_OFFSET}
-          safeAreaBottom={safeAreaInsets.bottom}
-          isLoading={isLoadingServices}
-          services={filteredServices}
-          selectedServiceId={(selectedService as any)?.id}
-          externalScrollX={serviceBgScrollX}
-          t={t}
-          onSelectService={(service, index) => {
-            setSelectedServiceIndex(index);
-            setSelectedService(service);
-            setSelectedDay(null);
-            setSelectedTime(null);
-            setAvailableSlots([]);
-            setIsLoadingSlots(false);
-            setShowConfirmModal(false);
-            setShowReplaceModal(false);
-            setExistingAppointment(null);
-          }}
-        />
-
-        {/* Step 3: Day Selection */}
-        <DaySelection
-          visible={currentStep === 3 && !!selectedBarber && !!selectedService}
-          styles={styles}
-          days={days}
-          bookingOpenDays={bookingOpenDays}
-          selectedDate={selectedDate}
-          selectedDayIndex={selectedDay}
-          dayAvailability={dayAvailability}
-          language={i18n?.language || 'he'}
-          onSelectDayIndex={(idx) => setSelectedDay(idx)}
-          onClearTime={() => setSelectedTime(null)}
-        />
->>>>>>> 2e0469c30b23b9a7cd88cb15a3097985ef60c79d
 
         {/* Step 4 removed from inside ScrollView to avoid nested VirtualizedList */}
 
@@ -2067,7 +1947,6 @@ export default function BookAppointment() {
       </View>
 
       {/* Step 4: Revolutionary Time Selection with Liquid Glass (outside ScrollView) */}
-<<<<<<< HEAD
       {Number(currentStep) === 4 && selectedBarber && selectedServices.length > 0 && selectedDay !== null && (
         <View>
           {/* Step 4 top spacer, raised by ~50px */}
@@ -2122,18 +2001,6 @@ export default function BookAppointment() {
           </View>
         </View>
       )}
-=======
-      <TimeSelection
-        visible={Number(currentStep) === 4 && !!selectedBarber && !!selectedService && selectedDay !== null}
-        styles={styles}
-        topOffset={TOP_OFFSET}
-        availableTimeSlots={(availableTimeSlots || []) as any}
-        selectedTime={selectedTime as any}
-        primaryColor={colors.primary}
-        t={t}
-        onSelectTime={(time) => setSelectedTime(time as any)}
-      />
->>>>>>> 2e0469c30b23b9a7cd88cb15a3097985ef60c79d
 
       {/* Footer action button per step */}
       {footerVisible && currentStep >= 3 && (
@@ -2457,7 +2324,6 @@ export default function BookAppointment() {
           </View>
         </Modal>
       )}
-      </SafeAreaView>
     </View>
   );
 }

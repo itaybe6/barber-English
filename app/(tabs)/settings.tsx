@@ -38,7 +38,7 @@ import {
   User,
   Repeat
 } from 'lucide-react-native';
-import { Ticket } from 'lucide-react-native';
+import { Ticket, DollarSign } from 'lucide-react-native';
 import { Users } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -122,6 +122,7 @@ export default function SettingsScreen() {
   
   // Delete account modal state
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   
   // Title dropdown states (removed)
 
@@ -814,21 +815,13 @@ export default function SettingsScreen() {
   ];
 
   const handleLogout = () => {
-    Alert.alert(
-      t('profile.logout.title','Log out'),
-      t('profile.logout.message','Are you sure you want to log out?'),
-      [
-        { text: t('cancel','Cancel'), style: 'cancel' },
-        { 
-          text: t('profile.logout.confirm','Log out'), 
-          style: 'destructive',
-          onPress: () => {
-            logout();
-            router.replace('/login');
-          }
-        }
-      ]
-    );
+    setShowLogoutModal(true);
+  };
+
+  const confirmLogout = () => {
+    setShowLogoutModal(false);
+    logout();
+    router.replace('/login');
   };
 
   const openServicesModal = async () => {
@@ -2412,6 +2405,16 @@ export default function SettingsScreen() {
         )}
         
         
+        <Text style={styles.sectionTitleNew}>{t('settings.sections.financeAccounting','Finance & Accounting')}</Text>
+        <View style={[styles.cardNew, shadowStyle]}>
+          {renderSettingItem(
+            <DollarSign size={20} color={businessColors.primary} />,
+            t('finance.title','Finance'),
+            t('finance.subtitle','Track income, expenses, and send reports'),
+            undefined,
+            () => router.push('/(tabs)/finance')
+          )}
+        </View>
         
         <Text style={styles.sectionTitleNew}>{t('settings.sections.securitySupport','Security & support')}</Text>
         
@@ -2493,6 +2496,38 @@ export default function SettingsScreen() {
 
       {/* Admin broadcast popup (consistent with Home screen) */}
       <AdminBroadcastComposer open={showBroadcast} onOpenChange={setShowBroadcast} renderTrigger={false} language="en" />
+
+      {/* Logout Confirmation Modal */}
+      <Modal
+        visible={showLogoutModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowLogoutModal(false)}
+      >
+        <Pressable
+          style={styles.logoutOverlay}
+          onPress={() => setShowLogoutModal(false)}
+        >
+          <Pressable style={styles.logoutDialog} onPress={() => {}}>
+            <Text style={styles.logoutDialogTitle}>{t('profile.logout.title', 'Log out')}</Text>
+            <Text style={styles.logoutDialogMessage}>{t('profile.logout.message', 'Are you sure you want to log out?')}</Text>
+            <View style={styles.logoutDialogButtons}>
+              <TouchableOpacity
+                style={[styles.logoutDialogBtn, styles.logoutDialogCancelBtn]}
+                onPress={() => setShowLogoutModal(false)}
+              >
+                <Text style={styles.logoutDialogCancelText}>{t('cancel', 'Cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.logoutDialogBtn, { backgroundColor: businessColors.primary }]}
+                onPress={confirmLogout}
+              >
+                <Text style={styles.logoutDialogConfirmText}>{t('profile.logout.confirm', 'Log out')}</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Support Modal */}
       <Modal
@@ -4911,6 +4946,66 @@ const styles = StyleSheet.create({
   },
   settingItemDisabled: {
     opacity: 0.6,
+  },
+
+  logoutOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoutDialog: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 20,
+    width: '82%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  logoutDialogTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.text,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  logoutDialogMessage: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  logoutDialogButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  logoutDialogBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoutDialogCancelBtn: {
+    backgroundColor: '#F2F2F7',
+  },
+  logoutDialogCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  logoutDialogConfirmText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
   },
 
   logoutButton: {

@@ -1,0 +1,145 @@
+import { supabase, getBusinessId } from '@/lib/supabase';
+import type { BusinessExpense } from '@/lib/supabase';
+import { expensesApi } from './expenses';
+
+export interface ServiceIncomeBreakdown {
+  service_id: string | null;
+  service_name: string;
+  price: number;
+  count: number;
+  total: number;
+}
+
+export interface MonthlyReport {
+  year: number;
+  month: number;
+  totalIncome: number;
+  totalExpenses: number;
+  netProfit: number;
+  incomeBreakdown: ServiceIncomeBreakdown[];
+  expenses: BusinessExpense[];
+  expensesByCategory: Record<string, number>;
+}
+
+export const financeApi = {
+  /**
+   * Calculates monthly income by joining appointments with services.
+   * Only counts booked appointments (is_available = false) with status confirmed/completed.
+   */
+  async getMonthlyIncome(year: number, month: number): Promise<{
+    total: number;
+    breakdown: ServiceIncomeBreakdown[];
+  }> {
+    try {
+      const businessId = getBusinessId();
+      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+      const endDate = month === 12
+        ? `${year + 1}-01-01`
+        : `${year}-${String(month + 1).padStart(2, '0')}-01`;
+
+      const { data: appointments, error: apptErr } = await supabase
+        .from('appointments')
+        .select('id, service_name, service_id, slot_date, status')
+        .eq('business_id', businessId)
+        .eq('is_available', false)
+        .in('status', ['confirmed', 'completed'])
+        .gte('slot_date', startDate)
+        .lt('slot_date', endDate);
+
+      if (apptErr) {
+        console.error('Error fetching appointments for income:', apptErr);
+        return { total: 0, breakdown: [] };
+      }
+
+      if (!appointments || appointments.length === 0) {
+        return { total: 0, breakdown: [] };
+      }
+
+      const { data: services, error: svcErr } = await supabase
+        .from('services')
+        .select('id, name, price')
+        .eq('business_id', businessId);
+
+      if (svcErr) {
+        console.error('Error fetching services for income:', svcErr);
+        return { total: 0, breakdown: [] };
+      }
+
+      const serviceMap = new Map<string, { name: string; price: number }>();
+      const serviceNameMap = new Map<string, { id: string; price: number }>();
+      for (const svc of (services || [])) {
+        serviceMap.set(svc.id, { name: svc.name, price: svc.price });
+        serviceNameMap.set(svc.name.toLowerCase(), { id: svc.id, price: svc.price });
+      }
+
+      const breakdownMap = new Map<string, ServiceIncomeBreakdown>();
+
+      for (const appt of appointments) {
+        let price = 0;
+        let serviceName = appt.service_name || 'Unknown';
+        let serviceId = appt.service_id || null;
+
+        if (serviceId && serviceMap.has(serviceId)) {
+          const svc = serviceMap.get(serviceId)!;
+          price = svc.price;
+          serviceName = svc.name;
+        } else if (serviceName) {
+          const match = serviceNameMap.get(serviceName.toLowerCase());
+          if (match) {
+            price = match.price;
+            serviceId = match.id;
+          }
+        }
+
+        const key = serviceId || serviceName;
+        const existing = breakdownMap.get(key);
+        if (existing) {
+          existing.count += 1;
+          existing.total += price;
+        } else {
+          breakdownMap.set(key, {
+            service_id: serviceId,
+            service_name: serviceName,
+            price,
+            count: 1,
+            total: price,
+          });
+        }
+      }
+
+      const breakdown = Array.from(breakdownMap.values()).sort((a, b) => b.total - a.total);
+      const total = breakdown.reduce((sum, item) => sum + item.total, 0);
+
+      return { total, breakdown };
+    } catch (err) {
+      console.error('Error in getMonthlyIncome:', err);
+      return { total: 0, breakdown: [] };
+    }
+  },
+
+  async getMonthlyReport(year: number, month: number): Promise<MonthlyReport> {
+    const [income, expenses] = await Promise.all([
+      this.getMonthlyIncome(year, month),
+      expensesApi.getExpensesByMonth(year, month),
+    ]);
+
+    const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
+
+    const expensesByCategory: Record<string, number> = {};
+    for (const expense of expenses) {
+      const cat = expense.category || 'other';
+      expensesByCategory[cat] = (expensesByCategory[cat] || 0) + Number(expense.amount);
+    }
+
+    return {
+      year,
+      month,
+      totalIncome: income.total,
+      totalExpenses,
+      netProfit: income.total - totalExpenses,
+      incomeBreakdown: income.breakdown,
+      expenses,
+      expensesByCategory,
+    };
+  },
+};

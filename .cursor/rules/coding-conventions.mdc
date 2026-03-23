@@ -44,5 +44,5 @@ alwaysApply: true
 - **DO** use i18n `t()` function for user-facing strings
 - **DO** keep screens relatively thin — extract logic to hooks or API modules
 - **DON'T** import directly from `expo-constants` — use `getExpoExtra()` wrapper
-- **DON'T** add RTL support code — the app explicitly forces LTR
+- **DO** support RTL layout — the app is Hebrew-first, right-to-left (see ui-design-patterns for details)
 - **DON'T** create new Supabase client instances — use the shared one from `lib/supabase.ts`

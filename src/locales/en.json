@@ -87,7 +87,9 @@
   "booking.min": "min",
   "booking.total": "Total",
   "booking.field.services": "Services",
-  "booking.price": "₪"
+  "booking.price": "₪",
+  "booking.selectBarber": "Choose your specialist",
+  "booking.selectBarberHint": "Who would you like to book with?"
   ,
   "booking.chooseTime": "Choose Time",
   "booking.chooseDateHint": "Select a barber and service to see available dates.",
@@ -498,6 +500,7 @@
       "recurring": "Recurring",
       "recurringTitle": "Recurring appointments",
       "security": "Security",
+      "financeAccounting": "Finance & Accounting",
       "securitySupport": "Security & support",
       "account": "Account",
       "accountManagement": "Account Management",
@@ -776,6 +779,48 @@
       "selectClientPlaceholder": "Select client..."
     }
     
+  },
+  "finance": {
+    "title": "Finance",
+    "subtitle": "Track income, expenses, and send reports",
+    "monthlyOverview": "Monthly Overview",
+    "totalIncome": "Total Income",
+    "totalExpenses": "Total Expenses",
+    "netProfit": "Net Profit",
+    "incomeBreakdown": "Income Breakdown",
+    "expensesList": "Expenses",
+    "noIncome": "No income this month",
+    "noExpenses": "No expenses this month",
+    "addExpense": "Add Expense",
+    "deleteExpense": "Delete Expense",
+    "deleteExpenseConfirm": "Are you sure you want to delete this expense?",
+    "expenseAdded": "Expense added successfully",
+    "expenseDeleted": "Expense deleted",
+    "expenseAddFailed": "Failed to add expense",
+    "expenseDeleteFailed": "Failed to delete expense",
+    "amount": "Amount",
+    "amountPlaceholder": "0.00",
+    "description": "Description",
+    "descriptionPlaceholder": "What was this expense for?",
+    "category": "Category",
+    "date": "Date",
+    "appointments": "appointments",
+    "priceNote": "Income is calculated using current service prices",
+    "accountantSettings": "Accountant Settings",
+    "businessNumber": "Business Number",
+    "businessNumberPlaceholder": "e.g. 514788017",
+    "accountantEmail": "Accountant Email",
+    "accountantEmailPlaceholder": "accountant@example.com",
+    "settingsSaved": "Settings saved successfully",
+    "settingsSaveFailed": "Failed to save settings",
+    "loading": "Loading financial data...",
+    "categories": {
+      "rent": "Rent",
+      "supplies": "Supplies",
+      "equipment": "Equipment",
+      "marketing": "Marketing",
+      "other": "Other"
+    }
   }
 }
 

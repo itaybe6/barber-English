@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Modal, TextInput, ActivityIndicator, Switch, Image, KeyboardAvoidingView, Platform, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Modal, Pressable, TextInput, ActivityIndicator, Switch, Image, KeyboardAvoidingView, Platform, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -49,6 +49,7 @@ export default function ClientProfileScreen() {
   const couponsCombinedTranslateY = Animated.add(couponsTranslateY as any, couponsDragY as any);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const formatTimeHHMM = (t?: string | null): string => {
     if (!t) return '';
     return formatTime12Hour(t);
@@ -164,21 +165,13 @@ export default function ClientProfileScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert(
-      t('profile.logout.title', 'Log out'),
-      t('profile.logout.message', 'Are you sure you want to log out?'),
-      [
-        { text: t('cancel', 'Cancel'), style: 'cancel' },
-        { 
-          text: t('profile.logout.confirm', 'Log out'), 
-          style: 'destructive',
-          onPress: () => {
-            logout();
-            router.replace('/(client-tabs)');
-          }
-        }
-      ]
-    );
+    setShowLogoutModal(true);
+  };
+
+  const confirmLogout = () => {
+    setShowLogoutModal(false);
+    logout();
+    router.replace('/(client-tabs)');
   };
 
   const menuItems = [
@@ -645,6 +638,35 @@ export default function ClientProfileScreen() {
           </ScrollView>
         </View>
       </SafeAreaView>
+
+      {/* Logout Confirmation Modal */}
+      <Modal
+        visible={showLogoutModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowLogoutModal(false)}
+      >
+        <Pressable style={styles.logoutOverlay} onPress={() => setShowLogoutModal(false)}>
+          <Pressable style={styles.logoutDialog} onPress={() => {}}>
+            <Text style={styles.logoutDialogTitle}>{t('profile.logout.title', 'Log out')}</Text>
+            <Text style={styles.logoutDialogMessage}>{t('profile.logout.message', 'Are you sure you want to log out?')}</Text>
+            <View style={styles.logoutDialogButtons}>
+              <TouchableOpacity
+                style={[styles.logoutDialogBtn, styles.logoutDialogCancelBtn]}
+                onPress={() => setShowLogoutModal(false)}
+              >
+                <Text style={styles.logoutDialogCancelText}>{t('cancel', 'Cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.logoutDialogBtn, { backgroundColor: businessColors.primary }]}
+                onPress={confirmLogout}
+              >
+                <Text style={styles.logoutDialogConfirmText}>{t('profile.logout.confirm', 'Log out')}</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Edit Profile Modal */}
       <Modal visible={isEditOpen} transparent animationType="slide" onRequestClose={() => setIsEditOpen(false)}>
@@ -1734,6 +1756,66 @@ const styles = StyleSheet.create<any>({
   switch: {
     transform: [{ scaleX: 1.1 }, { scaleY: 1.1 }],
   },
+  logoutOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoutDialog: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 20,
+    width: '82%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  logoutDialogTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.text,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  logoutDialogMessage: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  logoutDialogButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  logoutDialogBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoutDialogCancelBtn: {
+    backgroundColor: '#F2F2F7',
+  },
+  logoutDialogCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  logoutDialogConfirmText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
+  },
+
   logoutButton: {
     marginTop: 8,
     marginHorizontal: 16,

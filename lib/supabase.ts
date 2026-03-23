@@ -253,8 +253,22 @@ export interface BusinessProfile {
   booking_open_days?: number;
   // New per-barber booking open days map: { [userId: string]: number }
   booking_open_days_by_user?: Record<string, number>;
+  business_number?: string;
+  accountant_email?: string;
   created_at: string;
   updated_at: string;
+}
+
+export type ExpenseCategory = 'rent' | 'supplies' | 'equipment' | 'marketing' | 'other';
+
+export interface BusinessExpense {
+  id: string;
+  business_id: string;
+  amount: number;
+  description?: string;
+  category: ExpenseCategory;
+  expense_date: string; // YYYY-MM-DD
+  created_at: string;
 }
 
 // Product interface for products table

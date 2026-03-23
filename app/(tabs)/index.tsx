@@ -140,6 +140,7 @@ export default function HomeScreen() {
   const fetchProducts = useProductsStore((state) => state.fetchProducts);
 
   const isAdmin = useAuthStore((state) => state.isAdmin);
+  const isSuperAdmin = useAuthStore((state) => state.isSuperAdmin);
   const user = useAuthStore((state) => state.user);
   const unreadCount = useNotificationsStore((state) => state.unreadCount);
   const fetchUnread = useNotificationsStore((state) => state.fetchUnreadCount);
@@ -312,6 +313,7 @@ export default function HomeScreen() {
 
   // Fetch next appointment from database
   const fetchNextAppointment = async () => {
+    if (isSuperAdmin) { setLoadingNextAppointment(false); return; }
     try {
       setLoadingNextAppointment(true);
       const now = new Date();
@@ -351,6 +353,7 @@ export default function HomeScreen() {
 
   // Fetch today's appointments count
   const fetchTodayAppointmentsCount = async () => {
+    if (isSuperAdmin) { setLoadingTodayCount(false); return; }
     try {
       setLoadingTodayCount(true);
       const today = new Date().toISOString().split('T')[0];
@@ -385,6 +388,7 @@ export default function HomeScreen() {
 
   // Fetch monthly statistics
   const fetchMonthlyStats = async () => {
+    if (isSuperAdmin) { setLoadingStats(false); return; }
     try {
       setLoadingStats(true);
       const now = new Date();

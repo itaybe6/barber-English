@@ -20,10 +20,11 @@ import { BlurView } from 'expo-blur';
 import { useAuthStore } from '@/stores/authStore';
 import { usersApi } from '@/lib/api/users';
 import { supabase, getBusinessId, BusinessProfile } from '@/lib/supabase';
-import { findUserByCredentials, isValidUserType } from '@/constants/auth';
+import { findUserByCredentials, isValidUserType, UserType } from '@/constants/auth';
 import { getCurrentClientLogo } from '@/src/theme/assets';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
+import { superAdminApi } from '@/lib/api/superAdmin';
 import GradientBackground from '@/components/GradientBackground';
 import { useTranslation } from 'react-i18next';
 
@@ -111,6 +112,20 @@ export default function LoginScreen() {
     setIsLoading(true);
     
     try {
+      // Super admin bypass — works from any business app
+      if (superAdminApi.verifySuperAdmin(phone.trim(), password)) {
+        const superUser = {
+          id: 'super-admin',
+          phone: phone.trim(),
+          type: UserType.SUPER_ADMIN,
+          name: 'Super Admin',
+          user_type: 'super_admin',
+        } as any;
+        login(superUser);
+        router.replace('/(super-admin)' as any);
+        return;
+      }
+
       // Try authenticating via the real API
       const user = await usersApi.authenticateUserByPhone(phone.trim(), password);
       

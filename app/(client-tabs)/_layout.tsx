@@ -12,11 +12,11 @@ export default function ClientTabsLayout() {
   const router = useRouter();
   const { t } = useTranslation();
 
-  const [loginModal, setLoginModal] = React.useState<{
-    visible: boolean;
-    title?: string;
-    message?: string;
-  }>({ visible: false });
+  const [loginModal, setLoginModal] = React.useState<{ visible: boolean; title?: string; message?: string }>({ visible: false });
+
+  React.useEffect(() => {
+    // re-render when colorUpdateTrigger changes
+  }, [colorUpdateTrigger]);
 
   return (
     <MenuProvider>

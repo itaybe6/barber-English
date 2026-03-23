@@ -1,0 +1,92 @@
+{
+  "expo": {
+    "name": "Adie",
+    "slug": "adie",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./branding/Adie/icon.png",
+    "scheme": "adie",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./branding/Adie/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "buildNumber": "1",
+      "supportsTablet": true,
+      "bundleIdentifier": "com.adie.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleDevelopmentRegion": "en",
+        "CFBundleAllowMixedLocalizations": true,
+        "NSPhotoLibraryUsageDescription": "The app needs access to photos to select and upload images to the gallery or profile.",
+        "NSPhotoLibraryAddUsageDescription": "The app may save photos you've taken to your photo library.",
+        "NSCameraUsageDescription": "The app needs access to the camera to take photos for upload."
+      },
+      "jsEngine": "hermes"
+    },
+    "android": {
+      "package": "com.adie.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./branding/Adie/icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "intentFilters": [
+        {
+          "autoVerify": true,
+          "action": "VIEW",
+          "data": {
+            "scheme": "https",
+            "host": "adie.com"
+          },
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
+      "supportsRtl": false
+    },
+    "web": {
+      "favicon": "./branding/Adie/icon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://adie.com/"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#ffffff"
+        }
+      ],
+      "expo-web-browser",
+      "expo-font",
+      "expo-localization"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "locales": {
+      "he": "./assets/locales/he.json"
+    },
+    "extra": {
+      "router": {
+        "origin": "https://adie.com/"
+      },
+      "eas": {
+        "projectId": ""
+      },
+      "locale": "en",
+      "CLIENT": "Adie",
+      "BUSINESS_ID": "f51d2553-2433-4a74-ad75-873e3c8407ee",
+      "logo": "./branding/Adie/logo.png",
+      "logoWhite": "./branding/Adie/logo-white.png"
+    }
+  }
+}

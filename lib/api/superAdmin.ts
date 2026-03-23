@@ -1,8 +1,16 @@
 import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'expo-crypto';
+import { decode } from 'base64-arraybuffer';
 
 const SA_P = process.env.EXPO_PUBLIC_SA_P || '';
 const SA_K = process.env.EXPO_PUBLIC_SA_K || '';
+
+const serviceRoleKey = process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || '';
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+const adminSupabase = serviceRoleKey && supabaseUrl
+  ? createClient(supabaseUrl, serviceRoleKey)
+  : null;
 
 export interface BusinessOverview {
   id: string;
@@ -62,45 +70,59 @@ export const superAdminApi = {
     }
   },
 
-  async uploadBrandingImage(businessName: string, fileName: string, uri: string): Promise<string | null> {
+  async uploadBrandingFile(clientName: string, fileName: string, body: string, contentType: string, isBase64 = false): Promise<string | null> {
+    const client = adminSupabase || supabase;
     try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const ext = fileName.split('.').pop() || 'png';
-      const storagePath = `branding/${businessName}/${fileName}`;
+      const storagePath = `branding/${clientName}/${fileName}`;
 
-      const { error } = await supabase.storage
+      let uploadBody: ArrayBuffer;
+      if (isBase64) {
+        uploadBody = decode(body.replace(/^data:[^;]+;base64,/, ''));
+      } else {
+        const bytes = new TextEncoder().encode(body);
+        uploadBody = bytes.buffer as ArrayBuffer;
+      }
+
+      const { error } = await client.storage
         .from('app_design')
-        .upload(storagePath, blob, { contentType: `image/${ext}`, upsert: true });
+        .upload(storagePath, uploadBody, { contentType, upsert: true });
 
       if (error) {
         console.error(`Error uploading ${fileName}:`, error);
         return null;
       }
 
-      const { data: urlData } = supabase.storage.from('app_design').getPublicUrl(storagePath);
+      const { data: urlData } = client.storage.from('app_design').getPublicUrl(storagePath);
       return urlData?.publicUrl || null;
     } catch (err) {
-      console.error(`Error uploading branding image ${fileName}:`, err);
+      console.error(`Error uploading branding file ${fileName}:`, err);
       return null;
     }
   },
 
   async createBusiness(params: {
     businessName: string;
+    clientName: string;
     adminName: string;
     adminPhone: string;
     adminPassword: string;
     address?: string;
     primaryColor?: string;
-    logoUri?: string;
-    iconUri?: string;
-    splashUri?: string;
-  }): Promise<{ businessId: string } | null> {
+    logoBase64?: string;
+    iconBase64?: string;
+    splashBase64?: string;
+  }): Promise<{ businessId: string; clientName: string } | null> {
     try {
       const businessId = randomUUID();
-      const safeName = params.businessName.replace(/[^a-zA-Z0-9\u0590-\u05FF]/g, '_');
+      const clientName = params.clientName.replace(/[^a-zA-Z0-9]/g, '');
+      if (!clientName) {
+        console.error('Client name must contain at least one English letter or digit');
+        return null;
+      }
+      const slug = clientName.toLowerCase();
+      const color = params.primaryColor || '#000000';
 
+      // 1. Create business profile
       const { error: profileError } = await supabase
         .from('business_profile')
         .insert({
@@ -108,7 +130,7 @@ export const superAdminApi = {
           display_name: params.businessName,
           address: params.address || '',
           phone: params.adminPhone,
-          primary_color: params.primaryColor || '#000000',
+          primary_color: color,
           home_hero_images: [],
           break_by_user: {},
           booking_open_days_by_user: {},
@@ -121,6 +143,7 @@ export const superAdminApi = {
         return null;
       }
 
+      // 2. Create admin user
       const hashedPassword = params.adminPassword === '123456'
         ? 'default_hash'
         : `hash_${params.adminPassword}`;
@@ -141,36 +164,141 @@ export const superAdminApi = {
         return null;
       }
 
+      // 3. Create default services
       const defaultServices = [
         { name: 'Gel Nails', price: 150, duration_minutes: 60, is_active: true, business_id: businessId },
         { name: 'Gel Removal', price: 50, duration_minutes: 30, is_active: true, business_id: businessId },
         { name: 'Manicure', price: 80, duration_minutes: 45, is_active: true, business_id: businessId },
       ];
 
-      const { error: servicesError } = await supabase
-        .from('services')
-        .insert(defaultServices);
+      const { error: servicesError } = await supabase.from('services').insert(defaultServices);
+      if (servicesError) console.error('Error creating default services (non-fatal):', servicesError);
 
-      if (servicesError) {
-        console.error('Error creating default services (non-fatal):', servicesError);
+      // 4. Generate branding config files & upload everything to storage
+      const envContent = [
+        `# ${params.businessName} Environment Configuration`,
+        `EXPO_PUBLIC_SUPABASE_URL=${process.env.EXPO_PUBLIC_SUPABASE_URL || ''}`,
+        `EXPO_PUBLIC_SUPABASE_ANON_KEY=${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ''}`,
+        `EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY=${process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || ''}`,
+        `BUSINESS_ID=${businessId}`,
+        `CLIENT_NAME=${clientName}`,
+        '',
+      ].join('\n');
+
+      const appConfigObj = {
+        expo: {
+          name: params.businessName,
+          slug: slug,
+          version: '1.0.0',
+          orientation: 'portrait',
+          icon: `./branding/${clientName}/icon.png`,
+          scheme: slug,
+          userInterfaceStyle: 'automatic',
+          splash: {
+            image: `./branding/${clientName}/splash.png`,
+            resizeMode: 'contain',
+            backgroundColor: '#ffffff',
+          },
+          ios: {
+            buildNumber: '1',
+            supportsTablet: true,
+            bundleIdentifier: `com.${slug}.app`,
+            infoPlist: {
+              ITSAppUsesNonExemptEncryption: false,
+              CFBundleDevelopmentRegion: 'en',
+              CFBundleAllowMixedLocalizations: true,
+              NSPhotoLibraryUsageDescription:
+                'The app needs access to photos to select and upload images to the gallery or profile.',
+              NSPhotoLibraryAddUsageDescription:
+                'The app may save photos you\'ve taken to your photo library.',
+              NSCameraUsageDescription:
+                'The app needs access to the camera to take photos for upload.',
+            },
+            jsEngine: 'hermes',
+          },
+          android: {
+            package: `com.${slug}.app`,
+            versionCode: 1,
+            adaptiveIcon: {
+              foregroundImage: `./branding/${clientName}/icon.png`,
+              backgroundColor: '#ffffff',
+            },
+            intentFilters: [
+              {
+                autoVerify: true,
+                action: 'VIEW',
+                data: { scheme: 'https', host: `${slug}.com` },
+                category: ['BROWSABLE', 'DEFAULT'],
+              },
+            ],
+            supportsRtl: false,
+          },
+          web: { favicon: `./branding/${clientName}/icon.png` },
+          plugins: [
+            ['expo-router', { origin: `https://${slug}.com/` }],
+            ['expo-notifications', { color: '#ffffff' }],
+            'expo-web-browser',
+            'expo-font',
+            'expo-localization',
+          ],
+          experiments: { typedRoutes: true },
+          locales: { he: './assets/locales/he.json' },
+          extra: {
+            router: { origin: `https://${slug}.com/` },
+            eas: { projectId: '' },
+            locale: 'en',
+            CLIENT: clientName,
+            BUSINESS_ID: businessId,
+            logo: `./branding/${clientName}/logo.png`,
+            logoWhite: `./branding/${clientName}/logo-white.png`,
+          },
+        },
+      };
+
+      const themeObj = {
+        colors: {
+          primary: color,
+          secondary: color + 'CC',
+          accent: '#FF3B30',
+          background: '#FFFFFF',
+          surface: '#F2F2F7',
+          text: '#1C1C1E',
+          textSecondary: '#8E8E93',
+          border: '#E5E5EA',
+          success: '#34C759',
+          warning: '#FF9500',
+          error: '#FF3B30',
+          info: '#007AFF',
+        },
+        branding: {
+          logo: `./branding/${clientName}/logo.png`,
+          logoWhite: `./branding/${clientName}/logo-white.png`,
+          companyName: params.businessName,
+          website: `https://${slug}.com`,
+          supportEmail: `support@${slug}.com`,
+        },
+        fonts: { primary: 'System', secondary: 'System' },
+      };
+
+      const uploads: Promise<any>[] = [
+        this.uploadBrandingFile(clientName, '.env', envContent, 'text/plain'),
+        this.uploadBrandingFile(clientName, 'app.config.json', JSON.stringify(appConfigObj, null, 2), 'application/json'),
+        this.uploadBrandingFile(clientName, 'theme.json', JSON.stringify(themeObj, null, 2), 'application/json'),
+      ];
+
+      if (params.logoBase64) {
+        uploads.push(this.uploadBrandingFile(clientName, 'logo.png', params.logoBase64, 'image/png', true));
+      }
+      if (params.iconBase64) {
+        uploads.push(this.uploadBrandingFile(clientName, 'icon.png', params.iconBase64, 'image/png', true));
+      }
+      if (params.splashBase64) {
+        uploads.push(this.uploadBrandingFile(clientName, 'splash.png', params.splashBase64, 'image/png', true));
       }
 
-      // Upload branding images (non-blocking)
-      const uploads: Promise<void>[] = [];
-      if (params.logoUri) {
-        uploads.push(this.uploadBrandingImage(safeName, 'logo.png', params.logoUri).then(() => {}));
-      }
-      if (params.iconUri) {
-        uploads.push(this.uploadBrandingImage(safeName, 'icon.png', params.iconUri).then(() => {}));
-      }
-      if (params.splashUri) {
-        uploads.push(this.uploadBrandingImage(safeName, 'splash.png', params.splashUri).then(() => {}));
-      }
-      if (uploads.length > 0) {
-        await Promise.allSettled(uploads);
-      }
+      await Promise.allSettled(uploads);
 
-      return { businessId };
+      return { businessId, clientName };
     } catch (err) {
       console.error('Error in createBusiness:', err);
       return null;

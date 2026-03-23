@@ -46,14 +46,15 @@ export default function SuperAdminDashboard() {
   const [creating, setCreating] = useState(false);
 
   const [newBizName, setNewBizName] = useState('');
+  const [newClientName, setNewClientName] = useState('');
   const [newAdminName, setNewAdminName] = useState('');
   const [newAdminPhone, setNewAdminPhone] = useState('');
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [newAddress, setNewAddress] = useState('');
   const [newColor, setNewColor] = useState('#000000');
-  const [logoUri, setLogoUri] = useState<string | null>(null);
-  const [iconUri, setIconUri] = useState<string | null>(null);
-  const [splashUri, setSplashUri] = useState<string | null>(null);
+  const [logoAsset, setLogoAsset] = useState<{ uri: string; base64: string } | null>(null);
+  const [iconAsset, setIconAsset] = useState<{ uri: string; base64: string } | null>(null);
+  const [splashAsset, setSplashAsset] = useState<{ uri: string; base64: string } | null>(null);
 
   const loadBusinesses = useCallback(async () => {
     const data = await superAdminApi.getAllBusinesses();
@@ -77,39 +78,52 @@ export default function SuperAdminDashboard() {
   const totalClients = businesses.reduce((sum, b) => sum + b.clientCount, 0);
   const totalAdmins = businesses.reduce((sum, b) => sum + b.adminCount, 0);
 
-  const pickImage = async (setter: (uri: string | null) => void) => {
+  const pickImage = async (setter: (v: { uri: string; base64: string } | null) => void) => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
       quality: 0.9,
+      base64: true,
     });
     if (!result.canceled && result.assets[0]) {
-      setter(result.assets[0].uri);
+      const a = result.assets[0] as any;
+      if (a.base64) {
+        setter({ uri: a.uri, base64: a.base64 });
+      }
     }
   };
 
   const handleCreate = async () => {
-    if (!newBizName.trim() || !newAdminName.trim() || !newAdminPhone.trim() || !newAdminPassword.trim()) {
+    const trimmedClient = newClientName.trim().replace(/[^a-zA-Z0-9]/g, '');
+    if (!newBizName.trim() || !trimmedClient || !newAdminName.trim() || !newAdminPhone.trim() || !newAdminPassword.trim()) {
       Alert.alert('שדות חסרים', 'יש למלא את כל השדות המסומנים בכוכבית.');
+      return;
+    }
+    if (!/^[a-zA-Z]/.test(trimmedClient)) {
+      Alert.alert('שם אפליקציה לא תקין', 'שם האפליקציה (באנגלית) חייב להתחיל באות.');
       return;
     }
 
     setCreating(true);
     const result = await superAdminApi.createBusiness({
       businessName: newBizName.trim(),
+      clientName: trimmedClient,
       adminName: newAdminName.trim(),
       adminPhone: newAdminPhone.trim(),
       adminPassword: newAdminPassword.trim(),
       address: newAddress.trim(),
       primaryColor: newColor.trim(),
-      logoUri: logoUri || undefined,
-      iconUri: iconUri || undefined,
-      splashUri: splashUri || undefined,
+      logoBase64: logoAsset?.base64,
+      iconBase64: iconAsset?.base64,
+      splashBase64: splashAsset?.base64,
     });
     setCreating(false);
 
     if (result) {
-      Alert.alert('נוצר בהצלחה!', `העסק "${newBizName}" נוצר בהצלחה.\n\nמזהה עסק:\n${result.businessId}\n\n3 שירותים נוצרו אוטומטית.`);
+      Alert.alert(
+        'נוצר בהצלחה!',
+        `העסק "${newBizName}" נוצר בהצלחה.\n\nמזהה עסק:\n${result.businessId}\n\nשם אפליקציה: ${result.clientName}\n\nכדי להוריד את תיקיית הברנדינג הרץ:\nnode scripts/pull-branding.mjs ${result.clientName}`,
+      );
       resetForm();
       await loadBusinesses();
       setActiveTab('dashboard');
@@ -120,14 +134,15 @@ export default function SuperAdminDashboard() {
 
   const resetForm = () => {
     setNewBizName('');
+    setNewClientName('');
     setNewAdminName('');
     setNewAdminPhone('');
     setNewAdminPassword('');
     setNewAddress('');
     setNewColor('#000000');
-    setLogoUri(null);
-    setIconUri(null);
-    setSplashUri(null);
+    setLogoAsset(null);
+    setIconAsset(null);
+    setSplashAsset(null);
   };
 
   const handleLogout = () => {
@@ -145,12 +160,12 @@ export default function SuperAdminDashboard() {
   };
 
   // ─── Image Picker Tile ───
-  const renderImagePicker = (label: string, uri: string | null, setter: (v: string | null) => void, hint: string) => (
+  const renderImagePicker = (label: string, asset: { uri: string; base64: string } | null, setter: (v: { uri: string; base64: string } | null) => void, hint: string) => (
     <View style={styles.imgPickerWrap}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <TouchableOpacity style={styles.imgPickerBtn} onPress={() => pickImage(setter)} activeOpacity={0.7}>
-        {uri ? (
-          <Image source={{ uri }} style={styles.imgPickerPreview} />
+        {asset ? (
+          <Image source={{ uri: asset.uri }} style={styles.imgPickerPreview} />
         ) : (
           <View style={styles.imgPickerEmpty}>
             <Ionicons name="cloud-upload-outline" size={28} color={ACCENT} />
@@ -158,7 +173,7 @@ export default function SuperAdminDashboard() {
           </View>
         )}
       </TouchableOpacity>
-      {uri && (
+      {asset && (
         <TouchableOpacity style={styles.imgRemoveBtn} onPress={() => setter(null)}>
           <Ionicons name="trash-outline" size={14} color="#FF6B6B" />
           <Text style={styles.imgRemoveText}>הסר</Text>
@@ -294,6 +309,10 @@ export default function SuperAdminDashboard() {
         <Text style={styles.fieldLabel}>שם העסק *</Text>
         <TextInput style={styles.input} placeholder="לדוגמה: הסטודיו של שרה" placeholderTextColor={TEXT_MUTED} value={newBizName} onChangeText={setNewBizName} textAlign="right" />
 
+        <Text style={styles.fieldLabel}>שם אפליקציה (באנגלית) *</Text>
+        <TextInput style={styles.input} placeholder="לדוגמה: SarahStudio" placeholderTextColor={TEXT_MUTED} value={newClientName} onChangeText={setNewClientName} autoCapitalize="none" autoCorrect={false} textAlign="left" />
+        <Text style={styles.clientNameHint}>ישמש כשם תיקייה ושם חבילה — אותיות ומספרים בלבד</Text>
+
         <Text style={styles.fieldLabel}>כתובת</Text>
         <TextInput style={styles.input} placeholder="לדוגמה: תל אביב, דיזנגוף 50" placeholderTextColor={TEXT_MUTED} value={newAddress} onChangeText={setNewAddress} textAlign="right" />
 
@@ -324,9 +343,9 @@ export default function SuperAdminDashboard() {
         <Text style={styles.brandHint}>התמונות יישמרו בתיקיית branding של האפליקציה</Text>
 
         <View style={styles.imgRow}>
-          {renderImagePicker('לוגו', logoUri, setLogoUri, 'העלה לוגו')}
-          {renderImagePicker('אייקון', iconUri, setIconUri, 'העלה אייקון')}
-          {renderImagePicker('ספלאש', splashUri, setSplashUri, 'העלה ספלאש')}
+          {renderImagePicker('לוגו', logoAsset, setLogoAsset, 'העלה לוגו')}
+          {renderImagePicker('אייקון', iconAsset, setIconAsset, 'העלה אייקון')}
+          {renderImagePicker('ספלאש', splashAsset, setSplashAsset, 'העלה ספלאש')}
         </View>
       </View>
 
@@ -539,6 +558,7 @@ const styles = StyleSheet.create({
     borderColor: CARD_BORDER,
     textAlign: 'right',
   },
+  clientNameHint: { fontSize: 11, color: TEXT_MUTED, marginTop: 4, textAlign: 'left' },
   colorRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
   colorPreview: { width: 50, height: 50, borderRadius: 14, borderWidth: 1, borderColor: CARD_BORDER },
 

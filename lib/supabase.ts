@@ -255,6 +255,12 @@ export interface BusinessProfile {
   booking_open_days_by_user?: Record<string, number>;
   business_number?: string;
   accountant_email?: string;
+  /** 1–28: day of month (Asia/Jerusalem) to email the previous month’s report */
+  accountant_report_day_of_month?: number;
+  /** HH:mm 24h, interpreted in Asia/Jerusalem on the server */
+  accountant_report_time?: string;
+  /** YYYY-MM of the report month last emailed (deduplication) */
+  accountant_report_last_sent_period?: string | null;
   created_at: string;
   updated_at: string;
 }

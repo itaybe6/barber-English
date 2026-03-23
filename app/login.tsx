@@ -9,11 +9,10 @@ import {
   ScrollView,
   Image,
   Dimensions,
-  Platform,
   KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import Animated, {
-  useAnimatedKeyboard,
   useAnimatedStyle,
   withTiming,
   withSpring,
@@ -23,9 +22,6 @@ import Animated, {
   useSharedValue,
   interpolate,
   Easing,
-  FadeIn,
-  FadeInDown,
-  FadeInUp,
 } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, Link } from 'expo-router';
@@ -190,16 +186,6 @@ export default function LoginScreen() {
 
   const primary = businessColors.primary;
 
-  // ── Keyboard ──
-  const keyboard = useAnimatedKeyboard();
-  const formLiftStyle = useAnimatedStyle(() => {
-    const raw = keyboard.height.value;
-    const offset = Math.max(raw - insets.bottom, 0);
-    return {
-      transform: [{ translateY: withTiming(raw > 0 ? -(offset * 0.3) : 0, { duration: 220 }) }],
-    };
-  });
-
   // ── Logo float ──
   const logoFloat = useSharedValue(0);
   const logoGlow = useSharedValue(0);
@@ -232,8 +218,6 @@ export default function LoginScreen() {
   const btnAnimStyle = useAnimatedStyle(() => ({
     transform: [{ scale: btnScale.value }],
   }));
-
-  useEffect(() => {}, [isAuthenticated, user]);
 
   // ── Login handler ──
   const handleLogin = async () => {
@@ -336,92 +320,89 @@ export default function LoginScreen() {
         />
         <DriftingCircle
           size={320} left={-80} top={-60}
-          color={hexToRgba(primary, 0.22)}
+          color={hexToRgba(primary, 0.48)}
           driftMs={5000} delayMs={0} driftX={50} driftY={40}
         />
         <DriftingCircle
           size={260} left={SW * 0.5} top={SH * 0.05}
-          color={hexToRgba(shiftHex(primary, 30), 0.18)}
+          color={hexToRgba(shiftHex(primary, 30), 0.42)}
           driftMs={6200} delayMs={700} driftX={-45} driftY={55}
         />
         <DriftingCircle
           size={200} left={-40} top={SH * 0.3}
-          color={hexToRgba(shiftHex(primary, -20), 0.16)}
+          color={hexToRgba(shiftHex(primary, -20), 0.38)}
           driftMs={4800} delayMs={1200} driftX={60} driftY={-35}
         />
         <DriftingCircle
           size={150} left={SW * 0.65} top={SH * 0.38}
-          color={hexToRgba(shiftHex(primary, 50), 0.14)}
+          color={hexToRgba(shiftHex(primary, 50), 0.35)}
           driftMs={5500} delayMs={400} driftX={-30} driftY={-50}
         />
         <DriftingCircle
           size={100} left={SW * 0.2} top={SH * 0.55}
-          color={hexToRgba(primary, 0.12)}
+          color={hexToRgba(primary, 0.32)}
           driftMs={4200} delayMs={1800} driftX={40} driftY={30}
         />
       </View>
 
-      {/* ── Content (no BlurView — fixes Android keyboard / focus) ─────── */}
-      <SafeAreaView style={styles.safeArea}>
+      {/* ── Content — same pattern as register.tsx for reliable keyboard focus ─ */}
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <KeyboardAvoidingView
+          enabled={Platform.OS !== 'ios'}
+          behavior="height"
           style={styles.keyboardAvoid}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
         >
         <ScrollView
+          style={styles.scrollFlex}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="always"
-          keyboardDismissMode="on-drag"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'none' : 'on-drag'}
           showsVerticalScrollIndicator={false}
+          scrollEnabled={true}
           bounces={false}
+          alwaysBounceVertical={false}
+          overScrollMode="never"
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          removeClippedSubviews={false}
         >
+          {/* Centered login block: logo + card */}
+          <View style={styles.centeredBlock} pointerEvents="box-none">
+            {/* Logo — plain View (no Reanimated entering — can break TextInput focus) */}
+            <View style={styles.logoSection} pointerEvents="box-none">
+              <Animated.View style={logoFloatStyle} pointerEvents="box-none">
+                <Animated.View
+                  pointerEvents="none"
+                  style={[styles.logoGlow, { backgroundColor: hexToRgba(primary, 1) }, logoGlowStyle]}
+                />
+                <Image
+                  source={getCurrentClientLogo()}
+                  style={styles.logo}
+                  resizeMode="contain"
+                />
+              </Animated.View>
+            </View>
 
-          {/* Logo top section */}
-          <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.logoSection}>
-            <Animated.View style={logoFloatStyle}>
-              {/* Glow behind logo */}
-              <Animated.View
-                pointerEvents="none"
-                style={[styles.logoGlow, { backgroundColor: hexToRgba(primary, 1) }, logoGlowStyle]}
-              />
-              <Image
-                source={getCurrentClientLogo()}
-                style={styles.logo}
-                resizeMode="contain"
-              />
-            </Animated.View>
-          </Animated.View>
-
-          {/* ── Light form card (solid View — TextInput focus works everywhere) ─ */}
-          <Animated.View
-            style={[styles.cardWrapper, formLiftStyle]}
-            entering={FadeInUp.delay(200).springify()}
-          >
+            {/* Form card — plain View + collapsable={false} for Android touch */}
+            <View style={styles.cardWrapper} collapsable={false}>
             <View style={[styles.card, { paddingBottom: bottomPad + 8 }]}>
-              {/* Top accent line */}
               <View style={[styles.accentLine, { backgroundColor: hexToRgba(primary, 0.8) }]} />
 
-              {/* Header */}
-              <Animated.View entering={FadeIn.delay(380)} style={styles.header}>
+              <View style={styles.header}>
                 <Text style={styles.titleText}>
                   {t('login.form.title', 'כניסה לחשבון')}
                 </Text>
                 <Text style={styles.subtitleText}>
                   {t('login.form.subtitle', 'הכנס את הפרטים שלך כדי להמשיך')}
                 </Text>
-              </Animated.View>
+              </View>
 
-              {/* Phone field */}
-              <Animated.View entering={FadeInDown.delay(500).springify()} style={styles.fieldWrap}>
+              {/* Phone field — avoid elevation/shadow on focus (breaks keyboard on Android) */}
+              <View style={styles.fieldWrap} collapsable={false}>
                 <View style={[
                   styles.inputRow,
                   phoneFocused && {
                     borderColor: primary,
                     borderWidth: 1.8,
-                    shadowColor: primary,
-                    shadowOpacity: 0.35,
-                    shadowRadius: 10,
-                    elevation: 6,
                   },
                 ]}>
                   <Ionicons
@@ -439,24 +420,20 @@ export default function LoginScreen() {
                     keyboardType="phone-pad"
                     autoCorrect={false}
                     textAlign="left"
-                    editable
+                    showSoftInputOnFocus={true}
                     onFocus={() => setPhoneFocused(true)}
                     onBlur={() => setPhoneFocused(false)}
                   />
                 </View>
-              </Animated.View>
+              </View>
 
-              {/* Password field */}
-              <Animated.View entering={FadeInDown.delay(600).springify()} style={styles.fieldWrap}>
+              {/* Password field — avoid elevation/shadow on focus (breaks keyboard on Android) */}
+              <View style={styles.fieldWrap} collapsable={false}>
                 <View style={[
                   styles.inputRow,
                   passFocused && {
                     borderColor: primary,
                     borderWidth: 1.8,
-                    shadowColor: primary,
-                    shadowOpacity: 0.35,
-                    shadowRadius: 10,
-                    elevation: 6,
                   },
                 ]}>
                   <Ionicons
@@ -474,7 +451,7 @@ export default function LoginScreen() {
                     secureTextEntry={!showPassword}
                     autoCapitalize="none"
                     textAlign="left"
-                    editable
+                    showSoftInputOnFocus={true}
                     onFocus={() => setPassFocused(true)}
                     onBlur={() => setPassFocused(false)}
                   />
@@ -490,13 +467,10 @@ export default function LoginScreen() {
                     />
                   </TouchableOpacity>
                 </View>
-              </Animated.View>
+              </View>
 
               {/* Login button */}
-              <Animated.View
-                entering={FadeInUp.delay(700).springify()}
-                style={btnAnimStyle}
-              >
+              <Animated.View style={btnAnimStyle}>
                 <TouchableOpacity
                   onPressIn={() => { btnScale.value = withTiming(0.96, { duration: 80 }); }}
                   onPressOut={() => { btnScale.value = withSpring(1, { damping: 12, stiffness: 220 }); }}
@@ -523,7 +497,7 @@ export default function LoginScreen() {
               </Animated.View>
 
               {/* Links */}
-              <Animated.View entering={FadeIn.delay(820)} style={styles.linksWrap}>
+              <View style={styles.linksWrap}>
                 <TouchableOpacity onPress={() => setIsForgotOpen(true)} hitSlop={{ top: 8, bottom: 8 }}>
                   <Text style={[styles.forgotText, { color: '#6B7280' }]}>
                     {t('login.forgotPassword', 'שכחת סיסמה?')}
@@ -546,18 +520,19 @@ export default function LoginScreen() {
                     </TouchableOpacity>
                   </Link>
                 </View>
-              </Animated.View>
+              </View>
 
             </View>
-          </Animated.View>
+          </View>
+          </View>
         </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
 
       {/* ── Forgot Password Modal ────────────────────────────────────────── */}
       {isForgotOpen && (
-        <Animated.View style={styles.modalOverlay} entering={FadeIn.duration(200)}>
-          <Animated.View style={styles.modalCard} entering={FadeInUp.delay(60).springify()}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
 
             {/* Colored top stripe */}
             <LinearGradient
@@ -631,8 +606,8 @@ export default function LoginScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          </Animated.View>
-        </Animated.View>
+          </View>
+        </View>
       )}
     </View>
   );
@@ -649,17 +624,29 @@ const styles = StyleSheet.create({
   keyboardAvoid: {
     flex: 1,
   },
+  scrollFlex: {
+    flex: 1,
+  },
   scroll: {
     flexGrow: 1,
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 24,
+    paddingBottom: 32,
+  },
+
+  // ── Centered block (logo + card) ──
+  centeredBlock: {
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+    paddingHorizontal: 24,
   },
 
   // ── Logo ──
   logoSection: {
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingBottom: 18,
-    paddingTop: 20,
+    paddingBottom: 20,
   },
   logoGlow: {
     position: 'absolute',
@@ -675,25 +662,22 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
 
-  // ── Light card ──
+  // ── Centered card (rounded on all corners) ──
   cardWrapper: {
-    borderTopLeftRadius: 36,
-    borderTopRightRadius: 36,
+    borderRadius: 28,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.12)',
     shadowColor: '#000',
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.12,
     shadowRadius: 24,
-    shadowOffset: { width: 0, height: -4 },
+    shadowOffset: { width: 0, height: 8 },
     elevation: 12,
   },
   card: {
     paddingHorizontal: 24,
     paddingTop: 0,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: 'rgba(255, 255, 255, 0.46)',
   },
 
   // ── Accent line top of card ──

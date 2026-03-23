@@ -1,0 +1,11 @@
+# Supabase CLI — https://supabase.com/docs/guides/cli/config
+# After `supabase link`, project_id is filled automatically.
+
+project_id = "barber-Ennglish"
+
+[api]
+enabled = true
+
+# Cron calls must send Authorization: Bearer <service_role_jwt> (pg_cron SQL below).
+[functions.send-monthly-report]
+verify_jwt = true

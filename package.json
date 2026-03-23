@@ -73,7 +73,8 @@
     "start:web:adirApp": "cross-env CLIENT=adirApp node app.config.js && cross-env CLIENT=adirApp expo start --web --tunnel",
     "build:adirApp:ios": "cross-env CLIENT=adirApp node scripts/build-client.mjs adirApp ios",
     "build:adirApp:android": "cross-env CLIENT=adirApp node scripts/build-client.mjs adirApp android",
-    "build:adirApp:all": "cross-env CLIENT=adirApp node scripts/build-client.mjs adirApp all"
+    "build:adirApp:all": "cross-env CLIENT=adirApp node scripts/build-client.mjs adirApp all",
+    "deploy:edge:send-monthly-report": "node scripts/deploy-send-monthly-report.mjs"
   },
   "engines": {
     "node": "20.19.x",
@@ -86,6 +87,7 @@
     "@faker-js/faker": "^9.2.0",
     "@gorhom/bottom-sheet": "^5.2.6",
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/datetimepicker": "8.4.4",
     "@react-navigation/bottom-tabs": "^7.3.10",
     "@react-navigation/drawer": "^7.3.9",
     "@react-navigation/native": "^7.1.6",

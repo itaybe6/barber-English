@@ -27,7 +27,6 @@ export default function MonthlyInsightsCard({
 }: MonthlyInsightsCardProps) {
   const { t } = useTranslation();
   const total = completed + cancelled + noShow;
-  const clientsLeft = cancelled + noShow;
 
   const monthLabel = useMemo(() => {
     return new Date().toLocaleString('he-IL', { month: 'long', year: 'numeric' });
@@ -146,21 +145,6 @@ export default function MonthlyInsightsCard({
           ))}
         </View>
       </View>
-
-      {clientsLeft > 0 && (
-        <>
-          <View style={styles.divider} />
-          <View style={styles.insightRow}>
-            <View style={styles.insightIcon}>
-              <Ionicons name="arrow-down-outline" size={14} color="#FF3B30" />
-            </View>
-            <Text style={[styles.insightText, { color: colors.textSecondary }]}>
-              <Text style={styles.insightBold}>{clientsLeft}</Text>
-              {' '}{t('admin.insights.clientsLeft', 'clients left this month')}
-            </Text>
-          </View>
-        </>
-      )}
     </View>
   );
 }
@@ -265,33 +249,5 @@ const styles = StyleSheet.create({
   legendLabel: {
     fontSize: 13,
     fontWeight: '500',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#F1F5F9',
-    marginTop: 18,
-    marginBottom: 14,
-  },
-  insightRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  insightIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#FFF1F0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  insightText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  insightBold: {
-    fontWeight: '700',
-    fontSize: 14,
-    color: '#FF3B30',
   },
 });

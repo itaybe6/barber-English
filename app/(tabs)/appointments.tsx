@@ -295,7 +295,12 @@ const WeekDayColumn = memo(
 );
 
 export default function AdminAppointmentsScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  /** Hebrew UI for admin cancel/delete flows (per product requirement) */
+  const tHe = useCallback(
+    (key: string, fallback: string) => String(i18n.t(key, { lng: 'he', defaultValue: fallback })),
+    [i18n]
+  );
   const isRtl = I18nManager.isRTL;
   const user = useAuthStore((state) => state.user);
   const { colors: businessColors } = useBusinessColors();
@@ -738,7 +743,9 @@ export default function AdminAppointmentsScreen() {
       {isLoading ? (
         <View style={styles.loaderContainer}>
           <ActivityIndicator size="large" color={Colors.text} />
-          <Text style={styles.loadingText}>{t('admin.appointments.loadingForDate','Loading appointments for {{date}}...', { date: selectedDateStr })}</Text>
+          <Text style={styles.loadingText}>
+            {String(i18n.t('admin.appointments.loadingForDate', { lng: 'he', defaultValue: 'טוען תורים עבור {{date}}...', date: selectedDateStr }))}
+          </Text>
         </View>
       ) : (
         <>
@@ -876,7 +883,7 @@ export default function AdminAppointmentsScreen() {
                       <PressableScale
                         key={`${apt.id}-${apt.slot_time}`}
                         onPress={() => openActionsMenu(apt)}
-                        accessibilityLabel={t('admin.appointments.openActions','Open appointment actions')}
+                        accessibilityLabel={tHe('admin.appointments.openActions', 'פתח/י אפשרויות לתור')}
                         style={[
                           styles.appointmentCard,
                           {
@@ -923,8 +930,8 @@ export default function AdminAppointmentsScreen() {
 
               {appointments.length === 0 && (
                 <View style={styles.emptyState}>
-                  <Text style={styles.emptyTitle}>{t('admin.appointments.emptyTitle','No appointments for this day')}</Text>
-                  <Text style={styles.emptySubtitle}>{t('admin.appointments.emptySubtitle','Choose another day from the top bar')}</Text>
+                  <Text style={styles.emptyTitle}>{tHe('admin.appointments.emptyTitle', 'אין תורים ליום זה')}</Text>
+                  <Text style={styles.emptySubtitle}>{tHe('admin.appointments.emptySubtitle', 'בחר/י יום אחר מהסרגל העליון')}</Text>
                 </View>
               )}
             </ScrollView>
@@ -941,11 +948,11 @@ export default function AdminAppointmentsScreen() {
       >
         <View style={styles.actionsOverlay}>
           <View style={styles.actionsSheet}>
-            <Text style={styles.actionsTitle}>{t('admin.appointments.chooseAction','Choose an action')}</Text>
+            <Text style={styles.actionsTitle}>{tHe('admin.appointments.chooseAction', 'בחר/י פעולה')}</Text>
             {!!actionsAppointment?.client_phone && (
               <PressableScale
                 style={styles.actionsOption}
-                accessibilityLabel={t('admin.appointments.callClient','Call client')}
+                accessibilityLabel={tHe('admin.appointments.callClient', 'חייג ללקוח')}
                 onPress={async () => {
                   const phone = actionsAppointment?.client_phone;
                   closeActionsMenu();
@@ -955,13 +962,13 @@ export default function AdminAppointmentsScreen() {
                 <View style={[styles.actionsIconCircle, { backgroundColor: '#E8F0FF' }]}>
                   <Ionicons name="call" size={18} color="#0A84FF" />
                 </View>
-                <Text style={styles.actionsOptionText}>{t('admin.appointments.callClient','Call client')}</Text>
+                <Text style={styles.actionsOptionText}>{tHe('admin.appointments.callClient', 'חייג ללקוח')}</Text>
               </PressableScale>
             )}
             <View style={styles.actionsDivider} />
             <PressableScale
               style={styles.actionsOption}
-              accessibilityLabel={t('admin.appointments.cancelAndFree','Cancel and free slot')}
+              accessibilityLabel={tHe('admin.appointments.cancelAndFree', 'ביטול ושחרור משבצת')}
               onPress={() => {
                 if (actionsAppointment) {
                   askCancelAppointment(actionsAppointment);
@@ -972,11 +979,11 @@ export default function AdminAppointmentsScreen() {
               <View style={[styles.actionsIconCircle, { backgroundColor: '#FFECEC' }]}>
                 <Ionicons name="close-circle-outline" size={18} color="#FF9500" />
               </View>
-              <Text style={[styles.actionsOptionText, { color: '#FF9500' }]}>{t('admin.appointments.cancelAndFree','Cancel and free slot')}</Text>
+              <Text style={[styles.actionsOptionText, { color: '#FF9500' }]}>{tHe('admin.appointments.cancelAndFree', 'ביטול ושחרור משבצת')}</Text>
             </PressableScale>
             <PressableScale
               style={styles.actionsOption}
-              accessibilityLabel={t('admin.appointments.deleteAppointment','Delete appointment')}
+              accessibilityLabel={tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
               onPress={() => {
                 if (actionsAppointment) {
                   askDeleteAppointment(actionsAppointment);
@@ -987,14 +994,14 @@ export default function AdminAppointmentsScreen() {
               <View style={[styles.actionsIconCircle, { backgroundColor: '#FFECEC' }]}>
                 <Ionicons name="trash-outline" size={18} color="#FF3B30" />
               </View>
-              <Text style={[styles.actionsOptionText, { color: Colors.error }]}>{t('admin.appointments.deleteAppointment','Delete appointment')}</Text>
+              <Text style={[styles.actionsOptionText, { color: Colors.error }]}>{tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}</Text>
             </PressableScale>
             <PressableScale
               style={styles.actionsCancelButton}
-              accessibilityLabel={t('close','Close')}
+              accessibilityLabel={tHe('close', 'סגור')}
               onPress={closeActionsMenu}
             >
-              <Text style={styles.actionsCancelText}>{t('close','Close')}</Text>
+              <Text style={styles.actionsCancelText}>{tHe('close', 'סגור')}</Text>
             </PressableScale>
           </View>
         </View>
@@ -1012,9 +1019,9 @@ export default function AdminAppointmentsScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.iosAlertContainer}>
-            <Text style={styles.iosAlertTitle}>{t('appointments.cancel.title','Cancel Appointment')}</Text>
+            <Text style={styles.iosAlertTitle}>{tHe('appointments.cancel.title', 'ביטול תור')}</Text>
             <Text style={styles.iosAlertMessage}>
-              {t('admin.appointments.cancelMessage','This will free the time and remove the client details for the selected appointment.')}
+              {tHe('admin.appointments.cancelMessage', 'פעולה זו תפנה את הזמן, תסמן את התור כבוטל ותשחרר את המשבצת להזמנה מחדש.')}
             </Text>
             <View style={styles.iosAlertButtonsRow}>
               <TouchableOpacity
@@ -1026,7 +1033,7 @@ export default function AdminAppointmentsScreen() {
                 }}
                 disabled={isCancelling}
               >
-                <Text style={styles.iosAlertButtonDefaultText}>{t('cancel','Cancel')}</Text>
+                <Text style={styles.iosAlertButtonDefaultText}>{tHe('cancel', 'ביטול')}</Text>
               </TouchableOpacity>
               <View style={styles.iosAlertButtonDivider} />
               <TouchableOpacity
@@ -1038,7 +1045,7 @@ export default function AdminAppointmentsScreen() {
                 {isCancelling ? (
                   <ActivityIndicator size="small" color="#FF3B30" />
                 ) : (
-                  <Text style={styles.iosAlertButtonDestructiveText}>{t('confirm','Confirm')}</Text>
+                  <Text style={styles.iosAlertButtonDestructiveText}>{tHe('confirm', 'אישור')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -1058,9 +1065,9 @@ export default function AdminAppointmentsScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.iosAlertContainer}>
-            <Text style={styles.iosAlertTitle}>{t('admin.appointments.deleteTitle','Delete appointment')}</Text>
+            <Text style={styles.iosAlertTitle}>{tHe('admin.appointments.deleteTitle', 'מחיקת תור')}</Text>
             <Text style={styles.iosAlertMessage}>
-              {t('admin.appointments.deleteMessage','This will permanently remove the appointment. This action cannot be undone.')}
+              {tHe('admin.appointments.deleteMessage', 'פעולה זו תמחק את התור לצמיתות. לא ניתן לבטל פעולה זו.')}
             </Text>
             <View style={styles.iosAlertButtonsRow}>
               <TouchableOpacity
@@ -1072,7 +1079,7 @@ export default function AdminAppointmentsScreen() {
                 }}
                 disabled={isDeleting}
               >
-                <Text style={styles.iosAlertButtonDefaultText}>{t('cancel','Cancel')}</Text>
+                <Text style={styles.iosAlertButtonDefaultText}>{tHe('cancel', 'ביטול')}</Text>
               </TouchableOpacity>
               <View style={styles.iosAlertButtonDivider} />
               <TouchableOpacity
@@ -1084,7 +1091,7 @@ export default function AdminAppointmentsScreen() {
                 {isDeleting ? (
                   <ActivityIndicator size="small" color="#FF3B30" />
                 ) : (
-                  <Text style={styles.iosAlertButtonDestructiveText}>{t('delete','Delete')}</Text>
+                  <Text style={styles.iosAlertButtonDestructiveText}>{tHe('delete', 'מחק')}</Text>
                 )}
               </TouchableOpacity>
             </View>

@@ -18,12 +18,13 @@ CREATE TABLE IF NOT EXISTS business_expenses (
 CREATE INDEX IF NOT EXISTS idx_business_expenses_business_month
   ON business_expenses (business_id, expense_date);
 
--- Optional: Schedule monthly report via pg_cron + pg_net (enable extensions first)
+-- Optional: Schedule send-monthly-report via pg_cron + pg_net (enable extensions first).
+-- After add_accountant_report_schedule.sql, use a frequent cron (e.g. every 15 min) so per-business day+time work.
 -- Uncomment after enabling pg_cron and pg_net in Supabase dashboard:
 --
 -- SELECT cron.schedule(
 --   'send-monthly-reports',
---   '0 8 1 * *',  -- 8 AM on the 1st of each month
+--   '*/15 * * * *',  -- every 15 minutes (checks Asia/Jerusalem schedule per business)
 --   $$
 --   SELECT net.http_post(
 --     url := current_setting('app.settings.supabase_url') || '/functions/v1/send-monthly-report',

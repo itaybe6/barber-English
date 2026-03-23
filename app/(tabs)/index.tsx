@@ -219,6 +219,7 @@ export default function HomeScreen() {
   const [insightsData, setInsightsData] = useState({ completed: 0, cancelled: 0, noShow: 0 });
   const [loadingInsights, setLoadingInsights] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showBroadcast, setShowBroadcast] = useState(false);
   const [innerScrollEnabled, setInnerScrollEnabled] = useState(false);
   const innerScrollEnabledRef = useRef(false);
   const innerScrollRef = useRef<ScrollView>(null);
@@ -894,6 +895,39 @@ export default function HomeScreen() {
         {/* ── QUICK ACTIONS ── */}
         {isAdmin && (
           <View style={styles.quickActionsSection}>
+            <TouchableOpacity
+              style={styles.broadcastBannerWrap}
+              activeOpacity={0.92}
+              onPress={() => setShowBroadcast(true)}
+              accessibilityRole="button"
+              accessibilityLabel={t('admin.notificationsComposer.sendToAllTitle', 'Send message to all clients')}
+            >
+              <LinearGradient
+                colors={[colors.primary, colors.secondary]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.broadcastBannerGradient}
+              >
+                <View style={styles.broadcastBannerShine} pointerEvents="none" />
+                <View style={styles.broadcastBannerRow}>
+                  <View style={styles.broadcastBannerIconWrap}>
+                    <Ionicons name="megaphone-outline" size={26} color="#FFFFFF" />
+                  </View>
+                  <View style={styles.broadcastBannerTextCol}>
+                    <Text style={styles.broadcastBannerTitle}>
+                      {t('admin.notificationsComposer.sendToAllTitle', 'Send message to all clients')}
+                    </Text>
+                    <Text style={styles.broadcastBannerSub}>
+                      {t('admin.notificationsComposer.sendToAllSubtitle', 'Send a custom message to all clients')}
+                    </Text>
+                  </View>
+                  <View style={styles.broadcastBannerChevronWrap}>
+                    <Ionicons name="chevron-back" size={22} color="rgba(255,255,255,0.9)" />
+                  </View>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+
             <Text style={styles.quickActionsTitle}>{t('admin.home.quickActions', 'Quick Actions')}</Text>
             <View style={styles.quickActionsStack}>
 
@@ -959,12 +993,8 @@ export default function HomeScreen() {
       {/* Overlay Header - always on top of scroll */}
       <SafeAreaView edges={['top']} style={styles.overlayHeader} pointerEvents="box-none">
         <View style={styles.overlayHeaderContent} pointerEvents="box-none">
-          {/* Left: Broadcast */}
-          <View style={styles.headerSide}>
-            <View style={[styles.overlayButton, { backgroundColor: colors.primary }]}>
-              <AdminBroadcastComposer variant="icon" language="en" iconColor="#fff" />
-            </View>
-          </View>
+          {/* Left: spacer (broadcast moved to home quick-actions card) */}
+          <View style={styles.headerSide} />
           {/* Center placeholder */}
           <View style={styles.headerCenter} />
           {/* Right: Notifications */}
@@ -1123,7 +1153,14 @@ export default function HomeScreen() {
          </View>
        </Modal>
 
-      {/* Removed floating composer */}
+      {isAdmin && (
+        <AdminBroadcastComposer
+          open={showBroadcast}
+          onOpenChange={setShowBroadcast}
+          renderTrigger={false}
+          language="en"
+        />
+      )}
     </View>
   );
  }
@@ -1207,6 +1244,71 @@ const createStyles = (colors: any) => StyleSheet.create({
   dailyScheduleWrap: {
     marginTop: 12,
     marginBottom: 4,
+  },
+  broadcastBannerWrap: {
+    marginBottom: 14,
+    borderRadius: 20,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.18,
+        shadowRadius: 16,
+      },
+      android: { elevation: 6 },
+    }),
+  },
+  broadcastBannerGradient: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  broadcastBannerShine: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.35)',
+  },
+  broadcastBannerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    gap: 14,
+  },
+  broadcastBannerIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
+  },
+  broadcastBannerTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  broadcastBannerTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+    textAlign: 'left',
+  },
+  broadcastBannerSub: {
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 4,
+    lineHeight: 16,
+    textAlign: 'left',
+  },
+  broadcastBannerChevronWrap: {
+    opacity: 0.95,
   },
   /* ─── Quick Actions ─── */
   quickActionsSection: {

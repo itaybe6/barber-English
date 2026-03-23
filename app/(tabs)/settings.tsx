@@ -21,7 +21,6 @@ import {
   LogOut, 
   ChevronLeft,
   ChevronRight,
-  Send,
   ChevronDown,
   ChevronUp,
   Pencil,
@@ -45,7 +44,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usersApi } from '@/lib/api/users';
-import AdminBroadcastComposer from '@/components/AdminBroadcastComposer';
 import InlineEditableRow from '@/components/InlineEditableRow';
 import AddAppointmentModal from '@/components/AddAppointmentModal';
 import { ColorPicker } from '@/components/ColorPicker';
@@ -111,10 +109,8 @@ export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
   
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [showBroadcast, setShowBroadcast] = useState(false);
   
-  
-  // Notification modal states (replaced by AdminBroadcastComposer)
+  // Notification modal states
   const [showSupportModal, setShowSupportModal] = useState(false);
   
   // Add admin modal state
@@ -805,16 +801,6 @@ export default function SettingsScreen() {
     })
   ).current;
  
-  // Predefined titles
-  const predefinedTitles = [
-    { id: 'promotion', title: t('settings.broadcastTemplates.promotion.title', 'New Promotion! 🎉'), description: t('settings.broadcastTemplates.promotion.description', 'Message about promotion or discount') },
-    { id: 'reminder', title: t('settings.broadcastTemplates.reminder.title', 'Important Reminder ⏰'), description: t('settings.broadcastTemplates.reminder.description', 'Reminder for appointment or event') },
-    { id: 'update', title: t('settings.broadcastTemplates.update.title', 'Service Update 📢'), description: t('settings.broadcastTemplates.update.description', 'Update about new services') },
-    { id: 'holiday', title: t('settings.broadcastTemplates.holiday.title', 'Holiday Closure 🏖️'), description: t('settings.broadcastTemplates.holiday.description', 'Message about closure or schedule change') },
-    { id: 'welcome', title: t('settings.broadcastTemplates.welcome.title', 'Welcome! 👋'), description: t('settings.broadcastTemplates.welcome.description', 'Welcome message for clients') },
-    { id: 'custom', title: t('settings.broadcastTemplates.custom.title', 'Custom Title ✏️'), description: t('settings.broadcastTemplates.custom.description', 'Custom title') }
-  ];
-
   const handleLogout = () => {
     setShowLogoutModal(true);
   };
@@ -2140,14 +2126,6 @@ export default function SettingsScreen() {
             true
           )}
           
-          {renderSettingItem(
-            <Send size={20} color={businessColors.primary} />,
-            t('admin.notificationsComposer.sendToAllTitle','Send message to all clients'),
-            t('admin.notificationsComposer.sendToAllSubtitle','Send a custom message to all clients'),
-            undefined,
-            () => setShowBroadcast(true)
-          )}
-          
           <View style={styles.settingItemLTR}>
             <View style={styles.settingIconLTR}><Clock size={20} color={businessColors.primary} /></View>
             <View style={{ flex: 1 }}>
@@ -2494,9 +2472,6 @@ export default function SettingsScreen() {
         <Text style={styles.versionText}>{t('settings.sections.version','Version')} 1.0.0</Text>
         </ScrollView>
       </View>
-
-      {/* Admin broadcast popup (consistent with Home screen) */}
-      <AdminBroadcastComposer open={showBroadcast} onOpenChange={setShowBroadcast} renderTrigger={false} language="en" />
 
       {/* Logout Confirmation Modal */}
       <Modal

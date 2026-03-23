@@ -3,30 +3,50 @@ import { Dimensions, StyleSheet, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { AnimatePresence, MotiView } from 'moti';
 
-const { width } = Dimensions.get('screen');
+const { width, height } = Dimensions.get('screen');
 
 const DEFAULT_SIZE = Math.min(148, Math.round(width * 0.36));
 const DEFAULT_COLOR = '#34C759';
 const DURATION = 320;
+/** Delay before burst starts + burst duration + small buffer before parent shows details */
+const COMPLETE_AFTER_MS = 60 + DURATION * 1.4 + 50;
 
 type Props = {
   size?: number;
   color?: string;
+  /** Scale burst so the green fill reaches screen edges (from center) */
+  coverScreen?: boolean;
+  /** Fires once after the burst animation has finished */
+  onComplete?: () => void;
 };
 
-export default function BookingSuccessAnimation({ size = DEFAULT_SIZE, color = DEFAULT_COLOR }: Props) {
+export default function BookingSuccessAnimation({
+  size = DEFAULT_SIZE,
+  color = DEFAULT_COLOR,
+  coverScreen = false,
+  onComplete,
+}: Props) {
   const [played, setPlayed] = React.useState(false);
+
+  const screenDiagonal = Math.sqrt(width * width + height * height);
+  const burstScale = coverScreen ? Math.max(screenDiagonal / size + 0.15, 14) : 10;
 
   React.useEffect(() => {
     const id = setTimeout(() => setPlayed(true), 60);
     return () => clearTimeout(id);
   }, []);
 
+  React.useEffect(() => {
+    if (!onComplete) return;
+    const id = setTimeout(onComplete, COMPLETE_AFTER_MS);
+    return () => clearTimeout(id);
+  }, [onComplete]);
+
   return (
     <View style={[s.wrap, { width: size, height: size }]}>
       {/* Expanding background burst */}
       <MotiView
-        animate={{ scale: played ? 10 : 1 }}
+        animate={{ scale: played ? burstScale : 1 }}
         transition={{ type: 'timing', duration: DURATION * 1.4 }}
         style={[
           s.burst,

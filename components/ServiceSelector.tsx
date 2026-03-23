@@ -1,25 +1,166 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Image, Dimensions, FlatList, Platform, StyleSheet } from 'react-native';
-import { BlurView } from 'expo-blur';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Image,
+  Dimensions,
+  StyleSheet,
+} from 'react-native';
 import Animated, {
-  useSharedValue,
+  Extrapolation,
+  interpolate,
+  SharedValue,
   useAnimatedScrollHandler,
   useAnimatedStyle,
-  useAnimatedProps,
-  interpolate,
-  Extrapolate,
-  runOnJS,
+  useSharedValue,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { Service } from '@/lib/supabase';
+import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 
-const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
+const { height: WIN_HEIGHT } = Dimensions.get('window');
 
-const SCREEN = Dimensions.get('window');
-const HEADER_HEIGHT = 320; // match barber carousel proportions for consistent framing
-const CARD_WIDTH_PERCENT = 0.64;
-const AnimatedFlatList: any = Animated.createAnimatedComponent(FlatList as any);
+const _spacing = 8;
+const _borderRadius = 12;
+/** Card height — Perplexity-style focal item */
+const _itemSize = WIN_HEIGHT * 0.58;
+const _itemFullSize = _itemSize + _spacing * 2;
+
+function getServiceImageUri(service: Service): string | null {
+  return (
+    (service as any)?.image_url ||
+    (service as any)?.cover_url ||
+    (service as any)?.image ||
+    null
+  );
+}
+
+type ServiceAnimatedCardProps = {
+  service: Service;
+  index: number;
+  scrollY: SharedValue<number>;
+  onPress: () => void;
+  primaryFallback: string;
+  t: TFunction;
+};
+
+function ServiceAnimatedCard({
+  service,
+  index,
+  scrollY,
+  onPress,
+  primaryFallback,
+  t,
+}: ServiceAnimatedCardProps) {
+  const uri = getServiceImageUri(service);
+  const description = ((service as any)?.description as string | undefined)?.trim?.() || '';
+  const duration = service?.duration_minutes ?? 60;
+
+  const stylez = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      scrollY.value,
+      [index - 1, index, index + 1],
+      [0.4, 1, 0.4],
+      Extrapolation.CLAMP
+    ),
+    transform: [
+      {
+        scale: interpolate(
+          scrollY.value,
+          [index - 1, index, index + 1],
+          [0.92, 1, 0.92],
+          Extrapolation.CLAMP
+        ),
+      },
+    ],
+  }));
+
+  const tintBg = `${primaryFallback}22`;
+
+  return (
+    <TouchableOpacity activeOpacity={0.92} onPress={onPress}>
+      <Animated.View
+        style={[
+          {
+            height: _itemSize,
+            padding: _spacing * 2,
+            borderRadius: _borderRadius,
+            gap: _spacing * 2,
+            backgroundColor: uri ? 'transparent' : tintBg,
+          },
+          stylez,
+        ]}
+      >
+        {uri ? (
+          <>
+            <Image
+              source={{ uri }}
+              style={[StyleSheet.absoluteFillObject, { borderRadius: _borderRadius, opacity: 0.55 }]}
+              blurRadius={50}
+            />
+            <Image
+              source={{ uri }}
+              style={{
+                borderRadius: _borderRadius - _spacing / 2,
+                flex: 1,
+                height: _itemSize * 0.4,
+                margin: -_spacing,
+              }}
+              resizeMode="cover"
+            />
+          </>
+        ) : (
+          <View
+            style={{
+              borderRadius: _borderRadius - _spacing / 2,
+              flex: 1,
+              minHeight: _itemSize * 0.36,
+              margin: -_spacing,
+              backgroundColor: primaryFallback,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Ionicons name="cut" size={48} color="rgba(255,255,255,0.45)" />
+          </View>
+        )}
+
+        <View style={{ gap: _spacing }}>
+          <Text style={styles.cardTitle} numberOfLines={2}>
+            {service?.name || ''}
+          </Text>
+          {description ? (
+            <Text style={styles.cardDescription} numberOfLines={3}>
+              {description}
+            </Text>
+          ) : (
+            <Text style={styles.cardDescription} numberOfLines={2}>
+              {`${duration} ${t('booking.min', 'min')} · ${t('booking.price', '$')} ${service?.price ?? 0}`}
+            </Text>
+          )}
+        </View>
+
+        <View style={styles.metaRow}>
+          <View style={styles.metaChip}>
+            <Ionicons name="time-outline" size={14} color="#e5e5e5" />
+            <Text style={styles.metaChipText}>
+              {duration} {t('booking.min', 'min')}
+            </Text>
+          </View>
+          <View style={styles.metaChip}>
+            <Ionicons name="pricetag-outline" size={14} color="#e5e5e5" />
+            <Text style={styles.metaChipText}>
+              {t('booking.price', '$')} {service?.price ?? 0}
+            </Text>
+          </View>
+        </View>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+}
 
 export type ServiceSelectorProps = {
   services: Service[];
@@ -29,399 +170,165 @@ export type ServiceSelectorProps = {
   bottomOffset?: number;
 };
 
-const ServiceSelector: React.FC<ServiceSelectorProps> = ({ services, activeIndex, onIndexChange, styles, bottomOffset }) => {
+const ServiceSelector: React.FC<ServiceSelectorProps> = ({
+  services,
+  activeIndex,
+  onIndexChange,
+  styles: _parentStyles,
+  bottomOffset = 0,
+}) => {
   const { t } = useTranslation();
+  const { colors } = useBusinessColors();
 
-  const getCurrentImageUrl = (idx: number) => {
-    const service = services[idx];
-    return (service as any)?.image_url || (service as any)?.cover_url || (service as any)?.image || null;
-  };
+  const scrollY = useSharedValue(0);
+  const listRef = React.useRef<Animated.FlatList<Service>>(null);
+  /** -1 until first sync so initial activeIndex scrolls correctly */
+  const lastIndex = React.useRef<number>(-1);
 
-  const scrollX = useSharedValue(0);
-  const listRef = React.useRef<FlatList>(null);
-  const didInit = React.useRef(false);
-  const lastIndex = React.useRef<number>(Math.max(0, activeIndex));
-
-  React.useEffect(() => {}, [activeIndex]);
-
-  const cardWidth = SCREEN.width * CARD_WIDTH_PERCENT;
-  const ITEM_GAP = 14;
-  const ITEM_LENGTH = cardWidth + ITEM_GAP;
-  const sidePadding = Math.max(0, (SCREEN.width - ITEM_LENGTH) / 2);
-  const baseCount = Math.max(1, services.length);
-  const LOOP_COUNT = 200;
-  const totalItems = baseCount * LOOP_COUNT;
-  const middleBase = Math.floor(totalItems / 2) - (Math.floor(totalItems / 2) % baseCount);
-  const initialIndex = middleBase + (Math.max(0, activeIndex) % baseCount);
-  // Use interval snapping with center alignment; correct drift on momentum end
-
-  const centerToPhysicalIndex = React.useCallback(
-    (physicalIndex: number, animated: boolean) => {
-      try {
-        const offset = ITEM_LENGTH * physicalIndex;
-        (listRef.current as any)?.scrollToOffset?.({ offset, animated });
-      } catch {}
-    },
-    [ITEM_LENGTH]
-  );
-
-  React.useEffect(() => {
-    if (!didInit.current && services && services.length > 0) {
-      didInit.current = true;
-      try { centerToPhysicalIndex(initialIndex, false); } catch {}
-      lastIndex.current = 0;
-      try { onIndexChange(0); } catch {}
-    }
-  }, [services?.length, centerToPhysicalIndex, initialIndex, onIndexChange]);
-
-  const onScrollHandler = useAnimatedScrollHandler({
+  const onScroll = useAnimatedScrollHandler({
     onScroll: (e) => {
-      'worklet';
-      scrollX.value = e.contentOffset.x;
+      scrollY.value = e.contentOffset.y / _itemFullSize;
     },
   });
 
-  const HeroItem: React.FC<{ index: number }> = ({ index }) => {
-    const baseIdx = baseCount > 0 ? ((index % baseCount) + baseCount) % baseCount : 0;
-    const service = services[baseIdx];
-    const uri = getCurrentImageUrl(baseIdx);
+  const scrollToIndex = React.useCallback(
+    (idx: number, animated: boolean) => {
+      const clamped = Math.max(0, Math.min(idx, services.length - 1));
+      const offset = clamped * _itemFullSize;
+      try {
+        listRef.current?.scrollToOffset({ offset, animated });
+      } catch {
+        /* noop */
+      }
+    },
+    [services.length]
+  );
 
-    // Distance-from-center animation: center = 1.0, edges = 0.88 (opal-horizontal-carousel style)
-    const cardStyle = useAnimatedStyle(() => {
-      const screenCenter = SCREEN.width / 2;
-      const itemLeftEdge = sidePadding + index * ITEM_LENGTH - scrollX.value;
-      const itemCenter = itemLeftEdge + ITEM_LENGTH / 2;
-      const distanceFromCenter = Math.abs(itemCenter - screenCenter);
+  React.useEffect(() => {
+    if (services.length === 0) return;
+    const clamped = Math.max(0, Math.min(activeIndex, services.length - 1));
+    if (clamped !== lastIndex.current) {
+      const animate = lastIndex.current >= 0;
+      lastIndex.current = clamped;
+      scrollToIndex(clamped, animate);
+    }
+  }, [activeIndex, services.length, scrollToIndex]);
 
-      const fullyVisibleRange = ITEM_LENGTH;
-      const partiallyVisibleRange = ITEM_LENGTH * 1.5;
+  const onMomentumScrollEnd = React.useCallback(
+    (e: { nativeEvent: { contentOffset: { y: number } } }) => {
+      const y = Math.max(0, e.nativeEvent.contentOffset.y);
+      const idx = Math.round(y / _itemFullSize);
+      const clamped = Math.max(0, Math.min(idx, services.length - 1));
+      const target = clamped * _itemFullSize;
+      if (Math.abs(target - y) > 1) {
+        scrollToIndex(clamped, true);
+      }
+      if (clamped !== lastIndex.current) {
+        lastIndex.current = clamped;
+        onIndexChange(clamped);
+      }
+    },
+    [onIndexChange, scrollToIndex, services.length]
+  );
 
-      const scale = interpolate(
-        distanceFromCenter,
-        [0, fullyVisibleRange, partiallyVisibleRange],
-        [1, 1, 0.88],
-        Extrapolate.CLAMP
-      );
+  const verticalPad = (WIN_HEIGHT - _itemSize) / 2;
 
-      const opacity = interpolate(
-        distanceFromCenter,
-        [0, fullyVisibleRange, partiallyVisibleRange],
-        [1, 1, 0.9],
-        Extrapolate.CLAMP
-      );
+  if (services.length === 0) {
+    return null;
+  }
 
-      return {
-        transform: [{ scale }],
-        opacity,
-      };
-    });
-
-    // iOS-only blur: increases as item moves away from center (focus metaphor)
-    const rBlurProps = useAnimatedProps(() => {
-      const screenCenter = SCREEN.width / 2;
-      const itemLeftEdge = sidePadding + index * ITEM_LENGTH - scrollX.value;
-      const itemCenter = itemLeftEdge + ITEM_LENGTH / 2;
-      const distanceFromCenter = Math.abs(itemCenter - screenCenter);
-
-      const fullyVisibleRange = ITEM_LENGTH;
-      const partiallyVisibleRange = ITEM_LENGTH * 1.5;
-
-      const blurIntensity = interpolate(
-        distanceFromCenter,
-        [0, fullyVisibleRange, partiallyVisibleRange],
-        [0, 0, 15],
-        Extrapolate.CLAMP
-      );
-
-      return { intensity: blurIntensity };
-    });
-
-    return (
-      <TouchableOpacity activeOpacity={0.9} onPress={() => {
-        try {
-          const baseIdx = baseCount > 0 ? ((index % baseCount) + baseCount) % baseCount : 0;
-          if (baseIdx !== lastIndex.current) {
-            lastIndex.current = baseIdx;
-            runOnJS(onIndexChange)(baseIdx);
-          }
-          // Smoothly center the tapped item by scrolling to its exact physical index
-          centerToPhysicalIndex(index, true);
-        } catch {}
-      }} style={{ width: ITEM_LENGTH, alignItems: 'center', paddingHorizontal: 4 }}>
-        <Animated.View
-          style={[{
-            width: cardWidth,
-            height: HEADER_HEIGHT,
-            borderRadius: 34,
-            overflow: 'visible',
-            backgroundColor: 'transparent',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 16 },
-            shadowOpacity: 0.26,
-            shadowRadius: 26,
-            elevation: 14,
-          }, cardStyle]}
-        >
-          {/* Subtle border so the carousel window stays airy and lets the dynamic background shine through */}
-          <View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              top: -2,
-              left: -2,
-              right: -2,
-              bottom: -2,
-              borderRadius: 36,
-              borderWidth: 2,
-              borderColor: 'rgba(255,255,255,0.18)',
-            }}
-          />
-
-          <View
-            style={{
-              width: '100%',
-              height: '100%',
-              borderRadius: 34,
-              overflow: 'hidden',
-              backgroundColor: 'transparent',
-            }}
-          >
-            {uri ? (
-              <Image
-                source={{ uri: uri as any }}
-                style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-                resizeMode="cover"
-              />
-            ) : (
-              <View
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  backgroundColor: '#E5E5EA',
-                }}
-              />
-            )}
-            <View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                left: 0,
-                right: 0,
-                bottom: 0,
-                height: '45%',
-                backgroundColor: 'transparent',
-              }}
-            />
-          </View>
-
-          {/* Duration badge */}
-          <View style={{ position: 'absolute', top: 16, left: 16 }}>
-            <BlurView
-              intensity={20}
-              tint="light"
-              style={{
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-                borderRadius: 999,
-                overflow: 'hidden',
-                borderWidth: 1,
-                borderColor: 'rgba(255,255,255,0.28)',
-                backgroundColor: 'transparent',
-              }}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Ionicons name="time-outline" size={14} color="#111827" />
-                <Text style={{ color: '#111827', fontWeight: '800', fontSize: 13 }}>
-                  {(service?.duration_minutes ?? 60) + 'm'}
-                </Text>
-              </View>
-            </BlurView>
-          </View>
-
-          {/* Platform: iOS blur adds depth cue when card is away from center */}
-          {Platform.OS === 'ios' && (
-            <View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                borderRadius: 34,
-                overflow: 'hidden',
-              }}
-            >
-              <AnimatedBlurView
-                animatedProps={rBlurProps}
-                tint="systemThinMaterialLight"
-                style={StyleSheet.absoluteFill}
-              />
-            </View>
-          )}
-
-          {/* Name + price */}
-          <View style={{ position: 'absolute', left: 18, right: 18, bottom: 18, alignItems: 'center' }}>
-            <BlurView
-              intensity={20}
-              tint="light"
-              style={{
-                paddingVertical: 12,
-                paddingHorizontal: 16,
-                borderRadius: 24,
-                overflow: 'hidden',
-                borderWidth: 1.25,
-                borderColor: 'rgba(255,255,255,0.35)',
-                backgroundColor: 'rgba(17,24,39,0.28)',
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 3 },
-                shadowOpacity: 0.18,
-                shadowRadius: 8,
-                elevation: 5,
-              }}
-            >
-              <View
-                style={{
-                  position: 'absolute',
-                  top: -8,
-                  left: -6,
-                  width: '60%',
-                  height: 28,
-                  borderRadius: 18,
-                  backgroundColor: 'rgba(255,255,255,0.22)',
-                  opacity: 0.4,
-                  transform: [{ rotate: '-12deg' }],
-                }}
-              />
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <Text
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                  style={{
-                    color: '#FFFFFF',
-                    fontWeight: '900',
-                    fontSize: 17,
-                    textShadowColor: 'rgba(0, 0, 0, 0.4)',
-                    textShadowOffset: { width: 0, height: 2 },
-                    textShadowRadius: 4,
-                    flexGrow: 1,
-                    flexShrink: 1,
-                    minWidth: 0,
-                    maxWidth: '68%',
-                    marginRight: 12,
-                  }}
-                >
-                  {service?.name || ''}
-                </Text>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    paddingHorizontal: 12,
-                    paddingVertical: 6,
-                    borderRadius: 999,
-                    backgroundColor: 'rgba(255,255,255,0.92)',
-                    borderWidth: 1,
-                    borderColor: 'rgba(17,24,39,0.08)',
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.1,
-                    shadowRadius: 4,
-                    flexShrink: 0,
-                  }}
-                >
-                  <Ionicons
-                    name="pricetag-outline"
-                    size={14}
-                    color="#111827"
-                    style={{ marginRight: 4 }}
-                  />
-                  <Text
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                    style={{ color: '#111827', fontWeight: '800', fontSize: 14 }}
-                  >
-                    {`${t('booking.price', '$')} ${service?.price ?? 0}`}
-                  </Text>
-                </View>
-              </View>
-            </BlurView>
-          </View>
-        </Animated.View>
-      </TouchableOpacity>
-    );
-  };
+  /** Explicit height so FlatList lays out correctly inside ScrollView or flex parents */
+  const listViewportHeight = Math.min(WIN_HEIGHT * 0.72, _itemFullSize * 4.2);
 
   return (
     <View
       style={{
-        position: 'relative',
-        height: HEADER_HEIGHT + 200,
-        marginBottom: 140,
-        paddingTop: 60,
-        paddingBottom: 56,
+        width: '100%',
+        height: listViewportHeight,
         backgroundColor: 'transparent',
       }}
     >
-      {services.length > 0 && (
-        <View style={{ flex: 1, justifyContent: 'center', direction: 'ltr' as any, paddingVertical: 12 }}>
-        <AnimatedFlatList
-          ref={listRef as any}
-          data={Array.from({ length: totalItems })}
-          keyExtractor={(_, idx: number) => `s-${idx}`}
-          horizontal
-          inverted={false}
-          showsHorizontalScrollIndicator={false}
-          decelerationRate="fast"
-          bounces={false}
-          overScrollMode="never"
-          snapToInterval={ITEM_LENGTH}
-          snapToAlignment="center"
-          initialScrollIndex={initialIndex}
-          getItemLayout={(_, index) => ({ length: ITEM_LENGTH, offset: ITEM_LENGTH * index, index })}
-          contentContainerStyle={{ paddingLeft: sidePadding, paddingRight: sidePadding, paddingVertical: 24 }}
-          onScroll={onScrollHandler as any}
-          scrollEventThrottle={16}
-          renderItem={({ index }) => <HeroItem index={index} />}
-          onMomentumScrollEnd={(e: any) => {
-            try {
-              const x = Math.max(0, Number(e?.nativeEvent?.contentOffset?.x || 0));
-              const idx = Math.round(x / ITEM_LENGTH);
-              const expected = idx * ITEM_LENGTH;
-              if (Math.abs(expected - x) > 0.5) {
-                centerToPhysicalIndex(idx, true);
-              }
-              const baseIdx = baseCount > 0 ? ((idx % baseCount) + baseCount) % baseCount : 0;
-              if (baseIdx !== lastIndex.current) {
-                lastIndex.current = baseIdx;
-                onIndexChange(baseIdx);
-              }
-              const guard = baseCount * 2;
-              if (idx < guard || idx > (totalItems - guard)) {
-                const target = middleBase + baseIdx;
-                try { centerToPhysicalIndex(target, false); } catch {}
-              }
-            } catch {}
-          }}
-          removeClippedSubviews
-          windowSize={7}
-          maxToRenderPerBatch={7}
-          updateCellsBatchingPeriod={40}
-        />
-        </View>
-      )}
+      <Animated.FlatList
+        ref={listRef}
+        data={services}
+        keyExtractor={(item) => String(item.id)}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
+          gap: _spacing * 2,
+          paddingHorizontal: _spacing * 2,
+          paddingTop: verticalPad,
+          paddingBottom: verticalPad + bottomOffset,
+        }}
+        onScroll={onScroll}
+        scrollEventThrottle={1000 / 60}
+        snapToInterval={_itemFullSize}
+        snapToAlignment="start"
+        decelerationRate="fast"
+        getItemLayout={(_, index) => ({
+          length: _itemFullSize,
+          offset: _itemFullSize * index,
+          index,
+        })}
+        renderItem={({ item, index }) => (
+          <ServiceAnimatedCard
+            service={item}
+            index={index}
+            scrollY={scrollY}
+            primaryFallback={colors.primary}
+            t={t}
+            onPress={() => {
+              lastIndex.current = index;
+              onIndexChange(index);
+              scrollToIndex(index, true);
+            }}
+          />
+        )}
+        onMomentumScrollEnd={onMomentumScrollEnd}
+      />
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  cardTitle: {
+    fontSize: 22,
+    color: '#fff',
+    fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+  },
+  cardDescription: {
+    fontWeight: '400',
+    color: '#ddd',
+    fontSize: 14,
+    lineHeight: 20,
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: _spacing,
+    flexWrap: 'wrap',
+  },
+  metaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  metaChipText: {
+    color: '#e5e5e5',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+});
 
 export default ServiceSelector;

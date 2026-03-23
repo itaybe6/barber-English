@@ -61,8 +61,8 @@ export default function BookingStepTabs({
           borderRadius: 20,
           overflow: 'hidden',
           borderWidth: 1,
-          borderColor: 'rgba(255,255,255,0.28)',
-          backgroundColor: 'transparent',
+          borderColor: 'rgba(0,0,0,0.25)',
+          backgroundColor: '#E5E7EB',
         }}
       >
         <View style={{ padding: 6 }}>
@@ -77,7 +77,7 @@ export default function BookingStepTabs({
               if (step === 4 && canGoTime) return onChangeStep(4);
             }}
             activeColor="#111827"
-            inactiveColor="rgba(255,255,255,0.92)"
+            inactiveColor="#000"
             activeBackgroundColor="rgba(255,255,255,0.97)"
             inactiveBackgroundColor="rgba(255,255,255,0)"
           />

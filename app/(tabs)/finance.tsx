@@ -11,10 +11,11 @@ import {
   Modal,
   ActivityIndicator,
   KeyboardAvoidingView,
-  Dimensions,
   Image,
   Linking,
+  FlatList,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -41,9 +42,23 @@ import {
   ArrowDownRight,
   CheckCircle,
   FileImage,
+  Calendar,
+  Clock,
 } from 'lucide-react-native';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const REPORT_DAY_OPTIONS = Array.from({ length: 28 }, (_, i) => i + 1);
+
+function parseTimeToDate(s: string): Date {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(s || '').trim());
+  if (!m) return new Date(2000, 0, 1, 9, 0, 0, 0);
+  const h = Math.min(23, Math.max(0, parseInt(m[1], 10)));
+  const min = Math.min(59, Math.max(0, parseInt(m[2], 10)));
+  return new Date(2000, 0, 1, h, min, 0, 0);
+}
+
+function formatTimeToHm(d: Date): string {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
 
 const CATEGORIES: ExpenseCategory[] = ['rent', 'supplies', 'equipment', 'marketing', 'other'];
 
@@ -78,6 +93,12 @@ export default function FinanceScreen() {
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
   const [businessNumber, setBusinessNumber] = useState('');
   const [accountantEmail, setAccountantEmail] = useState('');
+  const [reportDayOfMonth, setReportDayOfMonth] = useState(1);
+  const [reportTimeDate, setReportTimeDate] = useState(() => parseTimeToDate('09:00'));
+  const [showReportDayModal, setShowReportDayModal] = useState(false);
+  const [showReportTimeModal, setShowReportTimeModal] = useState(false);
+  const [showAndroidTimePicker, setShowAndroidTimePicker] = useState(false);
+  const [webTimeDraft, setWebTimeDraft] = useState('09:00');
 
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [newExpenseAmount, setNewExpenseAmount] = useState('');
@@ -103,6 +124,15 @@ export default function FinanceScreen() {
         setProfile(prof);
         setBusinessNumber((prof as any).business_number || '');
         setAccountantEmail((prof as any).accountant_email || '');
+        const rawDay = Number((prof as any).accountant_report_day_of_month);
+        const day = Number.isFinite(rawDay)
+          ? Math.min(28, Math.max(1, Math.floor(rawDay)))
+          : 1;
+        setReportDayOfMonth(day);
+        const t = String((prof as any).accountant_report_time || '09:00');
+        const td = parseTimeToDate(t);
+        setReportTimeDate(td);
+        setWebTimeDraft(formatTimeToHm(td));
       }
     } catch (err) {
       console.error('שגיאה בטעינת נתונים פיננסיים:', err);
@@ -211,6 +241,8 @@ export default function FinanceScreen() {
         ...profile,
         business_number: businessNumber.trim() || undefined,
         accountant_email: accountantEmail.trim() || undefined,
+        accountant_report_day_of_month: reportDayOfMonth,
+        accountant_report_time: formatTimeToHm(reportTimeDate),
       } as any);
       if (result) {
         setProfile(result);
@@ -446,8 +478,49 @@ export default function FinanceScreen() {
           </View>
           <View style={styles.card}>
             <Text style={styles.settingsHint}>
-              הדוח החודשי יישלח אוטומטית בתחילת כל חודש לכתובת המייל שתוזן כאן
+              הדוח תמיד על החודש שחלף (הכנסות והוצאות מפורטות). בוחרים את היום בחודש (1–28) ואת השעה לפי שעון ישראל שבה יישלח המייל לרואה החשבון.
             </Text>
+
+            <View style={styles.fieldBlock}>
+              <Text style={styles.fieldLabel}>יום בשליחה בכל חודש (1–28)</Text>
+              <TouchableOpacity
+                style={styles.fieldInputRow}
+                onPress={() => setShowReportDayModal(true)}
+                activeOpacity={0.75}
+              >
+                <View style={[styles.scheduleValueBox, { borderColor: '#E8EAF0' }]}>
+                  <Text style={styles.scheduleValueText}>{reportDayOfMonth}</Text>
+                </View>
+                <View style={[styles.fieldIcon, { backgroundColor: `${primaryColor}15` }]}>
+                  <Calendar size={18} color={primaryColor} />
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.fieldBlock, { marginTop: 16 }]}>
+              <Text style={styles.fieldLabel}>שעת שליחה</Text>
+              <TouchableOpacity
+                style={styles.fieldInputRow}
+                onPress={() => {
+                  if (Platform.OS === 'android') {
+                    setShowAndroidTimePicker(true);
+                  } else if (Platform.OS === 'web') {
+                    setWebTimeDraft(formatTimeToHm(reportTimeDate));
+                    setShowReportTimeModal(true);
+                  } else {
+                    setShowReportTimeModal(true);
+                  }
+                }}
+                activeOpacity={0.75}
+              >
+                <View style={[styles.scheduleValueBox, { borderColor: '#E8EAF0' }]}>
+                  <Text style={styles.scheduleValueText}>{formatTimeToHm(reportTimeDate)}</Text>
+                </View>
+                <View style={[styles.fieldIcon, { backgroundColor: `${primaryColor}15` }]}>
+                  <Clock size={18} color={primaryColor} />
+                </View>
+              </TouchableOpacity>
+            </View>
 
             {/* Business number field — in RTL: icon on LEFT, text on RIGHT */}
             <View style={styles.fieldBlock}>
@@ -644,6 +717,127 @@ export default function FinanceScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* יום בשליחה בחודש */}
+      <Modal visible={showReportDayModal} animationType="slide" transparent statusBarTranslucent>
+        <View style={styles.reportModalRoot}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setShowReportDayModal(false)}
+          />
+          <View style={[styles.modalSheet, { paddingBottom: 28 }]}>
+            <Text style={styles.modalSectionLabel}>בחר יום בחודש</Text>
+            <FlatList
+              data={REPORT_DAY_OPTIONS}
+              keyExtractor={(item) => String(item)}
+              style={styles.reportDayList}
+              showsVerticalScrollIndicator={false}
+              renderItem={({ item }) => {
+                const selected = item === reportDayOfMonth;
+                return (
+                  <TouchableOpacity
+                    style={[styles.dayPickRow, selected && { backgroundColor: `${primaryColor}14` }]}
+                    onPress={() => {
+                      setReportDayOfMonth(item);
+                      setShowReportDayModal(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.dayPickText,
+                        selected && { color: primaryColor, fontWeight: '800' },
+                      ]}
+                    >
+                      {item} בחודש
+                    </Text>
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* שעת שליחה — iOS / Web */}
+      <Modal visible={showReportTimeModal} animationType="slide" transparent statusBarTranslucent>
+        {Platform.OS === 'web' ? (
+          <View style={styles.successModalOverlay}>
+            <View style={[styles.successModalBox, { maxWidth: 360 }]}>
+              <Text style={styles.modalSectionLabel}>שעה (24 שעות, לדוגמה 09:30)</Text>
+              <TextInput
+                style={styles.fieldInput}
+                value={webTimeDraft}
+                onChangeText={setWebTimeDraft}
+                placeholder="09:00"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="numbers-and-punctuation"
+                textAlign="right"
+              />
+              <TouchableOpacity
+                style={[styles.successModalBtn, { backgroundColor: primaryColor, marginTop: 16 }]}
+                onPress={() => {
+                  setReportTimeDate(parseTimeToDate(webTimeDraft));
+                  setShowReportTimeModal(false);
+                }}
+                activeOpacity={0.82}
+              >
+                <Text style={styles.successModalBtnText}>אישור</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowReportTimeModal(false)} style={{ marginTop: 14 }}>
+                <Text style={{ textAlign: 'center', color: Colors.subtext, fontWeight: '600' }}>ביטול</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.reportModalRoot}>
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              activeOpacity={1}
+              onPress={() => setShowReportTimeModal(false)}
+            />
+            <View style={[styles.modalSheet, styles.timePickerSheet]}>
+              <View style={styles.modalHandle} />
+              <Text style={[styles.modalSectionLabel, { marginBottom: 8 }]}>שעת שליחה</Text>
+              {/* UIDatePicker breaks inside RTL + white sheet when system is dark — force LTR, light theme, explicit size */}
+              <View style={styles.timePickerIOSWrap}>
+                <DateTimePicker
+                  value={reportTimeDate}
+                  mode="time"
+                  display="spinner"
+                  themeVariant="light"
+                  textColor={Colors.text}
+                  style={styles.timePickerIOSNative}
+                  onChange={(_, d) => {
+                    if (d) setReportTimeDate(d);
+                  }}
+                  locale="he-IL"
+                />
+              </View>
+              <TouchableOpacity
+                style={[styles.modalAddBtn, { backgroundColor: primaryColor, marginTop: 8 }]}
+                onPress={() => setShowReportTimeModal(false)}
+                activeOpacity={0.82}
+              >
+                <Text style={styles.modalAddBtnText}>סיום</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </Modal>
+
+      {Platform.OS === 'android' && showAndroidTimePicker ? (
+        <DateTimePicker
+          value={reportTimeDate}
+          mode="time"
+          display="default"
+          onChange={(event, date) => {
+            setShowAndroidTimePicker(false);
+            if (event.type === 'set' && date) setReportTimeDate(date);
+          }}
+        />
+      ) : null}
     </View>
   );
 }
@@ -1107,6 +1301,56 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  scheduleValueBox: {
+    flex: 1,
+    height: 50,
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+    backgroundColor: '#FAFBFD',
+  },
+  scheduleValueText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'right',
+  },
+  reportModalRoot: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  reportDayList: {
+    maxHeight: 280,
+    marginTop: 4,
+  },
+  dayPickRow: {
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#F0F2F7',
+  },
+  dayPickText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+    textAlign: 'right',
+  },
+  timePickerSheet: {
+    paddingBottom: 32,
+    direction: 'ltr',
+  },
+  timePickerIOSWrap: {
+    width: '100%',
+    height: 216,
+    alignSelf: 'center',
+    overflow: 'hidden',
+  },
+  timePickerIOSNative: {
+    width: '100%',
+    height: 216,
   },
   saveBtn: {
     height: 52,

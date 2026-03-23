@@ -6,94 +6,187 @@ import {
   Image,
   StyleSheet,
   Dimensions,
-  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
+  Extrapolation,
   FadeInDown,
+  interpolate,
   SharedValue,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
 } from 'react-native-reanimated';
+
+import { LinearGradient } from 'expo-linear-gradient';
 
 import type { Service } from '@/lib/supabase';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 
 const SCREEN = Dimensions.get('window');
+const WIN_H = SCREEN.height;
 
-type ServiceCardProps = {
+const _spacing = 8;
+const _borderRadius = 14;
+/** Shorter card so prev/next services peek above & below (carousel feel) */
+const _itemSize = WIN_H * 0.4;
+const _itemGap = _spacing * 2;
+const _itemFullSize = _itemSize + _itemGap;
+/** Room above/below focused card so neighbors + borders/shadows aren’t clipped */
+const _peekInset = Math.max(52, Math.round(WIN_H * 0.076));
+/** Extra viewport height beyond card+peek (shadows, 3px selection border, scale) */
+const _viewportBleed = 44;
+/** Floating title zone — gradient so cards scroll underneath instead of a hard cut */
+const _headerFadeHeight = 118;
+
+function serviceImageUri(service: Service): string {
+  return (
+    (service as any)?.image_url ||
+    (service as any)?.cover_url ||
+    (service as any)?.image ||
+    ''
+  );
+}
+
+type PerplexityServiceCardProps = {
   service: Service;
-  idx: number;
+  index: number;
+  scrollY: SharedValue<number>;
   isSelected: boolean;
   primaryColor: string;
   t: any;
   onPress: () => void;
 };
 
-function ServiceCard({ service, idx, isSelected, primaryColor, t, onPress }: ServiceCardProps) {
+function PerplexityServiceCard({
+  service,
+  index,
+  scrollY,
+  isSelected,
+  primaryColor,
+  t,
+  onPress,
+}: PerplexityServiceCardProps) {
   const [imgError, setImgError] = useState(false);
-  const imageUri =
-    (service as any)?.image_url ||
-    (service as any)?.cover_url ||
-    (service as any)?.image ||
-    '';
-  const showImage = !!imageUri && !imgError;
+  const uri = serviceImageUri(service);
+  const showImage = !!uri && !imgError;
+  const description = ((service as any)?.description as string | undefined)?.trim?.() || '';
+  const duration = (service as any)?.duration_minutes ?? 60;
+  const price = (service as any)?.price ?? 0;
+
+  const stylez = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      scrollY.value,
+      [index - 1, index, index + 1],
+      [0.62, 1, 0.62],
+      Extrapolation.CLAMP
+    ),
+    transform: [
+      {
+        scale: interpolate(
+          scrollY.value,
+          [index - 1, index, index + 1],
+          [0.96, 1, 0.96],
+          Extrapolation.CLAMP
+        ),
+      },
+    ],
+  }));
 
   return (
-    <Animated.View
-      key={(service as any).id ?? idx}
-      entering={FadeInDown.delay(120 + idx * 55).duration(400)}
-      style={s.cardOuter}
-    >
-      <TouchableOpacity
-        onPress={onPress}
-        activeOpacity={0.88}
+    <TouchableOpacity activeOpacity={0.92} onPress={onPress}>
+      <Animated.View
         style={[
-          s.card,
-          isSelected && [s.cardSelected, { borderColor: primaryColor, shadowColor: primaryColor }],
+          {
+            height: _itemSize,
+            padding: _spacing * 2,
+            borderRadius: _borderRadius,
+            gap: _spacing * 1.5,
+            backgroundColor: '#FFFFFF',
+            overflow: 'hidden',
+            borderWidth: isSelected ? 3 : 1,
+            borderColor: isSelected ? primaryColor : '#E8E8ED',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.08,
+            shadowRadius: 20,
+            elevation: 4,
+          },
+          stylez,
         ]}
       >
-        {/* Image */}
-        <View style={s.imageWrap}>
-          {showImage ? (
+        {isSelected && (
+          <View
+            style={[styles.checkFloating, { backgroundColor: primaryColor, borderColor: '#FFFFFF' }]}
+          >
+            <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+          </View>
+        )}
+
+        {showImage ? (
+          <>
             <Image
-              source={{ uri: imageUri }}
-              style={s.cardImage}
+              source={{ uri }}
+              style={[StyleSheet.absoluteFillObject, { borderRadius: _borderRadius, opacity: 0.12 }]}
+              blurRadius={40}
+            />
+            <Image
+              source={{ uri }}
+              style={{
+                borderRadius: _borderRadius - _spacing / 2,
+                flex: 1,
+                height: _itemSize * 0.38,
+                margin: -_spacing,
+              }}
               resizeMode="cover"
               onError={() => setImgError(true)}
             />
-          ) : (
-            <View style={[s.cardImage, s.imagePlaceholder]}>
-              <Ionicons name="cut" size={32} color="rgba(255,255,255,0.55)" />
-            </View>
-          )}
-          {/* Price badge */}
-          <View style={s.priceBadge}>
-            <Text style={s.priceText}>₪{(service as any).price ?? 0}</Text>
+          </>
+        ) : (
+          <View
+            style={{
+              borderRadius: _borderRadius - _spacing / 2,
+              flex: 1,
+              minHeight: _itemSize * 0.34,
+              margin: -_spacing,
+              backgroundColor: primaryColor,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Ionicons name="cut" size={44} color="rgba(255,255,255,0.5)" />
           </View>
-          {/* Selected checkmark */}
-          {isSelected && (
-            <View style={[s.checkBadge, { backgroundColor: primaryColor }]}>
-              <Ionicons name="checkmark" size={14} color="#FFFFFF" />
-            </View>
+        )}
+
+        <View style={{ gap: _spacing * 0.75 }}>
+          <Text style={styles.cardTitle} numberOfLines={2}>
+            {(service as any)?.name || ''}
+          </Text>
+          {description ? (
+            <Text style={styles.cardDescription} numberOfLines={3}>
+              {description}
+            </Text>
+          ) : (
+            <Text style={styles.cardDescription} numberOfLines={2}>
+              {`${duration} ${t('booking.min', 'min')} · ₪${price}`}
+            </Text>
           )}
         </View>
 
-        {/* Card info */}
-        <View style={s.info}>
-          <Text
-            numberOfLines={2}
-            style={[s.name, isSelected && { color: primaryColor }]}
-          >
-            {(service as any).name}
-          </Text>
-          <View style={s.metaRow}>
-            <Ionicons name="time-outline" size={13} color="#8E8E93" />
-            <Text style={s.duration}>
-              {(service as any).duration_minutes ?? 60} {t('booking.min', 'min')}
+        <View style={styles.metaRow}>
+          <View style={styles.metaChip}>
+            <Ionicons name="time-outline" size={14} color="#6B7280" />
+            <Text style={styles.metaChipText}>
+              {duration} {t('booking.min', 'min')}
             </Text>
           </View>
+          <View style={styles.metaChip}>
+            <Ionicons name="pricetag-outline" size={14} color="#6B7280" />
+            <Text style={styles.metaChipText}>₪{price}</Text>
+          </View>
         </View>
-      </TouchableOpacity>
-    </Animated.View>
+      </Animated.View>
+    </TouchableOpacity>
   );
 }
 
@@ -117,7 +210,6 @@ export default function ServiceSelection({
   visible,
   styles: parentStyles,
   step2FadeStyle,
-  topOffset,
   safeAreaBottom,
   isLoading,
   services,
@@ -128,8 +220,42 @@ export default function ServiceSelection({
   onContinue,
 }: Props) {
   const { colors } = useBusinessColors();
+  const scrollY = useSharedValue(0);
+  /** ScrollView (not FlatList) — parent screen uses ScrollView; nesting VirtualizedList caused blank area + RN warning */
+  const scrollRef = React.useRef<Animated.ScrollView>(null);
+
+  const listViewportHeight = Math.min(
+    WIN_H * 0.66,
+    _itemSize + _peekInset * 2 + _itemGap + _viewportBleed
+  );
+  const verticalPad = Math.max(24, (listViewportHeight - _itemSize) / 2);
+
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      scrollY.value = e.contentOffset.y / _itemFullSize;
+    },
+  });
+
+  const onMomentumScrollEnd = React.useCallback(
+    (e: { nativeEvent: { contentOffset: { y: number } } }) => {
+      const y = Math.max(0, e.nativeEvent.contentOffset.y);
+      const idx = Math.round(y / _itemFullSize);
+      const clamped = Math.max(0, Math.min(idx, Math.max(0, services.length - 1)));
+      const target = clamped * _itemFullSize;
+      if (Math.abs(target - y) > 1.5 && scrollRef.current) {
+        try {
+          scrollRef.current.scrollTo({ y: target, animated: true });
+        } catch {
+          /* noop */
+        }
+      }
+    },
+    [services.length]
+  );
 
   if (!visible) return null;
+
+  const footerPad = Math.max(safeAreaBottom, 20) + 120;
 
   return (
     <Animated.View
@@ -137,81 +263,113 @@ export default function ServiceSelection({
         parentStyles.section,
         parentStyles.sectionFullBleed,
         step2FadeStyle,
-        { flex: 1, minHeight: SCREEN.height * 0.7 },
+        { backgroundColor: 'transparent' },
       ]}
     >
       {isLoading ? (
         <View style={[parentStyles.loadingContainer, { flex: 1, justifyContent: 'center' }]}>
-          <Text style={[parentStyles.loadingText, { color: '#6B7280' }]}>
+          <Text style={[parentStyles.loadingText, { color: '#9CA3AF' }]}>
             {t('booking.loadingServices', 'Loading services...')}
           </Text>
         </View>
       ) : services.length > 0 ? (
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{
-            paddingTop: 16,
-            paddingHorizontal: 20,
-            paddingBottom: Math.max(safeAreaBottom, 20) + 160,
-          }}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Header */}
-          <Animated.View
-            entering={FadeInDown.delay(80).duration(400)}
-            style={s.headerWrap}
+        <View>
+          <View
+            style={{
+              width: '100%',
+              height: listViewportHeight,
+              overflow: 'visible',
+              position: 'relative',
+            }}
           >
-            <Text style={s.headerTitle}>
-              {t('booking.selectServices', 'Select Services')}
-            </Text>
-            <Text style={s.headerSub}>
-              {t('booking.selectMultipleHint', 'Tap to select one or more services')}
-            </Text>
-          </Animated.View>
-
-          {/* Service cards grid */}
-          <View style={s.grid}>
-            {(services || []).map((service, idx) => {
-              const svcId = String((service as any).id ?? '');
-              const isSelected = selectedServiceIds
-                ? selectedServiceIds.includes(svcId)
-                : svcId === String(selectedServiceId ?? '');
-              return (
-                <ServiceCard
-                  key={svcId || idx}
-                  service={service}
-                  idx={idx}
-                  isSelected={isSelected}
-                  primaryColor={colors.primary}
-                  t={t}
-                  onPress={() => onSelectService(service, idx)}
-                />
-              );
-            })}
-          </View>
-
-          {/* Continue button */}
-          {onContinue && (selectedServiceIds?.length ?? 0) > 0 && (
-            <Animated.View
-              entering={FadeInDown.delay(200).duration(380)}
-              style={s.continueBtnWrap}
+            <Animated.ScrollView
+              ref={scrollRef}
+              nestedScrollEnabled
+              removeClippedSubviews={false}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              style={StyleSheet.absoluteFillObject}
+              contentContainerStyle={{
+                gap: _itemGap,
+                paddingHorizontal: _spacing * 2,
+                paddingTop: verticalPad,
+                paddingBottom: verticalPad + footerPad,
+              }}
+              onScroll={onScroll}
+              scrollEventThrottle={1000 / 60}
+              snapToInterval={_itemFullSize}
+              snapToAlignment="start"
+              decelerationRate="fast"
+              onMomentumScrollEnd={onMomentumScrollEnd}
             >
-              <TouchableOpacity
-                onPress={onContinue}
-                activeOpacity={0.88}
-                style={[s.continueBtn, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
+              {services.map((item, index) => {
+                const svcId = String((item as any).id ?? '');
+                const isSelected = selectedServiceIds
+                  ? selectedServiceIds.includes(svcId)
+                  : svcId === String(selectedServiceId ?? '');
+                return (
+                  <PerplexityServiceCard
+                    key={svcId || `svc-${index}`}
+                    service={item}
+                    index={index}
+                    scrollY={scrollY}
+                    isSelected={isSelected}
+                    primaryColor={colors.primary}
+                    t={t}
+                    onPress={() => onSelectService(item, index)}
+                  />
+                );
+              })}
+              {onContinue && (selectedServiceIds?.length ?? 0) > 0 ? (
+                <Animated.View entering={FadeInDown.delay(120).duration(380)} style={styles.continueBtnWrap}>
+                  <TouchableOpacity
+                    onPress={onContinue}
+                    activeOpacity={0.88}
+                    style={[styles.continueBtn, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
+                  >
+                    <Text style={styles.continueBtnText}>
+                      {t('booking.continue', 'Continue')}
+                      {(selectedServiceIds?.length ?? 0) > 1 ? ` (${selectedServiceIds!.length})` : ''}
+                    </Text>
+                    <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </Animated.View>
+              ) : (
+                <View style={{ height: 8 }} />
+              )}
+            </Animated.ScrollView>
+
+            {/* Title floats above scroll; gradient hides hard edge so carousel runs underneath */}
+            <View
+              pointerEvents="none"
+              style={[styles.headerOverlay, { height: _headerFadeHeight }]}
+            >
+              <LinearGradient
+                colors={[
+                  'rgba(255,255,255,0.98)',
+                  'rgba(255,255,255,0.88)',
+                  'rgba(255,255,255,0.45)',
+                  'rgba(255,255,255,0)',
+                ]}
+                locations={[0, 0.35, 0.65, 1]}
+                style={StyleSheet.absoluteFillObject}
+              />
+              <Animated.View
+                entering={FadeInDown.delay(80).duration(400)}
+                style={styles.headerOverlayContent}
               >
-                <Text style={s.continueBtnText}>
-                  {t('booking.continue', 'Continue')}
-                  {(selectedServiceIds?.length ?? 0) > 1 ? ` (${selectedServiceIds!.length})` : ''}
+                <Text style={styles.headerTitle}>{t('booking.selectServices', 'Select Services')}</Text>
+                <Text style={styles.headerSub}>
+                  {t('booking.selectMultipleHint', 'Tap to select one or more services')}
                 </Text>
-                <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
-              </TouchableOpacity>
-            </Animated.View>
-          )}
-        </ScrollView>
+              </Animated.View>
+            </View>
+          </View>
+        </View>
       ) : (
-        <View style={[parentStyles.loadingContainer, { flex: 1, justifyContent: 'center', alignItems: 'center' }]}>
+        <View
+          style={[parentStyles.loadingContainer, { flex: 1, justifyContent: 'center', alignItems: 'center' }]}
+        >
           <Ionicons name="briefcase-outline" size={48} color="#D1D5DB" style={{ marginBottom: 16 }} />
           <Text style={[parentStyles.loadingText, { color: '#9CA3AF', fontSize: 17 }]}>
             {t('booking.noServices', 'No services available')}
@@ -222,10 +380,18 @@ export default function ServiceSelection({
   );
 }
 
-const s = StyleSheet.create({
-  headerWrap: {
+const styles = StyleSheet.create({
+  headerOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+  },
+  headerOverlayContent: {
     alignItems: 'center',
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: 4,
   },
   headerTitle: {
     color: '#1C1C1E',
@@ -233,6 +399,9 @@ const s = StyleSheet.create({
     fontWeight: '800',
     textAlign: 'center',
     letterSpacing: -0.3,
+    textShadowColor: 'rgba(255,255,255,0.9)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 6,
   },
   headerSub: {
     color: '#6B7280',
@@ -240,105 +409,65 @@ const s = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
     marginTop: 6,
+    textShadowColor: 'rgba(255,255,255,0.85)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 4,
   },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    justifyContent: 'space-between',
-  },
-  cardOuter: {
-    width: '47.5%',
-  },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: 2.5,
-    borderColor: 'transparent',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    elevation: 5,
-  },
-  cardSelected: {
-    shadowOpacity: 0.22,
-    shadowRadius: 18,
-    elevation: 9,
-    transform: [{ scale: 1.02 }],
-  },
-  imageWrap: {
-    width: '100%',
-    height: 110,
-    position: 'relative',
-  },
-  cardImage: {
-    width: '100%',
-    height: '100%',
-  },
-  imagePlaceholder: {
-    backgroundColor: '#8B5CF6',
+  checkFloating: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  priceBadge: {
-    position: 'absolute',
-    bottom: 8,
-    left: 8,
-    backgroundColor: 'rgba(255,255,255,0.93)',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(17,24,39,0.06)',
-  },
-  priceText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#111827',
-  },
-  checkBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2.5,
+    borderWidth: 2,
     borderColor: '#FFFFFF',
-    zIndex: 2,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.12,
     shadowRadius: 4,
-    elevation: 4,
+    elevation: 3,
   },
-  info: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  name: {
-    fontSize: 14,
-    fontWeight: '700',
+  cardTitle: {
+    fontSize: 20,
     color: '#1C1C1E',
-    letterSpacing: -0.2,
-    marginBottom: 5,
+    fontWeight: '700',
+  },
+  cardDescription: {
+    fontWeight: '400',
+    color: '#6B7280',
+    fontSize: 14,
+    lineHeight: 20,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: _spacing,
+    flexWrap: 'wrap',
   },
-  duration: {
+  metaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  metaChipText: {
+    color: '#374151',
     fontSize: 12,
     fontWeight: '600',
-    color: '#8E8E93',
   },
   continueBtnWrap: {
-    marginTop: 20,
+    marginTop: 28,
     alignItems: 'center',
+    paddingHorizontal: 8,
   },
   continueBtn: {
     flexDirection: 'row',
@@ -348,13 +477,12 @@ const s = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 36,
     borderRadius: 28,
-    backgroundColor: '#7C3AED',
-    shadowColor: '#7C3AED',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
     elevation: 8,
     width: '100%',
+    maxWidth: 400,
   },
   continueBtnText: {
     color: '#FFFFFF',

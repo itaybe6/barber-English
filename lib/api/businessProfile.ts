@@ -92,6 +92,8 @@ export const businessProfileApi = {
             booking_open_days: (updates as any).booking_open_days,
             business_number: (updates as any).business_number,
             accountant_email: (updates as any).accountant_email,
+            accountant_report_day_of_month: (updates as any).accountant_report_day_of_month,
+            accountant_report_time: (updates as any).accountant_report_time,
           })
           .eq('id', businessId)
           .select('*')
@@ -124,6 +126,8 @@ export const businessProfileApi = {
           booking_open_days: (updates as any).booking_open_days ?? 7,
           business_number: (updates as any).business_number,
           accountant_email: (updates as any).accountant_email,
+          accountant_report_day_of_month: (updates as any).accountant_report_day_of_month,
+          accountant_report_time: (updates as any).accountant_report_time,
         })
         .select('*')
         .single();

@@ -41,15 +41,80 @@ async function sendEmail(
   return { ok: true };
 }
 
-function getPreviousMonth(): { year: number; month: number } {
-  const now = new Date();
-  let month = now.getMonth(); // 0-indexed, so this is the previous month
-  let year = now.getFullYear();
-  if (month === 0) {
-    month = 12;
-    year -= 1;
-  }
-  return { year, month };
+const REPORT_TZ = "Asia/Jerusalem";
+
+function getJerusalemParts(d = new Date()): {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+} {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: REPORT_TZ,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    hourCycle: "h23",
+  });
+  const parts = formatter.formatToParts(d);
+  const get = (t: string) =>
+    parseInt(parts.find((p) => p.type === t)?.value ?? "0", 10);
+  let hour = get("hour");
+  if (hour >= 24) hour = 0;
+  return {
+    year: get("year"),
+    month: get("month"),
+    day: get("day"),
+    hour,
+    minute: get("minute"),
+  };
+}
+
+function getPreviousMonthFromJerusalem(j: {
+  year: number;
+  month: number;
+}): { year: number; month: number } {
+  if (j.month === 1) return { year: j.year - 1, month: 12 };
+  return { year: j.year, month: j.month - 1 };
+}
+
+function periodKey(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+function parseHm(s: string | null | undefined): { h: number; m: number } {
+  if (!s || typeof s !== "string") return { h: 9, m: 0 };
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s.trim());
+  if (!m) return { h: 9, m: 0 };
+  let h = parseInt(m[1], 10);
+  let min = parseInt(m[2], 10);
+  h = Math.max(0, Math.min(23, h));
+  min = Math.max(0, Math.min(59, min));
+  return { h, m };
+}
+
+function clampReportDay(d: number | null | undefined): number {
+  const n = typeof d === "number" && !Number.isNaN(d) ? Math.floor(d) : 1;
+  return Math.min(28, Math.max(1, n));
+}
+
+const SCHEDULE_WINDOW_MINUTES = 60;
+
+function shouldSendNowForSchedule(
+  parts: ReturnType<typeof getJerusalemParts>,
+  dayOfMonth: number,
+  timeStr: string | null | undefined
+): boolean {
+  if (parts.day !== dayOfMonth) return false;
+  const { h: sh, m: sm } = parseHm(timeStr ?? "09:00");
+  const nowM = parts.hour * 60 + parts.minute;
+  const schedM = sh * 60 + sm;
+  const endM = Math.min(schedM + SCHEDULE_WINDOW_MINUTES, 24 * 60);
+  if (endM <= schedM) return false;
+  return nowM >= schedM && nowM < endM;
 }
 
 function formatCurrency(amount: number): string {
@@ -174,8 +239,31 @@ serve(async (req) => {
   }
 
   try {
+    const rawBody = await req.text().catch(() => "");
+    let body: {
+      forceSendForBusinessId?: string;
+      ignoreLastSent?: boolean;
+    } = {};
+    try {
+      if (rawBody) body = JSON.parse(rawBody);
+    } catch {
+      /* ignore invalid JSON */
+    }
+
+    const authBearer = (req.headers.get("Authorization") || "")
+      .replace(/^Bearer\s+/i, "")
+      .trim();
+    const isServiceCaller = authBearer === serviceRoleKey;
+    const forceBusinessId =
+      isServiceCaller && body.forceSendForBusinessId
+        ? String(body.forceSendForBusinessId).trim()
+        : null;
+    const ignoreLastSent = isServiceCaller && Boolean(body.ignoreLastSent);
+
     const admin = createClient(supabaseUrl, serviceRoleKey);
-    const { year, month } = getPreviousMonth();
+    const jNow = getJerusalemParts();
+    const { year, month } = getPreviousMonthFromJerusalem(jNow);
+    const reportPeriod = periodKey(year, month);
 
     const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
     const endDate =
@@ -185,7 +273,9 @@ serve(async (req) => {
 
     const { data: businesses, error: bizErr } = await admin
       .from("business_profile")
-      .select("id, display_name, business_number, accountant_email")
+      .select(
+        "id, display_name, business_number, accountant_email, accountant_report_day_of_month, accountant_report_time, accountant_report_last_sent_period"
+      )
       .not("accountant_email", "is", null);
 
     if (bizErr) {
@@ -200,11 +290,46 @@ serve(async (req) => {
       (b: any) => b.accountant_email && b.accountant_email.trim().length > 0
     );
 
-    let sentCount = 0;
+    let toProcess = eligibleBusinesses;
+    if (forceBusinessId) {
+      toProcess = eligibleBusinesses.filter((b: any) => b.id === forceBusinessId);
+      if (toProcess.length === 0) {
+        return new Response(
+          JSON.stringify({
+            error:
+              "forceSendForBusinessId not found or business has no accountant_email",
+            forceBusinessId,
+          }),
+          {
+            status: 400,
+            headers: { ...cors, "Content-Type": "application/json" },
+          }
+        );
+      }
+    }
 
-    for (const biz of eligibleBusinesses) {
+    let sentCount = 0;
+    let skippedSchedule = 0;
+    let skippedAlreadySent = 0;
+    let skippedEmailNotConfigured = 0;
+
+    for (const biz of toProcess) {
       try {
         const businessId = biz.id;
+        const scheduleDay = clampReportDay(biz.accountant_report_day_of_month);
+        const scheduleTime = biz.accountant_report_time ?? "09:00";
+
+        if (!forceBusinessId) {
+          if (!shouldSendNowForSchedule(jNow, scheduleDay, scheduleTime)) {
+            skippedSchedule++;
+            continue;
+          }
+        }
+
+        if (!ignoreLastSent && biz.accountant_report_last_sent_period === reportPeriod) {
+          skippedAlreadySent++;
+          continue;
+        }
 
         const { data: appointments } = await admin
           .from("appointments")
@@ -299,7 +424,31 @@ serve(async (req) => {
           totalExpenses
         );
 
-        await sendEmail(biz.accountant_email, subject, html);
+        const emailResult = await sendEmail(
+          biz.accountant_email,
+          subject,
+          html
+        );
+        if (!emailResult.ok) {
+          skippedEmailNotConfigured++;
+          console.warn(
+            `[send-monthly-report] RESEND_API_KEY missing or send skipped for ${businessId}`
+          );
+          continue;
+        }
+
+        const { error: updErr } = await admin
+          .from("business_profile")
+          .update({ accountant_report_last_sent_period: reportPeriod })
+          .eq("id", businessId);
+
+        if (updErr) {
+          console.error(
+            `[send-monthly-report] Sent email but failed to mark period for ${businessId}:`,
+            updErr
+          );
+        }
+
         sentCount++;
         console.log(
           `[send-monthly-report] Sent report for business ${businessId} to ${biz.accountant_email}`
@@ -316,7 +465,25 @@ serve(async (req) => {
       JSON.stringify({
         ok: true,
         sent: sentCount,
-        total: eligibleBusinesses.length,
+        processed: toProcess.length,
+        totalEligible: eligibleBusinesses.length,
+        reportPeriod,
+        timeZone: REPORT_TZ,
+        jerusalemNow: {
+          ...jNow,
+          label: `${jNow.year}-${String(jNow.month).padStart(2, "0")}-${String(
+            jNow.day
+          ).padStart(2, "0")} ${String(jNow.hour).padStart(2, "0")}:${String(
+            jNow.minute
+          ).padStart(2, "0")}`,
+        },
+        scheduleWindowMinutes: SCHEDULE_WINDOW_MINUTES,
+        skippedSchedule,
+        skippedAlreadySent,
+        skippedEmailNotConfigured,
+        forceBusinessId: forceBusinessId || undefined,
+        hint:
+          "Invoke this function periodically (e.g. pg_cron every hour). Schedule is evaluated in Asia/Jerusalem. Test: POST with Authorization: Bearer SERVICE_ROLE_KEY and JSON {\"forceSendForBusinessId\":\"<uuid>\",\"ignoreLastSent\":true}",
       }),
       {
         status: 200,

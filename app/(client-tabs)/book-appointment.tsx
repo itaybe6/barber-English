@@ -12,6 +12,7 @@ import ServiceSelection from '@/components/book-appointment/ServiceSelection';
 import DaySelection from '@/components/book-appointment/DaySelection';
 import TimeSelection from '@/components/book-appointment/TimeSelection';
 import BookingSuccessAnimation from '@/components/book-appointment/BookingSuccessAnimation';
+import { MotiView } from 'moti';
 import BookingStepTabs, { BOOKING_TABS_HEIGHT } from '@/components/book-appointment/BookingStepTabs';
 
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
@@ -410,7 +411,17 @@ export default function BookAppointment() {
   const [refreshTick, setRefreshTick] = useState(0);
   const [globalBreakMinutes, setGlobalBreakMinutes] = useState<number>(0);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successModalPhase, setSuccessModalPhase] = useState<'burst' | 'details'>('burst');
   const [successMessage, setSuccessMessage] = useState('');
+  const onSuccessAnimationComplete = React.useCallback(() => {
+    setSuccessModalPhase('details');
+  }, []);
+
+  useEffect(() => {
+    if (showSuccessModal) {
+      setSuccessModalPhase('burst');
+    }
+  }, [showSuccessModal]);
   const scrollRef = React.useRef<ScrollView | null>(null);
   // Step 1 → Step 2 animated transition on initial scroll
   const introFade = useSharedValue(1);
@@ -1456,10 +1467,11 @@ export default function BookAppointment() {
           <ScrollView
           ref={scrollRef as any}
           contentContainerStyle={[
-            styles.scrollContent, 
+            styles.scrollContent,
             { paddingBottom: (currentStep === 1 || currentStep === 2) ? Math.max(safeAreaInsets.bottom, 20) : contentBottomPadding },
             (currentStep === 1) ? { minHeight: CAROUSEL_HEIGHT + 100 } : null,
-            (currentStep === 1 || currentStep === 2) ? { flexGrow: 1, justifyContent: 'flex-end' } : null
+            /* Step 1: pin barber block to bottom. Step 2: no flex-end — avoids empty flex gap + nested FlatList layout bugs */
+            (currentStep === 1) ? { flexGrow: 1, justifyContent: 'flex-end' } : null,
           ]}
           showsVerticalScrollIndicator={false}
             refreshControl={currentStep >= 3 ? <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#000" /> : undefined}
@@ -1774,134 +1786,157 @@ export default function BookAppointment() {
         </Modal>
       )}
 
-      {/* Success Modal (Apple-style) */}
+      {/* Success: full-screen burst, then details card */}
       {showSuccessModal && (
         <Modal
           visible={showSuccessModal}
           animationType="fade"
-          transparent={true}
+          transparent
+          statusBarTranslucent
           onRequestClose={() => setShowSuccessModal(false)}
         >
-          <View style={styles.modalOverlay}>
-            <BlurView style={StyleSheet.absoluteFill} intensity={26} tint="dark" />
-            <View style={styles.successCard}>
-              <BlurView intensity={36} tint="light" style={styles.successBlur} />
-              <View style={styles.successTint} />
-              <View style={styles.successSheen} />
-              <View style={styles.successInnerBorder} />
-              <View style={styles.modalIconWrapper}>
-                <BookingSuccessAnimation color="#34C759" />
+          <View style={styles.successModalRoot}>
+            {successModalPhase === 'burst' && (
+              <View style={styles.successFullscreenBurst}>
+                <BookingSuccessAnimation
+                  color="#34C759"
+                  coverScreen
+                  onComplete={onSuccessAnimationComplete}
+                />
               </View>
-              <Text style={styles.modalTitle}>{t('booking.successTitle', 'Appointment Successfully Booked!')}</Text>
-              <Text style={styles.modalMessage} numberOfLines={0} allowFontScaling={false}>
-                {successMessage}
-              </Text>
-              <View style={styles.scheduleBlock}>
-                <Text style={styles.scheduleLine}>{t('booking.scheduledFor', 'has been scheduled for')}</Text>
-                <Text style={styles.scheduleDate}>
-                  {selectedDate ? new Date(selectedDate).toLocaleDateString(i18n?.language === 'he' ? 'he-IL' : 'en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : ''}
-                </Text>
-                <Text style={styles.scheduleTime}>{selectedTime || ''}</Text>
-              </View>
-              <View style={styles.modalInfoSection}>
-                <Text style={styles.modalInfoTitle}>{t('booking.yourInfo', 'Your info')}</Text>
-                {selectedServices.length > 0 && (
-                  <View style={styles.modalInfoRow}>
-                    <Ionicons name="pricetag-outline" size={18} color="#8E8E93" style={styles.modalInfoIcon} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.modalInfoText}>
-                        <Text style={styles.modalInfoLabel}>
-                          {selectedServices.length > 1 ? t('booking.field.services', 'Services') : t('booking.field.service', 'Service')}:{' '}
-                        </Text>
-                        {selectedServices.map(s => s.name).join(' + ')}
+            )}
+            {successModalPhase === 'details' && (
+              <>
+                <BlurView style={StyleSheet.absoluteFill} intensity={26} tint="dark" />
+                <MotiView
+                  from={{ opacity: 0, translateY: 18 }}
+                  animate={{ opacity: 1, translateY: 0 }}
+                  transition={{ type: 'timing', duration: 380 }}
+                  style={styles.successDetailsWrap}
+                >
+                  <View style={styles.successCard}>
+                    <BlurView intensity={36} tint="light" style={styles.successBlur} />
+                    <View style={styles.successTint} />
+                    <View style={styles.successSheen} />
+                    <View style={styles.successInnerBorder} />
+                    <View style={styles.successStaticIconWrap}>
+                      <View style={styles.successStaticIconCircle}>
+                        <Ionicons name="checkmark" size={40} color="#34C759" />
+                      </View>
+                    </View>
+                    <Text style={styles.modalTitle}>{t('booking.successTitle', 'Appointment Successfully Booked!')}</Text>
+                    <Text style={styles.modalMessage} numberOfLines={0} allowFontScaling={false}>
+                      {successMessage}
+                    </Text>
+                    <View style={styles.scheduleBlock}>
+                      <Text style={styles.scheduleLine}>{t('booking.scheduledFor', 'has been scheduled for')}</Text>
+                      <Text style={styles.scheduleDate}>
+                        {selectedDate ? new Date(selectedDate).toLocaleDateString(i18n?.language === 'he' ? 'he-IL' : 'en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : ''}
                       </Text>
-                      {selectedServices.length > 1 && (
-                        <Text style={[styles.modalInfoText, { marginTop: 2, color: '#8E8E93', fontSize: 13 }]}>
-                          {totalDuration} {t('booking.min', 'min')}  ·  ₪{totalPrice}
-                        </Text>
+                      <Text style={styles.scheduleTime}>{selectedTime || ''}</Text>
+                    </View>
+                    <View style={styles.modalInfoSection}>
+                      <Text style={styles.modalInfoTitle}>{t('booking.yourInfo', 'Your info')}</Text>
+                      {selectedServices.length > 0 && (
+                        <View style={styles.modalInfoRow}>
+                          <Ionicons name="pricetag-outline" size={18} color="#8E8E93" style={styles.modalInfoIcon} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.modalInfoText}>
+                              <Text style={styles.modalInfoLabel}>
+                                {selectedServices.length > 1 ? t('booking.field.services', 'Services') : t('booking.field.service', 'Service')}:{' '}
+                              </Text>
+                              {selectedServices.map(s => s.name).join(' + ')}
+                            </Text>
+                            {selectedServices.length > 1 && (
+                              <Text style={[styles.modalInfoText, { marginTop: 2, color: '#8E8E93', fontSize: 13 }]}>
+                                {totalDuration} {t('booking.min', 'min')}  ·  ₪{totalPrice}
+                              </Text>
+                            )}
+                          </View>
+                        </View>
                       )}
+                      <View style={styles.modalInfoRow}>
+                        <Ionicons name="calendar-outline" size={18} color="#8E8E93" style={styles.modalInfoIcon} />
+                        <Text style={styles.modalInfoText}><Text style={styles.modalInfoLabel}>{t('booking.field.date', 'Date')}: </Text>{selectedDate ? new Date(selectedDate).toLocaleDateString(i18n?.language === 'he' ? 'he-IL' : undefined) : '-'}</Text>
+                      </View>
+                      <View style={styles.modalInfoRow}>
+                        <Ionicons name="time-outline" size={18} color="#8E8E93" style={styles.modalInfoIcon} />
+                        <Text style={styles.modalInfoText}>
+                          <Text style={styles.modalInfoLabel}>{t('booking.field.time', 'Time')}: </Text>
+                          {selectedTime || '-'}
+                          {selectedServices.length > 1 && selectedTime ? ` - ${_toHHMM(_toMinutes(selectedTime) + totalDuration)}` : ''}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.modalButtons}>
+                      <TouchableOpacity
+                        style={[styles.modalButton, styles.modalButtonCalendar]}
+                        onPress={async () => {
+                          try {
+                            const duration = totalDuration || 60;
+                            const dateStr = selectedDate?.toISOString().split('T')[0] || '';
+                            const timeStr = selectedTime || '00:00';
+                            const start = new Date(`${dateStr}T${timeStr}:00`);
+                            const end = new Date(start.getTime() + duration * 60000);
+
+                            const perm = await Calendar.requestCalendarPermissionsAsync();
+                            if (perm.status !== 'granted') {
+                              Alert.alert(t('booking.permissionsRequired', 'נדרש אישור'), t('booking.calendarPermissionMessage', 'נדרש אישור גישה ליומן כדי להוסיף אירוע.'));
+                              return;
+                            }
+
+                            let calendarId: string | undefined;
+                            if (Platform.OS === 'ios') {
+                              const defCal = await Calendar.getDefaultCalendarAsync();
+                              calendarId = defCal?.id;
+                            } else {
+                              const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+                              calendarId = cals.find((c: any) => (c.allowsModifications || c.accessLevel === Calendar.CalendarAccessLevel.OWNER))?.id || cals[0]?.id;
+                            }
+
+                            if (!calendarId) {
+                              Alert.alert(t('error.generic', 'שגיאה'), t('booking.noCalendar', 'לא נמצא יומן שניתן לכתוב אליו.'));
+                              return;
+                            }
+
+                            const allNames = selectedServices.map(s => s.name).join(' + ');
+                            await Calendar.createEventAsync(calendarId, {
+                              title: allNames || t('booking.calendarEventTitle','Appointment'),
+                              startDate: start,
+                              endDate: end,
+                              notes: t('booking.calendarNotes','Booked via the app'),
+                            });
+
+                            Alert.alert(t('booking.added', 'נוסף'), t('booking.eventAdded', 'האירוע נוסף ליומן שלך.'));
+                          } catch (e) {
+                            Alert.alert(t('error.generic', 'שגיאה'), t('booking.eventAddFailed', 'לא ניתן להוסיף את האירוע ליומן.'));
+                          }
+                        }}
+                        activeOpacity={0.9}
+                      >
+                        <View style={styles.modalButtonRow}>
+                          <Ionicons name="calendar-outline" size={20} color="#FFFFFF" style={styles.modalButtonIcon} />
+                          <Text style={styles.modalButtonCalendarText}>{t('booking.addToCalendar', 'Add to Calendar')}</Text>
+                        </View>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.modalButton, styles.modalButtonConfirm]}
+                        onPress={() => {
+                          setShowSuccessModal(false);
+                          try {
+                            (router as any).replace?.('/(client-tabs)/appointments');
+                          } catch {
+                            router.back();
+                          }
+                        }}
+                      >
+                        <Text style={styles.modalButtonText}>{t('booking.gotIt', 'Got it')}</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
-                )}
-                <View style={styles.modalInfoRow}>
-                  <Ionicons name="calendar-outline" size={18} color="#8E8E93" style={styles.modalInfoIcon} />
-                  <Text style={styles.modalInfoText}><Text style={styles.modalInfoLabel}>{t('booking.field.date', 'Date')}: </Text>{selectedDate ? new Date(selectedDate).toLocaleDateString(i18n?.language === 'he' ? 'he-IL' : undefined) : '-'}</Text>
-                </View>
-                <View style={styles.modalInfoRow}>
-                  <Ionicons name="time-outline" size={18} color="#8E8E93" style={styles.modalInfoIcon} />
-                  <Text style={styles.modalInfoText}>
-                    <Text style={styles.modalInfoLabel}>{t('booking.field.time', 'Time')}: </Text>
-                    {selectedTime || '-'}
-                    {selectedServices.length > 1 && selectedTime ? ` - ${_toHHMM(_toMinutes(selectedTime) + totalDuration)}` : ''}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonCalendar]}
-                  onPress={async () => {
-                    try {
-                      const duration = totalDuration || 60;
-                      const dateStr = selectedDate?.toISOString().split('T')[0] || '';
-                      const timeStr = selectedTime || '00:00';
-                      const start = new Date(`${dateStr}T${timeStr}:00`);
-                      const end = new Date(start.getTime() + duration * 60000);
-
-                      const perm = await Calendar.requestCalendarPermissionsAsync();
-                      if (perm.status !== 'granted') {
-                        Alert.alert(t('booking.permissionsRequired', 'נדרש אישור'), t('booking.calendarPermissionMessage', 'נדרש אישור גישה ליומן כדי להוסיף אירוע.'));
-                        return;
-                      }
-
-                      let calendarId: string | undefined;
-                      if (Platform.OS === 'ios') {
-                        const defCal = await Calendar.getDefaultCalendarAsync();
-                        calendarId = defCal?.id;
-                      } else {
-                        const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
-                        calendarId = cals.find((c: any) => (c.allowsModifications || c.accessLevel === Calendar.CalendarAccessLevel.OWNER))?.id || cals[0]?.id;
-                      }
-
-                      if (!calendarId) {
-                        Alert.alert(t('error.generic', 'שגיאה'), t('booking.noCalendar', 'לא נמצא יומן שניתן לכתוב אליו.'));
-                        return;
-                      }
-
-                      const allNames = selectedServices.map(s => s.name).join(' + ');
-                      await Calendar.createEventAsync(calendarId, {
-                        title: allNames || t('booking.calendarEventTitle','Appointment'),
-                        startDate: start,
-                        endDate: end,
-                        notes: t('booking.calendarNotes','Booked via the app'),
-                      });
-
-                      Alert.alert(t('booking.added', 'נוסף'), t('booking.eventAdded', 'האירוע נוסף ליומן שלך.'));
-                    } catch (e) {
-                      Alert.alert(t('error.generic', 'שגיאה'), t('booking.eventAddFailed', 'לא ניתן להוסיף את האירוע ליומן.'));
-                    }
-                  }}
-                  activeOpacity={0.9}
-                >
-                  <View style={styles.modalButtonRow}>
-                    <Ionicons name="calendar-outline" size={20} color="#FFFFFF" style={styles.modalButtonIcon} />
-                    <Text style={styles.modalButtonCalendarText}>{t('booking.addToCalendar', 'Add to Calendar')}</Text>
-                  </View>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonConfirm]}
-                  onPress={() => {
-                    setShowSuccessModal(false);
-                    try {
-                      (router as any).replace?.('/(client-tabs)/appointments');
-                    } catch {
-                      router.back();
-                    }
-                  }}
-                >
-                  <Text style={styles.modalButtonText}>{t('booking.gotIt', 'Got it')}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+                </MotiView>
+              </>
+            )}
           </View>
         </Modal>
       )}
@@ -3445,6 +3480,40 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     backdropFilter: 'blur(10px)',
+  },
+  successModalRoot: {
+    flex: 1,
+    backgroundColor: '#0a0a0a',
+  },
+  successFullscreenBurst: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+  },
+  successDetailsWrap: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: '6%',
+  },
+  successStaticIconWrap: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  successStaticIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
   successCard: {
     width: '88%',

@@ -23,6 +23,8 @@ export type TabsProps = {
   activeBackgroundColor?: string;
   inactiveBackgroundColor?: string;
   style?: ViewStyle;
+  /** Icon on top, animated label below (e.g. booking step bar) */
+  stacked?: boolean;
 };
 type AnimatedIconProps = {
   name: LucideIconName;
@@ -51,6 +53,7 @@ export default function AnimatedTabs({
   activeBackgroundColor = '#111',
   inactiveBackgroundColor = '#ddd',
   style,
+  stacked = false,
 }: TabsProps) {
   const isRTL = I18nManager.isRTL;
 
@@ -75,6 +78,10 @@ export default function AnimatedTabs({
         const realIndex = isRTL ? data.length - 1 - displayIndex : displayIndex;
         const isSelected = displayIndex === displaySelected;
 
+        const labelFontSize = stacked ? 10 : 14;
+        const labelWeight = stacked ? ('600' as const) : ('700' as const);
+        const iconSize = stacked ? 18 : 20;
+
         return (
           <MotiView
             layout={layoutAnimation}
@@ -84,27 +91,26 @@ export default function AnimatedTabs({
             }}
             style={{
               flex: isSelected ? 2 : 1,
-              borderRadius: 14,
+              borderRadius: stacked ? 12 : 14,
               overflow: 'hidden',
-              minHeight: 48,
+              minHeight: stacked ? 54 : 48,
             }}
           >
             <Pressable
               style={{
                 flex: 1,
-                flexDirection: 'row',
-                gap: _spacing,
+                flexDirection: stacked ? 'column' : 'row',
+                gap: stacked ? 2 : _spacing,
                 justifyContent: 'center',
                 alignItems: 'center',
-                paddingHorizontal: _spacing * 2,
-                paddingVertical: _spacing * 2,
+                paddingHorizontal: stacked ? _spacing : _spacing * 2,
+                paddingVertical: stacked ? 6 : _spacing * 2,
               }}
               onPress={() => onChange?.(realIndex)}
             >
               <AnimatedIcon
                 name={item.icon}
-                size={20}
-                // We avoid animating initial entering via LayoutAnimationConfig below
+                size={iconSize}
                 animate={{ color: isSelected ? activeColor : inactiveColor }}
               />
               <LayoutAnimationConfig skipEntering>
@@ -114,9 +120,10 @@ export default function AnimatedTabs({
                     exiting={exiting}
                     style={{
                       color: activeColor,
-                      fontWeight: '700',
-                      fontSize: 14,
-                      letterSpacing: -0.3,
+                      fontWeight: labelWeight,
+                      fontSize: labelFontSize,
+                      letterSpacing: stacked ? -0.2 : -0.3,
+                      textAlign: 'center',
                     }}
                     numberOfLines={1}
                   >

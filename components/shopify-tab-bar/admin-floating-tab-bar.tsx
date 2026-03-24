@@ -8,6 +8,7 @@ import {
   Home,
   Settings,
   Users,
+  Wallet,
 } from "lucide-react-native";
 import { TabButton } from "./tab-button";
 import { useColors } from "@/src/theme/ThemeProvider";
@@ -64,6 +65,14 @@ export const AdminFloatingTabBar: React.FC = () => {
           onPress={() => router.push("/(tabs)/business-hours")}
         >
           <Clock size={22} color={iconColor("business-hours")} />
+        </TabButton>
+
+        <TabButton
+          focused={isActive("finance")}
+          activeColor={primary}
+          onPress={() => router.push("/(tabs)/finance")}
+        >
+          <Wallet size={22} color={iconColor("finance")} />
         </TabButton>
 
       </View>

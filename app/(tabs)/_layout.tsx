@@ -28,7 +28,7 @@ export default function TabsLayout() {
             <Tabs.Screen name="edit-gallery" options={{ title: "Edit Gallery", href: null }} />
             <Tabs.Screen name="edit-products" options={{ title: "Edit Products", href: null }} />
             <Tabs.Screen name="edit-home-hero" options={{ title: "Edit Home Hero", href: null }} />
-            <Tabs.Screen name="finance" options={{ title: "Finance", href: null }} />
+            <Tabs.Screen name="finance" options={{ title: "Finance" }} />
           </Tabs>
         </AnimatedTabsContainer>
 

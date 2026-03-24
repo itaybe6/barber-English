@@ -44,6 +44,7 @@ import {
   FileImage,
   Calendar,
   Clock,
+  Eye,
 } from 'lucide-react-native';
 
 const REPORT_DAY_OPTIONS = Array.from({ length: 28 }, (_, i) => i + 1);
@@ -108,6 +109,7 @@ export default function FinanceScreen() {
   const [savingExpense, setSavingExpense] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showAccountantPreview, setShowAccountantPreview] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -481,6 +483,17 @@ export default function FinanceScreen() {
               הדוח תמיד על החודש שחלף (הכנסות והוצאות מפורטות). בוחרים את היום בחודש (1–28) ואת השעה לפי שעון ישראל שבה יישלח המייל לרואה החשבון.
             </Text>
 
+            <TouchableOpacity
+              style={[styles.previewReportBtn, { borderColor: primaryColor }]}
+              onPress={() => setShowAccountantPreview(true)}
+              activeOpacity={0.75}
+            >
+              <Eye size={20} color={primaryColor} />
+              <Text style={[styles.previewReportBtnText, { color: primaryColor }]}>
+                תצוגה מקדימה לדוח רואה חשבון
+              </Text>
+            </TouchableOpacity>
+
             <View style={styles.fieldBlock}>
               <Text style={styles.fieldLabel}>יום בשליחה בכל חודש (1–28)</Text>
               <TouchableOpacity
@@ -688,6 +701,188 @@ export default function FinanceScreen() {
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── Accountant report preview (same structure as email) ── */}
+      <Modal visible={showAccountantPreview} animationType="slide" transparent statusBarTranslucent>
+        <View style={styles.previewModalRoot}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setShowAccountantPreview(false)}
+          />
+          <View style={[styles.previewModalSheet, { borderTopColor: primaryColor }]}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalTopRow}>
+              <Text style={styles.modalTitle}>תצוגת דוח לרואה חשבון</Text>
+              <TouchableOpacity
+                onPress={() => setShowAccountantPreview(false)}
+                style={styles.modalCloseBtn}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <X size={22} color={Colors.subtext} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.previewScroll}
+              contentContainerStyle={styles.previewScrollContent}
+              showsVerticalScrollIndicator
+              bounces={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.previewHeaderCard}>
+                <Text style={styles.previewPeriodLabel}>
+                  {MONTH_NAMES_HE[month - 1]} {year}
+                </Text>
+                <Text style={styles.previewBusinessName}>
+                  {profile?.display_name?.trim() || 'העסק'}
+                </Text>
+                {businessNumber.trim() ? (
+                  <Text style={styles.previewBusinessMeta}>
+                    מספר עוסק / ח.פ.: {businessNumber.trim()}
+                  </Text>
+                ) : null}
+                {accountantEmail.trim() ? (
+                  <Text style={styles.previewBusinessMeta}>נשלח אל: {accountantEmail.trim()}</Text>
+                ) : (
+                  <Text style={[styles.previewBusinessMeta, { color: '#F59E0B' }]}>
+                    לא הוגדר מייל רואה חשבון — יש להשלים למטה לפני השליחה
+                  </Text>
+                )}
+              </View>
+
+              <View style={styles.previewSummaryRow}>
+                <View style={[styles.previewSummaryBox, { backgroundColor: '#ECFDF5' }]}>
+                  <Text style={[styles.previewSummaryLabel, { color: '#16A34A' }]}>סה״כ הכנסות</Text>
+                  <Text style={[styles.previewSummaryValue, { color: '#16A34A' }]}>
+                    {formatCurrency(totalIncome)}
+                  </Text>
+                </View>
+                <View style={[styles.previewSummaryBox, { backgroundColor: '#FEF2F2' }]}>
+                  <Text style={[styles.previewSummaryLabel, { color: '#DC2626' }]}>סה״כ הוצאות</Text>
+                  <Text style={[styles.previewSummaryValue, { color: '#DC2626' }]}>
+                    {formatCurrency(totalExpenses)}
+                  </Text>
+                </View>
+              </View>
+              <View
+                style={[
+                  styles.previewSummaryBox,
+                  {
+                    backgroundColor: netProfit >= 0 ? '#ECFDF5' : '#FEF2F2',
+                    width: '100%',
+                    marginBottom: 16,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.previewSummaryLabel,
+                    { color: netProfit >= 0 ? '#16A34A' : '#DC2626' },
+                  ]}
+                >
+                  רווח נקי
+                </Text>
+                <Text
+                  style={[
+                    styles.previewSummaryValue,
+                    { color: netProfit >= 0 ? '#16A34A' : '#DC2626' },
+                  ]}
+                >
+                  {netProfit >= 0 ? '+' : ''}{formatCurrency(netProfit)}
+                </Text>
+              </View>
+
+              <Text style={styles.previewSectionTitle}>פירוט הכנסות</Text>
+              <View style={styles.previewTableCard}>
+                {incomeBreakdown.length === 0 ? (
+                  <Text style={styles.previewEmptyText}>אין הכנסות בחודש זה</Text>
+                ) : (
+                  <>
+                    <View style={styles.previewTableHeader}>
+                      <Text style={[styles.previewTh, styles.previewThService]}>שירות</Text>
+                      <Text style={styles.previewThNum}>תורים</Text>
+                      <Text style={styles.previewThMoney}>מחיר</Text>
+                      <Text style={styles.previewThMoney}>סה״כ</Text>
+                    </View>
+                    {incomeBreakdown.map((item) => (
+                      <View key={item.service_id || item.service_name} style={styles.previewTableRow}>
+                        <Text style={[styles.previewTd, styles.previewThService]} numberOfLines={2}>
+                          {item.service_name}
+                        </Text>
+                        <Text style={styles.previewTdNum}>{item.count}</Text>
+                        <Text style={styles.previewTdMoney}>{formatCurrency(item.price)}</Text>
+                        <Text style={[styles.previewTdMoney, styles.previewTdMoneyStrong]}>
+                          {formatCurrency(item.total)}
+                        </Text>
+                      </View>
+                    ))}
+                    <View style={styles.previewTableFooter}>
+                      <Text style={styles.previewFooterLabel}>סה״כ הכנסות</Text>
+                      <Text style={[styles.previewFooterAmount, { color: '#16A34A' }]}>
+                        {formatCurrency(totalIncome)}
+                      </Text>
+                    </View>
+                  </>
+                )}
+              </View>
+
+              <Text style={styles.previewSectionTitle}>הוצאות</Text>
+              <View style={styles.previewTableCard}>
+                {expenses.length === 0 ? (
+                  <Text style={styles.previewEmptyText}>אין הוצאות בחודש זה</Text>
+                ) : (
+                  <>
+                    <View style={styles.previewTableHeader}>
+                      <Text style={[styles.previewTh, { flex: 1.2 }]}>תיאור</Text>
+                      <Text style={[styles.previewTh, { flex: 0.85 }]}>קטגוריה</Text>
+                      <Text style={[styles.previewTh, { flex: 0.75 }]}>תאריך</Text>
+                      <Text style={[styles.previewThMoney, { flex: 0.7 }]}>סכום</Text>
+                    </View>
+                    {expenses.map((expense) => {
+                      const cat = CATEGORY_CONFIG[expense.category] || CATEGORY_CONFIG.other;
+                      return (
+                        <View key={expense.id} style={styles.previewTableRow}>
+                          <Text style={[styles.previewTd, { flex: 1.2 }]} numberOfLines={2}>
+                            {expense.description || cat.label}
+                          </Text>
+                          <Text style={[styles.previewTd, { flex: 0.85, fontSize: 12 }]} numberOfLines={1}>
+                            {cat.label}
+                          </Text>
+                          <Text style={[styles.previewTd, { flex: 0.75, fontSize: 12 }]}>
+                            {expense.expense_date}
+                          </Text>
+                          <Text style={[styles.previewTdMoney, { flex: 0.7, color: '#DC2626' }]}>
+                            {formatCurrency(Number(expense.amount))}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                    <View style={styles.previewTableFooter}>
+                      <Text style={styles.previewFooterLabel}>סה״כ הוצאות</Text>
+                      <Text style={[styles.previewFooterAmount, { color: '#DC2626' }]}>
+                        {formatCurrency(totalExpenses)}
+                      </Text>
+                    </View>
+                  </>
+                )}
+              </View>
+
+              <Text style={styles.previewDisclaimer}>
+                התצוגה מבוססת על החודש שבחרת למעלה. בשליחה האוטומטית נשלח דוח על החודש הקודם (לפי שעון ישראל), באותו מבנה ובאותה לוגיקת חישוב הכנסות כמו כאן.
+              </Text>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.previewCloseFullBtn, { backgroundColor: primaryColor }]}
+              onPress={() => setShowAccountantPreview(false)}
+              activeOpacity={0.82}
+            >
+              <Text style={styles.modalAddBtnText}>סגור</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
 
       {/* ── Success Modal ── RTL */}
@@ -1599,5 +1794,219 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '800',
+  },
+
+  // ── Accountant preview ──
+  previewReportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    borderWidth: 2,
+    marginBottom: 20,
+    backgroundColor: '#FAFBFD',
+  },
+  previewReportBtnText: {
+    fontSize: 15,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  previewModalRoot: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  previewModalSheet: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderTopWidth: 4,
+    maxHeight: '92%',
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 20,
+    direction: 'rtl',
+  },
+  previewScroll: {
+    flexGrow: 0,
+    maxHeight: Platform.OS === 'web' ? 520 : 480,
+  },
+  previewScrollContent: {
+    paddingBottom: 12,
+    direction: 'rtl',
+  },
+  previewHeaderCard: {
+    backgroundColor: '#F4F6FB',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+  },
+  previewPeriodLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.subtext,
+    textAlign: 'right',
+    marginBottom: 6,
+  },
+  previewBusinessName: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: Colors.text,
+    textAlign: 'right',
+  },
+  previewBusinessMeta: {
+    fontSize: 13,
+    color: Colors.subtext,
+    textAlign: 'right',
+    marginTop: 6,
+    lineHeight: 18,
+    writingDirection: 'rtl',
+  },
+  previewSummaryRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  previewSummaryBox: {
+    flex: 1,
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+  },
+  previewSummaryLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  previewSummaryValue: {
+    fontSize: 17,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  previewSectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.text,
+    textAlign: 'right',
+    marginBottom: 10,
+    marginTop: 4,
+  },
+  previewTableCard: {
+    borderWidth: 1,
+    borderColor: '#E8EAF0',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 8,
+    backgroundColor: '#FAFBFD',
+  },
+  previewTableHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F2F7',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    gap: 4,
+  },
+  previewTh: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6B7280',
+    textAlign: 'right',
+    flex: 1,
+  },
+  previewThService: {
+    flex: 1.15,
+  },
+  previewThNum: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6B7280',
+    textAlign: 'center',
+    width: 40,
+  },
+  previewThMoney: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6B7280',
+    textAlign: 'left',
+    width: 56,
+  },
+  previewTableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E8EAF0',
+    gap: 4,
+  },
+  previewTd: {
+    fontSize: 13,
+    color: Colors.text,
+    textAlign: 'right',
+    flex: 1,
+  },
+  previewTdNum: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'center',
+    width: 40,
+  },
+  previewTdMoney: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'left',
+    width: 56,
+  },
+  previewTdMoneyStrong: {
+    color: '#16A34A',
+  },
+  previewTableFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    backgroundColor: '#F0F2F7',
+  },
+  previewFooterLabel: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Colors.text,
+    textAlign: 'right',
+  },
+  previewFooterAmount: {
+    fontSize: 15,
+    fontWeight: '900',
+    textAlign: 'left',
+  },
+  previewEmptyText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 12,
+  },
+  previewDisclaimer: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    textAlign: 'right',
+    lineHeight: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    writingDirection: 'rtl',
+  },
+  previewCloseFullBtn: {
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
   },
 });

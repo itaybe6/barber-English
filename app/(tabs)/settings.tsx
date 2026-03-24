@@ -37,7 +37,6 @@ import {
   User,
   Repeat
 } from 'lucide-react-native';
-import { Ticket } from 'lucide-react-native';
 import { Users } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -847,11 +846,6 @@ export default function SettingsScreen() {
 
   // Add Service modal state
   const [showAddServiceModal, setShowAddServiceModal] = useState(false);
-  // Coupons add modal state
-  const [showAddCouponModal, setShowAddCouponModal] = useState(false);
-  const [couponNameDraft, setCouponNameDraft] = useState('');
-  const [couponCountsDraft, setCouponCountsDraft] = useState('1');
-  const [isSavingCoupon, setIsSavingCoupon] = useState(false);
   const [showCountsDropdown, setShowCountsDropdown] = useState(false);
   
   
@@ -1374,35 +1368,6 @@ export default function SettingsScreen() {
       Alert.alert(t('error.generic','Error'), t('settings.services.createFailed','Failed to create service'));
     } finally {
       setAddSvcIsSaving(false);
-    }
-  };
-
-  const handleSaveCoupon = async () => {
-    try {
-      const name = (couponNameDraft || '').trim();
-      const counts = Math.max(1, Math.floor(Number((couponCountsDraft || '').trim()) || 0));
-      if (!name) {
-        Alert.alert(t('error.generic','Error'), t('settings.coupons.nameRequired','Please enter a coupon name'));
-        return;
-      }
-      setIsSavingCoupon(true);
-      const { error } = await supabase
-        .from('coupons')
-        .insert({
-          name,
-          counts_booking: counts,
-          business_id: getBusinessId(),
-          worker_id: user?.id || null,
-        } as any);
-      if (error) throw error;
-      setShowAddCouponModal(false);
-      setCouponNameDraft('');
-      setCouponCountsDraft('1');
-      Alert.alert(t('success.generic','Success'), t('settings.coupons.createSuccess','Coupon created successfully'));
-    } catch (e) {
-      Alert.alert(t('error.generic','Error'), t('settings.coupons.createFailed','Failed to create coupon'));
-    } finally {
-      setIsSavingCoupon(false);
     }
   };
 
@@ -2156,19 +2121,6 @@ export default function SettingsScreen() {
             openServicesModal
           )}
         </View>
-
-        {/* Coupons */}
-        <Text style={styles.sectionTitleNew}>{t('settings.sections.coupons','Coupons')}</Text>
-        <View style={[styles.cardNew, shadowStyle]}>
-          {renderSettingItem(
-            <Ticket size={20} color={businessColors.primary} />, 
-            t('settings.coupons.add','Add coupon'),
-            t('settings.coupons.addSubtitle','Create a coupon for clients'),
-            undefined,
-            () => setShowAddCouponModal(true)
-          )}
-        </View>
-
 
         {canSeeAddEmployee && (
           <>
@@ -4201,68 +4153,6 @@ export default function SettingsScreen() {
         </SafeAreaView>
       </Modal>
 
-
-      {/* Add Coupon Modal */}
-      <Modal
-        visible={showAddCouponModal}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setShowAddCouponModal(false)}
-      >
-        <View style={styles.smallModalOverlay}>
-          <LinearGradient colors={[`${businessColors.primary}20`, `${businessColors.primary}10`]} style={styles.glassOuter}>
-            <BlurView intensity={22} tint="light" style={styles.glassCard}>
-              <View style={styles.modalHeader}>
-                <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowAddCouponModal(false)}>
-                  <Text style={styles.modalCloseText}>{t('cancel','Cancel')}</Text>
-                </TouchableOpacity>
-                <Text style={styles.modalTitle}>{t('settings.coupons.addTitle','Add coupon')}</Text>
-                <TouchableOpacity
-                  style={[styles.modalSendButton, isSavingCoupon && styles.modalSendButtonDisabled]}
-                  onPress={handleSaveCoupon}
-                  disabled={isSavingCoupon}
-                >
-                  <Text style={[styles.modalSendText, isSavingCoupon && styles.modalSendTextDisabled]}>
-                    {isSavingCoupon ? t('settings.common.saving','Saving...') : t('save','Save')}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
-                <View style={[styles.couponRootLTR, styles.couponForm]}>
-                  <View style={styles.couponFieldGroup}>
-                    <Text style={styles.couponLabel}>{t('settings.coupons.name','Coupon name')}</Text>
-                    <TextInput
-                      style={[styles.couponInput]}
-                      value={couponNameDraft}
-                      onChangeText={setCouponNameDraft}
-                      placeholder={t('settings.coupons.namePlaceholder','e.g. 10th Free')}
-                      placeholderTextColor={Colors.subtext}
-                      textAlign="left"
-                    />
-                  </View>
-
-                  <View style={styles.couponFieldGroup}>
-                    <Text style={styles.couponLabel}>{t('settings.coupons.counts','Bookings count')}</Text>
-                    <View style={styles.chipRow}>
-                      {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-                        <TouchableOpacity
-                          key={n}
-                          style={[styles.chip, couponCountsDraft === String(n) && styles.chipSelected]}
-                          onPress={() => setCouponCountsDraft(String(n))}
-                          activeOpacity={0.9}
-                        >
-                          <Text style={[styles.chipText, couponCountsDraft === String(n) && styles.chipTextSelected]}>{n}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                </View>
-              </ScrollView>
-            </BlurView>
-          </LinearGradient>
-        </View>
-      </Modal>
-
       {/* Add Appointment Modal */}
       <AddAppointmentModal
         visible={showAddAppointmentModal}
@@ -5211,32 +5101,6 @@ const styles = StyleSheet.create({
   glassInput: {
     backgroundColor: 'rgba(255,255,255,0.6)',
     borderColor: 'rgba(0,0,0,0.06)'
-  },
-  // Add Coupon modal – modern LTR form
-  couponForm: {
-    padding: 4,
-  },
-  couponRootLTR: {
-    direction: 'ltr',
-  },
-  couponFieldGroup: {
-    marginBottom: 18,
-  },
-  couponLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 8,
-    textAlign: 'left',
-  },
-  couponInput: {
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
-    color: Colors.text,
   },
   chipRow: {
     flexDirection: 'row',

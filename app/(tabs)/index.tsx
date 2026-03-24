@@ -1180,27 +1180,57 @@ export default function HomeScreen() {
                     return (
                    <View style={styles.clientItem}>
                      <View style={styles.clientInfo}>
-                       <Text style={styles.clientName}>{item.name}</Text>
-                       {item.phone && (
-                         <Text style={styles.clientPhone}>{item.phone}</Text>
-                       )}
-                       <Text style={styles.clientStatsLine}>
-                         {t('clients.stats.appointmentsLine', '{{count}} appointments (excl. cancelled)', {
-                           count: totalAppts,
+                       <Text style={styles.modalClientName} numberOfLines={1} ellipsizeMode="tail">
+                         {item.name}
+                       </Text>
+                       {item.phone ? (
+                         <Text style={styles.clientPhone} numberOfLines={1} ellipsizeMode="tail">
+                           {item.phone}
+                         </Text>
+                       ) : null}
+                       <View
+                         style={styles.clientStatsPanel}
+                         accessibilityLabel={t('clients.stats.a11yCard', '{{name}}: {{visits}} visits, {{spend}}', {
+                           name: item.name || '',
+                           visits: totalAppts,
+                           spend:
+                             avgMo != null
+                               ? formatClientMoney(avgMo)
+                               : t('clients.stats.noSpendShort', 'No data'),
                          })}
-                       </Text>
-                       <Text style={styles.clientStatsLineMuted}>
-                         {avgMo != null
-                           ? t('clients.stats.avgMonthlyLine', '~{{amount}}/mo avg (active months)', {
-                               amount: formatClientMoney(avgMo),
-                             })
-                           : t('clients.stats.noSpendYet', 'No spend data yet (confirmed/completed)')}
-                       </Text>
+                       >
+                         <View style={styles.statBox}>
+                           <View style={[styles.statIconCircle, { backgroundColor: `${colors.primary}18` }]}>
+                             <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+                           </View>
+                           <Text style={styles.statBoxValue}>{totalAppts}</Text>
+                           <Text style={styles.statBoxLabel}>
+                             {t('clients.stats.visitsShort', 'Visits')}
+                           </Text>
+                         </View>
+                         <View style={styles.statBoxDivider} />
+                         <View style={styles.statBox}>
+                           <View style={[styles.statIconCircle, { backgroundColor: `${colors.primary}18` }]}>
+                             <Ionicons name="wallet-outline" size={18} color={colors.primary} />
+                           </View>
+                           <Text
+                             style={[styles.statBoxValue, avgMo == null && styles.statBoxValueMuted]}
+                             numberOfLines={1}
+                           >
+                             {avgMo != null ? formatClientMoney(avgMo) : '—'}
+                           </Text>
+                           <Text style={styles.statBoxLabel}>
+                             {t('clients.stats.avgMonthShort', 'Avg / month')}
+                           </Text>
+                         </View>
+                       </View>
                      </View>
-                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, alignSelf: 'center' }}>
+                     <View style={styles.clientActionsRow}>
                        <TouchableOpacity
                          style={styles.phoneButton}
                          onPress={() => handlePhoneCall(item.phone)}
+                         accessibilityRole="button"
+                         accessibilityLabel={t('clients.call.title', 'Call')}
                        >
                          <Ionicons name="call" size={20} color={colors.primary} />
                        </TouchableOpacity>
@@ -1208,8 +1238,18 @@ export default function HomeScreen() {
                          style={styles.blockButton}
                          onPress={() => (item.block ? handleUnblockClient(item) : handleBlockClient(item))}
                          activeOpacity={0.85}
+                         accessibilityRole="button"
+                         accessibilityLabel={
+                           item.block
+                             ? t('clients.unblock.title', 'Unblock Client')
+                             : t('clients.block.title', 'Block Client')
+                         }
                        >
-                         <Text style={styles.blockButtonText}>{item.block ? 'Unblock' : 'Block'}</Text>
+                         <Text style={styles.blockButtonText}>
+                           {item.block
+                             ? t('clients.actions.unblock', 'Unblock')
+                             : t('clients.actions.block', 'Block')}
+                         </Text>
                        </TouchableOpacity>
                      </View>
                    </View>
@@ -2351,21 +2391,24 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontWeight: '600',
   },
   clientItem: {
-    flexDirection: 'row', // LTR
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     backgroundColor: '#fff',
-    borderRadius: 12,
-    marginBottom: 8,
+    borderRadius: 16,
+    marginBottom: 10,
     marginHorizontal: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E8E8ED',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
       },
       android: {
         elevation: 2,
@@ -2374,15 +2417,16 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   // Renamed to avoid duplicate key in StyleSheet
   modalClientName: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
     color: colors.text,
     textAlign: 'left',
+    letterSpacing: -0.2,
   },
   clientInfo: {
     flex: 1,
-    marginLeft: 16,
-    alignItems: 'flex-start',
+    minWidth: 0,
+    alignItems: 'stretch',
   },
   clientPhone: {
     fontSize: 14,
@@ -2390,18 +2434,58 @@ const createStyles = (colors: any) => StyleSheet.create({
     textAlign: 'left',
     marginTop: 4,
   },
-  clientStatsLine: {
-    fontSize: 13,
-    color: colors.text,
-    textAlign: 'left',
-    marginTop: 6,
-    fontWeight: '500',
+  clientStatsPanel: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    marginTop: 12,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: `${colors.primary}0D`,
   },
-  clientStatsLineMuted: {
-    fontSize: 12,
+  statBox: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    gap: 4,
+  },
+  statIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  statBoxValue: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.text,
+    letterSpacing: -0.3,
+  },
+  statBoxValueMuted: {
     color: colors.textSecondary,
-    textAlign: 'left',
-    marginTop: 2,
+    fontWeight: '600',
+  },
+  statBoxLabel: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  statBoxDivider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: 'stretch',
+    marginVertical: 10,
+    backgroundColor: colors.border,
+  },
+  clientActionsRow: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingTop: 2,
   },
   phoneButton: {
     width: 44,
@@ -2426,7 +2510,8 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderColor: '#FEE2E2',
     borderWidth: 1,
     paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
+    minWidth: 92,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',

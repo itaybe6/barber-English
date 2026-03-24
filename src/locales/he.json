@@ -184,10 +184,15 @@
     },
     "update": { "failed": "נכשל בעדכון הלקוח" },
     "delete": { "title": "מחיקת לקוח", "message": "למחוק את {{name}}?", "failed": "נכשל במחיקת הלקוח" },
+    "actions": { "block": "חסום", "unblock": "בטל חסימה" },
     "stats": {
       "appointmentsLine": "{{count}} תורים (ללא ביטולים)",
       "avgMonthlyLine": "ממוצע ~{{amount}} לחודש (חודשים עם תורים)",
-      "noSpendYet": "אין נתוני הוצאה (תורים מאושרים/הושלמו עם מחיר)"
+      "noSpendYet": "אין נתוני הוצאה (תורים מאושרים/הושלמו עם מחיר)",
+      "visitsShort": "תורים",
+      "avgMonthShort": "ממוצע לחודש",
+      "noSpendShort": "אין",
+      "a11yCard": "{{name}}: {{visits}} תורים, הוצאה {{spend}}"
     }
   },
   "clients.client": "לקוחה ",

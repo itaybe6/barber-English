@@ -182,10 +182,15 @@
     },
     "update": { "failed": "Failed to update client" },
     "delete": { "title": "Delete Client", "message": "Delete {{name}}?", "failed": "Failed to delete client" },
+    "actions": { "block": "Block", "unblock": "Unblock" },
     "stats": {
       "appointmentsLine": "{{count}} appointments (excl. cancelled)",
       "avgMonthlyLine": "~{{amount}}/mo avg (active months)",
-      "noSpendYet": "No spend data yet (confirmed/completed with price)"
+      "noSpendYet": "No spend data yet (confirmed/completed with price)",
+      "visitsShort": "Visits",
+      "avgMonthShort": "Avg / mo",
+      "noSpendShort": "None",
+      "a11yCard": "{{name}}: {{visits}} visits, spend {{spend}}"
     }
   },
   "clients.client": "Client ",

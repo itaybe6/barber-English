@@ -331,8 +331,6 @@ export const superAdminApi = {
         'designs',
         'products',
         'messages',
-        'customer_coupons',
-        'coupons',
         'users',
       ];
 

@@ -769,12 +769,13 @@ export default function AdminAppointmentsScreen() {
   const gridDays = useMemo((): DayBlock[] => {
     if (calendarView === 'week') {
       const start = _getStartOfWeek(selectedDate);
-      return _buildDays(start, 7);
+      // RTL: Saturday (שבת) leftmost → Sunday (א׳) rightmost
+      return _buildDays(start, 7).reverse();
     }
     if (calendarView === 'threeDay') {
       const d0 = new Date(selectedDate);
       d0.setHours(0, 0, 0, 0);
-      return _buildDays(d0, 3);
+      return _buildDays(d0, 3).reverse();
     }
     return [];
   }, [selectedDateStr, calendarView]);
@@ -827,11 +828,29 @@ export default function AdminAppointmentsScreen() {
   }, [calendarView, selectedDateStr, dayStart, halfHourLabels.length]);
 
   const hoursScrollViewRef = useAnimatedRef<any>();
+  const flashListRef = useRef<any>(null);
   const scrollX = useSharedValue(0);
   const scrollY = useSharedValue(0);
   const onScrollX = useAnimatedScrollHandler((e) => {
     scrollX.value = e.contentOffset.x;
   });
+
+  // RTL: when week/threeDay view loads, scroll to the end so Sunday (א׳) appears on the right
+  useEffect(() => {
+    if ((calendarView !== 'week' && calendarView !== 'threeDay') || gridDays.length === 0) return;
+    const sw = Dimensions.get('window').width;
+    const totalWidth = gridDays.length * gridDims.daySize;
+    const visibleWidth = sw - gridDims.timeCol;
+    const targetOffset = Math.max(0, totalWidth - visibleWidth);
+    // Update scrollX so the header stays in sync
+    scrollX.value = targetOffset;
+    // Scroll the FlashList to show Sunday on the right
+    const timer = setTimeout(() => {
+      flashListRef.current?.scrollToOffset({ offset: targetOffset, animated: false });
+    }, 0);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendarView, gridDays.length, gridDims.daySize, gridDims.timeCol]);
   const headerStylez = useAnimatedStyle(() => {
     return {
       transform: [{ translateX: -scrollX.value }],
@@ -1271,6 +1290,7 @@ export default function AdminAppointmentsScreen() {
                     contentContainerStyle={{ paddingBottom: gridDims.padBottom }}
                   >
                     <AnimatedFlashList
+                      ref={flashListRef}
                       data={gridDays}
                       horizontal
                       keyExtractor={(item) => item.formatted}
@@ -1279,7 +1299,7 @@ export default function AdminAppointmentsScreen() {
                       decelerationRate="fast"
                       bounces={false}
                       contentContainerStyle={{ paddingBottom: gridDims.padBottom }}
-                      showsHorizontalScrollIndicator={true}
+                      showsHorizontalScrollIndicator={false}
                       renderItem={({ item, index }) => (
                         <WeekDayColumn
                           day={item}

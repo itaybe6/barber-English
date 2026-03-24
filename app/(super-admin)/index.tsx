@@ -20,6 +20,7 @@ import { BlurView } from 'expo-blur';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '@/stores/authStore';
 import { superAdminApi, BusinessOverview } from '@/lib/api/superAdmin';
+import { PulseemBusinessModal } from '@/components/superAdmin/PulseemBusinessModal';
 
 const ACCENT = '#6C5CE7';
 const ACCENT_DARK = '#5A4BD1';
@@ -55,6 +56,7 @@ export default function SuperAdminDashboard() {
   const [logoAsset, setLogoAsset] = useState<{ uri: string; base64: string } | null>(null);
   const [iconAsset, setIconAsset] = useState<{ uri: string; base64: string } | null>(null);
   const [splashAsset, setSplashAsset] = useState<{ uri: string; base64: string } | null>(null);
+  const [pulseModalBiz, setPulseModalBiz] = useState<BusinessOverview | null>(null);
 
   const loadBusinesses = useCallback(async () => {
     const data = await superAdminApi.getAllBusinesses();
@@ -303,6 +305,12 @@ export default function SuperAdminDashboard() {
             <Ionicons name="call" size={14} color={GREEN} />
           </View>
         ) : null}
+        {item.pulseem_user_id && item.pulseemHasPassword && item.pulseem_from_number ? (
+          <View style={[styles.bizChip, { backgroundColor: 'rgba(108,92,231,0.12)' }]}>
+            <Text style={[styles.bizChipText, { color: ACCENT }]}>פולסים מוגדר</Text>
+            <Ionicons name="chatbubbles" size={14} color={ACCENT} />
+          </View>
+        ) : null}
       </View>
 
       {(item.adminPhone || item.adminPassword) ? (
@@ -327,10 +335,16 @@ export default function SuperAdminDashboard() {
       ) : null}
 
       <View style={styles.bizFooter}>
-        <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item)} activeOpacity={0.7}>
-          <Text style={styles.deleteBtnText}>מחק</Text>
-          <Ionicons name="trash-outline" size={14} color="#FF6B6B" />
-        </TouchableOpacity>
+        <View style={styles.bizFooterLeft}>
+          <TouchableOpacity style={styles.pulseBtn} onPress={() => setPulseModalBiz(item)} activeOpacity={0.7}>
+            <Text style={styles.pulseBtnText}>פולסים SMS</Text>
+            <Ionicons name="keypad-outline" size={14} color={ACCENT} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item)} activeOpacity={0.7}>
+            <Text style={styles.deleteBtnText}>מחק</Text>
+            <Ionicons name="trash-outline" size={14} color="#FF6B6B" />
+          </TouchableOpacity>
+        </View>
         <Text style={styles.bizId} selectable numberOfLines={1}>{item.id}</Text>
       </View>
     </View>
@@ -476,6 +490,12 @@ export default function SuperAdminDashboard() {
 
   return (
     <View style={styles.root}>
+      <PulseemBusinessModal
+        visible={!!pulseModalBiz}
+        business={pulseModalBiz}
+        onClose={() => setPulseModalBiz(null)}
+        onSaved={() => loadBusinesses()}
+      />
       <LinearGradient colors={['#FFFFFF', '#F5F6FA']} style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <Text style={styles.headerTitle}>לוח בקרה</Text>
         <Text style={styles.headerSubtitle}>ניהול כל האפליקציות</Text>
@@ -497,7 +517,7 @@ export default function SuperAdminDashboard() {
                 <TouchableOpacity key={tab.key} style={styles.tabItem} onPress={() => setActiveTab(tab.key)} activeOpacity={0.7}>
                   {tab.key === 'add' ? (
                     <View style={[styles.addTabBtn, focused && styles.addTabBtnFocused]}>
-                      <Ionicons name={focused ? tab.iconFocused : tab.icon} size={28} color="#FFFFFF" />
+                      <Ionicons name={(focused ? tab.iconFocused : tab.icon) as any} size={28} color="#FFFFFF" />
                     </View>
                   ) : (
                     <>
@@ -580,8 +600,11 @@ const styles = StyleSheet.create({
   credentialLabel: { fontSize: 12, fontWeight: '600', color: TEXT_SECONDARY },
   credentialValue: { fontSize: 13, fontWeight: '700', color: TEXT_PRIMARY, fontFamily: 'monospace' },
 
-  bizFooter: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: CARD_BORDER, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  bizId: { fontSize: 10, color: TEXT_MUTED, fontFamily: 'monospace', flex: 1, textAlign: 'left' },
+  bizFooter: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: CARD_BORDER, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  bizFooterLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
+  bizId: { fontSize: 10, color: TEXT_MUTED, fontFamily: 'monospace', flex: 1, textAlign: 'left', minWidth: 0 },
+  pulseBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(108,92,231,0.08)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(108,92,231,0.2)' },
+  pulseBtnText: { fontSize: 12, fontWeight: '600', color: ACCENT },
   deleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FFF0F0', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#FFE0E0' },
   deleteBtnText: { fontSize: 12, fontWeight: '600', color: '#FF6B6B' },
 

@@ -23,6 +23,75 @@ export interface BusinessOverview {
   adminCount: number;
   adminPhone: string | null;
   adminPassword: string | null;
+  branding_client_name: string | null;
+  pulseem_user_id: string | null;
+  pulseem_from_number: string | null;
+  /** Set from DB column — password itself is never loaded in the businesses list */
+  pulseemHasPassword: boolean;
+}
+
+const PULSEEM_ASMX = 'https://www.pulseem.co.il/Pulseem/pulseemsendservices.asmx';
+
+function mergeEnvKeyValues(content: string, pairs: Record<string, string>): string {
+  const keys = new Set(Object.keys(pairs));
+  const lines = content.replace(/\r\n/g, '\n').split('\n');
+  const used = new Set<string>();
+  const out: string[] = [];
+
+  for (const line of lines) {
+    const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+    if (m && keys.has(m[1])) {
+      out.push(`${m[1]}=${pairs[m[1]]}`);
+      used.add(m[1]);
+    } else {
+      out.push(line);
+    }
+  }
+
+  const tail: string[] = [];
+  for (const k of keys) {
+    if (!used.has(k)) tail.push(`${k}=${pairs[k]}`);
+  }
+  if (tail.length) {
+    const body = out.join('\n').replace(/\s+$/, '');
+    const sep = body && !body.endsWith('\n') ? '\n' : '';
+    const block = `\n# Pulseem SMS (OTP)\n${tail.join('\n')}\n`;
+    return (body ? body + sep : '') + block;
+  }
+  return out.join('\n');
+}
+
+export async function testPulseemConnection(
+  userId: string,
+  password: string,
+): Promise<
+  | { readonly ok: true; readonly credits: string }
+  | { readonly ok: false; readonly message: string }
+> {
+  const uid = userId.trim();
+  const pw = password.trim();
+  if (!uid || !pw) {
+    return { ok: false, message: 'יש להזין מזהה משתמש וסיסמה' };
+  }
+  try {
+    const url = `${PULSEEM_ASMX}/GetSMScreditsLeft?userID=${encodeURIComponent(uid)}&password=${encodeURIComponent(pw)}`;
+    const res = await fetch(url);
+    const text = await res.text();
+    if (!res.ok) {
+      return { ok: false, message: `שגיאת רשת (${res.status})` };
+    }
+    const fault = text.match(/<faultstring[^>]*>([^<]+)</i);
+    if (fault) {
+      return { ok: false, message: fault[1].trim() };
+    }
+    const dec = text.match(/<decimal[^>]*>([^<]*)</i);
+    if (dec) {
+      return { ok: true, credits: dec[1].trim() };
+    }
+    return { ok: false, message: 'תגובה לא צפויה מפולסים' };
+  } catch (e: any) {
+    return { ok: false, message: e?.message || 'בדיקת חיבור נכשלה' };
+  }
 }
 
 export const superAdminApi = {
@@ -34,7 +103,9 @@ export const superAdminApi = {
     try {
       const { data: profiles, error } = await supabase
         .from('business_profile')
-        .select('id, display_name, address, phone, primary_color, created_at')
+        .select(
+          'id, display_name, address, phone, primary_color, created_at, branding_client_name, pulseem_user_id, pulseem_from_number, pulseem_has_password',
+        )
         .order('created_at', { ascending: false });
 
       if (error || !profiles) {
@@ -70,7 +141,16 @@ export const superAdminApi = {
       }
 
       return profiles.map((p: any) => ({
-        ...p,
+        id: p.id,
+        display_name: p.display_name,
+        address: p.address,
+        phone: p.phone,
+        primary_color: p.primary_color,
+        created_at: p.created_at,
+        branding_client_name: p.branding_client_name ?? null,
+        pulseem_user_id: p.pulseem_user_id ?? null,
+        pulseem_from_number: p.pulseem_from_number ?? null,
+        pulseemHasPassword: !!p.pulseem_has_password,
         clientCount: countMap[p.id]?.clients || 0,
         adminCount: countMap[p.id]?.admins || 0,
         adminPhone: countMap[p.id]?.adminPhone || null,
@@ -112,6 +192,153 @@ export const superAdminApi = {
     }
   },
 
+  async downloadBrandingFileText(clientName: string, fileName: string): Promise<string | null> {
+    const client = adminSupabase || supabase;
+    try {
+      const storagePath = `branding/${clientName}/${fileName}`;
+      const { data, error } = await client.storage.from('app_design').download(storagePath);
+      if (error || !data) {
+        return null;
+      }
+      return await data.text();
+    } catch (err) {
+      console.error(`Error downloading branding file ${fileName}:`, err);
+      return null;
+    }
+  },
+
+  async resolveBrandingClientName(businessId: string, hint: string | null): Promise<string | null> {
+    const h = hint?.trim();
+    if (h) return h;
+    const st = adminSupabase || supabase;
+    const { data: folders, error } = await st.storage.from('app_design').list('branding');
+    if (error || !folders?.length) return null;
+    for (const folder of folders) {
+      if (folder.name.includes('.')) continue;
+      const text = await this.downloadBrandingFileText(folder.name, '.env');
+      if (!text) continue;
+      const m = text.match(/^\s*BUSINESS_ID\s*=\s*(\S+)/m);
+      if (m && m[1] === businessId) return folder.name;
+    }
+    return null;
+  },
+
+  async getPulseemEditorState(businessId: string): Promise<{
+    userId: string;
+    fromNumber: string;
+    hasPassword: boolean;
+  } | null> {
+    const { data, error } = await supabase
+      .from('business_profile')
+      .select('pulseem_user_id, pulseem_from_number, pulseem_has_password')
+      .eq('id', businessId)
+      .maybeSingle();
+    if (error || !data) return null;
+    return {
+      userId: (data as any).pulseem_user_id?.trim() || '',
+      fromNumber: (data as any).pulseem_from_number?.trim() || '',
+      hasPassword: !!(data as any).pulseem_has_password,
+    };
+  },
+
+  async testPulseemForBusiness(
+    businessId: string,
+    userId: string,
+    passwordOverride: string,
+  ): Promise<
+    | { readonly ok: true; readonly credits: string }
+    | { readonly ok: false; readonly message: string }
+  > {
+    let password = passwordOverride.trim();
+    if (!password) {
+      const { data } = await supabase
+        .from('business_profile')
+        .select('pulseem_password')
+        .eq('id', businessId)
+        .maybeSingle();
+      password = ((data as any)?.pulseem_password as string | undefined)?.trim() || '';
+    }
+    return testPulseemConnection(userId, password);
+  },
+
+  async savePulseemCredentials(
+    businessId: string,
+    fields: { userId: string; password: string; fromNumber: string },
+  ): Promise<{ ok: boolean; errorMessage?: string; envSynced: boolean }> {
+    const uid = fields.userId.trim();
+    const fromNum = fields.fromNumber.trim();
+    if (!uid) {
+      return { ok: false, errorMessage: 'חסר מזהה משתמש פולסים', envSynced: false };
+    }
+    if (!fromNum) {
+      return { ok: false, errorMessage: 'חסר מספר שולח (מאיזה מספר נשלח ה-SMS)', envSynced: false };
+    }
+
+    const { data: row, error: fetchErr } = await supabase
+      .from('business_profile')
+      .select('pulseem_password, branding_client_name')
+      .eq('id', businessId)
+      .maybeSingle();
+
+    if (fetchErr || !row) {
+      return { ok: false, errorMessage: 'לא נמצא עסק', envSynced: false };
+    }
+
+    const existingPass = ((row as any).pulseem_password as string | undefined)?.trim() || '';
+    const newPass = fields.password.trim();
+    const finalPassword = newPass || existingPass;
+    if (!finalPassword) {
+      return { ok: false, errorMessage: 'נדרשת סיסמת API (או השאר ריק אם כבר נשמרה)', envSynced: false };
+    }
+
+    const clientName = await this.resolveBrandingClientName(businessId, (row as any).branding_client_name);
+
+    const { error: updErr } = await supabase
+      .from('business_profile')
+      .update({
+        pulseem_user_id: uid,
+        pulseem_password: finalPassword,
+        pulseem_from_number: fromNum,
+        pulseem_has_password: true,
+        ...(clientName ? { branding_client_name: clientName } : {}),
+      })
+      .eq('id', businessId);
+
+    if (updErr) {
+      console.error('savePulseemCredentials update:', updErr);
+      return { ok: false, errorMessage: 'שמירה למסד נכשלה', envSynced: false };
+    }
+
+    if (!clientName) {
+      return {
+        ok: true,
+        envSynced: false,
+      };
+    }
+
+    let envText = await this.downloadBrandingFileText(clientName, '.env');
+    if (!envText) {
+      envText = [
+        `# Synced from Super Admin — ${clientName}`,
+        `EXPO_PUBLIC_SUPABASE_URL=${process.env.EXPO_PUBLIC_SUPABASE_URL || ''}`,
+        `EXPO_PUBLIC_SUPABASE_ANON_KEY=${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ''}`,
+        `EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY=${process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || ''}`,
+        `BUSINESS_ID=${businessId}`,
+        `CLIENT_NAME=${clientName}`,
+        '',
+      ].join('\n');
+    }
+
+    const merged = mergeEnvKeyValues(envText, {
+      PULSEEM_USER_ID: uid,
+      PULSEEM_PASSWORD: finalPassword,
+      PULSEEM_FROM_NUMBER: fromNum,
+    });
+
+    const uploaded = await this.uploadBrandingFile(clientName, '.env', merged, 'text/plain');
+    return { ok: true, envSynced: !!uploaded };
+  },
+
   async createBusiness(params: {
     businessName: string;
     clientName: string;
@@ -143,6 +370,7 @@ export const superAdminApi = {
           address: params.address || '',
           phone: params.adminPhone,
           primary_color: color,
+          branding_client_name: clientName,
           home_hero_images: [],
           break_by_user: {},
           booking_open_days_by_user: {},
@@ -194,6 +422,11 @@ export const superAdminApi = {
         `EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY=${process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || ''}`,
         `BUSINESS_ID=${businessId}`,
         `CLIENT_NAME=${clientName}`,
+        '',
+        '# Pulseem SMS (OTP) — set from Super Admin dashboard',
+        '# PULSEEM_USER_ID=',
+        '# PULSEEM_PASSWORD=',
+        '# PULSEEM_FROM_NUMBER=',
         '',
       ].join('\n');
 

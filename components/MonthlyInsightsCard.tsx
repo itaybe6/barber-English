@@ -7,7 +7,8 @@ import { useTranslation } from 'react-i18next';
 interface MonthlyInsightsCardProps {
   completed: number;
   cancelled: number;
-  noShow: number;
+  /** Client users created this calendar month (not part of appointment donut). */
+  newClientsThisMonth: number;
   loading?: boolean;
   colors: any;
 }
@@ -21,12 +22,12 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 export default function MonthlyInsightsCard({
   completed,
   cancelled,
-  noShow,
+  newClientsThisMonth,
   loading,
   colors,
 }: MonthlyInsightsCardProps) {
   const { t } = useTranslation();
-  const total = completed + cancelled + noShow;
+  const total = completed + cancelled;
 
   const monthLabel = useMemo(() => {
     return new Date().toLocaleString('he-IL', { month: 'long', year: 'numeric' });
@@ -37,7 +38,6 @@ export default function MonthlyInsightsCard({
     const items = [
       { value: completed, color: colors.primary },
       { value: cancelled, color: '#FF9500' },
-      { value: noShow, color: '#FF3B30' },
     ].filter((s) => s.value > 0);
 
     let accumulated = 0;
@@ -47,7 +47,27 @@ export default function MonthlyInsightsCard({
       accumulated += length;
       return { ...item, length, offset };
     });
-  }, [completed, cancelled, noShow, total, colors.primary]);
+  }, [completed, cancelled, total, colors.primary]);
+
+  const legendItems = [
+    { value: completed, color: colors.primary, label: t('admin.insights.completed', 'Completed') },
+    { value: cancelled, color: '#FF9500', label: t('admin.insights.cancelled', 'Cancelled') },
+  ];
+
+  const newClientsRow = (
+    <View
+      style={[
+        styles.newClientsRow,
+        { backgroundColor: `${colors.primary}0D`, borderColor: `${colors.primary}22` },
+      ]}
+    >
+      <Ionicons name="person-add-outline" size={22} color={colors.primary} />
+      <Text style={[styles.newClientsNumber, { color: colors.text }]}>{newClientsThisMonth}</Text>
+      <Text style={[styles.newClientsLabel, { color: colors.textSecondary }]}>
+        {t('admin.insights.newClientsThisMonth', 'New clients this month')}
+      </Text>
+    </View>
+  );
 
   if (loading) {
     return (
@@ -76,15 +96,10 @@ export default function MonthlyInsightsCard({
             {t('admin.insights.noData', 'No appointment data this month')}
           </Text>
         </View>
+        {newClientsRow}
       </View>
     );
   }
-
-  const legendItems = [
-    { value: completed, color: colors.primary, label: t('admin.insights.completed', 'Completed') },
-    { value: cancelled, color: '#FF9500', label: t('admin.insights.cancelled', 'Cancelled') },
-    { value: noShow, color: '#FF3B30', label: t('admin.insights.noShow', 'No-show') },
-  ];
 
   return (
     <View style={styles.card}>
@@ -145,6 +160,8 @@ export default function MonthlyInsightsCard({
           ))}
         </View>
       </View>
+
+      {newClientsRow}
     </View>
   );
 }
@@ -181,6 +198,26 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  newClientsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  newClientsNumber: {
+    fontSize: 20,
+    fontWeight: '800',
+    minWidth: 24,
+  },
+  newClientsLabel: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
   },
   header: {
     flexDirection: 'row',

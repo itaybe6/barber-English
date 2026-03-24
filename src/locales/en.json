@@ -120,6 +120,8 @@
   "admin.pendingClients.bannerSubtitle": "{{count}} waiting for your approval",
   "admin.pendingClients.bannerA11y": "New clients awaiting approval",
   "admin.pendingClients.sheetTitle": "Approve clients",
+  "admin.pendingClients.pendingCount": "{{count}} pending",
+  "admin.pendingClients.loading": "Loading…",
   "admin.pendingClients.sheetHint": "Approve to let them use the app, or remove the registration.",
   "admin.pendingClients.empty": "No pending clients",
   "admin.pendingClients.approve": "Approve",
@@ -140,6 +142,7 @@
   "admin.insights.cancelled": "Cancelled",
   "admin.insights.noShow": "No-show",
   "admin.insights.total": "Total",
+  "admin.insights.newClientsThisMonth": "new clients added this month",
   "admin.hero.edit": "Main Media",
   "admin.hero.subtitle": "Manage the animation images at the top",
   "admin.gallery.subtitle": "View and manage your salon design photos",
@@ -178,7 +181,12 @@
       "failed": "Failed to unblock client"
     },
     "update": { "failed": "Failed to update client" },
-    "delete": { "title": "Delete Client", "message": "Delete {{name}}?", "failed": "Failed to delete client" }
+    "delete": { "title": "Delete Client", "message": "Delete {{name}}?", "failed": "Failed to delete client" },
+    "stats": {
+      "appointmentsLine": "{{count}} appointments (excl. cancelled)",
+      "avgMonthlyLine": "~{{amount}}/mo avg (active months)",
+      "noSpendYet": "No spend data yet (confirmed/completed with price)"
+    }
   },
   "clients.client": "Client ",
   "appointments.empty.date": "No appointments for this date",

@@ -122,6 +122,8 @@
   "admin.pendingClients.bannerSubtitle": "{{count}} ממתינים לאישורך",
   "admin.pendingClients.bannerA11y": "לקוחות חדשים ממתינים לאישור",
   "admin.pendingClients.sheetTitle": "אישור לקוחות",
+  "admin.pendingClients.pendingCount": "{{count}} ממתינים",
+  "admin.pendingClients.loading": "טוען…",
   "admin.pendingClients.sheetHint": "אשר כדי לאפשר שימוש באפליקציה, או הסר את ההרשמה.",
   "admin.pendingClients.empty": "אין לקוחות ממתינים",
   "admin.pendingClients.approve": "אשר",
@@ -142,6 +144,7 @@
   "admin.insights.cancelled": "בוטלו",
   "admin.insights.noShow": "לא הגיעו",
   "admin.insights.total": "סה״כ",
+  "admin.insights.newClientsThisMonth": "לקוחות חדשים נוספו החודש",
   "admin.hero.edit": "מדיה ראשית",
   "admin.hero.subtitle": "ניהול המדיה הראשית בראש הדף",
   "admin.gallery.subtitle": "הצג ונהל את תמונות העיצויים של הסלון",
@@ -180,7 +183,12 @@
       "failed": "נכשל בביטול חסימת הלקוח"
     },
     "update": { "failed": "נכשל בעדכון הלקוח" },
-    "delete": { "title": "מחיקת לקוח", "message": "למחוק את {{name}}?", "failed": "נכשל במחיקת הלקוח" }
+    "delete": { "title": "מחיקת לקוח", "message": "למחוק את {{name}}?", "failed": "נכשל במחיקת הלקוח" },
+    "stats": {
+      "appointmentsLine": "{{count}} תורים (ללא ביטולים)",
+      "avgMonthlyLine": "ממוצע ~{{amount}} לחודש (חודשים עם תורים)",
+      "noSpendYet": "אין נתוני הוצאה (תורים מאושרים/הושלמו עם מחיר)"
+    }
   },
   "clients.client": "לקוחה ",
   "appointments.empty.date": "אין תורים לתאריך זה",

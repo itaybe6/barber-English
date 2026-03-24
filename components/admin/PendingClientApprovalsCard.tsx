@@ -11,7 +11,7 @@ import {
   Alert,
   Image,
   TouchableWithoutFeedback,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, Entypo } from '@expo/vector-icons';
@@ -35,10 +35,8 @@ import type { User as DbUser } from '@/lib/supabase';
 
 const AnimatedEntypo = Animated.createAnimatedComponent(Entypo);
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SHEET_ANIM_MS = 500;
 const SHEET_CLOSE_MS = 450;
-const OFF_BOTTOM = Math.min(SCREEN_HEIGHT * 1.05, SCREEN_HEIGHT + 80);
 
 interface ThemeColors {
   primary: string;
@@ -49,7 +47,16 @@ interface ThemeColors {
 
 export function PendingClientApprovalsCard({ colors }: { colors: ThemeColors }) {
   const { t } = useTranslation();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const offBottom = React.useMemo(
+    () => Math.min(windowHeight * 1.05, windowHeight + 80),
+    [windowHeight]
+  );
+  const sheetHeight = React.useMemo(
+    () => Math.round(Math.min(windowHeight * 0.92, windowHeight - insets.top - 8)),
+    [windowHeight, insets.top]
+  );
   const isAdmin = useAuthStore((s) => s.isAdmin);
   const [pending, setPending] = React.useState<DbUser[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -58,7 +65,13 @@ export function PendingClientApprovalsCard({ colors }: { colors: ThemeColors }) 
   const [displayModal, setDisplayModal] = React.useState(false);
   const [actionId, setActionId] = React.useState<string | null>(null);
 
-  const translateY = useSharedValue(OFF_BOTTOM);
+  const translateY = useSharedValue(offBottom);
+
+  React.useLayoutEffect(() => {
+    if (!displayModal) {
+      translateY.value = offBottom;
+    }
+  }, [offBottom, displayModal, translateY]);
 
   const load = React.useCallback(async () => {
     if (!isAdmin) return;
@@ -91,32 +104,32 @@ export function PendingClientApprovalsCard({ colors }: { colors: ThemeColors }) 
   React.useEffect(() => {
     if (!modalOpen) return;
     setDisplayModal(true);
-    translateY.value = OFF_BOTTOM;
+    translateY.value = offBottom;
     translateY.value = withTiming(0, {
       duration: SHEET_ANIM_MS,
       easing: Easing.out(Easing.cubic),
     });
-  }, [modalOpen, translateY]);
+  }, [modalOpen, translateY, offBottom]);
 
   React.useEffect(() => {
     if (modalOpen || !displayModal) return;
     translateY.value = withTiming(
-      OFF_BOTTOM,
+      offBottom,
       { duration: SHEET_CLOSE_MS, easing: Easing.in(Easing.cubic) },
       (finished) => {
         if (finished) runOnJS(finishClose)();
       }
     );
-  }, [modalOpen, displayModal, finishClose, translateY]);
+  }, [modalOpen, displayModal, finishClose, translateY, offBottom]);
 
   const backdropStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(translateY.value, [0, OFF_BOTTOM], [0.48, 0], Extrapolate.CLAMP),
-  }));
+    opacity: interpolate(translateY.value, [0, offBottom], [0.48, 0], Extrapolate.CLAMP),
+  }), [offBottom]);
 
   const sheetSlideStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
-    opacity: interpolate(translateY.value, [OFF_BOTTOM * 0.35, 0], [0, 1], Extrapolate.CLAMP),
-  }));
+    opacity: interpolate(translateY.value, [offBottom * 0.35, 0], [0, 1], Extrapolate.CLAMP),
+  }), [offBottom]);
 
   const requestClose = () => setModalOpen(false);
 
@@ -166,6 +179,7 @@ export function PendingClientApprovalsCard({ colors }: { colors: ThemeColors }) 
   }
 
   const count = pending.length;
+  const actionsStacked = windowWidth < 420;
 
   return (
     <>
@@ -191,17 +205,19 @@ export function PendingClientApprovalsCard({ colors }: { colors: ThemeColors }) 
               <View style={styles.bannerIconWrap}>
                 <Ionicons name="person-add-outline" size={26} color="#FFFFFF" />
                 <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{count > 99 ? '99+' : count}</Text>
+                  <Text style={styles.badgeText}>{count > 99 ? '99+' : String(count)}</Text>
                 </View>
               </View>
               <View style={styles.bannerTextCol}>
-                <Text style={styles.bannerTitle}>{t('admin.pendingClients.bannerTitle', 'New clients')}</Text>
-                <Text style={styles.bannerSub}>
+                <Text style={styles.bannerTitle} numberOfLines={1}>
+                  {t('admin.pendingClients.bannerTitle', 'New clients')}
+                </Text>
+                <Text style={styles.bannerSub} numberOfLines={2}>
                   {t('admin.pendingClients.bannerSubtitle', '{{count}} waiting for your approval', { count })}
                 </Text>
               </View>
-              <View style={styles.bannerChevronWrap}>
-                <Ionicons name="chevron-back" size={22} color="rgba(255,255,255,0.9)" />
+              <View style={styles.bannerChevronCircle}>
+                <Ionicons name="chevron-back" size={20} color="rgba(255,255,255,0.95)" />
               </View>
             </View>
           </LinearGradient>
@@ -226,9 +242,8 @@ export function PendingClientApprovalsCard({ colors }: { colors: ThemeColors }) 
               styles.sheetOuter,
               sheetSlideStyle,
               {
-                paddingBottom: insets.bottom + 12,
-                maxHeight: SCREEN_HEIGHT * 0.88,
-                minHeight: SCREEN_HEIGHT * 0.42,
+                height: sheetHeight,
+                maxHeight: sheetHeight,
               },
             ]}
             pointerEvents="box-none"
@@ -237,71 +252,127 @@ export function PendingClientApprovalsCard({ colors }: { colors: ThemeColors }) 
               style={[
                 styles.sheetSurface,
                 {
-                  borderColor: `${colors.primary}14`,
+                  borderColor: `${colors.primary}18`,
                   shadowColor: colors.primary,
                 },
               ]}
             >
               <View style={styles.dragHandleWrap}>
-                <View style={[styles.dragHandle, { backgroundColor: `${colors.primary}33` }]} />
+                <View style={[styles.dragHandle, { backgroundColor: `${colors.primary}40` }]} />
               </View>
 
-              <View style={styles.sheetHeaderRow}>
-                <View style={{ width: 44 }} />
-                <Text style={[styles.sheetTitle, { color: colors.text }]} numberOfLines={1}>
-                  {t('admin.pendingClients.sheetTitle', 'Approve clients')}
-                </Text>
-                <TouchableOpacity
-                  onPress={requestClose}
-                  style={[styles.closeFab, { backgroundColor: colors.primary }]}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('close', 'Close')}
-                >
-                  <AnimatedEntypo
-                    name="cross"
-                    size={20}
-                    color="#FFFFFF"
-                    entering={FadeIn.duration(280)}
-                  />
-                </TouchableOpacity>
+              <View style={styles.sheetHero}>
+                <LinearGradient
+                  colors={[
+                    `${colors.primary}1A`,
+                    `${colors.primary}0D`,
+                    'rgba(255,255,255,0.98)',
+                    '#FFFFFF',
+                  ]}
+                  locations={[0, 0.35, 0.72, 1]}
+                  start={{ x: 0.5, y: 0 }}
+                  end={{ x: 0.5, y: 1 }}
+                  style={StyleSheet.absoluteFillObject}
+                />
+                <View style={styles.sheetHeroForeground}>
+                  <View style={styles.sheetHeaderRow}>
+                    <View style={styles.headerSpacer} />
+                    <View style={styles.sheetTitleBlock}>
+                      <View style={[styles.sheetTitleIconWrap, { backgroundColor: `${colors.primary}20` }]}>
+                        <Ionicons name="shield-checkmark-outline" size={22} color={colors.primary} />
+                      </View>
+                      <Text style={[styles.sheetTitle, { color: colors.text }]} numberOfLines={2}>
+                        {t('admin.pendingClients.sheetTitle', 'Approve clients')}
+                      </Text>
+                      <View
+                        style={[
+                          styles.pendingCountPill,
+                          {
+                            backgroundColor: '#FFFFFF',
+                            borderWidth: 1,
+                            borderColor: `${colors.primary}35`,
+                          },
+                        ]}
+                      >
+                        {loading ? (
+                          <ActivityIndicator size="small" color={colors.primary} />
+                        ) : (
+                          <Text style={[styles.pendingCountPillText, { color: colors.text }]}>
+                            {t('admin.pendingClients.pendingCount', '{{count}} pending', { count })}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      onPress={requestClose}
+                      style={[styles.closeFab, { backgroundColor: `${colors.primary}12` }]}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('close', 'Close')}
+                    >
+                      <AnimatedEntypo name="cross" size={22} color={colors.primary} entering={FadeIn.duration(280)} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={[styles.hintCallout, { borderColor: `${colors.primary}22`, backgroundColor: '#FFFFFF' }]}>
+                    <Ionicons name="information-circle-outline" size={20} color={colors.primary} style={styles.hintIcon} />
+                    <Text style={[styles.sheetHint, { color: colors.textSecondary }]}>
+                      {t('admin.pendingClients.sheetHint', 'Approve to let them use the app, or remove the registration.')}
+                    </Text>
+                  </View>
+                </View>
               </View>
 
-              <Text style={[styles.sheetHint, { color: colors.textSecondary }]}>
-                {t('admin.pendingClients.sheetHint', 'Approve to let them use the app, or remove the registration.')}
-              </Text>
-
-              <Animated.View
-                layout={LinearTransition.duration(SHEET_ANIM_MS)}
-                style={styles.sheetBody}
-              >
+              <Animated.View layout={LinearTransition.duration(SHEET_ANIM_MS)} style={styles.sheetBody}>
                 {loading ? (
                   <View style={styles.centered}>
                     <ActivityIndicator size="large" color={colors.primary} />
+                    <Text style={[styles.loadingLabel, { color: colors.textSecondary }]}>
+                      {t('admin.pendingClients.loading', 'Loading…')}
+                    </Text>
                   </View>
                 ) : (
                   <FlatList
                     style={styles.listFlex}
                     data={pending}
                     keyExtractor={(item) => item.id}
-                    contentContainerStyle={styles.listContent}
+                    contentContainerStyle={[
+                      styles.listContent,
+                      { paddingBottom: insets.bottom + 20 },
+                    ]}
                     showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
                     ListEmptyComponent={
-                      <Text style={[styles.empty, { color: colors.textSecondary }]}>
-                        {t('admin.pendingClients.empty', 'No pending clients')}
-                      </Text>
+                      <View style={styles.emptyWrap}>
+                        <View style={[styles.emptyIconWrap, { backgroundColor: `${colors.primary}12` }]}>
+                          <Ionicons name="people-outline" size={36} color={colors.primary} />
+                        </View>
+                        <Text style={[styles.empty, { color: colors.textSecondary }]}>
+                          {t('admin.pendingClients.empty', 'No pending clients')}
+                        </Text>
+                      </View>
                     }
                     renderItem={({ item }) => {
                       const busy = actionId === item.id;
                       return (
-                        <View style={[styles.row, { borderColor: `${colors.primary}22`, backgroundColor: '#FAFBFC' }]}>
+                        <View
+                          style={[
+                            styles.row,
+                            {
+                              borderColor: `${colors.primary}18`,
+                              backgroundColor: '#FFFFFF',
+                            },
+                          ]}
+                        >
                           <View style={styles.rowLeft}>
-                            {item.image_url ? (
-                              <Image source={{ uri: item.image_url }} style={styles.avatar} />
-                            ) : (
-                              <View style={[styles.avatarPh, { backgroundColor: `${colors.primary}14` }]}>
-                                <Ionicons name="person-outline" size={22} color={colors.primary} />
-                              </View>
-                            )}
+                            <View style={[styles.avatarRing, { borderColor: `${colors.primary}35` }]}>
+                              {item.image_url ? (
+                                <Image source={{ uri: item.image_url }} style={styles.avatar} />
+                              ) : (
+                                <View style={[styles.avatarPh, { backgroundColor: `${colors.primary}12` }]}>
+                                  <Ionicons name="person-outline" size={22} color={colors.primary} />
+                                </View>
+                              )}
+                            </View>
                             <View style={styles.rowText}>
                               <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
                                 {item.name}
@@ -316,9 +387,13 @@ export function PendingClientApprovalsCard({ colors }: { colors: ThemeColors }) 
                               ) : null}
                             </View>
                           </View>
-                          <View style={styles.actions}>
+                          <View style={[styles.actions, actionsStacked && styles.actionsStacked]}>
                             <TouchableOpacity
-                              style={[styles.btnOutline, { borderColor: `${colors.textSecondary}55` }]}
+                              style={[
+                                styles.btnOutline,
+                                { borderColor: `${colors.textSecondary}40` },
+                                actionsStacked && styles.btnFullWidth,
+                              ]}
                               onPress={() => onReject(item)}
                               disabled={busy}
                             >
@@ -331,14 +406,20 @@ export function PendingClientApprovalsCard({ colors }: { colors: ThemeColors }) 
                               )}
                             </TouchableOpacity>
                             <TouchableOpacity
-                              style={[styles.btnPrimary, { backgroundColor: colors.primary }]}
+                              style={[
+                                styles.btnPrimary,
+                                { backgroundColor: colors.primary },
+                                actionsStacked && styles.btnFullWidth,
+                              ]}
                               onPress={() => onApprove(item.id)}
                               disabled={busy}
                             >
                               {busy ? (
                                 <ActivityIndicator size="small" color="#fff" />
                               ) : (
-                                <Text style={styles.btnPrimaryText}>{t('admin.pendingClients.approve', 'Approve')}</Text>
+                                <Text style={styles.btnPrimaryText}>
+                                  {t('admin.pendingClients.approve', 'Approve')}
+                                </Text>
                               )}
                             </TouchableOpacity>
                           </View>
@@ -358,6 +439,7 @@ export function PendingClientApprovalsCard({ colors }: { colors: ThemeColors }) 
 
 const styles = StyleSheet.create({
   bannerWrap: {
+    marginTop: 10,
     marginBottom: 14,
     borderRadius: 20,
     overflow: 'hidden',
@@ -436,8 +518,15 @@ const styles = StyleSheet.create({
     marginTop: 4,
     lineHeight: 16,
   },
-  bannerChevronWrap: {
-    opacity: 0.95,
+  bannerChevronCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
   },
   modalRoot: {
     flex: 1,
@@ -452,6 +541,7 @@ const styles = StyleSheet.create({
   },
   sheetSurface: {
     flex: 1,
+    minHeight: 0,
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
@@ -472,23 +562,87 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
   },
   dragHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
+    width: 44,
+    height: 5,
+    borderRadius: 3,
+  },
+  sheetHero: {
+    position: 'relative',
+    flexShrink: 0,
+    overflow: 'hidden',
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+  sheetHeroForeground: {
+    position: 'relative',
+    zIndex: 1,
+    paddingBottom: 6,
   },
   sheetHeaderRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingBottom: 4,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  headerSpacer: {
+    width: 44,
+    height: 44,
+  },
+  sheetTitleBlock: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    gap: 10,
+  },
+  sheetTitleIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sheetTitle: {
-    flex: 1,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
     textAlign: 'center',
-    letterSpacing: -0.3,
+    letterSpacing: -0.4,
+    lineHeight: 26,
+  },
+  pendingCountPill: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    minHeight: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pendingCountPillText: {
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  hintCallout: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginHorizontal: 16,
+    marginBottom: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  hintIcon: {
+    marginTop: 1,
+  },
+  sheetHint: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+    paddingHorizontal: 0,
+    paddingBottom: 0,
   },
   closeFab: {
     width: 44,
@@ -496,32 +650,20 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-      },
-      android: { elevation: 4 },
-    }),
-  },
-  sheetHint: {
-    fontSize: 13,
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    lineHeight: 19,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
   },
   sheetBody: {
     flex: 1,
-    minHeight: 120,
+    minHeight: 0,
   },
   listFlex: {
     flex: 1,
+    minHeight: 0,
   },
   listContent: {
     paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingTop: 4,
     flexGrow: 1,
   },
   centered: {
@@ -529,22 +671,54 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  loadingLabel: {
+    marginTop: 14,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  emptyWrap: {
+    alignItems: 'center',
+    paddingVertical: 28,
+    paddingHorizontal: 24,
+  },
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
   empty: {
     textAlign: 'center',
-    paddingVertical: 32,
     fontSize: 15,
+    lineHeight: 22,
   },
   row: {
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
-    padding: 14,
+    padding: 16,
     marginBottom: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
+      },
+      android: { elevation: 2 },
+    }),
   },
   rowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     marginBottom: 12,
+  },
+  avatarRing: {
+    borderWidth: 2,
+    borderRadius: 999,
+    padding: 2,
   },
   avatar: {
     width: 48,
@@ -578,25 +752,45 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+  },
+  actionsStacked: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+  },
+  btnFullWidth: {
+    alignSelf: 'stretch',
+    width: '100%',
   },
   btnOutline: {
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    minWidth: 100,
+    minWidth: 108,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   btnOutlineText: {
     fontSize: 14,
     fontWeight: '600',
   },
   btnPrimary: {
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 18,
-    borderRadius: 12,
-    minWidth: 100,
+    borderRadius: 14,
+    minWidth: 108,
     alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.12,
+        shadowRadius: 6,
+      },
+      android: { elevation: 2 },
+    }),
   },
   btnPrimaryText: {
     color: '#fff',

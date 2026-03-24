@@ -40,6 +40,7 @@ import Reanimated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { manicureImages } from '@/src/constants/manicureImages';
 import MonthlyInsightsCard from '@/components/MonthlyInsightsCard';
 import { PendingClientApprovalsCard } from '@/components/admin/PendingClientApprovalsCard';
+import { clientAppointmentStatsApi } from '@/lib/api/clientAppointmentStats';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_ITEM_SIZE = Platform.OS === 'web' ? SCREEN_WIDTH * 0.24 : SCREEN_WIDTH * 0.45;
@@ -130,7 +131,7 @@ function sanitizeUrlArray(value: unknown): string[] {
 }
 
 export default function HomeScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const designsFromStore = useDesignsStore((state) => state.designs);
@@ -217,7 +218,11 @@ export default function HomeScreen() {
   const [editClientName, setEditClientName] = useState('');
   const [editClientPhone, setEditClientPhone] = useState('');
   const [savingClient, setSavingClient] = useState(false);
-  const [insightsData, setInsightsData] = useState({ completed: 0, cancelled: 0, noShow: 0 });
+  const [insightsData, setInsightsData] = useState({
+    completed: 0,
+    cancelled: 0,
+    newClientsThisMonth: 0,
+  });
   const [loadingInsights, setLoadingInsights] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showBroadcast, setShowBroadcast] = useState(false);
@@ -226,6 +231,17 @@ export default function HomeScreen() {
   const innerScrollRef = useRef<ScrollView>(null);
   const maxOuterScroll = HERO_HEIGHT - HERO_OVERLAP - insets.top - 60;
   const [blockedFilter, setBlockedFilter] = useState<'all' | 'blocked' | 'unblocked'>('all');
+  const [clientStatsMap, setClientStatsMap] = useState<
+    Record<string, { totalAppointments: number; avgMonthlySpend: number | null }>
+  >({});
+
+  const formatClientMoney = useCallback(
+    (amount: number) => {
+      const locale = i18n.language?.startsWith('he') ? 'he-IL' : 'en-US';
+      return `₪${Math.round(amount).toLocaleString(locale)}`;
+    },
+    [i18n.language]
+  );
   const categories = [
     {
       key: 'Gel Polish',
@@ -458,24 +474,38 @@ export default function HomeScreen() {
       const now = new Date();
       const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
       const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+      const monthStartIso = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const monthEndExclusiveIso = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
 
-      const { data, error } = await supabase
-        .from('appointments')
-        .select('id, status')
-        .eq('business_id', businessId)
-        .gte('slot_date', firstDayOfMonth)
-        .lte('slot_date', lastDayOfMonth)
-        .in('status', ['confirmed', 'completed', 'cancelled', 'no_show']);
+      const [appointmentsRes, newClientsRes] = await Promise.all([
+        supabase
+          .from('appointments')
+          .select('id, status')
+          .eq('business_id', businessId)
+          .gte('slot_date', firstDayOfMonth)
+          .lte('slot_date', lastDayOfMonth)
+          .in('status', ['confirmed', 'completed', 'cancelled']),
+        supabase
+          .from('users')
+          .select('id', { count: 'exact', head: true })
+          .eq('business_id', businessId)
+          .eq('user_type', 'client')
+          .gte('created_at', monthStartIso)
+          .lt('created_at', monthEndExclusiveIso),
+      ]);
 
-      if (error) {
-        console.error('Error fetching insights data:', error);
-        return;
+      if (appointmentsRes.error) {
+        console.error('Error fetching insights appointments:', appointmentsRes.error);
+      }
+      if (newClientsRes.error) {
+        console.error('Error fetching new clients count:', newClientsRes.error);
       }
 
+      const data = appointmentsRes.data;
       setInsightsData({
         completed: data?.filter(a => a.status === 'completed' || a.status === 'confirmed').length || 0,
         cancelled: data?.filter(a => a.status === 'cancelled').length || 0,
-        noShow: data?.filter(a => a.status === 'no_show').length || 0,
+        newClientsThisMonth: newClientsRes.error ? 0 : newClientsRes.count ?? 0,
       });
     } catch (error) {
       console.error('Error in fetchInsightsData:', error);
@@ -501,13 +531,20 @@ export default function HomeScreen() {
 
       if (error) {
         console.error('Error fetching clients:', error);
+        setClientStatsMap({});
         return;
       }
 
-      setClients(data || []);
-      setFilteredClients(data || []);
+      const list = data || [];
+      setClients(list);
+      setFilteredClients(list);
+
+      const ids = list.map((c) => c.id).filter(Boolean);
+      const stats = await clientAppointmentStatsApi.getStatsForClientIds(ids);
+      setClientStatsMap(stats);
     } catch (error) {
       console.error('Error in fetchClients:', error);
+      setClientStatsMap({});
     } finally {
       setLoadingClients(false);
     }
@@ -891,7 +928,7 @@ export default function HomeScreen() {
           <MonthlyInsightsCard
             completed={insightsData.completed}
             cancelled={insightsData.cancelled}
-            noShow={insightsData.noShow}
+            newClientsThisMonth={insightsData.newClientsThisMonth}
             loading={loadingInsights}
             colors={colors}
           />
@@ -1125,15 +1162,31 @@ export default function HomeScreen() {
                   style={{ flex: 1 }}
                   data={filteredClients}
                   keyExtractor={(item) => item.id}
-                  renderItem={({ item }) => (
+                  renderItem={({ item }) => {
+                    const stats = clientStatsMap[item.id];
+                    const totalAppts = stats?.totalAppointments ?? 0;
+                    const avgMo = stats?.avgMonthlySpend;
+                    return (
                    <View style={styles.clientItem}>
                      <View style={styles.clientInfo}>
                        <Text style={styles.clientName}>{item.name}</Text>
                        {item.phone && (
                          <Text style={styles.clientPhone}>{item.phone}</Text>
                        )}
+                       <Text style={styles.clientStatsLine}>
+                         {t('clients.stats.appointmentsLine', '{{count}} appointments (excl. cancelled)', {
+                           count: totalAppts,
+                         })}
+                       </Text>
+                       <Text style={styles.clientStatsLineMuted}>
+                         {avgMo != null
+                           ? t('clients.stats.avgMonthlyLine', '~{{amount}}/mo avg (active months)', {
+                               amount: formatClientMoney(avgMo),
+                             })
+                           : t('clients.stats.noSpendYet', 'No spend data yet (confirmed/completed)')}
+                       </Text>
                      </View>
-                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, alignSelf: 'center' }}>
                        <TouchableOpacity
                          style={styles.phoneButton}
                          onPress={() => handlePhoneCall(item.phone)}
@@ -1149,7 +1202,8 @@ export default function HomeScreen() {
                        </TouchableOpacity>
                      </View>
                    </View>
-                  )}
+                    );
+                  }}
                    showsVerticalScrollIndicator={true}
                    contentContainerStyle={[styles.clientsList, { paddingBottom: insets.bottom + 24 }]}
                 />
@@ -2288,7 +2342,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   clientItem: {
     flexDirection: 'row', // LTR
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingVertical: 16,
     paddingHorizontal: 20,
     backgroundColor: '#fff',
@@ -2324,6 +2378,19 @@ const createStyles = (colors: any) => StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'left',
     marginTop: 4,
+  },
+  clientStatsLine: {
+    fontSize: 13,
+    color: colors.text,
+    textAlign: 'left',
+    marginTop: 6,
+    fontWeight: '500',
+  },
+  clientStatsLineMuted: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    textAlign: 'left',
+    marginTop: 2,
   },
   phoneButton: {
     width: 44,

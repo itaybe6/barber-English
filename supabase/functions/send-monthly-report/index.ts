@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import * as XLSX from "npm:xlsx@0.18.5";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -15,10 +16,17 @@ const resendApiKey = Deno.env.get("RESEND_API_KEY");
 const fromEmail =
   Deno.env.get("MONTHLY_REPORT_FROM_EMAIL") || "onboarding@resend.dev";
 
+type EmailAttachment = {
+  filename: string;
+  content: string;
+  content_type?: string;
+};
+
 async function sendEmail(
   to: string,
   subject: string,
-  html: string
+  html: string,
+  attachments?: EmailAttachment[]
 ): Promise<{ ok: boolean }> {
   if (!resendApiKey) {
     console.warn(
@@ -26,13 +34,22 @@ async function sendEmail(
     );
     return { ok: false };
   }
+  const payload: Record<string, unknown> = {
+    from: fromEmail,
+    to: [to],
+    subject,
+    html,
+  };
+  if (attachments?.length) {
+    payload.attachments = attachments;
+  }
   const resp = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${resendApiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ from: fromEmail, to: [to], subject, html }),
+    body: JSON.stringify(payload),
   });
   if (!resp.ok) {
     const errText = await resp.text().catch(() => "");
@@ -136,6 +153,115 @@ const MONTH_NAMES = [
   "December",
 ];
 
+/** Hebrew labels for expense.category (matches app finance screen). */
+const CATEGORY_LABELS_HE: Record<string, string> = {
+  rent: "שכירות",
+  supplies: "חומרים",
+  equipment: "ציוד",
+  marketing: "שיווק",
+  other: "אחר",
+};
+
+function sanitizeFilenamePart(s: string): string {
+  const t = String(s || "Business")
+    .replace(/[/\\:*?"<>|]/g, "_")
+    .trim()
+    .slice(0, 80);
+  return t || "Business";
+}
+
+/**
+ * Builds an .xlsx workbook (3 sheets: summary, income, expenses) as Base64 for Resend attachments.
+ */
+function buildReportXlsxBase64(
+  businessName: string,
+  businessNumber: string | null,
+  year: number,
+  month: number,
+  incomeRows: Array<{ service_name: string; count: number; price: number; total: number }>,
+  totalIncome: number,
+  expenseRows: Array<{
+    description: string;
+    category: string;
+    amount: number;
+    expense_date: string;
+    receipt_url?: string;
+  }>,
+  totalExpenses: number
+): { base64: string; filename: string } {
+  const wb = XLSX.utils.book_new();
+  const monthName = MONTH_NAMES[month - 1] || `Month ${month}`;
+  const periodLabel = `${monthName} ${year}`;
+  const net = totalIncome - totalExpenses;
+
+  const summaryAoa = [
+    ["דוח חודשי לרואה חשבון"],
+    [],
+    ["שם העסק", businessName],
+    ["תקופה", periodLabel],
+    ["מספר עוסק / ח.פ.", businessNumber || ""],
+    [],
+    ['סה"כ הכנסות (ILS)', totalIncome],
+    ['סה"כ הוצאות (ILS)', totalExpenses],
+    ["רווח נקי (ILS)", net],
+    [],
+    [
+      "הערה",
+      "ההכנסות מחושבות לפי מחיר השירות הנוכחי במערכת. הדוח נוצר אוטומטית.",
+    ],
+  ];
+  const wsSum = XLSX.utils.aoa_to_sheet(summaryAoa);
+  XLSX.utils.book_append_sheet(wb, wsSum, "סיכום");
+
+  const incomeHeader = [
+    ['שירות', "מספר תורים", "מחיר ליחידה (ILS)", 'סה"כ שורה (ILS)'],
+  ];
+  const incomeBody = incomeRows.map((r) => [
+    r.service_name,
+    r.count,
+    r.price,
+    r.total,
+  ]);
+  const incomeAoa = [
+    ...incomeHeader,
+    ...incomeBody,
+    [],
+    ['סה"כ הכנסות', "", "", totalIncome],
+  ];
+  const wsInc = XLSX.utils.aoa_to_sheet(incomeAoa);
+  XLSX.utils.book_append_sheet(wb, wsInc, "הכנסות");
+
+  const expHeader = [
+    ["תיאור", "קטגוריה", "תאריך", "סכום (ILS)", "קישור קבלה"],
+  ];
+  const expBody = expenseRows.map((e) => {
+    const catKey = e.category || "other";
+    const catHe = CATEGORY_LABELS_HE[catKey] || catKey;
+    return [
+      e.description || catHe,
+      catHe,
+      e.expense_date,
+      e.amount,
+      e.receipt_url || "",
+    ];
+  });
+  const expAoa = [
+    ...expHeader,
+    ...expBody,
+    [],
+    ['סה"כ הוצאות', "", "", totalExpenses, ""],
+  ];
+  const wsExp = XLSX.utils.aoa_to_sheet(expAoa);
+  XLSX.utils.book_append_sheet(wb, wsExp, "הוצאות");
+
+  const base64 = XLSX.write(wb, { bookType: "xlsx", type: "base64" });
+  const filename =
+    `Monthly_Report_${sanitizeFilenamePart(businessName)}_${year}-${
+      String(month).padStart(2, "0")
+    }.xlsx`;
+  return { base64, filename };
+}
+
 function buildReportHtml(
   businessName: string,
   businessNumber: string | null,
@@ -175,6 +301,7 @@ function buildReportHtml(
     <h1 style="margin:0 0 4px;font-size:22px">Monthly Financial Report</h1>
     <p style="margin:0;color:#666;font-size:15px">${monthName} ${year}</p>
     <p style="margin:8px 0 0;font-size:15px"><strong>${businessName}</strong>${businessNumber ? ` &middot; Business #${businessNumber}` : ""}</p>
+    <p style="margin:12px 0 0;font-size:14px;color:#2563eb;font-weight:600">מצורף קובץ Excel (.xlsx) — גליונות: סיכום, הכנסות, הוצאות (כולל עמודת קישור לקבלה כשקיימת).</p>
   </div>
 
   <div style="display:flex;gap:12px;margin-bottom:24px">
@@ -405,6 +532,7 @@ serve(async (req) => {
           category: e.category || "other",
           amount: Number(e.amount),
           expense_date: e.expense_date,
+          receipt_url: typeof e.receipt_url === "string" ? e.receipt_url : "",
         }));
         const totalExpenses = expenseRows.reduce(
           (s: number, e: any) => s + e.amount,
@@ -424,11 +552,26 @@ serve(async (req) => {
           totalExpenses
         );
 
-        const emailResult = await sendEmail(
-          biz.accountant_email,
-          subject,
-          html
-        );
+        const { base64: xlsxBase64, filename: xlsxFilename } =
+          buildReportXlsxBase64(
+            biz.display_name || "Business",
+            biz.business_number,
+            year,
+            month,
+            incomeRows,
+            totalIncome,
+            expenseRows,
+            totalExpenses
+          );
+
+        const emailResult = await sendEmail(biz.accountant_email, subject, html, [
+          {
+            filename: xlsxFilename,
+            content: xlsxBase64,
+            content_type:
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          },
+        ]);
         if (!emailResult.ok) {
           skippedEmailNotConfigured++;
           console.warn(

@@ -242,6 +242,13 @@ export default function LoginScreen() {
           Alert.alert(t('account.blocked', 'חשבון חסום'), t('login.blockedCannotSignIn', 'החשבון שלך חסום. פנה למנהל.'));
           return;
         }
+        if (authUser.user_type === 'client' && (authUser as any).client_approved === false) {
+          Alert.alert(
+            t('login.pendingApprovalTitle', 'Awaiting approval'),
+            t('login.pendingApprovalMessage', 'Your account is waiting for the business to approve it. You will be able to sign in once approved.')
+          );
+          return;
+        }
         if (!isValidUserType(authUser.user_type)) {
           Alert.alert(t('error.generic', 'שגיאה'), t('login.invalidUserType', 'סוג משתמש לא תקין'));
           return;
@@ -251,6 +258,7 @@ export default function LoginScreen() {
           type: authUser.user_type, name: authUser.name,
           email: authUser.email ?? null, image_url: authUser.image_url ?? null,
           user_type: authUser.user_type, block: (authUser as any)?.block ?? false,
+          client_approved: (authUser as any).client_approved !== false,
         } as any;
         login(appUser);
         router.replace(appUser.type === 'admin' ? '/(tabs)' : '/(client-tabs)');

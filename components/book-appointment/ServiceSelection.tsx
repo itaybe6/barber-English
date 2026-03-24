@@ -6,6 +6,7 @@ import {
   Image,
   StyleSheet,
   Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
@@ -210,6 +211,7 @@ export default function ServiceSelection({
   visible,
   styles: parentStyles,
   step2FadeStyle,
+  topOffset = 0,
   safeAreaBottom,
   isLoading,
   services,
@@ -219,14 +221,29 @@ export default function ServiceSelection({
   onSelectService,
   onContinue,
 }: Props) {
+  const { height: windowHeight } = useWindowDimensions();
   const { colors } = useBusinessColors();
   const scrollY = useSharedValue(0);
   /** ScrollView (not FlatList) — parent screen uses ScrollView; nesting VirtualizedList caused blank area + RN warning */
   const scrollRef = React.useRef<Animated.ScrollView>(null);
 
+  /** Matches book-appointment spacer below step tabs: `TOP_OFFSET + 12` */
+  const SCROLL_TOP_EXTRA = 12;
+  /** Must stay in sync with ClientFloatingTabBar `bottom` (safe area + small lift, or web fallback) */
+  const tabBarBottomOffset = safeAreaBottom > 0 ? safeAreaBottom + 2 : 8;
+  /** Pill row height + gap so list doesn’t run under the floating bar */
+  const TAB_ROW_HEIGHT = 62;
+  const LIST_GAP_ABOVE_TAB = 10;
+  const bottomChrome = tabBarBottomOffset + TAB_ROW_HEIGHT + LIST_GAP_ABOVE_TAB;
+
+  const baseMinViewport = _itemSize + _peekInset * 2 + _itemGap + _viewportBleed;
+  const usableListHeight =
+    windowHeight - topOffset - SCROLL_TOP_EXTRA - bottomChrome;
+
+  /** Fill space to bottom nav; old Math.min(0.66*H, …) left a large empty band on web / short viewports */
   const listViewportHeight = Math.min(
-    WIN_H * 0.66,
-    _itemSize + _peekInset * 2 + _itemGap + _viewportBleed
+    windowHeight * 0.96,
+    Math.max(baseMinViewport, usableListHeight)
   );
   const verticalPad = Math.max(24, (listViewportHeight - _itemSize) / 2);
 
@@ -263,7 +280,11 @@ export default function ServiceSelection({
         parentStyles.section,
         parentStyles.sectionFullBleed,
         step2FadeStyle,
-        { backgroundColor: 'transparent' },
+        {
+          backgroundColor: 'transparent',
+          alignSelf: 'stretch',
+          minHeight: listViewportHeight,
+        },
       ]}
     >
       {isLoading ? (

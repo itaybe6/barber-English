@@ -31,11 +31,13 @@ export const useAuthStore = create<AuthState>()(
         const rawRole: unknown = (user as any)?.type ?? (user as any)?.user_type;
         const role = typeof rawRole === 'string' ? rawRole.trim().toLowerCase() : undefined;
         const isBlocked = Boolean((user as any)?.block);
+        const isPendingClient = role === 'client' && (user as any)?.client_approved === false;
+        const allowSession = !isBlocked && !isPendingClient;
         set({
-          user: isBlocked ? null : user,
-          isAuthenticated: !isBlocked,
-          isAdmin: !isBlocked && (role === 'admin' || role === 'super_admin'),
-          isSuperAdmin: !isBlocked && role === 'super_admin',
+          user: allowSession ? user : null,
+          isAuthenticated: allowSession,
+          isAdmin: allowSession && (role === 'admin' || role === 'super_admin'),
+          isSuperAdmin: allowSession && role === 'super_admin',
         });
         
         // Force a re-render by getting the state immediately
@@ -86,9 +88,17 @@ export const useAuthStore = create<AuthState>()(
             rehydratedState.hasHydrated = true as any;
             const rawRole: unknown = (rehydratedState.user as any)?.type ?? (rehydratedState.user as any)?.user_type;
             const role = typeof rawRole === 'string' ? rawRole.trim().toLowerCase() : undefined;
-            rehydratedState.isAdmin = role === 'admin' || role === 'super_admin';
-            rehydratedState.isSuperAdmin = role === 'super_admin';
-            rehydratedState.isAuthenticated = Boolean(rehydratedState.user);
+            const pendingClient = role === 'client' && (rehydratedState.user as any)?.client_approved === false;
+            if (pendingClient) {
+              rehydratedState.user = null;
+              rehydratedState.isAuthenticated = false;
+              rehydratedState.isAdmin = false;
+              rehydratedState.isSuperAdmin = false;
+            } else {
+              rehydratedState.isAdmin = role === 'admin' || role === 'super_admin';
+              rehydratedState.isSuperAdmin = role === 'super_admin';
+              rehydratedState.isAuthenticated = Boolean(rehydratedState.user);
+            }
           }
         };
       },

@@ -18,6 +18,9 @@ export interface User {
   image_url?: string | null;
   // Optional: for compatibility with records coming from the DB which use `user_type`
   user_type?: string;
+  /** false when client is waiting for admin approval */
+  client_approved?: boolean;
+  block?: boolean;
 }
 
 // משתמשים לדוגמה - בפועל זה יהיה מהשרת

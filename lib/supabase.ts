@@ -72,6 +72,9 @@ export interface User {
   business_id: string;
   created_at: string;
   updated_at: string;
+  /** false = pending admin approval; login blocked for clients */
+  client_approved?: boolean;
+  block?: boolean;
 }
 
 
@@ -131,6 +134,20 @@ export interface Appointment {
 // Alias for backward compatibility
 export type AvailableTimeSlot = Appointment;
 
+/** Admin calendar-only reminders (do not block booking slots; shown on appointments calendar). */
+export interface CalendarReminder {
+  id: string;
+  business_id: string;
+  barber_id: string;
+  event_date: string;
+  start_time: string;
+  duration_minutes: number;
+  title: string;
+  notes: string | null;
+  color_key: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 // Business Hours interface
 export interface BusinessHours {

@@ -281,6 +281,33 @@ export const usersApi = {
     }
   },
 
+  /** Clients waiting for admin approval (client_approved = false) */
+  async getPendingClients(): Promise<User[]> {
+    try {
+      const businessId = getBusinessId();
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('user_type', 'client')
+        .eq('business_id', businessId)
+        .eq('client_approved', false)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching pending clients:', error);
+        return [];
+      }
+      return data || [];
+    } catch (e) {
+      console.error('Error fetching pending clients:', e);
+      return [];
+    }
+  },
+
+  async approveClient(id: string): Promise<User | null> {
+    return this.updateUser(id, { client_approved: true });
+  },
+
   // Get all admin users (barbers)
   async getAdminUsers(): Promise<User[]> {
     try {

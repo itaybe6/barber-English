@@ -39,6 +39,7 @@ import { Marquee } from '@animatereactnative/marquee';
 import Reanimated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { manicureImages } from '@/src/constants/manicureImages';
 import MonthlyInsightsCard from '@/components/MonthlyInsightsCard';
+import { PendingClientApprovalsCard } from '@/components/admin/PendingClientApprovalsCard';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_ITEM_SIZE = Platform.OS === 'web' ? SCREEN_WIDTH * 0.24 : SCREEN_WIDTH * 0.45;
@@ -404,7 +405,8 @@ export default function HomeScreen() {
         .from('users')
         .select('*')
         .eq('user_type', 'client')
-        .eq('business_id', businessId);
+        .eq('business_id', businessId)
+        .eq('client_approved', true);
 
       if (clientsError) {
         console.error('Error fetching clients:', clientsError);
@@ -494,6 +496,7 @@ export default function HomeScreen() {
         .select('*')
         .eq('user_type', 'client')
         .eq('business_id', businessId)
+        .eq('client_approved', true)
         .order('name');
 
       if (error) {
@@ -880,6 +883,8 @@ export default function HomeScreen() {
             </View>
           </View>
         </View>
+
+        <PendingClientApprovalsCard colors={colors} />
 
         {/* ── MONTHLY INSIGHTS CHART ── */}
         {isAdmin && (

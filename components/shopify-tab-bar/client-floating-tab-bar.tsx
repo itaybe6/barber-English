@@ -73,8 +73,11 @@ export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
     router.push("/(client-tabs)/book-appointment");
   };
 
+  /** Sit just above the home indicator; avoid +12px “lift” that leaves a visible gray strip below the bar */
+  const bottomInset = insets.bottom > 0 ? insets.bottom + 2 : 8;
+
   return (
-    <View style={[styles.root, { bottom: insets.bottom + 12 }]} pointerEvents="box-none">
+    <View style={[styles.root, { bottom: bottomInset }]} pointerEvents="box-none">
       {/* Left standalone – Gallery */}
       <View style={[styles.pill, styles.single, styles.border, styles.shadow]}>
         <TabButton

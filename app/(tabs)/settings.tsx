@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Switch, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking, Dimensions } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Switch, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking, Dimensions, type LayoutChangeEvent } from 'react-native';
 import Constants from 'expo-constants';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import * as ImagePicker from 'expo-image-picker';
@@ -55,6 +55,13 @@ import GradientBackground from '@/components/GradientBackground';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { compressImage } from '@/lib/utils/imageCompression';
 import { useTranslation } from 'react-i18next';
+import Reanimated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated';
 
 // Helper for shadow style
 const shadowStyle = Platform.select({
@@ -106,6 +113,40 @@ export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t, i18n } = useTranslation();
+
+  /** Bank-app style 3D collapse for admin profile header on scroll (Dribbble-style) */
+  const adminProfileScrollY = useSharedValue(0);
+  const adminProfileHeaderBlockHeight = useSharedValue(96);
+  const onAdminProfileScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      adminProfileScrollY.value = e.contentOffset.y;
+    },
+  });
+  const adminProfileDummySpacerStyle = useAnimatedStyle(() => ({
+    height: adminProfileHeaderBlockHeight.value,
+  }));
+  const adminProfileCardFlipStyle = useAnimatedStyle(() => {
+    const y = Math.max(adminProfileScrollY.value, 0);
+    const h = Math.max(adminProfileHeaderBlockHeight.value, 72);
+    return {
+      transform: [
+        { perspective: h * 5 },
+        {
+          translateY: interpolate(y, [0, h], [0, -h * 0.5], Extrapolation.CLAMP),
+        },
+        {
+          rotateX: `${interpolate(y, [0, h], [0, 88], Extrapolation.CLAMP)}deg`,
+        },
+      ],
+      opacity: interpolate(y, [0, h * 0.55, h], [1, 0.92, 0], Extrapolation.CLAMP),
+    };
+  });
+  const onAdminProfileHeaderLayout = (e: LayoutChangeEvent) => {
+    const next = e.nativeEvent.layout.height;
+    if (next > 0) {
+      adminProfileHeaderBlockHeight.value = next;
+    }
+  };
   
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   
@@ -1556,7 +1597,7 @@ export default function SettingsScreen() {
       return name.includes(q) || phone.includes(q) || email.includes(q);
     });
   }, [adminUsers, manageEmpSearch]);
-  
+
   const handleSaveBookingDaysForUser = async (userId: string, days: number) => {
     setSavingBookingDaysForUser(userId);
     try {
@@ -2034,54 +2075,26 @@ export default function SettingsScreen() {
   };
   
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: Colors.white }]} edges={['top']}>
-      <LinearGradient
-        colors={[Colors.white, Colors.white]}
-        style={styles.headerGradient}
-      >
-        
-        <View style={styles.adminProfileCard}>
-          <TouchableOpacity 
-            style={styles.adminAvatarWrap}
-            onPress={() => {
-              setAdminNameDraft(user?.name || '');
-              setAdminPhoneDraft(user?.phone || '');
-              setAdminEmailDraft((user as any)?.email || '');
-              setShowEditAdminModal(true);
-            }}
-            activeOpacity={0.8}
-          >
-            <LinearGradient
-              colors={[businessColors.primary, businessColors.primary]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.adminAvatarRing}
-            >
-              <View style={styles.adminAvatar}>
-                <Image source={user?.image_url ? { uri: (user as any).image_url } : require('@/assets/images/logo-03.png')} style={styles.adminAvatarImage} resizeMode="cover" />
-              </View>
-            </LinearGradient>
-            <View style={[styles.editIconContainer, { backgroundColor: businessColors.primary }]}>
-              <Pencil size={16} color={Colors.white} />
-            </View>
-          </TouchableOpacity>
-          <Text style={styles.adminName}>{user?.name || 'Manager'}</Text>
-          <Text style={styles.adminPhone}>{user?.phone || 'Phone Number'}</Text>
-          <Text style={styles.adminEmail}>{(user as any)?.email || 'Email Address'}</Text>
-        </View>
-      </LinearGradient>
-      
-      <View style={styles.contentWrapper}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
+    <SafeAreaView style={[styles.container, styles.settingsPageRoot]} edges={['left', 'right']}>
+      <View style={styles.settingsScroll}>
+        <Reanimated.ScrollView
+          style={styles.settingsScrollFill}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24 },
+          ]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
           automaticallyAdjustKeyboardInsets
+          showsVerticalScrollIndicator={false}
+          onScroll={onAdminProfileScroll}
+          scrollEventThrottle={16}
         >
-        
+          <Reanimated.View style={adminProfileDummySpacerStyle} />
+
         <Text style={styles.sectionTitleNew}>{t('settings.sections.notificationsMessages','Notifications & messages')}</Text>
         
-        <View style={[styles.cardNew, shadowStyle]}>
+        <View style={styles.cardNew}>
           {renderSettingItem(
             <Bell size={20} color={businessColors.primary} />,
             t('settings.sections.notifications','Notifications'),
@@ -2112,7 +2125,7 @@ export default function SettingsScreen() {
         </View>
         
         <Text style={styles.sectionTitleNew}>{t('settings.sections.services','Services')}</Text>
-        <View style={[styles.cardNew, shadowStyle]}>
+        <View style={styles.cardNew}>
           {renderSettingItem(
             <Pencil size={20} color={businessColors.primary} />,
             t('settings.services.edit','Edit services'),
@@ -2125,7 +2138,7 @@ export default function SettingsScreen() {
         {canSeeAddEmployee && (
           <>
             <Text style={styles.sectionTitleNew}>{t('settings.sections.businessDetails','Business details')}</Text>
-            <View style={[styles.cardNew, shadowStyle]}>
+            <View style={styles.cardNew}>
               <View style={styles.settingItemLTR}>
                 <View style={styles.settingIconLTR}><Pencil size={20} color={businessColors.primary} /></View>
                 <View style={{ flex: 1 }}>
@@ -2214,7 +2227,8 @@ export default function SettingsScreen() {
         {canSeeAddEmployee && (
           <>
             <Text style={styles.sectionTitleNew}>{t('settings.sections.designApp','Design Application')}</Text>
-            <View style={[styles.cardNew, shadowStyle]}>
+            <View style={styles.cardNew}>
+              <View style={styles.colorPickerWrapper}>
               <ColorPicker 
                 currentColor={profile?.primary_color || '#000000'}
                 onColorSelect={(color) => {
@@ -2244,6 +2258,7 @@ export default function SettingsScreen() {
                   }, 1200);
                 }}
               />
+              </View>
               
               {renderSettingItemLTR(
                 <Ionicons name="images-outline" size={20} color={businessColors.primary} />,
@@ -2271,7 +2286,7 @@ export default function SettingsScreen() {
         )}
 
         <Text style={styles.sectionTitleNew}>{t('settings.sections.appointmentPolicies','Appointment policies')}</Text>
-        <View style={[styles.cardNew, shadowStyle]}>
+        <View style={styles.cardNew}>
           <View style={styles.settingItemLTR}>
             <View style={styles.settingIconLTR}><Clock size={20} color={businessColors.primary} /></View>
             <View style={{ flex: 1 }}>
@@ -2295,7 +2310,7 @@ export default function SettingsScreen() {
         {isAdmin && (
           <>
             <Text style={styles.sectionTitleNew}>{t('settings.sections.appointmentsManagement','Appointments management')}</Text>
-            <View style={[styles.cardNew, shadowStyle]}>
+            <View style={styles.cardNew}>
               {renderSettingItem(
                 <Calendar size={20} color={businessColors.primary} />,
                 t('adminEx.appointmentsAdmin.addAppointment','add appointment'),
@@ -2306,7 +2321,7 @@ export default function SettingsScreen() {
             </View>
 
             <Text style={styles.sectionTitleNew}>{t('settings.sections.recurringTitle','Recurring appointments')}</Text>
-            <View style={[styles.cardNew, shadowStyle]}>
+            <View style={styles.cardNew}>
               {renderSettingItem(
                 <Pencil size={20} color={businessColors.primary} />, // reuse icon
                 t('settings.recurring.addTitle','Add recurring appointment'),
@@ -2337,7 +2352,7 @@ export default function SettingsScreen() {
         
         <Text style={styles.sectionTitleNew}>{t('settings.sections.securitySupport','Security & support')}</Text>
         
-        <View style={[styles.cardNew, shadowStyle]}>
+        <View style={styles.cardNew}>
           {canSeeAddEmployee && (
             renderSettingItem(
               <User size={20} color={businessColors.primary} />,
@@ -2392,7 +2407,7 @@ export default function SettingsScreen() {
           <>
             <Text style={styles.sectionTitleNew}>{t('settings.sections.accountManagement','Account Management')}</Text>
             
-            <View style={[styles.cardNew, shadowStyle]}>
+            <View style={styles.cardNew}>
               {renderSettingItem(
                 <Trash2 size={20} color="#FF3B30" />,
                 t('profile.delete.title','Delete Account'),
@@ -2410,7 +2425,71 @@ export default function SettingsScreen() {
         </TouchableOpacity>
         
         <Text style={styles.versionText}>{t('settings.sections.version','Version')} 1.0.0</Text>
-        </ScrollView>
+        </Reanimated.ScrollView>
+
+        <View
+          pointerEvents="box-none"
+          style={[styles.adminProfileStickyHost, { top: insets.top + 8 }]}
+        >
+          <View style={styles.adminProfileHeaderMeasure} onLayout={onAdminProfileHeaderLayout}>
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={() => {
+                setAdminNameDraft(user?.name || '');
+                setAdminPhoneDraft(user?.phone || '');
+                setAdminEmailDraft((user as any)?.email || '');
+                setShowEditAdminModal(true);
+              }}
+            >
+              <Reanimated.View style={[styles.adminProfileCardOuter, adminProfileCardFlipStyle]}>
+                <LinearGradient
+                  colors={[businessColors.primary, businessColors.primary + 'CC']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1.1, y: 1 }}
+                  style={styles.adminProfileCardFlat}
+                >
+                  <View style={styles.adminProfileRow}>
+                    <View style={styles.adminAvatarWrap}>
+                      <LinearGradient
+                        colors={['rgba(255,255,255,0.40)', 'rgba(255,255,255,0.15)']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.adminAvatarRing}
+                      >
+                        <View style={styles.adminAvatar}>
+                          <Image
+                            source={
+                              user?.image_url ? { uri: (user as any).image_url } : require('@/assets/images/logo-03.png')
+                            }
+                            style={styles.adminAvatarImage}
+                            resizeMode="cover"
+                          />
+                        </View>
+                      </LinearGradient>
+                      <View style={[styles.editIconContainer, { backgroundColor: 'rgba(255,255,255,0.28)' }]}>
+                        <Pencil size={11} color={Colors.white} />
+                      </View>
+                    </View>
+                    <View style={styles.adminProfileInfo}>
+                      <Text style={styles.adminName} numberOfLines={1}>
+                        {user?.name || 'Manager'}
+                      </Text>
+                      <Text style={styles.adminPhone} numberOfLines={1}>
+                        {user?.phone || 'Phone Number'}
+                      </Text>
+                      <Text style={styles.adminEmail} numberOfLines={1}>
+                        {(user as any)?.email || 'Email Address'}
+                      </Text>
+                    </View>
+                    <View style={styles.adminProfileChevron} pointerEvents="none">
+                      <ChevronLeft size={20} color="rgba(255,255,255,0.72)" />
+                    </View>
+                  </View>
+                </LinearGradient>
+              </Reanimated.View>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
 
       {/* Logout Confirmation Modal */}
@@ -4420,13 +4499,41 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  contentWrapper: {
+  /** Full settings screen: white + gray section cards */
+  settingsPageRoot: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    backgroundColor: Colors.white,
+  },
+  settingsScroll: {
+    flex: 1,
+    backgroundColor: Colors.white,
+  },
+  settingsScrollFill: {
+    flex: 1,
+    backgroundColor: Colors.white,
+  },
+  /** Sticky profile header overlay (bank-app scroll flip) */
+  adminProfileStickyHost: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 2,
+    ...Platform.select({
+      android: { elevation: 4 },
+    }),
+  },
+  adminProfileHeaderMeasure: {
     marginTop: 8,
-    paddingTop: 16,
+    marginHorizontal: 16,
+    marginBottom: 4,
+  },
+  adminProfileCardOuter: {
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  adminProfileCardFlat: {
+    paddingVertical: 16,
+    paddingHorizontal: 18,
   },
   sheetRoot: {
     flex: 1,
@@ -4477,20 +4584,19 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginBottom: 6,
   },
-  headerGradient: {
-    paddingBottom: 8,
-  },
-  adminProfileCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingTop: 26,
-    paddingBottom: 20,
-    marginHorizontal: 16,
-    marginTop: 18,
-    marginBottom: 6,
+  adminProfileRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    ...shadowStyle,
+    width: '100%',
+  },
+  adminProfileInfo: {
+    flex: 1,
+    minWidth: 0,
+    marginHorizontal: 12,
+    justifyContent: 'center',
+  },
+  adminProfileChevron: {
+    justifyContent: 'center',
   },
   adminAvatarWrap: {
     position: 'relative',
@@ -4501,56 +4607,59 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     right: 0,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: Colors.white,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.22,
+    shadowRadius: 3,
+    elevation: 4,
   },
   adminAvatarRing: {
-    padding: 2,
+    padding: 2.5,
     borderRadius: 34,
     alignItems: 'center',
     justifyContent: 'center',
   },
   adminAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
   },
   adminAvatarImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
   },
   adminName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: Colors.text,
-    marginTop: 8,
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textAlign: 'right',
   },
   adminPhone: {
-    fontSize: 15,
-    color: Colors.subtext,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.78)',
+    marginTop: 3,
+    textAlign: 'right',
   },
   adminEmail: {
-    fontSize: 14,
-    color: Colors.subtext,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.60)',
     marginTop: 2,
+    textAlign: 'right',
   },
   scrollContent: {
-    padding: 16,
-    paddingTop: 0,
+    paddingHorizontal: 0,
+    backgroundColor: Colors.white,
   },
   statsRowNew: {
     flexDirection: 'row-reverse',
@@ -4579,21 +4688,36 @@ const styles = StyleSheet.create({
     color: Colors.subtext,
   },
   sectionTitleNew: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.text,
-    marginLeft: 24,
-    marginBottom: 10,
-    marginTop: 18,
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#8E8E93',
+    letterSpacing: 0.55,
+    textTransform: 'uppercase',
+    paddingLeft: 20,
+    marginBottom: 7,
+    marginTop: 24,
     textAlign: 'left',
   },
   cardNew: {
     backgroundColor: Colors.white,
-    borderRadius: 18,
+    borderRadius: 16,
     marginHorizontal: 16,
-    marginBottom: 18,
-    padding: 18,
-    ...shadowStyle,
+    marginBottom: 4,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  colorPickerWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
   },
   addressSheetContainer: {
     position: 'absolute',
@@ -4684,21 +4808,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
+    paddingHorizontal: 16,
+    minHeight: 56,
+    backgroundColor: Colors.white,
   },
   settingItem_last: {
     borderBottomWidth: 0,
   },
   settingDivider: {
-    height: 0,
-    borderBottomWidth: 1.5,
-    borderBottomColor: Colors.primary,
-    borderStyle: 'dashed',
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#E8E8ED',
+    marginLeft: 66,
   },
   settingIcon: {
-    marginRight: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#F5F5F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+    flexShrink: 0,
   },
   settingChevron: {
-    marginLeft: 12,
+    marginLeft: 8,
   },
   settingIconRight: {
     marginLeft: 12,
@@ -4707,48 +4840,61 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   settingTitle: {
-    fontSize: 16,
+    fontSize: 15.5,
+    fontWeight: '500',
     color: Colors.text,
-    marginBottom: 2,
+    marginBottom: 1,
     textAlign: 'left',
   },
   settingSubtitle: {
-    fontSize: 14,
-    color: Colors.subtext,
+    fontSize: 12.5,
+    color: '#8E8E93',
     textAlign: 'left',
+    lineHeight: 16,
   },
 
-  // LTR Perfect alignment styles for Business details
   settingItemLTR: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
+    paddingHorizontal: 16,
+    minHeight: 56,
+    backgroundColor: Colors.white,
   },
   settingIconLTR: {
-    marginRight: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#F5F5F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+    flexShrink: 0,
   },
   settingChevronLTR: {
-    marginLeft: 12,
+    marginLeft: 8,
   },
   settingContentLTR: {
     flex: 1,
     alignItems: 'flex-start',
   },
   settingTitleLTR: {
-    fontSize: 16,
+    fontSize: 15.5,
+    fontWeight: '500',
     color: Colors.text,
-    marginBottom: 2,
+    marginBottom: 1,
     textAlign: 'left',
     alignSelf: 'flex-start',
   },
   settingSubtitleLTR: {
-    fontSize: 14,
-    color: Colors.subtext,
+    fontSize: 12.5,
+    color: '#8E8E93',
     textAlign: 'left',
     alignSelf: 'flex-start',
+    lineHeight: 16,
   },
   settingItemDisabled: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
 
   logoutOverlay: {
@@ -4812,30 +4958,30 @@ const styles = StyleSheet.create({
   },
 
   logoutButton: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
-    marginHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: Colors.primary,
-    borderRadius: 16,
-    alignSelf: 'stretch',
-    marginBottom: 24,
+    gap: 8,
+    marginTop: 32,
+    marginHorizontal: 28,
+    paddingVertical: 15,
+    borderRadius: 14,
+    marginBottom: 10,
   },
   logoutText: {
     fontSize: 16,
+    fontWeight: '600',
     color: Colors.white,
-    fontWeight: '500',
-    marginLeft: 8,
+    letterSpacing: 0.2,
   },
 
   versionText: {
-    fontSize: 14,
-    color: Colors.subtext,
+    fontSize: 11.5,
+    color: '#C7C7CC',
     textAlign: 'center',
-    marginTop: 16,
-    marginBottom: 32,
+    marginTop: 10,
+    marginBottom: 8,
+    letterSpacing: 0.3,
   },
 
   // Modal Styles

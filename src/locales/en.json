@@ -129,6 +129,8 @@
   "admin.pendingClients.rejectMessage": "Remove {{name}}? They will need to register again.",
   "admin.pendingClients.rejectConfirm": "Remove",
   "admin.pendingClients.rejectError": "Could not remove this registration.",
+  "admin.pendingClients.notificationTitle": "New client awaiting approval",
+  "admin.pendingClients.notificationBody": "{{name}} ({{phone}}) registered and is waiting for you to approve them in the app.",
   "login.pendingApprovalTitle": "Awaiting approval",
   "login.pendingApprovalMessage": "Your account is waiting for the business to approve it. You will be able to sign in once approved.",
   "register.success.pendingApproval": "Your account was created. The business will review and approve it shortly.\n\nYou can sign in with your phone and password after approval.\n\nPhone: {{phone}}",

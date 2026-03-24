@@ -131,6 +131,8 @@
   "admin.pendingClients.rejectMessage": "להסיר את {{name}}? יצטרך להירשם מחדש.",
   "admin.pendingClients.rejectConfirm": "הסר",
   "admin.pendingClients.rejectError": "לא ניתן להסיר את ההרשמה.",
+  "admin.pendingClients.notificationTitle": "לקוח חדש ממתין לאישור",
+  "admin.pendingClients.notificationBody": "{{name}} ({{phone}}) נרשם/ה וממתין/ה לאישורך באפליקציה.",
   "login.pendingApprovalTitle": "ממתין לאישור",
   "login.pendingApprovalMessage": "החשבון ממתין לאישור העסק. תוכל/י להתחבר לאחר האישור.",
   "register.success.pendingApproval": "החשבון נוצר. העסק יאשר אותו בקרוב.\n\nתוכל/י להתחבר עם הטלפון והסיסמה אחרי האישור.\n\nטלפון: {{phone}}",

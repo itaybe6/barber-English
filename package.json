@@ -128,6 +128,7 @@
     "lucide-react-native": "^0.536.0",
     "moti": "^0.30.0",
     "nativewind": "^4.1.23",
+    "randomcolor": "^0.6.2",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-i18next": "^16.1.0",

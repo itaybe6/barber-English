@@ -10,15 +10,35 @@ import {
   Platform,
   Alert,
   Image,
+  TouchableWithoutFeedback,
+  Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, Entypo } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import Animated, {
+  Easing,
+  Extrapolate,
+  FadeIn,
+  LinearTransition,
+  interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { useAuthStore } from '@/stores/authStore';
 import { usersApi } from '@/lib/api/users';
 import type { User as DbUser } from '@/lib/supabase';
+
+const AnimatedEntypo = Animated.createAnimatedComponent(Entypo);
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const SHEET_ANIM_MS = 500;
+const SHEET_CLOSE_MS = 450;
+const OFF_BOTTOM = Math.min(SCREEN_HEIGHT * 1.05, SCREEN_HEIGHT + 80);
 
 interface ThemeColors {
   primary: string;
@@ -35,7 +55,10 @@ export function PendingClientApprovalsCard({ colors }: { colors: ThemeColors }) 
   const [loading, setLoading] = React.useState(false);
   const [initialized, setInitialized] = React.useState(false);
   const [modalOpen, setModalOpen] = React.useState(false);
+  const [displayModal, setDisplayModal] = React.useState(false);
   const [actionId, setActionId] = React.useState<string | null>(null);
+
+  const translateY = useSharedValue(OFF_BOTTOM);
 
   const load = React.useCallback(async () => {
     if (!isAdmin) return;
@@ -60,6 +83,42 @@ export function PendingClientApprovalsCard({ colors }: { colors: ThemeColors }) 
       setModalOpen(false);
     }
   }, [modalOpen, loading, pending.length]);
+
+  const finishClose = React.useCallback(() => {
+    setDisplayModal(false);
+  }, []);
+
+  React.useEffect(() => {
+    if (!modalOpen) return;
+    setDisplayModal(true);
+    translateY.value = OFF_BOTTOM;
+    translateY.value = withTiming(0, {
+      duration: SHEET_ANIM_MS,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [modalOpen, translateY]);
+
+  React.useEffect(() => {
+    if (modalOpen || !displayModal) return;
+    translateY.value = withTiming(
+      OFF_BOTTOM,
+      { duration: SHEET_CLOSE_MS, easing: Easing.in(Easing.cubic) },
+      (finished) => {
+        if (finished) runOnJS(finishClose)();
+      }
+    );
+  }, [modalOpen, displayModal, finishClose, translateY]);
+
+  const backdropStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(translateY.value, [0, OFF_BOTTOM], [0.48, 0], Extrapolate.CLAMP),
+  }));
+
+  const sheetSlideStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+    opacity: interpolate(translateY.value, [OFF_BOTTOM * 0.35, 0], [0, 1], Extrapolate.CLAMP),
+  }));
+
+  const requestClose = () => setModalOpen(false);
 
   const onApprove = async (id: string) => {
     setActionId(id);
@@ -122,7 +181,7 @@ export function PendingClientApprovalsCard({ colors }: { colors: ThemeColors }) 
           accessibilityLabel={t('admin.pendingClients.bannerA11y', 'New clients awaiting approval')}
         >
           <LinearGradient
-            colors={['#F59E0B', '#EA580C', '#C2410C']}
+            colors={[colors.primary, colors.secondary]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.bannerGradient}
@@ -141,105 +200,156 @@ export function PendingClientApprovalsCard({ colors }: { colors: ThemeColors }) 
                   {t('admin.pendingClients.bannerSubtitle', '{{count}} waiting for your approval', { count })}
                 </Text>
               </View>
-              <Ionicons name="chevron-back" size={22} color="rgba(255,255,255,0.9)" />
+              <View style={styles.bannerChevronWrap}>
+                <Ionicons name="chevron-back" size={22} color="rgba(255,255,255,0.9)" />
+              </View>
             </View>
           </LinearGradient>
         </TouchableOpacity>
       ) : null}
 
       <Modal
-        animationType="slide"
+        visible={displayModal}
         transparent
-        visible={modalOpen}
-        onRequestClose={() => setModalOpen(false)}
+        animationType="none"
+        statusBarTranslucent
+        onRequestClose={requestClose}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
-            <View style={styles.sheetHeader}>
-              <View style={{ width: 36 }} />
-              <Text style={[styles.sheetTitle, { color: colors.text }]}>
-                {t('admin.pendingClients.sheetTitle', 'Approve clients')}
-              </Text>
-              <TouchableOpacity style={styles.closeBtn} onPress={() => setModalOpen(false)}>
-                <Ionicons name="close" size={24} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-            <Text style={[styles.sheetHint, { color: colors.textSecondary }]}>
-              {t('admin.pendingClients.sheetHint', 'Approve to let them use the app, or remove the registration.')}
-            </Text>
+        <View style={styles.modalRoot} pointerEvents="box-none">
+          <TouchableWithoutFeedback onPress={requestClose}>
+            <Animated.View style={[styles.backdropFill, backdropStyle]} />
+          </TouchableWithoutFeedback>
 
-            {loading ? (
-              <View style={styles.centered}>
-                <ActivityIndicator size="large" color={colors.primary} />
+          <Animated.View
+            layout={LinearTransition.duration(SHEET_ANIM_MS)}
+            style={[
+              styles.sheetOuter,
+              sheetSlideStyle,
+              {
+                paddingBottom: insets.bottom + 12,
+                maxHeight: SCREEN_HEIGHT * 0.88,
+                minHeight: SCREEN_HEIGHT * 0.42,
+              },
+            ]}
+            pointerEvents="box-none"
+          >
+            <View
+              style={[
+                styles.sheetSurface,
+                {
+                  borderColor: `${colors.primary}14`,
+                  shadowColor: colors.primary,
+                },
+              ]}
+            >
+              <View style={styles.dragHandleWrap}>
+                <View style={[styles.dragHandle, { backgroundColor: `${colors.primary}33` }]} />
               </View>
-            ) : (
-              <FlatList
-                data={pending}
-                keyExtractor={(item) => item.id}
-                contentContainerStyle={styles.listContent}
-                ListEmptyComponent={
-                  <Text style={[styles.empty, { color: colors.textSecondary }]}>
-                    {t('admin.pendingClients.empty', 'No pending clients')}
-                  </Text>
-                }
-                renderItem={({ item }) => {
-                  const busy = actionId === item.id;
-                  return (
-                    <View style={[styles.row, { borderColor: `${colors.primary}18` }]}>
-                      <View style={styles.rowLeft}>
-                        {item.image_url ? (
-                          <Image source={{ uri: item.image_url }} style={styles.avatar} />
-                        ) : (
-                          <View style={[styles.avatarPh, { backgroundColor: `${colors.primary}18` }]}>
-                            <Ionicons name="person-outline" size={22} color={colors.primary} />
+
+              <View style={styles.sheetHeaderRow}>
+                <View style={{ width: 44 }} />
+                <Text style={[styles.sheetTitle, { color: colors.text }]} numberOfLines={1}>
+                  {t('admin.pendingClients.sheetTitle', 'Approve clients')}
+                </Text>
+                <TouchableOpacity
+                  onPress={requestClose}
+                  style={[styles.closeFab, { backgroundColor: colors.primary }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('close', 'Close')}
+                >
+                  <AnimatedEntypo
+                    name="cross"
+                    size={20}
+                    color="#FFFFFF"
+                    entering={FadeIn.duration(280)}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.sheetHint, { color: colors.textSecondary }]}>
+                {t('admin.pendingClients.sheetHint', 'Approve to let them use the app, or remove the registration.')}
+              </Text>
+
+              <Animated.View
+                layout={LinearTransition.duration(SHEET_ANIM_MS)}
+                style={styles.sheetBody}
+              >
+                {loading ? (
+                  <View style={styles.centered}>
+                    <ActivityIndicator size="large" color={colors.primary} />
+                  </View>
+                ) : (
+                  <FlatList
+                    style={styles.listFlex}
+                    data={pending}
+                    keyExtractor={(item) => item.id}
+                    contentContainerStyle={styles.listContent}
+                    showsVerticalScrollIndicator={false}
+                    ListEmptyComponent={
+                      <Text style={[styles.empty, { color: colors.textSecondary }]}>
+                        {t('admin.pendingClients.empty', 'No pending clients')}
+                      </Text>
+                    }
+                    renderItem={({ item }) => {
+                      const busy = actionId === item.id;
+                      return (
+                        <View style={[styles.row, { borderColor: `${colors.primary}22`, backgroundColor: '#FAFBFC' }]}>
+                          <View style={styles.rowLeft}>
+                            {item.image_url ? (
+                              <Image source={{ uri: item.image_url }} style={styles.avatar} />
+                            ) : (
+                              <View style={[styles.avatarPh, { backgroundColor: `${colors.primary}14` }]}>
+                                <Ionicons name="person-outline" size={22} color={colors.primary} />
+                              </View>
+                            )}
+                            <View style={styles.rowText}>
+                              <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
+                                {item.name}
+                              </Text>
+                              {item.phone ? (
+                                <Text style={[styles.phone, { color: colors.textSecondary }]}>{item.phone}</Text>
+                              ) : null}
+                              {item.email ? (
+                                <Text style={[styles.email, { color: colors.textSecondary }]} numberOfLines={1}>
+                                  {item.email}
+                                </Text>
+                              ) : null}
+                            </View>
                           </View>
-                        )}
-                        <View style={styles.rowText}>
-                          <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
-                            {item.name}
-                          </Text>
-                          {item.phone ? (
-                            <Text style={[styles.phone, { color: colors.textSecondary }]}>{item.phone}</Text>
-                          ) : null}
-                          {item.email ? (
-                            <Text style={[styles.email, { color: colors.textSecondary }]} numberOfLines={1}>
-                              {item.email}
-                            </Text>
-                          ) : null}
+                          <View style={styles.actions}>
+                            <TouchableOpacity
+                              style={[styles.btnOutline, { borderColor: `${colors.textSecondary}55` }]}
+                              onPress={() => onReject(item)}
+                              disabled={busy}
+                            >
+                              {busy ? (
+                                <ActivityIndicator size="small" color={colors.textSecondary} />
+                              ) : (
+                                <Text style={[styles.btnOutlineText, { color: colors.textSecondary }]}>
+                                  {t('admin.pendingClients.decline', 'Decline')}
+                                </Text>
+                              )}
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.btnPrimary, { backgroundColor: colors.primary }]}
+                              onPress={() => onApprove(item.id)}
+                              disabled={busy}
+                            >
+                              {busy ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                              ) : (
+                                <Text style={styles.btnPrimaryText}>{t('admin.pendingClients.approve', 'Approve')}</Text>
+                              )}
+                            </TouchableOpacity>
+                          </View>
                         </View>
-                      </View>
-                      <View style={styles.actions}>
-                        <TouchableOpacity
-                          style={[styles.btnOutline, { borderColor: colors.textSecondary }]}
-                          onPress={() => onReject(item)}
-                          disabled={busy}
-                        >
-                          {busy ? (
-                            <ActivityIndicator size="small" color={colors.textSecondary} />
-                          ) : (
-                            <Text style={[styles.btnOutlineText, { color: colors.textSecondary }]}>
-                              {t('admin.pendingClients.decline', 'Decline')}
-                            </Text>
-                          )}
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.btnPrimary, { backgroundColor: colors.primary }]}
-                          onPress={() => onApprove(item.id)}
-                          disabled={busy}
-                        >
-                          {busy ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                          ) : (
-                            <Text style={styles.btnPrimaryText}>{t('admin.pendingClients.approve', 'Approve')}</Text>
-                          )}
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  );
-                }}
-              />
-            )}
-          </View>
+                      );
+                    }}
+                  />
+                )}
+              </Animated.View>
+            </View>
+          </Animated.View>
         </View>
       </Modal>
     </>
@@ -255,7 +365,7 @@ const styles = StyleSheet.create({
       ios: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.2,
+        shadowOpacity: 0.18,
         shadowRadius: 16,
       },
       android: { elevation: 6 },
@@ -265,10 +375,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
+    borderColor: 'rgba(255,255,255,0.22)',
   },
   bannerShine: {
     ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255,255,255,0.35)',
   },
@@ -297,11 +408,11 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 11,
     paddingHorizontal: 6,
-    backgroundColor: '#1e293b',
+    backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#fff',
+    borderColor: 'rgba(255,255,255,0.85)',
   },
   badgeText: {
     color: '#fff',
@@ -314,64 +425,109 @@ const styles = StyleSheet.create({
   },
   bannerTitle: {
     color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
     letterSpacing: -0.3,
   },
   bannerSub: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 13,
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 12,
     fontWeight: '500',
     marginTop: 4,
+    lineHeight: 16,
   },
-  modalOverlay: {
+  bannerChevronWrap: {
+    opacity: 0.95,
+  },
+  modalRoot: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
-  sheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '88%',
-    paddingTop: 8,
+  backdropFill: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#0f172a',
   },
-  sheetHeader: {
+  sheetOuter: {
+    width: '100%',
+  },
+  sheetSurface: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowOffset: { width: 0, height: -12 },
+        shadowOpacity: 0.12,
+        shadowRadius: 24,
+      },
+      android: { elevation: 16 },
+    }),
+  },
+  dragHandleWrap: {
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  dragHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+  },
+  sheetHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e5e5e7',
+    paddingHorizontal: 12,
+    paddingBottom: 4,
   },
   sheetTitle: {
-    fontSize: 18,
-    fontWeight: '700',
     flex: 1,
+    fontSize: 18,
+    fontWeight: '800',
     textAlign: 'center',
+    letterSpacing: -0.3,
   },
-  closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#f2f2f7',
+  closeFab: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+      },
+      android: { elevation: 4 },
+    }),
   },
   sheetHint: {
     fontSize: 13,
     paddingHorizontal: 20,
-    paddingVertical: 12,
-    lineHeight: 18,
+    paddingBottom: 12,
+    lineHeight: 19,
+  },
+  sheetBody: {
+    flex: 1,
+    minHeight: 120,
+  },
+  listFlex: {
+    flex: 1,
   },
   listContent: {
     paddingHorizontal: 16,
-    paddingBottom: 24,
+    paddingBottom: 8,
+    flexGrow: 1,
   },
   centered: {
     paddingVertical: 48,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   empty: {
     textAlign: 'center',
@@ -383,7 +539,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 14,
     marginBottom: 12,
-    backgroundColor: '#fafafa',
   },
   rowLeft: {
     flexDirection: 'row',

@@ -18,6 +18,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router';
 import { supabase, getBusinessId, BusinessProfile } from '@/lib/supabase';
 import { usersApi } from '@/lib/api/users';
+import { notificationsApi } from '@/lib/api/notifications';
 import Colors from '@/constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -165,6 +166,15 @@ export default function RegisterScreen() {
         Alert.alert(t('error.generic', 'Error'), t('register.createError', 'An error occurred creating the account. Please try again.'));
         return;
       }
+
+      await notificationsApi.createAdminNotification(
+        t('admin.pendingClients.notificationTitle', 'New client awaiting approval'),
+        t('admin.pendingClients.notificationBody', '{{name}} ({{phone}}) registered and is waiting for you to approve them in the app.', {
+          name: name.trim(),
+          phone: phone.trim(),
+        }),
+        'system'
+      );
 
       // Success!
       Alert.alert(

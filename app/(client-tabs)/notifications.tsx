@@ -116,6 +116,26 @@ export default function ClientNotificationsScreen() {
     loadNotifications(true);
   }, [loadNotifications]);
 
+  /** Matches in-app admin notification when a new client registers (see register.tsx + locales). */
+  const isPendingClientApprovalNotification = (n: Notification): boolean => {
+    const title = n.title || '';
+    const titleLower = title.toLowerCase();
+    const body = n.content || '';
+    const bodyLower = body.toLowerCase();
+    if (/לקוח חדש ממתין לאישור/.test(title)) return true;
+    if (/new client awaiting approval/i.test(titleLower)) return true;
+    if (
+      /נרשם\/ה וממתין\/ה לאישור|נרשם\/ה וממתין\/ה לאישורר|ממתין\/ה לאישורר?|ממתינ\/ה לאישורר?ך/i.test(
+        body
+      ) ||
+      /ממתין לאישורך באפליקציה/i.test(body) ||
+      /registered and is waiting|waiting for you to approve/i.test(bodyLower)
+    ) {
+      return true;
+    }
+    return false;
+  };
+
   const handleNotificationPress = async (notification: Notification) => {
     if (!notification.is_read) {
       try {
@@ -132,6 +152,9 @@ export default function ClientNotificationsScreen() {
       } catch (error) {
         console.error('Error marking notification as read:', error);
       }
+    }
+    if (isAdmin && isPendingClientApprovalNotification(notification)) {
+      router.push('/(tabs)?openPendingClients=1');
     }
   };
 

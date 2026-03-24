@@ -35,8 +35,32 @@ import { getCurrentClientLogo } from '@/src/theme/assets';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { superAdminApi } from '@/lib/api/superAdmin';
 import { useTranslation } from 'react-i18next';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: SW, height: SH } = Dimensions.get('window');
+
+const MAX_LOGIN_FAILURES = 5;
+const loginFailuresStorageKey = (phoneKey: string) => `@login_failures:${phoneKey}`;
+
+function normalizePhoneKey(phone: string): string {
+  return phone.trim().replace(/\s+/g, '');
+}
+
+async function readLoginFailures(phoneKey: string): Promise<number> {
+  if (!phoneKey) return 0;
+  const raw = await AsyncStorage.getItem(loginFailuresStorageKey(phoneKey));
+  const n = raw ? parseInt(raw, 10) : 0;
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+async function writeLoginFailures(phoneKey: string, count: number): Promise<void> {
+  if (!phoneKey) return;
+  if (count <= 0) {
+    await AsyncStorage.removeItem(loginFailuresStorageKey(phoneKey));
+  } else {
+    await AsyncStorage.setItem(loginFailuresStorageKey(phoneKey), String(count));
+  }
+}
 
 // ─── Color helpers ────────────────────────────────────────────────────────────
 function hexToRgba(hex: string, a: number): string {
@@ -178,6 +202,7 @@ export default function LoginScreen() {
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [phoneFocused, setPhoneFocused] = useState(false);
   const [passFocused, setPassFocused] = useState(false);
+  const [loginFailureCount, setLoginFailureCount] = useState(0);
 
   const login = useAuthStore((state) => state.login);
   const { isAuthenticated, user } = useAuthStore();
@@ -185,6 +210,25 @@ export default function LoginScreen() {
   const { t } = useTranslation();
 
   const primary = businessColors.primary;
+
+  const phoneKey = normalizePhoneKey(phone);
+  const isLoginLocked = phoneKey.length > 0 && loginFailureCount >= MAX_LOGIN_FAILURES;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const key = normalizePhoneKey(phone);
+      if (!key) {
+        if (!cancelled) setLoginFailureCount(0);
+        return;
+      }
+      const n = await readLoginFailures(key);
+      if (!cancelled) setLoginFailureCount(n);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [phone]);
 
   // ── Logo float ──
   const logoFloat = useSharedValue(0);
@@ -220,14 +264,43 @@ export default function LoginScreen() {
   }));
 
   // ── Login handler ──
+  const reportFailedLogin = async (key: string) => {
+    const next = (await readLoginFailures(key)) + 1;
+    await writeLoginFailures(key, next);
+    setLoginFailureCount(next);
+    if (next >= MAX_LOGIN_FAILURES) {
+      Alert.alert(
+        t('login.tooManyAttemptsTitle', 'התחברות נחסמה'),
+        t('login.tooManyAttemptsMessage', 'בוצעו יותר מדי ניסיונות התחברות שגויים למספר זה. לא ניתן להתחבר כעת.')
+      );
+    } else {
+      const remaining = MAX_LOGIN_FAILURES - next;
+      Alert.alert(
+        t('error.generic', 'שגיאה'),
+        t('login.incorrectCredentialsWithRemaining', 'טלפון או סיסמה שגויים. נותרו {{count}} ניסיונות.', { count: remaining })
+      );
+    }
+  };
+
   const handleLogin = async () => {
     if (!phone.trim() || !password.trim()) {
       Alert.alert(t('error.generic', 'שגיאה'), t('login.fillAll', 'יש למלא את כל השדות'));
       return;
     }
+    const key = normalizePhoneKey(phone);
+    const existingFailures = await readLoginFailures(key);
+    if (existingFailures >= MAX_LOGIN_FAILURES) {
+      setLoginFailureCount(existingFailures);
+      Alert.alert(
+        t('login.tooManyAttemptsTitle', 'התחברות נחסמה'),
+        t('login.tooManyAttemptsMessage', 'בוצעו יותר מדי ניסיונות התחברות שגויים למספר זה. לא ניתן להתחבר כעת.')
+      );
+      return;
+    }
     setIsLoading(true);
     try {
       if (superAdminApi.verifySuperAdmin(phone.trim(), password)) {
+        await writeLoginFailures(key, 0);
         const superUser = {
           id: 'super-admin', phone: phone.trim(),
           type: UserType.SUPER_ADMIN, name: 'Super Admin', user_type: 'super_admin',
@@ -239,10 +312,12 @@ export default function LoginScreen() {
       const authUser = await usersApi.authenticateUserByPhone(phone.trim(), password);
       if (authUser) {
         if ((authUser as any)?.block) {
+          await writeLoginFailures(key, 0);
           Alert.alert(t('account.blocked', 'חשבון חסום'), t('login.blockedCannotSignIn', 'החשבון שלך חסום. פנה למנהל.'));
           return;
         }
         if (authUser.user_type === 'client' && (authUser as any).client_approved === false) {
+          await writeLoginFailures(key, 0);
           Alert.alert(
             t('login.pendingApprovalTitle', 'Awaiting approval'),
             t('login.pendingApprovalMessage', 'Your account is waiting for the business to approve it. You will be able to sign in once approved.')
@@ -250,9 +325,11 @@ export default function LoginScreen() {
           return;
         }
         if (!isValidUserType(authUser.user_type)) {
+          await writeLoginFailures(key, 0);
           Alert.alert(t('error.generic', 'שגיאה'), t('login.invalidUserType', 'סוג משתמש לא תקין'));
           return;
         }
+        await writeLoginFailures(key, 0);
         const appUser = {
           id: authUser.id, phone: authUser.phone,
           type: authUser.user_type, name: authUser.name,
@@ -267,24 +344,26 @@ export default function LoginScreen() {
         const { data: other } = await supabase.from('users').select('*')
           .eq('phone', phone.trim()).neq('business_id', businessId).single();
         if (other) {
-          Alert.alert(t('error.generic', 'שגיאה'), t('login.incorrectCredentials', 'טלפון או סיסמה שגויים'));
+          await reportFailedLogin(key);
           return;
         }
         const demoUser = findUserByCredentials(phone.trim(), password);
         if (demoUser) {
+          await writeLoginFailures(key, 0);
           login(demoUser);
           router.replace(demoUser.type === 'admin' ? '/(tabs)' : '/(client-tabs)');
         } else {
-          Alert.alert(t('error.generic', 'שגיאה'), t('login.incorrectCredentials', 'טלפון או סיסמה שגויים'));
+          await reportFailedLogin(key);
         }
       }
     } catch {
       const demoUser = findUserByCredentials(phone.trim(), password);
       if (demoUser) {
+        await writeLoginFailures(key, 0);
         login(demoUser);
         router.replace(demoUser.type === 'admin' ? '/(tabs)' : '/(client-tabs)');
       } else {
-        Alert.alert(t('error.generic', 'שגיאה'), t('login.incorrectCredentials', 'טלפון או סיסמה שגויים'));
+        await reportFailedLogin(key);
       }
     } finally {
       setIsLoading(false);
@@ -429,6 +508,7 @@ export default function LoginScreen() {
                     autoCorrect={false}
                     textAlign="left"
                     showSoftInputOnFocus={true}
+                    editable={!isLoginLocked}
                     onFocus={() => setPhoneFocused(true)}
                     onBlur={() => setPhoneFocused(false)}
                   />
@@ -460,6 +540,7 @@ export default function LoginScreen() {
                     autoCapitalize="none"
                     textAlign="left"
                     showSoftInputOnFocus={true}
+                    editable={!isLoginLocked}
                     onFocus={() => setPassFocused(true)}
                     onBlur={() => setPassFocused(false)}
                   />
@@ -477,16 +558,22 @@ export default function LoginScreen() {
                 </View>
               </View>
 
+              {isLoginLocked && (
+                <Text style={styles.lockBanner}>
+                  {t('login.lockedHint', 'התחברות למספר טלפון זה חסמה עקב ניסיונות שגויים חוזרים.')}
+                </Text>
+              )}
+
               {/* Login button */}
               <Animated.View style={btnAnimStyle}>
                 <TouchableOpacity
                   onPressIn={() => { btnScale.value = withTiming(0.96, { duration: 80 }); }}
                   onPressOut={() => { btnScale.value = withSpring(1, { damping: 12, stiffness: 220 }); }}
                   onPress={handleLogin}
-                  disabled={isLoading}
+                  disabled={isLoading || isLoginLocked}
                   activeOpacity={1}
                 >
-                  <View style={styles.btnOuter}>
+                  <View style={[styles.btnOuter, (isLoading || isLoginLocked) && styles.btnOuterDisabled]}>
                     <LinearGradient
                       colors={[shiftHex(primary, 40), primary, shiftHex(primary, -40)]}
                       start={{ x: 0, y: 0 }}
@@ -497,7 +584,9 @@ export default function LoginScreen() {
                       <Text style={styles.btnText}>
                         {isLoading
                           ? t('login.cta.signingIn', 'מתחבר...')
-                          : t('login.cta.signIn', 'כניסה')}
+                          : isLoginLocked
+                            ? t('login.cta.locked', 'התחברות חסומה')
+                            : t('login.cta.signIn', 'כניסה')}
                       </Text>
                     </LinearGradient>
                   </View>
@@ -742,6 +831,14 @@ const styles = StyleSheet.create({
   inputPass: {
     paddingRight: 38,
   },
+  lockBanner: {
+    fontSize: 13,
+    color: '#B45309',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
   eyeBtn: {
     position: 'absolute',
     right: 16,
@@ -757,6 +854,9 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },
     elevation: 10,
+  },
+  btnOuterDisabled: {
+    opacity: 0.55,
   },
   btn: {
     height: 56,

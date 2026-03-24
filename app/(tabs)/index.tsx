@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Platform, Modal, ActivityIndicator, TextInput, FlatList, Alert, Linking, RefreshControl, Animated, Easing, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import Colors from '@/constants/colors';
 import { generateAppointments } from '@/constants/appointments';
@@ -133,6 +133,7 @@ function sanitizeUrlArray(value: unknown): string[] {
 export default function HomeScreen() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
+  const params = useLocalSearchParams<{ openPendingClients?: string }>();
   const insets = useSafeAreaInsets();
   const designsFromStore = useDesignsStore((state) => state.designs);
   const isLoadingDesigns = useDesignsStore((state) => state.isLoading);
@@ -170,6 +171,15 @@ export default function HomeScreen() {
     React.useCallback(() => {
       loadHeroImages();
     }, [loadHeroImages])
+  );
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (params.openPendingClients === '1') {
+        setPendingApprovalsOpenNonce((n) => n + 1);
+        router.setParams({ openPendingClients: undefined });
+      }
+    }, [params.openPendingClients, router])
   );
 
   const heroImagesResolved = useMemo(
@@ -234,6 +244,7 @@ export default function HomeScreen() {
   const [clientStatsMap, setClientStatsMap] = useState<
     Record<string, { totalAppointments: number; avgMonthlySpend: number | null }>
   >({});
+  const [pendingApprovalsOpenNonce, setPendingApprovalsOpenNonce] = useState(0);
 
   const formatClientMoney = useCallback(
     (amount: number) => {
@@ -921,7 +932,7 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <PendingClientApprovalsCard colors={colors} />
+        <PendingClientApprovalsCard colors={colors} openSheetNonce={pendingApprovalsOpenNonce} />
 
         {/* ── MONTHLY INSIGHTS CHART ── */}
         {isAdmin && (

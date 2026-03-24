@@ -266,31 +266,44 @@ function _formatHebrewTimeLabel(date: Date) {
 }
 
 const HeaderDay = memo(
-  ({ day, columnWidth, headerHeight, isSelected }: { day: DayBlock; columnWidth: number; headerHeight: number; isSelected: boolean }) => {
+  ({ day, columnWidth, headerHeight, isSelected, isToday, onPress }: { day: DayBlock; columnWidth: number; headerHeight: number; isSelected: boolean; isToday?: boolean; onPress?: () => void }) => {
     const { dayNum, weekday } = _hebrewHeaderParts(day.date);
     return (
-      <View
+      <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={onPress ? 0.75 : 1}
         style={[
           {
             alignItems: 'center',
             justifyContent: 'center',
             width: columnWidth,
             height: headerHeight,
-            paddingBottom: 4,
+            paddingBottom: 6,
+            paddingTop: 6,
+            backgroundColor: isSelected ? '#F0F4FF' : 'transparent',
           },
           weekStyles.borderRight,
           weekStyles.borderBottom,
         ]}
       >
-        <Text style={[weekStyles.headerWeekday, { writingDirection: 'rtl' }]}>{weekday}</Text>
-        <View style={[weekStyles.headerDayCircle, isSelected && weekStyles.headerDayCircleSelected]}>
+        <Text style={[weekStyles.headerWeekday, { writingDirection: 'rtl', color: isSelected ? GC_BLUE : '#5F6368' }]}>{weekday}</Text>
+        <View style={[
+          weekStyles.headerDayCircle,
+          isToday && weekStyles.headerDayCircleToday,
+          isSelected && weekStyles.headerDayCircleSelected,
+        ]}>
           <Text
-            style={[weekStyles.headerDayNum, { writingDirection: 'rtl' }, isSelected && weekStyles.headerDayNumSelected]}
+            style={[
+              weekStyles.headerDayNum,
+              { writingDirection: 'rtl' },
+              isToday && weekStyles.headerDayNumToday,
+              isSelected && weekStyles.headerDayNumSelected,
+            ]}
           >
             {dayNum}
           </Text>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   }
 );
@@ -391,6 +404,8 @@ const WeekDayColumn = memo(
             const height = (durationMinutes / 60) * hourRowHeight;
             const clientName = apt.client_name || 'לקוח';
             const serviceName = apt.service_name || 'שירות';
+            const hasPhone = !!apt.client_phone;
+            const cardHeight = Math.max(40, height - 4);
             return (
               <PressableScale
                 key={`wk-${apt.id}-${apt.slot_date}-${apt.slot_time}`}
@@ -399,31 +414,37 @@ const WeekDayColumn = memo(
                   weekStyles.weekAptCard,
                   {
                     top: Math.max(0, top + 2),
-                    height: Math.max(42, height - 4),
-                    left: 4,
-                    right: 4,
+                    height: cardHeight,
+                    left: 3,
+                    right: 3,
                     zIndex: 2,
                     elevation: 3,
                   },
                 ]}
               >
-                <BlurView intensity={85} tint="light" style={weekStyles.weekAptBlur} />
-                <View style={weekStyles.weekAptTint} />
+                <View style={weekStyles.weekAptAccent} />
                 <View style={weekStyles.weekAptInner}>
-                  <Text numberOfLines={1} style={weekStyles.weekAptClient}>
-                    {clientName}
-                  </Text>
-                  <Text numberOfLines={1} style={weekStyles.weekAptService}>
-                    {serviceName}
-                  </Text>
-                  <View style={weekStyles.weekAptMetaRow}>
-                    {!!apt.slot_time && (
+                  <View style={weekStyles.weekAptHeaderRow}>
+                    <Text numberOfLines={1} style={weekStyles.weekAptClient}>
+                      {clientName}
+                    </Text>
+                    {hasPhone && (
+                      <Ionicons name="call-outline" size={9} color={GC_BLUE} />
+                    )}
+                  </View>
+                  {cardHeight >= 38 && (
+                    <Text numberOfLines={1} style={weekStyles.weekAptService}>
+                      {serviceName}
+                    </Text>
+                  )}
+                  {cardHeight >= 56 && !!apt.slot_time && (
+                    <View style={weekStyles.weekAptMetaRow}>
+                      <Ionicons name="time-outline" size={9} color="#6B7280" />
                       <Text numberOfLines={1} style={weekStyles.weekAptTime}>
                         {_formatHebrewTimeLabel(new Date(`${apt.slot_date}T${apt.slot_time}`))}
                       </Text>
-                    )}
-                    <Ionicons name="time-outline" size={12} color="#6B7280" />
-                  </View>
+                    </View>
+                  )}
                 </View>
               </PressableScale>
             );
@@ -761,11 +782,13 @@ export default function AdminAppointmentsScreen() {
   const gridDims = useMemo(() => {
     const sw = Dimensions.get('window').width;
     const cols = calendarView === 'threeDay' ? 3 : 7;
-    const timeCol = 50;
-    const inner = sw - timeCol - 8;
-    const daySize = Math.max(inner / cols, calendarView === 'threeDay' ? 88 : 44);
-    const hourSize = Math.max(Math.min(daySize * 1.2, 92), 64);
-    return { cols, daySize, hourSize, timeCol, padBottom: hourSize };
+    const timeCol = 48;
+    const inner = sw - timeCol;
+    // For week view, enforce a minimum width per day so cards are readable; enables horizontal scroll
+    const minDaySize = calendarView === 'threeDay' ? 110 : 82;
+    const daySize = Math.max(inner / cols, minDaySize);
+    const hourSize = 72;
+    return { cols, daySize, hourSize, timeCol, padBottom: hourSize * 2 };
   }, [calendarView]);
 
   useEffect(() => {
@@ -1105,12 +1128,12 @@ export default function AdminAppointmentsScreen() {
     );
   }, [editingReminder, tHe, closeReminderModal, refreshCalendarRemindersOnly]);
 
-  const viewMenuItems: { id: CalendarViewMode; label: string }[] = [
-    { id: 'schedule', label: tHe('admin.calendar.viewSchedule', 'לוח זמנים') },
-    { id: 'day', label: tHe('admin.calendar.viewDay', 'יום') },
-    { id: 'threeDay', label: tHe('admin.calendar.viewThreeDay', '3 ימים') },
-    { id: 'week', label: tHe('admin.calendar.viewWeek', 'שבוע') },
-    { id: 'month', label: tHe('admin.calendar.viewMonth', 'חודש') },
+  const viewMenuItems: { id: CalendarViewMode; label: string; subtitle?: string }[] = [
+    { id: 'day', label: tHe('admin.calendar.viewDay', 'יומי'), subtitle: tHe('admin.calendar.viewDaySub', 'תצוגת יום בודד') },
+    { id: 'week', label: tHe('admin.calendar.viewWeek', 'שבועי'), subtitle: tHe('admin.calendar.viewWeekSub', 'כל ימי השבוע') },
+    { id: 'month', label: tHe('admin.calendar.viewMonth', 'חודשי'), subtitle: tHe('admin.calendar.viewMonthSub', 'תצוגת חודש מלא') },
+    { id: 'threeDay', label: tHe('admin.calendar.viewThreeDay', '3 ימים'), subtitle: tHe('admin.calendar.viewThreeDaySub', 'שלושה ימים רצופים') },
+    { id: 'schedule', label: tHe('admin.calendar.viewSchedule', 'לוח זמנים'), subtitle: tHe('admin.calendar.viewScheduleSub', 'רשימת אירועים') },
   ];
 
   const renderViewMenuIcon = (id: CalendarViewMode, active: boolean) => {
@@ -1184,12 +1207,14 @@ export default function AdminAppointmentsScreen() {
         </View>
       </View>
 
-      <DaySelector
-        selectedDate={selectedDate}
-        onSelectDate={setSelectedDate}
-        mode={calendarView === 'month' ? 'month' : 'week'}
-        markedDates={markedDates}
-      />
+      {calendarView !== 'week' && calendarView !== 'threeDay' && (
+        <DaySelector
+          selectedDate={selectedDate}
+          onSelectDate={setSelectedDate}
+          mode={calendarView === 'month' ? 'month' : 'week'}
+          markedDates={markedDates}
+        />
+      )}
 
       {isLoading ? (
         <View style={styles.loaderContainer}>
@@ -1205,16 +1230,19 @@ export default function AdminAppointmentsScreen() {
               <View style={weekStyles.row}>
                 <Animated.ScrollView
                   ref={hoursScrollViewRef}
-                  style={[weekStyles.hoursCol, { width: gridDims.timeCol, marginTop: gridDims.hourSize - 9 }]}
-                  contentContainerStyle={{ paddingBottom: gridDims.padBottom * 10 }}
+                  style={[weekStyles.hoursCol, { width: gridDims.timeCol, marginTop: gridDims.hourSize }]}
+                  contentContainerStyle={{ paddingBottom: gridDims.padBottom }}
                   scrollEnabled={false}
                   showsVerticalScrollIndicator={false}
                 >
                   {_hourBlocks.map((hourBlock, idx) => {
                     const hourDate = hourBlock.toDate();
+                    const h = hourDate.getHours();
                     return (
                       <View key={`wk-hour-${idx}`} style={[weekStyles.hourRow, { height: gridDims.hourSize }]}>
-                        <Text style={weekStyles.hourText}>{_formatHebrewTimeLabel(hourDate)}</Text>
+                        <Text style={[weekStyles.hourText, h === 0 && { opacity: 0 }]}>
+                          {_formatHebrewTimeLabel(hourDate)}
+                        </Text>
                       </View>
                     );
                   })}
@@ -1229,6 +1257,8 @@ export default function AdminAppointmentsScreen() {
                         columnWidth={gridDims.daySize}
                         headerHeight={gridDims.hourSize}
                         isSelected={d.formatted === selectedDateStr}
+                        isToday={d.formatted === _formatLocalYyyyMmDd(new Date())}
+                        onPress={() => setSelectedDate(d.date)}
                       />
                     ))}
                   </Animated.View>
@@ -1244,12 +1274,12 @@ export default function AdminAppointmentsScreen() {
                       data={gridDays}
                       horizontal
                       keyExtractor={(item) => item.formatted}
-                      estimatedItemSize={gridDims.hourSize}
+                      estimatedItemSize={gridDims.daySize}
                       snapToInterval={gridDims.daySize}
                       decelerationRate="fast"
                       bounces={false}
                       contentContainerStyle={{ paddingBottom: gridDims.padBottom }}
-                      showsHorizontalScrollIndicator={false}
+                      showsHorizontalScrollIndicator={true}
                       renderItem={({ item, index }) => (
                         <WeekDayColumn
                           day={item}
@@ -1393,20 +1423,38 @@ export default function AdminAppointmentsScreen() {
                             <BlurView intensity={28} tint="light" style={styles.pillBlur} />
                             <View style={styles.pillTint} />
 
-                            {/* Title row with green check icon on the right */}
+                            {/* Title row with icons */}
                             <View style={styles.titleRow}>
                               <Text numberOfLines={2} ellipsizeMode="tail" style={[styles.titleText, styles.titleTextFlex]}>
-                                {[apt.client_name || 'לקוח', apt.service_name || 'שירות'].filter(Boolean).join(' - ')}
+                                {apt.client_name || 'לקוח'}
                               </Text>
-                              <CheckCircle size={18} color="#34C759" />
+                              <View style={styles.titleIconsRow}>
+                                {!!apt.client_phone && (
+                                  <TouchableOpacity
+                                    onPress={async () => {
+                                      openActionsMenu(apt);
+                                    }}
+                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                    style={styles.phoneIconBtn}
+                                  >
+                                    <Ionicons name="call" size={14} color="#0A84FF" />
+                                  </TouchableOpacity>
+                                )}
+                                <CheckCircle size={16} color="#34C759" />
+                              </View>
                             </View>
 
-                            {/* Time range row with grey rounded background */}
+                            {/* Service name */}
+                            <Text numberOfLines={1} style={styles.serviceNameText}>
+                              {apt.service_name || 'שירות'}
+                            </Text>
+
+                            {/* Time range row */}
                             <View style={styles.durationRow}>
                               <Text numberOfLines={1} style={styles.durationText}>
                                 {`${startTime} - ${endTime}`}
                               </Text>
-                              <Ionicons name="time-outline" size={16} color="#8E8E93" />
+                              <Ionicons name="time-outline" size={14} color="#8E8E93" />
                             </View>
                           </View>
                         </View>
@@ -1547,8 +1595,18 @@ export default function AdminAppointmentsScreen() {
                     setShowViewMenu(false);
                   }}
                 >
-                  <Text style={[styles.viewMenuRowLabel, active && styles.viewMenuRowLabelActive]}>{opt.label}</Text>
-                  {renderViewMenuIcon(opt.id, active)}
+                  <View style={styles.viewMenuIconWrap}>
+                    {renderViewMenuIcon(opt.id, active)}
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[styles.viewMenuRowLabel, active && styles.viewMenuRowLabelActive]}>{opt.label}</Text>
+                    {!!opt.subtitle && (
+                      <Text style={[styles.viewMenuRowSub, active && styles.viewMenuRowSubActive]} numberOfLines={1}>{opt.subtitle}</Text>
+                    )}
+                  </View>
+                  {active && (
+                    <Ionicons name="checkmark" size={18} color={GC_BLUE} />
+                  )}
                 </TouchableOpacity>
               );
             })}
@@ -2235,12 +2293,11 @@ const styles = StyleSheet.create({
   viewMenuRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: 14,
     marginVertical: 2,
-    borderRadius: 24,
-    gap: 12,
+    borderRadius: 12,
+    gap: 10,
   },
   viewMenuRowActive: {
     backgroundColor: '#E8F0FE',
@@ -2255,17 +2312,33 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 4,
     borderBottomLeftRadius: 4,
   },
+  viewMenuIconWrap: {
+    width: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
+    flexShrink: 0,
+  },
   viewMenuRowLabel: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#3C4043',
     writingDirection: 'rtl',
-    flex: 1,
     textAlign: 'right',
   },
   viewMenuRowLabelActive: {
     color: GC_BLUE,
     fontWeight: '800',
+  },
+  viewMenuRowSub: {
+    fontSize: 12,
+    color: '#9AA0A6',
+    writingDirection: 'rtl',
+    textAlign: 'right',
+    marginTop: 1,
+  },
+  viewMenuRowSubActive: {
+    color: '#4A90D9',
   },
   viewMenuDivider: {
     height: StyleSheet.hairlineWidth,
@@ -2535,6 +2608,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
+  },
+  titleIconsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
+  phoneIconBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#E8F0FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  serviceNameText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#5F6368',
+    writingDirection: 'rtl',
   },
   durationRow: {
     flexDirection: 'row',
@@ -2975,18 +3068,22 @@ const weekStyles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   hoursCol: {
-    width: _daySize,
     flexGrow: 0,
+    backgroundColor: GC_SURFACE,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: '#E8EAED',
   },
   hourRow: {
-    height: _hourSize,
     alignItems: 'flex-end',
-    paddingRight: 8,
+    justifyContent: 'flex-start',
+    paddingRight: 6,
+    paddingTop: 4,
   },
   hourText: {
-    fontWeight: '800',
-    opacity: 0.22,
-    fontSize: 12,
+    fontWeight: '700',
+    opacity: 0.5,
+    fontSize: 11,
+    color: '#5F6368',
     writingDirection: 'rtl',
   },
   gridOuter: {
@@ -3003,26 +3100,37 @@ const weekStyles = StyleSheet.create({
     marginBottom: 2,
   },
   headerDayCircle: {
-    minWidth: 36,
-    height: 36,
-    borderRadius: 18,
+    minWidth: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
   },
+  headerDayCircleToday: {
+    borderWidth: 2,
+    borderColor: GC_BLUE,
+  },
   headerDayCircleSelected: {
     backgroundColor: GC_BLUE,
+    borderWidth: 0,
   },
   headerDayNum: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '800',
     color: '#202124',
+  },
+  headerDayNumToday: {
+    color: GC_BLUE,
   },
   headerDayNumSelected: {
     color: '#FFFFFF',
   },
   headerRow: {
     flexDirection: 'row',
+    backgroundColor: GC_SURFACE,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E8EAED',
   },
   borderBottom: {
     borderBottomColor: '#E8EAED',
@@ -3034,48 +3142,67 @@ const weekStyles = StyleSheet.create({
   },
   weekAptCard: {
     position: 'absolute',
-    borderRadius: 12,
+    borderRadius: 8,
     overflow: 'hidden',
+    backgroundColor: '#EEF3FD',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(0,0,0,0.25)',
+    borderColor: 'rgba(26, 115, 232, 0.18)',
+    flexDirection: 'row',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#1A73E8',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.12,
+        shadowRadius: 4,
+      },
+      android: { elevation: 2 },
+    }),
   },
-  weekAptBlur: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  weekAptTint: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.94)',
+  weekAptAccent: {
+    width: 3,
+    backgroundColor: GC_BLUE,
+    borderTopLeftRadius: 8,
+    borderBottomLeftRadius: 8,
+    flexShrink: 0,
   },
   weekAptInner: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 3,
+    flex: 1,
+    paddingHorizontal: 5,
+    paddingVertical: 4,
+    gap: 1,
+    minWidth: 0,
+  },
+  weekAptHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 2,
+    minWidth: 0,
   },
   weekAptClient: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#000',
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#1a1a2e',
     writingDirection: 'rtl',
+    flex: 1,
+    minWidth: 0,
   },
   weekAptService: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#111827',
-    opacity: 0.9,
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#3C4043',
     writingDirection: 'rtl',
+    opacity: 0.85,
   },
   weekAptMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 3,
   },
   weekAptTime: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#374151',
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#5F6368',
     writingDirection: 'rtl',
   },
   weekReminderCard: {

@@ -4,7 +4,7 @@ import { CURRENT_CLIENT } from '../config/currentClient';
 // Logo mapping — every path must exist (Metro resolves at bundle time).
 export const clientLogos = {
   KetyCooper: require('../../branding/KetyCooper/logo.png'),
-  EliApp: require('../../branding/EliApp/logo.png'),
+  ElianNails: require('../../branding/ElianNails/logo.png'),
 } as const;
 
 const DEFAULT_CLIENT: keyof typeof clientLogos = 'KetyCooper';

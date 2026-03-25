@@ -34,6 +34,27 @@ export interface BusinessOverview {
 
 const PULSEEM_ASMX = 'https://www.pulseem.co.il/Pulseem/pulseemsendservices.asmx';
 
+/** Supabase storage `download()` returns a Blob; RN/Hermes often lacks `Blob.prototype.text`. */
+async function storageDownloadToUtf8(data: Blob): Promise<string> {
+  const b = data as Blob & { text?: () => Promise<string>; arrayBuffer?: () => Promise<ArrayBuffer> };
+  if (typeof b.text === 'function') {
+    return b.text();
+  }
+  if (typeof b.arrayBuffer === 'function') {
+    const buf = await b.arrayBuffer();
+    return new TextDecoder('utf-8').decode(buf);
+  }
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') resolve(reader.result);
+      else reject(new Error('Could not read storage blob as text'));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('FileReader failed'));
+    reader.readAsText(b);
+  });
+}
+
 function mergeEnvKeyValues(content: string, pairs: Record<string, string>): string {
   const keys = new Set(Object.keys(pairs));
   const lines = content.replace(/\r\n/g, '\n').split('\n');
@@ -203,7 +224,7 @@ export const superAdminApi = {
       if (error || !data) {
         return null;
       }
-      return await data.text();
+      return await storageDownloadToUtf8(data);
     } catch (err) {
       console.error(`Error downloading branding file ${fileName}:`, err);
       return null;
@@ -362,6 +383,10 @@ export const superAdminApi = {
     pulseemApiKey?: string;
     /** מספר/שם שולח SMS מאושר בפולסים */
     pulseemFromNumber?: string;
+    /** מזהה משתמש Web Service (pulseemsendservices) — נשמר ב-business_profile ל-Edge OTP */
+    pulseemWsUserId?: string;
+    /** סיסמת Web Service פולסים — נשמרת ב-business_profile (לא נטענת מ-.env מקומי בשרת) */
+    pulseemWsPassword?: string;
   }): Promise<{ businessId: string; clientName: string } | null> {
     try {
       const businessId = randomUUID();
@@ -374,8 +399,10 @@ export const superAdminApi = {
       const color = params.primaryColor || '#000000';
       const pulseApiKey = params.pulseemApiKey?.trim() || '';
       const pulseFrom = params.pulseemFromNumber?.trim() || '';
+      const pulseWsUser = params.pulseemWsUserId?.trim() || '';
+      const pulseWsPass = params.pulseemWsPassword?.trim() || '';
 
-      // 1. Create business profile
+      // 1. Create business profile (Edge Functions read Pulseem from here — not from local branding/.env)
       const { error: profileError } = await supabase
         .from('business_profile')
         .insert({
@@ -392,6 +419,10 @@ export const superAdminApi = {
           booking_open_days: 7,
           ...(pulseApiKey ? { pulseem_api_key: pulseApiKey, pulseem_has_api_key: true } : {}),
           ...(pulseFrom ? { pulseem_from_number: pulseFrom } : {}),
+          ...(pulseWsUser ? { pulseem_user_id: pulseWsUser } : {}),
+          ...(pulseWsPass
+            ? { pulseem_password: pulseWsPass, pulseem_has_password: true }
+            : {}),
         });
 
       if (profileError) {
@@ -445,13 +476,18 @@ export const superAdminApi = {
       } else {
         envPulseLines.push('# PULSEEM_FROM_NUMBER=');
       }
-      envPulseLines.push(
-        '',
-        '# Pulseem — Web Service ישן (אופציונלי)',
-        '# PULSEEM_USER_ID=',
-        '# PULSEEM_PASSWORD=',
-        '',
-      );
+      envPulseLines.push('', '# Pulseem — Web Service (שליחת SMS / OTP ב-Edge)', '');
+      if (pulseWsUser) {
+        envPulseLines.push(`PULSEEM_USER_ID=${pulseWsUser}`);
+      } else {
+        envPulseLines.push('# PULSEEM_USER_ID=');
+      }
+      if (pulseWsPass) {
+        envPulseLines.push(`PULSEEM_PASSWORD=${pulseWsPass}`);
+      } else {
+        envPulseLines.push('# PULSEEM_PASSWORD=');
+      }
+      envPulseLines.push('');
 
       const envContent = [
         `# ${params.businessName} Environment Configuration`,
@@ -586,6 +622,13 @@ export const superAdminApi = {
   async deleteBusiness(businessId: string): Promise<boolean> {
     const client = adminSupabase || supabase;
     try {
+      const { data: profilePeek } = await client
+        .from('business_profile')
+        .select('branding_client_name')
+        .eq('id', businessId)
+        .maybeSingle();
+      const brandingFolder = ((profilePeek as any)?.branding_client_name as string | undefined)?.trim() || null;
+
       const tables = [
         'notifications',
         'waitlist_entries',
@@ -611,24 +654,41 @@ export const superAdminApi = {
         return false;
       }
 
-      const { data: brandingFiles } = await client.storage.from('app_design').list(`branding`);
-      if (brandingFiles) {
-        for (const folder of brandingFiles) {
-          const { data: files } = await client.storage.from('app_design').list(`branding/${folder.name}`);
-          if (!files) continue;
+      const removeStoragePrefix = async (prefix: string) => {
+        const { data: files, error: listErr } = await client.storage.from('app_design').list(prefix);
+        if (listErr) {
+          console.error(`Error listing storage ${prefix}:`, listErr.message);
+          return;
+        }
+        if (!files?.length) return;
+        const paths = files.map((f: { name: string }) => `${prefix}/${f.name}`);
+        const { error: remErr } = await client.storage.from('app_design').remove(paths);
+        if (remErr) console.error(`Error removing storage ${prefix}:`, remErr.message);
+        else console.log(`Deleted storage: ${prefix}/`);
+      };
 
-          const envFile = files.find((f: any) => f.name === '.env');
-          if (!envFile) continue;
+      if (brandingFolder) {
+        await removeStoragePrefix(`branding/${brandingFolder}`);
+      } else {
+        const { data: brandingFiles } = await client.storage.from('app_design').list(`branding`);
+        if (brandingFiles) {
+          for (const folder of brandingFiles) {
+            const { data: files } = await client.storage.from('app_design').list(`branding/${folder.name}`);
+            if (!files) continue;
 
-          const { data: envBlob } = await client.storage.from('app_design').download(`branding/${folder.name}/.env`);
-          if (!envBlob) continue;
+            const envFile = files.find((f: { name: string }) => f.name === '.env');
+            if (!envFile) continue;
 
-          const envText = await envBlob.text();
-          if (envText.includes(businessId)) {
-            const filePaths = files.map((f: any) => `branding/${folder.name}/${f.name}`);
-            await client.storage.from('app_design').remove(filePaths);
-            console.log(`Deleted storage folder: branding/${folder.name}/`);
-            break;
+            const { data: envBlob } = await client.storage.from('app_design').download(`branding/${folder.name}/.env`);
+            if (!envBlob) continue;
+
+            const envText = await storageDownloadToUtf8(envBlob);
+            if (envText.includes(businessId)) {
+              const filePaths = files.map((f: { name: string }) => `branding/${folder.name}/${f.name}`);
+              await client.storage.from('app_design').remove(filePaths);
+              console.log(`Deleted storage folder: branding/${folder.name}/`);
+              break;
+            }
           }
         }
       }

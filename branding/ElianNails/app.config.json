@@ -1,21 +1,21 @@
 {
   "expo": {
-    "name": "Eliya",
-    "slug": "eliapp",
+    "name": "אליאן ציפורניים",
+    "slug": "eliannails",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./branding/EliApp/icon.png",
-    "scheme": "eliapp",
+    "icon": "./branding/ElianNails/icon.png",
+    "scheme": "eliannails",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./branding/EliApp/splash.png",
+      "image": "./branding/ElianNails/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
       "buildNumber": "1",
       "supportsTablet": true,
-      "bundleIdentifier": "com.eliapp.app",
+      "bundleIdentifier": "com.eliannails.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "CFBundleDevelopmentRegion": "en",
@@ -27,10 +27,10 @@
       "jsEngine": "hermes"
     },
     "android": {
-      "package": "com.eliapp.app",
+      "package": "com.eliannails.app",
       "versionCode": 1,
       "adaptiveIcon": {
-        "foregroundImage": "./branding/EliApp/icon.png",
+        "foregroundImage": "./branding/ElianNails/icon.png",
         "backgroundColor": "#ffffff"
       },
       "intentFilters": [
@@ -39,7 +39,7 @@
           "action": "VIEW",
           "data": {
             "scheme": "https",
-            "host": "eliapp.com"
+            "host": "eliannails.com"
           },
           "category": [
             "BROWSABLE",
@@ -50,13 +50,13 @@
       "supportsRtl": false
     },
     "web": {
-      "favicon": "./branding/EliApp/icon.png"
+      "favicon": "./branding/ElianNails/icon.png"
     },
     "plugins": [
       [
         "expo-router",
         {
-          "origin": "https://eliapp.com/"
+          "origin": "https://eliannails.com/"
         }
       ],
       [
@@ -77,16 +77,16 @@
     },
     "extra": {
       "router": {
-        "origin": "https://eliapp.com/"
+        "origin": "https://eliannails.com/"
       },
       "eas": {
         "projectId": ""
       },
       "locale": "en",
-      "CLIENT": "EliApp",
-      "BUSINESS_ID": "69b7cf47-d66c-4567-9014-8acb22fd3016",
-      "logo": "./branding/EliApp/logo.png",
-      "logoWhite": "./branding/EliApp/logo-white.png"
+      "CLIENT": "ElianNails",
+      "BUSINESS_ID": "0391f58f-9a75-4006-8eeb-8bf38e0b6341",
+      "logo": "./branding/ElianNails/logo.png",
+      "logoWhite": "./branding/ElianNails/logo-white.png"
     }
   }
 }

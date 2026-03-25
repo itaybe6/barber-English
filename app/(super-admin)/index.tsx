@@ -11,6 +11,7 @@ import {
   ScrollView,
   RefreshControl,
   Image,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -58,7 +59,20 @@ export default function SuperAdminDashboard() {
   const [splashAsset, setSplashAsset] = useState<{ uri: string; base64: string } | null>(null);
   const [newPulseemApiKey, setNewPulseemApiKey] = useState('');
   const [newPulseemFromNumber, setNewPulseemFromNumber] = useState('');
+  const [newPulseemWsUserId, setNewPulseemWsUserId] = useState('');
+  const [newPulseemWsPassword, setNewPulseemWsPassword] = useState('');
   const [pulseModalBiz, setPulseModalBiz] = useState<BusinessOverview | null>(null);
+  const [deleteConfirmBiz, setDeleteConfirmBiz] = useState<BusinessOverview | null>(null);
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
+  const [feedbackDialog, setFeedbackDialog] = useState<{ title: string; message: string } | null>(null);
+
+  const buildDeleteSuccessMessage = (item: BusinessOverview) => {
+    const folder = item.branding_client_name?.trim();
+    if (!folder) {
+      return 'האפליקציה נמחקה מהשרת.\n\nלא נשמר שם תיקיית ברנדינג — אם יש תיקייה מקומית ב־branding/, מחק אותה ידנית.';
+    }
+    return `האפליקציה נמחקה מהשרת וקבצי הברנדינג ב־Storage.\n\nכדי למחוק גם את התיקייה המקומית בפרויקט (branding/${folder}), הרץ בטרמינל בשורש הפרויקט:\n\nnode scripts/delete-branding.mjs ${folder}`;
+  };
 
   const loadBusinesses = useCallback(async () => {
     const data = await superAdminApi.getAllBusinesses();
@@ -122,6 +136,8 @@ export default function SuperAdminDashboard() {
       splashBase64: splashAsset?.base64,
       pulseemApiKey: newPulseemApiKey.trim() || undefined,
       pulseemFromNumber: newPulseemFromNumber.trim() || undefined,
+      pulseemWsUserId: newPulseemWsUserId.trim() || undefined,
+      pulseemWsPassword: newPulseemWsPassword.trim() || undefined,
     });
     setCreating(false);
 
@@ -151,31 +167,34 @@ export default function SuperAdminDashboard() {
     setSplashAsset(null);
     setNewPulseemApiKey('');
     setNewPulseemFromNumber('');
+    setNewPulseemWsUserId('');
+    setNewPulseemWsPassword('');
   };
 
   const handleDelete = (item: BusinessOverview) => {
-    Alert.alert(
-      'מחיקת אפליקציה',
-      `בטוח שברצונך למחוק את "${item.display_name || 'עסק ללא שם'}"?\n\nפעולה זו תמחק את כל הנתונים: משתמשים, תורים, שירותים, וקבצי ברנדינג.\n\nלא ניתן לבטל פעולה זו!`,
-      [
-        { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'מחק',
-          style: 'destructive',
-          onPress: async () => {
-            setLoading(true);
-            const success = await superAdminApi.deleteBusiness(item.id);
-            if (success) {
-              Alert.alert('נמחק', 'האפליקציה נמחקה בהצלחה.');
-              await loadBusinesses();
-            } else {
-              Alert.alert('שגיאה', 'מחיקת האפליקציה נכשלה.');
-            }
-            setLoading(false);
-          },
-        },
-      ],
-    );
+    setDeleteConfirmBiz(item);
+  };
+
+  const closeDeleteConfirm = () => {
+    if (!deleteInProgress) setDeleteConfirmBiz(null);
+  };
+
+  const runConfirmedDelete = async () => {
+    const item = deleteConfirmBiz;
+    if (!item) return;
+    const snapshot = item;
+    setDeleteInProgress(true);
+    setLoading(true);
+    const success = await superAdminApi.deleteBusiness(snapshot.id);
+    setDeleteInProgress(false);
+    setDeleteConfirmBiz(null);
+    setLoading(false);
+    if (success) {
+      setFeedbackDialog({ title: 'נמחק', message: buildDeleteSuccessMessage(snapshot) });
+      await loadBusinesses();
+    } else {
+      setFeedbackDialog({ title: 'שגיאה', message: 'מחיקת האפליקציה נכשלה.' });
+    }
   };
 
   const handleLogout = () => {
@@ -393,16 +412,17 @@ export default function SuperAdminDashboard() {
         </View>
       </View>
 
-      {/* Pulseem API (optional) */}
+      {/* Pulseem — נשמר ב-business_profile במסד; Edge OTP לא קורא מ-.env מקומי */}
       <View style={styles.formCard}>
-        <Text style={styles.formSectionLabel}>פולסים — מפתח API (אופציונלי)</Text>
+        <Text style={styles.formSectionLabel}>פולסים (אופציונלי)</Text>
         <Text style={styles.brandHint}>
-          בחר בחשבון המשנה בפולסים → הגדרות API → העתק את מפתח ה-API. יישמר ב-.env ובמסד בעת יצירת האפליקציה.
+          שליחת קוד SMS (התחברות/הרשמה) רצה ב-Supabase Edge ונשענת על השדות בטבלת העסק במסד — לא על הקובץ .env בלפטופ.
+          מפתח API שימושי לאינטגרציות; ל-OTP חובה גם מזהה וסיסמה של Web Service ושולח, או להשלים אחר כך מכרטיס העסק → «פולסים SMS».
         </Text>
-        <Text style={styles.fieldLabel}>מפתח API</Text>
+        <Text style={styles.fieldLabel}>מפתח API (הגדרות API בחשבון משנה)</Text>
         <TextInput
           style={styles.input}
-          placeholder="מהעמוד «הגדרות API» בחשבון המשנה"
+          placeholder="אופציונלי — ui-api / אינטגרציות"
           placeholderTextColor={TEXT_MUTED}
           value={newPulseemApiKey}
           onChangeText={setNewPulseemApiKey}
@@ -411,10 +431,33 @@ export default function SuperAdminDashboard() {
           secureTextEntry
           textAlign="right"
         />
+        <Text style={styles.fieldLabel}>מזהה משתמש Web Service (לשליחת SMS / OTP)</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="כמו בחיבור ישן ל-pulseemsendservices"
+          placeholderTextColor={TEXT_MUTED}
+          value={newPulseemWsUserId}
+          onChangeText={setNewPulseemWsUserId}
+          autoCapitalize="none"
+          autoCorrect={false}
+          textAlign="right"
+        />
+        <Text style={styles.fieldLabel}>סיסמת Web Service פולסים</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="סיסמת API של המשתמש בפולסים"
+          placeholderTextColor={TEXT_MUTED}
+          value={newPulseemWsPassword}
+          onChangeText={setNewPulseemWsPassword}
+          autoCapitalize="none"
+          autoCorrect={false}
+          secureTextEntry
+          textAlign="right"
+        />
         <Text style={styles.fieldLabel}>מספר / שם שולח SMS (From)</Text>
         <TextInput
           style={styles.input}
-          placeholder="כפי שמוגדר אצל פולסים לשליחה"
+          placeholder="כפי שמוגדר אצל פולסים (לרוב באנגלית/מספר)"
           placeholderTextColor={TEXT_MUTED}
           value={newPulseemFromNumber}
           onChangeText={setNewPulseemFromNumber}
@@ -523,8 +566,62 @@ export default function SuperAdminDashboard() {
     { key: 'settings', icon: 'settings-outline', iconFocused: 'settings', label: 'הגדרות' },
   ];
 
+  const deleteDialogMessage = deleteConfirmBiz
+    ? `בטוח שברצונך למחוק את "${deleteConfirmBiz.display_name || 'עסק ללא שם'}"?\n\nפעולה זו תמחק את כל הנתונים: משתמשים, תורים, שירותים, וקבצי ברנדינג.\n\nלא ניתן לבטל פעולה זו!`
+    : '';
+
   return (
     <View style={styles.root}>
+      <Modal visible={!!deleteConfirmBiz} transparent animationType="fade" onRequestClose={closeDeleteConfirm}>
+        <View style={styles.confirmOverlay}>
+          {deleteConfirmBiz ? (
+            <View style={styles.confirmCard}>
+              <Text style={styles.confirmTitle}>מחיקת אפליקציה</Text>
+              <Text style={styles.confirmMessage}>{deleteDialogMessage}</Text>
+              <View style={styles.confirmButtonsRow}>
+                <TouchableOpacity
+                  style={styles.confirmButton}
+                  onPress={closeDeleteConfirm}
+                  activeOpacity={0.8}
+                  disabled={deleteInProgress}
+                >
+                  <Text style={styles.confirmButtonDefaultText}>ביטול</Text>
+                </TouchableOpacity>
+                <View style={styles.confirmButtonDivider} />
+                <TouchableOpacity
+                  style={styles.confirmButton}
+                  onPress={runConfirmedDelete}
+                  activeOpacity={0.8}
+                  disabled={deleteInProgress}
+                >
+                  {deleteInProgress ? (
+                    <ActivityIndicator size="small" color="#FF3B30" />
+                  ) : (
+                    <Text style={styles.confirmButtonDestructiveText}>מחק</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
+
+      <Modal visible={!!feedbackDialog} transparent animationType="fade" onRequestClose={() => setFeedbackDialog(null)}>
+        <View style={styles.confirmOverlay}>
+          {feedbackDialog ? (
+            <View style={styles.confirmCard}>
+              <Text style={styles.confirmTitle}>{feedbackDialog.title}</Text>
+              <Text style={styles.confirmMessage}>{feedbackDialog.message}</Text>
+              <View style={styles.confirmButtonsRow}>
+                <TouchableOpacity style={styles.confirmButton} onPress={() => setFeedbackDialog(null)} activeOpacity={0.8}>
+                  <Text style={styles.confirmButtonDefaultText}>אישור</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
+
       <PulseemBusinessModal
         visible={!!pulseModalBiz}
         business={pulseModalBiz}
@@ -739,4 +836,63 @@ const styles = StyleSheet.create({
   tabLabelFocused: { color: ACCENT },
   addTabBtn: { width: 52, height: 52, borderRadius: 26, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center', marginTop: -20, shadowColor: ACCENT, shadowOpacity: 0.45, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 },
   addTabBtnFocused: { backgroundColor: ACCENT_DARK, transform: [{ scale: 1.08 }] },
+
+  confirmOverlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    paddingHorizontal: 24,
+  },
+  confirmCard: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: 14,
+    backgroundColor: CARD_BG,
+    overflow: 'hidden',
+    paddingTop: 16,
+  },
+  confirmTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: TEXT_PRIMARY,
+    textAlign: 'center',
+    marginBottom: 8,
+    paddingHorizontal: 16,
+  },
+  confirmMessage: {
+    fontSize: 13,
+    color: TEXT_SECONDARY,
+    textAlign: 'center',
+    paddingHorizontal: 18,
+    marginBottom: 14,
+    lineHeight: 20,
+  },
+  confirmButtonsRow: {
+    flexDirection: 'row',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#D1D1D6',
+  },
+  confirmButton: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: CARD_BG,
+    minHeight: 48,
+  },
+  confirmButtonDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: '#D1D1D6',
+  },
+  confirmButtonDefaultText: {
+    fontSize: 17,
+    color: '#0A84FF',
+    fontWeight: '600',
+  },
+  confirmButtonDestructiveText: {
+    fontSize: 17,
+    color: '#FF3B30',
+    fontWeight: '700',
+  },
 });

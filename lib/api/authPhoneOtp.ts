@@ -1,0 +1,118 @@
+import { FunctionsHttpError } from '@supabase/supabase-js';
+import { supabase, getBusinessId } from '@/lib/supabase';
+
+export interface OtpAuthUserPayload {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  user_type: string;
+  image_url: string | null;
+  client_approved: boolean;
+  block: boolean;
+}
+
+type FnResponse = {
+  ok?: boolean;
+  error?: string;
+  detail?: string;
+  user?: OtpAuthUserPayload;
+};
+
+function parseInvokePayload(data: unknown): FnResponse {
+  if (data && typeof data === 'object') return data as FnResponse;
+  return {};
+}
+
+/** Non-2xx responses set `error` and discard `data`; JSON body is on error.context (Response). */
+async function invokeAuthPhoneOtp(body: Record<string, unknown>): Promise<FnResponse> {
+  const { data, error } = await supabase.functions.invoke('auth-phone-otp', { body });
+
+  let payload = parseInvokePayload(data);
+
+  if (error instanceof FunctionsHttpError && error.context) {
+    try {
+      const ct = error.context.headers.get('content-type') || '';
+      if (ct.includes('application/json')) {
+        const j = await error.context.json();
+        if (j && typeof j === 'object') {
+          payload = { ...payload, ...(j as FnResponse) };
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (error && payload.ok === undefined && payload.error === undefined) {
+    return { ok: false, error: 'invoke_network' };
+  }
+
+  return payload;
+}
+
+export const authPhoneOtpApi = {
+  async sendLoginOtp(phone: string): Promise<{ ok: boolean; error?: string }> {
+    const businessId = getBusinessId();
+    const p = await invokeAuthPhoneOtp({
+      action: 'send_login_otp',
+      business_id: businessId,
+      phone: phone.trim(),
+    });
+    if (p.ok !== true) {
+      return { ok: false, error: p.error || 'send_failed' };
+    }
+    return { ok: true };
+  },
+
+  async verifyLoginOtp(
+    phone: string,
+    code: string,
+  ): Promise<{ ok: boolean; user?: OtpAuthUserPayload; error?: string }> {
+    const businessId = getBusinessId();
+    const p = await invokeAuthPhoneOtp({
+      action: 'verify_login_otp',
+      business_id: businessId,
+      phone: phone.trim(),
+      code,
+    });
+    if (p.ok !== true || !p.user) {
+      return { ok: false, error: p.error || 'verify_failed' };
+    }
+    return { ok: true, user: p.user };
+  },
+
+  async sendRegisterOtp(phone: string): Promise<{ ok: boolean; error?: string }> {
+    const businessId = getBusinessId();
+    const p = await invokeAuthPhoneOtp({
+      action: 'send_register_otp',
+      business_id: businessId,
+      phone: phone.trim(),
+    });
+    if (p.ok !== true) {
+      return { ok: false, error: p.error || 'send_failed' };
+    }
+    return { ok: true };
+  },
+
+  async verifyRegisterOtp(params: {
+    phone: string;
+    code: string;
+    name: string;
+    email: string;
+  }): Promise<{ ok: boolean; user?: OtpAuthUserPayload; error?: string }> {
+    const businessId = getBusinessId();
+    const p = await invokeAuthPhoneOtp({
+      action: 'verify_register_otp',
+      business_id: businessId,
+      phone: params.phone.trim(),
+      code: params.code,
+      name: params.name.trim(),
+      email: params.email.trim(),
+    });
+    if (p.ok !== true || !p.user) {
+      return { ok: false, error: p.error || 'verify_failed' };
+    }
+    return { ok: true, user: p.user };
+  },
+};

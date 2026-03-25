@@ -15,9 +15,7 @@ import {
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { supabase, getBusinessId, BusinessProfile } from '@/lib/supabase';
-import { usersApi } from '@/lib/api/users';
-import { notificationsApi } from '@/lib/api/notifications';
+import { BusinessProfile } from '@/lib/supabase';
 import Colors from '@/constants/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -27,6 +25,7 @@ import GradientBackground from '@/components/GradientBackground';
 import { getCurrentClientLogo } from '@/src/theme/assets';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useTranslation } from 'react-i18next';
+import { authPhoneOtpApi } from '@/lib/api/authPhoneOtp';
 
 // Local palette (male, dark-neutral accents)
 const palette = {
@@ -53,11 +52,10 @@ export default function RegisterScreen() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [registerStep, setRegisterStep] = useState<'form' | 'otp'>('form');
+  const [otpCooldownSec, setOtpCooldownSec] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const router = useRouter();
   useEffect(() => {
@@ -68,6 +66,12 @@ export default function RegisterScreen() {
       hideSub.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (otpCooldownSec <= 0) return;
+    const id = setInterval(() => setOtpCooldownSec((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(id);
+  }, [otpCooldownSec]);
 
   useEffect(() => {
     // No-op: content is visible by default
@@ -89,108 +93,127 @@ export default function RegisterScreen() {
     loadBusinessProfile();
   }, []);
 
-  const validatePassword = (password: string) => {
-    return password.length >= 6;
-  };
-
   const validateForm = () => {
     const newErrors: {[key: string]: string} = {};
 
     if (!name.trim()) {
-      newErrors.name = 'Full name is required';
+      newErrors.name = t('register.error.nameRequired', 'Full name is required');
     }
 
     if (!phone.trim()) {
-      newErrors.phone = 'Phone number is required';
-    } else if (phone.length < 10) {
-      newErrors.phone = 'Invalid phone number';
+      newErrors.phone = t('register.error.phoneRequired', 'Phone number is required');
+    } else if (phone.replace(/\D/g, '').length < 9) {
+      newErrors.phone = t('register.error.phoneInvalid', 'Invalid phone number');
     }
 
-    // Email required and must be valid
     if (!email.trim()) {
-      newErrors.email = 'Email is required';
+      newErrors.email = t('register.error.emailRequired', 'Email is required');
     } else {
       const emailRegex = /^(?:[a-zA-Z0-9_'^&+%!-]+(?:\.[a-zA-Z0-9_'^&+%!-]+)*)@(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/;
       if (!emailRegex.test(email.trim())) {
-        newErrors.email = 'Invalid email address';
+        newErrors.email = t('register.error.emailInvalid', 'Invalid email address');
       }
-    }
-
-    if (!password) {
-      newErrors.password = 'Password is required';
-    } else if (!validatePassword(password)) {
-      newErrors.password = 'Password must be at least 6 characters';
-    }
-
-    if (password !== confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleRegister = async () => {
-    if (!validateForm()) {
+  const registerOtpError = (code: string | undefined): string => {
+    switch (code) {
+      case 'pulseem_not_configured':
+        return t(
+          'login.otp.errorPulseem',
+          'שליחת SMS לא הוגדרה: נדרשים מזהה משתמש, סיסמה ומספר שולח פולסים (Web Service) בעסק. מפתח API בלבד לא מספיק.',
+        );
+      case 'business_not_found':
+        return t(
+          'login.otp.errorBusiness',
+          'מזהה העסק לא נמצא במסד. בדוק ש-BUSINESS_ID ב-.env תואם לעסק שנוצר.',
+        );
+      case 'db_error':
+      case 'server_error':
+        return t(
+          'login.otp.errorServer',
+          'שגיאת שרת. ודא שהרצת את מיגרציית OTP ב-Supabase ושהפונקציה auth-phone-otp פורסמה.',
+        );
+      case 'invoke_network':
+        return t(
+          'login.otp.errorInvoke',
+          'לא ניתן להגיע ל-Edge Function. בדוק אינטרנט, שפרסת את auth-phone-otp, ושכתובת ה-Supabase ב-.env נכונה.',
+        );
+      case 'rate_limit_sends':
+        return t('login.otp.errorRateLimit', 'Too many codes sent. Try again later.');
+      case 'sms_send_failed':
+        return t('login.otp.errorSms', 'Failed to send SMS.');
+      case 'phone_registered':
+        return t('register.phoneExists.message', 'This phone number is already registered.');
+      default:
+        return code && code !== 'send_failed'
+          ? `${t('common.retry', 'נסה שוב')} (${code})`
+          : t('common.tryAgain', 'Please try again.');
+    }
+  };
+
+  const handleSendRegisterOtp = async () => {
+    if (!validateForm()) return;
+    setLoading(true);
+    try {
+      const res = await authPhoneOtpApi.sendRegisterOtp(phone.trim());
+      if (!res.ok) {
+        Alert.alert(t('error.generic', 'Error'), registerOtpError(res.error));
+        return;
+      }
+      setRegisterStep('otp');
+      setOtpCode('');
+      setOtpCooldownSec(45);
+      Alert.alert(
+        t('login.otp.sentTitle', 'Code sent'),
+        t('register.otp.sentBody', 'Enter the 6-digit code sent to your phone by SMS.')
+      );
+    } catch (e) {
+      console.error('sendRegisterOtp', e);
+      Alert.alert(t('error.generic', 'Error'), t('common.tryAgain', 'Please try again.'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCompleteRegister = async () => {
+    const digits = otpCode.replace(/\D/g, '');
+    if (digits.length !== 6) {
+      Alert.alert(t('error.generic', 'Error'), t('login.otp.enterSix', 'Enter the 6-digit code from SMS'));
       return;
     }
-
     setLoading(true);
-    
     try {
-      // Check if user already exists by phone in the same business
-      const businessId = getBusinessId();
-      const { data: existingUser } = await supabase
-        .from('users')
-        .select('*')
-        .eq('phone', phone.trim())
-        .eq('business_id', businessId)
-        .single();
-
-      if (existingUser) {
-        Alert.alert(t('register.phoneExists.title', 'Phone number already exists'), t('register.phoneExists.message', 'This phone number is already registered in the system. Please use a different phone number or sign in to your existing account.'));
-        return;
-      }
-
-      // Create new user in custom table with chosen password
-      const newUser = await usersApi.createUserWithPassword({
-        name: name.trim(),
-        user_type: 'client', // כל ההרשמות החדשות הן לקוחות
+      const res = await authPhoneOtpApi.verifyRegisterOtp({
         phone: phone.trim(),
+        code: digits,
+        name: name.trim(),
         email: email.trim(),
-        client_approved: false,
-      } as any, password);
-
-      if (!newUser) {
-        Alert.alert(t('error.generic', 'Error'), t('register.createError', 'An error occurred creating the account. Please try again.'));
+      });
+      if (!res.ok) {
+        Alert.alert(
+          t('error.generic', 'Error'),
+          res.error === 'wrong_code' || res.error === 'no_active_code'
+            ? t('login.otp.errorWrongCode', 'Wrong or expired code.')
+            : res.error === 'too_many_attempts'
+              ? t('login.otp.errorTooMany', 'Too many wrong attempts.')
+              : registerOtpError(res.error)
+        );
         return;
       }
 
-      await notificationsApi.createAdminNotification(
-        t('admin.pendingClients.notificationTitle', 'New client awaiting approval'),
-        t('admin.pendingClients.notificationBody', '{{name}} ({{phone}}) registered and is waiting for you to approve them in the app.', {
-          name: name.trim(),
-          phone: phone.trim(),
-        }),
-        'system'
-      );
-
-      // Success!
       Alert.alert(
         t('register.success.title', 'Registration successful!'),
         t(
-          'register.success.pendingApproval',
-          'Your account was created. The business will review and approve it shortly.\n\nYou can sign in with your phone and password after approval.\n\nPhone: {{phone}}',
+          'register.success.pendingApprovalOtp',
+          'Your account was created. The business will review and approve it shortly.\n\nYou can sign in with your phone number and SMS code after approval.\n\nPhone: {{phone}}',
           { phone: phone.trim() }
         ),
-        [
-          {
-            text: t('ok', 'OK'),
-            onPress: () => router.push('/login')
-          }
-        ]
+        [{ text: t('ok', 'OK'), onPress: () => router.push('/login') }]
       );
-      
     } catch (error) {
       console.error('Registration error:', error);
       Alert.alert(t('error.generic', 'Error'), t('common.tryAgain', 'A system error occurred. Please try again.'));
@@ -199,17 +222,12 @@ export default function RegisterScreen() {
     }
   };
 
-  const getErrorMessage = (error: string) => {
-    if (error.includes('User already registered') || error.includes('phone number already exists')) {
-      return 'This phone number is already registered in the system';
+  const handleRegister = async () => {
+    if (registerStep === 'form') {
+      await handleSendRegisterOtp();
+    } else {
+      await handleCompleteRegister();
     }
-    if (error.includes('Invalid email')) {
-      return 'Invalid email address';
-    }
-    if (error.includes('Password should be at least 6 characters')) {
-      return 'Password must be at least 6 characters';
-    }
-    return 'An error occurred during registration. Please try again.';
   };
 
   return (
@@ -302,7 +320,11 @@ export default function RegisterScreen() {
               {/* Form header text */}
               <View style={styles.formHeader}>
                 <Text style={[styles.formTitle, { color: businessColors.primary }]}>{t('register.form.title','Sign up now')}</Text>
-                <Text style={styles.formSubtitle}>{t('register.form.subtitle','Fill in your details to register and sign in')}</Text>
+                <Text style={styles.formSubtitle}>
+                  {registerStep === 'otp'
+                    ? t('register.form.subtitleOtp', 'Enter the verification code we sent by SMS')
+                    : t('register.form.subtitle','Fill in your details — we will send a code by SMS')}
+                </Text>
               </View>
               {/* Name Input */}
               <View style={styles.field}>
@@ -321,6 +343,7 @@ export default function RegisterScreen() {
                     }}
                     textAlign="left"
                     autoCorrect={false}
+                    editable={registerStep === 'form'}
                   />
                 </View>
                 {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
@@ -344,6 +367,7 @@ export default function RegisterScreen() {
                     keyboardType="phone-pad"
                     autoCorrect={false}
                     textAlign="left"
+                    editable={registerStep === 'form'}
                   />
                 </View>
                 {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
@@ -368,64 +392,52 @@ export default function RegisterScreen() {
                     autoCapitalize="none"
                     autoCorrect={false}
                     textAlign="left"
+                    editable={registerStep === 'form'}
                   />
                 </View>
                 {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
               </View>
 
-
-
-              {/* Password Input */}
-              <View style={styles.field}>
-                <View style={[styles.inputRow, { backgroundColor: palette.inputBg, borderColor: palette.inputBorder }]}>
-                  <Ionicons name="lock-closed-outline" size={16} color={palette.textSecondary} style={styles.iconLeft} />
-                  <TextInput
-                    style={[styles.input, styles.inputPassword]}
-                    placeholder={t('register.passwordPlaceholder','Password (at least 6 characters)')}
-                    placeholderTextColor={palette.textSecondary}
-                    value={password}
-                    onChangeText={(text) => {
-                      setPassword(text);
-                      if (errors.password) {
-                        setErrors(prev => ({...prev, password: ''}));
-                      }
+              {registerStep === 'otp' ? (
+                <View style={styles.field}>
+                  <View style={[styles.inputRow, { backgroundColor: palette.inputBg, borderColor: palette.inputBorder }]}>
+                    <Ionicons name="keypad-outline" size={16} color={palette.textSecondary} style={styles.iconLeft} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder={t('login.otp.placeholder', '6-digit code')}
+                      placeholderTextColor={palette.textSecondary}
+                      value={otpCode}
+                      onChangeText={(text) => setOtpCode(text.replace(/\D/g, '').slice(0, 6))}
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      autoCorrect={false}
+                      textAlign="left"
+                    />
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setRegisterStep('form');
+                      setOtpCode('');
                     }}
-                    secureTextEntry={!showPassword}
-                    autoCapitalize="none"
-                    textAlign="left"
-                  />
-                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButtonRight}>
-                    <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={16} color={palette.textSecondary} />
+                    style={{ marginTop: 10 }}
+                  >
+                    <Text style={{ color: businessColors.primary, fontWeight: '600', fontSize: 14 }}>
+                      {t('register.otp.editDetails', 'Edit details')}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleSendRegisterOtp}
+                    disabled={loading || otpCooldownSec > 0}
+                    style={{ marginTop: 8 }}
+                  >
+                    <Text style={{ color: otpCooldownSec > 0 ? palette.textSecondary : businessColors.primary, fontWeight: '600', fontSize: 14 }}>
+                      {otpCooldownSec > 0
+                        ? t('login.otp.resendWait', 'Resend in {{s}}s', { s: otpCooldownSec })
+                        : t('login.otp.resend', 'Resend code')}
+                    </Text>
                   </TouchableOpacity>
                 </View>
-                {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
-              </View>
-
-              {/* Confirm Password Input */}
-              <View style={styles.field}>
-                <View style={[styles.inputRow, { backgroundColor: palette.inputBg, borderColor: palette.inputBorder }]}>
-                  <Ionicons name="lock-closed-outline" size={16} color={palette.textSecondary} style={styles.iconLeft} />
-                  <TextInput
-                    style={[styles.input, styles.inputPassword]}
-                    placeholder={t('register.confirmPasswordPlaceholder','Confirm password')}
-                    placeholderTextColor={palette.textSecondary}
-                    value={confirmPassword}
-                    onChangeText={(text) => {
-                      setConfirmPassword(text);
-                      if (errors.confirmPassword) {
-                        setErrors(prev => ({...prev, confirmPassword: ''}));
-                      }
-                    }}
-                    secureTextEntry={!showConfirmPassword}
-                    autoCapitalize="none"
-                    textAlign="left"
-                  />
-                  <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeButtonRight}>
-                    <Ionicons name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} size={16} color={palette.textSecondary} />
-                  </TouchableOpacity>
-                </View>
-                {errors.confirmPassword && <Text style={styles.errorText}>{errors.confirmPassword}</Text>}
-              </View>
+              ) : null}
 
               {/* Register Button - styled like login CTA */}
               <TouchableOpacity
@@ -439,7 +451,11 @@ export default function RegisterScreen() {
                     {loading ? (
                       <ActivityIndicator color={palette.white} size="small" />
                     ) : (
-                      <Text style={styles.ctaText}>{t('register.cta.register','Register')}</Text>
+                      <Text style={styles.ctaText}>
+                        {registerStep === 'otp'
+                          ? t('register.cta.complete', 'Complete registration')
+                          : t('register.cta.sendCode', 'Send SMS code')}
+                      </Text>
                     )}
                   </LinearGradient>
                 </View>

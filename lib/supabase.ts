@@ -278,6 +278,14 @@ export interface BusinessProfile {
   accountant_report_time?: string;
   /** YYYY-MM of the report month last emailed (deduplication) */
   accountant_report_last_sent_period?: string | null;
+  /** Storage folder `branding/<name>/` — matches CLIENT_NAME in pulled .env */
+  branding_client_name?: string | null;
+  pulseem_user_id?: string | null;
+  pulseem_password?: string | null;
+  pulseem_from_number?: string | null;
+  pulseem_has_password?: boolean;
+  pulseem_api_key?: string | null;
+  pulseem_has_api_key?: boolean;
   created_at: string;
   updated_at: string;
 }

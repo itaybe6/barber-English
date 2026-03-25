@@ -11,6 +11,7 @@ import {
   ScrollView,
   RefreshControl,
   Image,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +22,7 @@ import { BlurView } from 'expo-blur';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '@/stores/authStore';
 import { superAdminApi, BusinessOverview } from '@/lib/api/superAdmin';
+import { PulseemBusinessModal } from '@/components/superAdmin/PulseemBusinessModal';
 
 const ACCENT = '#6C5CE7';
 const ACCENT_DARK = '#5A4BD1';
@@ -56,6 +58,25 @@ export default function SuperAdminDashboard() {
   const [logoAsset, setLogoAsset] = useState<{ uri: string; base64: string } | null>(null);
   const [iconAsset, setIconAsset] = useState<{ uri: string; base64: string } | null>(null);
   const [splashAsset, setSplashAsset] = useState<{ uri: string; base64: string } | null>(null);
+  const [newPulseemApiKey, setNewPulseemApiKey] = useState('');
+  const [newPulseemFromNumber, setNewPulseemFromNumber] = useState('');
+  const [newPulseemWsUserId, setNewPulseemWsUserId] = useState('');
+  const [newPulseemWsPassword, setNewPulseemWsPassword] = useState('');
+  const [newPulseemSubPassword, setNewPulseemSubPassword] = useState('');
+
+  const hasPulseemMainKey = !!process.env.EXPO_PUBLIC_PULSEEM_MAIN_API_KEY;
+  const [pulseModalBiz, setPulseModalBiz] = useState<BusinessOverview | null>(null);
+  const [deleteConfirmBiz, setDeleteConfirmBiz] = useState<BusinessOverview | null>(null);
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
+  const [feedbackDialog, setFeedbackDialog] = useState<{ title: string; message: string } | null>(null);
+
+  const buildDeleteSuccessMessage = (item: BusinessOverview) => {
+    const folder = item.branding_client_name?.trim();
+    if (!folder) {
+      return 'האפליקציה נמחקה מהשרת.\n\nלא נשמר שם תיקיית ברנדינג — אם יש תיקייה מקומית ב־branding/, מחק אותה ידנית.';
+    }
+    return `האפליקציה נמחקה מהשרת וקבצי הברנדינג ב־Storage.\n\nכדי למחוק גם את התיקייה המקומית בפרויקט (branding/${folder}), הרץ בטרמינל בשורש הפרויקט:\n\nnode scripts/delete-branding.mjs ${folder}`;
+  };
 
   const loadBusinesses = useCallback(async () => {
     const data = await superAdminApi.getAllBusinesses();
@@ -117,13 +138,26 @@ export default function SuperAdminDashboard() {
       logoBase64: logoAsset?.base64,
       iconBase64: iconAsset?.base64,
       splashBase64: splashAsset?.base64,
+      pulseemSubPassword: newPulseemSubPassword.trim() || undefined,
+      pulseemFromNumber: newPulseemFromNumber.trim() || undefined,
+      pulseemApiKey: newPulseemApiKey.trim() || undefined,
+      pulseemWsUserId: newPulseemWsUserId.trim() || undefined,
+      pulseemWsPassword: newPulseemWsPassword.trim() || undefined,
     });
     setCreating(false);
 
     if (result) {
+      const pulseemLine = result.pulseemCreated
+        ? '\n\n✅ חשבון Pulseem נוצר אוטומטית (100 DirectSmsCredits)'
+        : result.pulseemError
+        ? `\n\n⚠️ Pulseem לא הוגדר: ${result.pulseemError}`
+        : !process.env.EXPO_PUBLIC_PULSEEM_MAIN_API_KEY
+        ? '\n\n⚠️ הגדר EXPO_PUBLIC_PULSEEM_MAIN_API_KEY ב-.env ליצירת Pulseem אוטומטית'
+        : '';
+
       Alert.alert(
         'נוצר בהצלחה!',
-        `העסק "${newBizName}" נוצר בהצלחה.\n\nמזהה עסק:\n${result.businessId}\n\nשם אפליקציה: ${result.clientName}\n\nכדי להוריד את תיקיית הברנדינג הרץ:\nnode scripts/pull-branding.mjs ${result.clientName}`,
+        `העסק "${newBizName}" נוצר בהצלחה.\n\nמזהה עסק:\n${result.businessId}\n\nשם אפליקציה: ${result.clientName}${pulseemLine}\n\nכדי להוריד את תיקיית הברנדינג הרץ:\nnode scripts/pull-branding.mjs ${result.clientName}`,
       );
       resetForm();
       await loadBusinesses();
@@ -144,31 +178,37 @@ export default function SuperAdminDashboard() {
     setLogoAsset(null);
     setIconAsset(null);
     setSplashAsset(null);
+    setNewPulseemApiKey('');
+    setNewPulseemFromNumber('');
+    setNewPulseemWsUserId('');
+    setNewPulseemWsPassword('');
+    setNewPulseemSubPassword('');
   };
 
   const handleDelete = (item: BusinessOverview) => {
-    Alert.alert(
-      'מחיקת אפליקציה',
-      `בטוח שברצונך למחוק את "${item.display_name || 'עסק ללא שם'}"?\n\nפעולה זו תמחק את כל הנתונים: משתמשים, תורים, שירותים, וקבצי ברנדינג.\n\nלא ניתן לבטל פעולה זו!`,
-      [
-        { text: 'ביטול', style: 'cancel' },
-        {
-          text: 'מחק',
-          style: 'destructive',
-          onPress: async () => {
-            setLoading(true);
-            const success = await superAdminApi.deleteBusiness(item.id);
-            if (success) {
-              Alert.alert('נמחק', 'האפליקציה נמחקה בהצלחה.');
-              await loadBusinesses();
-            } else {
-              Alert.alert('שגיאה', 'מחיקת האפליקציה נכשלה.');
-            }
-            setLoading(false);
-          },
-        },
-      ],
-    );
+    setDeleteConfirmBiz(item);
+  };
+
+  const closeDeleteConfirm = () => {
+    if (!deleteInProgress) setDeleteConfirmBiz(null);
+  };
+
+  const runConfirmedDelete = async () => {
+    const item = deleteConfirmBiz;
+    if (!item) return;
+    const snapshot = item;
+    setDeleteInProgress(true);
+    setLoading(true);
+    const success = await superAdminApi.deleteBusiness(snapshot.id);
+    setDeleteInProgress(false);
+    setDeleteConfirmBiz(null);
+    setLoading(false);
+    if (success) {
+      setFeedbackDialog({ title: 'נמחק', message: buildDeleteSuccessMessage(snapshot) });
+      await loadBusinesses();
+    } else {
+      setFeedbackDialog({ title: 'שגיאה', message: 'מחיקת האפליקציה נכשלה.' });
+    }
   };
 
   const handleLogout = () => {
@@ -304,6 +344,12 @@ export default function SuperAdminDashboard() {
             <Ionicons name="call" size={14} color={GREEN} />
           </View>
         ) : null}
+        {item.pulseemHasApiKey || (item.pulseem_user_id && item.pulseemHasPassword) ? (
+          <View style={[styles.bizChip, { backgroundColor: 'rgba(108,92,231,0.12)' }]}>
+            <Text style={[styles.bizChipText, { color: ACCENT }]}>פולסים מוגדר</Text>
+            <Ionicons name="chatbubbles" size={14} color={ACCENT} />
+          </View>
+        ) : null}
       </View>
 
       {(item.adminPhone || item.adminPassword) ? (
@@ -328,10 +374,16 @@ export default function SuperAdminDashboard() {
       ) : null}
 
       <View style={styles.bizFooter}>
-        <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item)} activeOpacity={0.7}>
-          <Text style={styles.deleteBtnText}>מחק</Text>
-          <Ionicons name="trash-outline" size={14} color="#FF6B6B" />
-        </TouchableOpacity>
+        <View style={styles.bizFooterLeft}>
+          <TouchableOpacity style={styles.pulseBtn} onPress={() => setPulseModalBiz(item)} activeOpacity={0.7}>
+            <Text style={styles.pulseBtnText}>פולסים SMS</Text>
+            <Ionicons name="keypad-outline" size={14} color={ACCENT} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item)} activeOpacity={0.7}>
+            <Text style={styles.deleteBtnText}>מחק</Text>
+            <Ionicons name="trash-outline" size={14} color="#FF6B6B" />
+          </TouchableOpacity>
+        </View>
         <Text style={styles.bizId} selectable numberOfLines={1}>{item.id}</Text>
       </View>
     </View>
@@ -372,6 +424,99 @@ export default function SuperAdminDashboard() {
           <View style={[styles.colorPreview, { backgroundColor: newColor }]} />
           <TextInput style={[styles.input, { flex: 1 }]} placeholder="#000000" placeholderTextColor={TEXT_MUTED} value={newColor} onChangeText={setNewColor} autoCapitalize="none" textAlign="right" />
         </View>
+      </View>
+
+      {/* Pulseem SMS */}
+      <View style={styles.formCard}>
+        <Text style={styles.formSectionLabel}>פולסים SMS</Text>
+
+        {hasPulseemMainKey ? (
+          <>
+            <View style={styles.pulseemAutoBox}>
+              <Ionicons name="checkmark-circle" size={16} color={GREEN} />
+              <Text style={[styles.brandHint, { color: GREEN, marginBottom: 0, flex: 1 }]}>
+                {' '}חשבון Pulseem ייווצר אוטומטית עם 100 DirectSmsCredits
+              </Text>
+            </View>
+
+            <Text style={styles.fieldLabel}>סיסמה לתת-חשבון (אופציונלי)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="ריק = תיווצר אוטומטית"
+              placeholderTextColor={TEXT_MUTED}
+              value={newPulseemSubPassword}
+              onChangeText={setNewPulseemSubPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              secureTextEntry
+              textAlign="right"
+            />
+
+            <Text style={styles.fieldLabel}>שם שולח SMS — From (אופציונלי)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="ריק = שם האפליקציה"
+              placeholderTextColor={TEXT_MUTED}
+              value={newPulseemFromNumber}
+              onChangeText={setNewPulseemFromNumber}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textAlign="right"
+            />
+          </>
+        ) : (
+          <>
+            <Text style={styles.brandHint}>
+              הגדר <Text style={{ fontWeight: '700' }}>EXPO_PUBLIC_PULSEEM_MAIN_API_KEY</Text> ב-.env ליצירה אוטומטית.{'\n'}
+              לחילופין מלא ידנית:
+            </Text>
+
+            <Text style={styles.fieldLabel}>מפתח API (הגדרות API בחשבון משנה)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="אופציונלי — ui-api / אינטגרציות"
+              placeholderTextColor={TEXT_MUTED}
+              value={newPulseemApiKey}
+              onChangeText={setNewPulseemApiKey}
+              autoCapitalize="none"
+              autoCorrect={false}
+              secureTextEntry
+              textAlign="right"
+            />
+            <Text style={styles.fieldLabel}>מזהה משתמש (לשליחת SMS / OTP)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="pulseemsendservices — מזהה משתמש"
+              placeholderTextColor={TEXT_MUTED}
+              value={newPulseemWsUserId}
+              onChangeText={setNewPulseemWsUserId}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textAlign="right"
+            />
+            <Text style={styles.fieldLabel}>סיסמה</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="סיסמת API של המשתמש בפולסים"
+              placeholderTextColor={TEXT_MUTED}
+              value={newPulseemWsPassword}
+              onChangeText={setNewPulseemWsPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              secureTextEntry
+              textAlign="right"
+            />
+            <Text style={styles.fieldLabel}>שם שולח SMS — From</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="כפי שמוגדר אצל פולסים (לרוב באנגלית/מספר)"
+              placeholderTextColor={TEXT_MUTED}
+              value={newPulseemFromNumber}
+              onChangeText={setNewPulseemFromNumber}
+              textAlign="right"
+            />
+          </>
+        )}
       </View>
 
       {/* Admin Details */}
@@ -475,8 +620,68 @@ export default function SuperAdminDashboard() {
     { key: 'settings', icon: 'settings-outline', iconFocused: 'settings', label: 'הגדרות' },
   ];
 
+  const deleteDialogMessage = deleteConfirmBiz
+    ? `בטוח שברצונך למחוק את "${deleteConfirmBiz.display_name || 'עסק ללא שם'}"?\n\nפעולה זו תמחק את כל הנתונים: משתמשים, תורים, שירותים, וקבצי ברנדינג.\n\nלא ניתן לבטל פעולה זו!`
+    : '';
+
   return (
     <View style={styles.root}>
+      <Modal visible={!!deleteConfirmBiz} transparent animationType="fade" onRequestClose={closeDeleteConfirm}>
+        <View style={styles.confirmOverlay}>
+          {deleteConfirmBiz ? (
+            <View style={styles.confirmCard}>
+              <Text style={styles.confirmTitle}>מחיקת אפליקציה</Text>
+              <Text style={styles.confirmMessage}>{deleteDialogMessage}</Text>
+              <View style={styles.confirmButtonsRow}>
+                <TouchableOpacity
+                  style={styles.confirmButton}
+                  onPress={closeDeleteConfirm}
+                  activeOpacity={0.8}
+                  disabled={deleteInProgress}
+                >
+                  <Text style={styles.confirmButtonDefaultText}>ביטול</Text>
+                </TouchableOpacity>
+                <View style={styles.confirmButtonDivider} />
+                <TouchableOpacity
+                  style={styles.confirmButton}
+                  onPress={runConfirmedDelete}
+                  activeOpacity={0.8}
+                  disabled={deleteInProgress}
+                >
+                  {deleteInProgress ? (
+                    <ActivityIndicator size="small" color="#FF3B30" />
+                  ) : (
+                    <Text style={styles.confirmButtonDestructiveText}>מחק</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
+
+      <Modal visible={!!feedbackDialog} transparent animationType="fade" onRequestClose={() => setFeedbackDialog(null)}>
+        <View style={styles.confirmOverlay}>
+          {feedbackDialog ? (
+            <View style={styles.confirmCard}>
+              <Text style={styles.confirmTitle}>{feedbackDialog.title}</Text>
+              <Text style={styles.confirmMessage}>{feedbackDialog.message}</Text>
+              <View style={styles.confirmButtonsRow}>
+                <TouchableOpacity style={styles.confirmButton} onPress={() => setFeedbackDialog(null)} activeOpacity={0.8}>
+                  <Text style={styles.confirmButtonDefaultText}>אישור</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
+
+      <PulseemBusinessModal
+        visible={!!pulseModalBiz}
+        business={pulseModalBiz}
+        onClose={() => setPulseModalBiz(null)}
+        onSaved={() => loadBusinesses()}
+      />
       <LinearGradient colors={['#FFFFFF', '#F5F6FA']} style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <Text style={styles.headerTitle}>לוח בקרה</Text>
         <Text style={styles.headerSubtitle}>ניהול כל האפליקציות</Text>
@@ -498,7 +703,7 @@ export default function SuperAdminDashboard() {
                 <TouchableOpacity key={tab.key} style={styles.tabItem} onPress={() => setActiveTab(tab.key)} activeOpacity={0.7}>
                   {tab.key === 'add' ? (
                     <View style={[styles.addTabBtn, focused && styles.addTabBtnFocused]}>
-                      <Ionicons name={focused ? tab.iconFocused : tab.icon} size={28} color="#FFFFFF" />
+                      <Ionicons name={(focused ? tab.iconFocused : tab.icon) as any} size={28} color="#FFFFFF" />
                     </View>
                   ) : (
                     <>
@@ -581,8 +786,11 @@ const styles = StyleSheet.create({
   credentialLabel: { fontSize: 12, fontWeight: '600', color: TEXT_SECONDARY },
   credentialValue: { fontSize: 13, fontWeight: '700', color: TEXT_PRIMARY, fontFamily: 'monospace' },
 
-  bizFooter: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: CARD_BORDER, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  bizId: { fontSize: 10, color: TEXT_MUTED, fontFamily: 'monospace', flex: 1, textAlign: 'left' },
+  bizFooter: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: CARD_BORDER, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  bizFooterLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
+  bizId: { fontSize: 10, color: TEXT_MUTED, fontFamily: 'monospace', flex: 1, textAlign: 'left', minWidth: 0 },
+  pulseBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(108,92,231,0.08)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(108,92,231,0.2)' },
+  pulseBtnText: { fontSize: 12, fontWeight: '600', color: ACCENT },
   deleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FFF0F0', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#FFE0E0' },
   deleteBtnText: { fontSize: 12, fontWeight: '600', color: '#FF6B6B' },
 
@@ -630,6 +838,7 @@ const styles = StyleSheet.create({
   colorPreview: { width: 50, height: 50, borderRadius: 14, borderWidth: 1, borderColor: CARD_BORDER },
 
   brandHint: { fontSize: 12, color: TEXT_MUTED, textAlign: 'right', marginBottom: 12, alignSelf: 'stretch' },
+  pulseemAutoBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0FFF4', borderRadius: 8, padding: 10, marginBottom: 12, gap: 4 },
   imgRow: { flexDirection: 'row', gap: 10 },
   imgPickerWrap: { flex: 1, alignItems: 'center' },
   imgPickerBtn: {
@@ -682,4 +891,63 @@ const styles = StyleSheet.create({
   tabLabelFocused: { color: ACCENT },
   addTabBtn: { width: 52, height: 52, borderRadius: 26, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center', marginTop: -20, shadowColor: ACCENT, shadowOpacity: 0.45, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 },
   addTabBtnFocused: { backgroundColor: ACCENT_DARK, transform: [{ scale: 1.08 }] },
+
+  confirmOverlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    paddingHorizontal: 24,
+  },
+  confirmCard: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: 14,
+    backgroundColor: CARD_BG,
+    overflow: 'hidden',
+    paddingTop: 16,
+  },
+  confirmTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: TEXT_PRIMARY,
+    textAlign: 'center',
+    marginBottom: 8,
+    paddingHorizontal: 16,
+  },
+  confirmMessage: {
+    fontSize: 13,
+    color: TEXT_SECONDARY,
+    textAlign: 'center',
+    paddingHorizontal: 18,
+    marginBottom: 14,
+    lineHeight: 20,
+  },
+  confirmButtonsRow: {
+    flexDirection: 'row',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#D1D1D6',
+  },
+  confirmButton: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: CARD_BG,
+    minHeight: 48,
+  },
+  confirmButtonDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: '#D1D1D6',
+  },
+  confirmButtonDefaultText: {
+    fontSize: 17,
+    color: '#0A84FF',
+    fontWeight: '600',
+  },
+  confirmButtonDestructiveText: {
+    fontSize: 17,
+    color: '#FF3B30',
+    fontWeight: '700',
+  },
 });

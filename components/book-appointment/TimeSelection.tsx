@@ -3,27 +3,30 @@ import { View, Text, TouchableOpacity, FlatList } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 
-type Props = {
+export interface TimeSelectionProps {
   visible: boolean;
   styles: any;
   topOffset: number;
+  /** Extra padding under time grid so content clears bottom booking bar */
+  listBottomPadding?: number;
   availableTimeSlots: string[];
   selectedTime: string | null;
   primaryColor: string;
   t: any;
   onSelectTime: (time: string) => void;
-};
+}
 
 export default function TimeSelection({
   visible,
   styles,
   topOffset,
+  listBottomPadding = 0,
   availableTimeSlots,
   selectedTime,
   primaryColor,
   t,
   onSelectTime,
-}: Props) {
+}: TimeSelectionProps) {
   if (!visible) return null;
 
   return (
@@ -65,7 +68,7 @@ export default function TimeSelection({
               maxToRenderPerBatch={21}
               updateCellsBatchingPeriod={50}
               decelerationRate="fast"
-              contentContainerStyle={styles.timeGridList}
+              contentContainerStyle={[styles.timeGridList, listBottomPadding ? { paddingBottom: listBottomPadding } : null]}
             />
           </View>
         ) : (

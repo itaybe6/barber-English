@@ -33,6 +33,7 @@ import { findUserByCredentials, isValidUserType, UserType } from '@/constants/au
 import { getCurrentClientLogo } from '@/src/theme/assets';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { superAdminApi } from '@/lib/api/superAdmin';
+import { authPhoneOtpApi } from '@/lib/api/authPhoneOtp';
 import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -193,6 +194,10 @@ export default function LoginScreen() {
 
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [loginStep, setLoginStep] = useState<'phone' | 'code'>('phone');
+  const [usePasswordLogin, setUsePasswordLogin] = useState(false);
+  const [otpCooldownSec, setOtpCooldownSec] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isForgotOpen, setIsForgotOpen] = useState(false);
@@ -201,6 +206,7 @@ export default function LoginScreen() {
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [phoneFocused, setPhoneFocused] = useState(false);
   const [passFocused, setPassFocused] = useState(false);
+  const [otpFocused, setOtpFocused] = useState(false);
   const [loginFailureCount, setLoginFailureCount] = useState(0);
 
   const login = useAuthStore((state) => state.login);
@@ -228,6 +234,19 @@ export default function LoginScreen() {
       cancelled = true;
     };
   }, [phone]);
+
+  useEffect(() => {
+    if (otpCooldownSec <= 0) return;
+    const id = setInterval(() => setOtpCooldownSec((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(id);
+  }, [otpCooldownSec]);
+
+  useEffect(() => {
+    if (usePasswordLogin) {
+      setLoginStep('phone');
+      setOtpCode('');
+    }
+  }, [usePasswordLogin]);
 
   // ── Logo float ──
   const logoFloat = useSharedValue(0);
@@ -263,7 +282,7 @@ export default function LoginScreen() {
   }));
 
   // ── Login handler ──
-  const reportFailedLogin = async (key: string) => {
+  const reportFailedLogin = async (key: string, kind: 'password' | 'otp' = 'password') => {
     const next = (await readLoginFailures(key)) + 1;
     await writeLoginFailures(key, next);
     setLoginFailureCount(next);
@@ -274,14 +293,176 @@ export default function LoginScreen() {
       );
     } else {
       const remaining = MAX_LOGIN_FAILURES - next;
+      const msg =
+        kind === 'otp'
+          ? t('login.incorrectOtpWithRemaining', 'קוד שגוי. נותרו {{count}} ניסיונות.', { count: remaining })
+          : t('login.incorrectCredentialsWithRemaining', 'טלפון או סיסמה שגויים. נותרו {{count}} ניסיונות.', { count: remaining });
+      Alert.alert(t('error.generic', 'שגיאה'), msg);
+    }
+  };
+
+  const otpErrorMessage = (code: string | undefined): string => {
+    switch (code) {
+      case 'pulseem_not_configured':
+        return t(
+          'login.otp.errorPulseem',
+          'שליחת SMS לא הוגדרה: נדרשים מזהה משתמש, סיסמה ומספר שולח פולסים (Web Service). מפתח API בלבד לא מספיק — הגדר בסופר־אדמין.',
+        );
+      case 'business_not_found':
+        return t(
+          'login.otp.errorBusiness',
+          'מזהה העסק לא נמצא במסד. בדוק BUSINESS_ID ב-.env.',
+        );
+      case 'db_error':
+      case 'server_error':
+        return t(
+          'login.otp.errorServer',
+          'שגיאת שרת. ודא מיגרציית OTP והפונקציה auth-phone-otp ב-Supabase.',
+        );
+      case 'invoke_network':
+        return t(
+          'login.otp.errorInvoke',
+          'לא ניתן להגיע לשרת (Edge Function). בדוק פריסה ואינטרנט.',
+        );
+      case 'rate_limit_sends':
+        return t('login.otp.errorRateLimit', 'נשלחו יותר מדי קודים לשעה. נסה שוב מאוחר יותר.');
+      case 'sms_send_failed':
+        return t('login.otp.errorSms', 'שליחת ה-SMS נכשלה. נסה שוב.');
+      case 'wrong_code':
+      case 'no_active_code':
+        return t('login.otp.errorWrongCode', 'קוד שגוי או שפג תוקפו. בקש קוד חדש.');
+      case 'too_many_attempts':
+        return t('login.otp.errorTooMany', 'יותר מדי ניסיונות שגויים. בקש קוד חדש.');
+      case 'phone_registered':
+        return t('register.phoneExists.message', 'מספר זה כבר רשום.');
+      default:
+        return code && code !== 'send_failed'
+          ? `${t('common.retry', 'נסה שוב')} (${code})`
+          : t('common.tryAgain', 'נסה שוב');
+    }
+  };
+
+  const handleSendLoginOtp = async () => {
+    if (!phone.trim()) {
+      Alert.alert(t('error.generic', 'שגיאה'), t('login.fillPhone', 'יש להזין מספר טלפון'));
+      return;
+    }
+    const key = normalizePhoneKey(phone);
+    const existingFailures = await readLoginFailures(key);
+    if (existingFailures >= MAX_LOGIN_FAILURES) {
+      setLoginFailureCount(existingFailures);
       Alert.alert(
-        t('error.generic', 'שגיאה'),
-        t('login.incorrectCredentialsWithRemaining', 'טלפון או סיסמה שגויים. נותרו {{count}} ניסיונות.', { count: remaining })
+        t('login.tooManyAttemptsTitle', 'התחברות נחסמה'),
+        t('login.tooManyAttemptsMessage', 'בוצעו יותר מדי ניסיונות התחברות שגויים למספר זה. לא ניתן להתחבר כעת.')
       );
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const res = await authPhoneOtpApi.sendLoginOtp(phone.trim());
+      if (!res.ok) {
+        Alert.alert(t('error.generic', 'שגיאה'), otpErrorMessage(res.error));
+        return;
+      }
+      setLoginStep('code');
+      setOtpCode('');
+      setOtpCooldownSec(45);
+      Alert.alert(
+        t('login.otp.sentTitle', 'קוד נשלח'),
+        t(
+          'login.otp.sentBody',
+          'אם המספר רשום אצלנו, תקבל הודעת SMS עם קוד אימות. הזן אותו למטה.'
+        )
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyLoginOtp = async () => {
+    const digits = otpCode.replace(/\D/g, '');
+    if (digits.length !== 6) {
+      Alert.alert(t('error.generic', 'שגיאה'), t('login.otp.enterSix', 'הזן את 6 הספרות שנשלחו ב-SMS'));
+      return;
+    }
+    const key = normalizePhoneKey(phone);
+    const existingFailures = await readLoginFailures(key);
+    if (existingFailures >= MAX_LOGIN_FAILURES) {
+      setLoginFailureCount(existingFailures);
+      Alert.alert(
+        t('login.tooManyAttemptsTitle', 'התחברות נחסמה'),
+        t('login.tooManyAttemptsMessage', 'בוצעו יותר מדי ניסיונות התחברות שגויים למספר זה. לא ניתן להתחבר כעת.')
+      );
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const res = await authPhoneOtpApi.verifyLoginOtp(phone.trim(), digits);
+      if (!res.ok || !res.user) {
+        const next = (await readLoginFailures(key)) + 1;
+        await writeLoginFailures(key, next);
+        setLoginFailureCount(next);
+        if (next >= MAX_LOGIN_FAILURES) {
+          Alert.alert(
+            t('login.tooManyAttemptsTitle', 'התחברות נחסמה'),
+            t('login.tooManyAttemptsMessage', 'בוצעו יותר מדי ניסיונות התחברות שגויים למספר זה. לא ניתן להתחבר כעת.')
+          );
+        } else {
+          const remaining = MAX_LOGIN_FAILURES - next;
+          Alert.alert(
+            t('error.generic', 'שגיאה'),
+            `${otpErrorMessage(res.error)}\n\n${t('login.attemptsRemaining', 'נותרו {{n}} ניסיונות.', { n: remaining })}`
+          );
+        }
+        return;
+      }
+      const authUser = res.user;
+      if (authUser.block) {
+        await writeLoginFailures(key, 0);
+        Alert.alert(t('account.blocked', 'חשבון חסום'), t('login.blockedCannotSignIn', 'החשבון שלך חסום. פנה למנהל.'));
+        return;
+      }
+      if (authUser.user_type === 'client' && authUser.client_approved === false) {
+        await writeLoginFailures(key, 0);
+        Alert.alert(
+          t('login.pendingApprovalTitle', 'Awaiting approval'),
+          t('login.pendingApprovalMessage', 'Your account is waiting for the business to approve it. You will be able to sign in once approved.')
+        );
+        return;
+      }
+      if (!isValidUserType(authUser.user_type)) {
+        await writeLoginFailures(key, 0);
+        Alert.alert(t('error.generic', 'שגיאה'), t('login.invalidUserType', 'סוג משתמש לא תקין'));
+        return;
+      }
+      await writeLoginFailures(key, 0);
+      const appUser = {
+        id: authUser.id,
+        phone: authUser.phone,
+        type: authUser.user_type,
+        name: authUser.name,
+        email: authUser.email ?? null,
+        image_url: authUser.image_url ?? null,
+        user_type: authUser.user_type,
+        block: authUser.block ?? false,
+        client_approved: authUser.client_approved !== false,
+      } as any;
+      login(appUser);
+      router.replace(appUser.type === 'admin' ? '/(tabs)' : '/(client-tabs)');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleLogin = async () => {
+    if (!usePasswordLogin) {
+      if (loginStep === 'phone') {
+        await handleSendLoginOtp();
+      } else {
+        await handleVerifyLoginOtp();
+      }
+      return;
+    }
     if (!phone.trim() || !password.trim()) {
       Alert.alert(t('error.generic', 'שגיאה'), t('login.fillAll', 'יש למלא את כל השדות'));
       return;
@@ -468,10 +649,18 @@ export default function LoginScreen() {
 
               <View style={styles.header}>
                 <Text style={styles.titleText}>
-                  {t('login.form.title', 'כניסה לחשבון')}
+                  {usePasswordLogin
+                    ? t('login.form.title', 'כניסה לחשבון')
+                    : loginStep === 'code'
+                      ? t('login.otp.title', 'קוד אימות')
+                      : t('login.form.title', 'כניסה לחשבון')}
                 </Text>
                 <Text style={styles.subtitleText}>
-                  {t('login.form.subtitle', 'הכנס את הפרטים שלך כדי להמשיך')}
+                  {usePasswordLogin
+                    ? t('login.form.subtitle', 'הכנס את הפרטים שלך כדי להמשיך')
+                    : loginStep === 'code'
+                      ? t('login.otp.subtitle', 'הזן את הקוד בן 6 הספרות שנשלח ב-SMS')
+                      : t('login.otp.subtitlePhone', 'הזן מספר טלפון — נשלח אליך קוד ב-SMS')}
                 </Text>
               </View>
 
@@ -500,55 +689,119 @@ export default function LoginScreen() {
                     autoCorrect={false}
                     textAlign="left"
                     showSoftInputOnFocus={true}
-                    editable={!isLoginLocked}
+                    editable={
+                      !isLoginLocked &&
+                      (usePasswordLogin || loginStep === 'phone')
+                    }
                     onFocus={() => setPhoneFocused(true)}
                     onBlur={() => setPhoneFocused(false)}
                   />
                 </View>
               </View>
 
-              {/* Password field — avoid elevation/shadow on focus (breaks keyboard on Android) */}
-              <View style={styles.fieldWrap} collapsable={false}>
-                <View style={[
-                  styles.inputRow,
-                  passFocused && {
-                    borderColor: primary,
-                    borderWidth: 1.8,
-                  },
-                ]}>
-                  <Ionicons
-                    name="lock-closed-outline"
-                    size={19}
-                    color={passFocused ? primary : '#9CA3AF'}
-                    style={styles.iconLeft}
-                  />
-                  <TextInput
-                    style={[styles.input, styles.inputPass]}
-                    placeholder={t('login.passwordPlaceholder', 'סיסמה')}
-                    placeholderTextColor="#B0B8C4"
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry={!showPassword}
-                    autoCapitalize="none"
-                    textAlign="left"
-                    showSoftInputOnFocus={true}
-                    editable={!isLoginLocked}
-                    onFocus={() => setPassFocused(true)}
-                    onBlur={() => setPassFocused(false)}
-                  />
-                  <TouchableOpacity
-                    onPress={() => setShowPassword(v => !v)}
-                    style={styles.eyeBtn}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
+              {/* OTP code (SMS) */}
+              {!usePasswordLogin && loginStep === 'code' ? (
+                <View style={styles.fieldWrap} collapsable={false}>
+                  <View style={[
+                    styles.inputRow,
+                    otpFocused && {
+                      borderColor: primary,
+                      borderWidth: 1.8,
+                    },
+                  ]}>
                     <Ionicons
-                      name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                      name="keypad-outline"
                       size={19}
-                      color={passFocused ? primary : '#9CA3AF'}
+                      color={otpFocused ? primary : '#9CA3AF'}
+                      style={styles.iconLeft}
                     />
+                    <TextInput
+                      style={styles.input}
+                      placeholder={t('login.otp.placeholder', 'קוד 6 ספרות')}
+                      placeholderTextColor="#B0B8C4"
+                      value={otpCode}
+                      onChangeText={(v) => setOtpCode(v.replace(/\D/g, '').slice(0, 6))}
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      autoCorrect={false}
+                      textAlign="left"
+                      showSoftInputOnFocus={true}
+                      editable={!isLoginLocked}
+                      onFocus={() => setOtpFocused(true)}
+                      onBlur={() => setOtpFocused(false)}
+                    />
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setLoginStep('phone');
+                      setOtpCode('');
+                    }}
+                    style={styles.otpBackRow}
+                    hitSlop={{ top: 8, bottom: 8 }}
+                  >
+                    <Text style={[styles.otpBackText, { color: primary }]}>
+                      {t('login.otp.changePhone', 'שינוי מספר טלפון')}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleSendLoginOtp}
+                    disabled={isLoading || otpCooldownSec > 0 || isLoginLocked}
+                    style={styles.otpBackRow}
+                    hitSlop={{ top: 8, bottom: 8 }}
+                  >
+                    <Text style={[styles.otpBackText, { color: otpCooldownSec > 0 ? '#9CA3AF' : primary }]}>
+                      {otpCooldownSec > 0
+                        ? t('login.otp.resendWait', 'שלח שוב בעוד {{s}} שניות', { s: otpCooldownSec })
+                        : t('login.otp.resend', 'שלח קוד מחדש')}
+                    </Text>
                   </TouchableOpacity>
                 </View>
-              </View>
+              ) : null}
+
+              {/* Password field — super admin / legacy */}
+              {usePasswordLogin ? (
+                <View style={styles.fieldWrap} collapsable={false}>
+                  <View style={[
+                    styles.inputRow,
+                    passFocused && {
+                      borderColor: primary,
+                      borderWidth: 1.8,
+                    },
+                  ]}>
+                    <Ionicons
+                      name="lock-closed-outline"
+                      size={19}
+                      color={passFocused ? primary : '#9CA3AF'}
+                      style={styles.iconLeft}
+                    />
+                    <TextInput
+                      style={[styles.input, styles.inputPass]}
+                      placeholder={t('login.passwordPlaceholder', 'סיסמה')}
+                      placeholderTextColor="#B0B8C4"
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      textAlign="left"
+                      showSoftInputOnFocus={true}
+                      editable={!isLoginLocked}
+                      onFocus={() => setPassFocused(true)}
+                      onBlur={() => setPassFocused(false)}
+                    />
+                    <TouchableOpacity
+                      onPress={() => setShowPassword(v => !v)}
+                      style={styles.eyeBtn}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Ionicons
+                        name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                        size={19}
+                        color={passFocused ? primary : '#9CA3AF'}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : null}
 
               {isLoginLocked && (
                 <Text style={styles.lockBanner}>
@@ -578,7 +831,11 @@ export default function LoginScreen() {
                           ? t('login.cta.signingIn', 'מתחבר...')
                           : isLoginLocked
                             ? t('login.cta.locked', 'התחברות חסומה')
-                            : t('login.cta.signIn', 'כניסה')}
+                            : usePasswordLogin
+                              ? t('login.cta.signIn', 'כניסה')
+                              : loginStep === 'code'
+                                ? t('login.cta.verifyOtp', 'אמת קוד והתחבר')
+                                : t('login.cta.sendOtp', 'שלח קוד ב-SMS')}
                       </Text>
                     </LinearGradient>
                   </View>
@@ -587,11 +844,24 @@ export default function LoginScreen() {
 
               {/* Links */}
               <View style={styles.linksWrap}>
-                <TouchableOpacity onPress={() => setIsForgotOpen(true)} hitSlop={{ top: 8, bottom: 8 }}>
+                <TouchableOpacity
+                  onPress={() => setUsePasswordLogin((v) => !v)}
+                  hitSlop={{ top: 8, bottom: 8 }}
+                >
                   <Text style={[styles.forgotText, { color: '#6B7280' }]}>
-                    {t('login.forgotPassword', 'שכחת סיסמה?')}
+                    {usePasswordLogin
+                      ? t('login.switchToOtp', 'התחברות עם קוד SMS')
+                      : t('login.switchToPassword', 'כניסת מנהל / סיסמה')}
                   </Text>
                 </TouchableOpacity>
+
+                {usePasswordLogin ? (
+                  <TouchableOpacity onPress={() => setIsForgotOpen(true)} hitSlop={{ top: 8, bottom: 8 }}>
+                    <Text style={[styles.forgotText, { color: '#6B7280' }]}>
+                      {t('login.forgotPassword', 'שכחת סיסמה?')}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
 
                 <View style={styles.dividerRow}>
                   <View style={styles.divider} />
@@ -868,6 +1138,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 20,
     gap: 10,
+  },
+  otpBackRow: {
+    alignSelf: 'flex-start',
+    marginTop: 10,
+  },
+  otpBackText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   forgotText: {
     fontSize: 14,

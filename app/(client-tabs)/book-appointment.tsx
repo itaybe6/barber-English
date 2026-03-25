@@ -10,10 +10,10 @@ import { useFocusEffect } from '@react-navigation/native';
 import BarberSelection from '@/components/book-appointment/BarberSelection';
 import ServiceSelection from '@/components/book-appointment/ServiceSelection';
 import DaySelection from '@/components/book-appointment/DaySelection';
-import TimeSelection from '@/components/book-appointment/TimeSelection';
+import TimeSelection, { type TimeSelectionProps } from '@/components/book-appointment/TimeSelection';
 import BookingSuccessAnimation from '@/components/book-appointment/BookingSuccessAnimation';
 import { MotiView } from 'moti';
-import BookingStepTabs, { BOOKING_TABS_HEIGHT } from '@/components/book-appointment/BookingStepTabs';
+import BookingStepTabs, { getBookingStepBarTopFromBottom } from '@/components/book-appointment/BookingStepTabs';
 
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { Service } from '@/lib/supabase';
@@ -380,7 +380,8 @@ export default function BookAppointment() {
   const { colors } = useBusinessColors();
   const safeAreaInsets = useSafeAreaInsets();
   const styles = createStyles(colors);
-  const footerBottom = Math.max(safeAreaInsets.bottom, 16) + 80;
+  const bookingBarTopFromBottom = getBookingStepBarTopFromBottom(safeAreaInsets.bottom);
+  const footerBottom = bookingBarTopFromBottom + 12;
   const params = (router as any).useLocalSearchParams?.() || {};
   // Top animated tabs replace the old grey hero/stepper
   
@@ -566,7 +567,7 @@ export default function BookAppointment() {
   const buttonHeight = 56;
   const contentBottomPadding = footerVisible
     ? footerBottom + buttonHeight + 12
-    : 96;
+    : Math.max(96, bookingBarTopFromBottom + 40);
   
   // Compute available start times dynamically for the selected service and date using business_hours
   const getAvailableTimeSlotsForDate = () => {
@@ -1413,7 +1414,35 @@ export default function BookAppointment() {
     }
   };
 
-  const TOP_OFFSET = Math.round(safeAreaInsets.top + 8 + BOOKING_TABS_HEIGHT);
+  const TOP_OFFSET = Math.round(safeAreaInsets.top + 8);
+
+  const handleBookingStepBack = React.useCallback(() => {
+    if (currentStep > 1) {
+      setCurrentStep((currentStep - 1) as 1 | 2 | 3 | 4);
+    } else if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(client-tabs)' as any);
+    }
+  }, [currentStep, router]);
+
+  const handleBookingHome = React.useCallback(() => {
+    router.replace('/(client-tabs)' as any);
+  }, [router]);
+
+  const timeSelectionProps: TimeSelectionProps = {
+    visible:
+      Number(currentStep) === 4 && !!selectedBarber && !!selectedService && selectedDay !== null,
+    styles,
+    topOffset: TOP_OFFSET,
+    listBottomPadding: bookingBarTopFromBottom + 16,
+    availableTimeSlots: (availableTimeSlots || []) as any,
+    selectedTime: selectedTime as any,
+    primaryColor: colors.primary,
+    t,
+    onSelectTime: (time) => setSelectedTime(time as any),
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: 'transparent' }}>
       {/* Background (changes with scroll for steps 1-2, cross-fade for steps 3-4) */}
@@ -1444,7 +1473,7 @@ export default function BookAppointment() {
       <SafeAreaView style={styles.container} edges={[]}>
         <BookingStepTabs
           currentStep={currentStep}
-          safeAreaTop={safeAreaInsets.top}
+          safeAreaBottom={safeAreaInsets.bottom}
           labels={{
             barber: t('booking.step.barber', 'Barber'),
             service: t('booking.step.service', 'Service'),
@@ -1454,6 +1483,8 @@ export default function BookAppointment() {
           canGoService={!!selectedBarber}
           canGoDay={!!selectedService}
           canGoTime={selectedDay !== null}
+          onBack={handleBookingStepBack}
+          onHome={handleBookingHome}
           onChangeStep={(step) => setCurrentStep(Number(step) as any)}
         />
       {/* Header removed on steps 3-4 per request */}
@@ -1468,7 +1499,12 @@ export default function BookAppointment() {
           ref={scrollRef as any}
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingBottom: (currentStep === 1 || currentStep === 2) ? Math.max(safeAreaInsets.bottom, 20) : contentBottomPadding },
+            {
+              paddingBottom:
+                currentStep === 1 || currentStep === 2
+                  ? bookingBarTopFromBottom + 20
+                  : contentBottomPadding,
+            },
             (currentStep === 1) ? { minHeight: CAROUSEL_HEIGHT + 100 } : null,
             /* Step 1: pin barber block to bottom. Step 2: no flex-end — avoids empty flex gap + nested FlatList layout bugs */
             (currentStep === 1) ? { flexGrow: 1, justifyContent: 'flex-end' } : null,
@@ -1485,7 +1521,7 @@ export default function BookAppointment() {
           nestedScrollEnabled={true}
         >
 
-        {/* Spacer to keep content below the top tabs */}
+        {/* Spacer below status bar / safe top */}
         <View style={{ height: TOP_OFFSET + 12 }} />
 
         {/* Step 1: Barber Selection */}
@@ -1564,16 +1600,7 @@ export default function BookAppointment() {
       </View>
 
       {/* Step 4: Revolutionary Time Selection with Liquid Glass (outside ScrollView) */}
-      <TimeSelection
-        visible={Number(currentStep) === 4 && !!selectedBarber && !!selectedService && selectedDay !== null}
-        styles={styles}
-        topOffset={TOP_OFFSET}
-        availableTimeSlots={(availableTimeSlots || []) as any}
-        selectedTime={selectedTime as any}
-        primaryColor={colors.primary}
-        t={t}
-        onSelectTime={(time) => setSelectedTime(time as any)}
-      />
+      <TimeSelection {...timeSelectionProps} />
 
       {/* Footer action button per step */}
       {footerVisible && currentStep >= 3 && (

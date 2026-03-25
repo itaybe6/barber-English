@@ -39,6 +39,10 @@ export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
   const { primary } = useColors();
 
   const currentTab = segments[1] as string | undefined;
+  if (currentTab === "book-appointment") {
+    return null;
+  }
+
   const isActive = (tab: string) => currentTab === tab || (tab === "index" && !currentTab);
   const iconColor = (tab: string) => (isActive(tab) ? ICON_ACTIVE : INACTIVE);
 

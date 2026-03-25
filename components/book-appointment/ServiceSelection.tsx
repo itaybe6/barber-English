@@ -229,9 +229,9 @@ export default function ServiceSelection({
 
   /** Matches book-appointment spacer below step tabs: `TOP_OFFSET + 12` */
   const SCROLL_TOP_EXTRA = 12;
-  /** Must stay in sync with ClientFloatingTabBar `bottom` (safe area + small lift, or web fallback) */
+  /** Same inset as booking step bar / client floating tab bar */
   const tabBarBottomOffset = safeAreaBottom > 0 ? safeAreaBottom + 2 : 8;
-  /** Pill row height + gap so list doesn’t run under the floating bar */
+  /** Keep aligned with `BOOKING_TABS_HEIGHT` in BookingStepTabs */
   const TAB_ROW_HEIGHT = 62;
   const LIST_GAP_ABOVE_TAB = 10;
   const bottomChrome = tabBarBottomOffset + TAB_ROW_HEIGHT + LIST_GAP_ABOVE_TAB;

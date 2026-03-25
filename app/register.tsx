@@ -51,7 +51,6 @@ export default function RegisterScreen() {
   const { t } = useTranslation();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [registerStep, setRegisterStep] = useState<'form' | 'otp'>('form');
   const [otpCooldownSec, setOtpCooldownSec] = useState(0);
@@ -102,17 +101,8 @@ export default function RegisterScreen() {
 
     if (!phone.trim()) {
       newErrors.phone = t('register.error.phoneRequired', 'Phone number is required');
-    } else if (phone.replace(/\D/g, '').length < 9) {
+    } else     if (phone.replace(/\D/g, '').length < 9) {
       newErrors.phone = t('register.error.phoneInvalid', 'Invalid phone number');
-    }
-
-    if (!email.trim()) {
-      newErrors.email = t('register.error.emailRequired', 'Email is required');
-    } else {
-      const emailRegex = /^(?:[a-zA-Z0-9_'^&+%!-]+(?:\.[a-zA-Z0-9_'^&+%!-]+)*)@(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/;
-      if (!emailRegex.test(email.trim())) {
-        newErrors.email = t('register.error.emailInvalid', 'Invalid email address');
-      }
     }
 
     setErrors(newErrors);
@@ -191,7 +181,6 @@ export default function RegisterScreen() {
         phone: phone.trim(),
         code: digits,
         name: name.trim(),
-        email: email.trim(),
       });
       if (!res.ok) {
         Alert.alert(
@@ -371,31 +360,6 @@ export default function RegisterScreen() {
                   />
                 </View>
                 {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
-              </View>
-
-              {/* Email Input (optional) */}
-              <View style={styles.field}>
-                <View style={[styles.inputRow, { backgroundColor: palette.inputBg, borderColor: palette.inputBorder }]}>
-                  <Ionicons name="mail-outline" size={16} color={palette.textSecondary} style={styles.iconLeft} />
-                  <TextInput
-                    style={[styles.input]}
-                    placeholder={t('profile.edit.emailPlaceholder','Email')}
-                    placeholderTextColor={palette.textSecondary}
-                    value={email}
-                    onChangeText={(text) => {
-                      setEmail(text);
-                      if (errors.email) {
-                        setErrors(prev => ({...prev, email: ''}));
-                      }
-                    }}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    textAlign="left"
-                    editable={registerStep === 'form'}
-                  />
-                </View>
-                {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
               </View>
 
               {registerStep === 'otp' ? (

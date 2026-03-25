@@ -630,15 +630,11 @@ serve(async (req) => {
     if (action === "verify_register_otp") {
       const code = String(body.code || "").replace(/\D/g, "");
       const name = String(body.name || "").trim();
-      const email = String(body.email || "").trim();
       if (code.length !== 6) {
         return json({ ok: false, error: "invalid_code" }, 400);
       }
       if (!name) {
         return json({ ok: false, error: "missing_name" }, 400);
-      }
-      if (!email) {
-        return json({ ok: false, error: "missing_email" }, 400);
       }
 
       const { data: rows, error: selErr } = await admin
@@ -692,7 +688,7 @@ serve(async (req) => {
           name,
           user_type: "client",
           phone: phone.trim(),
-          email,
+          email: null,
           business_id: businessId,
           password_hash: randomSecret,
           client_approved: false,

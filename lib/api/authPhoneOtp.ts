@@ -99,7 +99,6 @@ export const authPhoneOtpApi = {
     phone: string;
     code: string;
     name: string;
-    email: string;
   }): Promise<{ ok: boolean; user?: OtpAuthUserPayload; error?: string }> {
     const businessId = getBusinessId();
     const p = await invokeAuthPhoneOtp({
@@ -108,7 +107,6 @@ export const authPhoneOtpApi = {
       phone: params.phone.trim(),
       code: params.code,
       name: params.name.trim(),
-      email: params.email.trim(),
     });
     if (p.ok !== true || !p.user) {
       return { ok: false, error: p.error || 'verify_failed' };

@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { getExpoExtra } from '@/lib/getExtra';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'expo-crypto';
 import { decode } from 'base64-arraybuffer';
 
@@ -74,6 +74,59 @@ async function storageDownloadToUtf8(data: Blob): Promise<string> {
     reader.onerror = () => reject(reader.error ?? new Error('FileReader failed'));
     reader.readAsText(b);
   });
+}
+
+/** Public Storage URL → bucket + object path (for batch remove). */
+function storageRefFromPublicUrl(url: string): { bucket: string; path: string } | null {
+  const s = String(url || '').trim();
+  if (!s) return null;
+  const marker = '/storage/v1/object/public/';
+  const i = s.indexOf(marker);
+  if (i === -1) return null;
+  const rest = s.slice(i + marker.length);
+  const slash = rest.indexOf('/');
+  if (slash <= 0) return null;
+  const bucket = rest.slice(0, slash);
+  let objectPath = rest.slice(slash + 1);
+  const q = objectPath.indexOf('?');
+  if (q !== -1) objectPath = objectPath.slice(0, q);
+  if (!objectPath) return null;
+  try {
+    objectPath = decodeURIComponent(objectPath);
+  } catch {
+    /* keep raw */
+  }
+  return { bucket, path: objectPath };
+}
+
+function addStorageUrlToMap(map: Map<string, Set<string>>, url: string | null | undefined) {
+  const ref = storageRefFromPublicUrl(url ?? '');
+  if (!ref) return;
+  let set = map.get(ref.bucket);
+  if (!set) {
+    set = new Set();
+    map.set(ref.bucket, set);
+  }
+  set.add(ref.path);
+}
+
+function addStorageUrlsFromList(map: Map<string, Set<string>>, urls: unknown) {
+  if (!Array.isArray(urls)) return;
+  for (const u of urls) {
+    if (typeof u === 'string') addStorageUrlToMap(map, u);
+  }
+}
+
+async function removeStorageRefsInBatches(client: SupabaseClient, byBucket: Map<string, Set<string>>) {
+  const BATCH = 100;
+  for (const [bucket, set] of byBucket) {
+    const paths = [...set];
+    for (let i = 0; i < paths.length; i += BATCH) {
+      const chunk = paths.slice(i, i + BATCH);
+      const { error } = await client.storage.from(bucket).remove(chunk);
+      if (error) console.error(`Storage remove ${bucket}:`, error.message);
+    }
+  }
 }
 
 function mergeEnvKeyValues(content: string, pairs: Record<string, string>): string {
@@ -774,10 +827,44 @@ export const superAdminApi = {
     try {
       const { data: profilePeek } = await client
         .from('business_profile')
-        .select('branding_client_name')
+        .select('branding_client_name, home_hero_images')
         .eq('id', businessId)
         .maybeSingle();
       const brandingFolder = ((profilePeek as any)?.branding_client_name as string | undefined)?.trim() || null;
+
+      const storagePathsByBucket = new Map<string, Set<string>>();
+      addStorageUrlsFromList(storagePathsByBucket, (profilePeek as any)?.home_hero_images);
+
+      const [designsRes, usersRes, servicesRes, productsRes] = await Promise.all([
+        client.from('designs').select('image_url, image_urls').eq('business_id', businessId),
+        client.from('users').select('image_url').eq('business_id', businessId),
+        client.from('services').select('image_url').eq('business_id', businessId),
+        client.from('products').select('image_url').eq('business_id', businessId),
+      ]);
+
+      const expensesRes = await client.from('business_expenses').select('receipt_url').eq('business_id', businessId);
+      if (expensesRes.error) {
+        console.warn('deleteBusiness: business_expenses fetch skipped:', expensesRes.error.message);
+      }
+
+      for (const row of designsRes.data || []) {
+        addStorageUrlToMap(storagePathsByBucket, (row as { image_url?: string }).image_url);
+        addStorageUrlsFromList(storagePathsByBucket, (row as { image_urls?: string[] }).image_urls);
+      }
+      for (const row of usersRes.data || []) {
+        addStorageUrlToMap(storagePathsByBucket, (row as { image_url?: string | null }).image_url);
+      }
+      for (const row of servicesRes.data || []) {
+        addStorageUrlToMap(storagePathsByBucket, (row as { image_url?: string | null }).image_url);
+      }
+      for (const row of productsRes.data || []) {
+        addStorageUrlToMap(storagePathsByBucket, (row as { image_url?: string | null }).image_url);
+      }
+      if (!expensesRes.error) {
+        for (const row of expensesRes.data || []) {
+          addStorageUrlToMap(storagePathsByBucket, (row as { receipt_url?: string | null }).receipt_url);
+        }
+      }
 
       const tables = [
         'notifications',
@@ -790,6 +877,7 @@ export const superAdminApi = {
         'designs',
         'products',
         'messages',
+        'business_expenses',
         'users',
       ];
 
@@ -842,6 +930,8 @@ export const superAdminApi = {
           }
         }
       }
+
+      await removeStorageRefsInBatches(client, storagePathsByBucket);
 
       return true;
     } catch (err) {

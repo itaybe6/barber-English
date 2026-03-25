@@ -75,10 +75,12 @@ export default function SuperAdminDashboard() {
 
   const buildDeleteSuccessMessage = (item: BusinessOverview) => {
     const folder = item.branding_client_name?.trim();
+    const storageLine =
+      'מ־Storage נמחקו גם ברנדינג, גלריה, באנר בית, תמונות פרופיל וקבלות הוצאות (ככל שנשמרו ב-Supabase).';
     if (!folder) {
-      return 'האפליקציה נמחקה מהשרת.\n\nלא נשמר שם תיקיית ברנדינג — אם יש תיקייה מקומית ב־branding/, מחק אותה ידנית.';
+      return `האפליקציה נמחקה מהשרת.\n${storageLine}\n\nלא נשמר שם תיקיית ברנדינג — אם יש תיקייה מקומית ב־branding/, מחק אותה ידנית.`;
     }
-    return `האפליקציה נמחקה מהשרת וקבצי הברנדינג ב־Storage.\n\nכדי למחוק גם את התיקייה המקומית בפרויקט (branding/${folder}), הרץ בטרמינל בשורש הפרויקט:\n\nnode scripts/delete-branding.mjs ${folder}`;
+    return `האפליקציה נמחקה מהשרת.\n${storageLine}\n\nכדי למחוק גם את התיקייה המקומית בפרויקט (branding/${folder}), הרץ בטרמינל בשורש הפרויקט:\n\nnode scripts/delete-branding.mjs ${folder}`;
   };
 
   const loadBusinesses = useCallback(async () => {

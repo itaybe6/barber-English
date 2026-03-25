@@ -13,6 +13,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { notificationsApi } from '@/lib/api/notifications';
 import { ThemeProvider } from '@/src/theme/ThemeProvider';
 import { ColorUpdateProvider } from '@/lib/contexts/ColorUpdateContext';
+import { BusinessColorsProvider } from '@/lib/contexts/BusinessColorsContext';
 import { StatusBar } from 'expo-status-bar';
 
 // RTL is configured by i18n.ensureLayoutDirection() based on language (he → RTL)
@@ -208,13 +209,15 @@ export default function RootLayout() {
 
   return (
     <ColorUpdateProvider>
-      <ThemeProvider>
-        <GestureHandlerRootView style={{ flex: 1 }} onLayout={onLayoutRootView}>
-          <StatusBar style="dark" />
-          {/* Removed boot debug overlay */}
-          {content}
-        </GestureHandlerRootView>
-      </ThemeProvider>
+      <BusinessColorsProvider>
+        <ThemeProvider>
+          <GestureHandlerRootView style={{ flex: 1 }} onLayout={onLayoutRootView}>
+            <StatusBar style="dark" />
+            {/* Removed boot debug overlay */}
+            {content}
+          </GestureHandlerRootView>
+        </ThemeProvider>
+      </BusinessColorsProvider>
     </ColorUpdateProvider>
   );
 }

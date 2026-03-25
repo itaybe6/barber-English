@@ -15,6 +15,7 @@ import {
   Animated,
   Easing,
 } from 'react-native';
+import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { Calendar, Search, User, Clock, CalendarDays, X } from 'lucide-react-native';
 import { Calendar as RNCalendar, LocaleConfig } from 'react-native-calendars';
 import Colors from '@/constants/colors';
@@ -735,7 +736,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
         </View>
 
         <View style={styles.bodyWrapper}>
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <KeyboardAwareScreenScroll style={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           {/* Stepper */}
           <View style={styles.stepperContainer}>
             <View style={styles.stepperTrack}>
@@ -831,7 +832,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
               </View>
             </View>
           )}
-        </ScrollView>
+        </KeyboardAwareScreenScroll>
         </View>
       </View>
     </Modal>

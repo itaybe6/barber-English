@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import * as ImagePicker from 'expo-image-picker';
@@ -409,7 +410,7 @@ export default function SuperAdminDashboard() {
 
   // ─── Tab: Add Business ───
   const renderAddBusiness = () => (
-    <ScrollView
+    <KeyboardAwareScreenScroll
       style={styles.addScroll}
       contentContainerStyle={[styles.addContent, { paddingBottom: 120 }]}
       showsVerticalScrollIndicator={false}
@@ -613,7 +614,7 @@ export default function SuperAdminDashboard() {
           )}
         </LinearGradient>
       </TouchableOpacity>
-    </ScrollView>
+    </KeyboardAwareScreenScroll>
   );
 
   // ─── Tab: Settings ───

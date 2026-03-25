@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform, Animated, Keyboard, Dimensions, ScrollView, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform, Animated, Keyboard, Dimensions, StatusBar } from 'react-native';
+import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import Colors from '@/constants/colors';
 import { ChevronDown, ChevronUp, CheckCircle2, AlertCircle, Bell, Send, Users, Calendar, Gift, MessageSquare } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -114,7 +115,7 @@ export default function ClientNotificationsScreen() {
         </View>
       ) : null}
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <KeyboardAwareScreenScroll style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Main Card */}
         <View style={styles.mainCard}>
           <View style={styles.cardHeader}>
@@ -239,7 +240,7 @@ export default function ClientNotificationsScreen() {
             </View>
           </View>
         )}
-      </ScrollView>
+      </KeyboardAwareScreenScroll>
     </SafeAreaView>
   );
 }

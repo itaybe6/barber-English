@@ -6,14 +6,13 @@ import {
   TouchableOpacity, 
   StyleSheet, 
   Alert, 
-  ScrollView,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
   Image, 
   Keyboard,
   Animated,
 } from 'react-native';
+import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { BusinessProfile } from '@/lib/supabase';
@@ -288,21 +287,15 @@ export default function RegisterScreen() {
         <View style={styles.darkOverlay} />
       )}
       <SafeAreaView style={styles.container} edges={['top']}>
-        <KeyboardAvoidingView 
-          behavior={'height'}
-          keyboardVerticalOffset={0}
+        <KeyboardAwareScreenScroll
           style={styles.keyboardAvoid}
+          contentContainerStyle={[styles.scrollContainer, isKeyboardVisible ? styles.scrollContainerCompact : null]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          bounces={false}
+          alwaysBounceVertical={false}
+          overScrollMode="never"
         >
-          <ScrollView
-            contentContainerStyle={[styles.scrollContainer, isKeyboardVisible ? styles.scrollContainerCompact : null]}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            scrollEnabled={isKeyboardVisible}
-            bounces={false}
-            alwaysBounceVertical={false}
-            overScrollMode="never"
-            automaticallyAdjustKeyboardInsets
-          >
             {/* Header */}
             <View style={styles.header}>
               <TouchableOpacity 
@@ -477,8 +470,7 @@ export default function RegisterScreen() {
               </View>
               </BlurView>
             </Animated.View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardAwareScreenScroll>
       </SafeAreaView>
       {/* No bottom safe-area inset on register screen */}
     </View>

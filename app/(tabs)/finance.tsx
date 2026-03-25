@@ -10,7 +10,6 @@ import {
   TextInput,
   Modal,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Image,
   Linking,
   FlatList,
@@ -20,6 +19,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import Colors from '@/constants/colors';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { businessProfileApi } from '@/lib/api/businessProfile';
@@ -288,12 +288,11 @@ export default function FinanceScreen() {
           <View style={{ width: 44 }} />
         </View>
 
-        <ScrollView
+        <KeyboardAwareScreenScroll
           contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
           bounces
           keyboardShouldPersistTaps="handled"
-          automaticallyAdjustKeyboardInsets
         >
 
           {/* ── Hero Summary Card ── */}
@@ -587,15 +586,17 @@ export default function FinanceScreen() {
           </View>
 
           <View style={{ height: 110 }} />
-        </ScrollView>
+        </KeyboardAwareScreenScroll>
       </SafeAreaView>
 
       {/* ── Add Expense Modal ── */}
       <Modal visible={showAddExpense} animationType="slide" transparent statusBarTranslucent>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
-        >
+        <View style={styles.modalOverlay}>
+          <KeyboardAwareScreenScroll
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
+          >
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
 
@@ -700,7 +701,8 @@ export default function FinanceScreen() {
               }
             </TouchableOpacity>
           </View>
-        </KeyboardAvoidingView>
+          </KeyboardAwareScreenScroll>
+        </View>
       </Modal>
 
       {/* ── Accountant report preview (same structure as email) ── */}

@@ -61,6 +61,9 @@ export default function SuperAdminDashboard() {
   const [newPulseemFromNumber, setNewPulseemFromNumber] = useState('');
   const [newPulseemWsUserId, setNewPulseemWsUserId] = useState('');
   const [newPulseemWsPassword, setNewPulseemWsPassword] = useState('');
+  const [newPulseemSubPassword, setNewPulseemSubPassword] = useState('');
+
+  const hasPulseemMainKey = !!process.env.EXPO_PUBLIC_PULSEEM_MAIN_API_KEY;
   const [pulseModalBiz, setPulseModalBiz] = useState<BusinessOverview | null>(null);
   const [deleteConfirmBiz, setDeleteConfirmBiz] = useState<BusinessOverview | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
@@ -134,17 +137,26 @@ export default function SuperAdminDashboard() {
       logoBase64: logoAsset?.base64,
       iconBase64: iconAsset?.base64,
       splashBase64: splashAsset?.base64,
-      pulseemApiKey: newPulseemApiKey.trim() || undefined,
+      pulseemSubPassword: newPulseemSubPassword.trim() || undefined,
       pulseemFromNumber: newPulseemFromNumber.trim() || undefined,
+      pulseemApiKey: newPulseemApiKey.trim() || undefined,
       pulseemWsUserId: newPulseemWsUserId.trim() || undefined,
       pulseemWsPassword: newPulseemWsPassword.trim() || undefined,
     });
     setCreating(false);
 
     if (result) {
+      const pulseemLine = result.pulseemCreated
+        ? '\n\n✅ חשבון Pulseem נוצר אוטומטית (100 DirectSmsCredits)'
+        : result.pulseemError
+        ? `\n\n⚠️ Pulseem לא הוגדר: ${result.pulseemError}`
+        : !process.env.EXPO_PUBLIC_PULSEEM_MAIN_API_KEY
+        ? '\n\n⚠️ הגדר EXPO_PUBLIC_PULSEEM_MAIN_API_KEY ב-.env ליצירת Pulseem אוטומטית'
+        : '';
+
       Alert.alert(
         'נוצר בהצלחה!',
-        `העסק "${newBizName}" נוצר בהצלחה.\n\nמזהה עסק:\n${result.businessId}\n\nשם אפליקציה: ${result.clientName}\n\nכדי להוריד את תיקיית הברנדינג הרץ:\nnode scripts/pull-branding.mjs ${result.clientName}`,
+        `העסק "${newBizName}" נוצר בהצלחה.\n\nמזהה עסק:\n${result.businessId}\n\nשם אפליקציה: ${result.clientName}${pulseemLine}\n\nכדי להוריד את תיקיית הברנדינג הרץ:\nnode scripts/pull-branding.mjs ${result.clientName}`,
       );
       resetForm();
       await loadBusinesses();
@@ -169,6 +181,7 @@ export default function SuperAdminDashboard() {
     setNewPulseemFromNumber('');
     setNewPulseemWsUserId('');
     setNewPulseemWsPassword('');
+    setNewPulseemSubPassword('');
   };
 
   const handleDelete = (item: BusinessOverview) => {
@@ -412,57 +425,97 @@ export default function SuperAdminDashboard() {
         </View>
       </View>
 
-      {/* Pulseem — נשמר ב-business_profile במסד; Edge OTP לא קורא מ-.env מקומי */}
+      {/* Pulseem SMS */}
       <View style={styles.formCard}>
-        <Text style={styles.formSectionLabel}>פולסים (אופציונלי)</Text>
-        <Text style={styles.brandHint}>
-          שליחת קוד SMS (התחברות/הרשמה) רצה ב-Supabase Edge ונשענת על השדות בטבלת העסק במסד — לא על הקובץ .env בלפטופ.
-          מפתח API שימושי לאינטגרציות; ל-OTP חובה גם מזהה וסיסמה של Web Service ושולח, או להשלים אחר כך מכרטיס העסק → «פולסים SMS».
-        </Text>
-        <Text style={styles.fieldLabel}>מפתח API (הגדרות API בחשבון משנה)</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="אופציונלי — ui-api / אינטגרציות"
-          placeholderTextColor={TEXT_MUTED}
-          value={newPulseemApiKey}
-          onChangeText={setNewPulseemApiKey}
-          autoCapitalize="none"
-          autoCorrect={false}
-          secureTextEntry
-          textAlign="right"
-        />
-        <Text style={styles.fieldLabel}>מזהה משתמש Web Service (לשליחת SMS / OTP)</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="כמו בחיבור ישן ל-pulseemsendservices"
-          placeholderTextColor={TEXT_MUTED}
-          value={newPulseemWsUserId}
-          onChangeText={setNewPulseemWsUserId}
-          autoCapitalize="none"
-          autoCorrect={false}
-          textAlign="right"
-        />
-        <Text style={styles.fieldLabel}>סיסמת Web Service פולסים</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="סיסמת API של המשתמש בפולסים"
-          placeholderTextColor={TEXT_MUTED}
-          value={newPulseemWsPassword}
-          onChangeText={setNewPulseemWsPassword}
-          autoCapitalize="none"
-          autoCorrect={false}
-          secureTextEntry
-          textAlign="right"
-        />
-        <Text style={styles.fieldLabel}>מספר / שם שולח SMS (From)</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="כפי שמוגדר אצל פולסים (לרוב באנגלית/מספר)"
-          placeholderTextColor={TEXT_MUTED}
-          value={newPulseemFromNumber}
-          onChangeText={setNewPulseemFromNumber}
-          textAlign="right"
-        />
+        <Text style={styles.formSectionLabel}>פולסים SMS</Text>
+
+        {hasPulseemMainKey ? (
+          <>
+            <View style={styles.pulseemAutoBox}>
+              <Ionicons name="checkmark-circle" size={16} color={GREEN} />
+              <Text style={[styles.brandHint, { color: GREEN, marginBottom: 0, flex: 1 }]}>
+                {' '}חשבון Pulseem ייווצר אוטומטית עם 100 DirectSmsCredits
+              </Text>
+            </View>
+
+            <Text style={styles.fieldLabel}>סיסמה לתת-חשבון (אופציונלי)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="ריק = תיווצר אוטומטית"
+              placeholderTextColor={TEXT_MUTED}
+              value={newPulseemSubPassword}
+              onChangeText={setNewPulseemSubPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              secureTextEntry
+              textAlign="right"
+            />
+
+            <Text style={styles.fieldLabel}>שם שולח SMS — From (אופציונלי)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="ריק = שם האפליקציה"
+              placeholderTextColor={TEXT_MUTED}
+              value={newPulseemFromNumber}
+              onChangeText={setNewPulseemFromNumber}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textAlign="right"
+            />
+          </>
+        ) : (
+          <>
+            <Text style={styles.brandHint}>
+              הגדר <Text style={{ fontWeight: '700' }}>EXPO_PUBLIC_PULSEEM_MAIN_API_KEY</Text> ב-.env ליצירה אוטומטית.{'\n'}
+              לחילופין מלא ידנית:
+            </Text>
+
+            <Text style={styles.fieldLabel}>מפתח API (הגדרות API בחשבון משנה)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="אופציונלי — ui-api / אינטגרציות"
+              placeholderTextColor={TEXT_MUTED}
+              value={newPulseemApiKey}
+              onChangeText={setNewPulseemApiKey}
+              autoCapitalize="none"
+              autoCorrect={false}
+              secureTextEntry
+              textAlign="right"
+            />
+            <Text style={styles.fieldLabel}>מזהה משתמש (לשליחת SMS / OTP)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="pulseemsendservices — מזהה משתמש"
+              placeholderTextColor={TEXT_MUTED}
+              value={newPulseemWsUserId}
+              onChangeText={setNewPulseemWsUserId}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textAlign="right"
+            />
+            <Text style={styles.fieldLabel}>סיסמה</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="סיסמת API של המשתמש בפולסים"
+              placeholderTextColor={TEXT_MUTED}
+              value={newPulseemWsPassword}
+              onChangeText={setNewPulseemWsPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              secureTextEntry
+              textAlign="right"
+            />
+            <Text style={styles.fieldLabel}>שם שולח SMS — From</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="כפי שמוגדר אצל פולסים (לרוב באנגלית/מספר)"
+              placeholderTextColor={TEXT_MUTED}
+              value={newPulseemFromNumber}
+              onChangeText={setNewPulseemFromNumber}
+              textAlign="right"
+            />
+          </>
+        )}
       </View>
 
       {/* Admin Details */}
@@ -784,6 +837,7 @@ const styles = StyleSheet.create({
   colorPreview: { width: 50, height: 50, borderRadius: 14, borderWidth: 1, borderColor: CARD_BORDER },
 
   brandHint: { fontSize: 12, color: TEXT_MUTED, textAlign: 'right', marginBottom: 12, alignSelf: 'stretch' },
+  pulseemAutoBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0FFF4', borderRadius: 8, padding: 10, marginBottom: 12, gap: 4 },
   imgRow: { flexDirection: 'row', gap: 10 },
   imgPickerWrap: { flex: 1, alignItems: 'center' },
   imgPickerBtn: {

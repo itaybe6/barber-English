@@ -43,6 +43,8 @@ export interface BusinessOverview {
 }
 
 const PULSEEM_ASMX = 'https://www.pulseem.co.il/Pulseem/pulseemsendservices.asmx';
+const PULSEEM_REST_BASE = 'https://api.pulseem.com/api/v1';
+const PULSEEM_UI_API_BASE = 'https://ui-api.pulseem.com/api/v1';
 
 /** Supabase storage `download()` returns a Blob; RN/Hermes often lacks `Blob.prototype.text`. */
 async function storageDownloadToUtf8(data: Blob): Promise<string> {
@@ -92,6 +94,77 @@ function mergeEnvKeyValues(content: string, pairs: Record<string, string>): stri
     return (body ? body + sep : '') + block;
   }
   return out.join('\n');
+}
+
+export interface PulseemSubAccountResult {
+  loginUserName: string;
+  loginPassword: string;
+  /** API key for the direct/REST account (directAccountPassword from Pulseem response) */
+  directApiKey: string;
+  directSmsCredits: number;
+}
+
+/**
+ * Creates a Pulseem sub-account with DirectSmsCredits via the REST API.
+ * Requires the main account's API key (EXPO_PUBLIC_PULSEEM_MAIN_API_KEY).
+ */
+export async function createPulseemSubAccount(params: {
+  mainApiKey: string;
+  subAccountName: string;
+  loginUserName: string;
+  loginPassword: string;
+  directSmsCredits?: number;
+}): Promise<PulseemSubAccountResult | { error: string }> {
+  const credits = params.directSmsCredits ?? 100;
+  try {
+    const res = await fetch(`${PULSEEM_UI_API_BASE}/AccountsApi/AddNewSubaccountAndDirectAcount`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'APIKey': params.mainApiKey,
+      },
+      body: JSON.stringify({
+        subAccountName: params.subAccountName,
+        loginUserName: params.loginUserName,
+        loginPassword: params.loginPassword,
+        smsCredits: 0,
+        emailCredits: 0,
+        directEmailCredits: 0,
+        directSmsCredits: credits,
+      }),
+    });
+
+    const text = await res.text();
+    console.log('[createPulseemSubAccount] status=', res.status, 'body=', text);
+
+    if (!res.ok) {
+      return { error: `Pulseem HTTP ${res.status}: ${text.slice(0, 200)}` };
+    }
+
+    let json: any = {};
+    try { json = JSON.parse(text); } catch { /* ignore */ }
+
+    const status = json?.status ?? json?.Status ?? '';
+    if (status && String(status).toLowerCase() !== 'success') {
+      return { error: `Pulseem error: ${status}` };
+    }
+
+    const directApiKey: string =
+      json?.directAccountPassword ??
+      json?.DirectAccountPassword ??
+      json?.apiKey ??
+      json?.ApiKey ??
+      params.loginPassword;
+
+    return {
+      loginUserName: params.loginUserName,
+      loginPassword: params.loginPassword,
+      directApiKey,
+      directSmsCredits: json?.creditTransferModelResult?.directSms?.credits ?? credits,
+    };
+  } catch (e: any) {
+    return { error: e?.message || 'createPulseemSubAccount failed' };
+  }
 }
 
 export async function testPulseemConnection(
@@ -391,15 +464,17 @@ export const superAdminApi = {
     logoBase64?: string;
     iconBase64?: string;
     splashBase64?: string;
-    /** מפתח API מעמוד «הגדרות API» בפולסים (חשבון משנה) */
+    /** מפתח API מעמוד «הגדרות API» בפולסים (חשבון משנה) — אם סופק ידנית */
     pulseemApiKey?: string;
     /** מספר/שם שולח SMS מאושר בפולסים */
     pulseemFromNumber?: string;
-    /** מזהה משתמש Web Service (pulseemsendservices) — נשמר ב-business_profile ל-Edge OTP */
+    /** מזהה משתמש Web Service (pulseemsendservices) */
     pulseemWsUserId?: string;
-    /** סיסמת Web Service פולסים — נשמרת ב-business_profile (לא נטענת מ-.env מקומי בשרת) */
+    /** סיסמת Web Service פולסים */
     pulseemWsPassword?: string;
-  }): Promise<{ businessId: string; clientName: string } | null> {
+    /** סיסמה ידנית לתת-חשבון Pulseem החדש — אם ריק תיווצר אקראית */
+    pulseemSubPassword?: string;
+  }): Promise<{ businessId: string; clientName: string; pulseemCreated?: boolean; pulseemError?: string } | null> {
     try {
       const businessId = randomUUID();
       const clientName = params.clientName.replace(/[^a-zA-Z0-9]/g, '');
@@ -409,10 +484,39 @@ export const superAdminApi = {
       }
       const slug = clientName.toLowerCase();
       const color = params.primaryColor || '#000000';
-      const pulseApiKey = params.pulseemApiKey?.trim() || '';
-      const pulseFrom = params.pulseemFromNumber?.trim() || '';
-      const pulseWsUser = params.pulseemWsUserId?.trim() || '';
-      const pulseWsPass = params.pulseemWsPassword?.trim() || '';
+
+      // Try to auto-create a Pulseem sub-account if the main API key is configured
+      const mainPulseemApiKey = (process.env.EXPO_PUBLIC_PULSEEM_MAIN_API_KEY || '').trim();
+      let pulseApiKey = params.pulseemApiKey?.trim() || '';
+      let pulseFrom = params.pulseemFromNumber?.trim() || clientName;
+      let pulseWsUser = params.pulseemWsUserId?.trim() || '';
+      let pulseWsPass = params.pulseemWsPassword?.trim() || '';
+      let pulseemCreated = false;
+      let pulseemError: string | undefined;
+
+      if (mainPulseemApiKey && !pulseApiKey) {
+        const subUser = `${slug}sms`.slice(0, 20);
+        const subPass = params.pulseemSubPassword?.trim() ||
+          Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6).toUpperCase();
+        const subResult = await createPulseemSubAccount({
+          mainApiKey: mainPulseemApiKey,
+          subAccountName: params.businessName,
+          loginUserName: subUser,
+          loginPassword: subPass,
+          directSmsCredits: 100,
+        });
+
+        if ('error' in subResult) {
+          console.warn('[createBusiness] Pulseem sub-account creation failed (non-fatal):', subResult.error);
+          pulseemError = subResult.error;
+        } else {
+          pulseApiKey = subResult.directApiKey;
+          pulseWsUser = subResult.loginUserName;
+          pulseWsPass = subResult.loginPassword;
+          pulseemCreated = true;
+          console.log('[createBusiness] Pulseem sub-account created:', subResult.loginUserName, 'credits:', subResult.directSmsCredits);
+        }
+      }
 
       // 1. Create business profile (Edge Functions read Pulseem from here — not from local branding/.env)
       const { error: profileError } = await supabase
@@ -624,7 +728,7 @@ export const superAdminApi = {
 
       await Promise.allSettled(uploads);
 
-      return { businessId, clientName };
+      return { businessId, clientName, pulseemCreated, pulseemError };
     } catch (err) {
       console.error('Error in createBusiness:', err);
       return null;

@@ -16,6 +16,7 @@ const cors = {
 
 const PULSEEM_ASMX =
   "https://www.pulseem.co.il/Pulseem/pulseemsendservices.asmx";
+const PULSEEM_REST = "https://api.pulseem.com/api/v1/SmsApi/SendSms";
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 const MAX_SENDS_PER_HOUR = 8;
@@ -129,10 +130,55 @@ function parsePulseemSendSingleResult(
 }
 
 /**
- * Sends via HTTP GET to Pulseem SendSingleSMS.
- * Returns a simple <string> response with message ID (positive) or error code (negative).
+ * Sends via Pulseem REST API (requires DirectSmsCredits on the sub-account).
+ * Auth: APIKey header with pulseem_api_key.
  */
-async function sendPulseemSingleSms(opts: {
+async function sendPulseemViaRestApi(opts: {
+  apiKey: string;
+  fromNumber: string;
+  toNumber: string;
+  text: string;
+}): Promise<void> {
+  const to = normalizeSmsDestination(opts.toNumber);
+  const ref = crypto.randomUUID().replace(/-/g, "").slice(0, 20);
+
+  const body = {
+    sendId: ref,
+    isAsync: false,
+    smsSendData: {
+      fromNumber: opts.fromNumber,
+      toNumberList: [to],
+      referenceList: [ref],
+      textList: [opts.text],
+      isAutomaticUnsubscribeLink: false,
+    },
+  };
+
+  console.log("[auth-phone-otp] sending via Pulseem REST API, to=", to, "from=", opts.fromNumber);
+
+  const res = await fetch(PULSEEM_REST, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "APIKey": opts.apiKey,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const responseText = await res.text();
+  console.log("[auth-phone-otp] pulseem REST response status=", res.status, "body=", responseText);
+
+  if (!res.ok) {
+    throw new Error(`Pulseem REST ${res.status}: ${responseText.slice(0, 300)}`);
+  }
+  console.log("[auth-phone-otp] pulseem REST ok, to=", to);
+}
+
+/**
+ * Sends via legacy Pulseem ASMX HTTP GET (uses userID + password).
+ * Returns a simple <string> XML response with message ID (positive) or error code (negative).
+ */
+async function sendPulseemViaAsmx(opts: {
   userId: string;
   password: string;
   fromNumber: string;
@@ -151,21 +197,50 @@ async function sendPulseemSingleSms(opts: {
   url.searchParams.set("text", opts.text);
   url.searchParams.set("delayDeliveryMinutes", "0");
 
-  console.log("[auth-phone-otp] sending to Pulseem, to=", to, "from=", opts.fromNumber, "userID=", opts.userId);
+  console.log("[auth-phone-otp] sending via Pulseem ASMX, to=", to, "from=", opts.fromNumber);
 
   const res = await fetch(url.toString());
   const xml = await res.text();
-  console.log("[auth-phone-otp] pulseem response status=", res.status, "body=", xml);
+  console.log("[auth-phone-otp] pulseem ASMX response status=", res.status, "body=", xml);
 
   if (!res.ok) {
-    throw new Error(`Pulseem HTTP ${res.status}: ${xml.slice(0, 200)}`);
+    throw new Error(`Pulseem ASMX HTTP ${res.status}: ${xml.slice(0, 200)}`);
   }
   const parsed = parsePulseemSendSingleResult(xml);
   if (!parsed.ok) {
-    console.error("[auth-phone-otp] pulseem rejected:", parsed.reason);
+    console.error("[auth-phone-otp] pulseem ASMX rejected:", parsed.reason);
     throw new Error(parsed.reason);
   }
-  console.log("[auth-phone-otp] pulseem ok, messageRef=", parsed.ref, "to=", to);
+  console.log("[auth-phone-otp] pulseem ASMX ok, messageRef=", parsed.ref, "to=", to);
+}
+
+/**
+ * Main send function — prefers REST API (DirectSmsCredits) when apiKey is available,
+ * falls back to legacy ASMX (userID + password) otherwise.
+ */
+async function sendPulseemSingleSms(opts: {
+  userId: string;
+  password: string;
+  fromNumber: string;
+  toNumber: string;
+  text: string;
+  apiKey?: string;
+}): Promise<void> {
+  if (opts.apiKey) {
+    return sendPulseemViaRestApi({
+      apiKey: opts.apiKey,
+      fromNumber: opts.fromNumber,
+      toNumber: opts.toNumber,
+      text: opts.text,
+    });
+  }
+  return sendPulseemViaAsmx({
+    userId: opts.userId,
+    password: opts.password,
+    fromNumber: opts.fromNumber,
+    toNumber: opts.toNumber,
+    text: opts.text,
+  });
 }
 
 async function findUserByPhoneFlexible(
@@ -355,6 +430,7 @@ serve(async (req) => {
           fromNumber: pulse.fromNumber,
           toNumber: phone.trim(),
           text: msg,
+          apiKey: pulse.apiKey || undefined,
         });
       } catch (e) {
         console.error("[auth-phone-otp] pulseem send", e);
@@ -515,6 +591,7 @@ serve(async (req) => {
           fromNumber: pulse.fromNumber,
           toNumber: phone.trim(),
           text: msg,
+          apiKey: pulse.apiKey || undefined,
         });
       } catch (e) {
         console.error("[auth-phone-otp] pulseem send", e);
@@ -631,24 +708,38 @@ serve(async (req) => {
       });
     }
 
-    // Diagnostic: verify Pulseem credentials and check SMS credits
+    // Diagnostic: check Pulseem credentials and DirectSms credits via REST API
     if (action === "check_pulseem") {
       const pulse = await loadPulseemCredentials(admin, businessId);
       if ("error" in pulse) {
         return json({ ok: false, error: pulse.error }, 400);
       }
-      const url = new URL(`${PULSEEM_ASMX}/GetSMScreditsLeft`);
-      url.searchParams.set("userID", pulse.userId);
-      url.searchParams.set("password", pulse.password);
-      const res = await fetch(url.toString());
-      const xml = await res.text();
-      console.log("[auth-phone-otp] check_pulseem raw:", xml);
+
+      // Check ASMX credits (legacy)
+      const asmxUrl = new URL(`${PULSEEM_ASMX}/GetSMScreditsLeft`);
+      asmxUrl.searchParams.set("userID", pulse.userId);
+      asmxUrl.searchParams.set("password", pulse.password);
+      const asmxRes = await fetch(asmxUrl.toString());
+      const asmxXml = await asmxRes.text();
+
+      // Check REST API credits (if api_key set)
+      let restCredits: unknown = null;
+      if (pulse.apiKey) {
+        const restRes = await fetch("https://api.pulseem.com/api/v1/AccountsApi/GetCreditBalance", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "APIKey": pulse.apiKey },
+          body: JSON.stringify({}),
+        });
+        restCredits = await restRes.text();
+      }
+
       return json({
         ok: true,
         pulseem_userId: pulse.userId,
         pulseem_fromNumber: pulse.fromNumber,
-        http_status: res.status,
-        raw_response: xml,
+        has_api_key: !!pulse.apiKey,
+        asmx_credits_raw: asmxXml,
+        rest_credits_raw: restCredits,
       });
     }
 

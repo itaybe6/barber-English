@@ -1,10 +1,20 @@
 import { supabase } from '@/lib/supabase';
+import { getExpoExtra } from '@/lib/getExtra';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'expo-crypto';
 import { decode } from 'base64-arraybuffer';
 
-const SA_P = process.env.EXPO_PUBLIC_SA_P || '';
-const SA_K = process.env.EXPO_PUBLIC_SA_K || '';
+function superAdminPhoneDigits(s: string): string {
+  return String(s || '').replace(/\D/g, '');
+}
+
+function getSuperAdminEnv(): { phone: string; password: string } {
+  const extra = getExpoExtra();
+  return {
+    phone: String(extra.EXPO_PUBLIC_SA_P ?? '').trim(),
+    password: String(extra.EXPO_PUBLIC_SA_K ?? ''),
+  };
+}
 
 const serviceRoleKey = process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || '';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
@@ -119,7 +129,9 @@ export async function testPulseemConnection(
 
 export const superAdminApi = {
   verifySuperAdmin(phone: string, password: string): boolean {
-    return !!SA_P && !!SA_K && phone === SA_P && password === SA_K;
+    const { phone: saPhone, password: saPass } = getSuperAdminEnv();
+    if (!saPhone || !saPass) return false;
+    return superAdminPhoneDigits(phone) === superAdminPhoneDigits(saPhone) && password === saPass;
   },
 
   async getAllBusinesses(): Promise<BusinessOverview[]> {

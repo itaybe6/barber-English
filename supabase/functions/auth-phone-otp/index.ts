@@ -58,6 +58,80 @@ function randomSixDigitCode(): string {
   return String(n).padStart(6, "0");
 }
 
+/** Israeli mobile 05xxxxxxxx → 9725xxxxxxxx (many SMS gateways require this). */
+function normalizeSmsDestination(raw: string): string {
+  const d = phoneDigits(raw);
+  if (d.startsWith("972")) return d;
+  if (d.startsWith("0") && d.length >= 9 && d.length <= 11) return "972" + d.slice(1);
+  return d;
+}
+
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+/**
+ * Pulseem SOAP response parser.
+ * Success: <SendSingleSMSResult>positive_number</SendSingleSMSResult>
+ * Failure: <SendSingleSMSResult /> (self-closing = invalid sender/credentials)
+ *       or <SendSingleSMSResult>-N</SendSingleSMSResult> (negative = error code)
+ */
+function parsePulseemSendSingleResult(
+  xml: string,
+): { ok: true; ref: string } | { ok: false; reason: string } {
+  // SOAP fault
+  const fault = xml.match(/<faultstring[^>]*>([\s\S]+?)<\/faultstring>/i);
+  if (fault) return { ok: false, reason: fault[1].trim() };
+
+  // Self-closing empty tags = Pulseem rejected (wrong credentials or unregistered sender)
+  // HTTP GET: <string xmlns="http://tempuri.org/" />
+  // SOAP:     <SendSingleSMSResult />
+  if (/(<string\b[^>]*\/>|SendSingleSMSResult\s*\/>)/.test(xml)) {
+    console.error(
+      "[auth-phone-otp] pulseem returned empty result — wrong credentials or unregistered sender. XML:",
+      xml,
+    );
+    return { ok: false, reason: "pulseem_invalid_credentials_or_sender" };
+  }
+
+  // SOAP: <SendSingleSMSResult>value</SendSingleSMSResult>
+  const soapResult = xml.match(
+    /SendSingleSMSResult[^>]*>\s*([\s\S]*?)\s*<\/[^>]*SendSingleSMSResult>/i,
+  );
+  if (soapResult) {
+    const inner = soapResult[1].trim();
+    if (!inner) return { ok: false, reason: "empty_pulseem_result" };
+    if (/^-\d+$/.test(inner)) return { ok: false, reason: `pulseem_error_code:${inner}` };
+    if (/שגיא|לא\s*תקין|חסר|error|fail|invalid/i.test(inner)) return { ok: false, reason: inner };
+    return { ok: true, ref: inner };
+  }
+
+  // HTTP GET: <string xmlns="http://tempuri.org/">value</string>
+  const stringResult = xml.match(/<string(?:\s[^>]*)?>([^<]*)<\/string>/i);
+  if (stringResult) {
+    const inner = stringResult[1].trim();
+    if (!inner) return { ok: false, reason: "empty_pulseem_result" };
+    if (/^-\d+$/.test(inner)) return { ok: false, reason: `pulseem_error_code:${inner}` };
+    if (/שגיא|לא\s*תקין|חסר|error|fail|invalid/i.test(inner)) return { ok: false, reason: inner };
+    return { ok: true, ref: inner };
+  }
+
+  console.error("[auth-phone-otp] unparseable pulseem response. Full XML:", xml);
+  return {
+    ok: false,
+    reason: `unparseable_pulseem_xml:${xml.slice(0, 400).replace(/\s+/g, " ")}`,
+  };
+}
+
+/**
+ * Sends via HTTP GET to Pulseem SendSingleSMS.
+ * Returns a simple <string> response with message ID (positive) or error code (negative).
+ */
 async function sendPulseemSingleSms(opts: {
   userId: string;
   password: string;
@@ -65,24 +139,33 @@ async function sendPulseemSingleSms(opts: {
   toNumber: string;
   text: string;
 }): Promise<void> {
+  const to = normalizeSmsDestination(opts.toNumber);
   const ref = crypto.randomUUID().slice(0, 12);
+
   const url = new URL(`${PULSEEM_ASMX}/SendSingleSMS`);
   url.searchParams.set("userID", opts.userId);
   url.searchParams.set("password", opts.password);
   url.searchParams.set("fromNumber", opts.fromNumber);
-  url.searchParams.set("toNumber", opts.toNumber);
+  url.searchParams.set("toNumber", to);
   url.searchParams.set("reference", ref);
   url.searchParams.set("text", opts.text);
   url.searchParams.set("delayDeliveryMinutes", "0");
+
+  console.log("[auth-phone-otp] sending to Pulseem, to=", to, "from=", opts.fromNumber, "userID=", opts.userId);
+
   const res = await fetch(url.toString());
   const xml = await res.text();
+  console.log("[auth-phone-otp] pulseem response status=", res.status, "body=", xml);
+
   if (!res.ok) {
-    throw new Error(`Pulseem HTTP ${res.status}`);
+    throw new Error(`Pulseem HTTP ${res.status}: ${xml.slice(0, 200)}`);
   }
-  const fault = xml.match(/<faultstring[^>]*>([^<]+)/i);
-  if (fault) {
-    throw new Error(fault[1].trim());
+  const parsed = parsePulseemSendSingleResult(xml);
+  if (!parsed.ok) {
+    console.error("[auth-phone-otp] pulseem rejected:", parsed.reason);
+    throw new Error(parsed.reason);
   }
+  console.log("[auth-phone-otp] pulseem ok, messageRef=", parsed.ref, "to=", to);
 }
 
 async function findUserByPhoneFlexible(
@@ -545,6 +628,27 @@ serve(async (req) => {
           client_approved: false,
           block: false,
         },
+      });
+    }
+
+    // Diagnostic: verify Pulseem credentials and check SMS credits
+    if (action === "check_pulseem") {
+      const pulse = await loadPulseemCredentials(admin, businessId);
+      if ("error" in pulse) {
+        return json({ ok: false, error: pulse.error }, 400);
+      }
+      const url = new URL(`${PULSEEM_ASMX}/GetSMScreditsLeft`);
+      url.searchParams.set("userID", pulse.userId);
+      url.searchParams.set("password", pulse.password);
+      const res = await fetch(url.toString());
+      const xml = await res.text();
+      console.log("[auth-phone-otp] check_pulseem raw:", xml);
+      return json({
+        ok: true,
+        pulseem_userId: pulse.userId,
+        pulseem_fromNumber: pulse.fromNumber,
+        http_status: res.status,
+        raw_response: xml,
       });
     }
 

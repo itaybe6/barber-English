@@ -77,7 +77,10 @@ appConfig.expo.extra = {
     process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || appConfig.expo.extra?.EXPO_PUBLIC_SUPABASE_ANON_KEY,
   EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY:
     process.env.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY || process.env.GOOGLE_STATIC_MAPS_KEY,
-  EXPO_PUBLIC_GOOGLE_PLACES_KEY: process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY
+  EXPO_PUBLIC_GOOGLE_PLACES_KEY: process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY,
+  /** Super Admin login (מסך התחברות → «כניסת מנהל / סיסמה») */
+  EXPO_PUBLIC_SA_P: process.env.EXPO_PUBLIC_SA_P || '',
+  EXPO_PUBLIC_SA_K: process.env.EXPO_PUBLIC_SA_K || '',
 };
 
 // -------------------------------------------------------------

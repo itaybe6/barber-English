@@ -171,6 +171,25 @@ async function sendPulseemViaRestApi(opts: {
   if (!res.ok) {
     throw new Error(`Pulseem REST ${res.status}: ${responseText.slice(0, 300)}`);
   }
+
+  const trimmed = responseText.trim();
+  if (trimmed.startsWith("{")) {
+    try {
+      const payload = JSON.parse(trimmed) as Record<string, unknown>;
+      const st = String(payload.status ?? payload.Status ?? "").toLowerCase();
+      const errMsg = String(payload.error ?? payload.Error ?? "").trim();
+      if (st === "error") {
+        throw new Error(errMsg || "pulseem_rest_error");
+      }
+    } catch (e) {
+      if (e instanceof SyntaxError) {
+        // non-JSON or truncated body — treat as ok if HTTP was 2xx
+      } else {
+        throw e;
+      }
+    }
+  }
+
   console.log("[auth-phone-otp] pulseem REST ok, to=", to);
 }
 

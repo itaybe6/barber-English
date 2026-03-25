@@ -519,7 +519,8 @@ export const superAdminApi = {
       const mainPulseemApiKey = getPulseemMainApiKey();
       console.log('[createBusiness] pulseemMainApiKey length=', mainPulseemApiKey.length, 'empty?', !mainPulseemApiKey);
       let pulseApiKey = params.pulseemApiKey?.trim() || '';
-      let pulseFrom = params.pulseemFromNumber?.trim() || clientName;
+      // Never default From to clientName — Pulseem often allows only numeric senders for new sub-accounts.
+      let pulseFrom = params.pulseemFromNumber?.trim() || '';
       let pulseWsUser = params.pulseemWsUserId?.trim() || '';
       let pulseWsPass = params.pulseemWsPassword?.trim() || '';
       let pulseemCreated = false;

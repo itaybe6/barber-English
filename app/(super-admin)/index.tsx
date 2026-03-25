@@ -88,6 +88,7 @@ export default function SuperAdminDashboard() {
   const [deleteConfirmBiz, setDeleteConfirmBiz] = useState<BusinessOverview | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [feedbackDialog, setFeedbackDialog] = useState<{ title: string; message: string } | null>(null);
+  const [logoutConfirmVisible, setLogoutConfirmVisible] = useState(false);
 
   const buildDeleteSuccessMessage = (item: BusinessOverview) => {
     const folder = item.branding_client_name?.trim();
@@ -231,17 +232,13 @@ export default function SuperAdminDashboard() {
   };
 
   const handleLogout = () => {
-    Alert.alert('התנתקות', 'בטוח שברצונך להתנתק?', [
-      { text: 'ביטול', style: 'cancel' },
-      {
-        text: 'התנתק',
-        style: 'destructive',
-        onPress: () => {
-          logout();
-          router.replace('/login');
-        },
-      },
-    ]);
+    setLogoutConfirmVisible(true);
+  };
+
+  const runConfirmedLogout = () => {
+    setLogoutConfirmVisible(false);
+    logout();
+    router.replace('/login');
   };
 
   // ─── Image Picker Tile ───
@@ -497,10 +494,13 @@ export default function SuperAdminDashboard() {
               textAlign="right"
             />
 
-            <Text style={styles.fieldLabel}>שם שולח SMS — From (אופציונלי)</Text>
+            <Text style={styles.fieldLabel}>מספר שולח SMS — From (מומלץ)</Text>
+            <Text style={styles.brandHint}>
+              לרוב חובה מספר שולח מאושר בפולסים (ללא אותיות באנגלית). אם ריק — תגדיר אחר כך ב«פולסים SMS» או ב-Supabase.
+            </Text>
             <TextInput
               style={styles.input}
-              placeholder="ריק = שם האפליקציה"
+              placeholder="למשל: 0501234567 או מספר וירטואלי מפולסים"
               placeholderTextColor={TEXT_MUTED}
               value={newPulseemFromNumber}
               onChangeText={setNewPulseemFromNumber}
@@ -551,10 +551,10 @@ export default function SuperAdminDashboard() {
               secureTextEntry
               textAlign="right"
             />
-            <Text style={styles.fieldLabel}>שם שולח SMS — From</Text>
+            <Text style={styles.fieldLabel}>מספר / שם שולח SMS — From</Text>
             <TextInput
               style={styles.input}
-              placeholder="כפי שמוגדר אצל פולסים (לרוב באנגלית/מספר)"
+              placeholder="מספר מאושר בפולסים (לעיתים שם באנגלית רק אחרי אימות אצלם)"
               placeholderTextColor={TEXT_MUTED}
               value={newPulseemFromNumber}
               onChangeText={setNewPulseemFromNumber}
@@ -718,6 +718,24 @@ export default function SuperAdminDashboard() {
               </View>
             </View>
           ) : null}
+        </View>
+      </Modal>
+
+      <Modal visible={logoutConfirmVisible} transparent animationType="fade" onRequestClose={() => setLogoutConfirmVisible(false)}>
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>התנתקות</Text>
+            <Text style={styles.confirmMessage}>בטוח שברצונך להתנתק?</Text>
+            <View style={styles.confirmButtonsRow}>
+              <TouchableOpacity style={styles.confirmButton} onPress={() => setLogoutConfirmVisible(false)} activeOpacity={0.8}>
+                <Text style={styles.confirmButtonDefaultText}>ביטול</Text>
+              </TouchableOpacity>
+              <View style={styles.confirmButtonDivider} />
+              <TouchableOpacity style={styles.confirmButton} onPress={runConfirmedLogout} activeOpacity={0.8}>
+                <Text style={styles.confirmButtonDestructiveText}>התנתק</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
 

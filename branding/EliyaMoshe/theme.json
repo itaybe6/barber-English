@@ -1,0 +1,27 @@
+{
+  "colors": {
+    "primary": "#000000",
+    "secondary": "#000000CC",
+    "accent": "#FF3B30",
+    "background": "#FFFFFF",
+    "surface": "#F2F2F7",
+    "text": "#1C1C1E",
+    "textSecondary": "#8E8E93",
+    "border": "#E5E5EA",
+    "success": "#34C759",
+    "warning": "#FF9500",
+    "error": "#FF3B30",
+    "info": "#007AFF"
+  },
+  "branding": {
+    "logo": "./branding/EliyaMoshe/logo.png",
+    "logoWhite": "./branding/EliyaMoshe/logo-white.png",
+    "companyName": "EliyaMoshe",
+    "website": "https://eliyamoshe.com",
+    "supportEmail": "support@eliyamoshe.com"
+  },
+  "fonts": {
+    "primary": "System",
+    "secondary": "System"
+  }
+}

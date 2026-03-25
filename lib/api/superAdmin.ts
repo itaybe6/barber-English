@@ -16,6 +16,15 @@ function getSuperAdminEnv(): { phone: string; password: string } {
   };
 }
 
+/** מפתח Pulseem הראשי — מ-app.config extra (מפוענח מ-PULSEEM_MAIN_API_KEY_B64) */
+function getPulseemMainApiKey(): string {
+  const extra = getExpoExtra();
+  const raw = String(extra.PULSEEM_MAIN_API_KEY ?? '')
+    .replace(/^\uFEFF/, '')
+    .trim();
+  return raw;
+}
+
 const serviceRoleKey = process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || '';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const adminSupabase = serviceRoleKey && supabaseUrl
@@ -106,32 +115,44 @@ export interface PulseemSubAccountResult {
 
 /**
  * Creates a Pulseem sub-account with DirectSmsCredits via the REST API.
- * Requires the main account's API key (EXPO_PUBLIC_PULSEEM_MAIN_API_KEY).
+ * Requires the main account's API key (PULSEEM_MAIN_API_KEY in .env → app.config extra).
  */
 export async function createPulseemSubAccount(params: {
   mainApiKey: string;
   subAccountName: string;
+  /** אימייל לחשבון (Pulseem דורש בשדה AccountEmail; עד 50 תווים) */
+  accountEmail: string;
   loginUserName: string;
   loginPassword: string;
   directSmsCredits?: number;
 }): Promise<PulseemSubAccountResult | { error: string }> {
   const credits = params.directSmsCredits ?? 100;
+  const accountEmail = params.accountEmail.trim().slice(0, 50);
+  const mainApiKey = (params.mainApiKey.trim() || getPulseemMainApiKey()).replace(/^\uFEFF/, '').trim();
+  console.log('[createPulseemSubAccount] key length=', mainApiKey.length, 'first3=', mainApiKey.slice(0, 3));
+  if (!mainApiKey) {
+    return { error: 'חסר מפתח Pulseem ראשי (PULSEEM_MAIN_API_KEY_B64 ב-.env)' };
+  }
   try {
-    const res = await fetch(`${PULSEEM_UI_API_BASE}/AccountsApi/AddNewSubaccountAndDirectAcount`, {
+    const payload = {
+      SubAccountName: params.subAccountName.slice(0, 50),
+      AccountEmail: accountEmail,
+      LoginUserName: params.loginUserName.slice(0, 50),
+      LoginPassword: params.loginPassword.slice(0, 50),
+      SmsCredits: 0,
+      EmailCredits: 0,
+      DirectEmailCredits: 0,
+      DirectSmsCredits: credits,
+    };
+    const url = `${PULSEEM_REST_BASE}/AccountsApi/AddNewSubaccountAndDirectAcount`;
+    const res = await fetch(url, {
       method: 'POST',
       headers: {
+        APIKEY: mainApiKey,
         'Content-Type': 'application/json',
-        'APIKey': params.mainApiKey,
+        Accept: 'application/json',
       },
-      body: JSON.stringify({
-        subAccountName: params.subAccountName,
-        loginUserName: params.loginUserName,
-        loginPassword: params.loginPassword,
-        smsCredits: 0,
-        emailCredits: 0,
-        directEmailCredits: 0,
-        directSmsCredits: credits,
-      }),
+      body: JSON.stringify(payload),
     });
 
     const text = await res.text();
@@ -145,8 +166,14 @@ export async function createPulseemSubAccount(params: {
     try { json = JSON.parse(text); } catch { /* ignore */ }
 
     const status = json?.status ?? json?.Status ?? '';
+    const errMsg = json?.errorMessage ?? json?.ErrorMessage ?? null;
     if (status && String(status).toLowerCase() !== 'success') {
-      return { error: `Pulseem error: ${status}` };
+      return {
+        error: `Pulseem: ${status}${errMsg ? ` — ${errMsg}` : ''}`,
+      };
+    }
+    if (errMsg) {
+      return { error: String(errMsg) };
     }
 
     const directApiKey: string =
@@ -156,11 +183,15 @@ export async function createPulseemSubAccount(params: {
       json?.ApiKey ??
       params.loginPassword;
 
+    const ctr = json?.creditTransferModelResult ?? json?.CreditTransferModelResult;
+    const ds = ctr?.directSms ?? ctr?.DirectSms;
+    const transferredCredits = ds?.credits ?? ds?.Credits;
+
     return {
       loginUserName: params.loginUserName,
       loginPassword: params.loginPassword,
       directApiKey,
-      directSmsCredits: json?.creditTransferModelResult?.directSms?.credits ?? credits,
+      directSmsCredits: transferredCredits ?? credits,
     };
   } catch (e: any) {
     return { error: e?.message || 'createPulseemSubAccount failed' };
@@ -485,8 +516,8 @@ export const superAdminApi = {
       const slug = clientName.toLowerCase();
       const color = params.primaryColor || '#000000';
 
-      // Try to auto-create a Pulseem sub-account if the main API key is configured
-      const mainPulseemApiKey = (process.env.EXPO_PUBLIC_PULSEEM_MAIN_API_KEY || '').trim();
+      const mainPulseemApiKey = getPulseemMainApiKey();
+      console.log('[createBusiness] pulseemMainApiKey length=', mainPulseemApiKey.length, 'empty?', !mainPulseemApiKey);
       let pulseApiKey = params.pulseemApiKey?.trim() || '';
       let pulseFrom = params.pulseemFromNumber?.trim() || clientName;
       let pulseWsUser = params.pulseemWsUserId?.trim() || '';
@@ -498,9 +529,11 @@ export const superAdminApi = {
         const subUser = `${slug}sms`.slice(0, 20);
         const subPass = params.pulseemSubPassword?.trim() ||
           Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6).toUpperCase();
+        const accountEmail = `${slug}-pulseem@noreply.local`.slice(0, 50);
         const subResult = await createPulseemSubAccount({
           mainApiKey: mainPulseemApiKey,
-          subAccountName: params.businessName,
+          subAccountName: params.businessName.slice(0, 50),
+          accountEmail,
           loginUserName: subUser,
           loginPassword: subPass,
           directSmsCredits: 100,

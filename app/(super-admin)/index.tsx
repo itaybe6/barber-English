@@ -153,7 +153,7 @@ export default function SuperAdminDashboard() {
 
     if (result) {
       const pulseemLine = result.pulseemCreated
-        ? '\n\n✅ חשבון Pulseem נוצר אוטומטית (100 DirectSmsCredits)'
+        ? '\n\n✅ חשבון Pulseem נוצר אוטומטית (20 DirectSmsCredits)'
         : result.pulseemError
         ? `\n\n⚠️ Pulseem לא הוגדר: ${result.pulseemError}`
         : !hasPulseemMainKey
@@ -436,7 +436,7 @@ export default function SuperAdminDashboard() {
             <View style={styles.pulseemAutoBox}>
               <Ionicons name="checkmark-circle" size={16} color={GREEN} />
               <Text style={[styles.brandHint, { color: GREEN, marginBottom: 0, flex: 1 }]}>
-                {' '}חשבון Pulseem ייווצר אוטומטית עם 100 DirectSmsCredits
+                {' '}חשבון Pulseem ייווצר אוטומטית עם 20 DirectSmsCredits
               </Text>
             </View>
 

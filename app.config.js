@@ -32,7 +32,7 @@ try {
   }
 } catch {}
 
-const CLIENT = process.env.CLIENT || clientFromProfile || 'KetyCooper';
+const CLIENT = process.env.CLIENT || clientFromProfile || 'EliyaMoshe';
 const clientDir = path.join(__dirname, 'branding', CLIENT);
 
 // -------------------------------------------------------------

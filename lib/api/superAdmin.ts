@@ -179,7 +179,7 @@ export async function createPulseemSubAccount(params: {
   loginPassword: string;
   directSmsCredits?: number;
 }): Promise<PulseemSubAccountResult | { error: string }> {
-  const credits = params.directSmsCredits ?? 100;
+  const credits = params.directSmsCredits ?? 20;
   const accountEmail = params.accountEmail.trim().slice(0, 50);
   const mainApiKey = (params.mainApiKey.trim() || getPulseemMainApiKey()).replace(/^\uFEFF/, '').trim();
   console.log('[createPulseemSubAccount] key length=', mainApiKey.length, 'first3=', mainApiKey.slice(0, 3));
@@ -590,7 +590,7 @@ export const superAdminApi = {
           accountEmail,
           loginUserName: subUser,
           loginPassword: subPass,
-          directSmsCredits: 100,
+          directSmsCredits: 20,
         });
 
         if ('error' in subResult) {

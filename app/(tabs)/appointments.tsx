@@ -463,6 +463,9 @@ export default function AdminAppointmentsScreen() {
     [i18n]
   );
   const isRtl = I18nManager.isRTL;
+  /** Week grid uses `direction: 'ltr'` — column order ignores app RTL unless we reverse here. Also `app/index.tsx` may force LTR, so use language too for Hebrew salons. */
+  const weekGridReverseDays =
+    I18nManager.isRTL || (typeof i18n.language === 'string' && i18n.language.startsWith('he'));
   const user = useAuthStore((state) => state.user);
   const { colors: businessColors } = useBusinessColors();
   const [calendarView, setCalendarView] = useState<CalendarViewMode>('week');
@@ -770,18 +773,17 @@ export default function AdminAppointmentsScreen() {
     if (calendarView === 'week') {
       const start = _getStartOfWeek(selectedDate);
       const days = _buildDays(start, 7);
-      // RTL (שעות מימין): שבת בשמאל הגריד, א׳ בימין ליד עמודת השעות — רק אז צריך reverse.
-      // LTR: שעות משמאל, א׳ צמוד לשעות משמאל → סדר כרונולוגי רגיל.
-      return isRtl ? [...days].reverse() : days;
+      // Hebrew / RTL week in LTR grid: שבת משמאל, א׳ מימין ליד עמודת השעות (זרימת שבוע מימין לשמאל).
+      return weekGridReverseDays ? [...days].reverse() : days;
     }
     if (calendarView === 'threeDay') {
       const d0 = new Date(selectedDate);
       d0.setHours(0, 0, 0, 0);
       const days = _buildDays(d0, 3);
-      return isRtl ? [...days].reverse() : days;
+      return weekGridReverseDays ? [...days].reverse() : days;
     }
     return [];
-  }, [selectedDateStr, calendarView, isRtl]);
+  }, [selectedDateStr, calendarView, weekGridReverseDays]);
 
   const gridDims = useMemo(() => {
     const sw = Dimensions.get('window').width;
@@ -843,12 +845,12 @@ export default function AdminAppointmentsScreen() {
     const sw = Dimensions.get('window').width;
     const totalWidth = gridDays.length * gridDims.daySize;
     const visibleWidth = sw - gridDims.timeCol;
-    const targetOffset = isRtl ? Math.max(0, totalWidth - visibleWidth) : 0;
+    const targetOffset = weekGridReverseDays ? Math.max(0, totalWidth - visibleWidth) : 0;
     scrollX.value = targetOffset;
     requestAnimationFrame(() => {
       flashListRef.current?.scrollToOffset({ offset: targetOffset, animated: false });
     });
-  }, [calendarView, gridDays.length, gridDims.daySize, gridDims.timeCol, isRtl]);
+  }, [calendarView, gridDays.length, gridDims.daySize, gridDims.timeCol, weekGridReverseDays]);
 
   // RTL: גלול לסוף כדי שא׳ יופיע ליד עמודת השעות; LTR: התחלה (א׳ משמאל). ב-web לפעמים צריך אחרי layout.
   useEffect(() => {

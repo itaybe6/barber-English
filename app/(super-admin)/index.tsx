@@ -339,6 +339,10 @@ export default function SuperAdminDashboard() {
           <Text style={[styles.bizChipText, { color: ORANGE }]}>{item.adminCount} מנהלים</Text>
           <Ionicons name="shield-checkmark" size={14} color={ORANGE} />
         </View>
+        <View style={[styles.bizChip, { backgroundColor: 'rgba(253,121,168,0.12)' }]}>
+          <Text style={[styles.bizChipText, { color: PINK }]}>{item.broadcastMessageCount} הודעות שידור</Text>
+          <Ionicons name="megaphone-outline" size={14} color={PINK} />
+        </View>
         {item.phone ? (
           <View style={[styles.bizChip, { backgroundColor: 'rgba(0,184,148,0.1)' }]}>
             <Text style={[styles.bizChipText, { color: GREEN }]}>{item.phone}</Text>

@@ -61,6 +61,15 @@ function randomSixDigitCode(): string {
   return String(n).padStart(6, "0");
 }
 
+/** 32 random bytes as hex (64 chars) for post-OTP profile completion token */
+function randomProfileSetupToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 /** Israeli mobile 05xxxxxxxx → 9725xxxxxxxx (many SMS gateways require this). */
 function normalizeSmsDestination(raw: string): string {
   const d = phoneDigits(raw);
@@ -377,19 +386,100 @@ serve(async (req) => {
 
   const action = body.action as string;
   const businessId = String(body.business_id || "").trim();
-  const phone = String(body.phone || "").trim();
 
-  if (!businessId || !phone) {
+  if (!businessId) {
     return json({ ok: false, error: "missing_business_or_phone" }, 400);
   }
 
   const admin = createClient(supabaseUrl, serviceRoleKey);
-  const digits = phoneDigits(phone);
-  if (digits.length < 9) {
-    return json({ ok: false, error: "invalid_phone" }, 400);
-  }
 
   try {
+    if (action === "complete_register_profile") {
+      const profileSetupToken = String(body.profile_setup_token || "").trim();
+      const name = String(body.name || "").trim();
+      const birthRaw = String(body.birth_date || "").trim();
+      const imageUrl = String(body.image_url || "").trim();
+
+      if (!profileSetupToken || profileSetupToken.length < 32) {
+        return json({ ok: false, error: "invalid_token" }, 400);
+      }
+      if (!name) {
+        return json({ ok: false, error: "missing_name" }, 400);
+      }
+
+      const tokenHash = await sha256Hex(profileSetupToken);
+      const { data: tokRows, error: tokSelErr } = await admin
+        .from("auth_register_profile_tokens")
+        .select("id, user_id, expires_at, used_at")
+        .eq("business_id", businessId)
+        .eq("token_hash", tokenHash)
+        .limit(1);
+
+      if (tokSelErr || !tokRows?.[0]) {
+        return json({ ok: false, error: "invalid_token" }, 400);
+      }
+      const tok = tokRows[0];
+      if (tok.used_at) {
+        return json({ ok: false, error: "token_used" }, 400);
+      }
+      if (new Date(tok.expires_at).getTime() <= Date.now()) {
+        return json({ ok: false, error: "token_expired" }, 400);
+      }
+
+      let birthDate: string | null = null;
+      if (birthRaw) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(birthRaw)) {
+          return json({ ok: false, error: "invalid_birth_date" }, 400);
+        }
+        birthDate = birthRaw;
+      }
+
+      const updatePayload: Record<string, unknown> = { name };
+      if (birthDate) updatePayload.birth_date = birthDate;
+      else updatePayload.birth_date = null;
+      if (imageUrl) {
+        updatePayload.image_url = imageUrl;
+      }
+
+      const { data: updatedUser, error: updErr } = await admin
+        .from("users")
+        .update(updatePayload)
+        .eq("id", tok.user_id)
+        .eq("business_id", businessId)
+        .select("id, name, phone")
+        .maybeSingle();
+
+      if (updErr || !updatedUser) {
+        console.error("[auth-phone-otp] complete profile update", updErr);
+        return json({ ok: false, error: "update_failed" }, 500);
+      }
+
+      await admin
+        .from("auth_register_profile_tokens")
+        .update({ used_at: new Date().toISOString() })
+        .eq("id", tok.id);
+
+      await notifyAdminsNewClient(
+        admin,
+        businessId,
+        updatedUser.name || name,
+        String(updatedUser.phone || "").trim(),
+      );
+
+      return json({ ok: true });
+    }
+
+    const phone = String(body.phone || "").trim();
+
+    if (!phone) {
+      return json({ ok: false, error: "missing_business_or_phone" }, 400);
+    }
+
+    const digits = phoneDigits(phone);
+    if (digits.length < 9) {
+      return json({ ok: false, error: "invalid_phone" }, 400);
+    }
+
     if (action === "send_login_otp") {
       const user = await findUserByPhoneFlexible(admin, businessId, phone);
       if (!user) {
@@ -650,12 +740,8 @@ serve(async (req) => {
 
     if (action === "verify_register_otp") {
       const code = String(body.code || "").replace(/\D/g, "");
-      const name = String(body.name || "").trim();
       if (code.length !== 6) {
         return json({ ok: false, error: "invalid_code" }, 400);
-      }
-      if (!name) {
-        return json({ ok: false, error: "missing_name" }, 400);
       }
 
       const { data: rows, error: selErr } = await admin
@@ -703,10 +789,11 @@ serve(async (req) => {
       }
 
       const randomSecret = `otp_only_${crypto.randomUUID()}`;
+      const placeholderName = "משתמש חדש";
       const { data: inserted, error: insUserErr } = await admin
         .from("users")
         .insert({
-          name,
+          name: placeholderName,
           user_type: "client",
           phone: phone.trim(),
           email: null,
@@ -722,15 +809,28 @@ serve(async (req) => {
         return json({ ok: false, error: "create_user_failed" }, 500);
       }
 
-      await notifyAdminsNewClient(
-        admin,
-        businessId,
-        name,
-        phone.trim(),
-      );
+      const profileSetupToken = randomProfileSetupToken();
+      const tokenHash = await sha256Hex(profileSetupToken);
+      const profileTokenExpires = new Date(
+        Date.now() + 60 * 60 * 1000,
+      ).toISOString();
+      const { error: tokErr } = await admin
+        .from("auth_register_profile_tokens")
+        .insert({
+          business_id: businessId,
+          user_id: inserted.id,
+          token_hash: tokenHash,
+          expires_at: profileTokenExpires,
+        });
+      if (tokErr) {
+        console.error("[auth-phone-otp] profile token insert", tokErr);
+        await admin.from("users").delete().eq("id", inserted.id);
+        return json({ ok: false, error: "db_error" }, 500);
+      }
 
       return json({
         ok: true,
+        profile_setup_token: profileSetupToken,
         user: {
           id: inserted.id,
           name: inserted.name,

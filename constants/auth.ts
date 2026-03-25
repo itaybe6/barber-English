@@ -14,6 +14,8 @@ export interface User {
   phone: string;
   type: UserType;
   name: string;
+  /** YYYY-MM-DD when set */
+  birth_date?: string | null;
   email?: string | null;
   image_url?: string | null;
   // Optional: for compatibility with records coming from the DB which use `user_type`

@@ -1273,8 +1273,8 @@ export default function BookAppointment() {
     setIsBooking(true);
     try {
       if (existingAppointmentToCancel) {
-        const cancelSuccess = await bookingApi.cancelTimeSlot(existingAppointmentToCancel.id);
-        if (!cancelSuccess) {
+        const cancelResult = await bookingApi.cancelTimeSlot(existingAppointmentToCancel.id);
+        if (!cancelResult.success) {
           Alert.alert(t('error.generic', 'שגיאה'), t('booking.cancelExistingFailed', 'שגיאה בביטול התור הקיים. אנא נסה שוב.'));
           return;
         }
@@ -1283,6 +1283,7 @@ export default function BookAppointment() {
       // Book each service consecutively (first starts at selectedTime, each subsequent follows)
       let currentStartMin = _toMinutes(selectedTime);
       let allBooked = true;
+      let firstBookedAppointmentId: string | undefined;
 
       for (const svc of selectedServices) {
         const svcTime = _toHHMM(currentStartMin);
@@ -1295,7 +1296,7 @@ export default function BookAppointment() {
                   (selectedBarber?.id ? slot.barber_id === selectedBarber.id : !slot.barber_id)
         );
 
-        const success = slotForSvc
+        const booked = slotForSvc
           ? await bookingApi.bookTimeSlot(
               slotForSvc.id,
               user?.name || 'לקוח',
@@ -1318,9 +1319,12 @@ export default function BookAppointment() {
               user?.id
             );
 
-        if (!success) {
+        if (!booked) {
           allBooked = false;
           break;
+        }
+        if (!firstBookedAppointmentId && booked.id) {
+          firstBookedAppointmentId = booked.id;
         }
         currentStartMin += svcDuration;
       }
@@ -1352,8 +1356,16 @@ export default function BookAppointment() {
 
         try {
           if (user?.phone && user.phone.trim() !== '') {
-            const notifTitle = 'התור שלך נקבע';
-            const notifContent = `התור שלך ל"${allNames}" נקבע ליום ${days[selectedDay].dayName} ${days[selectedDay].date} בשעה ${selectedTime}`;
+            const endSuffix =
+              selectedServices.length > 1 ? ` – ${_toHHMM(_toMinutes(selectedTime) + totalDuration)}` : '';
+            const notifTitle = t('booking.successNotificationTitle', 'נקבע לך תור בהצלחה');
+            const notifContent = t('booking.successNotificationBody', '{{service}} · יום {{weekday}} {{dayOfMonth}} · {{time}}{{endSuffix}}', {
+              service: allNames,
+              weekday: days[selectedDay].dayName,
+              dayOfMonth: String(days[selectedDay].date),
+              time: selectedTime,
+              endSuffix,
+            });
             await notificationsApi.createNotification({
               title: notifTitle,
               content: notifContent,
@@ -1361,6 +1373,8 @@ export default function BookAppointment() {
               recipient_name: user?.name || 'לקוח',
               recipient_phone: user.phone.trim(),
               business_id: getBusinessId(),
+              ...(firstBookedAppointmentId ? { appointment_id: firstBookedAppointmentId } : {}),
+              ...(user?.id ? { user_id: user.id } : {}),
             });
           }
         } catch {}

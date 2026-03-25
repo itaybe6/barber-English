@@ -17,6 +17,7 @@ type FnResponse = {
   error?: string;
   detail?: string;
   user?: OtpAuthUserPayload;
+  profile_setup_token?: string;
 };
 
 function parseInvokePayload(data: unknown): FnResponse {
@@ -98,19 +99,47 @@ export const authPhoneOtpApi = {
   async verifyRegisterOtp(params: {
     phone: string;
     code: string;
-    name: string;
-  }): Promise<{ ok: boolean; user?: OtpAuthUserPayload; error?: string }> {
+  }): Promise<{
+    ok: boolean;
+    user?: OtpAuthUserPayload;
+    profileSetupToken?: string;
+    error?: string;
+  }> {
     const businessId = getBusinessId();
     const p = await invokeAuthPhoneOtp({
       action: 'verify_register_otp',
       business_id: businessId,
       phone: params.phone.trim(),
       code: params.code,
-      name: params.name.trim(),
     });
-    if (p.ok !== true || !p.user) {
+    if (p.ok !== true || !p.user || !p.profile_setup_token) {
       return { ok: false, error: p.error || 'verify_failed' };
     }
-    return { ok: true, user: p.user };
+    return {
+      ok: true,
+      user: p.user,
+      profileSetupToken: p.profile_setup_token,
+    };
+  },
+
+  async completeRegisterProfile(params: {
+    profileSetupToken: string;
+    name: string;
+    birthDate?: string | null;
+    imageUrl?: string | null;
+  }): Promise<{ ok: boolean; error?: string }> {
+    const businessId = getBusinessId();
+    const p = await invokeAuthPhoneOtp({
+      action: 'complete_register_profile',
+      business_id: businessId,
+      profile_setup_token: params.profileSetupToken.trim(),
+      name: params.name.trim(),
+      birth_date: params.birthDate?.trim() || '',
+      image_url: params.imageUrl?.trim() || '',
+    });
+    if (p.ok !== true) {
+      return { ok: false, error: p.error || 'complete_failed' };
+    }
+    return { ok: true };
   },
 };

@@ -75,6 +75,8 @@ export interface BusinessOverview {
   created_at: string;
   clientCount: number;
   adminCount: number;
+  /** סה״כ רשומות בטבלת messages (הודעות שידור לדף הבית), לא יתרת SMS */
+  broadcastMessageCount: number;
   adminPhone: string | null;
   adminPassword: string | null;
   branding_client_name: string | null;
@@ -352,6 +354,30 @@ export const superAdminApi = {
         console.error('Error fetching user counts:', usersError);
       }
 
+      const messageCountByBusiness: Record<string, number> = {};
+      for (const id of businessIds) messageCountByBusiness[id] = 0;
+
+      const PAGE = 1000;
+      for (let offset = 0; offset < 500_000; offset += PAGE) {
+        const { data: batch, error: messagesError } = await supabase
+          .from('messages')
+          .select('business_id')
+          .in('business_id', businessIds)
+          .range(offset, offset + PAGE - 1);
+        if (messagesError) {
+          console.error('Error fetching message counts:', messagesError);
+          break;
+        }
+        if (!batch?.length) break;
+        for (const row of batch) {
+          const bid = (row as { business_id?: string }).business_id;
+          if (bid && messageCountByBusiness[bid] !== undefined) {
+            messageCountByBusiness[bid]++;
+          }
+        }
+        if (batch.length < PAGE) break;
+      }
+
       const countMap: Record<string, { clients: number; admins: number; adminPhone: string | null; adminPassword: string | null }> = {};
       for (const u of users || []) {
         if (!countMap[u.business_id]) countMap[u.business_id] = { clients: 0, admins: 0, adminPhone: null, adminPassword: null };
@@ -381,6 +407,7 @@ export const superAdminApi = {
         pulseemHasApiKey: !!p.pulseem_has_api_key,
         clientCount: countMap[p.id]?.clients || 0,
         adminCount: countMap[p.id]?.admins || 0,
+        broadcastMessageCount: messageCountByBusiness[p.id] ?? 0,
         adminPhone: countMap[p.id]?.adminPhone || null,
         adminPassword: countMap[p.id]?.adminPassword || null,
       }));

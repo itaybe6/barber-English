@@ -284,6 +284,8 @@ export interface BusinessProfile {
   pulseem_password?: string | null;
   pulseem_from_number?: string | null;
   pulseem_has_password?: boolean;
+  pulseem_api_key?: string | null;
+  pulseem_has_api_key?: boolean;
   created_at: string;
   updated_at: string;
 }

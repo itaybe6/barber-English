@@ -28,6 +28,8 @@ export interface BusinessOverview {
   pulseem_from_number: string | null;
   /** Set from DB column — password itself is never loaded in the businesses list */
   pulseemHasPassword: boolean;
+  /** מפתח API חדש (Pulseem הגדרות API) — רק דגל, לא הערך */
+  pulseemHasApiKey: boolean;
 }
 
 const PULSEEM_ASMX = 'https://www.pulseem.co.il/Pulseem/pulseemsendservices.asmx';
@@ -104,7 +106,7 @@ export const superAdminApi = {
       const { data: profiles, error } = await supabase
         .from('business_profile')
         .select(
-          'id, display_name, address, phone, primary_color, created_at, branding_client_name, pulseem_user_id, pulseem_from_number, pulseem_has_password',
+          'id, display_name, address, phone, primary_color, created_at, branding_client_name, pulseem_user_id, pulseem_from_number, pulseem_has_password, pulseem_has_api_key',
         )
         .order('created_at', { ascending: false });
 
@@ -151,6 +153,7 @@ export const superAdminApi = {
         pulseem_user_id: p.pulseem_user_id ?? null,
         pulseem_from_number: p.pulseem_from_number ?? null,
         pulseemHasPassword: !!p.pulseem_has_password,
+        pulseemHasApiKey: !!p.pulseem_has_api_key,
         clientCount: countMap[p.id]?.clients || 0,
         adminCount: countMap[p.id]?.admins || 0,
         adminPhone: countMap[p.id]?.adminPhone || null,
@@ -276,7 +279,7 @@ export const superAdminApi = {
 
     const { data: row, error: fetchErr } = await supabase
       .from('business_profile')
-      .select('pulseem_password, branding_client_name')
+      .select('pulseem_password, branding_client_name, pulseem_api_key')
       .eq('id', businessId)
       .maybeSingle();
 
@@ -329,11 +332,16 @@ export const superAdminApi = {
       ].join('\n');
     }
 
-    const merged = mergeEnvKeyValues(envText, {
+    const apiKeyStored = ((row as any).pulseem_api_key as string | undefined)?.trim() || '';
+    const mergePairs: Record<string, string> = {
       PULSEEM_USER_ID: uid,
       PULSEEM_PASSWORD: finalPassword,
       PULSEEM_FROM_NUMBER: fromNum,
-    });
+    };
+    if (apiKeyStored) {
+      mergePairs.PULSEEM_API_KEY = apiKeyStored;
+    }
+    const merged = mergeEnvKeyValues(envText, mergePairs);
 
     const uploaded = await this.uploadBrandingFile(clientName, '.env', merged, 'text/plain');
     return { ok: true, envSynced: !!uploaded };
@@ -350,6 +358,10 @@ export const superAdminApi = {
     logoBase64?: string;
     iconBase64?: string;
     splashBase64?: string;
+    /** מפתח API מעמוד «הגדרות API» בפולסים (חשבון משנה) */
+    pulseemApiKey?: string;
+    /** מספר/שם שולח SMS מאושר בפולסים */
+    pulseemFromNumber?: string;
   }): Promise<{ businessId: string; clientName: string } | null> {
     try {
       const businessId = randomUUID();
@@ -360,6 +372,8 @@ export const superAdminApi = {
       }
       const slug = clientName.toLowerCase();
       const color = params.primaryColor || '#000000';
+      const pulseApiKey = params.pulseemApiKey?.trim() || '';
+      const pulseFrom = params.pulseemFromNumber?.trim() || '';
 
       // 1. Create business profile
       const { error: profileError } = await supabase
@@ -376,6 +390,8 @@ export const superAdminApi = {
           booking_open_days_by_user: {},
           min_cancellation_hours: 24,
           booking_open_days: 7,
+          ...(pulseApiKey ? { pulseem_api_key: pulseApiKey, pulseem_has_api_key: true } : {}),
+          ...(pulseFrom ? { pulseem_from_number: pulseFrom } : {}),
         });
 
       if (profileError) {
@@ -415,6 +431,28 @@ export const superAdminApi = {
       if (servicesError) console.error('Error creating default services (non-fatal):', servicesError);
 
       // 4. Generate branding config files & upload everything to storage
+      const envPulseLines: string[] = [
+        '',
+        '# Pulseem — מפתח מ«הגדרות API» (חשבון משנה), ל-Edge / אינטגרציות',
+      ];
+      if (pulseApiKey) {
+        envPulseLines.push(`PULSEEM_API_KEY=${pulseApiKey}`);
+      } else {
+        envPulseLines.push('# PULSEEM_API_KEY=');
+      }
+      if (pulseFrom) {
+        envPulseLines.push(`PULSEEM_FROM_NUMBER=${pulseFrom}`);
+      } else {
+        envPulseLines.push('# PULSEEM_FROM_NUMBER=');
+      }
+      envPulseLines.push(
+        '',
+        '# Pulseem — Web Service ישן (אופציונלי)',
+        '# PULSEEM_USER_ID=',
+        '# PULSEEM_PASSWORD=',
+        '',
+      );
+
       const envContent = [
         `# ${params.businessName} Environment Configuration`,
         `EXPO_PUBLIC_SUPABASE_URL=${process.env.EXPO_PUBLIC_SUPABASE_URL || ''}`,
@@ -422,12 +460,7 @@ export const superAdminApi = {
         `EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY=${process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || ''}`,
         `BUSINESS_ID=${businessId}`,
         `CLIENT_NAME=${clientName}`,
-        '',
-        '# Pulseem SMS (OTP) — set from Super Admin dashboard',
-        '# PULSEEM_USER_ID=',
-        '# PULSEEM_PASSWORD=',
-        '# PULSEEM_FROM_NUMBER=',
-        '',
+        ...envPulseLines,
       ].join('\n');
 
       const appConfigObj = {

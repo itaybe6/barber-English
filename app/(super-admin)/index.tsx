@@ -56,6 +56,8 @@ export default function SuperAdminDashboard() {
   const [logoAsset, setLogoAsset] = useState<{ uri: string; base64: string } | null>(null);
   const [iconAsset, setIconAsset] = useState<{ uri: string; base64: string } | null>(null);
   const [splashAsset, setSplashAsset] = useState<{ uri: string; base64: string } | null>(null);
+  const [newPulseemApiKey, setNewPulseemApiKey] = useState('');
+  const [newPulseemFromNumber, setNewPulseemFromNumber] = useState('');
   const [pulseModalBiz, setPulseModalBiz] = useState<BusinessOverview | null>(null);
 
   const loadBusinesses = useCallback(async () => {
@@ -118,6 +120,8 @@ export default function SuperAdminDashboard() {
       logoBase64: logoAsset?.base64,
       iconBase64: iconAsset?.base64,
       splashBase64: splashAsset?.base64,
+      pulseemApiKey: newPulseemApiKey.trim() || undefined,
+      pulseemFromNumber: newPulseemFromNumber.trim() || undefined,
     });
     setCreating(false);
 
@@ -145,6 +149,8 @@ export default function SuperAdminDashboard() {
     setLogoAsset(null);
     setIconAsset(null);
     setSplashAsset(null);
+    setNewPulseemApiKey('');
+    setNewPulseemFromNumber('');
   };
 
   const handleDelete = (item: BusinessOverview) => {
@@ -305,7 +311,7 @@ export default function SuperAdminDashboard() {
             <Ionicons name="call" size={14} color={GREEN} />
           </View>
         ) : null}
-        {item.pulseem_user_id && item.pulseemHasPassword && item.pulseem_from_number ? (
+        {item.pulseemHasApiKey || (item.pulseem_user_id && item.pulseemHasPassword) ? (
           <View style={[styles.bizChip, { backgroundColor: 'rgba(108,92,231,0.12)' }]}>
             <Text style={[styles.bizChipText, { color: ACCENT }]}>פולסים מוגדר</Text>
             <Ionicons name="chatbubbles" size={14} color={ACCENT} />
@@ -385,6 +391,35 @@ export default function SuperAdminDashboard() {
           <View style={[styles.colorPreview, { backgroundColor: newColor }]} />
           <TextInput style={[styles.input, { flex: 1 }]} placeholder="#000000" placeholderTextColor={TEXT_MUTED} value={newColor} onChangeText={setNewColor} autoCapitalize="none" textAlign="right" />
         </View>
+      </View>
+
+      {/* Pulseem API (optional) */}
+      <View style={styles.formCard}>
+        <Text style={styles.formSectionLabel}>פולסים — מפתח API (אופציונלי)</Text>
+        <Text style={styles.brandHint}>
+          בחר בחשבון המשנה בפולסים → הגדרות API → העתק את מפתח ה-API. יישמר ב-.env ובמסד בעת יצירת האפליקציה.
+        </Text>
+        <Text style={styles.fieldLabel}>מפתח API</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="מהעמוד «הגדרות API» בחשבון המשנה"
+          placeholderTextColor={TEXT_MUTED}
+          value={newPulseemApiKey}
+          onChangeText={setNewPulseemApiKey}
+          autoCapitalize="none"
+          autoCorrect={false}
+          secureTextEntry
+          textAlign="right"
+        />
+        <Text style={styles.fieldLabel}>מספר / שם שולח SMS (From)</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="כפי שמוגדר אצל פולסים לשליחה"
+          placeholderTextColor={TEXT_MUTED}
+          value={newPulseemFromNumber}
+          onChangeText={setNewPulseemFromNumber}
+          textAlign="right"
+        />
       </View>
 
       {/* Admin Details */}

@@ -132,7 +132,7 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
               contentContainerStyle={styles.scrollPad}
             >
               <Text style={styles.hint}>
-                פולסים (Pulseem): מזהה וסיסמה מהממשק שלהם. מספר השולח הוא ה-From המורשה בחשבון.
+                מפתח ה-API החדש (מ«הגדרות API») מוזן ביצירת עסק חדש ונשמר ב-.env. כאן: ממשק ה-Web Service הישן (מזהה משתמש + סיסמה). כפתור «בדיקת חיבור» בודק רק את הישן; אם השתמשת רק במפתח API — התעלם מהבדיקה או השלם כאן פרטי WS אם יש לך.
               </Text>
 
               <Text style={styles.label}>מזהה משתמש (User ID)</Text>

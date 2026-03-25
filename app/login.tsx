@@ -6,12 +6,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ScrollView,
   Image,
   Dimensions,
-  KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import Animated, {
   useAnimatedStyle,
   withTiming,
@@ -434,22 +433,15 @@ export default function LoginScreen() {
 
       {/* ── Content — same pattern as register.tsx for reliable keyboard focus ─ */}
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <KeyboardAvoidingView
-          enabled={Platform.OS !== 'ios'}
-          behavior="height"
+        <KeyboardAwareScreenScroll
           style={styles.keyboardAvoid}
-        >
-        <ScrollView
-          style={styles.scrollFlex}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="always"
           keyboardDismissMode={Platform.OS === 'ios' ? 'none' : 'on-drag'}
           showsVerticalScrollIndicator={false}
-          scrollEnabled={true}
           bounces={false}
           alwaysBounceVertical={false}
           overScrollMode="never"
-          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
           removeClippedSubviews={false}
         >
           {/* Centered login block: logo + card */}
@@ -622,8 +614,7 @@ export default function LoginScreen() {
             </View>
           </View>
           </View>
-        </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardAwareScreenScroll>
       </SafeAreaView>
 
       {/* ── Forgot Password Modal ────────────────────────────────────────── */}
@@ -639,7 +630,11 @@ export default function LoginScreen() {
               style={styles.modalStripe}
             />
 
-            <View style={styles.modalBody}>
+            <KeyboardAwareScreenScroll
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.modalBody}
+            >
               <Text style={[styles.modalTitle, { color: primary }]}>
                 {t('login.reset.title', 'איפוס סיסמה')}
               </Text>
@@ -702,7 +697,7 @@ export default function LoginScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            </KeyboardAwareScreenScroll>
           </View>
         </View>
       )}
@@ -719,9 +714,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   keyboardAvoid: {
-    flex: 1,
-  },
-  scrollFlex: {
     flex: 1,
   },
   scroll: {

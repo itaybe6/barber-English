@@ -783,6 +783,14 @@ export default function ClientHomeScreen() {
           
           {/* Header Overlay */}
           <SafeAreaView edges={["top"]} style={styles.overlayHeader} pointerEvents="box-none">
+            <LinearGradient
+              colors={['rgba(0,0,0,0.62)', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              locations={[0, 0.6, 1]}
+              style={styles.overlayHeaderGradient}
+              pointerEvents="none"
+            />
             <View style={styles.overlayHeaderContent} pointerEvents="box-none">
               <View style={styles.headerSide}>
                 <TouchableOpacity
@@ -1376,7 +1384,15 @@ const styles = StyleSheet.create<any>({
     top: 0,
     left: 0,
     right: 0,
-    zIndex: 2, // Lower than white background content
+    zIndex: 2,
+    overflow: 'visible',
+  },
+  overlayHeaderGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 200,
   },
   overlayHeaderContent: {
     flexDirection: 'row',

@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { productsApi, Product, CreateProductData } from '@/lib/api/products';
@@ -402,7 +403,7 @@ export default function EditProductsScreen() {
 
           {/* Body */}
           <View style={styles.bodyWrapper}>
-            <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+            <KeyboardAwareScreenScroll style={styles.modalContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               {/* Stepper */}
               <View style={styles.stepperContainer}>
                 <View style={styles.stepperTrack}>
@@ -534,7 +535,7 @@ export default function EditProductsScreen() {
                   </TouchableOpacity>
                 </View>
               </View>
-            </ScrollView>
+            </KeyboardAwareScreenScroll>
           </View>
           {/* Color the bottom safe area to gray to avoid white split */}
           <View

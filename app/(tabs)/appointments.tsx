@@ -16,9 +16,9 @@ import {
   Alert,
   Platform,
   TextInput,
-  KeyboardAvoidingView,
   Pressable,
 } from 'react-native';
+import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Colors from '@/constants/colors';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
@@ -1830,13 +1830,10 @@ export default function AdminAppointmentsScreen() {
       )}
 
       <Modal visible={showReminderModal} transparent animationType="slide" onRequestClose={closeReminderModal}>
-        <KeyboardAvoidingView
-          style={styles.reminderModalRoot}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
+        <View style={styles.reminderModalRoot}>
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closeReminderModal} />
           <View style={styles.reminderSheet}>
-            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <KeyboardAwareScreenScroll keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <View style={styles.reminderSheetHandle} />
             <Text style={styles.reminderSheetTitle}>
               {editingReminder
@@ -1972,9 +1969,9 @@ export default function AdminAppointmentsScreen() {
             <TouchableOpacity style={styles.reminderCancelTextBtn} onPress={closeReminderModal}>
               <Text style={styles.reminderCancelText}>{tHe('cancel', 'ביטול')}</Text>
             </TouchableOpacity>
-            </ScrollView>
+            </KeyboardAwareScreenScroll>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       {Platform.OS === 'android' && showReminderAndroidTime ? (

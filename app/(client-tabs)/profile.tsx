@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Modal, Pressable, TextInput, ActivityIndicator, Switch, Image, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Modal, Pressable, TextInput, ActivityIndicator, Switch, Image } from 'react-native';
+import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -509,8 +510,7 @@ export default function ClientProfileScreen() {
 
       {/* Edit Profile Modal */}
       <Modal visible={isEditOpen} transparent animationType="slide" onRequestClose={() => setIsEditOpen(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={insets.top + 12} style={styles.modalOverlay}>
-          <ScrollView contentContainerStyle={styles.modalOverlayContent} keyboardShouldPersistTaps="handled">
+        <KeyboardAwareScreenScroll style={styles.modalOverlay} contentContainerStyle={styles.modalOverlayContent} keyboardShouldPersistTaps="handled">
             <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>{t('profile.edit.title', 'Edit Profile')}</Text>
             <View style={styles.inputGroup}>
@@ -610,8 +610,7 @@ export default function ClientProfileScreen() {
               </TouchableOpacity>
             </View>
             </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardAwareScreenScroll>
       </Modal>
 
       {/* Language Bottom Sheet */}

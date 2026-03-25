@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, Modal, StyleSheet, TextInput, Platform, Alert, ScrollView, KeyboardAvoidingView, ViewStyle } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, StyleSheet, TextInput, Platform, Alert, ViewStyle } from 'react-native';
+import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
@@ -202,7 +203,7 @@ export default function AdminBroadcastComposer({
         transparent
         onRequestClose={() => setOpen(false)}
       >
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={{ flex: 1 }}>
           <View style={styles.overlay}>
             <View style={styles.sheet}>
             <LinearGradient
@@ -217,7 +218,7 @@ export default function AdminBroadcastComposer({
               </TouchableOpacity>
             </LinearGradient>
 
-            <ScrollView style={{ maxHeight: '100%' }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+            <KeyboardAwareScreenScroll style={{ flexGrow: 1, maxHeight: '100%' }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
               {/* Title */}
               <View style={styles.sectionCard}>
                 <Text style={[styles.label, isLTR && { textAlign: 'left' }]}>{t.titleLabel}</Text>
@@ -308,11 +309,11 @@ export default function AdminBroadcastComposer({
                   </LinearGradient>
                 </TouchableOpacity>
               </View>
-            </ScrollView>
+            </KeyboardAwareScreenScroll>
             </View>
             {/* Dropdown removed in simplified UX */}
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       {/* Dropdown Portal */}

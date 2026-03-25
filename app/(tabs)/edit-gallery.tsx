@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Dimensions, TextInput, Alert, Platform, Modal, ActivityIndicator, KeyboardAvoidingView, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Dimensions, TextInput, Alert, Platform, Modal, ActivityIndicator, ScrollView } from 'react-native';
+import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -420,7 +421,7 @@ export default function EditGalleryScreen() {
             onRequestClose={closeEdit}
           >
             <View style={styles.modalBackdrop}>
-              <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%' }}>
+              <View style={{ width: '100%' }}>
                 <View style={styles.modalCard}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Text style={styles.sectionTitle}>{t('admin.gallery.editDesign','Edit Design')}</Text>
@@ -429,7 +430,7 @@ export default function EditGalleryScreen() {
                     </TouchableOpacity>
                   </View>
 
-                  <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+                  <KeyboardAwareScreenScroll keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
                     <TouchableOpacity onPress={addImagesToEdit} activeOpacity={0.9} style={{ marginTop: 8 }}>
                       <Image
                         source={{ uri: (editImages[0]?.kind === 'local') ? editImages[0]?.asset.uri : (editImages[0] as any)?.url ?? selectedDesign?.image_url }}
@@ -534,9 +535,9 @@ export default function EditGalleryScreen() {
                         <Text style={styles.createButtonText}>{t('save','Save')}</Text>
                       )}
                     </TouchableOpacity>
-                  </ScrollView>
+                  </KeyboardAwareScreenScroll>
                 </View>
-              </KeyboardAvoidingView>
+              </View>
             </View>
           </Modal>
           {/* Create Modal */}
@@ -547,7 +548,7 @@ export default function EditGalleryScreen() {
             onRequestClose={() => setCreateVisible(false)}
           >
             <View style={styles.modalBackdrop}>
-              <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%' }}>
+              <View style={{ width: '100%' }}>
                 <View style={styles.modalCard}>
                   <View style={styles.modalHeader}>
                     <Text style={[styles.sectionTitle, { color: Colors.text }]}>{t('admin.gallery.addDesign','Add Design')}</Text>
@@ -560,7 +561,7 @@ export default function EditGalleryScreen() {
                     </TouchableOpacity>
                   </View>
 
-                  <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
+                  <KeyboardAwareScreenScroll keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
                     <Text style={[styles.helperText, { marginBottom: 4 }]}>{t('admin.gallery.helper','You can select multiple images. The first one will be used as the cover image.')}</Text>
 
                     {/* Admin User Selection */}
@@ -645,9 +646,9 @@ export default function EditGalleryScreen() {
                         <Text style={styles.createButtonText}>{isLoading ? t('settings.common.saving','Saving...') : t('admin.gallery.publish','Publish')}</Text>
                       )}
                     </TouchableOpacity>
-                  </ScrollView>
+                  </KeyboardAwareScreenScroll>
                 </View>
-              </KeyboardAvoidingView>
+              </View>
             </View>
           </Modal>
         </View>

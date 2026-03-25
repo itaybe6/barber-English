@@ -8,13 +8,11 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   Animated,
   Easing,
   Dimensions,
 } from 'react-native';
+import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { X, User, Phone, Mail, Lock } from 'lucide-react-native';
 import { usersApi } from '@/lib/api/users';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
@@ -201,11 +199,7 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
       presentationStyle="pageSheet"
       onRequestClose={handleClose}
     >
-      <KeyboardAvoidingView 
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-      >
+      <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.closeButton} onPress={step === 0 ? handleClose : () => goBack()}>
             <X size={20} color={Colors.text} />
@@ -215,7 +209,7 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
         </View>
 
         <View style={styles.bodyWrapper}>
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <KeyboardAwareScreenScroll style={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           {/* Stepper */}
           <View style={styles.stepperContainer}>
             <View style={styles.stepperTrack}>
@@ -362,9 +356,9 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
               </TouchableOpacity>
             </View>
           </View>
-        </ScrollView>
+        </KeyboardAwareScreenScroll>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }

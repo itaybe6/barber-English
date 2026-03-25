@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Alert, Pressable, TextInput, Platform, KeyboardAvoidingView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Alert, Pressable, TextInput } from 'react-native';
+import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -258,8 +259,11 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
           </TouchableOpacity>
         </View>
 
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={insets.top + 56}>
-        <ScrollView contentContainerStyle={{ paddingBottom: 24 + 16 }} keyboardShouldPersistTaps="handled">
+        <KeyboardAwareScreenScroll
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 24 + 16 }}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Mode selector */}
           <View style={styles.segmentedCard}>
             <View style={styles.segmented}>
@@ -515,8 +519,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
           </View>
 
           
-        </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardAwareScreenScroll>
       </SafeAreaView>
 
       {/* Existing constraints popup */}

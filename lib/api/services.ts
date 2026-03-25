@@ -11,6 +11,8 @@ export const servicesApi = {
         .select('*')
         .eq('business_id', businessId)
         .eq('is_active', true)
+        .order('worker_id', { ascending: true, nullsFirst: false })
+        .order('order_index', { ascending: true, nullsFirst: false })
         .order('name', { ascending: true });
 
       if (error) {
@@ -113,6 +115,27 @@ export async function createService(
   } catch (error) {
     console.error('Error creating service:', error);
     return null;
+  }
+}
+
+/** Persist 0..n-1 order_index for the given service IDs (tenant-scoped). */
+export async function updateServicesOrderIndexes(orderedIds: string[]): Promise<boolean> {
+  const businessId = getBusinessId();
+  try {
+    const results = await Promise.all(
+      orderedIds.map((id, i) =>
+        supabase.from('services').update({ order_index: i }).eq('id', id).eq('business_id', businessId),
+      ),
+    );
+    const failed = results.find((r) => r.error);
+    if (failed?.error) {
+      console.error('updateServicesOrderIndexes:', failed.error);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error('updateServicesOrderIndexes:', e);
+    return false;
   }
 }
 

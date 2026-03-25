@@ -169,6 +169,37 @@ export default function SettingsScreen() {
       adminProfileHeaderBlockHeight.value = next;
     }
   };
+
+  /** Height below safe area: must match ~settingsMainNavInner (minHeight + paddingBottom). */
+  const SETTINGS_MAIN_NAV_BELOW_INSET_H = 60;
+
+  const safeTopSV = useSharedValue(insets.top);
+  useEffect(() => {
+    safeTopSV.value = insets.top;
+  }, [insets.top]);
+
+  /** Slides down with scroll when the profile card collapses; reverses when scrolling back up. */
+  const settingsMainNavAnimatedStyle = useAnimatedStyle(() => {
+    const y = Math.max(adminProfileScrollY.value, 0);
+    const h = Math.max(adminProfileHeaderBlockHeight.value, 72);
+    const slideRange = safeTopSV.value + SETTINGS_MAIN_NAV_BELOW_INSET_H + 10;
+    const translateY = interpolate(
+      y,
+      [h * 0.2, h * 0.58],
+      [-slideRange, 0],
+      Extrapolation.CLAMP,
+    );
+    const opacity = interpolate(
+      y,
+      [h * 0.2, h * 0.42],
+      [0, 1],
+      Extrapolation.CLAMP,
+    );
+    return {
+      transform: [{ translateY }],
+      opacity,
+    };
+  });
   
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   
@@ -1525,6 +1556,7 @@ export default function SettingsScreen() {
     const businessPhone = String((profile as any)?.phone || '').trim();
     return userPhone !== '' && businessPhone !== '' && userPhone === businessPhone;
   }, [user?.phone, (profile as any)?.phone]);
+
   const [showRecurringModal, setShowRecurringModal] = useState(false);
   const [isSubmittingRecurring, setIsSubmittingRecurring] = useState(false);
   const [showManageRecurringModal, setShowManageRecurringModal] = useState(false);
@@ -2097,7 +2129,9 @@ export default function SettingsScreen() {
         >
           <Reanimated.View style={adminProfileDummySpacerStyle} />
 
-        <Text style={styles.sectionTitleNew}>{t('settings.sections.notificationsMessages','Notifications & messages')}</Text>
+        <View style={[styles.sectionTitleWrapper, styles.sectionTitleWrapperFirst]}>
+          <Text style={styles.sectionTitleNew}>{t('settings.sections.notificationsMessages','Notifications & messages')}</Text>
+        </View>
         
         <View style={styles.cardNew}>
           {renderSettingItem(
@@ -2129,7 +2163,9 @@ export default function SettingsScreen() {
 
         </View>
         
-        <Text style={styles.sectionTitleNew}>{t('settings.sections.services','Services')}</Text>
+        <View style={styles.sectionTitleWrapper}>
+          <Text style={styles.sectionTitleNew}>{t('settings.sections.services','Services')}</Text>
+        </View>
         <View style={styles.cardNew}>
           {renderSettingItem(
             <Pencil size={20} color={businessColors.primary} />,
@@ -2142,7 +2178,9 @@ export default function SettingsScreen() {
 
         {canSeeAddEmployee && (
           <>
-            <Text style={styles.sectionTitleNew}>{t('settings.sections.businessDetails','Business details')}</Text>
+            <View style={styles.sectionTitleWrapper}>
+              <Text style={styles.sectionTitleNew}>{t('settings.sections.businessDetails','Business details')}</Text>
+            </View>
             <View style={styles.cardNew}>
               <View style={styles.settingItemLTR}>
                 <View style={styles.settingIconLTR}><Pencil size={20} color={businessColors.primary} /></View>
@@ -2231,7 +2269,9 @@ export default function SettingsScreen() {
 
         {canSeeAddEmployee && (
           <>
-            <Text style={styles.sectionTitleNew}>{t('settings.sections.designApp','Design Application')}</Text>
+            <View style={styles.sectionTitleWrapper}>
+              <Text style={styles.sectionTitleNew}>{t('settings.sections.designApp','Design Application')}</Text>
+            </View>
             <View style={styles.cardNew}>
               <View style={styles.colorPickerWrapper}>
               <ColorPicker currentColor={profile?.primary_color || '#000000'} />
@@ -2262,7 +2302,9 @@ export default function SettingsScreen() {
           </>
         )}
 
-        <Text style={styles.sectionTitleNew}>{t('settings.sections.appointmentPolicies','Appointment policies')}</Text>
+        <View style={styles.sectionTitleWrapper}>
+          <Text style={styles.sectionTitleNew}>{t('settings.sections.appointmentPolicies','Appointment policies')}</Text>
+        </View>
         <View style={styles.cardNew}>
           <View style={styles.settingItemLTR}>
             <View style={styles.settingIconLTR}><Clock size={20} color={businessColors.primary} /></View>
@@ -2286,7 +2328,9 @@ export default function SettingsScreen() {
 
         {isAdmin && (
           <>
-            <Text style={styles.sectionTitleNew}>{t('settings.sections.appointmentsManagement','Appointments management')}</Text>
+            <View style={styles.sectionTitleWrapper}>
+              <Text style={styles.sectionTitleNew}>{t('settings.sections.appointmentsManagement','Appointments management')}</Text>
+            </View>
             <View style={styles.cardNew}>
               {renderSettingItem(
                 <Calendar size={20} color={businessColors.primary} />,
@@ -2297,7 +2341,9 @@ export default function SettingsScreen() {
               )}
             </View>
 
-            <Text style={styles.sectionTitleNew}>{t('settings.sections.recurringTitle','Recurring appointments')}</Text>
+            <View style={styles.sectionTitleWrapper}>
+              <Text style={styles.sectionTitleNew}>{t('settings.sections.recurringTitle','Recurring appointments')}</Text>
+            </View>
             <View style={styles.cardNew}>
               {renderSettingItem(
                 <Pencil size={20} color={businessColors.primary} />, // reuse icon
@@ -2327,7 +2373,9 @@ export default function SettingsScreen() {
           </>
         )}
         
-        <Text style={styles.sectionTitleNew}>{t('settings.sections.securitySupport','Security & support')}</Text>
+        <View style={styles.sectionTitleWrapper}>
+          <Text style={styles.sectionTitleNew}>{t('settings.sections.securitySupport','Security & support')}</Text>
+        </View>
         
         <View style={styles.cardNew}>
           {canSeeAddEmployee && (
@@ -2382,7 +2430,9 @@ export default function SettingsScreen() {
 
         {user && (
           <>
-            <Text style={styles.sectionTitleNew}>{t('settings.sections.accountManagement','Account Management')}</Text>
+            <View style={styles.sectionTitleWrapper}>
+              <Text style={styles.sectionTitleNew}>{t('settings.sections.accountManagement','Account Management')}</Text>
+            </View>
             
             <View style={styles.cardNew}>
               {renderSettingItem(
@@ -2403,6 +2453,21 @@ export default function SettingsScreen() {
         
         <Text style={styles.versionText}>{t('settings.sections.version','Version')} 1.0.0</Text>
         </Reanimated.ScrollView>
+
+        <Reanimated.View
+          pointerEvents="none"
+          style={[
+            styles.settingsMainNavShell,
+            { paddingTop: insets.top },
+            settingsMainNavAnimatedStyle,
+          ]}
+        >
+          <View style={styles.settingsMainNavInner}>
+            <Text style={styles.settingsMainNavTitle}>
+              {t('profile.settings', 'Settings')}
+            </Text>
+          </View>
+        </Reanimated.View>
 
         <View
           pointerEvents="box-none"
@@ -2443,9 +2508,6 @@ export default function SettingsScreen() {
                           />
                         </View>
                       </LinearGradient>
-                      <View style={[styles.editIconContainer, { backgroundColor: 'rgba(255,255,255,0.28)' }]}>
-                        <Pencil size={11} color={Colors.white} />
-                      </View>
                     </View>
                     <View style={styles.adminProfileInfo}>
                       <Text style={styles.adminName} numberOfLines={1}>
@@ -2457,9 +2519,6 @@ export default function SettingsScreen() {
                       <Text style={styles.adminEmail} numberOfLines={1}>
                         {(user as any)?.email || 'Email Address'}
                       </Text>
-                    </View>
-                    <View style={styles.adminProfileChevron} pointerEvents="none">
-                      <ChevronLeft size={20} color="rgba(255,255,255,0.72)" />
                     </View>
                   </View>
                 </LinearGradient>
@@ -3957,74 +4016,12 @@ export default function SettingsScreen() {
                       )}
                     >
                       <View style={[styles.svcCard, styles.svcListCard, justSaved && styles.svcCardSaved, isActive && styles.svcListCardDragging]}>
-                        {/* Left accent bar */}
+                        {/* LTR row: chevron left | text (title+chips) | thumb right — matches mockup regardless of app RTL */}
                         <View style={[styles.svcCardAccent, { backgroundColor: businessColors.primary }]} />
                         {!isExpanded ? (
                           <View style={styles.svcListCollapsedRow}>
-                            {/* Thumbnail + red delete badge wrapper – overflow visible so badge is not clipped */}
-                            <View style={styles.svcListThumbOuter}>
-                              {servicesReorderMode && (
-                                <TouchableOpacity
-                                  style={styles.svcDeleteBadge}
-                                  onPress={() => handleDeleteService(svc.id)}
-                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                  activeOpacity={0.8}
-                                >
-                                  <Trash2 size={13} color="#fff" />
-                                </TouchableOpacity>
-                              )}
-                            <TouchableOpacity
-                              onPress={() => !servicesReorderMode && handlePickServiceImage(svc.id)}
-                              activeOpacity={0.85}
-                              style={styles.svcListThumbWrap}
-                              disabled={servicesReorderMode}
-                            >
-                              {svc.image_url ? (
-                                <Image source={{ uri: svc.image_url }} style={styles.svcListThumb} resizeMode="cover" />
-                              ) : (
-                                <View style={[styles.svcListThumbPlaceholder, { backgroundColor: `${businessColors.primary}15` }]}>
-                                  <Text style={[styles.svcListThumbPlaceholderText, { color: businessColors.primary }]}>
-                                    {(svc.name || '?').charAt(0).toUpperCase()}
-                                  </Text>
-                                </View>
-                              )}
-                              {uploadingServiceId === svc.id && (
-                                <View style={styles.svcListThumbUploadOverlay}>
-                                  <ActivityIndicator size="small" color="#fff" />
-                                </View>
-                              )}
-                            </TouchableOpacity>
-                            </View>
-                            <TouchableOpacity
-                              style={styles.svcListCollapsedMain}
-                              activeOpacity={0.85}
-                              disabled={servicesReorderMode}
-                              onPress={() => !servicesReorderMode && setExpandedServiceId(prev => (prev === svc.id ? null : svc.id))}
-                            >
-                              <View style={styles.svcCardInfo}>
-                                <Text style={styles.svcCardName} numberOfLines={1}>
-                                  {svc.name || t('common.noName','No name')}
-                                </Text>
-                                <View style={styles.svcMetaRow}>
-                                  {typeof svc.price === 'number' && (
-                                    <View style={[styles.svcMetaChip, { backgroundColor: `${businessColors.primary}12` }]}>
-                                      <Text style={[styles.svcMetaChipText, { color: businessColors.primary }]}>
-                                        ₪{svc.price}
-                                      </Text>
-                                    </View>
-                                  )}
-                                  {svc.duration_minutes ? (
-                                    <View style={styles.svcMetaChipDuration}>
-                                      <Text style={styles.svcMetaChipDurationText}>
-                                        {svc.duration_minutes} {t('settings.services.minShort','דק׳')}
-                                      </Text>
-                                    </View>
-                                  ) : null}
-                                </View>
-                              </View>
-                            </TouchableOpacity>
+                            {/* 1 — Chevron / drag (physical left) */}
                             {servicesReorderMode ? (
-                              /* Drag handle – 3 horizontal lines */
                               <Pressable
                                 onPressIn={drag}
                                 style={styles.svcDragHandle}
@@ -4052,6 +4049,72 @@ export default function SettingsScreen() {
                                 )}
                               </TouchableOpacity>
                             )}
+                            {/* 2 — Title + badges (grows; align content toward thumb on the right) */}
+                            <TouchableOpacity
+                              style={styles.svcListCollapsedMain}
+                              activeOpacity={0.85}
+                              disabled={servicesReorderMode}
+                              onPress={() => !servicesReorderMode && setExpandedServiceId(prev => (prev === svc.id ? null : svc.id))}
+                            >
+                              {/* Fixed height = thumb (70); centers title+chips vertically — TouchableOpacity does not stretch reliably */}
+                              <View style={styles.svcListCollapsedTextCol}>
+                                <View style={styles.svcCardInfo}>
+                                  <Text style={styles.svcCardName} numberOfLines={1}>
+                                    {svc.name || t('common.noName','No name')}
+                                  </Text>
+                                  <View style={styles.svcMetaRow}>
+                                    {svc.duration_minutes ? (
+                                      <View style={styles.svcMetaChipDuration}>
+                                        <Text style={styles.svcMetaChipDurationText}>
+                                          {svc.duration_minutes} {t('settings.services.minShort','דק׳')}
+                                        </Text>
+                                      </View>
+                                    ) : null}
+                                    {typeof svc.price === 'number' && (
+                                      <View style={[styles.svcMetaChip, { backgroundColor: `${businessColors.primary}14` }]}>
+                                        <Text style={[styles.svcMetaChipText, { color: businessColors.primary }]}>
+                                          ₪{svc.price}
+                                        </Text>
+                                      </View>
+                                    )}
+                                  </View>
+                                </View>
+                              </View>
+                            </TouchableOpacity>
+                            {/* 3 — Thumbnail (physical right, next to orange accent) */}
+                            <View style={styles.svcListThumbOuter}>
+                              {servicesReorderMode && (
+                                <TouchableOpacity
+                                  style={styles.svcDeleteBadge}
+                                  onPress={() => handleDeleteService(svc.id)}
+                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                  activeOpacity={0.8}
+                                >
+                                  <Trash2 size={13} color="#fff" />
+                                </TouchableOpacity>
+                              )}
+                              <TouchableOpacity
+                                onPress={() => !servicesReorderMode && handlePickServiceImage(svc.id)}
+                                activeOpacity={0.85}
+                                style={styles.svcListThumbWrap}
+                                disabled={servicesReorderMode}
+                              >
+                                {svc.image_url ? (
+                                  <Image source={{ uri: svc.image_url }} style={styles.svcListThumb} resizeMode="cover" />
+                                ) : (
+                                  <View style={[styles.svcListThumbPlaceholder, { backgroundColor: `${businessColors.primary}15` }]}>
+                                    <Text style={[styles.svcListThumbPlaceholderText, { color: businessColors.primary }]}>
+                                      {(svc.name || '?').charAt(0).toUpperCase()}
+                                    </Text>
+                                  </View>
+                                )}
+                                {uploadingServiceId === svc.id && (
+                                  <View style={styles.svcListThumbUploadOverlay}>
+                                    <ActivityIndicator size="small" color="#fff" />
+                                  </View>
+                                )}
+                              </TouchableOpacity>
+                            </View>
                           </View>
                         ) : (
                           /* ── Expanded edit form – same look as Add Service ── */
@@ -4681,6 +4744,39 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.white,
   },
+  settingsMainNavShell: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: Colors.white,
+    zIndex: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(60,60,67,0.18)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 3,
+      },
+      android: { elevation: 5 },
+    }),
+  },
+  settingsMainNavInner: {
+    minHeight: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: 12,
+    paddingHorizontal: 20,
+  },
+  settingsMainNavTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: Colors.text,
+    textAlign: 'center',
+    letterSpacing: -0.3,
+  },
   /** Sticky profile header overlay (bank-app scroll flip) */
   adminProfileStickyHost: {
     position: 'absolute',
@@ -4697,12 +4793,17 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   adminProfileCardOuter: {
-    borderRadius: 18,
+    borderRadius: 22,
     overflow: 'hidden',
+    marginHorizontal: 16,
+    alignSelf: 'center',
+    width: '100%',
   },
   adminProfileCardFlat: {
-    paddingVertical: 16,
-    paddingHorizontal: 18,
+    paddingTop: 28,
+    paddingBottom: 24,
+    paddingHorizontal: 24,
+    alignItems: 'center',
   },
   sheetRoot: {
     flex: 1,
@@ -4754,77 +4855,55 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   adminProfileRow: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     width: '100%',
   },
   adminProfileInfo: {
-    flex: 1,
-    minWidth: 0,
-    marginHorizontal: 12,
-    justifyContent: 'center',
-  },
-  adminProfileChevron: {
-    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 14,
   },
   adminAvatarWrap: {
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  editIconContainer: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: Colors.white,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.22,
-    shadowRadius: 3,
-    elevation: 4,
-  },
   adminAvatarRing: {
-    padding: 2.5,
-    borderRadius: 34,
+    padding: 3,
+    borderRadius: 46,
     alignItems: 'center',
     justifyContent: 'center',
   },
   adminAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 84,
+    height: 84,
+    borderRadius: 42,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
   },
   adminAvatarImage: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
   },
   adminName: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '700',
     color: '#FFFFFF',
-    textAlign: 'right',
+    textAlign: 'center',
   },
   adminPhone: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.78)',
-    marginTop: 3,
-    textAlign: 'right',
+    marginTop: 4,
+    textAlign: 'center',
   },
   adminEmail: {
     fontSize: 12,
     color: 'rgba(255,255,255,0.60)',
-    marginTop: 2,
-    textAlign: 'right',
+    marginTop: 3,
+    textAlign: 'center',
   },
   scrollContent: {
     paddingHorizontal: 0,
@@ -4856,6 +4935,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.subtext,
   },
+  sectionTitleWrapper: {
+    backgroundColor: Colors.white,
+    paddingTop: 20,
+    paddingBottom: 0,
+  },
+  /** Extra air between the sticky profile card and the first section label */
+  sectionTitleWrapperFirst: {
+    marginTop: 14,
+  },
   sectionTitleNew: {
     fontSize: 11,
     fontWeight: '600',
@@ -4864,7 +4952,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     paddingLeft: 20,
     marginBottom: 7,
-    marginTop: 24,
+    marginTop: 4,
     textAlign: 'left',
   },
   cardNew: {
@@ -5518,11 +5606,12 @@ const styles = StyleSheet.create({
   },
   svcListCollapsedRow: {
     flexDirection: 'row',
+    direction: 'ltr',
     alignItems: 'center',
     paddingVertical: 14,
-    paddingHorizontal: 14,
-    paddingLeft: 18,
-    gap: 6,
+    paddingLeft: 10,
+    paddingRight: 8,
+    gap: 10,
   },
   svcListThumbOuter: {
     position: 'relative',
@@ -5567,6 +5656,12 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     justifyContent: 'center',
+  },
+  /** Exact thumb height; justifyContent centers title+chips (must not use flex:1 on inner svcCardInfo) */
+  svcListCollapsedTextCol: {
+    height: 70,
+    justifyContent: 'center',
+    width: '100%',
   },
   svcListChevronHit: {
     alignItems: 'center',
@@ -6200,39 +6295,40 @@ const styles = StyleSheet.create({
   },
   svcAddImageBandArea: {
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: 24,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E5EA',
   },
   svcAddImageCircleBtn: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 120,
+    height: 120,
+    borderRadius: 20,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
   svcAddImageCirclePlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 2,
+    width: 120,
+    height: 120,
+    borderRadius: 20,
+    borderWidth: 1.5,
     borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 0,
+    gap: 8,
+    backgroundColor: '#FAFAFA',
   },
   svcAddImageIconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
   svcAddImageCircleFull: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 120,
+    height: 120,
+    borderRadius: 20,
   },
   svcAddImageDashedBox: {
     width: 110,
@@ -6261,7 +6357,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 50,
+    borderRadius: 20,
   },
   svcAddFieldsArea: {
     paddingHorizontal: 18,
@@ -6425,15 +6521,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   svcCardInfo: {
-    flex: 1,
     alignItems: 'stretch',
+    width: '100%',
   },
   svcCardName: {
     fontSize: 16,
     fontWeight: '700',
     color: Colors.text,
     marginBottom: 6,
-    textAlign: 'left',
+    textAlign: 'right',
   },
   svcCardMeta: {
     fontSize: 13,
@@ -6442,24 +6538,24 @@ const styles = StyleSheet.create({
   svcMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     flexWrap: 'wrap',
     justifyContent: 'flex-end',
   },
   svcMetaChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
   },
   svcMetaChipText: {
     fontSize: 12,
     fontWeight: '700',
   },
   svcMetaChipDuration: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    backgroundColor: '#F0F0F5',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: '#E8E8EE',
   },
   svcMetaChipDurationText: {
     fontSize: 12,

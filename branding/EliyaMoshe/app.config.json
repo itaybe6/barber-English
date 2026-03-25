@@ -1,0 +1,92 @@
+{
+  "expo": {
+    "name": "EliyaMoshe",
+    "slug": "eliyamoshe",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./branding/EliyaMoshe/icon.png",
+    "scheme": "eliyamoshe",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./branding/EliyaMoshe/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "buildNumber": "1",
+      "supportsTablet": true,
+      "bundleIdentifier": "com.eliyamoshe.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleDevelopmentRegion": "en",
+        "CFBundleAllowMixedLocalizations": true,
+        "NSPhotoLibraryUsageDescription": "The app needs access to photos to select and upload images to the gallery or profile.",
+        "NSPhotoLibraryAddUsageDescription": "The app may save photos you've taken to your photo library.",
+        "NSCameraUsageDescription": "The app needs access to the camera to take photos for upload."
+      },
+      "jsEngine": "hermes"
+    },
+    "android": {
+      "package": "com.eliyamoshe.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./branding/EliyaMoshe/icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "intentFilters": [
+        {
+          "autoVerify": true,
+          "action": "VIEW",
+          "data": {
+            "scheme": "https",
+            "host": "eliyamoshe.com"
+          },
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
+      "supportsRtl": false
+    },
+    "web": {
+      "favicon": "./branding/EliyaMoshe/icon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://eliyamoshe.com/"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#ffffff"
+        }
+      ],
+      "expo-web-browser",
+      "expo-font",
+      "expo-localization"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "locales": {
+      "he": "./assets/locales/he.json"
+    },
+    "extra": {
+      "router": {
+        "origin": "https://eliyamoshe.com/"
+      },
+      "eas": {
+        "projectId": ""
+      },
+      "locale": "en",
+      "CLIENT": "EliyaMoshe",
+      "BUSINESS_ID": "464cb35b-0fbb-413f-91fe-1ad49addcb77",
+      "logo": "./branding/EliyaMoshe/logo.png",
+      "logoWhite": "./branding/EliyaMoshe/logo-white.png"
+    }
+  }
+}

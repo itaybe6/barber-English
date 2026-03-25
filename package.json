@@ -82,7 +82,14 @@
     "start:web:ElianNails": "cross-env CLIENT=ElianNails node app.config.js && cross-env CLIENT=ElianNails expo start --web --tunnel",
     "build:ElianNails:ios": "cross-env CLIENT=ElianNails node scripts/build-client.mjs ElianNails ios",
     "build:ElianNails:android": "cross-env CLIENT=ElianNails node scripts/build-client.mjs ElianNails android",
-    "build:ElianNails:all": "cross-env CLIENT=ElianNails node scripts/build-client.mjs ElianNails all"
+    "build:ElianNails:all": "cross-env CLIENT=ElianNails node scripts/build-client.mjs ElianNails all",
+    "start:EliyaMoshe": "cross-env CLIENT=EliyaMoshe node app.config.js && cross-env CLIENT=EliyaMoshe expo start --tunnel",
+    "start:EliyaMoshe:lan": "cross-env CLIENT=EliyaMoshe node app.config.js && cross-env CLIENT=EliyaMoshe expo start --lan",
+    "start:EliyaMoshe:localhost": "cross-env CLIENT=EliyaMoshe node app.config.js && cross-env CLIENT=EliyaMoshe expo start --localhost",
+    "start:web:EliyaMoshe": "cross-env CLIENT=EliyaMoshe node app.config.js && cross-env CLIENT=EliyaMoshe expo start --web --tunnel",
+    "build:EliyaMoshe:ios": "cross-env CLIENT=EliyaMoshe node scripts/build-client.mjs EliyaMoshe ios",
+    "build:EliyaMoshe:android": "cross-env CLIENT=EliyaMoshe node scripts/build-client.mjs EliyaMoshe android",
+    "build:EliyaMoshe:all": "cross-env CLIENT=EliyaMoshe node scripts/build-client.mjs EliyaMoshe all"
   },
   "engines": {
     "node": "20.19.x",

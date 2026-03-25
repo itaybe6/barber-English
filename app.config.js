@@ -2,6 +2,22 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
+/** Expo טוען .env ומרחיב $VAR — מפתחות עם $ חייבים ב-Base64 (PULSEEM_MAIN_API_KEY_B64) */
+function resolvePulseemMainApiKey() {
+  const b64 = (process.env.PULSEEM_MAIN_API_KEY_B64 || '').trim();
+  if (b64) {
+    try {
+      const decoded = Buffer.from(b64, 'base64').toString('utf8').trim();
+      if (decoded) return decoded;
+    } catch (e) {
+      console.warn('PULSEEM_MAIN_API_KEY_B64 decode failed:', e?.message);
+    }
+  }
+  return String(process.env.PULSEEM_MAIN_API_KEY || '')
+    .replace(/^\uFEFF/, '')
+    .trim();
+}
+
 // -------------------------------------------------------------
 // 1. מי הלקוח? אם אין הגדרה – ננסה לגזור מה-EAS_BUILD_PROFILE → eas.json
 //    מאפשר להריץ: `npx eas-cli build --profile production` בלי CLIENT מקומי
@@ -81,6 +97,8 @@ appConfig.expo.extra = {
   /** Super Admin login (מסך התחברות → «כניסת מנהל / סיסמה») */
   EXPO_PUBLIC_SA_P: process.env.EXPO_PUBLIC_SA_P || '',
   EXPO_PUBLIC_SA_K: process.env.EXPO_PUBLIC_SA_K || '',
+  /** Pulseem — מומלץ PULSEEM_MAIN_API_KEY_B64 (ללא $ בקובץ) */
+  PULSEEM_MAIN_API_KEY: resolvePulseemMainApiKey(),
 };
 
 // -------------------------------------------------------------

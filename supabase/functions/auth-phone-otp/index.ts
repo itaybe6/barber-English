@@ -2,10 +2,12 @@
 /**
  * Phone SMS OTP for tenant login/register via Pulseem (legacy SendSingleSMS).
  * Reads credentials only from public.business_profile (service role) — never from the app’s local branding/.env.
- * Needs: pulseem_user_id, pulseem_password, pulseem_from_number. pulseem_api_key alone is not used here yet.
+ * pulseem_password / pulseem_api_key: decrypt with PULSEEM_FIELD_ENCRYPTION_KEY if stored as enc:v1:...
+ * Needs: pulseem_user_id, pulseem_password, pulseem_from_number. REST send uses pulseem_api_key when set.
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { decryptPulseemField } from "./pulseemFieldCrypto.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -307,8 +309,21 @@ async function loadPulseemCredentials(
     .maybeSingle();
   if (error || !row) return { error: "business_not_found" as const };
   const userId = (row.pulseem_user_id || "").trim();
-  const password = (row.pulseem_password || "").trim();
   const fromNumber = (row.pulseem_from_number || "").trim();
+  const encKey = (Deno.env.get("PULSEEM_FIELD_ENCRYPTION_KEY") ?? "").trim();
+  let password: string;
+  let apiKey: string;
+  try {
+    password = (
+      await decryptPulseemField(String(row.pulseem_password || "").trim(), encKey)
+    ).trim();
+    apiKey = (
+      await decryptPulseemField(String(row.pulseem_api_key || "").trim(), encKey)
+    ).trim();
+  } catch (e) {
+    console.error("[auth-phone-otp] pulseem decrypt failed", e);
+    return { error: "pulseem_decrypt_failed" as const };
+  }
   if (!userId || !password || !fromNumber) {
     return { error: "pulseem_not_configured" as const };
   }
@@ -316,7 +331,7 @@ async function loadPulseemCredentials(
     userId,
     password,
     fromNumber,
-    apiKey: (row.pulseem_api_key || "").trim(),
+    apiKey,
   };
 }
 
@@ -383,6 +398,9 @@ serve(async (req) => {
 
       const pulse = await loadPulseemCredentials(admin, businessId);
       if ("error" in pulse) {
+        if (pulse.error === "pulseem_decrypt_failed") {
+          return json({ ok: false, error: "pulseem_decrypt_failed" }, 500);
+        }
         return json(
           {
             ok: false,
@@ -542,6 +560,9 @@ serve(async (req) => {
 
       const pulse = await loadPulseemCredentials(admin, businessId);
       if ("error" in pulse) {
+        if (pulse.error === "pulseem_decrypt_failed") {
+          return json({ ok: false, error: "pulseem_decrypt_failed" }, 500);
+        }
         return json(
           {
             ok: false,
@@ -727,7 +748,8 @@ serve(async (req) => {
     if (action === "check_pulseem") {
       const pulse = await loadPulseemCredentials(admin, businessId);
       if ("error" in pulse) {
-        return json({ ok: false, error: pulse.error }, 400);
+        const st = pulse.error === "pulseem_decrypt_failed" ? 500 : 400;
+        return json({ ok: false, error: pulse.error }, st);
       }
 
       // Check ASMX credits (legacy)

@@ -27,9 +27,44 @@ function getPulseemMainApiKey(): string {
 
 const serviceRoleKey = process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || '';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const adminSupabase = serviceRoleKey && supabaseUrl
   ? createClient(supabaseUrl, serviceRoleKey)
   : null;
+
+/** Encrypts Pulseem secrets server-side (AES-GCM); DB never stores plaintext for new writes. */
+async function invokePulseemCredentialsAdmin<T extends Record<string, unknown>>(
+  body: Record<string, unknown>,
+): Promise<T | null> {
+  if (!serviceRoleKey || !supabaseUrl || !supabaseAnonKey) {
+    console.error(
+      '[pulseem-admin] Missing EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY, EXPO_PUBLIC_SUPABASE_URL, or EXPO_PUBLIC_SUPABASE_ANON_KEY',
+    );
+    return null;
+  }
+  const base = supabaseUrl.replace(/\/$/, '');
+  const res = await fetch(`${base}/functions/v1/pulseem-admin-credentials`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: supabaseAnonKey,
+    },
+    body: JSON.stringify(body),
+  });
+  const data = (await res.json().catch(() => null)) as
+    | (T & { error?: string })
+    | { error?: string }
+    | null;
+  if (!res.ok) {
+    console.error('[pulseem-admin] HTTP', res.status, data);
+    return null;
+  }
+  if (data && typeof data === 'object' && (data as { error?: string }).error === 'unauthorized') {
+    return null;
+  }
+  return data as T;
+}
 
 export interface BusinessOverview {
   id: string;
@@ -442,16 +477,27 @@ export const superAdminApi = {
     | { readonly ok: true; readonly credits: string }
     | { readonly ok: false; readonly message: string }
   > {
-    let password = passwordOverride.trim();
-    if (!password) {
-      const { data } = await supabase
-        .from('business_profile')
-        .select('pulseem_password')
-        .eq('id', businessId)
-        .maybeSingle();
-      password = ((data as any)?.pulseem_password as string | undefined)?.trim() || '';
+    const result = await invokePulseemCredentialsAdmin<{
+      ok: boolean;
+      credits?: string;
+      message?: string;
+    }>({
+      action: 'test_connection',
+      businessId,
+      userId: userId.trim(),
+      password: passwordOverride.trim(),
+    });
+    if (!result) {
+      return {
+        ok: false,
+        message:
+          'בדיקה נכשלה — ודא פריסת pulseem-admin-credentials, מפתח הצפנה ב-Edge, ומפתח שירות באפליקציה',
+      };
     }
-    return testPulseemConnection(userId, password);
+    if (result.ok && typeof result.credits === 'string') {
+      return { ok: true, credits: result.credits };
+    }
+    return { ok: false, message: result.message || 'בדיקה נכשלה' };
   },
 
   async savePulseemCredentials(
@@ -467,46 +513,50 @@ export const superAdminApi = {
       return { ok: false, errorMessage: 'חסר מספר שולח (מאיזה מספר נשלח ה-SMS)', envSynced: false };
     }
 
-    const { data: row, error: fetchErr } = await supabase
-      .from('business_profile')
-      .select('pulseem_password, branding_client_name, pulseem_api_key')
-      .eq('id', businessId)
-      .maybeSingle();
+    const edge = await invokePulseemCredentialsAdmin<{
+      ok?: boolean;
+      errorMessage?: string;
+      envPlaintext?: Record<string, string>;
+    }>({
+      action: 'save_credentials',
+      businessId,
+      userId: uid,
+      password: fields.password.trim(),
+      fromNumber: fromNum,
+    });
 
-    if (fetchErr || !row) {
-      return { ok: false, errorMessage: 'לא נמצא עסק', envSynced: false };
-    }
-
-    const existingPass = ((row as any).pulseem_password as string | undefined)?.trim() || '';
-    const newPass = fields.password.trim();
-    const finalPassword = newPass || existingPass;
-    if (!finalPassword) {
-      return { ok: false, errorMessage: 'נדרשת סיסמת API (או השאר ריק אם כבר נשמרה)', envSynced: false };
-    }
-
-    const clientName = await this.resolveBrandingClientName(businessId, (row as any).branding_client_name);
-
-    const { error: updErr } = await supabase
-      .from('business_profile')
-      .update({
-        pulseem_user_id: uid,
-        pulseem_password: finalPassword,
-        pulseem_from_number: fromNum,
-        pulseem_has_password: true,
-        ...(clientName ? { branding_client_name: clientName } : {}),
-      })
-      .eq('id', businessId);
-
-    if (updErr) {
-      console.error('savePulseemCredentials update:', updErr);
-      return { ok: false, errorMessage: 'שמירה למסד נכשלה', envSynced: false };
-    }
-
-    if (!clientName) {
+    if (!edge) {
       return {
-        ok: true,
+        ok: false,
+        errorMessage:
+          'שמירה נכשלה — ודא פריסת pulseem-admin-credentials, PULSEEM_FIELD_ENCRYPTION_KEY ב-Supabase Secrets, ומפתחות URL/Anon/Service באפליקציה',
         envSynced: false,
       };
+    }
+    if (!edge.ok) {
+      return { ok: false, errorMessage: edge.errorMessage || 'שמירה נכשלה', envSynced: false };
+    }
+
+    const { data: hintRow } = await supabase
+      .from('business_profile')
+      .select('branding_client_name')
+      .eq('id', businessId)
+      .maybeSingle();
+    const clientName = await this.resolveBrandingClientName(
+      businessId,
+      ((hintRow as any)?.branding_client_name as string | undefined) ?? null,
+    );
+
+    if (clientName) {
+      const db = adminSupabase || supabase;
+      await db
+        .from('business_profile')
+        .update({ branding_client_name: clientName })
+        .eq('id', businessId);
+    }
+
+    if (!clientName || !edge.envPlaintext) {
+      return { ok: true, envSynced: false };
     }
 
     let envText = await this.downloadBrandingFileText(clientName, '.env');
@@ -522,17 +572,7 @@ export const superAdminApi = {
       ].join('\n');
     }
 
-    const apiKeyStored = ((row as any).pulseem_api_key as string | undefined)?.trim() || '';
-    const mergePairs: Record<string, string> = {
-      PULSEEM_USER_ID: uid,
-      PULSEEM_PASSWORD: finalPassword,
-      PULSEEM_FROM_NUMBER: fromNum,
-    };
-    if (apiKeyStored) {
-      mergePairs.PULSEEM_API_KEY = apiKeyStored;
-    }
-    const merged = mergeEnvKeyValues(envText, mergePairs);
-
+    const merged = mergeEnvKeyValues(envText, edge.envPlaintext);
     const uploaded = await this.uploadBrandingFile(clientName, '.env', merged, 'text/plain');
     return { ok: true, envSynced: !!uploaded };
   },
@@ -605,6 +645,39 @@ export const superAdminApi = {
         }
       }
 
+      let insertPulseApiKey = pulseApiKey;
+      let insertPulsePass = pulseWsPass;
+      if (pulseApiKey || pulseWsPass) {
+        const enc = await invokePulseemCredentialsAdmin<{
+          pulseem_api_key?: string;
+          pulseem_password?: string;
+        }>({
+          action: 'encrypt_for_insert',
+          ...(pulseApiKey ? { pulseem_api_key: pulseApiKey } : {}),
+          ...(pulseWsPass ? { pulseem_password: pulseWsPass } : {}),
+        });
+        if (!enc) {
+          console.error(
+            '[createBusiness] encrypt_for_insert failed — deploy pulseem-admin-credentials and set PULSEEM_FIELD_ENCRYPTION_KEY (same value on auth-phone-otp)',
+          );
+          return null;
+        }
+        if (pulseApiKey) {
+          if (!enc.pulseem_api_key) {
+            console.error('[createBusiness] encrypted api key missing');
+            return null;
+          }
+          insertPulseApiKey = enc.pulseem_api_key;
+        }
+        if (pulseWsPass) {
+          if (!enc.pulseem_password) {
+            console.error('[createBusiness] encrypted pulseem password missing');
+            return null;
+          }
+          insertPulsePass = enc.pulseem_password;
+        }
+      }
+
       // 1. Create business profile (Edge Functions read Pulseem from here — not from local branding/.env)
       const { error: profileError } = await supabase
         .from('business_profile')
@@ -620,11 +693,13 @@ export const superAdminApi = {
           booking_open_days_by_user: {},
           min_cancellation_hours: 24,
           booking_open_days: 7,
-          ...(pulseApiKey ? { pulseem_api_key: pulseApiKey, pulseem_has_api_key: true } : {}),
+          ...(insertPulseApiKey
+            ? { pulseem_api_key: insertPulseApiKey, pulseem_has_api_key: true }
+            : {}),
           ...(pulseFrom ? { pulseem_from_number: pulseFrom } : {}),
           ...(pulseWsUser ? { pulseem_user_id: pulseWsUser } : {}),
-          ...(pulseWsPass
-            ? { pulseem_password: pulseWsPass, pulseem_has_password: true }
+          ...(insertPulsePass
+            ? { pulseem_password: insertPulsePass, pulseem_has_password: true }
             : {}),
         });
 

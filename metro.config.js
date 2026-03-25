@@ -1,5 +1,6 @@
 const path = require('path');
 const { getDefaultConfig } = require('expo/metro-config');
+const { resolve: metroDefaultResolve } = require('metro-resolver');
 
 // Metro (Expo SDK 54) sometimes resolves `react-native-reanimated` to its `src/`
 // entry on web (via the `react-native` field). With Reanimated 4.x this can
@@ -17,8 +18,10 @@ const reanimatedWebEntry = path.join(
   'index.js'
 );
 
-const defaultResolveRequest = config.resolver.resolveRequest;
-
+// Chain custom resolution with Metro's default. Do not use `context.resolveRequest`
+// alone: with Expo 54, `config.resolver.resolveRequest` is often null, and calling
+// `context.resolveRequest` here can break bare imports (e.g. react-native-gesture-handler).
+// metro-resolver's `resolve` implements the correct fallback wrapping.
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (platform === 'web' && moduleName === 'react-native-reanimated') {
     return {
@@ -27,11 +30,7 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     };
   }
 
-  if (typeof defaultResolveRequest === 'function') {
-    return defaultResolveRequest(context, moduleName, platform);
-  }
-
-  return context.resolveRequest(context, moduleName, platform);
+  return metroDefaultResolve(context, moduleName, platform);
 };
 
 module.exports = config;

@@ -39,13 +39,6 @@ const TEXT_MUTED = '#9CA3AF';
 
 type TabKey = 'dashboard' | 'add' | 'settings';
 
-function pulseemMainKeyMasked(key: string): string {
-  const k = key.trim();
-  if (!k) return '';
-  if (k.length <= 10) return `${k.slice(0, 2)}…${k.slice(-2)}`;
-  return `${k.slice(0, 6)}…${k.slice(-6)}`;
-}
-
 export default function SuperAdminDashboard() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -73,17 +66,7 @@ export default function SuperAdminDashboard() {
   const [newPulseemSubPassword, setNewPulseemSubPassword] = useState('');
 
   const extra = getExpoExtra();
-  const pulseemMainApiKey = String(extra.PULSEEM_MAIN_API_KEY ?? '').replace(/^\uFEFF/, '').trim();
-  const hasPulseemMainKey = !!pulseemMainApiKey;
-  useEffect(() => {
-    if (!__DEV__) return;
-    if (pulseemMainApiKey) {
-      console.log('[super-admin] PULSEEM_MAIN_API_KEY', pulseemMainApiKey);
-      console.log('[super-admin] PULSEEM_MAIN_API_KEY length=', pulseemMainApiKey.length);
-    } else {
-      console.log('[super-admin] Pulseem ראשי — ריק (בדוק PULSEEM_MAIN_API_KEY_B64 ב-.env)');
-    }
-  }, [pulseemMainApiKey]);
+  const hasPulseemMainKey = !!String(extra.PULSEEM_MAIN_API_KEY ?? '').replace(/^\uFEFF/, '').trim();
   const [pulseModalBiz, setPulseModalBiz] = useState<BusinessOverview | null>(null);
   const [deleteConfirmBiz, setDeleteConfirmBiz] = useState<BusinessOverview | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
@@ -445,32 +428,6 @@ export default function SuperAdminDashboard() {
       {/* Pulseem SMS */}
       <View style={styles.formCard}>
         <Text style={styles.formSectionLabel}>פולסים SMS</Text>
-
-        <View style={styles.pulseemKeyDebugBox}>
-          <Text style={styles.pulseemKeyDebugTitle}>מפתח Pulseem ראשי (מ-extra, מקור: PULSEEM_MAIN_API_KEY_B64)</Text>
-          {pulseemMainApiKey ? (
-            <>
-              <Text style={styles.pulseemKeyDebugMeta}>
-                אורך: {pulseemMainApiKey.length} תווים · תחילה: {JSON.stringify(pulseemMainApiKey.slice(0, 4))} · סוף:{' '}
-                {JSON.stringify(pulseemMainApiKey.slice(-4))}
-              </Text>
-              {__DEV__ ? (
-                <>
-                  <Text style={styles.pulseemKeyDebugDevNote}>מצב פיתוח — המפתח המלא (ניתן להעתקה):</Text>
-                  <Text selectable style={styles.pulseemKeyDebugFull}>
-                    {pulseemMainApiKey}
-                  </Text>
-                </>
-              ) : (
-                <Text style={styles.pulseemKeyDebugMasked}>מוסתר בבילד ייצור: {pulseemMainKeyMasked(pulseemMainApiKey)}</Text>
-              )}
-            </>
-          ) : (
-            <Text style={styles.pulseemKeyDebugMissing}>
-              לא נטען — הוסף PULSEEM_MAIN_API_KEY_B64 ל-.env (Base64, בלי $ גולמי) והפעל מחדש Metro
-            </Text>
-          )}
-        </View>
 
         {hasPulseemMainKey ? (
           <>
@@ -901,31 +858,6 @@ const styles = StyleSheet.create({
   colorPreview: { width: 50, height: 50, borderRadius: 14, borderWidth: 1, borderColor: CARD_BORDER },
 
   brandHint: { fontSize: 12, color: TEXT_MUTED, textAlign: 'right', marginBottom: 12, alignSelf: 'stretch' },
-  pulseemKeyDebugBox: {
-    backgroundColor: '#F8F9FC',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#E2E6EF',
-    alignSelf: 'stretch',
-  },
-  pulseemKeyDebugTitle: { fontSize: 12, fontWeight: '700', color: TEXT_SECONDARY, textAlign: 'right', marginBottom: 6 },
-  pulseemKeyDebugMeta: { fontSize: 11, color: TEXT_MUTED, textAlign: 'right', marginBottom: 8, fontFamily: 'monospace' },
-  pulseemKeyDebugDevNote: { fontSize: 11, color: ORANGE, textAlign: 'right', marginBottom: 4 },
-  pulseemKeyDebugFull: {
-    fontSize: 11,
-    color: TEXT_PRIMARY,
-    textAlign: 'left',
-    fontFamily: 'monospace',
-    backgroundColor: '#FFFFFF',
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: CARD_BORDER,
-  },
-  pulseemKeyDebugMasked: { fontSize: 12, color: TEXT_SECONDARY, textAlign: 'right', fontFamily: 'monospace' },
-  pulseemKeyDebugMissing: { fontSize: 12, color: ORANGE, textAlign: 'right' },
   pulseemAutoBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0FFF4', borderRadius: 8, padding: 10, marginBottom: 12, gap: 4 },
   imgRow: { flexDirection: 'row', gap: 10 },
   imgPickerWrap: { flex: 1, alignItems: 'center' },

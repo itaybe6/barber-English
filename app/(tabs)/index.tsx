@@ -229,6 +229,7 @@ export default function HomeScreen() {
   const [editClientPhone, setEditClientPhone] = useState('');
   const [savingClient, setSavingClient] = useState(false);
   const [insightsData, setInsightsData] = useState({
+    booked: 0,
     completed: 0,
     cancelled: 0,
     newClientsThisMonth: 0,
@@ -348,6 +349,8 @@ export default function HomeScreen() {
     if (isSuperAdmin) { setLoadingNextAppointment(false); return; }
     try {
       setLoadingNextAppointment(true);
+      const { getBusinessId } = await import('@/lib/supabase');
+      const businessId = getBusinessId();
       const now = new Date();
       const today = now.toISOString().split('T')[0];
       const currentTime = now.toTimeString().split(' ')[0];
@@ -356,6 +359,7 @@ export default function HomeScreen() {
       let query = supabase
         .from('appointments')
         .select('*')
+        .eq('business_id', businessId)
         .eq('is_available', false) // Only booked appointments
         .eq('slot_date', today) // Today only
         .gt('slot_time', currentTime) // After current time
@@ -388,11 +392,14 @@ export default function HomeScreen() {
     if (isSuperAdmin) { setLoadingTodayCount(false); return; }
     try {
       setLoadingTodayCount(true);
+      const { getBusinessId } = await import('@/lib/supabase');
+      const businessId = getBusinessId();
       const today = new Date().toISOString().split('T')[0];
       
       let query = supabase
         .from('appointments')
         .select('*')
+        .eq('business_id', businessId)
         .eq('slot_date', today)
         .eq('is_available', false); // Only booked appointments
 
@@ -446,28 +453,27 @@ export default function HomeScreen() {
       
       let appointmentsQuery = supabase
         .from('appointments')
-        .select('*')
-        .eq('is_available', false) // Only booked appointments
-        .gte('slot_date', firstDayOfMonth) // From start of month
-        .lte('slot_date', lastDayOfMonth); // To end of month
+        .select('id, status')
+        .eq('business_id', businessId)
+        .eq('is_available', false)
+        .gte('slot_date', firstDayOfMonth)
+        .lte('slot_date', lastDayOfMonth)
+        .in('status', ['pending', 'confirmed', 'completed']);
 
-      // סינון לפי המשתמש הנוכחי - רק תורים שהוא יצר
       if (user?.id) {
-        appointmentsQuery = appointmentsQuery.eq('user_id', user.id);
+        appointmentsQuery = appointmentsQuery.eq('barber_id', user.id);
       }
 
       const { data: appointmentsData, error: appointmentsError } = await appointmentsQuery;
 
       if (appointmentsError) {
-        console.error('Error fetching completed appointments:', appointmentsError);
+        console.error('Error fetching monthly booked appointments:', appointmentsError);
         return;
       }
 
-
-
       setMonthlyStats({
         totalClients: clientsData?.length || 0,
-        completedAppointments: appointmentsData?.length || 0
+        completedAppointments: appointmentsData?.length || 0,
       });
     } catch (error) {
       console.error('Error in fetchMonthlyStats:', error);
@@ -493,9 +499,10 @@ export default function HomeScreen() {
           .from('appointments')
           .select('id, status')
           .eq('business_id', businessId)
+          .eq('is_available', false)
           .gte('slot_date', firstDayOfMonth)
           .lte('slot_date', lastDayOfMonth)
-          .in('status', ['confirmed', 'completed', 'cancelled']),
+          .in('status', ['pending', 'confirmed', 'completed', 'cancelled', 'no_show']),
         supabase
           .from('users')
           .select('id', { count: 'exact', head: true })
@@ -514,8 +521,11 @@ export default function HomeScreen() {
 
       const data = appointmentsRes.data;
       setInsightsData({
-        completed: data?.filter(a => a.status === 'completed' || a.status === 'confirmed').length || 0,
-        cancelled: data?.filter(a => a.status === 'cancelled').length || 0,
+        booked:
+          data?.filter((a) => a.status === 'pending' || a.status === 'confirmed').length || 0,
+        completed: data?.filter((a) => a.status === 'completed').length || 0,
+        cancelled:
+          data?.filter((a) => a.status === 'cancelled' || a.status === 'no_show').length || 0,
         newClientsThisMonth: newClientsRes.error ? 0 : newClientsRes.count ?? 0,
       });
     } catch (error) {
@@ -937,6 +947,7 @@ export default function HomeScreen() {
         {/* ── MONTHLY INSIGHTS CHART ── */}
         {isAdmin && (
           <MonthlyInsightsCard
+            booked={insightsData.booked}
             completed={insightsData.completed}
             cancelled={insightsData.cancelled}
             newClientsThisMonth={insightsData.newClientsThisMonth}

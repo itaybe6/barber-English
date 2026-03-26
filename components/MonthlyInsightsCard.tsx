@@ -5,6 +5,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 
 interface MonthlyInsightsCardProps {
+  /** Booked visits not yet finished: pending (awaiting approval) + confirmed (approved / scheduled). */
+  booked: number;
+  /** Finished services only (status completed). */
   completed: number;
   cancelled: number;
   /** Client users created this calendar month (not part of appointment donut). */
@@ -13,6 +16,8 @@ interface MonthlyInsightsCardProps {
   colors: any;
 }
 
+const COMPLETED_SEGMENT_COLOR = '#34C759';
+
 const CHART_SIZE = 120;
 const STROKE_WIDTH = 12;
 const CENTER = CHART_SIZE / 2;
@@ -20,6 +25,7 @@ const RADIUS = (CHART_SIZE - STROKE_WIDTH) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 export default function MonthlyInsightsCard({
+  booked,
   completed,
   cancelled,
   newClientsThisMonth,
@@ -27,7 +33,7 @@ export default function MonthlyInsightsCard({
   colors,
 }: MonthlyInsightsCardProps) {
   const { t } = useTranslation();
-  const total = completed + cancelled;
+  const total = booked + completed + cancelled;
 
   const monthLabel = useMemo(() => {
     return new Date().toLocaleString('he-IL', { month: 'long', year: 'numeric' });
@@ -36,7 +42,8 @@ export default function MonthlyInsightsCard({
   const segments = useMemo(() => {
     if (total === 0) return [];
     const items = [
-      { value: completed, color: colors.primary },
+      { value: booked, color: colors.primary },
+      { value: completed, color: COMPLETED_SEGMENT_COLOR },
       { value: cancelled, color: '#FF9500' },
     ].filter((s) => s.value > 0);
 
@@ -47,10 +54,11 @@ export default function MonthlyInsightsCard({
       accumulated += length;
       return { ...item, length, offset };
     });
-  }, [completed, cancelled, total, colors.primary]);
+  }, [booked, completed, cancelled, total, colors.primary]);
 
   const legendItems = [
-    { value: completed, color: colors.primary, label: t('admin.insights.completed', 'Completed') },
+    { value: booked, color: colors.primary, label: t('admin.insights.booked', 'Booked') },
+    { value: completed, color: COMPLETED_SEGMENT_COLOR, label: t('admin.insights.completed', 'Completed') },
     { value: cancelled, color: '#FF9500', label: t('admin.insights.cancelled', 'Cancelled') },
   ];
 

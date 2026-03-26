@@ -142,6 +142,7 @@
   "register.success.pendingApproval": "החשבון נוצר. העסק יאשר אותו בקרוב.\n\nתוכל/י להתחבר עם הטלפון והסיסמה אחרי האישור.\n\nטלפון: {{phone}}",
   "admin.insights.title": "תובנות חודשיות",
   "admin.insights.noData": "אין נתוני תורים החודש",
+  "admin.insights.booked": "מוזמנו",
   "admin.insights.completed": "הושלמו",
   "admin.insights.cancelled": "בוטלו",
   "admin.insights.noShow": "לא הגיעו",

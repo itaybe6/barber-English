@@ -125,7 +125,19 @@ export default function SelectTimeScreen() {
       } else {
         bhQuery = bhQuery.is('user_id', null);
       }
-      const { data: bhRow } = await bhQuery.maybeSingle();
+      let { data: bhRow } = await bhQuery.maybeSingle();
+      // Fallback: if no barber-specific hours found, try global hours
+      if (!bhRow && params.barberId) {
+        const { data: globalBh } = await supabase
+          .from('business_hours')
+          .select('*')
+          .eq('day_of_week', dow)
+          .eq('is_active', true)
+          .eq('business_id', businessId)
+          .is('user_id', null)
+          .maybeSingle();
+        bhRow = globalBh;
+      }
 
       const toHHMM = (mins: number) => {
         const h = Math.floor(mins / 60);

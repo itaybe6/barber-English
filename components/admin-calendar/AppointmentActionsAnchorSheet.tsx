@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef, useLayoutEffect } from 'react';
-import { Dimensions, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { Dimensions, Modal, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing,
   Extrapolation,
@@ -10,7 +10,16 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+const PANEL_SHADOW_STATIC = Platform.select({
+  ios: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 20,
+  },
+  android: { elevation: 12 },
+  default: {},
+});
 
 export interface AnchorRect {
   x: number;
@@ -21,15 +30,44 @@ export interface AnchorRect {
 
 const _defaultDuration = 480;
 
-/** כשאין מדידה — פותחים ממרכז המסך */
 export function getDefaultAppointmentAnchorRect(): AnchorRect {
+  const { width, height } = Dimensions.get('window');
   const s = 56;
   return {
-    x: (SCREEN_W - s) / 2,
-    y: SCREEN_H * 0.38,
+    x: (width - s) / 2,
+    y: height * 0.38,
     width: s,
     height: s,
   };
+}
+
+/**
+ * Convert anchor rect to center + size.
+ * measureInWindow always returns physical screen coordinates (x=0 at
+ * physical left edge), which is what we need for transform-based positioning.
+ */
+function anchorToShared(anchor: AnchorRect) {
+  return {
+    cx: anchor.x + anchor.width / 2,
+    cy: anchor.y + anchor.height / 2,
+    w: Math.max(anchor.width, 40),
+    h: Math.max(anchor.height, 36),
+  };
+}
+
+/**
+ * When the tap is on the physical right side of the screen (e.g. Sunday column
+ * in RTL week view), the sheet can look slightly too far right; nudge the open
+ * resting position left. Values are in physical px; `winW` is window width.
+ */
+function computeOpenedCenterOffsetX(cx: number, winW: number): number {
+  if (winW <= 0) return 0;
+  const r = cx / winW;
+  // Strong right (rightmost day column)
+  if (r > 0.62) return -Math.min(36, winW * 0.085);
+  // Moderate right
+  if (r > 0.52) return -Math.min(22, winW * 0.048);
+  return 0;
 }
 
 type Props = {
@@ -41,9 +79,6 @@ type Props = {
   children: React.ReactNode;
 };
 
-/**
- * לוח פעולות לבן שנפתח ונסגר ממיקום הכרטיס שלחצו (מורפולוגיה דומה ל־Fab).
- */
 export function AppointmentActionsAnchorSheet({
   open,
   anchor,
@@ -52,41 +87,50 @@ export function AppointmentActionsAnchorSheet({
   duration = _defaultDuration,
   children,
 }: Props) {
+  const { width: winW, height: winH } = useWindowDimensions();
   const progress = useSharedValue(0);
 
-  const cx0 = useSharedValue(SCREEN_W / 2);
-  const cy0 = useSharedValue(SCREEN_H * 0.4);
-  const w0 = useSharedValue(56);
-  const h0 = useSharedValue(56);
+  const init = anchorToShared(anchor);
+  const cx0 = useSharedValue(init.cx);
+  const cy0 = useSharedValue(init.cy);
+  const w0 = useSharedValue(init.w);
+  const h0 = useSharedValue(init.h);
+  /** Extra horizontal offset for the *opened* position (interpolated target), not the anchor */
+  const openedCenterOffsetX = useSharedValue(computeOpenedCenterOffsetX(init.cx, winW));
 
   const closingRef = useRef(false);
   const onDismissedRef = useRef(onDismissed);
   onDismissedRef.current = onDismissed;
 
+  const scheduleDismissed = useCallback(() => {
+    onDismissedRef.current();
+  }, []);
+
   const syncAnchor = useCallback(
-    (a: AnchorRect) => {
-      cx0.value = a.x + a.width / 2;
-      cy0.value = a.y + a.height / 2;
-      w0.value = Math.max(a.width, 40);
-      h0.value = Math.max(a.height, 36);
+    (a: AnchorRect, width: number) => {
+      const o = anchorToShared(a);
+      cx0.value = o.cx;
+      cy0.value = o.cy;
+      w0.value = o.w;
+      h0.value = o.h;
+      openedCenterOffsetX.value = computeOpenedCenterOffsetX(o.cx, width);
     },
-    [cx0, cy0, w0, h0]
+    [cx0, cy0, w0, h0, openedCenterOffsetX]
   );
 
   useLayoutEffect(() => {
-    syncAnchor(anchor);
-  }, [anchor, syncAnchor]);
-
-  useEffect(() => {
-    if (open) {
-      closingRef.current = false;
-      progress.value = 0;
+    syncAnchor(anchor, winW);
+    if (!open) return;
+    closingRef.current = false;
+    progress.value = 0;
+    const id = requestAnimationFrame(() => {
       progress.value = withTiming(1, {
         duration,
         easing: Easing.out(Easing.cubic),
       });
-    }
-  }, [open, duration, progress]);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [anchor, open, duration, progress, syncAnchor, winW]);
 
   useEffect(() => {
     if (open) {
@@ -101,51 +145,48 @@ export function AppointmentActionsAnchorSheet({
       (finished) => {
         closingRef.current = false;
         if (finished) {
-          runOnJS(() => onDismissedRef.current())();
+          runOnJS(scheduleDismissed)();
         }
       }
     );
-  }, [open, duration, progress]);
+  }, [open, duration, progress, scheduleDismissed]);
 
-  const finalW = Math.min(SCREEN_W * 0.88, 420);
   const finalH = 340;
-
-  const targetCX = SCREEN_W / 2;
-  const targetCY = SCREEN_H * 0.42;
 
   const backdropStyle = useAnimatedStyle(() => ({
     opacity: interpolate(progress.value, [0, 1], [0, 1], Extrapolation.CLAMP),
   }));
 
+  /**
+   * Position the panel using ONLY transform (translateX/Y) instead of left/top.
+   * Transforms are always in physical screen coordinates regardless of RTL,
+   * which matches the physical x/y from measureInWindow.
+   */
   const panelStyle = useAnimatedStyle(() => {
+    const finalW = Math.min(winW * 0.88, 420);
+    const targetCX = winW / 2 + openedCenterOffsetX.value;
+    const targetCY = winH * 0.42;
     const p = progress.value;
     const cx = interpolate(p, [0, 1], [cx0.value, targetCX], Extrapolation.CLAMP);
     const cy = interpolate(p, [0, 1], [cy0.value, targetCY], Extrapolation.CLAMP);
     const w = interpolate(p, [0, 1], [w0.value, finalW], Extrapolation.CLAMP);
     const h = interpolate(p, [0, 1], [h0.value, finalH], Extrapolation.CLAMP);
     const borderRadius = interpolate(p, [0, 1], [10, 22], Extrapolation.CLAMP);
-    const shadowOpacity = interpolate(p, [0, 0.35, 1], [0, 0, 0.14], Extrapolation.CLAMP);
     return {
       position: 'absolute' as const,
-      left: cx - w / 2,
-      top: cy - h / 2,
+      left: 0,
+      top: 0,
       width: w,
       height: h,
       borderRadius,
       backgroundColor: '#FFFFFF',
       overflow: 'hidden' as const,
-      ...Platform.select({
-        ios: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity,
-          shadowRadius: 20,
-        },
-        android: { elevation: p > 0.2 ? 12 : 0 },
-        default: {},
-      }),
+      transform: [
+        { translateX: cx - w / 2 },
+        { translateY: cy - h / 2 },
+      ],
     };
-  });
+  }, [winW, winH, finalH]);
 
   const innerStyle = useAnimatedStyle(() => ({
     opacity: interpolate(progress.value, [0.22, 0.68], [0, 1], Extrapolation.CLAMP),
@@ -162,7 +203,7 @@ export function AppointmentActionsAnchorSheet({
         <Animated.View style={[styles.backdrop, backdropStyle]} pointerEvents="box-none">
           <Pressable style={StyleSheet.absoluteFill} onPress={onRequestClose} accessibilityRole="button" />
         </Animated.View>
-        <Animated.View style={[styles.panelTouchWrap, panelStyle]} pointerEvents="box-none">
+        <Animated.View style={[styles.panelTouchWrap, PANEL_SHADOW_STATIC, panelStyle]} pointerEvents="box-none">
           <Animated.View style={[styles.panelInner, innerStyle]} pointerEvents="auto">
             {children}
           </Animated.View>

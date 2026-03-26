@@ -14,6 +14,8 @@ interface TabButtonProps {
   activeColor?: string;
   /** Default 14 — use a larger value for oversized tab bars (e.g. booking). */
   buttonPadding?: number;
+  accessibilityLabel?: string;
+  accessibilityRole?: "button" | "tab";
 }
 
 export const TabButton: FC<TabButtonProps> = ({
@@ -22,6 +24,8 @@ export const TabButton: FC<TabButtonProps> = ({
   children,
   activeColor = "#F5F5F5",
   buttonPadding = 14,
+  accessibilityLabel,
+  accessibilityRole = "button",
 }) => {
   const scale = useSharedValue(1);
   const bg = useSharedValue(focused ? activeColor : "#ffffff");
@@ -39,6 +43,8 @@ export const TabButton: FC<TabButtonProps> = ({
 
   return (
     <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole={accessibilityRole}
       onPress={() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
         onPress();

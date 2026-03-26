@@ -61,11 +61,14 @@ import { useTranslation } from 'react-i18next';
 import Reanimated, {
   Extrapolation,
   interpolate,
+  runOnJS,
+  useAnimatedReaction,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
 } from 'react-native-reanimated';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
+import { SettingsStickyNavSectionTitle } from '@/components/settings/SettingsStickyNavSectionTitle';
 
 // Helper for shadow style
 const shadowStyle = Platform.select({
@@ -200,6 +203,16 @@ export default function SettingsScreen() {
       opacity,
     };
   });
+
+  /** Y positions of each section title (scroll content coords) → sticky header label while scrolling */
+  const sectionPositionsRef = useRef<Map<string, number>>(new Map());
+  const stickySectionOrderRef = useRef<string[]>([]);
+  const stickyScrollAnchorRef = useRef(insets.top + SETTINGS_MAIN_NAV_BELOW_INSET_H + 16);
+  const lastStickySectionIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    stickyScrollAnchorRef.current = insets.top + SETTINGS_MAIN_NAV_BELOW_INSET_H + 16;
+  }, [insets.top]);
   
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   
@@ -1556,6 +1569,104 @@ export default function SettingsScreen() {
     return userPhone !== '' && businessPhone !== '' && userPhone === businessPhone;
   }, [user?.phone, (profile as any)?.phone]);
 
+  const settingsStickySections = useMemo(() => {
+    const items: { id: string; title: string }[] = [];
+    items.push({
+      id: 'notifications',
+      title: t('settings.sections.notificationsMessages', 'Notifications & messages'),
+    });
+    items.push({
+      id: 'services',
+      title: t('settings.sections.services', 'Services'),
+    });
+    if (canSeeAddEmployee) {
+      items.push({
+        id: 'business',
+        title: t('settings.sections.businessDetails', 'Business details'),
+      });
+      items.push({
+        id: 'design',
+        title: t('settings.sections.designApp', 'Design Application'),
+      });
+    }
+    items.push({
+      id: 'policies',
+      title: t('settings.sections.appointmentPolicies', 'Appointment policies'),
+    });
+    if (isAdmin) {
+      items.push({
+        id: 'appointments_mgmt',
+        title: t('settings.sections.appointmentsManagement', 'Appointments management'),
+      });
+      items.push({
+        id: 'recurring',
+        title: t('settings.sections.recurringTitle', 'Recurring appointments'),
+      });
+    }
+    items.push({
+      id: 'security',
+      title: t('settings.sections.securitySupport', 'Security & support'),
+    });
+    if (user) {
+      items.push({
+        id: 'account',
+        title: t('settings.sections.accountManagement', 'Account Management'),
+      });
+    }
+    return items;
+  }, [canSeeAddEmployee, isAdmin, user, t]);
+
+  const [activeStickySectionId, setActiveStickySectionId] = useState<string>('notifications');
+
+  useEffect(() => {
+    stickySectionOrderRef.current = settingsStickySections.map((s) => s.id);
+  }, [settingsStickySections]);
+
+  useEffect(() => {
+    const ids = settingsStickySections.map((s) => s.id);
+    if (!ids.length) return;
+    if (!ids.includes(activeStickySectionId)) {
+      const next = ids[0]!;
+      lastStickySectionIdRef.current = next;
+      setActiveStickySectionId(next);
+    }
+  }, [settingsStickySections, activeStickySectionId]);
+
+  const onSettingsSectionLayout = useCallback((id: string) => (e: LayoutChangeEvent) => {
+    sectionPositionsRef.current.set(id, e.nativeEvent.layout.y);
+  }, []);
+
+  const syncStickySectionFromScroll = useCallback((scrollY: number) => {
+    const anchor = scrollY + stickyScrollAnchorRef.current;
+    const ids = stickySectionOrderRef.current;
+    if (!ids.length) return;
+    const pos = sectionPositionsRef.current;
+    let bestId = ids[0]!;
+    for (const id of ids) {
+      const y = pos.get(id);
+      if (y !== undefined && y <= anchor) bestId = id;
+    }
+    if (bestId !== lastStickySectionIdRef.current) {
+      lastStickySectionIdRef.current = bestId;
+      setActiveStickySectionId(bestId);
+    }
+  }, []);
+
+  useAnimatedReaction(
+    () => adminProfileScrollY.value,
+    (y) => {
+      runOnJS(syncStickySectionFromScroll)(y);
+    },
+    [syncStickySectionFromScroll],
+  );
+
+  const stickyNavTitle = useMemo(
+    () =>
+      settingsStickySections.find((s) => s.id === activeStickySectionId)?.title ??
+      t('profile.settings', 'Settings'),
+    [settingsStickySections, activeStickySectionId, t],
+  );
+
   const [showRecurringModal, setShowRecurringModal] = useState(false);
   const [isSubmittingRecurring, setIsSubmittingRecurring] = useState(false);
   const [showManageRecurringModal, setShowManageRecurringModal] = useState(false);
@@ -2127,8 +2238,10 @@ export default function SettingsScreen() {
         >
           <Reanimated.View style={adminProfileDummySpacerStyle} />
 
-        <View style={[styles.sectionTitleWrapper, styles.sectionTitleWrapperFirst]}>
-          <Text style={styles.sectionTitleNew}>{t('settings.sections.notificationsMessages','Notifications & messages')}</Text>
+        <View onLayout={onSettingsSectionLayout('notifications')}>
+          <View style={[styles.sectionTitleWrapper, styles.sectionTitleWrapperFirst]}>
+            <Text style={styles.sectionTitleNew}>{t('settings.sections.notificationsMessages','Notifications & messages')}</Text>
+          </View>
         </View>
         
         <View style={styles.cardNew}>
@@ -2161,8 +2274,10 @@ export default function SettingsScreen() {
 
         </View>
         
-        <View style={styles.sectionTitleWrapper}>
-          <Text style={styles.sectionTitleNew}>{t('settings.sections.services','Services')}</Text>
+        <View onLayout={onSettingsSectionLayout('services')}>
+          <View style={styles.sectionTitleWrapper}>
+            <Text style={styles.sectionTitleNew}>{t('settings.sections.services','Services')}</Text>
+          </View>
         </View>
         <View style={styles.cardNew}>
           {renderSettingItem(
@@ -2176,8 +2291,10 @@ export default function SettingsScreen() {
 
         {canSeeAddEmployee && (
           <>
-            <View style={styles.sectionTitleWrapper}>
-              <Text style={styles.sectionTitleNew}>{t('settings.sections.businessDetails','Business details')}</Text>
+            <View onLayout={onSettingsSectionLayout('business')}>
+              <View style={styles.sectionTitleWrapper}>
+                <Text style={styles.sectionTitleNew}>{t('settings.sections.businessDetails','Business details')}</Text>
+              </View>
             </View>
             <View style={styles.cardNew}>
               <View style={styles.settingItemLTR}>
@@ -2267,8 +2384,10 @@ export default function SettingsScreen() {
 
         {canSeeAddEmployee && (
           <>
-            <View style={styles.sectionTitleWrapper}>
-              <Text style={styles.sectionTitleNew}>{t('settings.sections.designApp','Design Application')}</Text>
+            <View onLayout={onSettingsSectionLayout('design')}>
+              <View style={styles.sectionTitleWrapper}>
+                <Text style={styles.sectionTitleNew}>{t('settings.sections.designApp','Design Application')}</Text>
+              </View>
             </View>
             <View style={styles.cardNew}>
               <View style={styles.colorPickerWrapper}>
@@ -2300,8 +2419,10 @@ export default function SettingsScreen() {
           </>
         )}
 
-        <View style={styles.sectionTitleWrapper}>
-          <Text style={styles.sectionTitleNew}>{t('settings.sections.appointmentPolicies','Appointment policies')}</Text>
+        <View onLayout={onSettingsSectionLayout('policies')}>
+          <View style={styles.sectionTitleWrapper}>
+            <Text style={styles.sectionTitleNew}>{t('settings.sections.appointmentPolicies','Appointment policies')}</Text>
+          </View>
         </View>
         <View style={styles.cardNew}>
           <View style={styles.settingItemLTR}>
@@ -2326,8 +2447,10 @@ export default function SettingsScreen() {
 
         {isAdmin && (
           <>
-            <View style={styles.sectionTitleWrapper}>
-              <Text style={styles.sectionTitleNew}>{t('settings.sections.appointmentsManagement','Appointments management')}</Text>
+            <View onLayout={onSettingsSectionLayout('appointments_mgmt')}>
+              <View style={styles.sectionTitleWrapper}>
+                <Text style={styles.sectionTitleNew}>{t('settings.sections.appointmentsManagement','Appointments management')}</Text>
+              </View>
             </View>
             <View style={styles.cardNew}>
               {renderSettingItem(
@@ -2339,8 +2462,10 @@ export default function SettingsScreen() {
               )}
             </View>
 
-            <View style={styles.sectionTitleWrapper}>
-              <Text style={styles.sectionTitleNew}>{t('settings.sections.recurringTitle','Recurring appointments')}</Text>
+            <View onLayout={onSettingsSectionLayout('recurring')}>
+              <View style={styles.sectionTitleWrapper}>
+                <Text style={styles.sectionTitleNew}>{t('settings.sections.recurringTitle','Recurring appointments')}</Text>
+              </View>
             </View>
             <View style={styles.cardNew}>
               {renderSettingItem(
@@ -2371,8 +2496,10 @@ export default function SettingsScreen() {
           </>
         )}
         
-        <View style={styles.sectionTitleWrapper}>
-          <Text style={styles.sectionTitleNew}>{t('settings.sections.securitySupport','Security & support')}</Text>
+        <View onLayout={onSettingsSectionLayout('security')}>
+          <View style={styles.sectionTitleWrapper}>
+            <Text style={styles.sectionTitleNew}>{t('settings.sections.securitySupport','Security & support')}</Text>
+          </View>
         </View>
         
         <View style={styles.cardNew}>
@@ -2428,8 +2555,10 @@ export default function SettingsScreen() {
 
         {user && (
           <>
-            <View style={styles.sectionTitleWrapper}>
-              <Text style={styles.sectionTitleNew}>{t('settings.sections.accountManagement','Account Management')}</Text>
+            <View onLayout={onSettingsSectionLayout('account')}>
+              <View style={styles.sectionTitleWrapper}>
+                <Text style={styles.sectionTitleNew}>{t('settings.sections.accountManagement','Account Management')}</Text>
+              </View>
             </View>
             
             <View style={styles.cardNew}>
@@ -2461,9 +2590,7 @@ export default function SettingsScreen() {
           ]}
         >
           <View style={styles.settingsMainNavInner}>
-            <Text style={styles.settingsMainNavTitle}>
-              {t('profile.settings', 'Settings')}
-            </Text>
+            <SettingsStickyNavSectionTitle sectionKey={activeStickySectionId} title={stickyNavTitle} />
           </View>
         </Reanimated.View>
 
@@ -4737,13 +4864,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: 12,
     paddingHorizontal: 20,
-  },
-  settingsMainNavTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: Colors.text,
-    textAlign: 'center',
-    letterSpacing: -0.3,
   },
   /** Sticky profile header overlay (bank-app scroll flip) */
   adminProfileStickyHost: {

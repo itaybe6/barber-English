@@ -22,7 +22,7 @@ import Animated, {
   useSharedValue,
 } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router, Link } from 'expo-router';
+import { router } from 'expo-router';
 import { Phone, Lock, Mail, Eye, EyeOff } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
@@ -674,17 +674,18 @@ export default function LoginScreen() {
                   />
                 </View>
 
-                <View style={[styles.registerRow, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
-                  <Text style={[styles.registerText, { color: heroMuted }]}>
-                    {t('login.noAccount', 'אין לך חשבון?')}
+                <View style={styles.registerRow}>
+                  <Text style={[styles.registerText, { color: heroMuted, textAlign: 'center' }]}>
+                    {t('login.noAccount', 'אין לך חשבון?')}{' '}
+                    <Text
+                      onPress={() => router.push('/register')}
+                      accessibilityRole="link"
+                      style={[styles.registerAction, { color: useLightFg ? '#FFFFFF' : primary }]}
+                      suppressHighlighting={false}
+                    >
+                      {t('login.signUpNow', 'להרשמה')}
+                    </Text>
                   </Text>
-                  <Link href="/register" asChild>
-                    <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
-                      <Text style={[styles.registerAction, { color: useLightFg ? '#FFFFFF' : primary }]}>
-                        {t('login.signUpNow', 'הרשם עכשיו')}
-                      </Text>
-                    </TouchableOpacity>
-                  </Link>
                 </View>
               </LoginEntranceSection>
             </View>

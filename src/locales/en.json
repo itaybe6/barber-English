@@ -420,6 +420,7 @@
       "phoneNotRegisteredTitle": "Phone number not registered",
       "tagPhoneRequired": "Please enter a valid phone number",
       "tagPhoneNotRegistered": "This phone number isn’t registered with us",
+      "resendSuccessTag": "Code sent again successfully",
       "errorPhoneNotRegistered": "This phone number isn’t registered with us. You can sign up from the registration screen or double-check the number.",
       "a11y": { "delete": "Delete" }
     }
@@ -451,10 +452,14 @@
       "title": "A few more details",
       "subtitle": "So we can recognize you and serve you better.",
       "nameLabel": "Full name",
-      "namePlaceholder": "e.g. Jane Doe",
+      "nameRequiredA11y": "Required field",
+      "namePlaceholder": "Enter your full name",
       "birthLabel": "Date of birth",
       "birthOptional": "Optional",
       "birthPick": "Choose date",
+      "birthDayPlaceholder": "Day",
+      "birthMonthPlaceholder": "Month",
+      "birthYearPlaceholder": "Year",
       "birthClear": "No date",
       "photoLabel": "Profile photo",
       "photoOptional": "Optional",

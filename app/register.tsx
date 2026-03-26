@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withSequence,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
@@ -31,7 +32,7 @@ import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { Phone, User, Hash, Calendar, Camera } from 'lucide-react-native';
+import { Phone, User, Calendar, Camera, RotateCcw } from 'lucide-react-native';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useTranslation } from 'react-i18next';
 import { authPhoneOtpApi } from '@/lib/api/authPhoneOtp';
@@ -40,6 +41,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { isValidUserType } from '@/constants/auth';
 import { readableOnHex } from '@/lib/utils/readableOnHex';
 import { LoginEntranceSection } from '@/components/login/LoginEntranceSection';
+import { OtpPasscodeKeypad, type OtpKeyId } from '@/components/login/OtpPasscodeKeypad';
 import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
 import { parseIsraeliMobileNational10 } from '@/lib/login/israeliMobilePhone';
 
@@ -78,16 +80,6 @@ function lightenHex(hex: string, ratio: number): string {
   const mix = (c: number) => Math.min(255, Math.round(c + (255 - c) * ratio));
   const to = (n: number) => n.toString(16).padStart(2, '0');
   return `#${to(mix(r))}${to(mix(g))}${to(mix(b))}`;
-}
-
-function hexToRgba(hex: string, a: number): string {
-  const h = hex.replace('#', '');
-  if (h.length < 6) return `rgba(0,0,0,${a})`;
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  if (isNaN(r + g + b)) return `rgba(0,0,0,${a})`;
-  return `rgba(${r},${g},${b},${a})`;
 }
 
 type RegisterStep = 'phone' | 'otp' | 'profile';
@@ -146,7 +138,7 @@ export default function RegisterScreen() {
 
   const [registerStep, setRegisterStep] = useState<RegisterStep>('phone');
   const [phone, setPhone] = useState('');
-  const [otpCode, setOtpCode] = useState('');
+  const [otpPasscode, setOtpPasscode] = useState<number[]>([]);
   const [otpCooldownSec, setOtpCooldownSec] = useState(0);
   const [codeSentBanner, setCodeSentBanner] = useState(false);
 
@@ -166,7 +158,6 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [phoneFocused, setPhoneFocused] = useState(false);
-  const [otpFocused, setOtpFocused] = useState(false);
   const [nameFocused, setNameFocused] = useState(false);
   const [registerPhoneToast, setRegisterPhoneToast] = useState<RegisterPhoneToastKind | null>(null);
   const router = useRouter();
@@ -194,6 +185,29 @@ export default function RegisterScreen() {
   const btnScaleStyle = useAnimatedStyle(() => ({
     transform: [{ scale: btnScale.value }],
   }));
+
+  const verifyRegisterOtpInFlight = useRef(false);
+  const registerOtpShakeX = useSharedValue(0);
+  const registerOtpShakeStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: registerOtpShakeX.value }],
+  }));
+  const triggerRegisterOtpShake = useCallback(() => {
+    const step = { duration: 42, easing: Easing.linear };
+    registerOtpShakeX.value = withSequence(
+      withTiming(-9, step),
+      withTiming(9, step),
+      withTiming(-7, step),
+      withTiming(7, step),
+      withTiming(0, { duration: 48, easing: Easing.out(Easing.quad) }),
+    );
+  }, [registerOtpShakeX]);
+
+  const registerOtpDividerLeft = useLightFg
+    ? (['rgba(255,255,255,0)', 'rgba(255,255,255,0.28)', 'rgba(255,255,255,0.4)'] as const)
+    : (['rgba(0,0,0,0)', 'rgba(0,0,0,0.1)', 'rgba(0,0,0,0.14)'] as const);
+  const registerOtpDividerRight = useLightFg
+    ? (['rgba(255,255,255,0.4)', 'rgba(255,255,255,0.28)', 'rgba(255,255,255,0)'] as const)
+    : (['rgba(0,0,0,0.14)', 'rgba(0,0,0,0.1)', 'rgba(0,0,0,0)'] as const);
 
   const registerPhoneToastY = useSharedValue(REGISTER_PHONE_TOAST_HIDE_Y);
   const registerPhoneToastOpacity = useSharedValue(0);
@@ -333,8 +347,11 @@ export default function RegisterScreen() {
         }
         return;
       }
+      // Fresh SMS round: drop any stale profile-completion session from a previous attempt
+      setProfileSetupToken('');
+      setPendingUserId(null);
       setRegisterStep('otp');
-      setOtpCode('');
+      setOtpPasscode([]);
       setOtpCooldownSec(45);
       setCodeSentBanner(true);
       setTimeout(() => setCodeSentBanner(false), 4000);
@@ -346,44 +363,68 @@ export default function RegisterScreen() {
     }
   };
 
-  const handleVerifyOtpAndContinue = async () => {
-    const digits = otpCode.replace(/\D/g, '');
-    if (digits.length !== 6) {
-      Alert.alert(t('error.generic', 'שגיאה'), t('login.otp.enterSix', 'הזינו קוד בן 6 ספרות'));
+  const runRegisterVerifyOtp = useCallback(
+    async (digits: string) => {
+      if (digits.length !== 6 || verifyRegisterOtpInFlight.current) return;
+      verifyRegisterOtpInFlight.current = true;
+      setLoading(true);
+      try {
+        const res = await authPhoneOtpApi.verifyRegisterOtp({
+          phone: parseIsraeliMobileNational10(phone) ?? phone.trim(),
+          code: digits,
+        });
+        if (!res.ok || !res.profileSetupToken || !res.user?.id) {
+          setOtpPasscode([]);
+          triggerRegisterOtpShake();
+          Alert.alert(
+            t('error.generic', 'שגיאה'),
+            res.error === 'wrong_code' || res.error === 'no_active_code'
+              ? t('login.otp.errorWrongCode', 'קוד שגוי או שפג תוקפו.')
+              : res.error === 'too_many_attempts'
+                ? t('login.otp.errorTooMany', 'יותר מדי ניסיונות שגויים.')
+                : registerOtpError(res.error),
+          );
+          return;
+        }
+        setProfileSetupToken(res.profileSetupToken);
+        setPendingUserId(res.user.id);
+        setRegisterStep('profile');
+        setProfileName('');
+        setBirthDate(null);
+        setHasBirthDate(false);
+        setAvatarLocalUri(null);
+        setAvatarBase64(null);
+        setAvatarMime(null);
+        setOtpPasscode([]);
+      } catch (error) {
+        console.error('verifyRegisterOtp', error);
+        setOtpPasscode([]);
+        triggerRegisterOtpShake();
+        Alert.alert(t('error.generic', 'שגיאה'), t('common.tryAgain', 'נסו שוב.'));
+      } finally {
+        setLoading(false);
+        verifyRegisterOtpInFlight.current = false;
+      }
+    },
+    [phone, t, triggerRegisterOtpShake],
+  );
+
+  useEffect(() => {
+    if (registerStep !== 'otp') return;
+    const digits = otpPasscode.join('');
+    if (digits.length !== 6) return;
+    void runRegisterVerifyOtp(digits);
+  }, [otpPasscode, registerStep, runRegisterVerifyOtp]);
+
+  const handleRegisterOtpKey = (key: OtpKeyId) => {
+    if (loading) return;
+    if (key === 'delete') {
+      setOtpPasscode((p) => (p.length === 0 ? p : p.slice(0, -1)));
       return;
     }
-    setLoading(true);
-    try {
-      const res = await authPhoneOtpApi.verifyRegisterOtp({
-        phone: parseIsraeliMobileNational10(phone) ?? phone.trim(),
-        code: digits,
-      });
-      if (!res.ok || !res.profileSetupToken || !res.user?.id) {
-        Alert.alert(
-          t('error.generic', 'שגיאה'),
-          res.error === 'wrong_code' || res.error === 'no_active_code'
-            ? t('login.otp.errorWrongCode', 'קוד שגוי או שפג תוקפו.')
-            : res.error === 'too_many_attempts'
-              ? t('login.otp.errorTooMany', 'יותר מדי ניסיונות שגויים.')
-              : registerOtpError(res.error),
-        );
-        return;
-      }
-      setProfileSetupToken(res.profileSetupToken);
-      setPendingUserId(res.user.id);
-      setRegisterStep('profile');
-      setProfileName('');
-      setBirthDate(null);
-      setHasBirthDate(false);
-      setAvatarLocalUri(null);
-      setAvatarBase64(null);
-      setAvatarMime(null);
-    } catch (error) {
-      console.error('verifyRegisterOtp', error);
-      Alert.alert(t('error.generic', 'שגיאה'), t('common.tryAgain', 'נסו שוב.'));
-    } finally {
-      setLoading(false);
-    }
+    if (key === 'space') return;
+    if (otpPasscode.length >= 6) return;
+    setOtpPasscode((p) => [...p, key as number]);
   };
 
   const uploadRegisterAvatar = async (
@@ -426,6 +467,24 @@ export default function RegisterScreen() {
       return null;
     }
   };
+
+  const openBirthPicker = useCallback(() => {
+    setPickerTempDate(birthDate ?? defaultBirthDate());
+    if (Platform.OS === 'android') {
+      setShowAndroidBirthPicker(true);
+    } else {
+      setShowBirthModal(true);
+    }
+  }, [birthDate]);
+
+  const profileBirthParts = useMemo(() => {
+    if (!hasBirthDate || !birthDate) return { d: '', m: '', y: '' };
+    return {
+      d: String(birthDate.getDate()).padStart(2, '0'),
+      m: String(birthDate.getMonth() + 1).padStart(2, '0'),
+      y: String(birthDate.getFullYear()),
+    };
+  }, [hasBirthDate, birthDate]);
 
   const pickAvatar = async () => {
     if (!pendingUserId) return;
@@ -522,17 +581,6 @@ export default function RegisterScreen() {
       setLoading(false);
     }
   };
-
-  const boxedFieldStyle = (focused: boolean) =>
-    useLightFg
-      ? {
-          borderColor: focused ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.32)',
-          backgroundColor: focused ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.12)',
-        }
-      : {
-          borderColor: focused ? primary : 'rgba(0,0,0,0.1)',
-          backgroundColor: focused ? hexToRgba(primary, 0.06) : '#F7F7F7',
-        };
 
   return (
     <View style={[styles.root, { backgroundColor: gradientEnd }]}>
@@ -681,63 +729,78 @@ export default function RegisterScreen() {
                           <Text style={[styles.bannerOkText, { color: heroText }]}>{t('register.otp.sentToast', 'הקוד נשלח בהצלחה')}</Text>
                         </View>
                       ) : null}
-                      <View
-                        style={[
-                          styles.inputRow,
-                          { flexDirection: isRtl ? 'row-reverse' : 'row' },
-                          boxedFieldStyle(otpFocused),
-                        ]}
-                      >
-                        <Hash
-                          size={19}
-                          color={
-                            otpFocused
-                              ? useLightFg
-                                ? '#FFFFFF'
-                                : primary
-                              : useLightFg
-                                ? heroFaint
-                                : '#ABABAB'
-                          }
-                          strokeWidth={1.7}
-                        />
-                        <TextInput
-                          style={[styles.input, styles.otpInput, { textAlign: isRtl ? 'right' : 'left', color: heroText }]}
-                          placeholder="______"
-                          placeholderTextColor={heroFaint}
-                          value={otpCode}
-                          onChangeText={(text) => setOtpCode(text.replace(/\D/g, '').slice(0, 6))}
-                          keyboardType="number-pad"
-                          maxLength={6}
-                          autoCorrect={false}
-                          onFocus={() => setOtpFocused(true)}
-                          onBlur={() => setOtpFocused(false)}
-                        />
-                      </View>
-                      <TouchableOpacity onPress={() => setRegisterStep('phone')} style={styles.linkBtn}>
-                        <Text style={[styles.linkText, { color: useLightFg ? '#FFFFFF' : primary }]}>
-                          {t('register.otp.editPhone', 'שינוי מספר טלפון')}
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={handleSendRegisterOtp}
-                        disabled={loading || otpCooldownSec > 0}
-                        style={styles.linkBtn}
-                      >
-                        <Text
-                          style={[
-                            styles.linkText,
-                            {
-                              color:
-                                otpCooldownSec > 0 ? heroMuted : useLightFg ? '#FFFFFF' : primary,
-                            },
-                          ]}
+                      <OtpPasscodeKeypad
+                        passcode={otpPasscode}
+                        onKey={handleRegisterOtpKey}
+                        busy={loading}
+                        disabled={loading}
+                        useLightFg={useLightFg}
+                        primary={primary}
+                        heroText={heroText}
+                        heroFaint={heroFaint}
+                        shakeDotsStyle={registerOtpShakeStyle}
+                        deleteA11yLabel={t('login.otp.a11y.delete', 'מחק')}
+                      />
+                      <View style={styles.registerOtpFooter}>
+                        <TouchableOpacity
+                          onPress={handleSendRegisterOtp}
+                          disabled={loading || otpCooldownSec > 0}
+                          style={styles.linkBtn}
                         >
-                          {otpCooldownSec > 0
-                            ? t('register.otp.resendWait', 'שליחה חוזרת בעוד {{s}} שניות', { s: otpCooldownSec })
-                            : t('register.otp.resend', 'שלחו שוב')}
-                        </Text>
-                      </TouchableOpacity>
+                          <Text
+                            style={[
+                              styles.linkText,
+                              {
+                                color:
+                                  otpCooldownSec > 0 ? heroMuted : useLightFg ? '#FFFFFF' : primary,
+                              },
+                            ]}
+                          >
+                            {otpCooldownSec > 0
+                              ? t('register.otp.resendWait', 'שליחה חוזרת בעוד {{s}} שניות', { s: otpCooldownSec })
+                              : t('register.otp.resend', 'שלחו שוב')}
+                          </Text>
+                        </TouchableOpacity>
+                        <View style={styles.dividerOrnament} accessibilityElementsHidden>
+                          <LinearGradient
+                            colors={[...registerOtpDividerLeft]}
+                            locations={[0, 0.65, 1]}
+                            start={{ x: 0, y: 0.5 }}
+                            end={{ x: 1, y: 0.5 }}
+                            style={styles.dividerGrad}
+                          />
+                          <View
+                            style={[
+                              styles.dividerGem,
+                              {
+                                borderColor: primary,
+                                backgroundColor: useLightFg ? 'rgba(255,255,255,0.2)' : '#FFFFFF',
+                              },
+                            ]}
+                          />
+                          <LinearGradient
+                            colors={[...registerOtpDividerRight]}
+                            locations={[0, 0.35, 1]}
+                            start={{ x: 0, y: 0.5 }}
+                            end={{ x: 1, y: 0.5 }}
+                            style={styles.dividerGrad}
+                          />
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => {
+                            setRegisterStep('phone');
+                            setOtpPasscode([]);
+                            setCodeSentBanner(false);
+                            setProfileSetupToken('');
+                            setPendingUserId(null);
+                          }}
+                          style={styles.linkBtn}
+                        >
+                          <Text style={[styles.linkText, { color: useLightFg ? '#FFFFFF' : primary }]}>
+                            {t('register.otp.editPhone', 'שינוי מספר טלפון')}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                     </>
                   ) : null}
 
@@ -750,37 +813,107 @@ export default function RegisterScreen() {
                         {t('register.profile.subtitle', 'כך נזהה אותך ונוכל לתת שירות מדויק יותר.')}
                       </Text>
 
-                      <Text
+                      <TouchableOpacity
+                        activeOpacity={0.9}
+                        onPress={pickAvatar}
                         style={[
-                          styles.fieldLabelHero,
-                          { color: heroMuted, textAlign: isRtl ? 'right' : 'left' },
+                          styles.profileAvatarZone,
+                          {
+                            borderColor: useLightFg ? 'rgba(255,255,255,0.32)' : 'rgba(0,0,0,0.1)',
+                            backgroundColor: useLightFg ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.78)',
+                          },
                         ]}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          avatarLocalUri
+                            ? t('register.profile.photoChange', 'החלפת תמונה')
+                            : t('register.profile.photoAdd', 'הוספת תמונה')
+                        }
+                        accessibilityHint={t('register.profile.photoOptional', 'לא חובה')}
                       >
-                        {t('register.profile.nameLabel', 'שם מלא')} <Text style={styles.reqStar}>*</Text>
-                      </Text>
+                        <View style={styles.profileOptionalTagWrap} pointerEvents="none">
+                          <View
+                            style={[
+                              styles.profileOptionalPill,
+                              {
+                                borderColor: useLightFg ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.1)',
+                                backgroundColor: useLightFg ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.92)',
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.profileOptionalPillText,
+                                { color: useLightFg ? 'rgba(255,255,255,0.92)' : palette.textSecondary },
+                              ]}
+                            >
+                              {t('register.profile.photoOptional', 'לא חובה')}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.profileAvatarTap} pointerEvents="none">
+                          <View
+                            style={[
+                              styles.avatarRing,
+                              {
+                                borderColor: useLightFg ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.12)',
+                                backgroundColor: useLightFg ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.95)',
+                              },
+                            ]}
+                          >
+                            {avatarLocalUri ? (
+                              <Image source={{ uri: avatarLocalUri }} style={styles.avatarImageFill} />
+                            ) : (
+                              <View
+                                style={[
+                                  styles.avatarInner,
+                                  {
+                                    backgroundColor: useLightFg ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.04)',
+                                  },
+                                ]}
+                              >
+                                <Camera
+                                  size={28}
+                                  color={useLightFg ? 'rgba(255,255,255,0.75)' : heroFaint}
+                                  strokeWidth={1.45}
+                                />
+                              </View>
+                            )}
+                          </View>
+                          <Text
+                            style={[styles.avatarCaption, { color: useLightFg ? 'rgba(255,255,255,0.95)' : primary }]}
+                          >
+                            {avatarLocalUri
+                              ? t('register.profile.photoChange', 'החלפת תמונה')
+                              : t('register.profile.photoAdd', 'הוספת תמונה')}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+
                       <View
                         style={[
-                          styles.inputRow,
-                          { flexDirection: isRtl ? 'row-reverse' : 'row' },
-                          boxedFieldStyle(nameFocused),
+                          styles.phoneOpenRow,
+                          styles.profileNameRow,
+                          { flexDirection: 'row' },
+                          {
+                            borderBottomColor: nameFocused ? phoneBorderFocus : phoneBorderUnfocus,
+                            borderBottomWidth: nameFocused ? 2.5 : 1.5,
+                          },
                         ]}
                       >
-                        <User
-                          size={19}
-                          color={
-                            nameFocused
-                              ? useLightFg
-                                ? '#FFFFFF'
-                                : primary
-                              : useLightFg
-                                ? heroFaint
-                                : '#ABABAB'
-                          }
-                          strokeWidth={1.7}
-                        />
+                        <View style={styles.phoneOpenIconSlot} accessible={false}>
+                          <User
+                            size={18}
+                            color={nameFocused ? phoneBorderFocus : heroFaint}
+                            strokeWidth={1.6}
+                          />
+                        </View>
                         <TextInput
-                          style={[styles.input, { textAlign: isRtl ? 'right' : 'left', color: heroText }]}
-                          placeholder={t('register.profile.namePlaceholder', 'למשל: יוסי כהן')}
+                          style={[
+                            styles.phoneOpenInput,
+                            { textAlign: isRtl ? 'right' : 'left', color: heroText },
+                          ]}
+                          placeholder={t('register.profile.namePlaceholder', 'כתוב/י שם מלא')}
                           placeholderTextColor={heroFaint}
                           value={profileName}
                           onChangeText={(text) => {
@@ -790,7 +923,16 @@ export default function RegisterScreen() {
                           autoCorrect={false}
                           onFocus={() => setNameFocused(true)}
                           onBlur={() => setNameFocused(false)}
+                          accessibilityLabel={t('register.profile.nameLabel', 'שם מלא')}
+                          accessibilityHint={t('register.profile.nameRequiredA11y', 'שדה חובה')}
                         />
+                        <Text
+                          style={[styles.profileNameRequiredStar, { color: businessColors.error }]}
+                          accessibilityElementsHidden
+                          importantForAccessibility="no-hide-descendants"
+                        >
+                          *
+                        </Text>
                       </View>
                       {errors.name ? (
                         <Text
@@ -803,162 +945,254 @@ export default function RegisterScreen() {
                         </Text>
                       ) : null}
 
-                      <Text
-                        style={[
-                          styles.fieldLabelHero,
-                          { color: heroMuted, textAlign: isRtl ? 'right' : 'left' },
-                        ]}
-                      >
-                        {t('register.profile.birthLabel', 'תאריך לידה')}{' '}
-                        <Text style={styles.optionalOnHero}>({t('register.profile.birthOptional', 'לא חובה')})</Text>
-                      </Text>
-                      <View style={[styles.rowActions, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
-                        <TouchableOpacity
-                          style={[
-                            styles.secondaryBtn,
-                            {
-                              borderColor: useLightFg ? 'rgba(255,255,255,0.55)' : primary,
-                              backgroundColor: useLightFg ? 'rgba(255,255,255,0.1)' : 'transparent',
-                            },
-                          ]}
-                          onPress={() => {
-                            setPickerTempDate(birthDate ?? defaultBirthDate());
-                            if (Platform.OS === 'android') {
-                              setShowAndroidBirthPicker(true);
-                            } else {
-                              setShowBirthModal(true);
-                            }
-                          }}
-                        >
-                          <Calendar
-                            size={18}
-                            color={useLightFg ? '#FFFFFF' : primary}
-                            strokeWidth={1.8}
-                          />
-                          <Text
+                      <View style={styles.profileBirthBlock}>
+                        <View style={styles.profileOptionalTagWrap}>
+                          <View
                             style={[
-                              styles.secondaryBtnText,
-                              { color: useLightFg ? '#FFFFFF' : primary },
+                              styles.profileOptionalPill,
+                              {
+                                borderColor: useLightFg ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.1)',
+                                backgroundColor: useLightFg ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.92)',
+                              },
                             ]}
                           >
-                            {hasBirthDate && birthDate
-                              ? birthDate.toLocaleDateString('he-IL')
-                              : t('register.profile.birthPick', 'בחירת תאריך')}
-                          </Text>
-                        </TouchableOpacity>
+                            <Text
+                              style={[
+                                styles.profileOptionalPillText,
+                                { color: useLightFg ? 'rgba(255,255,255,0.92)' : palette.textSecondary },
+                              ]}
+                            >
+                              {t('register.profile.birthOptional', 'לא חובה')}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.profileBirthOpenRow}>
+                          <TouchableOpacity
+                            onPress={openBirthPicker}
+                            style={styles.phoneOpenIconSlot}
+                            hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                            accessibilityRole="button"
+                            accessibilityLabel={t('register.profile.birthPick', 'בחירת תאריך')}
+                            accessibilityHint={t('register.profile.birthOptional', 'לא חובה')}
+                          >
+                            <Calendar
+                              size={18}
+                              color={
+                                hasBirthDate && birthDate
+                                  ? useLightFg
+                                    ? phoneBorderFocus
+                                    : primary
+                                  : heroFaint
+                              }
+                              strokeWidth={1.6}
+                            />
+                          </TouchableOpacity>
+                          <View style={styles.profileBirthSegments}>
+                            <TouchableOpacity
+                              activeOpacity={0.88}
+                              onPress={openBirthPicker}
+                              style={[
+                                styles.profileBirthSegment,
+                                {
+                                  borderBottomColor: phoneBorderUnfocus,
+                                  borderBottomWidth: 1.5,
+                                },
+                              ]}
+                              accessibilityRole="button"
+                              accessibilityLabel={`${t('register.profile.birthLabel', 'תאריך לידה')}: ${t('register.profile.birthDayPlaceholder', 'יום')}`}
+                            >
+                              <Text
+                                style={[
+                                  styles.profileBirthSegmentText,
+                                  {
+                                    color: profileBirthParts.d ? heroText : heroFaint,
+                                    fontWeight: profileBirthParts.d ? '600' : '400',
+                                  },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {profileBirthParts.d ||
+                                  t('register.profile.birthDayPlaceholder', 'יום')}
+                              </Text>
+                            </TouchableOpacity>
+                            <View
+                              style={[
+                                styles.profileBirthSep,
+                                {
+                                  backgroundColor: useLightFg ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.12)',
+                                },
+                              ]}
+                            />
+                            <TouchableOpacity
+                              activeOpacity={0.88}
+                              onPress={openBirthPicker}
+                              style={[
+                                styles.profileBirthSegment,
+                                {
+                                  borderBottomColor: phoneBorderUnfocus,
+                                  borderBottomWidth: 1.5,
+                                },
+                              ]}
+                              accessibilityRole="button"
+                              accessibilityLabel={`${t('register.profile.birthLabel', 'תאריך לידה')}: ${t('register.profile.birthMonthPlaceholder', 'חודש')}`}
+                            >
+                              <Text
+                                style={[
+                                  styles.profileBirthSegmentText,
+                                  {
+                                    color: profileBirthParts.m ? heroText : heroFaint,
+                                    fontWeight: profileBirthParts.m ? '600' : '400',
+                                  },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {profileBirthParts.m ||
+                                  t('register.profile.birthMonthPlaceholder', 'חודש')}
+                              </Text>
+                            </TouchableOpacity>
+                            <View
+                              style={[
+                                styles.profileBirthSep,
+                                {
+                                  backgroundColor: useLightFg ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.12)',
+                                },
+                              ]}
+                            />
+                            <TouchableOpacity
+                              activeOpacity={0.88}
+                              onPress={openBirthPicker}
+                              style={[
+                                styles.profileBirthSegmentYear,
+                                {
+                                  borderBottomColor: phoneBorderUnfocus,
+                                  borderBottomWidth: 1.5,
+                                },
+                              ]}
+                              accessibilityRole="button"
+                              accessibilityLabel={`${t('register.profile.birthLabel', 'תאריך לידה')}: ${t('register.profile.birthYearPlaceholder', 'שנה')}`}
+                            >
+                              <Text
+                                style={[
+                                  styles.profileBirthSegmentText,
+                                  {
+                                    color: profileBirthParts.y ? heroText : heroFaint,
+                                    fontWeight: profileBirthParts.y ? '600' : '400',
+                                  },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {profileBirthParts.y ||
+                                  t('register.profile.birthYearPlaceholder', 'שנה')}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
                         {hasBirthDate ? (
                           <TouchableOpacity
-                            style={styles.textGhostBtn}
+                            style={[
+                              styles.profileBirthClearChip,
+                              {
+                                borderColor: useLightFg ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.12)',
+                                backgroundColor: useLightFg ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.94)',
+                              },
+                            ]}
                             onPress={() => {
                               setHasBirthDate(false);
                               setBirthDate(null);
                             }}
+                            activeOpacity={0.85}
+                            accessibilityRole="button"
+                            accessibilityLabel={t('register.profile.birthClear', 'ללא תאריך')}
                           >
-                            <Text style={[styles.textGhost, { color: heroMuted }]}>
+                            <Text
+                              style={[
+                                styles.profileBirthClearChipText,
+                                { color: useLightFg ? 'rgba(255,255,255,0.95)' : palette.textPrimary },
+                              ]}
+                            >
                               {t('register.profile.birthClear', 'ללא תאריך')}
                             </Text>
+                            <RotateCcw
+                              size={15}
+                              color={useLightFg ? 'rgba(255,255,255,0.88)' : primary}
+                              strokeWidth={2.2}
+                            />
                           </TouchableOpacity>
                         ) : null}
                       </View>
-
-                      <Text
-                        style={[
-                          styles.fieldLabelHero,
-                          { marginTop: 18, color: heroMuted, textAlign: isRtl ? 'right' : 'left' },
-                        ]}
-                      >
-                        {t('register.profile.photoLabel', 'תמונת פרופיל')}{' '}
-                        <Text style={styles.optionalOnHero}>({t('register.profile.photoOptional', 'לא חובה')})</Text>
-                      </Text>
-                      <TouchableOpacity style={styles.avatarCard} onPress={pickAvatar} activeOpacity={0.85}>
-                        {avatarLocalUri ? (
-                          <Image source={{ uri: avatarLocalUri }} style={styles.avatarPreview} />
-                        ) : (
-                          <View
-                            style={[
-                              styles.avatarPlaceholder,
-                              {
-                                backgroundColor: useLightFg ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.05)',
-                                borderColor: useLightFg ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.12)',
-                              },
-                            ]}
-                          >
-                            <Camera
-                              size={36}
-                              color={useLightFg ? heroFaint : palette.textSecondary}
-                              strokeWidth={1.5}
-                            />
-                          </View>
-                        )}
-                        <Text style={[styles.avatarHint, { color: useLightFg ? '#FFFFFF' : primary }]}>
-                          {avatarLocalUri
-                            ? t('register.profile.photoChange', 'החלפת תמונה')
-                            : t('register.profile.photoAdd', 'הוספת תמונה')}
-                        </Text>
-                      </TouchableOpacity>
                     </>
                   ) : null}
                 </LoginEntranceSection>
 
-                <LoginEntranceSection delayMs={420} style={styles.btnWrap}>
-                  <Animated.View style={btnScaleStyle}>
-                    <TouchableOpacity
-                      onPressIn={() => {
-                        btnScale.value = withTiming(0.97, { duration: 90 });
-                      }}
-                      onPressOut={() => {
-                        btnScale.value = withSpring(1, { damping: 16, stiffness: 280 });
-                      }}
-                      onPress={() => {
-                        if (registerStep === 'phone') handleSendRegisterOtp();
-                        else if (registerStep === 'otp') handleVerifyOtpAndContinue();
-                        else handleCompleteProfile();
-                      }}
-                      disabled={loading}
-                      activeOpacity={1}
-                      accessibilityRole="button"
-                      accessibilityState={{ disabled: loading }}
-                    >
-                      <View
-                        style={[
-                          styles.btnOuter,
-                          useLightFg ? styles.btnOuterElevated : null,
-                          loading && styles.btnOuterDisabled,
-                          {
-                            backgroundColor: ctaElevatedBg,
-                            borderWidth: useLightFg ? 1 : StyleSheet.hairlineWidth * 2,
-                            borderColor: ctaElevatedBorder,
-                          },
-                        ]}
+                {registerStep !== 'otp' ? (
+                  <LoginEntranceSection
+                    delayMs={420}
+                    style={[styles.btnWrap, registerStep === 'profile' && styles.profileBtnWrap]}
+                  >
+                    <Animated.View style={btnScaleStyle}>
+                      <TouchableOpacity
+                        onPressIn={() => {
+                          btnScale.value = withTiming(0.97, { duration: 90 });
+                        }}
+                        onPressOut={() => {
+                          btnScale.value = withSpring(1, { damping: 16, stiffness: 280 });
+                        }}
+                        onPress={() => {
+                          if (registerStep === 'phone') handleSendRegisterOtp();
+                          else handleCompleteProfile();
+                        }}
+                        disabled={loading}
+                        activeOpacity={1}
+                        accessibilityRole="button"
+                        accessibilityState={{ disabled: loading }}
                       >
-                        {loading ? (
-                          <ActivityIndicator color={ctaElevatedLabel} size="small" />
-                        ) : (
-                          <Text style={[styles.btnText, { color: ctaElevatedLabel }]}>
-                            {registerStep === 'phone'
-                              ? t('register.phone.cta', 'שלחו לי קוד')
-                              : registerStep === 'otp'
-                                ? t('register.otp.cta', 'אמתו והמשיכו')
+                        <View
+                          style={[
+                            styles.btnOuter,
+                            useLightFg ? styles.btnOuterElevated : null,
+                            loading && styles.btnOuterDisabled,
+                            {
+                              backgroundColor: ctaElevatedBg,
+                              borderWidth: useLightFg ? 1 : StyleSheet.hairlineWidth * 2,
+                              borderColor: ctaElevatedBorder,
+                            },
+                          ]}
+                        >
+                          {loading ? (
+                            <ActivityIndicator color={ctaElevatedLabel} size="small" />
+                          ) : (
+                            <Text style={[styles.btnText, { color: ctaElevatedLabel }]}>
+                              {registerStep === 'phone'
+                                ? t('register.phone.cta', 'שלחו לי קוד')
                                 : t('register.profile.cta', 'סיום הרשמה')}
-                          </Text>
-                        )}
-                      </View>
-                    </TouchableOpacity>
-                  </Animated.View>
-                </LoginEntranceSection>
+                            </Text>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    </Animated.View>
+                  </LoginEntranceSection>
+                ) : null}
 
-                <LoginEntranceSection delayMs={560} style={styles.linksWrap}>
-                  <View style={[styles.registerRow, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
-                    <Text style={[styles.footerMuted, { color: heroMuted }]}>
-                      {t('register.haveAccount', 'כבר יש לך חשבון?')}
-                    </Text>
-                    <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }} onPress={() => router.push('/login')}>
-                      <Text style={[styles.footerAction, { color: useLightFg ? '#FFFFFF' : primary }]}>
-                        {t('auth.signInNow', 'התחברות')}
+                {registerStep !== 'profile' ? (
+                  <LoginEntranceSection
+                    delayMs={560}
+                    style={[styles.linksWrap, registerStep === 'otp' && styles.linksWrapOtp]}
+                  >
+                    <View style={styles.registerRow}>
+                      <Text style={[styles.footerMerged, { color: heroMuted, textAlign: 'center' }]}>
+                        {t('register.haveAccount', 'כבר יש לך חשבון?')}{' '}
+                        <Text
+                          onPress={() => router.push('/login')}
+                          accessibilityRole="link"
+                          style={[styles.footerAction, { color: useLightFg ? '#FFFFFF' : primary }]}
+                          suppressHighlighting={false}
+                        >
+                          {t('auth.signInNow', 'התחבר/י עכשיו')}
+                        </Text>
                       </Text>
-                    </TouchableOpacity>
-                  </View>
-                </LoginEntranceSection>
+                    </View>
+                  </LoginEntranceSection>
+                ) : null}
               </View>
             </Pressable>
           </View>
@@ -1105,17 +1339,6 @@ const styles = StyleSheet.create({
     marginBottom: 22,
     paddingHorizontal: 4,
   },
-  fieldLabelHero: {
-    fontSize: 11,
-    fontWeight: '700',
-    marginBottom: 8,
-    marginTop: 4,
-    alignSelf: 'stretch',
-    letterSpacing: 0.7,
-    textTransform: 'uppercase',
-  },
-  reqStar: { color: '#DC2626' },
-  optionalOnHero: { fontWeight: '500', fontSize: 13 },
   phoneOpenRow: {
     alignSelf: 'stretch',
     alignItems: 'center',
@@ -1123,6 +1346,66 @@ const styles = StyleSheet.create({
     paddingBottom: 1,
     minHeight: 48,
     gap: 6,
+  },
+  profileNameRow: {
+    marginTop: 6,
+  },
+  profileNameRequiredStar: {
+    fontSize: 20,
+    fontWeight: '800',
+    lineHeight: 24,
+    paddingBottom: 6,
+    marginLeft: 4,
+    marginRight: 4,
+  },
+  profileBirthBlock: {
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 14,
+  },
+  profileBirthOpenRow: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    minHeight: 48,
+    gap: 8,
+    paddingTop: 2,
+    paddingBottom: 1,
+  },
+  profileBirthSegments: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 0,
+    /** Always day → month → year left-to-right, even when the screen is RTL */
+    direction: 'ltr',
+  },
+  profileBirthSegment: {
+    flex: 1,
+    minWidth: 0,
+    paddingBottom: 5,
+    alignItems: 'center',
+  },
+  profileBirthSegmentYear: {
+    flex: 1.2,
+    minWidth: 0,
+    paddingBottom: 5,
+    alignItems: 'center',
+  },
+  profileBirthSep: {
+    width: StyleSheet.hairlineWidth * 2,
+    height: 22,
+    marginHorizontal: 5,
+    marginBottom: 10,
+    borderRadius: 1,
+    opacity: 0.95,
+  },
+  profileBirthSegmentText: {
+    fontSize: 17,
+    letterSpacing: 0.2,
+    textAlign: 'center',
+    paddingVertical: Platform.OS === 'ios' ? 7 : 6,
+    width: '100%',
   },
   phoneOpenIconSlot: {
     paddingBottom: 1,
@@ -1136,28 +1419,6 @@ const styles = StyleSheet.create({
     paddingVertical: Platform.OS === 'ios' ? 8 : 7,
     paddingHorizontal: 0,
     margin: 0,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 14,
-    minHeight: 54,
-    paddingHorizontal: 15,
-    borderWidth: 1,
-    width: '100%',
-    alignSelf: 'center',
-    gap: 11,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '400',
-    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
-  },
-  otpInput: {
-    fontSize: 22,
-    letterSpacing: 4,
-    fontWeight: '700',
   },
   softHint: {
     fontSize: 13,
@@ -1182,43 +1443,117 @@ const styles = StyleSheet.create({
   bannerOkText: { fontSize: 14, fontWeight: '600', marginRight: 8 },
   linkBtn: { marginTop: 10, alignSelf: 'center' },
   linkText: { fontSize: 15, fontWeight: '600' },
-  rowActions: { alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' },
-  secondaryBtn: {
-    flexDirection: 'row-reverse',
+  registerOtpFooter: {
+    width: '100%',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    borderWidth: 1.5,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 8,
+    paddingBottom: 4,
   },
-  secondaryBtnText: { fontSize: 15, fontWeight: '700', marginRight: 8 },
-  textGhostBtn: { paddingVertical: 8 },
-  textGhost: { fontSize: 14, fontWeight: '600' },
-  avatarCard: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    marginTop: 6,
-    marginBottom: 8,
-  },
-  avatarPlaceholder: {
-    width: 112,
-    height: 112,
-    borderRadius: 56,
+  dividerOrnament: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
+    maxWidth: 280,
+    marginVertical: 6,
+    gap: 12,
+  },
+  dividerGrad: {
+    flex: 1,
+    height: 1.5,
+    maxHeight: 1.5,
+    borderRadius: 1,
+  },
+  dividerGem: {
+    width: 10,
+    height: 10,
+    borderRadius: 2,
+    borderWidth: 1.5,
+    transform: [{ rotate: '45deg' }],
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  profileOptionalTagWrap: {
+    width: '100%',
+    alignItems: 'flex-start',
+    marginBottom: 6,
+  },
+  profileOptionalPill: {
+    paddingVertical: 5,
+    paddingHorizontal: 11,
+    borderRadius: 999,
     borderWidth: 1,
-    borderStyle: 'dashed',
   },
-  avatarPreview: {
-    width: 112,
-    height: 112,
-    borderRadius: 56,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.95)',
+  profileOptionalPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.35,
   },
-  avatarHint: { marginTop: 10, fontSize: 15, fontWeight: '700' },
+  profileAvatarZone: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    paddingVertical: 22,
+    paddingHorizontal: 18,
+    marginTop: 4,
+    marginBottom: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  profileAvatarTap: {
+    alignItems: 'center',
+    alignSelf: 'center',
+  },
+  avatarRing: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarImageFill: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 48,
+  },
+  avatarInner: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarCaption: {
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  profileBirthClearChip: {
+    alignSelf: 'center',
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  profileBirthClearChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
   btnWrap: {
     marginTop: 10,
+  },
+  profileBtnWrap: {
+    marginTop: 36,
   },
   btnOuter: {
     minHeight: 54,
@@ -1249,19 +1584,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 20,
   },
+  /** Extra separation from OTP actions (resend / change phone) so “have account” reads as its own block */
+  linksWrapOtp: {
+    marginTop: 52,
+    paddingTop: 20,
+  },
   registerRow: {
     alignItems: 'center',
-    flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 5,
-    rowGap: 4,
+    paddingHorizontal: 8,
   },
-  footerMuted: {
+  footerMerged: {
     fontSize: 14,
+    lineHeight: 22,
+    flexShrink: 1,
   },
   footerAction: {
     fontWeight: '700',
     fontSize: 14,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
   },
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
   modalBackdrop: {

@@ -440,6 +440,7 @@
       "phoneNotRegisteredTitle": "מספר הטלפון לא רשום",
       "tagPhoneRequired": "אנא הזינו מספר טלפון תקין",
       "tagPhoneNotRegistered": "מספר הטלפון אינו רשום אצלנו",
+      "resendSuccessTag": "קוד נשלח מחדש בהצלחה",
       "errorPhoneNotRegistered": "מספר הטלפון אינו רשום אצלנו. אפשר להירשם דרך \"הרשמה\" או לבדוק את המספר.",
       "a11y": { "delete": "מחק" }
     }
@@ -471,10 +472,14 @@
       "title": "כמה פרטים אחרונים",
       "subtitle": "כך נזהה אותך ונוכל לתת שירות מדויק יותר.",
       "nameLabel": "שם מלא",
-      "namePlaceholder": "למשל: יוסי כהן",
+      "nameRequiredA11y": "שדה חובה",
+      "namePlaceholder": "כתוב/י שם מלא",
       "birthLabel": "תאריך לידה",
       "birthOptional": "לא חובה",
       "birthPick": "בחירת תאריך",
+      "birthDayPlaceholder": "יום",
+      "birthMonthPlaceholder": "חודש",
+      "birthYearPlaceholder": "שנה",
       "birthClear": "ללא תאריך",
       "photoLabel": "תמונת פרופיל",
       "photoOptional": "לא חובה",

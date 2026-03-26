@@ -366,7 +366,12 @@ async function notifyAdminsNewClient(
     recipient_phone: (a.phone || "").trim(),
     business_id: businessId,
   }));
-  await admin.from("notifications").insert(notifications);
+  const { error: notifErr } = await admin.from("notifications").insert(
+    notifications,
+  );
+  if (notifErr) {
+    console.error("[auth-phone-otp] notifyAdminsNewClient insert failed", notifErr);
+  }
 }
 
 serve(async (req) => {
@@ -503,12 +508,22 @@ serve(async (req) => {
             business_id: businessId,
             password_hash: randomSecret,
             client_approved: false,
+            language: "he",
           })
           .select(userSelect)
           .single();
 
         if (insUserErr || !inserted) {
           console.error("[auth-phone-otp] complete profile insert user", insUserErr);
+          // Unique violation / duplicate phone — can happen if row exists with different formatting than pre-check
+          const pgc = String((insUserErr as { code?: string })?.code || "");
+          const pgm = String((insUserErr as { message?: string })?.message || "");
+          if (
+            pgc === "23505" ||
+            /duplicate key|unique constraint|already exists/i.test(pgm)
+          ) {
+            return json({ ok: false, error: "phone_registered" }, 400);
+          }
           return json({ ok: false, error: "create_user_failed" }, 500);
         }
         displayName = inserted.name || name;
@@ -530,12 +545,16 @@ serve(async (req) => {
         .update({ used_at: new Date().toISOString() })
         .eq("id", tok.id);
 
-      await notifyAdminsNewClient(
-        admin,
-        businessId,
-        displayName,
-        displayPhone,
-      );
+      try {
+        await notifyAdminsNewClient(
+          admin,
+          businessId,
+          displayName,
+          displayPhone,
+        );
+      } catch (e) {
+        console.error("[auth-phone-otp] notifyAdminsNewClient threw", e);
+      }
 
       return json({
         ok: true,
@@ -863,6 +882,21 @@ serve(async (req) => {
 
       await admin.from("auth_phone_otp_challenges").delete().eq("id", ch.id);
 
+      const phoneTrimmed = phone.trim();
+      // New OTP session: remove stale unused completion tokens for this phone so only the latest flow applies
+      const { error: staleTokDelErr } = await admin
+        .from("auth_register_profile_tokens")
+        .delete()
+        .eq("business_id", businessId)
+        .is("used_at", null)
+        .eq("phone", phoneTrimmed);
+      if (staleTokDelErr) {
+        console.error(
+          "[auth-phone-otp] stale profile token delete",
+          staleTokDelErr,
+        );
+      }
+
       const { data: allUsers } = await admin
         .from("users")
         .select("phone")
@@ -876,7 +910,6 @@ serve(async (req) => {
       const profileTokenExpires = new Date(
         Date.now() + 60 * 60 * 1000,
       ).toISOString();
-      const phoneTrimmed = phone.trim();
       const { error: tokErr } = await admin
         .from("auth_register_profile_tokens")
         .insert({

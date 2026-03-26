@@ -103,6 +103,7 @@
         "EXPO_PUBLIC_GOOGLE_PLACES_KEY": "AIzaSyAVHoNZSAuWDnCArgFn1gAqA9bxkSuhdJ8",
         "EXPO_PUBLIC_SA_P": "",
         "EXPO_PUBLIC_SA_K": "",
+        "PULSEEM_MAIN_API_KEY": "",
         "EXPO_PUBLIC_PROJECT_ID": "98671cac-90d9-42b1-8228-225df1dc4f9e"
       }
     }
@@ -134,5 +135,5 @@
       "secondary": "System"
     }
   },
-  "timestamp": "2026-03-25T18:41:49.575Z"
+  "timestamp": "2026-03-26T11:20:40.659Z"
 }

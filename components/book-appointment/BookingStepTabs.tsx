@@ -28,7 +28,6 @@ const INACTIVE = '#6b7280';
 /** Moss / forest greens — distinct from the old emerald→teal arrow. */
 const BOOKING_TAB_SELECTED = '#15803d';
 const BOOKING_TAB_SELECTED_DEEP = '#14532d';
-const INACTIVE_TAB_BG = 'rgba(236, 253, 245, 0.98)';
 /** Active “continue” — mint → grass → deep forest */
 const ADVANCE_GRADIENT = ['#86efac', '#22c55e', BOOKING_TAB_SELECTED_DEEP] as const;
 const ADVANCE_GRADIENT_LOCATIONS = [0, 0.45, 1] as const;
@@ -134,7 +133,7 @@ export default function BookingStepTabs({
               activeColor="#ffffff"
               inactiveColor="#4b5563"
               activeBackgroundColor={BOOKING_TAB_SELECTED}
-              inactiveBackgroundColor={INACTIVE_TAB_BG}
+              inactiveBackgroundColor="transparent"
             />
           </View>
         </View>

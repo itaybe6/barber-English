@@ -1661,6 +1661,7 @@ export default function BookAppointment() {
           selectedDayIndex={selectedDay}
           dayAvailability={dayAvailability}
           language={i18n?.language || 'he'}
+          primaryColor={colors.primary}
           onSelectDayIndex={(idx) => setSelectedDay(idx)}
           onClearTime={() => setSelectedTime(null)}
         />
@@ -2949,7 +2950,8 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   calendarSectionTitle: {},
   calendarFixedBox: {
-    height: 300,
+    minHeight: 400,
+    height: 430,
     borderRadius: 18,
     overflow: 'hidden',
   },

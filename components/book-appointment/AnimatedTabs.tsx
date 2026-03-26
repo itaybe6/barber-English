@@ -98,14 +98,14 @@ export default function AnimatedTabs({
           <MotiView
             layout={layoutAnimation}
             key={`${item.icon}-${displayIndex}`}
-            animate={{
-              backgroundColor: isSelected ? activeBackgroundColor : inactiveBackgroundColor,
-            }}
             style={{
               flex: isSelected ? 2 : 1,
               borderRadius: stackedRadius,
               overflow: 'hidden',
               minHeight: stackedMinH,
+              // Apply on `style`, not `animate` — Moti/Reanimated often fails to paint
+              // `activeBackgroundColor` when animating from `transparent` (booking step bar).
+              backgroundColor: isSelected ? activeBackgroundColor : inactiveBackgroundColor,
             }}
           >
             <Pressable

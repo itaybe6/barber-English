@@ -25,7 +25,6 @@ import Colors from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
 import { notificationsApi } from '@/lib/api/notifications';
 import { Notification } from '@/lib/supabase';
-import { Ionicons } from '@expo/vector-icons';
 import { Bell, Clock, CheckCircle, AlertCircle, Calendar, XCircle, User } from 'lucide-react-native';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { formatTimeFromDate } from '@/lib/utils/timeFormat';
@@ -501,16 +500,9 @@ export default function ClientNotificationsScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: ios.background }}>
+        <StatusBar barStyle="dark-content" backgroundColor={ios.background} />
         <View style={styles.container}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color={Colors.text} />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>{t('notifications.title', 'Notifications')}</Text>
-            <View style={styles.headerRight} />
-          </View>
           <View style={styles.contentWrapper}>
             <View style={styles.loadingContainer}>
               <Text style={styles.loadingText}>{t('notifications.loading', 'Loading notifications...')}</Text>
@@ -522,17 +514,9 @@ export default function ClientNotificationsScreen() {
   }
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: ios.background }}>
+      <StatusBar barStyle="dark-content" backgroundColor={ios.background} />
       <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={Colors.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t('notifications.title', 'Notifications')}</Text>
-          <View style={styles.headerRight} />
-        </View>
         <View style={styles.contentWrapper}>
         {/* Filters */}
         {isAdmin && (
@@ -615,7 +599,7 @@ export default function ClientNotificationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F2F2F7',
   },
   loadingContainer: {
     flex: 1,
@@ -626,34 +610,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#8E8E93',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 0,
-    borderBottomColor: 'transparent',
-    backgroundColor: '#FFFFFF',
-  },
   contentWrapper: {
     flex: 1,
     backgroundColor: '#F2F2F7',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 8,
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#1C1C1E',
-    letterSpacing: -0.3,
-  },
-  headerRight: {
-    width: 40,
   },
   scrollView: {
     flex: 1,

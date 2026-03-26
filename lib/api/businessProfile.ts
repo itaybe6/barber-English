@@ -41,7 +41,6 @@ export const businessProfileApi = {
         facebook_url: null,
         tiktok_url: null,
         home_hero_images: [],
-        login_img: null,
         break_by_user: {},
         booking_open_days_by_user: {},
         min_cancellation_hours: 24, // Default 24 hours
@@ -83,7 +82,6 @@ export const businessProfileApi = {
             facebook_url: updates.facebook_url,
             tiktok_url: (updates as any).tiktok_url,
         home_hero_images: (updates as any).home_hero_images,
-        login_img: (updates as any).login_img,
         break_by_user: (updates as any).break_by_user,
         booking_open_days_by_user: (updates as any).booking_open_days_by_user,
         reminder_minutes_by_user: (updates as any).reminder_minutes_by_user,
@@ -117,7 +115,6 @@ export const businessProfileApi = {
           facebook_url: updates.facebook_url,
           tiktok_url: (updates as any).tiktok_url,
           home_hero_images: (updates as any).home_hero_images,
-          login_img: (updates as any).login_img,
           break_by_user: (updates as any).break_by_user,
           booking_open_days_by_user: (updates as any).booking_open_days_by_user ?? {},
           reminder_minutes_by_user: (updates as any).reminder_minutes_by_user,

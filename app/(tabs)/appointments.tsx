@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
   Dimensions,
@@ -1452,8 +1452,9 @@ export default function AdminAppointmentsScreen() {
   const calendarRipple = `${calendarPrimary}2A`;
 
   return (
-    <SafeAreaView style={styles.gcSafeArea} edges={['top']}>
-      <View style={styles.gcHeader}>
+    <View style={styles.gcRoot}>
+      <View style={[styles.gcTopChrome, { paddingTop: insets.top }]}>
+        <View style={styles.gcHeader}>
         <View
           style={[
             styles.gcNavTrack,
@@ -1516,6 +1517,7 @@ export default function AdminAppointmentsScreen() {
           >
             <ChevronLeft size={22} color={calendarPrimary} strokeWidth={2.5} />
           </Pressable>
+        </View>
         </View>
       </View>
 
@@ -2258,7 +2260,7 @@ export default function AdminAppointmentsScreen() {
           }}
         />
       ) : null}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -2334,8 +2336,11 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 120,
   },
-  gcSafeArea: {
+  gcRoot: {
     flex: 1,
+    backgroundColor: GC_PAGE_BG,
+  },
+  gcTopChrome: {
     backgroundColor: GC_HEADER_CHROME,
   },
   gcHeader: {

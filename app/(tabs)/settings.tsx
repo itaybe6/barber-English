@@ -49,14 +49,11 @@ import InlineEditableRow from '@/components/InlineEditableRow';
 import AddAppointmentModal from '@/components/AddAppointmentModal';
 import { ColorPicker } from '@/components/ColorPicker';
 import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
-import ImageSelectionModal from '@/components/ImageSelectionModal';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { TabButton } from '@/components/shopify-tab-bar/tab-button';
 import AddAdminModal from '@/components/AddAdminModal';
 import DeleteAccountModal from '@/components/DeleteAccountModal';
-import GradientBackground from '@/components/GradientBackground';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
-import { compressImage } from '@/lib/utils/imageCompression';
 import { useTranslation } from 'react-i18next';
 import Reanimated, {
   Extrapolation,
@@ -235,7 +232,6 @@ export default function SettingsScreen() {
   const [profileInstagram, setProfileInstagram] = useState('');
   const [profileFacebook, setProfileFacebook] = useState('');
   const [profileTiktok, setProfileTiktok] = useState('');
-  const [profileLoginImg, setProfileLoginImg] = useState('');
   const [profileMinCancellationHours, setProfileMinCancellationHours] = useState(24);
   const [profileBookingOpenDays, setProfileBookingOpenDays] = useState(7);
   const [showEditDisplayNameModal, setShowEditDisplayNameModal] = useState(false);
@@ -247,18 +243,6 @@ export default function SettingsScreen() {
   const [showEditCancellationModal, setShowEditCancellationModal] = useState(false);
   const [showCancellationDropdown, setShowCancellationDropdown] = useState(false);
   const [cancellationDropdownDirection, setCancellationDropdownDirection] = useState<'up' | 'down'>('down');
-  const [isUploadingLoginImg, setIsUploadingLoginImg] = useState(false);
-  const [showImagePreviewModal, setShowImagePreviewModal] = useState(false);
-  const [previewImageType, setPreviewImageType] = useState<'login' | null>(null);
-  const [showImageSelectionModal, setShowImageSelectionModal] = useState(false);
-  const [currentImageType, setCurrentImageType] = useState<'login' | null>(null);
-  const [imageTranslateX, setImageTranslateX] = useState(0);
-  const [imageTranslateY, setImageTranslateY] = useState(0);
-  const [isImageLoading, setIsImageLoading] = useState(false);
-  const [imageLoadError, setImageLoadError] = useState(false);
-  const [imageLoadTimeout, setImageLoadTimeout] = useState<number | null>(null);
-  const [previewFallback, setPreviewFallback] = useState(false);
-  const [progressAnimation] = useState(new Animated.Value(0));
   // Address bottom sheet animation
   const addressSheetAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
   const addressOverlayOpacity = addressSheetAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
@@ -308,24 +292,14 @@ export default function SettingsScreen() {
     try {
       const p = await businessProfileApi.getProfile();
       if (p) {
-        const isBadLocalAssetRef = (val: any): boolean => {
-          const s = String(val || '');
-          // Treat Expo dev unstable paths, relative bundled assets, and device-local file:// URIs as invalid for remote display
-          return s.includes('unstable_path=') || /(^\.?\/?assets\/images\/default)/i.test(s) || /^file:/i.test(s);
-        };
-
         setProfile(p);
         setProfileDisplayName(p?.display_name || '');
         setProfileAddress(p?.address || '');
         setProfileInstagram(p?.instagram_url || '');
         setProfileFacebook(p?.facebook_url || '');
         setProfileTiktok((p as any)?.tiktok_url || '');
-        setProfileLoginImg(isBadLocalAssetRef((p as any)?.login_img) ? '' : ((p as any)?.login_img || ''));
         setProfileMinCancellationHours(p?.min_cancellation_hours || 24);
         setProfileBookingOpenDays(Number(((p as any)?.booking_open_days ?? 7)));
-        
-        // Preload images for better performance
-        preloadImages(p);
       }
     } catch (error) {
       console.error('Failed to load business profile:', error);
@@ -333,22 +307,6 @@ export default function SettingsScreen() {
     } finally {
       setIsLoadingProfile(false);
     }
-  };
-
-  const preloadImages = (profile: any) => {
-    const images = [
-      profile?.login_img
-    ].filter(Boolean);
-    
-    images.forEach((imageUrl) => {
-      // Only prefetch remote or file-based URLs. Avoid relative asset paths and Expo dev asset URLs
-      const isRemote = typeof imageUrl === 'string' && /^(https?:|data:|file:)/.test(imageUrl) && !String(imageUrl).includes('unstable_path=');
-      if (isRemote) {
-        Image.prefetch(imageUrl).catch((error) => {
-          console.log('Failed to prefetch image:', error);
-        });
-      }
-    });
   };
 
   useFocusEffect(
@@ -372,16 +330,6 @@ export default function SettingsScreen() {
       }
     })();
   }, [user?.id]);
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (imageLoadTimeout) {
-        clearTimeout(imageLoadTimeout);
-      }
-      progressAnimation.stopAnimation();
-    };
-  }, [imageLoadTimeout, progressAnimation]);
 
   // Keep edit drafts in sync when modal opens or profile updates
   useEffect(() => {
@@ -439,7 +387,6 @@ export default function SettingsScreen() {
         instagram_url: profileInstagram.trim() || null as any,
         facebook_url: profileFacebook.trim() || null as any,
         tiktok_url: profileTiktok.trim() || null as any,
-        login_img: profileLoginImg.trim() || null as any,
       });
       if (!updated) {
         Alert.alert(t('error.generic','Error'), t('settings.profile.saveFailed','Failed to save business profile'));
@@ -1074,38 +1021,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const uploadBusinessImage = async (asset: { uri: string; base64?: string | null; mimeType?: string | null; fileName?: string | null }): Promise<string | null> => {
-    try {
-      let contentType = asset.mimeType || guessMimeFromUri(asset.fileName || asset.uri);
-      let fileBody: Uint8Array;
-      
-      if (asset.base64) {
-        const bytes = base64ToUint8Array(asset.base64);
-        fileBody = bytes;
-      } else {
-        const response = await fetch(asset.uri, { cache: 'no-store' });
-        const arrayBuffer = await response.arrayBuffer();
-        fileBody = new Uint8Array(arrayBuffer);
-        contentType = response.headers.get('content-type') || contentType;
-      }
-      
-      const extGuess = (contentType.split('/')[1] || 'jpg').toLowerCase();
-      const randomId = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-      const filePath = `business-images/${Date.now()}_${randomId()}.${extGuess}`;
-      
-      const { error } = await supabase.storage.from('app_design').upload(filePath, fileBody, { contentType, upsert: false });
-      if (error) {
-        console.error('business image upload error', error);
-        return null;
-      }
-      const { data } = supabase.storage.from('app_design').getPublicUrl(filePath);
-      return data.publicUrl;
-    } catch (e) {
-      console.error('business image upload exception', e);
-      return null;
-    }
-  };
-
   const uploadBusinessVideo = async (asset: { uri: string; mimeType?: string | null; fileName?: string | null }): Promise<string | null> => {
     try {
       let contentType = asset.mimeType || guessMimeFromUriForAny(asset.fileName || asset.uri);
@@ -1125,30 +1040,6 @@ export default function SettingsScreen() {
       return data.publicUrl;
     } catch (e) {
       console.error('business video upload exception', e);
-      return null;
-    }
-  };
-
-  // Upload a copy of a remote image URL into our app_design bucket
-  const uploadRemoteImageToStorage = async (remoteUrl: string, subdir: string = 'business-images'): Promise<string | null> => {
-    try {
-      const response = await fetch(remoteUrl, { cache: 'no-store' });
-      if (!response.ok) return null;
-      const arrayBuffer = await response.arrayBuffer();
-      const fileBody = new Uint8Array(arrayBuffer);
-      const contentTypeHeader = response.headers.get('content-type') || 'image/jpeg';
-      const extGuess = (contentTypeHeader.split('/')[1] || 'jpg').toLowerCase().split(';')[0];
-      const randomId = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-      const filePath = `${subdir}/${Date.now()}_${randomId()}.${extGuess}`;
-      const { error } = await supabase.storage.from('app_design').upload(filePath, fileBody, { contentType: contentTypeHeader, upsert: false });
-      if (error) {
-        console.error('copy remote image upload error', error);
-        return null;
-      }
-      const { data } = supabase.storage.from('app_design').getPublicUrl(filePath);
-      return data.publicUrl;
-    } catch (e) {
-      console.error('copy remote image to storage exception', e);
       return null;
     }
   };
@@ -1216,215 +1107,6 @@ export default function SettingsScreen() {
       setUploadingServiceId(null);
     }
   };
-
-
-  const openImagePreview = (imageType: 'login') => {
-    // Clear any existing timeout
-    if (imageLoadTimeout) {
-      clearTimeout(imageLoadTimeout);
-    }
-    
-    setPreviewImageType(imageType);
-    setImageTranslateX(0);
-    setImageTranslateY(0);
-    setPreviewFallback(false);
-    
-    // Special handling for special backgrounds - no loading needed
-    if (imageType === 'login' && (profileLoginImg === 'gradient-background' || 
-                                 profileLoginImg === 'solid-blue-background' ||
-                                 profileLoginImg === 'solid-purple-background' ||
-                                 profileLoginImg === 'solid-green-background' ||
-                                 profileLoginImg === 'solid-orange-background' ||
-                                 profileLoginImg === 'light-silver-background' ||
-                                 profileLoginImg === 'light-white-background' ||
-                                 profileLoginImg === 'light-gray-background' ||
-                                 profileLoginImg === 'light-pink-background' ||
-                                 profileLoginImg === 'light-cyan-background' ||
-                                 profileLoginImg === 'light-lavender-background' ||
-                                 profileLoginImg === 'light-coral-background' ||
-                                 profileLoginImg === 'dark-black-background' ||
-                                 profileLoginImg === 'dark-charcoal-background')) {
-      setIsImageLoading(false);
-      setImageLoadError(false);
-      setShowImagePreviewModal(true);
-      return;
-    }
-    
-    // If the stored image is a non-remote relative asset path (e.g. './assets/...'),
-    // skip preview and open the picker directly to let the user choose a valid image.
-    const currentUrl = profileLoginImg;
-    const isRemote = typeof currentUrl === 'string' && /^(https?:|data:|file:)/.test(currentUrl) && !String(currentUrl).includes('unstable_path=');
-    if (!isRemote) {
-      setShowImagePreviewModal(false);
-      handlePickBusinessImage(imageType);
-      return;
-    }
-    
-    setIsImageLoading(true);
-    setImageLoadError(false);
-    setShowImagePreviewModal(true);
-    
-    // Start progress animation
-    progressAnimation.setValue(0);
-    Animated.timing(progressAnimation, {
-      toValue: 1,
-      duration: 15000,
-      useNativeDriver: false,
-    }).start();
-    
-    // Set a timeout to show error if image doesn't load within 15 seconds
-    const timeout = setTimeout(() => {
-      // Only show error if still loading (image didn't load successfully)
-      if (isImageLoading) {
-        setIsImageLoading(false);
-        setImageLoadError(true);
-      }
-    }, 15000);
-    
-    setImageLoadTimeout(timeout);
-  };
-
-  const handlePickBusinessImage = async (imageType: 'login') => {
-    setCurrentImageType(imageType);
-    setShowImageSelectionModal(true);
-  };
-
-  const handleImageSelected = async (imageUri: string, isPreset: boolean) => {
-    if (!currentImageType) return;
-
-    try {
-      // Set loading state
-      setIsUploadingLoginImg(true);
-
-      let uploadedUrl: string;
-
-      if (isPreset) {
-        // For preset images: if HTTP, copy into our storage. If local file path, upload to storage.
-        const isRemoteHttp = /^https?:\/\//i.test(imageUri);
-        const isSpecialLoginKeyword = (currentImageType === 'login') && (
-          imageUri === 'gradient-background' ||
-          imageUri === 'solid-blue-background' ||
-          imageUri === 'solid-purple-background' ||
-          imageUri === 'solid-green-background' ||
-          imageUri === 'solid-orange-background' ||
-          imageUri === 'light-silver-background' ||
-          imageUri === 'light-white-background' ||
-          imageUri === 'light-gray-background' ||
-          imageUri === 'light-pink-background' ||
-          imageUri === 'light-cyan-background' ||
-          imageUri === 'light-lavender-background' ||
-          imageUri === 'light-coral-background' ||
-          imageUri === 'dark-black-background' ||
-          imageUri === 'dark-charcoal-background'
-        );
-        if (isSpecialLoginKeyword) {
-          uploadedUrl = imageUri; // keep keyword as-is for login backgrounds
-        } else if (isRemoteHttp) {
-          const copied = await uploadRemoteImageToStorage(imageUri, 'business-images');
-          uploadedUrl = copied || imageUri; // fallback to original URL if copy failed
-        } else {
-          // Local preset from app bundle (file:// or asset://) — upload into our storage
-          const guessType = guessMimeFromUri(imageUri);
-          const up = await uploadBusinessImage({ uri: imageUri, base64: null, mimeType: guessType, fileName: null });
-          uploadedUrl = up || '';
-        }
-      } else {
-        // For gallery images, parse the asset data and compress before upload
-        try {
-          const assetData = JSON.parse(imageUri);
-          let sourceUri = assetData.uri;
-          // Compress for all design images to reduce size
-          const compressed = await compressImage(assetData.uri, {
-            quality: 0.7,
-            maxWidth: 1200,
-            maxHeight: 1200,
-            format: 'jpeg',
-          });
-          sourceUri = compressed.uri;
-          uploadedUrl = await uploadBusinessImage({
-            uri: sourceUri,
-            base64: null,
-            mimeType: 'image/jpeg',
-            fileName: assetData.fileName,
-          });
-        } catch (parseError) {
-          // Fallback for old format (just URI) with compression
-          let sourceUri = imageUri;
-          const compressed = await compressImage(imageUri, {
-            quality: 0.7,
-            maxWidth: 1200,
-            maxHeight: 1200,
-            format: 'jpeg',
-          });
-          sourceUri = compressed.uri;
-          uploadedUrl = await uploadBusinessImage({
-            uri: sourceUri,
-            base64: null,
-            mimeType: 'image/jpeg',
-            fileName: null,
-          });
-        }
-      }
-
-      if (!uploadedUrl) {
-      Alert.alert(t('error.generic','Error'), t('settings.profile.uploadFailed','Failed to upload image'));
-        return;
-      }
-
-      // Sanitize: never persist device-local file:// URIs in DB
-      if (/^file:/i.test(uploadedUrl)) {
-        const guessType = guessMimeFromUri(uploadedUrl);
-        const up2 = await uploadBusinessImage({ uri: uploadedUrl, base64: null, mimeType: guessType, fileName: null });
-        if (up2) uploadedUrl = up2;
-      }
-
-      // Update the appropriate image state
-      setProfileLoginImg(uploadedUrl);
-
-      // Save ONLY the changed image field to avoid overwriting others
-      const imagePayload: Partial<BusinessProfile> = {} as any;
-      (imagePayload as any).login_img = uploadedUrl;
-
-      const updated = await businessProfileApi.upsertProfile(imagePayload);
-
-      if (updated) {
-        setProfile(updated);
-        // Update local state with the new data from server
-        setProfileDisplayName(updated?.display_name || '');
-        setProfileAddress(updated?.address || '');
-        setProfileInstagram(updated?.instagram_url || '');
-        setProfileFacebook(updated?.facebook_url || '');
-        setProfileTiktok((updated as any)?.tiktok_url || '');
-        setProfileLoginImg((updated as any)?.login_img || '');
-        setProfileMinCancellationHours(updated?.min_cancellation_hours || 24);
-        
-        // Clear all modal states immediately after successful save
-        setShowImageSelectionModal(false);
-        setShowImagePreviewModal(false);
-        setPreviewImageType(null);
-        setCurrentImageType(null);
-        
-        Alert.alert(t('success.generic','Success'), t('settings.profile.imageSaveSuccess','Image saved successfully'));
-      } else {
-        Alert.alert(t('error.generic','Error'), t('settings.profile.imageSaveFailed','Failed to save image'));
-      }
-    } catch (e) {
-      console.error('image selection failed', e);
-      Alert.alert(t('error.generic','Error'), t('settings.profile.imageSaveFailed','Failed to save image'));
-    } finally {
-      // Clear all image-related states
-      setIsUploadingLoginImg(false);
-      setCurrentImageType(null);
-      setShowImageSelectionModal(false);
-      setShowImagePreviewModal(false);
-      setPreviewImageType(null);
-      setImageTranslateX(0);
-      setImageTranslateY(0);
-      // Ensure we're not in a loading state
-      setIsLoadingProfile(false);
-    }
-  };
-
 
   const handleOpenAddService = () => {
     setServicesReorderMode(false);
@@ -2283,18 +1965,6 @@ export default function SettingsScreen() {
                 () => router.push('/(tabs)/edit-home-hero'),
                 false,
                 false
-              )}
-
-              {renderSettingItemLTR(
-                <Ionicons name="log-in-outline" size={20} color={isUploadingLoginImg ? Colors.subtext : businessColors.primary} />, 
-                'Login page image',
-                isUploadingLoginImg ? 'Uploading...' : (profileLoginImg ? 'Image uploaded' : 'Upload login page image'),
-                isUploadingLoginImg ? (
-                  <ActivityIndicator size="small" color={businessColors.primary} />
-                ) : undefined,
-                isUploadingLoginImg ? undefined : (profileLoginImg ? () => openImagePreview('login') : () => handlePickBusinessImage('login')),
-                false,
-                isUploadingLoginImg
               )}
             </View>
           </>
@@ -4457,239 +4127,6 @@ export default function SettingsScreen() {
         }}
       />
 
-      {/* Image Preview Modal */}
-      <Modal
-        visible={showImagePreviewModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowImagePreviewModal(false)}
-      >
-        <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#F8F9FA' }]}>
-          <View style={styles.imagePreviewHeader}>
-            <TouchableOpacity 
-              style={styles.modalCloseButton}
-              onPress={() => {
-                setShowImagePreviewModal(false);
-                setIsImageLoading(false);
-                setImageLoadError(false);
-                if (imageLoadTimeout) {
-                  clearTimeout(imageLoadTimeout);
-                  setImageLoadTimeout(null);
-                }
-                progressAnimation.stopAnimation();
-              }}
-            >
-              <X size={24} color="#000000" />
-            </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: '#000000' }]}>
-              {'Login page image'}
-            </Text>
-            <TouchableOpacity 
-              style={[styles.modalSendButton, { backgroundColor: businessColors.primary }]}
-              onPress={() => {
-                setShowImagePreviewModal(false);
-                if (previewImageType) {
-                  handlePickBusinessImage(previewImageType);
-                }
-              }}
-            >
-              <Text style={[styles.modalSendText, { color: '#FFFFFF' }]}>{t('common.change','Change')}</Text>
-            </TouchableOpacity>
-          </View>
-          
-          <View style={styles.imagePreviewContainer}>
-            {isImageLoading && !(previewImageType === 'login' && (profileLoginImg === 'gradient-background' || 
-                                                                  profileLoginImg === 'solid-blue-background' ||
-                                                                  profileLoginImg === 'solid-purple-background' ||
-                                                                  profileLoginImg === 'solid-green-background' ||
-                                                                  profileLoginImg === 'solid-orange-background' ||
-                                                                  profileLoginImg === 'light-silver-background' ||
-                                                                  profileLoginImg === 'light-white-background' ||
-                                                                  profileLoginImg === 'light-gray-background' ||
-                                                                  profileLoginImg === 'light-pink-background' ||
-                                                                  profileLoginImg === 'light-cyan-background' ||
-                                                                  profileLoginImg === 'light-lavender-background' ||
-                                                                  profileLoginImg === 'light-coral-background' ||
-                                                                  profileLoginImg === 'dark-black-background' ||
-                                                                  profileLoginImg === 'dark-charcoal-background')) && (
-              <View style={styles.imageLoadingContainer}>
-                <Image
-                  source={require('../../assets/images/icon.png')}
-                  style={styles.placeholderImage}
-                  resizeMode="contain"
-                />
-                <ActivityIndicator size="large" color={businessColors.primary} style={styles.loadingSpinner} />
-                <Text style={[styles.imageLoadingText, { color: businessColors.primary }]}>
-                  Loading image...
-                </Text>
-                <Text style={[styles.imageLoadingSubtext, { color: Colors.subtext }]}>
-                  This may take a few seconds
-                </Text>
-                <View style={styles.progressBarContainer}>
-                  <Animated.View 
-                    style={[
-                      styles.progressBar, 
-                      { 
-                        backgroundColor: businessColors.primary,
-                        width: progressAnimation.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: ['0%', '100%'],
-                        })
-                      }
-                    ]} 
-                  />
-                </View>
-              </View>
-            )}
-            
-            {imageLoadError && !(previewImageType === 'login' && (profileLoginImg === 'gradient-background' || 
-                                                                  profileLoginImg === 'solid-blue-background' ||
-                                                                  profileLoginImg === 'solid-purple-background' ||
-                                                                  profileLoginImg === 'solid-green-background' ||
-                                                                  profileLoginImg === 'solid-orange-background' ||
-                                                                  profileLoginImg === 'light-silver-background' ||
-                                                                  profileLoginImg === 'light-white-background' ||
-                                                                  profileLoginImg === 'light-gray-background' ||
-                                                                  profileLoginImg === 'light-pink-background' ||
-                                                                  profileLoginImg === 'light-cyan-background' ||
-                                                                  profileLoginImg === 'light-lavender-background' ||
-                                                                  profileLoginImg === 'light-coral-background' ||
-                                                                  profileLoginImg === 'dark-black-background' ||
-                                                                  profileLoginImg === 'dark-charcoal-background')) && (
-              <View style={styles.imageErrorContainer}>
-                <Ionicons name="image-outline" size={48} color={Colors.subtext} />
-                <Text style={[styles.imageErrorText, { color: Colors.subtext }]}>
-                  Failed to load image
-                </Text>
-                <TouchableOpacity 
-                  style={[styles.retryButton, { backgroundColor: businessColors.primary }]}
-                  onPress={() => {
-                    setIsImageLoading(true);
-                    setImageLoadError(false);
-                    progressAnimation.setValue(0);
-                    Animated.timing(progressAnimation, {
-                      toValue: 1,
-                      duration: 15000,
-                      useNativeDriver: false,
-                    }).start();
-                    
-                    // Set new timeout for retry
-                    const timeout = setTimeout(() => {
-                      if (isImageLoading) {
-                        setIsImageLoading(false);
-                        setImageLoadError(true);
-                      }
-                    }, 15000);
-                    
-                    setImageLoadTimeout(timeout);
-                  }}
-                >
-                  <Text style={styles.retryButtonText}>{t('common.retry','Retry')}</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            
-            <ScrollView
-              contentContainerStyle={previewImageType === 'login' ? styles.loginImagePreviewScrollContent : styles.imagePreviewScrollContent}
-              maximumZoomScale={1}
-              minimumZoomScale={1}
-              showsHorizontalScrollIndicator={false}
-              showsVerticalScrollIndicator={false}
-              scrollEnabled={false}
-              pinchGestureEnabled={false}
-              style={(isImageLoading || imageLoadError) && !(previewImageType === 'login' && (profileLoginImg === 'gradient-background' || 
-                                                                                              profileLoginImg === 'solid-blue-background' ||
-                                                                                              profileLoginImg === 'solid-purple-background' ||
-                                                                                              profileLoginImg === 'solid-green-background' ||
-                                                                                              profileLoginImg === 'solid-orange-background' ||
-                                                                                              profileLoginImg === 'light-silver-background' ||
-                                                                                              profileLoginImg === 'light-white-background' ||
-                                                                                              profileLoginImg === 'light-gray-background' ||
-                                                                                              profileLoginImg === 'light-pink-background' ||
-                                                                                              profileLoginImg === 'light-cyan-background' ||
-                                                                                              profileLoginImg === 'light-lavender-background' ||
-                                                                                              profileLoginImg === 'light-coral-background' ||
-                                                                                              profileLoginImg === 'dark-black-background' ||
-                                                                                              profileLoginImg === 'dark-charcoal-background')) ? styles.hiddenScrollView : undefined}
-            >
-              {/* Special handling for gradient background */}
-              {previewImageType === 'login' && (profileLoginImg === 'gradient-background' || 
-                                               profileLoginImg === 'solid-blue-background' ||
-                                               profileLoginImg === 'solid-purple-background' ||
-                                               profileLoginImg === 'solid-green-background' ||
-                                               profileLoginImg === 'solid-orange-background' ||
-                                               profileLoginImg === 'light-silver-background' ||
-                                               profileLoginImg === 'light-white-background' ||
-                                               profileLoginImg === 'light-gray-background' ||
-                                               profileLoginImg === 'light-pink-background' ||
-                                               profileLoginImg === 'light-cyan-background' ||
-                                               profileLoginImg === 'light-lavender-background' ||
-                                               profileLoginImg === 'light-coral-background' ||
-                                               profileLoginImg === 'dark-black-background' ||
-                                               profileLoginImg === 'dark-charcoal-background') ? (
-                <GradientBackground 
-                  style={styles.loginImagePreview}
-                  backgroundType={profileLoginImg}
-                />
-              ) : (
-              <Image
-                  source={imageLoadError ? require('@/assets/images/1homePage.jpg') : { uri: profileLoginImg }}
-                  style={previewImageType === 'login' ? styles.loginImagePreview : styles.imagePreviewImage}
-                  resizeMode={previewImageType === 'login' ? "cover" : "contain"}
-                  onLoadStart={() => setIsImageLoading(true)}
-                  onLoad={() => {
-                  setIsImageLoading(false);
-                  setImageLoadError(false);
-                  progressAnimation.stopAnimation();
-                  // Clear timeout since image loaded successfully
-                  if (imageLoadTimeout) {
-                    clearTimeout(imageLoadTimeout);
-                    setImageLoadTimeout(null);
-                  }
-                }}
-                onError={() => {
-                  setIsImageLoading(false);
-                  setImageLoadError(true);
-                  progressAnimation.stopAnimation();
-                  // Clear timeout since we got an error
-                  if (imageLoadTimeout) {
-                    clearTimeout(imageLoadTimeout);
-                    setImageLoadTimeout(null);
-                  }
-                }}
-                defaultSource={undefined}
-                />
-              )}
-            </ScrollView>
-          </View>
-          
-          <View style={styles.imagePreviewFooter}>
-            <Text style={styles.imagePreviewInstructions}>
-              Tap "Change" to replace image
-            </Text>
-            {previewImageType === 'login' && (
-              <Text style={styles.loginImageFormatNote}>
-                📱 Login page images are displayed in (9:16 ratio)
-              </Text>
-            )}
-          </View>
-        </SafeAreaView>
-      </Modal>
-
-
-
-      {/* Image Selection Modal */}
-      <ImageSelectionModal
-        visible={showImageSelectionModal}
-        onClose={() => {
-          setShowImageSelectionModal(false);
-          setCurrentImageType(null);
-        }}
-        onImageSelected={handleImageSelected}
-        title={'Select Login Page Image'}
-        mainCategory={'loginPage'}
-      />
-
     </SafeAreaView>
   );
 }
@@ -6634,162 +6071,6 @@ const styles = StyleSheet.create({
 
   // deleteIconText removed in favor of vector icon
 
-  // Image Preview Modal Styles
-  imagePreviewHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
-  },
-  imagePreviewContainer: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
-  imagePreviewScrollContent: {
-    flexGrow: 1,
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    minHeight: '100%',
-    paddingTop: 30,
-    paddingBottom: 100,
-    paddingHorizontal: 20,
-  },
-  loginImagePreviewScrollContent: {
-    flexGrow: 1,
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    minHeight: '100%',
-    paddingTop: 30,
-    paddingBottom: 100,
-    paddingHorizontal: 20,
-  },
-  imagePreviewImage: {
-    width: '100%',
-    height: '100%',
-    minHeight: 400,
-    maxHeight: '85%',
-  },
-  loginImagePreview: {
-    width: '100%',
-    height: '100%',
-    minHeight: 400,
-    aspectRatio: 9/16, // Instagram Story ratio (vertical rectangle)
-    maxHeight: '85%',
-    alignSelf: 'center',
-    flex: 1, // Ensure it takes full available space
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: 'rgba(0, 0, 0, 0.1)',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  imageLoadingContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    zIndex: 10,
-  },
-  imageLoadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  imageLoadingSubtext: {
-    marginTop: 4,
-    fontSize: 14,
-    fontWeight: '400',
-    textAlign: 'center',
-  },
-  progressBarContainer: {
-    width: 200,
-    height: 4,
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
-    borderRadius: 2,
-    marginTop: 16,
-    overflow: 'hidden',
-  },
-  progressBar: {
-    height: '100%',
-    borderRadius: 2,
-  },
-  placeholderImage: {
-    width: 80,
-    height: 80,
-    opacity: 0.3,
-    marginBottom: 16,
-  },
-  loadingSpinner: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    marginTop: -10,
-    marginLeft: -10,
-  },
-  imageErrorContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    zIndex: 10,
-    paddingHorizontal: 20,
-  },
-  imageErrorText: {
-    marginTop: 12,
-    fontSize: 16,
-    fontWeight: '500',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  retryButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  hiddenScrollView: {
-    opacity: 0,
-  },
-  imagePreviewFooter: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0, 0, 0, 0.1)',
-    alignItems: 'center',
-  },
-  imagePreviewInstructions: {
-    color: 'rgba(0, 0, 0, 0.6)',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  loginImageFormatNote: {
-    fontSize: 12,
-    color: 'rgba(0, 0, 0, 0.5)',
-    textAlign: 'center',
-    marginTop: 8,
-    fontStyle: 'italic',
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',

@@ -40,9 +40,7 @@ import Reanimated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { manicureImages } from '@/src/constants/manicureImages';
 import MonthlyInsightsCard from '@/components/MonthlyInsightsCard';
 import { PendingClientApprovalsCard } from '@/components/admin/PendingClientApprovalsCard';
-import { TopActiveClientsLeaderboard } from '@/components/admin/TopActiveClientsLeaderboard';
 import { clientAppointmentStatsApi } from '@/lib/api/clientAppointmentStats';
-import { topActiveClientsApi, type TopActiveClientRow } from '@/lib/api/topActiveClients';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_ITEM_SIZE = Platform.OS === 'web' ? SCREEN_WIDTH * 0.24 : SCREEN_WIDTH * 0.45;
@@ -237,8 +235,6 @@ export default function HomeScreen() {
     newClientsThisMonth: 0,
   });
   const [loadingInsights, setLoadingInsights] = useState(true);
-  const [topActiveClients, setTopActiveClients] = useState<TopActiveClientRow[]>([]);
-  const [loadingTopActiveClients, setLoadingTopActiveClients] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showBroadcast, setShowBroadcast] = useState(false);
   const [innerScrollEnabled, setInnerScrollEnabled] = useState(false);
@@ -539,24 +535,6 @@ export default function HomeScreen() {
     }
   };
 
-  const fetchTopActiveClients = async () => {
-    if (isSuperAdmin) {
-      setLoadingTopActiveClients(false);
-      setTopActiveClients([]);
-      return;
-    }
-    try {
-      setLoadingTopActiveClients(true);
-      const rows = await topActiveClientsApi.getTopClients(7);
-      setTopActiveClients(rows);
-    } catch (e) {
-      console.error('Error in fetchTopActiveClients:', e);
-      setTopActiveClients([]);
-    } finally {
-      setLoadingTopActiveClients(false);
-    }
-  };
-
   // Fetch clients
   const fetchClients = async () => {
     try {
@@ -779,7 +757,6 @@ export default function HomeScreen() {
     fetchTodayAppointmentsCount();
     fetchMonthlyStats();
     fetchInsightsData();
-    fetchTopActiveClients();
     fetchDesigns();
     fetchProducts();
   }, []);
@@ -792,7 +769,6 @@ export default function HomeScreen() {
         fetchTodayAppointmentsCount(),
         fetchMonthlyStats(),
         fetchInsightsData(),
-        fetchTopActiveClients(),
         (async () => { try { await fetchDesigns(); } catch {} })(),
         (async () => { try { await fetchProducts(); } catch {} })(),
       ]);
@@ -967,14 +943,6 @@ export default function HomeScreen() {
         </View>
 
         <PendingClientApprovalsCard colors={colors} openSheetNonce={pendingApprovalsOpenNonce} />
-
-        {isAdmin && (
-          <TopActiveClientsLeaderboard
-            rows={topActiveClients}
-            loading={loadingTopActiveClients}
-            colors={colors}
-          />
-        )}
 
         {/* ── MONTHLY INSIGHTS CHART ── */}
         {isAdmin && (

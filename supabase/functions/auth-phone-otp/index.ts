@@ -566,7 +566,7 @@ serve(async (req) => {
     if (action === "send_login_otp") {
       const user = await findUserByPhoneFlexible(admin, businessId, phone);
       if (!user) {
-        return json({ ok: true });
+        return json({ ok: false, error: "phone_not_registered" }, 400);
       }
 
       const pulse = await loadPulseemCredentials(admin, businessId);

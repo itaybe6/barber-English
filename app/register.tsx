@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,39 +10,85 @@ import {
   Platform,
   Image,
   Keyboard,
-  Animated,
   Modal,
   Pressable,
+  Dimensions,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
+import Animated, {
+  Easing,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { BusinessProfile, supabase } from '@/lib/supabase';
-import Colors from '@/constants/colors';
+import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import { businessProfileApi } from '@/lib/api/businessProfile';
-import GradientBackground from '@/components/GradientBackground';
-import { getCurrentClientLogo } from '@/src/theme/assets';
+import { StatusBar } from 'expo-status-bar';
+import { Phone, User, Hash, Calendar, Camera } from 'lucide-react-native';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useTranslation } from 'react-i18next';
 import { authPhoneOtpApi } from '@/lib/api/authPhoneOtp';
+import { usersApi } from '@/lib/api/users';
 import { useAuthStore } from '@/stores/authStore';
 import { isValidUserType } from '@/constants/auth';
+import { readableOnHex } from '@/lib/utils/readableOnHex';
+import { LoginEntranceSection } from '@/components/login/LoginEntranceSection';
+import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
+import { parseIsraeliMobileNational10 } from '@/lib/login/israeliMobilePhone';
+
+const { height: SH } = Dimensions.get('window');
+
+const REGISTER_PHONE_TOAST_HIDE_Y = -140;
+const REGISTER_PHONE_TOAST_VISIBLE_MS = 3000;
+
+type RegisterPhoneToastKind = 'invalid' | 'already_registered';
 
 const palette = {
   textPrimary: '#111827',
   textSecondary: '#6B7280',
   textMuted: '#9CA3AF',
-  inputBg: 'rgba(255, 255, 255, 0.92)',
-  inputBorder: 'rgba(17, 24, 39, 0.08)',
-  sheetBg: 'rgba(255, 255, 255, 0.72)',
   white: '#FFFFFF',
   success: '#059669',
 };
+
+function darkenHex(hex: string, ratio: number): string {
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return hex;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const f = 1 - ratio;
+  const to = (n: number) => Math.round(Math.max(0, Math.min(255, n * f))).toString(16).padStart(2, '0');
+  return `#${to(r)}${to(g)}${to(b)}`;
+}
+
+function lightenHex(hex: string, ratio: number): string {
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return hex;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const mix = (c: number) => Math.min(255, Math.round(c + (255 - c) * ratio));
+  const to = (n: number) => n.toString(16).padStart(2, '0');
+  return `#${to(mix(r))}${to(mix(g))}${to(mix(b))}`;
+}
+
+function hexToRgba(hex: string, a: number): string {
+  const h = hex.replace('#', '');
+  if (h.length < 6) return `rgba(0,0,0,${a})`;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  if (isNaN(r + g + b)) return `rgba(0,0,0,${a})`;
+  return `rgba(${r},${g},${b},${a})`;
+}
 
 type RegisterStep = 'phone' | 'otp' | 'profile';
 
@@ -93,10 +139,8 @@ function defaultBirthDate(): Date {
 
 export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
+  const bottomPad = Math.max(insets.bottom, 24);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-  const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
-  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const { colors: businessColors } = useBusinessColors();
   const { t, i18n } = useTranslation();
 
@@ -121,9 +165,78 @@ export default function RegisterScreen() {
 
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [phoneFocused, setPhoneFocused] = useState(false);
+  const [otpFocused, setOtpFocused] = useState(false);
+  const [nameFocused, setNameFocused] = useState(false);
+  const [registerPhoneToast, setRegisterPhoneToast] = useState<RegisterPhoneToastKind | null>(null);
   const router = useRouter();
   const login = useAuthStore((s) => s.login);
   const isRtl = i18n.language?.startsWith('he') ?? true;
+
+  const primary = businessColors.primary;
+  const loginGradient = useMemo(
+    () => [lightenHex(primary, 0.1), darkenHex(primary, 0.42)] as const,
+    [primary],
+  );
+  const gradientEnd = loginGradient[1];
+  const contrastAnchor = useMemo(() => darkenHex(primary, 0.22), [primary]);
+  const useLightFg = readableOnHex(contrastAnchor) === '#FFFFFF';
+  const heroText = useLightFg ? '#FFFFFF' : '#141414';
+  const heroMuted = useLightFg ? 'rgba(255,255,255,0.86)' : 'rgba(0,0,0,0.62)';
+  const heroFaint = useLightFg ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.28)';
+  const phoneBorderUnfocus = useLightFg ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.22)';
+  const phoneBorderFocus = useLightFg ? '#FFFFFF' : primary;
+  const ctaElevatedBg = useLightFg ? '#FFFFFF' : 'rgba(0,0,0,0.1)';
+  const ctaElevatedLabel = useLightFg ? '#141414' : '#111111';
+  const ctaElevatedBorder = useLightFg ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.18)';
+
+  const btnScale = useSharedValue(1);
+  const btnScaleStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: btnScale.value }],
+  }));
+
+  const registerPhoneToastY = useSharedValue(REGISTER_PHONE_TOAST_HIDE_Y);
+  const registerPhoneToastOpacity = useSharedValue(0);
+  const registerPhoneToastStyle = useAnimatedStyle(() => ({
+    opacity: registerPhoneToastOpacity.value,
+    transform: [{ translateY: registerPhoneToastY.value }],
+  }));
+
+  useEffect(() => {
+    if (!registerPhoneToast) {
+      registerPhoneToastOpacity.value = withTiming(0, { duration: 180 });
+      registerPhoneToastY.value = withTiming(REGISTER_PHONE_TOAST_HIDE_Y, {
+        duration: 260,
+        easing: Easing.in(Easing.cubic),
+      });
+      return;
+    }
+    registerPhoneToastY.value = REGISTER_PHONE_TOAST_HIDE_Y;
+    registerPhoneToastOpacity.value = 0;
+    registerPhoneToastY.value = withSpring(0, {
+      damping: 19,
+      stiffness: 280,
+      mass: 0.85,
+    });
+    registerPhoneToastOpacity.value = withTiming(1, {
+      duration: 320,
+      easing: Easing.out(Easing.cubic),
+    });
+    const id = setTimeout(() => {
+      registerPhoneToastOpacity.value = withTiming(0, {
+        duration: 220,
+        easing: Easing.in(Easing.quad),
+      });
+      registerPhoneToastY.value = withTiming(
+        REGISTER_PHONE_TOAST_HIDE_Y,
+        { duration: 300, easing: Easing.in(Easing.cubic) },
+        (finished) => {
+          if (finished) runOnJS(setRegisterPhoneToast)(null);
+        },
+      );
+    }, REGISTER_PHONE_TOAST_VISIBLE_MS);
+    return () => clearTimeout(id);
+  }, [registerPhoneToast, registerPhoneToastY, registerPhoneToastOpacity]);
 
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => setIsKeyboardVisible(true));
@@ -139,32 +252,6 @@ export default function RegisterScreen() {
     const id = setInterval(() => setOtpCooldownSec((s) => Math.max(0, s - 1)), 1000);
     return () => clearInterval(id);
   }, [otpCooldownSec]);
-
-  useEffect(() => {
-    const loadBusinessProfile = async () => {
-      try {
-        setIsLoadingProfile(true);
-        const profile = await businessProfileApi.getProfile();
-        setBusinessProfile(profile);
-      } catch (error) {
-        console.error('Failed to load business profile (register):', error);
-      } finally {
-        setIsLoadingProfile(false);
-      }
-    };
-    loadBusinessProfile();
-  }, []);
-
-  const validatePhoneStep = () => {
-    const next: Record<string, string> = {};
-    if (!phone.trim()) {
-      next.phone = t('register.error.phoneRequired');
-    } else if (phone.replace(/\D/g, '').length < 9) {
-      next.phone = t('register.error.phoneInvalid');
-    }
-    setErrors(next);
-    return Object.keys(next).length === 0;
-  };
 
   const validateProfileStep = () => {
     const next: Record<string, string> = {};
@@ -218,13 +305,32 @@ export default function RegisterScreen() {
   };
 
   const handleSendRegisterOtp = async () => {
-    if (!validatePhoneStep()) return;
+    const canonical = parseIsraeliMobileNational10(phone);
+    if (!canonical) {
+      setRegisterPhoneToast('invalid');
+      return;
+    }
+    setPhone(canonical);
+    setRegisterPhoneToast(null);
     setLoading(true);
     setCodeSentBanner(false);
     try {
-      const res = await authPhoneOtpApi.sendRegisterOtp(phone.trim());
+      const alreadyRegistered = await usersApi.hasUserWithPhoneForBusiness(canonical);
+      if (alreadyRegistered === true) {
+        setRegisterPhoneToast('already_registered');
+        return;
+      }
+      if (alreadyRegistered === null) {
+        Alert.alert(t('error.generic', 'שגיאה'), t('common.tryAgain', 'נסו שוב.'));
+        return;
+      }
+      const res = await authPhoneOtpApi.sendRegisterOtp(canonical);
       if (!res.ok) {
-        Alert.alert(t('error.generic', 'שגיאה'), registerOtpError(res.error));
+        if (res.error === 'phone_registered') {
+          setRegisterPhoneToast('already_registered');
+        } else {
+          Alert.alert(t('error.generic', 'שגיאה'), registerOtpError(res.error));
+        }
         return;
       }
       setRegisterStep('otp');
@@ -249,7 +355,7 @@ export default function RegisterScreen() {
     setLoading(true);
     try {
       const res = await authPhoneOtpApi.verifyRegisterOtp({
-        phone: phone.trim(),
+        phone: parseIsraeliMobileNational10(phone) ?? phone.trim(),
         code: digits,
       });
       if (!res.ok || !res.profileSetupToken || !res.user?.id) {
@@ -417,378 +523,444 @@ export default function RegisterScreen() {
     }
   };
 
-  const goBackWithinFlow = () => {
-    if (registerStep === 'phone') {
-      router.back();
-      return;
-    }
-    if (registerStep === 'otp') {
-      setRegisterStep('phone');
-      setOtpCode('');
-      setCodeSentBanner(false);
-      return;
-    }
-    Alert.alert(
-      t('register.profile.abortTitle', 'לצאת מההרשמה?'),
-      t(
-        'register.profile.abortMessage',
-        'ההרשמה עדיין לא הושלמה — אפשר יהיה להמשיך מאותו מספר טלפון. אם תצאו עכשיו, השם והתמונה לא יישמרו.',
-      ),
-      [
-        { text: t('register.profile.abortStay', 'המשך למלא'), style: 'cancel' },
-        { text: t('register.profile.abortLeave', 'יציאה'), onPress: () => router.replace('/login') },
-      ],
-    );
-  };
-
-  const stepIndex = registerStep === 'phone' ? 0 : registerStep === 'otp' ? 1 : 2;
-
-  const renderProgress = () => (
-    <View style={styles.progressWrap} accessibilityRole="header">
-      {[0, 1, 2].map((i) => (
-        <React.Fragment key={i}>
-          {i > 0 ? (
-            <View
-              style={[
-                styles.progressLine,
-                { backgroundColor: i <= stepIndex ? businessColors.primary : palette.textMuted },
-              ]}
-            />
-          ) : null}
-          <View
-            style={[
-              styles.progressDot,
-              {
-                backgroundColor: i <= stepIndex ? businessColors.primary : 'transparent',
-                borderColor: i <= stepIndex ? businessColors.primary : palette.textMuted,
-              },
-            ]}
-          >
-            {i < stepIndex ? (
-              <Ionicons name="checkmark" size={14} color={palette.white} />
-            ) : (
-              <Text style={[styles.progressDotText, { color: i === stepIndex ? palette.white : palette.textMuted }]}>
-                {i + 1}
-              </Text>
-            )}
-          </View>
-        </React.Fragment>
-      ))}
-    </View>
-  );
-
-  const renderStepLabels = () => (
-    <View style={[styles.stepLabels, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
-      <Text style={[styles.stepLabel, stepIndex === 0 && { color: businessColors.primary, fontWeight: '800' }]}>
-        {t('register.steps.phone', 'טלפון')}
-      </Text>
-      <Text style={[styles.stepLabel, stepIndex === 1 && { color: businessColors.primary, fontWeight: '800' }]}>
-        {t('register.steps.code', 'קוד')}
-      </Text>
-      <Text style={[styles.stepLabel, stepIndex === 2 && { color: businessColors.primary, fontWeight: '800' }]}>
-        {t('register.steps.profile', 'פרופיל')}
-      </Text>
-    </View>
-  );
+  const boxedFieldStyle = (focused: boolean) =>
+    useLightFg
+      ? {
+          borderColor: focused ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.32)',
+          backgroundColor: focused ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.12)',
+        }
+      : {
+          borderColor: focused ? primary : 'rgba(0,0,0,0.1)',
+          backgroundColor: focused ? hexToRgba(primary, 0.06) : '#F7F7F7',
+        };
 
   return (
-    <View style={styles.gradient}>
-      {businessProfile?.login_img && !isLoadingProfile ? (
-        businessProfile.login_img === 'gradient-background' ||
-        businessProfile.login_img === 'solid-blue-background' ||
-        businessProfile.login_img === 'solid-purple-background' ||
-        businessProfile.login_img === 'solid-green-background' ||
-        businessProfile.login_img === 'solid-orange-background' ||
-        businessProfile.login_img === 'light-silver-background' ||
-        businessProfile.login_img === 'light-white-background' ||
-        businessProfile.login_img === 'light-gray-background' ||
-        businessProfile.login_img === 'light-pink-background' ||
-        businessProfile.login_img === 'light-cyan-background' ||
-        businessProfile.login_img === 'light-lavender-background' ||
-        businessProfile.login_img === 'light-coral-background' ||
-        businessProfile.login_img === 'dark-black-background' ||
-        businessProfile.login_img === 'dark-charcoal-background' ? (
-          <GradientBackground style={styles.backgroundImage} backgroundType={businessProfile.login_img} />
-        ) : (
-          <Image source={{ uri: businessProfile.login_img }} style={styles.backgroundImage} resizeMode="cover" />
-        )
-      ) : (
-        <LinearGradient
-          colors={['#FFFFFF', '#F6F6F6', '#EFEFEF']}
-          locations={[0, 0.55, 1]}
-          start={{ x: 0.2, y: 0 }}
-          end={{ x: 0.8, y: 1 }}
-          style={styles.bgGradient}
-        >
-          <LinearGradient
-            colors={['#00000022', '#00000000']}
-            start={{ x: 1, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={styles.beamRight}
-            pointerEvents="none"
-          />
-          <LinearGradient
-            colors={['#00000026', '#FFFFFF00']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.beamTop}
-            pointerEvents="none"
-          />
-        </LinearGradient>
-      )}
-      {businessProfile?.login_img && !isLoadingProfile ? <View style={styles.darkOverlay} /> : null}
+    <View style={[styles.root, { backgroundColor: gradientEnd }]}>
+      <LinearGradient colors={[...loginGradient]} style={StyleSheet.absoluteFill} />
+      {Platform.OS !== 'web' ? (
+        <BrandLavaLampBackground
+          primaryColor={primary}
+          baseColor={gradientEnd}
+          count={4}
+          duration={16000}
+          blurIntensity={48}
+        />
+      ) : null}
+      <StatusBar style={useLightFg ? 'light' : 'dark'} />
 
-      <SafeAreaView style={styles.container} edges={['top']}>
+      {registerPhoneToast ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.registerPhoneToastWrap,
+            { paddingTop: insets.top + 10 },
+            registerPhoneToastStyle,
+          ]}
+          accessibilityRole="alert"
+          accessibilityLiveRegion="polite"
+        >
+          <View style={styles.registerPhoneToastPill}>
+            <View style={styles.registerPhoneToastRow}>
+              <View
+                style={[styles.registerPhoneToastDot, { backgroundColor: businessColors.error }]}
+                accessibilityElementsHidden
+              />
+              <Text style={styles.registerPhoneToastText}>
+                {registerPhoneToast === 'invalid'
+                  ? t('register.phone.toastInvalid', 'המספר שהוזן אינו תקין')
+                  : t('register.phone.toastAlreadyRegistered', 'מספר הטלפון הזה כבר רשום למערכת')}
+              </Text>
+            </View>
+          </View>
+        </Animated.View>
+      ) : null}
+
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         <KeyboardAwareScreenScroll
-          style={styles.keyboardAvoid}
+          style={[styles.keyboardAvoid, { backgroundColor: 'transparent' }]}
           contentContainerStyle={[
             styles.scrollContainer,
+            {
+              backgroundColor: 'transparent',
+              justifyContent: 'center',
+              paddingVertical: 16,
+            },
             isKeyboardVisible ? styles.scrollContainerCompact : null,
           ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           bounces={false}
           alwaysBounceVertical={false}
           overScrollMode="never"
+          removeClippedSubviews={false}
         >
           <View style={[styles.rtlRoot, { direction: isRtl ? 'rtl' : 'ltr' }]}>
-            <View style={[styles.header, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
-              <TouchableOpacity style={styles.backButton} onPress={goBackWithinFlow} accessibilityLabel={t('back', 'חזרה')}>
-                <Ionicons name={isRtl ? 'chevron-forward' : 'chevron-back'} size={22} color={Colors.white} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.titleContainer}>
-              <Image source={getCurrentClientLogo()} style={styles.logoImage} resizeMode="contain" />
-            </View>
-
-            <Animated.View style={[styles.formWrapper, styles.formWrapperFill, { opacity: fadeAnim }]} collapsable={false}>
-              <BlurView intensity={28} tint="light" style={styles.formContainer}>
-                {renderProgress()}
-                {renderStepLabels()}
-
-                {registerStep === 'phone' ? (
-                  <>
-                    <Text style={styles.heroTitle}>{t('register.phone.title', 'מה מספר הטלפון שלך?')}</Text>
-                    <Text style={styles.heroSubtitle}>
-                      {t('register.phone.subtitle', 'נשלח אליך קוד אימות ב-SMS כדי להשלים את ההרשמה.')}
-                    </Text>
-                    <View
-                      style={[
-                        styles.inputRow,
-                        { borderColor: palette.inputBorder, backgroundColor: palette.inputBg },
-                        { flexDirection: isRtl ? 'row-reverse' : 'row' },
-                      ]}
-                    >
-                      <Ionicons name="call-outline" size={20} color={palette.textSecondary} style={styles.inputIcon} />
-                      <TextInput
-                        style={[styles.input, { textAlign: isRtl ? 'right' : 'left' }]}
-                        placeholder={t('profile.edit.phonePlaceholder', 'מספר טלפון')}
-                        placeholderTextColor={palette.textMuted}
-                        value={phone}
-                        onChangeText={(text) => {
-                          setPhone(text);
-                          if (errors.phone) setErrors((p) => ({ ...p, phone: '' }));
-                        }}
-                        keyboardType="phone-pad"
-                        autoCorrect={false}
-                      />
-                    </View>
-                    {errors.phone ? (
-                      <Text style={[styles.errorText, { textAlign: isRtl ? 'right' : 'left' }]}>{errors.phone}</Text>
-                    ) : null}
-                    <Text style={styles.softHint}>{t('register.phone.hint', 'הקוד יגיע תוך שניות לנייד')}</Text>
-                  </>
-                ) : null}
-
-                {registerStep === 'otp' ? (
-                  <>
-                    <Text style={styles.heroTitle}>{t('register.otp.title', 'הזינו את הקוד')}</Text>
-                    <Text style={styles.heroSubtitle}>
-                      {t('register.otp.subtitle', 'שלחנו קוד בן 6 ספרות ל־{{phone}}', { phone: phone.trim() })}
-                    </Text>
-                    {codeSentBanner ? (
-                      <View style={styles.bannerOk}>
-                        <Ionicons name="checkmark-circle" size={18} color={palette.success} />
-                        <Text style={styles.bannerOkText}>{t('register.otp.sentToast', 'הקוד נשלח בהצלחה')}</Text>
-                      </View>
-                    ) : null}
-                    <View
-                      style={[
-                        styles.inputRow,
-                        { borderColor: palette.inputBorder, backgroundColor: palette.inputBg },
-                        { flexDirection: isRtl ? 'row-reverse' : 'row' },
-                      ]}
-                    >
-                      <Ionicons name="keypad-outline" size={20} color={palette.textSecondary} style={styles.inputIcon} />
-                      <TextInput
-                        style={[styles.input, styles.otpInput, { textAlign: isRtl ? 'right' : 'left' }]}
-                        placeholder="______"
-                        placeholderTextColor={palette.textMuted}
-                        value={otpCode}
-                        onChangeText={(text) => setOtpCode(text.replace(/\D/g, '').slice(0, 6))}
-                        keyboardType="number-pad"
-                        maxLength={6}
-                        autoCorrect={false}
-                      />
-                    </View>
-                    <TouchableOpacity onPress={() => setRegisterStep('phone')} style={styles.linkBtn}>
-                      <Text style={[styles.linkText, { color: businessColors.primary }]}>
-                        {t('register.otp.editPhone', 'שינוי מספר טלפון')}
+            <Pressable
+              accessible={false}
+              style={[
+                styles.dismissKeyboardArea,
+                {
+                  minHeight: Math.max(SH - insets.top - insets.bottom, 480),
+                  justifyContent: 'center',
+                },
+              ]}
+              onPress={Keyboard.dismiss}
+            >
+              <View style={[styles.formZone, { paddingBottom: bottomPad + 32 }]}>
+                <LoginEntranceSection key={registerStep} delayMs={0} style={styles.stepBody}>
+                  {registerStep === 'phone' ? (
+                    <>
+                      <Text style={[styles.heroTitle, { color: heroText }]}>
+                        {t('register.phone.title', 'מה מספר הטלפון שלך?')}
                       </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={handleSendRegisterOtp}
-                      disabled={loading || otpCooldownSec > 0}
-                      style={styles.linkBtn}
-                    >
-                      <Text
+                      <Text style={[styles.heroSubtitle, { color: heroMuted }]}>
+                        {t('register.phone.subtitle', 'נשלח אליך קוד אימות ב-SMS כדי להשלים את ההרשמה.')}
+                      </Text>
+                      <View
                         style={[
-                          styles.linkText,
-                          { color: otpCooldownSec > 0 ? palette.textMuted : businessColors.primary },
+                          styles.phoneOpenRow,
+                          { flexDirection: 'row' },
+                          {
+                            borderBottomColor: phoneFocused ? phoneBorderFocus : phoneBorderUnfocus,
+                            borderBottomWidth: phoneFocused ? 2.5 : 1.5,
+                          },
                         ]}
                       >
-                        {otpCooldownSec > 0
-                          ? t('register.otp.resendWait', 'שליחה חוזרת בעוד {{s}} שניות', { s: otpCooldownSec })
-                          : t('register.otp.resend', 'שלחו שוב')}
+                        <View style={styles.phoneOpenIconSlot} accessible={false}>
+                          <Phone
+                            size={18}
+                            color={phoneFocused ? phoneBorderFocus : heroFaint}
+                            strokeWidth={1.5}
+                          />
+                        </View>
+                        <TextInput
+                          style={[
+                            styles.phoneOpenInput,
+                            { textAlign: isRtl ? 'right' : 'left', color: heroText },
+                          ]}
+                          placeholder={t('profile.edit.phonePlaceholder', 'מספר טלפון')}
+                          placeholderTextColor={heroFaint}
+                          value={phone}
+                          onChangeText={(text) => {
+                            setPhone(text);
+                            setRegisterPhoneToast(null);
+                          }}
+                          keyboardType="phone-pad"
+                          autoCorrect={false}
+                          onFocus={() => setPhoneFocused(true)}
+                          onBlur={() => setPhoneFocused(false)}
+                        />
+                      </View>
+                      <Text style={[styles.softHint, { color: heroMuted }]}>
+                        {t('register.phone.hint', 'הקוד יגיע תוך שניות לנייד')}
                       </Text>
-                    </TouchableOpacity>
-                  </>
-                ) : null}
+                    </>
+                  ) : null}
 
-                {registerStep === 'profile' ? (
-                  <>
-                    <Text style={styles.heroTitle}>{t('register.profile.title', 'כמה פרטים אחרונים')}</Text>
-                    <Text style={styles.heroSubtitle}>
-                      {t('register.profile.subtitle', 'כך נזהה אותך ונוכל לתת שירות מדויק יותר.')}
-                    </Text>
-
-                    <Text style={[styles.fieldLabel, { textAlign: isRtl ? 'right' : 'left' }]}>
-                      {t('register.profile.nameLabel', 'שם מלא')} <Text style={styles.reqStar}>*</Text>
-                    </Text>
-                    <View
-                      style={[
-                        styles.inputRow,
-                        { borderColor: palette.inputBorder, backgroundColor: palette.inputBg },
-                        { flexDirection: isRtl ? 'row-reverse' : 'row' },
-                      ]}
-                    >
-                      <Ionicons name="person-outline" size={20} color={palette.textSecondary} style={styles.inputIcon} />
-                      <TextInput
-                        style={[styles.input, { textAlign: isRtl ? 'right' : 'left' }]}
-                        placeholder={t('register.profile.namePlaceholder', 'למשל: יוסי כהן')}
-                        placeholderTextColor={palette.textMuted}
-                        value={profileName}
-                        onChangeText={(text) => {
-                          setProfileName(text);
-                          if (errors.name) setErrors((p) => ({ ...p, name: '' }));
-                        }}
-                        autoCorrect={false}
-                      />
-                    </View>
-                    {errors.name ? (
-                      <Text style={[styles.errorText, { textAlign: isRtl ? 'right' : 'left' }]}>{errors.name}</Text>
-                    ) : null}
-
-                    <Text style={[styles.fieldLabel, { textAlign: isRtl ? 'right' : 'left' }]}>
-                      {t('register.profile.birthLabel', 'תאריך לידה')}{' '}
-                      <Text style={styles.optionalTag}>({t('register.profile.birthOptional', 'לא חובה')})</Text>
-                    </Text>
-                    <View style={[styles.rowActions, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
-                      <TouchableOpacity
-                        style={[styles.secondaryBtn, { borderColor: businessColors.primary }]}
-                        onPress={() => {
-                          setPickerTempDate(birthDate ?? defaultBirthDate());
-                          if (Platform.OS === 'android') {
-                            setShowAndroidBirthPicker(true);
-                          } else {
-                            setShowBirthModal(true);
-                          }
-                        }}
+                  {registerStep === 'otp' ? (
+                    <>
+                      <Text style={[styles.heroTitle, { color: heroText }]}>
+                        {t('register.otp.title', 'הזינו את הקוד')}
+                      </Text>
+                      <Text style={[styles.heroSubtitle, { color: heroMuted }]}>
+                        {t('register.otp.subtitle', 'שלחנו קוד בן 6 ספרות ל־{{phone}}', {
+                          phone: phone.trim(),
+                        })}
+                      </Text>
+                      {codeSentBanner ? (
+                        <View
+                          style={[
+                            styles.bannerOk,
+                            {
+                              backgroundColor: useLightFg ? 'rgba(255,255,255,0.16)' : 'rgba(5, 150, 105, 0.12)',
+                            },
+                          ]}
+                        >
+                          <Ionicons name="checkmark-circle" size={18} color={palette.success} />
+                          <Text style={[styles.bannerOkText, { color: heroText }]}>{t('register.otp.sentToast', 'הקוד נשלח בהצלחה')}</Text>
+                        </View>
+                      ) : null}
+                      <View
+                        style={[
+                          styles.inputRow,
+                          { flexDirection: isRtl ? 'row-reverse' : 'row' },
+                          boxedFieldStyle(otpFocused),
+                        ]}
                       >
-                        <Ionicons name="calendar-outline" size={18} color={businessColors.primary} />
-                        <Text style={[styles.secondaryBtnText, { color: businessColors.primary }]}>
-                          {hasBirthDate && birthDate
-                            ? birthDate.toLocaleDateString('he-IL')
-                            : t('register.profile.birthPick', 'בחירת תאריך')}
+                        <Hash
+                          size={19}
+                          color={
+                            otpFocused
+                              ? useLightFg
+                                ? '#FFFFFF'
+                                : primary
+                              : useLightFg
+                                ? heroFaint
+                                : '#ABABAB'
+                          }
+                          strokeWidth={1.7}
+                        />
+                        <TextInput
+                          style={[styles.input, styles.otpInput, { textAlign: isRtl ? 'right' : 'left', color: heroText }]}
+                          placeholder="______"
+                          placeholderTextColor={heroFaint}
+                          value={otpCode}
+                          onChangeText={(text) => setOtpCode(text.replace(/\D/g, '').slice(0, 6))}
+                          keyboardType="number-pad"
+                          maxLength={6}
+                          autoCorrect={false}
+                          onFocus={() => setOtpFocused(true)}
+                          onBlur={() => setOtpFocused(false)}
+                        />
+                      </View>
+                      <TouchableOpacity onPress={() => setRegisterStep('phone')} style={styles.linkBtn}>
+                        <Text style={[styles.linkText, { color: useLightFg ? '#FFFFFF' : primary }]}>
+                          {t('register.otp.editPhone', 'שינוי מספר טלפון')}
                         </Text>
                       </TouchableOpacity>
-                      {hasBirthDate ? (
+                      <TouchableOpacity
+                        onPress={handleSendRegisterOtp}
+                        disabled={loading || otpCooldownSec > 0}
+                        style={styles.linkBtn}
+                      >
+                        <Text
+                          style={[
+                            styles.linkText,
+                            {
+                              color:
+                                otpCooldownSec > 0 ? heroMuted : useLightFg ? '#FFFFFF' : primary,
+                            },
+                          ]}
+                        >
+                          {otpCooldownSec > 0
+                            ? t('register.otp.resendWait', 'שליחה חוזרת בעוד {{s}} שניות', { s: otpCooldownSec })
+                            : t('register.otp.resend', 'שלחו שוב')}
+                        </Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : null}
+
+                  {registerStep === 'profile' ? (
+                    <>
+                      <Text style={[styles.heroTitle, { color: heroText }]}>
+                        {t('register.profile.title', 'כמה פרטים אחרונים')}
+                      </Text>
+                      <Text style={[styles.heroSubtitle, { color: heroMuted }]}>
+                        {t('register.profile.subtitle', 'כך נזהה אותך ונוכל לתת שירות מדויק יותר.')}
+                      </Text>
+
+                      <Text
+                        style={[
+                          styles.fieldLabelHero,
+                          { color: heroMuted, textAlign: isRtl ? 'right' : 'left' },
+                        ]}
+                      >
+                        {t('register.profile.nameLabel', 'שם מלא')} <Text style={styles.reqStar}>*</Text>
+                      </Text>
+                      <View
+                        style={[
+                          styles.inputRow,
+                          { flexDirection: isRtl ? 'row-reverse' : 'row' },
+                          boxedFieldStyle(nameFocused),
+                        ]}
+                      >
+                        <User
+                          size={19}
+                          color={
+                            nameFocused
+                              ? useLightFg
+                                ? '#FFFFFF'
+                                : primary
+                              : useLightFg
+                                ? heroFaint
+                                : '#ABABAB'
+                          }
+                          strokeWidth={1.7}
+                        />
+                        <TextInput
+                          style={[styles.input, { textAlign: isRtl ? 'right' : 'left', color: heroText }]}
+                          placeholder={t('register.profile.namePlaceholder', 'למשל: יוסי כהן')}
+                          placeholderTextColor={heroFaint}
+                          value={profileName}
+                          onChangeText={(text) => {
+                            setProfileName(text);
+                            if (errors.name) setErrors((p) => ({ ...p, name: '' }));
+                          }}
+                          autoCorrect={false}
+                          onFocus={() => setNameFocused(true)}
+                          onBlur={() => setNameFocused(false)}
+                        />
+                      </View>
+                      {errors.name ? (
+                        <Text
+                          style={[
+                            styles.errorOnHero,
+                            { color: businessColors.error, textAlign: isRtl ? 'right' : 'left' },
+                          ]}
+                        >
+                          {errors.name}
+                        </Text>
+                      ) : null}
+
+                      <Text
+                        style={[
+                          styles.fieldLabelHero,
+                          { color: heroMuted, textAlign: isRtl ? 'right' : 'left' },
+                        ]}
+                      >
+                        {t('register.profile.birthLabel', 'תאריך לידה')}{' '}
+                        <Text style={styles.optionalOnHero}>({t('register.profile.birthOptional', 'לא חובה')})</Text>
+                      </Text>
+                      <View style={[styles.rowActions, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
                         <TouchableOpacity
-                          style={styles.textGhostBtn}
+                          style={[
+                            styles.secondaryBtn,
+                            {
+                              borderColor: useLightFg ? 'rgba(255,255,255,0.55)' : primary,
+                              backgroundColor: useLightFg ? 'rgba(255,255,255,0.1)' : 'transparent',
+                            },
+                          ]}
                           onPress={() => {
-                            setHasBirthDate(false);
-                            setBirthDate(null);
+                            setPickerTempDate(birthDate ?? defaultBirthDate());
+                            if (Platform.OS === 'android') {
+                              setShowAndroidBirthPicker(true);
+                            } else {
+                              setShowBirthModal(true);
+                            }
                           }}
                         >
-                          <Text style={styles.textGhost}>{t('register.profile.birthClear', 'ללא תאריך')}</Text>
+                          <Calendar
+                            size={18}
+                            color={useLightFg ? '#FFFFFF' : primary}
+                            strokeWidth={1.8}
+                          />
+                          <Text
+                            style={[
+                              styles.secondaryBtnText,
+                              { color: useLightFg ? '#FFFFFF' : primary },
+                            ]}
+                          >
+                            {hasBirthDate && birthDate
+                              ? birthDate.toLocaleDateString('he-IL')
+                              : t('register.profile.birthPick', 'בחירת תאריך')}
+                          </Text>
                         </TouchableOpacity>
-                      ) : null}
-                    </View>
+                        {hasBirthDate ? (
+                          <TouchableOpacity
+                            style={styles.textGhostBtn}
+                            onPress={() => {
+                              setHasBirthDate(false);
+                              setBirthDate(null);
+                            }}
+                          >
+                            <Text style={[styles.textGhost, { color: heroMuted }]}>
+                              {t('register.profile.birthClear', 'ללא תאריך')}
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
 
-                    <Text style={[styles.fieldLabel, { marginTop: 18, textAlign: isRtl ? 'right' : 'left' }]}>
-                      {t('register.profile.photoLabel', 'תמונת פרופיל')}{' '}
-                      <Text style={styles.optionalTag}>({t('register.profile.photoOptional', 'לא חובה')})</Text>
+                      <Text
+                        style={[
+                          styles.fieldLabelHero,
+                          { marginTop: 18, color: heroMuted, textAlign: isRtl ? 'right' : 'left' },
+                        ]}
+                      >
+                        {t('register.profile.photoLabel', 'תמונת פרופיל')}{' '}
+                        <Text style={styles.optionalOnHero}>({t('register.profile.photoOptional', 'לא חובה')})</Text>
+                      </Text>
+                      <TouchableOpacity style={styles.avatarCard} onPress={pickAvatar} activeOpacity={0.85}>
+                        {avatarLocalUri ? (
+                          <Image source={{ uri: avatarLocalUri }} style={styles.avatarPreview} />
+                        ) : (
+                          <View
+                            style={[
+                              styles.avatarPlaceholder,
+                              {
+                                backgroundColor: useLightFg ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.05)',
+                                borderColor: useLightFg ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.12)',
+                              },
+                            ]}
+                          >
+                            <Camera
+                              size={36}
+                              color={useLightFg ? heroFaint : palette.textSecondary}
+                              strokeWidth={1.5}
+                            />
+                          </View>
+                        )}
+                        <Text style={[styles.avatarHint, { color: useLightFg ? '#FFFFFF' : primary }]}>
+                          {avatarLocalUri
+                            ? t('register.profile.photoChange', 'החלפת תמונה')
+                            : t('register.profile.photoAdd', 'הוספת תמונה')}
+                        </Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : null}
+                </LoginEntranceSection>
+
+                <LoginEntranceSection delayMs={420} style={styles.btnWrap}>
+                  <Animated.View style={btnScaleStyle}>
+                    <TouchableOpacity
+                      onPressIn={() => {
+                        btnScale.value = withTiming(0.97, { duration: 90 });
+                      }}
+                      onPressOut={() => {
+                        btnScale.value = withSpring(1, { damping: 16, stiffness: 280 });
+                      }}
+                      onPress={() => {
+                        if (registerStep === 'phone') handleSendRegisterOtp();
+                        else if (registerStep === 'otp') handleVerifyOtpAndContinue();
+                        else handleCompleteProfile();
+                      }}
+                      disabled={loading}
+                      activeOpacity={1}
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: loading }}
+                    >
+                      <View
+                        style={[
+                          styles.btnOuter,
+                          useLightFg ? styles.btnOuterElevated : null,
+                          loading && styles.btnOuterDisabled,
+                          {
+                            backgroundColor: ctaElevatedBg,
+                            borderWidth: useLightFg ? 1 : StyleSheet.hairlineWidth * 2,
+                            borderColor: ctaElevatedBorder,
+                          },
+                        ]}
+                      >
+                        {loading ? (
+                          <ActivityIndicator color={ctaElevatedLabel} size="small" />
+                        ) : (
+                          <Text style={[styles.btnText, { color: ctaElevatedLabel }]}>
+                            {registerStep === 'phone'
+                              ? t('register.phone.cta', 'שלחו לי קוד')
+                              : registerStep === 'otp'
+                                ? t('register.otp.cta', 'אמתו והמשיכו')
+                                : t('register.profile.cta', 'סיום הרשמה')}
+                          </Text>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  </Animated.View>
+                </LoginEntranceSection>
+
+                <LoginEntranceSection delayMs={560} style={styles.linksWrap}>
+                  <View style={[styles.registerRow, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
+                    <Text style={[styles.footerMuted, { color: heroMuted }]}>
+                      {t('register.haveAccount', 'כבר יש לך חשבון?')}
                     </Text>
-                    <TouchableOpacity style={styles.avatarCard} onPress={pickAvatar} activeOpacity={0.85}>
-                      {avatarLocalUri ? (
-                        <Image source={{ uri: avatarLocalUri }} style={styles.avatarPreview} />
-                      ) : (
-                        <View style={styles.avatarPlaceholder}>
-                          <Ionicons name="camera-outline" size={36} color={palette.textSecondary} />
-                        </View>
-                      )}
-                      <Text style={[styles.avatarHint, { color: businessColors.primary }]}>
-                        {avatarLocalUri
-                          ? t('register.profile.photoChange', 'החלפת תמונה')
-                          : t('register.profile.photoAdd', 'הוספת תמונה')}
+                    <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }} onPress={() => router.push('/login')}>
+                      <Text style={[styles.footerAction, { color: useLightFg ? '#FFFFFF' : primary }]}>
+                        {t('auth.signInNow', 'התחברות')}
                       </Text>
                     </TouchableOpacity>
-                  </>
-                ) : null}
-
-                <TouchableOpacity
-                  onPress={() => {
-                    if (registerStep === 'phone') handleSendRegisterOtp();
-                    else if (registerStep === 'otp') handleVerifyOtpAndContinue();
-                    else handleCompleteProfile();
-                  }}
-                  activeOpacity={0.9}
-                  disabled={loading}
-                  style={[styles.ctaShadow, loading ? { opacity: 0.65 } : null]}
-                >
-                  <View style={styles.ctaRadiusWrap}>
-                    <LinearGradient
-                      colors={[businessColors.primary, businessColors.primary]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={styles.cta}
-                    >
-                      {loading ? (
-                        <ActivityIndicator color={palette.white} size="small" />
-                      ) : (
-                        <Text style={styles.ctaText}>
-                          {registerStep === 'phone'
-                            ? t('register.phone.cta', 'שלחו לי קוד')
-                            : registerStep === 'otp'
-                              ? t('register.otp.cta', 'אמתו והמשיכו')
-                              : t('register.profile.cta', 'סיום הרשמה')}
-                        </Text>
-                      )}
-                    </LinearGradient>
                   </View>
-                </TouchableOpacity>
-
-                <View style={styles.loginSection}>
-                  <Text style={styles.loginText}>
-                    {t('register.haveAccount', 'כבר יש לך חשבון?')}{' '}
-                    <Text onPress={() => router.push('/login')} style={[styles.loginLink, styles.loginLinkSpacer]}>
-                      {t('auth.signInNow', 'התחברות')}
-                    </Text>
-                  </Text>
-                </View>
-              </BlurView>
-            </Animated.View>
+                </LoginEntranceSection>
+              </View>
+            </Pressable>
           </View>
         </KeyboardAwareScreenScroll>
       </SafeAreaView>
@@ -853,169 +1025,134 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  gradient: { flex: 1 },
-  container: { flex: 1, backgroundColor: 'transparent' },
+  root: {
+    flex: 1,
+  },
+  registerPhoneToastWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    zIndex: 50,
+    alignItems: 'center',
+    paddingHorizontal: 18,
+  },
+  registerPhoneToastPill: {
+    alignSelf: 'center',
+    maxWidth: '92%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 999,
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    elevation: 8,
+  },
+  registerPhoneToastRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    maxWidth: '100%',
+  },
+  registerPhoneToastDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    flexShrink: 0,
+  },
+  registerPhoneToastText: {
+    flexShrink: 1,
+    color: '#111111',
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  safeArea: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
   rtlRoot: { flex: 1 },
   keyboardAvoid: { flex: 1 },
   scrollContainer: { flexGrow: 1, paddingBottom: 8 },
   scrollContainerCompact: { flexGrow: 0 },
-  backgroundImage: {
-    position: 'absolute',
-    top: -20,
-    left: 0,
-    right: 0,
-    bottom: -20,
-    width: '100%',
-    height: '110%',
-  },
-  bgGradient: {
-    position: 'absolute',
-    top: -50,
-    left: 0,
-    right: 0,
-    bottom: -50,
-    width: '100%',
-    height: '120%',
-  },
-  darkOverlay: {
-    position: 'absolute',
-    top: -50,
-    left: 0,
-    right: 0,
-    bottom: -50,
-    backgroundColor: 'rgba(0, 0, 0, 0.12)',
-  },
-  beamRight: {
-    position: 'absolute',
-    right: -120,
-    top: -40,
-    width: 300,
-    height: 500,
-    transform: [{ rotate: '18deg' }],
-    borderRadius: 24,
-  },
-  beamTop: {
-    position: 'absolute',
-    left: -80,
-    top: -60,
-    width: 380,
-    height: 240,
-    transform: [{ rotate: '-10deg' }],
-    borderRadius: 24,
-  },
-  header: {
-    paddingTop: 8,
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    alignItems: 'center',
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.28)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  titleContainer: { paddingHorizontal: 20, marginBottom: 20, alignItems: 'center' },
-  logoImage: { width: '78%', height: 88, alignSelf: 'center' },
-  formWrapper: {
-    backgroundColor: palette.sheetBg,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    overflow: 'hidden',
-    marginHorizontal: 10,
-    marginBottom: 8,
+  dismissKeyboardArea: {
     flexGrow: 1,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.9)',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOpacity: 0.1,
-        shadowRadius: 20,
-        shadowOffset: { width: 0, height: 10 },
-      },
-      android: { elevation: 6 },
-    }),
+    width: '100%',
+    alignSelf: 'stretch',
   },
-  formWrapperFill: { minHeight: '58%' },
-  formContainer: {
-    paddingHorizontal: 22,
-    paddingTop: 22,
-    paddingBottom: 28,
-    flex: 1,
+  formZone: {
+    backgroundColor: 'transparent',
+    paddingHorizontal: 26,
+    width: '100%',
   },
-  progressWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  progressLine: { width: 36, height: 3, borderRadius: 2, marginHorizontal: 2 },
-  progressDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progressDotText: { fontSize: 12, fontWeight: '700' },
-  stepLabels: {
-    justifyContent: 'space-between',
-    marginBottom: 20,
-    paddingHorizontal: 4,
-  },
-  stepLabel: {
-    fontSize: 11,
-    color: palette.textMuted,
-    fontWeight: '600',
-    flex: 1,
-    textAlign: 'center',
+  stepBody: {
+    marginBottom: 6,
   },
   heroTitle: {
     fontSize: 22,
     fontWeight: '800',
-    color: palette.textPrimary,
     textAlign: 'center',
     marginBottom: 8,
     lineHeight: 28,
   },
   heroSubtitle: {
     fontSize: 15,
-    color: palette.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 22,
     paddingHorizontal: 4,
   },
-  fieldLabel: {
-    fontSize: 14,
+  fieldLabelHero: {
+    fontSize: 11,
     fontWeight: '700',
-    color: palette.textPrimary,
     marginBottom: 8,
     marginTop: 4,
     alignSelf: 'stretch',
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
   },
   reqStar: { color: '#DC2626' },
-  optionalTag: { fontWeight: '500', color: palette.textMuted, fontSize: 13 },
+  optionalOnHero: { fontWeight: '500', fontSize: 13 },
+  phoneOpenRow: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    paddingTop: 2,
+    paddingBottom: 1,
+    minHeight: 48,
+    gap: 6,
+  },
+  phoneOpenIconSlot: {
+    paddingBottom: 1,
+    opacity: 0.95,
+  },
+  phoneOpenInput: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '400',
+    letterSpacing: 0.2,
+    paddingVertical: Platform.OS === 'ios' ? 8 : 7,
+    paddingHorizontal: 0,
+    margin: 0,
+  },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: 14,
     minHeight: 54,
-    paddingHorizontal: 14,
+    paddingHorizontal: 15,
     borderWidth: 1,
     width: '100%',
     alignSelf: 'center',
+    gap: 11,
   },
-  inputIcon: { marginHorizontal: 4 },
   input: {
     flex: 1,
-    fontSize: 17,
-    color: palette.textPrimary,
-    paddingVertical: Platform.OS === 'ios' ? 12 : 8,
+    fontSize: 16,
+    fontWeight: '400',
+    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
   },
   otpInput: {
     fontSize: 22,
@@ -1024,9 +1161,13 @@ const styles = StyleSheet.create({
   },
   softHint: {
     fontSize: 13,
-    color: palette.textMuted,
     textAlign: 'center',
     marginTop: 14,
+  },
+  errorOnHero: {
+    fontSize: 13,
+    marginTop: 6,
+    width: '100%',
   },
   bannerOk: {
     flexDirection: 'row-reverse',
@@ -1038,7 +1179,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 14,
   },
-  bannerOkText: { fontSize: 14, color: palette.success, fontWeight: '600', marginRight: 8 },
+  bannerOkText: { fontSize: 14, fontWeight: '600', marginRight: 8 },
   linkBtn: { marginTop: 10, alignSelf: 'center' },
   linkText: { fontSize: 15, fontWeight: '600' },
   rowActions: { alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' },
@@ -1052,7 +1193,7 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: { fontSize: 15, fontWeight: '700', marginRight: 8 },
   textGhostBtn: { paddingVertical: 8 },
-  textGhost: { fontSize: 14, color: palette.textSecondary, fontWeight: '600' },
+  textGhost: { fontSize: 14, fontWeight: '600' },
   avatarCard: {
     alignItems: 'center',
     alignSelf: 'center',
@@ -1063,11 +1204,9 @@ const styles = StyleSheet.create({
     width: 112,
     height: 112,
     borderRadius: 56,
-    backgroundColor: 'rgba(17,24,39,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: palette.inputBorder,
     borderStyle: 'dashed',
   },
   avatarPreview: {
@@ -1078,37 +1217,52 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.95)',
   },
   avatarHint: { marginTop: 10, fontSize: 15, fontWeight: '700' },
-  errorText: {
-    color: Colors.error,
-    fontSize: 13,
-    marginTop: 6,
-    width: '100%',
+  btnWrap: {
+    marginTop: 10,
   },
-  ctaShadow: {
-    marginTop: 22,
-    borderRadius: 16,
-    width: '100%',
-    alignSelf: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOpacity: 0.12,
-        shadowRadius: 12,
-        shadowOffset: { width: 0, height: 6 },
-      },
-      android: { elevation: 3 },
-    }),
-  },
-  ctaRadiusWrap: { borderRadius: 16, overflow: 'hidden' },
-  cta: { height: 52, alignItems: 'center', justifyContent: 'center', width: '100%' },
-  ctaText: { color: palette.white, fontSize: 17, fontWeight: '800' },
-  loginSection: {
-    marginTop: 22,
+  btnOuter: {
+    minHeight: 54,
+    borderRadius: 28,
     alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
-  loginText: { color: Colors.subtext, fontSize: 15, textAlign: 'center' },
-  loginLink: { color: palette.textPrimary, fontWeight: '800' },
-  loginLinkSpacer: { marginLeft: 4 },
+  btnOuterElevated: {
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  btnOuterDisabled: {
+    opacity: 0.46,
+  },
+  btnText: {
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  linksWrap: {
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  registerRow: {
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 5,
+    rowGap: 4,
+  },
+  footerMuted: {
+    fontSize: 14,
+  },
+  footerAction: {
+    fontWeight: '700',
+    fontSize: 14,
+  },
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,

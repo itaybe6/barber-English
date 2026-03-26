@@ -384,7 +384,7 @@
     "screenHeader": "Sign in",
     "form": {
       "title": "See you inside",
-      "subtitle": "Enter your details to access your account"
+      "subtitle": "Enter your phone and password to sign in"
     },
     "cta": { "signIn": "Sign In", "signingIn": "Signing in…", "locked": "Sign-in blocked" },
     "forgotPassword": "Forgot password",
@@ -410,7 +410,12 @@
     "emailSent": { "title": "Email Sent", "message": "We sent you a password reset email. Check your inbox." },
     "otp": {
       "heroTitle": "One quick step",
+      "subtitlePhone": "Enter your number — we’ll text you a verification code",
       "passcodeHint": "Enter the 6-digit code we sent by SMS",
+      "phoneNotRegisteredTitle": "Phone number not registered",
+      "tagPhoneRequired": "Please enter a valid phone number",
+      "tagPhoneNotRegistered": "This phone number isn’t registered with us",
+      "errorPhoneNotRegistered": "This phone number isn’t registered with us. You can sign up from the registration screen or double-check the number.",
       "a11y": { "delete": "Delete" }
     }
   },
@@ -420,7 +425,9 @@
       "title": "What’s your phone number?",
       "subtitle": "We’ll send a verification code by SMS to finish signing up.",
       "cta": "Send me the code",
-      "hint": "The code arrives in seconds"
+      "hint": "The code arrives in seconds",
+      "toastInvalid": "The number you entered is not valid",
+      "toastAlreadyRegistered": "This phone number is already registered"
     },
     "otp": {
       "title": "Enter the code",

@@ -1,6 +1,14 @@
 import { supabase, User, getBusinessId } from '../supabase';
 import { useAuthStore } from '../../stores/authStore';
 
+/** Same matching idea as Edge `phoneDigits` / `userExistsForRegister`. */
+function userPhoneMatchesRow(storedPhone: string, rawPhone: string): boolean {
+  const trimmed = rawPhone.trim();
+  const digits = trimmed.replace(/\D/g, '');
+  const storedDigits = String(storedPhone || '').replace(/\D/g, '');
+  return storedDigits === digits || String(storedPhone || '').trim() === trimmed;
+}
+
 export const usersApi = {
   // Simple hash function for passwords (for demo purposes)
   hashPassword(password: string): string {
@@ -163,6 +171,34 @@ export const usersApi = {
       return null;
     } catch (error) {
       console.error('Error authenticating user by phone:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Whether a row in `users` exists for this tenant with the same phone (digits or exact trim).
+   * `null` = could not read users (caller should fall back to Edge Function).
+   */
+  async hasUserWithPhoneForBusiness(phoneRaw: string): Promise<boolean | null> {
+    try {
+      const businessId = getBusinessId();
+      const trimmed = phoneRaw.trim();
+      const digits = trimmed.replace(/\D/g, '');
+      if (digits.length < 9) return false;
+
+      const { data, error } = await supabase
+        .from('users')
+        .select('phone')
+        .eq('business_id', businessId);
+
+      if (error) {
+        console.error('hasUserWithPhoneForBusiness:', error);
+        return null;
+      }
+      if (!data) return null;
+      return data.some((u: { phone: string }) => userPhoneMatchesRow(u.phone, trimmed));
+    } catch (e) {
+      console.error('hasUserWithPhoneForBusiness:', e);
       return null;
     }
   },

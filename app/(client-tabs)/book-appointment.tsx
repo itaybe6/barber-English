@@ -25,7 +25,7 @@ import { notificationsApi } from '@/lib/api/notifications';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
 import { User } from '@/lib/supabase';
-import Animated, { useSharedValue, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, withDelay, Easing, FadeIn } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, Easing, FadeIn } from 'react-native-reanimated';
 import type { SharedValue } from 'react-native-reanimated';
 
 
@@ -503,6 +503,9 @@ export default function BookAppointment() {
       setTimeout(() => {
         try { scrollRef.current?.scrollTo({ y: 0, animated: false }); } catch {}
       }, 100);
+    }
+    if (currentStep === 3) {
+      try { scrollRef.current?.scrollTo({ y: 0, animated: false }); } catch {}
     }
   }, [currentStep]);
 
@@ -1728,20 +1731,24 @@ export default function BookAppointment() {
           }}
         />
 
-        {/* Step 3: Day Selection */}
-        <DaySelection
-          visible={currentStep === 3 && !!selectedBarber && !!selectedService}
-          styles={styles}
-          days={days}
-          bookingOpenDays={bookingOpenDays}
-          selectedDate={selectedDate}
-          selectedDayIndex={selectedDay}
-          dayAvailability={dayAvailability}
-          language={i18n?.language || 'he'}
-          primaryColor={colors.primary}
-          onSelectDayIndex={(idx) => setSelectedDay(idx)}
-          onClearTime={() => setSelectedTime(null)}
-        />
+        {/* Step 3: Day Selection — fade-in avoids a visual jump after service fade-out */}
+        {currentStep === 3 && !!selectedBarber && !!selectedService && (
+          <Animated.View entering={FadeIn.duration(320).delay(40)}>
+            <DaySelection
+              visible
+              styles={styles}
+              days={days}
+              bookingOpenDays={bookingOpenDays}
+              selectedDate={selectedDate}
+              selectedDayIndex={selectedDay}
+              dayAvailability={dayAvailability}
+              language={i18n?.language || 'he'}
+              primaryColor={colors.primary}
+              onSelectDayIndex={(idx) => setSelectedDay(idx)}
+              onClearTime={() => setSelectedTime(null)}
+            />
+          </Animated.View>
+        )}
 
         {/* Step 4 removed from inside ScrollView to avoid nested VirtualizedList */}
 

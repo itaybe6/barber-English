@@ -1945,6 +1945,8 @@ export default function AdminAppointmentsScreen() {
             accessibilityLabel={tHe('close', 'סגור')}
           />
           <View style={[styles.monthModalSheet, { paddingBottom: insets.bottom + 16 }]}>
+            {/* iOS-style drag handle pill */}
+            <View style={styles.monthModalDragHandle} />
             <View style={[styles.monthModalHeader, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
               <Text style={styles.monthModalTitle} numberOfLines={2}>
                 {monthDayModalDate
@@ -2539,39 +2541,44 @@ const styles = StyleSheet.create({
   },
   gcMonthScroll: {
     flex: 1,
-    backgroundColor: GC_PAGE_BG,
+    backgroundColor: '#F2F2F7',
   },
   gcMonthScrollContent: {
-    paddingTop: 4,
+    paddingTop: 6,
     paddingBottom: 120,
   },
-  /** Same chrome as client `book-appointment` day step */
+  /** iOS-style month calendar card */
   bookingCalendarSectionCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    marginHorizontal: 16,
-    marginTop: 8,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 8,
+    borderRadius: 20,
+    marginHorizontal: 14,
+    marginTop: 10,
+    padding: 0,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.09,
+        shadowRadius: 20,
+      },
+      android: { elevation: 6 },
+    }),
   },
   bookingCalendarFixedBox: {
-    minHeight: 400,
-    height: 430,
-    borderRadius: 18,
+    minHeight: 420,
+    borderRadius: 20,
     overflow: 'hidden',
   },
   gcMonthHint: {
-    fontSize: 13,
-    color: '#80868B',
+    fontSize: 12,
+    color: '#8E8E93',
     textAlign: 'center',
     writingDirection: 'rtl',
     paddingHorizontal: 24,
-    paddingTop: 8,
+    paddingTop: 10,
     paddingBottom: 16,
+    letterSpacing: 0.1,
   },
   monthModalRoot: {
     flex: 1,
@@ -2579,37 +2586,47 @@ const styles = StyleSheet.create({
   },
   monthModalBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.40)',
+  },
+  monthModalDragHandle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#D1D1D6',
+    marginBottom: 12,
+    marginTop: 4,
   },
   monthModalSheet: {
-    backgroundColor: GC_SURFACE,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: '78%',
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    maxHeight: '80%',
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 8,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.12,
-        shadowRadius: 8,
+        shadowOffset: { width: 0, height: -3 },
+        shadowOpacity: 0.10,
+        shadowRadius: 16,
       },
-      android: { elevation: 16 },
+      android: { elevation: 20 },
     }),
   },
   monthModalHeader: {
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 14,
     gap: 12,
   },
   monthModalTitle: {
     flex: 1,
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#202124',
+    fontSize: 19,
+    fontWeight: '700',
+    color: '#1C1C1E',
     writingDirection: 'rtl',
+    letterSpacing: -0.3,
   },
   monthModalLoading: {
     paddingVertical: 40,

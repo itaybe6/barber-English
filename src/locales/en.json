@@ -779,7 +779,12 @@
       "manageFull": "Edit & delete items",
       "emptyTitle": "No designs yet",
       "emptySubtitle": "Show clients your work — add your first photos.",
-      "emptyCta": "Add photos"
+      "emptyCta": "Add photos",
+      "editScreenHint": "{{count}} designs · tap to edit",
+      "searchDesigns": "Search by name",
+      "noSearchResults": "No designs match your search",
+      "tryDifferentSearch": "Try another name or clear the search",
+      "atLeastOne": "Please select at least one image"
     },
     "products": {
       "title": "Products",

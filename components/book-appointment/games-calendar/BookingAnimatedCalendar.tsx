@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, LayoutChangeEvent, Dimensions } from 'react-native';
+import { View, Text, LayoutChangeEvent, Dimensions, StyleSheet } from 'react-native';
 import { CalendarAnimatedProvider, useBookingCalendarContext } from './animated-context';
 import { ScrollContainer } from './scroll-container';
 import { ThreeMonthHeader } from './three-month-header';
@@ -182,6 +182,7 @@ function CalendarShell({
           ))
           .reverse()}
       </ScrollContainer>
+      {/* Weekday names row — fixed overlay above the scrollable month pages */}
       <View
         style={{
           position: 'absolute',
@@ -196,19 +197,23 @@ function CalendarShell({
           paddingHorizontal: 16,
           zIndex: 1,
           backgroundColor: '#FFFFFF',
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: 'rgba(0,0,0,0.07)',
         }}
         pointerEvents="none"
       >
-        {weekdayNames.map((day) => (
+        {weekdayNames.map((day, i) => (
           <Text
-            key={day}
+            key={`${day}-${i}`}
             style={{
               width: cellSize,
               textAlign: 'center',
-              fontSize: 13,
-              fontWeight: '700',
-              color: '#6B7280',
+              fontSize: 11,
+              fontWeight: '600',
+              color: '#8E8E93',
+              letterSpacing: 0.3,
               textTransform: 'uppercase',
+              includeFontPadding: false,
             }}
           >
             {day}

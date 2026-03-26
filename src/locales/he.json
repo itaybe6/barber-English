@@ -780,7 +780,12 @@
       "manageFull": "עריכה ומחיקה",
       "emptyTitle": "עדיין אין עיצובים",
       "emptySubtitle": "הציגו ללקוחות את העבודה שלכם — הוסיפו תמונות.",
-      "emptyCta": "הוספת תמונות"
+      "emptyCta": "הוספת תמונות",
+      "editScreenHint": "{{count}} עיצובים · לחיצה לעריכה",
+      "searchDesigns": "חיפוש לפי שם",
+      "noSearchResults": "אין עיצובים שתואמים לחיפוש",
+      "tryDifferentSearch": "נסו שם אחר או נקו את החיפוש",
+      "atLeastOne": "נא לבחור לפחות תמונה אחת"
     },
     "products": {
       "title": "מוצרים",

@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
+import React from 'react';
+import { View, Text, Pressable, Platform, StyleSheet } from 'react-native';
+import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import type { MonthEntry } from './utils';
 import { MONTHS_HEIGHT } from './constants';
 
@@ -10,81 +11,15 @@ type Props = {
   onGoToIndex: (index: number) => void;
 };
 
-const labelStyle = (isCurrent: boolean) => ({
-  fontSize: isCurrent ? 17 : 13,
-  fontWeight: (isCurrent ? '800' : '600') as '800' | '600',
-  color: isCurrent ? '#111827' : '#6B7280',
-  textTransform: 'uppercase' as const,
-  textAlign: 'center' as const,
-  paddingHorizontal: 4,
-});
+const HIT_SLOP = { top: 14, bottom: 14, left: 14, right: 14 };
 
-const sidePressStyle = {
-  paddingHorizontal: 10,
-  paddingVertical: 4,
-  borderBottomWidth: 3,
-  borderBottomColor: 'transparent' as const,
-  alignItems: 'center' as const,
-  justifyContent: 'center' as const,
-};
-
-const currentStyle = (primaryColor: string) => ({
-  paddingHorizontal: 10,
-  paddingVertical: 4,
-  borderBottomWidth: 3,
-  borderBottomColor: primaryColor,
-  alignItems: 'center' as const,
-  justifyContent: 'center' as const,
-});
-
-/**
- * Visual left → right: … furthest future, next+1, next, current (current flush right).
- * So “reading” from current toward the left: current → next → next+1 …
- * Futures are reversed vs chronological array so the immediate left neighbor of current is the next month.
- */
 export function ThreeMonthHeader({ data, activeIndex, primaryColor, onGoToIndex }: Props) {
   const n = data.length;
   const safeIndex = Math.max(0, Math.min(n - 1, activeIndex));
   const currEntry = data[safeIndex];
 
-  const upcoming = data.slice(safeIndex + 1).map((entry, i) => ({
-    entry,
-    index: safeIndex + 1 + i,
-  }));
-
-  const [containerW, setContainerW] = useState(0);
-  const scrollRef = useRef<ScrollView>(null);
-
-  const scrollToEnd = useCallback(() => {
-    scrollRef.current?.scrollToEnd({ animated: false });
-  }, []);
-
-  useEffect(() => {
-    scrollToEnd();
-  }, [safeIndex, n, scrollToEnd]);
-
-  const currentEl = (
-    <View key={`cur-${safeIndex}`} style={currentStyle(primaryColor)}>
-      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={labelStyle(true)}>
-        {currEntry?.label ?? ''}
-      </Text>
-    </View>
-  );
-
-  const futureEls = [...upcoming].reverse().map(({ entry, index }) => (
-    <Pressable
-      key={`f-${index}`}
-      onPress={() => onGoToIndex(index)}
-      style={sidePressStyle}
-    >
-      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={labelStyle(false)}>
-        {entry.label}
-      </Text>
-    </Pressable>
-  ));
-
-  /** Left → right: … Mar+1y, Feb+1y, …, Apr (next), current (right) */
-  const rowChildren = [...futureEls, currentEl];
+  const canGoPrev = safeIndex > 0;
+  const canGoNext = safeIndex < n - 1;
 
   return (
     <View
@@ -96,33 +31,91 @@ export function ThreeMonthHeader({ data, activeIndex, primaryColor, onGoToIndex 
         height: MONTHS_HEIGHT,
         zIndex: 5,
         backgroundColor: '#FFFFFF',
+        flexDirection: 'row',
+        alignItems: 'center',
         direction: 'ltr',
+        paddingHorizontal: 6,
+        // Subtle bottom separator
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: 'rgba(0,0,0,0.08)',
       }}
-      onLayout={(e) => setContainerW(e.nativeEvent.layout.width)}
     >
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={{ height: MONTHS_HEIGHT, direction: 'ltr' }}
-        contentContainerStyle={{ minHeight: MONTHS_HEIGHT }}
-        onContentSizeChange={scrollToEnd}
+      {/* ← Previous month */}
+      <Pressable
+        onPress={() => canGoPrev && onGoToIndex(safeIndex - 1)}
+        disabled={!canGoPrev}
+        hitSlop={HIT_SLOP}
+        style={({ pressed }) => ({
+          width: 44,
+          height: 44,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 22,
+          opacity: !canGoPrev ? 0.18 : 1,
+          backgroundColor:
+            pressed && canGoPrev
+              ? `${primaryColor}12`
+              : 'transparent',
+        })}
+        accessibilityRole="button"
+        accessibilityLabel="חודש קודם"
       >
-        <View
+        <ChevronLeft
+          size={21}
+          color={primaryColor}
+          strokeWidth={2.6}
+        />
+      </Pressable>
+
+      {/* Month + Year title */}
+      <View style={{ flex: 1, alignItems: 'center', paddingHorizontal: 4 }}>
+        <Text
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.8}
           style={{
-            flexDirection: 'row',
-            direction: 'ltr',
-            alignItems: 'center',
-            justifyContent: 'flex-end',
-            minWidth: containerW > 0 ? containerW : undefined,
-            paddingHorizontal: 12,
-            gap: 8,
-            minHeight: MONTHS_HEIGHT,
+            fontSize: 17,
+            fontWeight: '700',
+            color: '#1C1C1E',
+            letterSpacing: -0.3,
+            textAlign: 'center',
+            ...Platform.select({
+              ios: { fontFamily: 'System' },
+              android: { fontFamily: 'sans-serif-medium' },
+            }),
           }}
         >
-          {rowChildren}
-        </View>
-      </ScrollView>
+          {currEntry?.label ?? ''}
+        </Text>
+      </View>
+
+      {/* → Next month */}
+      <Pressable
+        onPress={() => canGoNext && onGoToIndex(safeIndex + 1)}
+        disabled={!canGoNext}
+        hitSlop={HIT_SLOP}
+        style={({ pressed }) => ({
+          width: 44,
+          height: 44,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 22,
+          opacity: !canGoNext ? 0.18 : 1,
+          backgroundColor:
+            pressed && canGoNext
+              ? `${primaryColor}12`
+              : 'transparent',
+        })}
+        accessibilityRole="button"
+        accessibilityLabel="חודש הבא"
+      >
+        <ChevronRight
+          size={21}
+          color={primaryColor}
+          strokeWidth={2.6}
+        />
+      </Pressable>
     </View>
   );
 }
+

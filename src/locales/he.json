@@ -63,6 +63,8 @@
   "booking.replace": "החלפת תור",
   "booking.bookAdditional": "קביעת תור נוסף",
   "booking.successTitle": "התור נקבע בהצלחה!",
+  "booking.successNotificationTitle": "נקבע לך תור בהצלחה",
+  "booking.successNotificationBody": "{{service}} · יום {{weekday}} {{dayOfMonth}} · {{time}}{{endSuffix}}",
   "booking.scheduledFor": "נקבע לתאריך",
   "booking.yourInfo": "פרטיך",
   "booking.permissionsRequired": "נדרש אישור",
@@ -426,15 +428,65 @@
     "emailSent": { "title": "האימייל נשלח", "message": "שלחנו אימייל לאיפוס סיסמה. בדקו את תיבת הדואר." }
   },
   "register": {
+    "steps": { "phone": "טלפון", "code": "קוד", "profile": "פרופיל" },
+    "phone": {
+      "title": "מה מספר הטלפון שלך?",
+      "subtitle": "נשלח אליך קוד אימות ב-SMS כדי להשלים את ההרשמה.",
+      "cta": "שלחו לי קוד",
+      "hint": "הקוד יגיע תוך שניות לנייד"
+    },
+    "otp": {
+      "title": "הזינו את הקוד",
+      "subtitle": "שלחנו קוד בן 6 ספרות ל־{{phone}}",
+      "editPhone": "שינוי מספר טלפון",
+      "resend": "שלחו שוב",
+      "resendWait": "שליחה חוזרת בעוד {{s}} שניות",
+      "cta": "אמתו והמשיכו",
+      "sentToast": "הקוד נשלח בהצלחה"
+    },
+    "profile": {
+      "abortTitle": "לצאת מההרשמה?",
+      "abortMessage": "החשבון נוצר — תוכלו להתחבר עם הטלפון אחרי אישור המנהל. אם תצאו עכשיו, השם והתמונה לא יישמרו.",
+      "abortStay": "המשך למלא",
+      "abortLeave": "יציאה",
+      "title": "כמה פרטים אחרונים",
+      "subtitle": "כך נזהה אותך ונוכל לתת שירות מדויק יותר.",
+      "nameLabel": "שם מלא",
+      "namePlaceholder": "למשל: יוסי כהן",
+      "birthLabel": "תאריך לידה",
+      "birthOptional": "לא חובה",
+      "birthPick": "בחירת תאריך",
+      "birthClear": "ללא תאריך",
+      "photoLabel": "תמונת פרופיל",
+      "photoOptional": "לא חובה",
+      "photoAdd": "הוספת תמונה",
+      "photoChange": "החלפת תמונה",
+      "cta": "סיום הרשמה",
+      "pickerDone": "סיום",
+      "pickerCancel": "ביטול"
+    },
     "form": {
       "title": "הרשמה",
       "subtitle": "מלא/י את הפרטים כדי להירשם ולהתחבר"
     },
-    "cta": { "register": "הרשמה" },
+    "cta": { "register": "הרשמה", "sendCode": "שלח קוד SMS", "complete": "השלם הרשמה" },
     "haveAccount": "כבר יש לך חשבון?",
+    "error": {
+      "phoneRequired": "נא להזין מספר טלפון",
+      "phoneInvalid": "מספר טלפון לא תקין",
+      "nameRequired": "נא להזין שם מלא",
+      "sessionExpired": "פג תוקף ההרשמה. התחילו מחדש.",
+      "tokenUsed": "ההרשמה כבר הושלמה. התחברו עם הטלפון.",
+      "birthInvalid": "תאריך לידה לא תקין.",
+      "updateFailed": "שמירת הפרופיל נכשלה. נסו שוב."
+    },
     "phoneExists": { "title": "מספר הטלפון כבר קיים", "message": "מספר הטלפון הזה כבר רשום במערכת. אנא השתמש/י במספר אחר או התחבר/י לחשבון קיים." },
     "createError": "אירעה שגיאה ביצירת החשבון. אנא נסו שוב.",
-    "success": { "title": "ההרשמה הצליחה!", "message": "החשבון נוצר בהצלחה.\n\nכעת ניתן להתחבר עם מספר הטלפון והסיסמה שבחרת.\n\nמספר הטלפון: {{phone}}" },
+    "success": {
+      "title": "ההרשמה הצליחה!",
+      "message": "החשבון נוצר בהצלחה.\n\nכעת ניתן להתחבר עם מספר הטלפון והסיסמה שבחרת.\n\nמספר הטלפון: {{phone}}",
+      "pendingApprovalOtp": "החשבון נוצר. העסק יאשר אותו בקרוב.\n\nאחרי האישור תוכלו להתחבר עם מספר הטלפון וקוד SMS.\n\nטלפון: {{phone}}"
+    },
     "passwordPlaceholder": "סיסמה (לפחות 6 תווים)",
     "confirmPasswordPlaceholder": "אימות סיסמה"
   },

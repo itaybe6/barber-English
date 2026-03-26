@@ -1,45 +1,67 @@
 {
-  "client": "KetyCooper",
+  "client": "EliyaMoshe",
   "config": {
     "expo": {
-      "name": "Kety Cooper",
-      "slug": "kety-cooper",
+      "name": "EliyaMoshe",
+      "slug": "eliyamoshe",
       "version": "1.0.0",
-      "icon": "./branding/KetyCooper/icon.png",
-      "scheme": "ketycooper",
+      "orientation": "portrait",
+      "icon": "./branding/EliyaMoshe/icon.png",
+      "scheme": "eliyamoshe",
       "userInterfaceStyle": "automatic",
       "splash": {
-        "image": "./branding/KetyCooper/splash.png",
+        "image": "./branding/EliyaMoshe/splash.png",
         "resizeMode": "contain",
         "backgroundColor": "#ffffff"
       },
       "ios": {
         "buildNumber": "1",
         "supportsTablet": true,
-        "bundleIdentifier": "BookingApp2",
+        "bundleIdentifier": "com.eliyamoshe.app",
         "infoPlist": {
+          "ITSAppUsesNonExemptEncryption": false,
+          "CFBundleDevelopmentRegion": "en",
+          "CFBundleAllowMixedLocalizations": true,
+          "NSPhotoLibraryUsageDescription": "The app needs access to photos to select and upload images to the gallery or profile.",
+          "NSPhotoLibraryAddUsageDescription": "The app may save photos you've taken to your photo library.",
+          "NSCameraUsageDescription": "The app needs access to the camera to take photos for upload.",
           "LSApplicationQueriesSchemes": [
             "comgooglemaps"
           ]
-        }
+        },
+        "jsEngine": "hermes"
       },
       "android": {
-        "package": "com.ketycooper.app",
+        "package": "com.eliyamoshe.app",
         "versionCode": 1,
         "adaptiveIcon": {
-          "foregroundImage": "./branding/KetyCooper/icon.png",
+          "foregroundImage": "./branding/EliyaMoshe/icon.png",
           "backgroundColor": "#ffffff"
         },
+        "intentFilters": [
+          {
+            "autoVerify": true,
+            "action": "VIEW",
+            "data": {
+              "scheme": "https",
+              "host": "eliyamoshe.com"
+            },
+            "category": [
+              "BROWSABLE",
+              "DEFAULT"
+            ]
+          }
+        ],
         "supportsRtl": false
       },
       "web": {
-        "favicon": "./branding/KetyCooper/icon.png"
+        "favicon": "./branding/EliyaMoshe/icon.png"
       },
       "plugins": [
         [
           "expo-router",
           {
-            "origin": "https://ketycooper.com/"
+            "origin": "https://eliyamoshe.com/"
           }
         ],
         [
@@ -60,20 +82,20 @@
       },
       "extra": {
         "router": {
-          "origin": "https://ketycooper.com/"
+          "origin": "https://eliyamoshe.com/"
+        },
+        "eas": {
+          "projectId": "8efaeaeb-7141-4328-a75f-5d56de528df1"
         },
         "locale": "en",
-        "CLIENT": "KetyCooper",
-        "BUSINESS_ID": "91036074-55af-4f5d-883e-47b5804a465c",
-        "eas": {
-          "projectId": "98671cac-90d9-42b1-8228-225df1dc4f9e"
-        },
-        "logo": "./branding/KetyCooper/logo.png",
-        "logoWhite": "./branding/KetyCooper/logo-white.png",
+        "CLIENT": "EliyaMoshe",
+        "BUSINESS_ID": "464cb35b-0fbb-413f-91fe-1ad49addcb77",
+        "logo": "./branding/EliyaMoshe/logo.png",
+        "logoWhite": "./branding/EliyaMoshe/logo-white.png",
         "theme": {
           "colors": {
-            "primary": "#D4AF37",
-            "secondary": "#8B6A2B",
+            "primary": "#000000",
+            "secondary": "#000000CC",
             "accent": "#FF3B30",
             "background": "#FFFFFF",
             "surface": "#F2F2F7",
@@ -86,11 +108,11 @@
             "info": "#007AFF"
           },
           "branding": {
-            "logo": "./branding/KetyCooper/logo.png",
-            "logoWhite": "./branding/KetyCooper/logo-white.png",
-            "companyName": "Kety Cooper",
-            "website": "https://ketycooper.com",
-            "supportEmail": "support@ketycooper.com"
+            "logo": "./branding/EliyaMoshe/logo.png",
+            "logoWhite": "./branding/EliyaMoshe/logo-white.png",
+            "companyName": "EliyaMoshe",
+            "website": "https://eliyamoshe.com",
+            "supportEmail": "support@eliyamoshe.com"
           },
           "fonts": {
             "primary": "System",
@@ -110,8 +132,8 @@
   },
   "theme": {
     "colors": {
-      "primary": "#D4AF37",
-      "secondary": "#8B6A2B",
+      "primary": "#000000",
+      "secondary": "#000000CC",
       "accent": "#FF3B30",
       "background": "#FFFFFF",
       "surface": "#F2F2F7",
@@ -124,16 +146,20 @@
       "info": "#007AFF"
     },
     "branding": {
-      "logo": "./branding/KetyCooper/logo.png",
-      "logoWhite": "./branding/KetyCooper/logo-white.png",
-      "companyName": "Kety Cooper",
-      "website": "https://ketycooper.com",
-      "supportEmail": "support@ketycooper.com"
+      "logo": "./branding/EliyaMoshe/logo.png",
+      "logoWhite": "./branding/EliyaMoshe/logo-white.png",
+      "companyName": "EliyaMoshe",
+      "website": "https://eliyamoshe.com",
+      "supportEmail": "support@eliyamoshe.com"
     },
     "fonts": {
       "primary": "System",
       "secondary": "System"
     }
   },
+<<<<<<< HEAD
   "timestamp": "2026-03-26T11:20:40.659Z"
+=======
+  "timestamp": "2026-03-25T22:42:15.619Z"
+>>>>>>> 9a13fd39e663afe04449d2cbf1c9a4839f068dd5
 }

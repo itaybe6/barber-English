@@ -65,6 +65,8 @@ export interface User {
   user_type: 'admin' | 'client';
   phone: string;
   email?: string;
+  /** YYYY-MM-DD when set */
+  birth_date?: string | null;
   password_hash?: string;
   image_url?: string;
   push_token?: string;

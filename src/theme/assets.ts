@@ -3,11 +3,10 @@ import { CURRENT_CLIENT } from '../config/currentClient';
 
 // Logo mapping — every path must exist (Metro resolves at bundle time).
 export const clientLogos = {
-  KetyCooper: require('../../branding/KetyCooper/logo.png'),
-  ElianNails: require('../../branding/ElianNails/logo.png'),
+  EliyaMoshe: require('../../branding/EliyaMoshe/logo.png'),
 } as const;
 
-const DEFAULT_CLIENT: keyof typeof clientLogos = 'KetyCooper';
+const DEFAULT_CLIENT: keyof typeof clientLogos = 'EliyaMoshe';
 
 export const getCurrentClient = (): keyof typeof clientLogos => {
   try {

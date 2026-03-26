@@ -39,13 +39,6 @@ const TEXT_MUTED = '#9CA3AF';
 
 type TabKey = 'dashboard' | 'add' | 'settings';
 
-function pulseemMainKeyMasked(key: string): string {
-  const k = key.trim();
-  if (!k) return '';
-  if (k.length <= 10) return `${k.slice(0, 2)}…${k.slice(-2)}`;
-  return `${k.slice(0, 6)}…${k.slice(-6)}`;
-}
-
 export default function SuperAdminDashboard() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -73,28 +66,21 @@ export default function SuperAdminDashboard() {
   const [newPulseemSubPassword, setNewPulseemSubPassword] = useState('');
 
   const extra = getExpoExtra();
-  const pulseemMainApiKey = String(extra.PULSEEM_MAIN_API_KEY ?? '').replace(/^\uFEFF/, '').trim();
-  const hasPulseemMainKey = !!pulseemMainApiKey;
-  useEffect(() => {
-    if (!__DEV__) return;
-    if (pulseemMainApiKey) {
-      console.log('[super-admin] PULSEEM_MAIN_API_KEY', pulseemMainApiKey);
-      console.log('[super-admin] PULSEEM_MAIN_API_KEY length=', pulseemMainApiKey.length);
-    } else {
-      console.log('[super-admin] Pulseem ראשי — ריק (בדוק PULSEEM_MAIN_API_KEY_B64 ב-.env)');
-    }
-  }, [pulseemMainApiKey]);
+  const hasPulseemMainKey = !!String(extra.PULSEEM_MAIN_API_KEY ?? '').replace(/^\uFEFF/, '').trim();
   const [pulseModalBiz, setPulseModalBiz] = useState<BusinessOverview | null>(null);
   const [deleteConfirmBiz, setDeleteConfirmBiz] = useState<BusinessOverview | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [feedbackDialog, setFeedbackDialog] = useState<{ title: string; message: string } | null>(null);
+  const [logoutConfirmVisible, setLogoutConfirmVisible] = useState(false);
 
   const buildDeleteSuccessMessage = (item: BusinessOverview) => {
     const folder = item.branding_client_name?.trim();
+    const storageLine =
+      'מ־Storage נמחקו גם ברנדינג, גלריה, באנר בית, תמונות פרופיל וקבלות הוצאות (ככל שנשמרו ב-Supabase).';
     if (!folder) {
-      return 'האפליקציה נמחקה מהשרת.\n\nלא נשמר שם תיקיית ברנדינג — אם יש תיקייה מקומית ב־branding/, מחק אותה ידנית.';
+      return `האפליקציה נמחקה מהשרת.\n${storageLine}\n\nלא נשמר שם תיקיית ברנדינג — אם יש תיקייה מקומית ב־branding/, מחק אותה ידנית.`;
     }
-    return `האפליקציה נמחקה מהשרת וקבצי הברנדינג ב־Storage.\n\nכדי למחוק גם את התיקייה המקומית בפרויקט (branding/${folder}), הרץ בטרמינל בשורש הפרויקט:\n\nnode scripts/delete-branding.mjs ${folder}`;
+    return `האפליקציה נמחקה מהשרת.\n${storageLine}\n\nכדי למחוק גם את התיקייה המקומית בפרויקט (branding/${folder}), הרץ בטרמינל בשורש הפרויקט:\n\nnode scripts/delete-branding.mjs ${folder}`;
   };
 
   const loadBusinesses = useCallback(async () => {
@@ -167,7 +153,7 @@ export default function SuperAdminDashboard() {
 
     if (result) {
       const pulseemLine = result.pulseemCreated
-        ? '\n\n✅ חשבון Pulseem נוצר אוטומטית (100 DirectSmsCredits)'
+        ? '\n\n✅ חשבון Pulseem נוצר אוטומטית (20 DirectSmsCredits)'
         : result.pulseemError
         ? `\n\n⚠️ Pulseem לא הוגדר: ${result.pulseemError}`
         : !hasPulseemMainKey
@@ -231,17 +217,13 @@ export default function SuperAdminDashboard() {
   };
 
   const handleLogout = () => {
-    Alert.alert('התנתקות', 'בטוח שברצונך להתנתק?', [
-      { text: 'ביטול', style: 'cancel' },
-      {
-        text: 'התנתק',
-        style: 'destructive',
-        onPress: () => {
-          logout();
-          router.replace('/login');
-        },
-      },
-    ]);
+    setLogoutConfirmVisible(true);
+  };
+
+  const runConfirmedLogout = () => {
+    setLogoutConfirmVisible(false);
+    logout();
+    router.replace('/login');
   };
 
   // ─── Image Picker Tile ───
@@ -357,6 +339,10 @@ export default function SuperAdminDashboard() {
           <Text style={[styles.bizChipText, { color: ORANGE }]}>{item.adminCount} מנהלים</Text>
           <Ionicons name="shield-checkmark" size={14} color={ORANGE} />
         </View>
+        <View style={[styles.bizChip, { backgroundColor: 'rgba(253,121,168,0.12)' }]}>
+          <Text style={[styles.bizChipText, { color: PINK }]}>{item.broadcastMessageCount} הודעות שידור</Text>
+          <Ionicons name="megaphone-outline" size={14} color={PINK} />
+        </View>
         {item.phone ? (
           <View style={[styles.bizChip, { backgroundColor: 'rgba(0,184,148,0.1)' }]}>
             <Text style={[styles.bizChipText, { color: GREEN }]}>{item.phone}</Text>
@@ -449,38 +435,12 @@ export default function SuperAdminDashboard() {
       <View style={styles.formCard}>
         <Text style={styles.formSectionLabel}>פולסים SMS</Text>
 
-        <View style={styles.pulseemKeyDebugBox}>
-          <Text style={styles.pulseemKeyDebugTitle}>מפתח Pulseem ראשי (מ-extra, מקור: PULSEEM_MAIN_API_KEY_B64)</Text>
-          {pulseemMainApiKey ? (
-            <>
-              <Text style={styles.pulseemKeyDebugMeta}>
-                אורך: {pulseemMainApiKey.length} תווים · תחילה: {JSON.stringify(pulseemMainApiKey.slice(0, 4))} · סוף:{' '}
-                {JSON.stringify(pulseemMainApiKey.slice(-4))}
-              </Text>
-              {__DEV__ ? (
-                <>
-                  <Text style={styles.pulseemKeyDebugDevNote}>מצב פיתוח — המפתח המלא (ניתן להעתקה):</Text>
-                  <Text selectable style={styles.pulseemKeyDebugFull}>
-                    {pulseemMainApiKey}
-                  </Text>
-                </>
-              ) : (
-                <Text style={styles.pulseemKeyDebugMasked}>מוסתר בבילד ייצור: {pulseemMainKeyMasked(pulseemMainApiKey)}</Text>
-              )}
-            </>
-          ) : (
-            <Text style={styles.pulseemKeyDebugMissing}>
-              לא נטען — הוסף PULSEEM_MAIN_API_KEY_B64 ל-.env (Base64, בלי $ גולמי) והפעל מחדש Metro
-            </Text>
-          )}
-        </View>
-
         {hasPulseemMainKey ? (
           <>
             <View style={styles.pulseemAutoBox}>
               <Ionicons name="checkmark-circle" size={16} color={GREEN} />
               <Text style={[styles.brandHint, { color: GREEN, marginBottom: 0, flex: 1 }]}>
-                {' '}חשבון Pulseem ייווצר אוטומטית עם 100 DirectSmsCredits
+                {' '}חשבון Pulseem ייווצר אוטומטית עם 20 DirectSmsCredits
               </Text>
             </View>
 
@@ -497,10 +457,13 @@ export default function SuperAdminDashboard() {
               textAlign="right"
             />
 
-            <Text style={styles.fieldLabel}>שם שולח SMS — From (אופציונלי)</Text>
+            <Text style={styles.fieldLabel}>מספר שולח SMS — From (מומלץ)</Text>
+            <Text style={styles.brandHint}>
+              לרוב חובה מספר שולח מאושר בפולסים (ללא אותיות באנגלית). אם ריק — תגדיר אחר כך ב«פולסים SMS» או ב-Supabase.
+            </Text>
             <TextInput
               style={styles.input}
-              placeholder="ריק = שם האפליקציה"
+              placeholder="למשל: 0501234567 או מספר וירטואלי מפולסים"
               placeholderTextColor={TEXT_MUTED}
               value={newPulseemFromNumber}
               onChangeText={setNewPulseemFromNumber}
@@ -551,10 +514,10 @@ export default function SuperAdminDashboard() {
               secureTextEntry
               textAlign="right"
             />
-            <Text style={styles.fieldLabel}>שם שולח SMS — From</Text>
+            <Text style={styles.fieldLabel}>מספר / שם שולח SMS — From</Text>
             <TextInput
               style={styles.input}
-              placeholder="כפי שמוגדר אצל פולסים (לרוב באנגלית/מספר)"
+              placeholder="מספר מאושר בפולסים (לעיתים שם באנגלית רק אחרי אימות אצלם)"
               placeholderTextColor={TEXT_MUTED}
               value={newPulseemFromNumber}
               onChangeText={setNewPulseemFromNumber}
@@ -721,6 +684,24 @@ export default function SuperAdminDashboard() {
         </View>
       </Modal>
 
+      <Modal visible={logoutConfirmVisible} transparent animationType="fade" onRequestClose={() => setLogoutConfirmVisible(false)}>
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>התנתקות</Text>
+            <Text style={styles.confirmMessage}>בטוח שברצונך להתנתק?</Text>
+            <View style={styles.confirmButtonsRow}>
+              <TouchableOpacity style={styles.confirmButton} onPress={() => setLogoutConfirmVisible(false)} activeOpacity={0.8}>
+                <Text style={styles.confirmButtonDefaultText}>ביטול</Text>
+              </TouchableOpacity>
+              <View style={styles.confirmButtonDivider} />
+              <TouchableOpacity style={styles.confirmButton} onPress={runConfirmedLogout} activeOpacity={0.8}>
+                <Text style={styles.confirmButtonDestructiveText}>התנתק</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <PulseemBusinessModal
         visible={!!pulseModalBiz}
         business={pulseModalBiz}
@@ -883,31 +864,6 @@ const styles = StyleSheet.create({
   colorPreview: { width: 50, height: 50, borderRadius: 14, borderWidth: 1, borderColor: CARD_BORDER },
 
   brandHint: { fontSize: 12, color: TEXT_MUTED, textAlign: 'right', marginBottom: 12, alignSelf: 'stretch' },
-  pulseemKeyDebugBox: {
-    backgroundColor: '#F8F9FC',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#E2E6EF',
-    alignSelf: 'stretch',
-  },
-  pulseemKeyDebugTitle: { fontSize: 12, fontWeight: '700', color: TEXT_SECONDARY, textAlign: 'right', marginBottom: 6 },
-  pulseemKeyDebugMeta: { fontSize: 11, color: TEXT_MUTED, textAlign: 'right', marginBottom: 8, fontFamily: 'monospace' },
-  pulseemKeyDebugDevNote: { fontSize: 11, color: ORANGE, textAlign: 'right', marginBottom: 4 },
-  pulseemKeyDebugFull: {
-    fontSize: 11,
-    color: TEXT_PRIMARY,
-    textAlign: 'left',
-    fontFamily: 'monospace',
-    backgroundColor: '#FFFFFF',
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: CARD_BORDER,
-  },
-  pulseemKeyDebugMasked: { fontSize: 12, color: TEXT_SECONDARY, textAlign: 'right', fontFamily: 'monospace' },
-  pulseemKeyDebugMissing: { fontSize: 12, color: ORANGE, textAlign: 'right' },
   pulseemAutoBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0FFF4', borderRadius: 8, padding: 10, marginBottom: 12, gap: 4 },
   imgRow: { flexDirection: 'row', gap: 10 },
   imgPickerWrap: { flex: 1, alignItems: 'center' },

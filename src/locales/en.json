@@ -62,6 +62,8 @@
   "booking.replace": "Replace Appointment",
   "booking.bookAdditional": "Book Additional Appointment",
   "booking.successTitle": "Appointment Successfully Booked!",
+  "booking.successNotificationTitle": "Your appointment was booked successfully",
+  "booking.successNotificationBody": "{{service}} · {{weekday}} {{dayOfMonth}} · {{time}}{{endSuffix}}",
   "booking.scheduledFor": "has been scheduled for",
   "booking.yourInfo": "Your info",
   "booking.permissionsRequired": "Permission Required",
@@ -406,15 +408,65 @@
     "emailSent": { "title": "Email Sent", "message": "We sent you a password reset email. Check your inbox." }
   },
   "register": {
+    "steps": { "phone": "Phone", "code": "Code", "profile": "Profile" },
+    "phone": {
+      "title": "What’s your phone number?",
+      "subtitle": "We’ll send a verification code by SMS to finish signing up.",
+      "cta": "Send me the code",
+      "hint": "The code arrives in seconds"
+    },
+    "otp": {
+      "title": "Enter the code",
+      "subtitle": "We sent a 6-digit code to {{phone}}",
+      "editPhone": "Change phone number",
+      "resend": "Resend code",
+      "resendWait": "Resend in {{s}}s",
+      "cta": "Verify and continue",
+      "sentToast": "Code sent successfully"
+    },
+    "profile": {
+      "abortTitle": "Leave registration?",
+      "abortMessage": "Your account was created — you can sign in with your phone after approval. If you leave now, name and photo won’t be saved.",
+      "abortStay": "Continue",
+      "abortLeave": "Leave",
+      "title": "A few more details",
+      "subtitle": "So we can recognize you and serve you better.",
+      "nameLabel": "Full name",
+      "namePlaceholder": "e.g. Jane Doe",
+      "birthLabel": "Date of birth",
+      "birthOptional": "Optional",
+      "birthPick": "Choose date",
+      "birthClear": "No date",
+      "photoLabel": "Profile photo",
+      "photoOptional": "Optional",
+      "photoAdd": "Add photo",
+      "photoChange": "Change photo",
+      "cta": "Finish registration",
+      "pickerDone": "Done",
+      "pickerCancel": "Cancel"
+    },
     "form": {
       "title": "Sign up now",
       "subtitle": "Fill in your details to register and sign in"
     },
-    "cta": { "register": "Register" },
+    "cta": { "register": "Register", "sendCode": "Send SMS code", "complete": "Complete registration" },
     "haveAccount": "Already have an account?",
+    "error": {
+      "phoneRequired": "Please enter a phone number",
+      "phoneInvalid": "Invalid phone number",
+      "nameRequired": "Please enter your full name",
+      "sessionExpired": "Registration session expired. Please start again.",
+      "tokenUsed": "Registration was already completed. Sign in with your phone.",
+      "birthInvalid": "Invalid birth date.",
+      "updateFailed": "Could not save profile. Try again."
+    },
     "phoneExists": { "title": "Phone number already exists", "message": "This phone number is already registered in the system. Please use a different phone number or sign in to your existing account." },
     "createError": "An error occurred creating the account. Please try again.",
-    "success": { "title": "Registration successful!", "message": "Your account was created successfully.\n\nYou can now sign in with your phone number and chosen password.\n\nPhone number: {{phone}}" },
+    "success": {
+      "title": "Registration successful!",
+      "message": "Your account was created successfully.\n\nYou can now sign in with your phone number and chosen password.\n\nPhone number: {{phone}}",
+      "pendingApprovalOtp": "Your account was created. The business will approve it shortly.\n\nAfter approval you can sign in with your phone number and SMS code.\n\nPhone: {{phone}}"
+    },
     "passwordPlaceholder": "Password (at least 6 characters)",
     "confirmPasswordPlaceholder": "Confirm password"
   },

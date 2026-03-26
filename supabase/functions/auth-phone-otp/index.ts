@@ -2,10 +2,12 @@
 /**
  * Phone SMS OTP for tenant login/register via Pulseem (legacy SendSingleSMS).
  * Reads credentials only from public.business_profile (service role) — never from the app’s local branding/.env.
- * Needs: pulseem_user_id, pulseem_password, pulseem_from_number. pulseem_api_key alone is not used here yet.
+ * pulseem_password / pulseem_api_key: decrypt with PULSEEM_FIELD_ENCRYPTION_KEY if stored as enc:v1:...
+ * Needs: pulseem_user_id, pulseem_password, pulseem_from_number. REST send uses pulseem_api_key when set.
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { decryptPulseemField } from "./pulseemFieldCrypto.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -57,6 +59,15 @@ function timingSafeEqualHex(a: string, b: string): boolean {
 function randomSixDigitCode(): string {
   const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000;
   return String(n).padStart(6, "0");
+}
+
+/** 32 random bytes as hex (64 chars) for post-OTP profile completion token */
+function randomProfileSetupToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 /** Israeli mobile 05xxxxxxxx → 9725xxxxxxxx (many SMS gateways require this). */
@@ -171,6 +182,25 @@ async function sendPulseemViaRestApi(opts: {
   if (!res.ok) {
     throw new Error(`Pulseem REST ${res.status}: ${responseText.slice(0, 300)}`);
   }
+
+  const trimmed = responseText.trim();
+  if (trimmed.startsWith("{")) {
+    try {
+      const payload = JSON.parse(trimmed) as Record<string, unknown>;
+      const st = String(payload.status ?? payload.Status ?? "").toLowerCase();
+      const errMsg = String(payload.error ?? payload.Error ?? "").trim();
+      if (st === "error") {
+        throw new Error(errMsg || "pulseem_rest_error");
+      }
+    } catch (e) {
+      if (e instanceof SyntaxError) {
+        // non-JSON or truncated body — treat as ok if HTTP was 2xx
+      } else {
+        throw e;
+      }
+    }
+  }
+
   console.log("[auth-phone-otp] pulseem REST ok, to=", to);
 }
 
@@ -288,8 +318,21 @@ async function loadPulseemCredentials(
     .maybeSingle();
   if (error || !row) return { error: "business_not_found" as const };
   const userId = (row.pulseem_user_id || "").trim();
-  const password = (row.pulseem_password || "").trim();
   const fromNumber = (row.pulseem_from_number || "").trim();
+  const encKey = (Deno.env.get("PULSEEM_FIELD_ENCRYPTION_KEY") ?? "").trim();
+  let password: string;
+  let apiKey: string;
+  try {
+    password = (
+      await decryptPulseemField(String(row.pulseem_password || "").trim(), encKey)
+    ).trim();
+    apiKey = (
+      await decryptPulseemField(String(row.pulseem_api_key || "").trim(), encKey)
+    ).trim();
+  } catch (e) {
+    console.error("[auth-phone-otp] pulseem decrypt failed", e);
+    return { error: "pulseem_decrypt_failed" as const };
+  }
   if (!userId || !password || !fromNumber) {
     return { error: "pulseem_not_configured" as const };
   }
@@ -297,7 +340,7 @@ async function loadPulseemCredentials(
     userId,
     password,
     fromNumber,
-    apiKey: (row.pulseem_api_key || "").trim(),
+    apiKey,
   };
 }
 
@@ -343,19 +386,100 @@ serve(async (req) => {
 
   const action = body.action as string;
   const businessId = String(body.business_id || "").trim();
-  const phone = String(body.phone || "").trim();
 
-  if (!businessId || !phone) {
+  if (!businessId) {
     return json({ ok: false, error: "missing_business_or_phone" }, 400);
   }
 
   const admin = createClient(supabaseUrl, serviceRoleKey);
-  const digits = phoneDigits(phone);
-  if (digits.length < 9) {
-    return json({ ok: false, error: "invalid_phone" }, 400);
-  }
 
   try {
+    if (action === "complete_register_profile") {
+      const profileSetupToken = String(body.profile_setup_token || "").trim();
+      const name = String(body.name || "").trim();
+      const birthRaw = String(body.birth_date || "").trim();
+      const imageUrl = String(body.image_url || "").trim();
+
+      if (!profileSetupToken || profileSetupToken.length < 32) {
+        return json({ ok: false, error: "invalid_token" }, 400);
+      }
+      if (!name) {
+        return json({ ok: false, error: "missing_name" }, 400);
+      }
+
+      const tokenHash = await sha256Hex(profileSetupToken);
+      const { data: tokRows, error: tokSelErr } = await admin
+        .from("auth_register_profile_tokens")
+        .select("id, user_id, expires_at, used_at")
+        .eq("business_id", businessId)
+        .eq("token_hash", tokenHash)
+        .limit(1);
+
+      if (tokSelErr || !tokRows?.[0]) {
+        return json({ ok: false, error: "invalid_token" }, 400);
+      }
+      const tok = tokRows[0];
+      if (tok.used_at) {
+        return json({ ok: false, error: "token_used" }, 400);
+      }
+      if (new Date(tok.expires_at).getTime() <= Date.now()) {
+        return json({ ok: false, error: "token_expired" }, 400);
+      }
+
+      let birthDate: string | null = null;
+      if (birthRaw) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(birthRaw)) {
+          return json({ ok: false, error: "invalid_birth_date" }, 400);
+        }
+        birthDate = birthRaw;
+      }
+
+      const updatePayload: Record<string, unknown> = { name };
+      if (birthDate) updatePayload.birth_date = birthDate;
+      else updatePayload.birth_date = null;
+      if (imageUrl) {
+        updatePayload.image_url = imageUrl;
+      }
+
+      const { data: updatedUser, error: updErr } = await admin
+        .from("users")
+        .update(updatePayload)
+        .eq("id", tok.user_id)
+        .eq("business_id", businessId)
+        .select("id, name, phone")
+        .maybeSingle();
+
+      if (updErr || !updatedUser) {
+        console.error("[auth-phone-otp] complete profile update", updErr);
+        return json({ ok: false, error: "update_failed" }, 500);
+      }
+
+      await admin
+        .from("auth_register_profile_tokens")
+        .update({ used_at: new Date().toISOString() })
+        .eq("id", tok.id);
+
+      await notifyAdminsNewClient(
+        admin,
+        businessId,
+        updatedUser.name || name,
+        String(updatedUser.phone || "").trim(),
+      );
+
+      return json({ ok: true });
+    }
+
+    const phone = String(body.phone || "").trim();
+
+    if (!phone) {
+      return json({ ok: false, error: "missing_business_or_phone" }, 400);
+    }
+
+    const digits = phoneDigits(phone);
+    if (digits.length < 9) {
+      return json({ ok: false, error: "invalid_phone" }, 400);
+    }
+
     if (action === "send_login_otp") {
       const user = await findUserByPhoneFlexible(admin, businessId, phone);
       if (!user) {
@@ -364,6 +488,9 @@ serve(async (req) => {
 
       const pulse = await loadPulseemCredentials(admin, businessId);
       if ("error" in pulse) {
+        if (pulse.error === "pulseem_decrypt_failed") {
+          return json({ ok: false, error: "pulseem_decrypt_failed" }, 500);
+        }
         return json(
           {
             ok: false,
@@ -523,6 +650,9 @@ serve(async (req) => {
 
       const pulse = await loadPulseemCredentials(admin, businessId);
       if ("error" in pulse) {
+        if (pulse.error === "pulseem_decrypt_failed") {
+          return json({ ok: false, error: "pulseem_decrypt_failed" }, 500);
+        }
         return json(
           {
             ok: false,
@@ -610,16 +740,8 @@ serve(async (req) => {
 
     if (action === "verify_register_otp") {
       const code = String(body.code || "").replace(/\D/g, "");
-      const name = String(body.name || "").trim();
-      const email = String(body.email || "").trim();
       if (code.length !== 6) {
         return json({ ok: false, error: "invalid_code" }, 400);
-      }
-      if (!name) {
-        return json({ ok: false, error: "missing_name" }, 400);
-      }
-      if (!email) {
-        return json({ ok: false, error: "missing_email" }, 400);
       }
 
       const { data: rows, error: selErr } = await admin
@@ -667,13 +789,14 @@ serve(async (req) => {
       }
 
       const randomSecret = `otp_only_${crypto.randomUUID()}`;
+      const placeholderName = "משתמש חדש";
       const { data: inserted, error: insUserErr } = await admin
         .from("users")
         .insert({
-          name,
+          name: placeholderName,
           user_type: "client",
           phone: phone.trim(),
-          email,
+          email: null,
           business_id: businessId,
           password_hash: randomSecret,
           client_approved: false,
@@ -686,15 +809,28 @@ serve(async (req) => {
         return json({ ok: false, error: "create_user_failed" }, 500);
       }
 
-      await notifyAdminsNewClient(
-        admin,
-        businessId,
-        name,
-        phone.trim(),
-      );
+      const profileSetupToken = randomProfileSetupToken();
+      const tokenHash = await sha256Hex(profileSetupToken);
+      const profileTokenExpires = new Date(
+        Date.now() + 60 * 60 * 1000,
+      ).toISOString();
+      const { error: tokErr } = await admin
+        .from("auth_register_profile_tokens")
+        .insert({
+          business_id: businessId,
+          user_id: inserted.id,
+          token_hash: tokenHash,
+          expires_at: profileTokenExpires,
+        });
+      if (tokErr) {
+        console.error("[auth-phone-otp] profile token insert", tokErr);
+        await admin.from("users").delete().eq("id", inserted.id);
+        return json({ ok: false, error: "db_error" }, 500);
+      }
 
       return json({
         ok: true,
+        profile_setup_token: profileSetupToken,
         user: {
           id: inserted.id,
           name: inserted.name,
@@ -712,7 +848,8 @@ serve(async (req) => {
     if (action === "check_pulseem") {
       const pulse = await loadPulseemCredentials(admin, businessId);
       if ("error" in pulse) {
-        return json({ ok: false, error: pulse.error }, 400);
+        const st = pulse.error === "pulseem_decrypt_failed" ? 500 : 400;
+        return json({ ok: false, error: pulse.error }, st);
       }
 
       // Check ASMX credits (legacy)

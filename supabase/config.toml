@@ -13,3 +13,11 @@ verify_jwt = true
 # Login/register SMS OTP — called before user session exists
 [functions.auth-phone-otp]
 verify_jwt = false
+
+# Pulseem DB field encryption — Bearer must be service role (super-admin app only)
+[functions.pulseem-admin-credentials]
+verify_jwt = false
+
+# Database Webhook on notifications INSERT — Authorization: Bearer <SERVICE_ROLE_KEY>
+[functions.notification-push-sms]
+verify_jwt = true

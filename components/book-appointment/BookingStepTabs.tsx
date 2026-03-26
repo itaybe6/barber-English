@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
-import { ChevronLeft, Home } from 'lucide-react-native';
+import { View, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import { Check, ChevronLeft, Home } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 
@@ -19,8 +19,16 @@ type Props = {
   canGoService: boolean;
   canGoDay: boolean;
   canGoTime: boolean;
-  /** Next-step control (replaces inline Continue buttons on steps 1–3). Hidden on step 4. */
-  advanceNext?: { enabled: boolean; onPress: () => void };
+  /**
+   * Steps 1–3: chevron advances to next step.
+   * Step 4: confirm variant = checkmark; gray until a time is chosen, then green = book.
+   */
+  advanceNext?: {
+    enabled: boolean;
+    onPress: () => void;
+    variant?: 'chevron' | 'confirm';
+    loading?: boolean;
+  };
 };
 
 const INACTIVE = '#6b7280';
@@ -80,24 +88,39 @@ export default function BookingStepTabs({
               styles.single,
               styles.border,
               styles.pillBooking,
-              advanceNext.enabled ? styles.advancePillActive : styles.shadow,
+              advanceNext.enabled && !advanceNext.loading ? styles.advancePillActive : styles.shadow,
             ]}
           >
             <Pressable
               accessibilityRole="button"
-              accessibilityState={{ disabled: !advanceNext.enabled }}
-              disabled={!advanceNext.enabled}
+              accessibilityState={{
+                disabled: !advanceNext.enabled || !!advanceNext.loading,
+              }}
+              disabled={!advanceNext.enabled || !!advanceNext.loading}
               onPress={() => {
-                if (!advanceNext.enabled) return;
+                if (!advanceNext.enabled || advanceNext.loading) return;
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
                 advanceNext.onPress();
               }}
               style={({ pressed }) => [
                 styles.advancePressable,
-                { opacity: !advanceNext.enabled ? 0.5 : pressed ? 0.9 : 1 },
+                {
+                  opacity:
+                    advanceNext.loading
+                      ? 0.65
+                      : !advanceNext.enabled
+                        ? 0.5
+                        : pressed
+                          ? 0.9
+                          : 1,
+                },
               ]}
             >
-              {advanceNext.enabled ? (
+              {advanceNext.loading ? (
+                <View style={[styles.advanceInner, styles.advanceLoadingFill]}>
+                  <ActivityIndicator color={BOOKING_TAB_SELECTED} />
+                </View>
+              ) : advanceNext.enabled ? (
                 <LinearGradient
                   colors={[...ADVANCE_GRADIENT]}
                   locations={[...ADVANCE_GRADIENT_LOCATIONS]}
@@ -105,11 +128,19 @@ export default function BookingStepTabs({
                   end={{ x: 1, y: 1 }}
                   style={styles.advanceGradientFill}
                 >
-                  <ChevronLeft size={22} color="#ecfdf5" strokeWidth={2.5} />
+                  {advanceNext.variant === 'confirm' ? (
+                    <Check size={22} color="#ecfdf5" strokeWidth={2.8} />
+                  ) : (
+                    <ChevronLeft size={22} color="#ecfdf5" strokeWidth={2.5} />
+                  )}
                 </LinearGradient>
               ) : (
                 <View style={[styles.advanceInner, styles.advanceDisabledFill]}>
-                  <ChevronLeft size={22} color={INACTIVE} strokeWidth={2.4} />
+                  {advanceNext.variant === 'confirm' ? (
+                    <Check size={22} color={INACTIVE} strokeWidth={2.6} />
+                  ) : (
+                    <ChevronLeft size={22} color={INACTIVE} strokeWidth={2.4} />
+                  )}
                 </View>
               )}
             </Pressable>
@@ -202,6 +233,9 @@ const styles = StyleSheet.create({
   },
   advanceDisabledFill: {
     backgroundColor: '#ffffff',
+  },
+  advanceLoadingFill: {
+    backgroundColor: '#f0fdf4',
   },
   center: {
     flex: 1,

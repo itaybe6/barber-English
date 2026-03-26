@@ -775,6 +775,53 @@ export default function ClientAppointmentsScreen() {
           // Fallback: notify all admins
           notificationsApi.createAdminNotification(title, content, 'system').catch(() => {});
         }
+
+        // In-app notification for the client who canceled (appears under Notifications)
+        if (user?.user_type !== 'admin') {
+          const clientPhone = (user?.phone || selectedAppointment.client_phone || '').trim();
+          const clientName = user?.name || selectedAppointment.client_name || t('common.client', 'Client');
+          if (clientPhone) {
+            const tHe = i18n.getFixedT('he');
+            const slotDate = selectedAppointment.slot_date;
+            const dateHebrew = new Date(`${slotDate}T12:00:00`).toLocaleDateString('he-IL', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            });
+            const timeRaw = String(selectedAppointment.slot_time || '00:00');
+            const [th = '0', tm = '0'] = timeRaw.split(':');
+            const timeAt = new Date();
+            timeAt.setHours(parseInt(th, 10) || 0, parseInt(tm, 10) || 0, 0, 0);
+            const timeHebrew = timeAt.toLocaleTimeString('he-IL', {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            });
+            const clientTitle = tHe('appointments.clientCancelled.title', 'התור בוטל');
+            const clientContent = tHe(
+              'appointments.clientCancelled.content',
+              'התור שלך ל־"{{service}}" בתאריך {{date}} בשעה {{time}} בוטל בהצלחה.',
+              {
+                service: serviceName,
+                date: dateHebrew,
+                time: timeHebrew,
+              }
+            );
+            notificationsApi
+              .createNotification({
+                title: clientTitle,
+                content: clientContent,
+                type: 'general',
+                recipient_name: clientName,
+                recipient_phone: clientPhone,
+                business_id: getBusinessId(),
+                appointment_id: selectedAppointment.id,
+                ...(user?.id ? { user_id: user.id } : {}),
+              })
+              .catch(() => {});
+          }
+        }
       } else {
         Alert.alert(t('appointments.cannotCancel.title', 'Cannot Cancel Appointment'), result.error || t('appointments.cannotCancel.message', 'Unable to cancel the appointment. Please try again.'));
       }

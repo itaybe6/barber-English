@@ -440,8 +440,21 @@ serve(async (req) => {
       else profileFields.birth_date = null;
       if (imageUrl) profileFields.image_url = imageUrl;
 
+      const userSelect =
+        "id, name, phone, email, user_type, image_url, client_approved, block";
+
       let displayName = name;
       let displayPhone = regPhone;
+      let sessionUser: {
+        id: string;
+        name: string;
+        phone: string;
+        email: string | null;
+        user_type: string;
+        image_url: string | null;
+        client_approved: boolean;
+        block: boolean;
+      };
 
       if (tok.user_id) {
         // Legacy: user row already existed (old flow after verify_register_otp).
@@ -450,7 +463,7 @@ serve(async (req) => {
           .update(profileFields)
           .eq("id", tok.user_id)
           .eq("business_id", businessId)
-          .select("id, name, phone")
+          .select(userSelect)
           .maybeSingle();
 
         if (updErr || !updatedUser) {
@@ -459,6 +472,16 @@ serve(async (req) => {
         }
         displayName = updatedUser.name || name;
         displayPhone = String(updatedUser.phone || "").trim();
+        sessionUser = {
+          id: updatedUser.id,
+          name: updatedUser.name,
+          phone: updatedUser.phone,
+          email: updatedUser.email ?? null,
+          user_type: updatedUser.user_type,
+          image_url: updatedUser.image_url ?? null,
+          client_approved: updatedUser.client_approved !== false,
+          block: !!updatedUser.block,
+        };
       } else {
         if (!regPhone) {
           return json({ ok: false, error: "invalid_token" }, 400);
@@ -482,7 +505,7 @@ serve(async (req) => {
             password_hash: randomSecret,
             client_approved: false,
           })
-          .select("id, name, phone")
+          .select(userSelect)
           .single();
 
         if (insUserErr || !inserted) {
@@ -491,6 +514,16 @@ serve(async (req) => {
         }
         displayName = inserted.name || name;
         displayPhone = String(inserted.phone || "").trim();
+        sessionUser = {
+          id: inserted.id,
+          name: inserted.name,
+          phone: inserted.phone,
+          email: inserted.email ?? null,
+          user_type: inserted.user_type,
+          image_url: inserted.image_url ?? null,
+          client_approved: inserted.client_approved !== false,
+          block: !!inserted.block,
+        };
       }
 
       await admin
@@ -505,7 +538,19 @@ serve(async (req) => {
         displayPhone,
       );
 
-      return json({ ok: true });
+      return json({
+        ok: true,
+        user: {
+          id: sessionUser.id,
+          name: sessionUser.name,
+          phone: sessionUser.phone,
+          email: sessionUser.email,
+          user_type: sessionUser.user_type,
+          image_url: sessionUser.image_url,
+          client_approved: sessionUser.client_approved,
+          block: sessionUser.block,
+        },
+      });
     }
 
     const phone = String(body.phone || "").trim();

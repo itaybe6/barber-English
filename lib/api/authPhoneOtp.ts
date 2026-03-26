@@ -127,7 +127,7 @@ export const authPhoneOtpApi = {
     name: string;
     birthDate?: string | null;
     imageUrl?: string | null;
-  }): Promise<{ ok: boolean; error?: string }> {
+  }): Promise<{ ok: boolean; user?: OtpAuthUserPayload; error?: string }> {
     const businessId = getBusinessId();
     const p = await invokeAuthPhoneOtp({
       action: 'complete_register_profile',
@@ -140,6 +140,9 @@ export const authPhoneOtpApi = {
     if (p.ok !== true) {
       return { ok: false, error: p.error || 'complete_failed' };
     }
-    return { ok: true };
+    if (!p.user) {
+      return { ok: false, error: 'missing_user_payload' };
+    }
+    return { ok: true, user: p.user };
   },
 };

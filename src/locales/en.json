@@ -459,7 +459,8 @@
       "tokenUsed": "Registration was already completed. Sign in with your phone.",
       "birthInvalid": "Invalid birth date.",
       "updateFailed": "Could not save profile. Try again.",
-      "createUserFailed": "Could not create the account. Try again."
+      "createUserFailed": "Could not create the account. Try again.",
+      "sessionPayload": "Registration succeeded but user details were missing. Sign in with your phone."
     },
     "phoneExists": { "title": "Phone number already exists", "message": "This phone number is already registered in the system. Please use a different phone number or sign in to your existing account." },
     "createError": "An error occurred creating the account. Please try again.",

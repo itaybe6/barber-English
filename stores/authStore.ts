@@ -31,8 +31,7 @@ export const useAuthStore = create<AuthState>()(
         const rawRole: unknown = (user as any)?.type ?? (user as any)?.user_type;
         const role = typeof rawRole === 'string' ? rawRole.trim().toLowerCase() : undefined;
         const isBlocked = Boolean((user as any)?.block);
-        const isPendingClient = role === 'client' && (user as any)?.client_approved === false;
-        const allowSession = !isBlocked && !isPendingClient;
+        const allowSession = !isBlocked;
         set({
           user: allowSession ? user : null,
           isAuthenticated: allowSession,
@@ -88,8 +87,8 @@ export const useAuthStore = create<AuthState>()(
             rehydratedState.hasHydrated = true as any;
             const rawRole: unknown = (rehydratedState.user as any)?.type ?? (rehydratedState.user as any)?.user_type;
             const role = typeof rawRole === 'string' ? rawRole.trim().toLowerCase() : undefined;
-            const pendingClient = role === 'client' && (rehydratedState.user as any)?.client_approved === false;
-            if (pendingClient) {
+            const isBlocked = Boolean((rehydratedState.user as any)?.block);
+            if (rehydratedState.user && isBlocked) {
               rehydratedState.user = null;
               rehydratedState.isAuthenticated = false;
               rehydratedState.isAdmin = false;

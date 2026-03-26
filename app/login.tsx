@@ -321,14 +321,6 @@ export default function LoginScreen() {
         Alert.alert(t('account.blocked', 'חשבון חסום'), t('login.blockedCannotSignIn', 'החשבון שלך חסום. פנה למנהל.'));
         return;
       }
-      if (authUser.user_type === 'client' && authUser.client_approved === false) {
-        await writeLoginFailures(key, 0);
-        Alert.alert(
-          t('login.pendingApprovalTitle', 'Awaiting approval'),
-          t('login.pendingApprovalMessage', 'Your account is waiting for the business to approve it. You will be able to sign in once approved.')
-        );
-        return;
-      }
       if (!isValidUserType(authUser.user_type)) {
         await writeLoginFailures(key, 0);
         Alert.alert(t('error.generic', 'שגיאה'), t('login.invalidUserType', 'סוג משתמש לא תקין'));
@@ -394,14 +386,6 @@ export default function LoginScreen() {
         if ((authUser as any)?.block) {
           await writeLoginFailures(key, 0);
           Alert.alert(t('account.blocked', 'חשבון חסום'), t('login.blockedCannotSignIn', 'החשבון שלך חסום. פנה למנהל.'));
-          return;
-        }
-        if (authUser.user_type === 'client' && (authUser as any).client_approved === false) {
-          await writeLoginFailures(key, 0);
-          Alert.alert(
-            t('login.pendingApprovalTitle', 'Awaiting approval'),
-            t('login.pendingApprovalMessage', 'Your account is waiting for the business to approve it. You will be able to sign in once approved.')
-          );
           return;
         }
         if (!isValidUserType(authUser.user_type)) {

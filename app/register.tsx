@@ -30,6 +30,8 @@ import { getCurrentClientLogo } from '@/src/theme/assets';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useTranslation } from 'react-i18next';
 import { authPhoneOtpApi } from '@/lib/api/authPhoneOtp';
+import { useAuthStore } from '@/stores/authStore';
+import { isValidUserType } from '@/constants/auth';
 
 const palette = {
   textPrimary: '#111827',
@@ -120,6 +122,7 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const router = useRouter();
+  const login = useAuthStore((s) => s.login);
   const isRtl = i18n.language?.startsWith('he') ?? true;
 
   useEffect(() => {
@@ -201,6 +204,10 @@ export default function RegisterScreen() {
         return t('register.error.birthInvalid', 'תאריך לידה לא תקין.');
       case 'update_failed':
         return t('register.error.updateFailed', 'שמירת הפרופיל נכשלה. נסו שוב.');
+      case 'create_user_failed':
+        return t('register.error.createUserFailed', 'יצירת החשבון נכשלה. נסו שוב.');
+      case 'missing_user_payload':
+        return t('register.error.sessionPayload', 'ההרשמה הצליחה אך לא התקבלו פרטי משתמש. התחברו עם הטלפון.');
       case 'missing_name':
         return t('register.error.nameRequired', 'נא להזין שם מלא');
       default:
@@ -371,14 +378,37 @@ export default function RegisterScreen() {
         birthDate: birthIso,
         imageUrl,
       });
-      if (!res.ok) {
+      if (!res.ok || !res.user) {
         Alert.alert(t('error.generic', 'שגיאה'), registerOtpError(res.error));
         return;
       }
 
-      Alert.alert(t('register.success.title'), t('register.success.pendingApprovalOtp', { phone: phone.trim() }), [
-        { text: t('ok'), onPress: () => router.replace('/login') },
-      ]);
+      const authUser = res.user;
+      if (authUser.block) {
+        Alert.alert(t('account.blocked', 'חשבון חסום'), t('login.blockedCannotSignIn', 'החשבון שלך חסום. פנה למנהל.'));
+        return;
+      }
+      if (!isValidUserType(authUser.user_type)) {
+        Alert.alert(t('error.generic', 'שגיאה'), t('login.invalidUserType', 'סוג משתמש לא תקין'));
+        return;
+      }
+
+      const birthIsoForStore = hasBirthDate && birthDate ? toISODate(birthDate) : null;
+      const appUser = {
+        id: authUser.id,
+        phone: authUser.phone,
+        type: authUser.user_type,
+        name: authUser.name,
+        email: authUser.email ?? null,
+        image_url: authUser.image_url ?? null,
+        user_type: authUser.user_type,
+        block: authUser.block ?? false,
+        client_approved: authUser.client_approved !== false,
+        ...(birthIsoForStore ? { birth_date: birthIsoForStore } : {}),
+      } as any;
+
+      login(appUser);
+      router.replace('/(client-tabs)');
     } catch (e) {
       console.error('completeRegisterProfile', e);
       Alert.alert(t('error.generic', 'שגיאה'), t('common.tryAgain', 'נסו שוב.'));
@@ -402,7 +432,7 @@ export default function RegisterScreen() {
       t('register.profile.abortTitle', 'לצאת מההרשמה?'),
       t(
         'register.profile.abortMessage',
-        'החשבון נוצר — תוכלו להתחבר עם הטלפון אחרי אישור המנהל. אם תצאו עכשיו, השם והתמונה לא יישמרו.',
+        'ההרשמה עדיין לא הושלמה — אפשר יהיה להמשיך מאותו מספר טלפון. אם תצאו עכשיו, השם והתמונה לא יישמרו.',
       ),
       [
         { text: t('register.profile.abortStay', 'המשך למלא'), style: 'cancel' },

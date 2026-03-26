@@ -46,7 +46,6 @@ import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usersApi } from '@/lib/api/users';
 import InlineEditableRow from '@/components/InlineEditableRow';
-import AddAppointmentModal from '@/components/AddAppointmentModal';
 import { ColorPicker } from '@/components/ColorPicker';
 import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
@@ -1277,10 +1276,6 @@ export default function SettingsScreen() {
     });
     if (isAdmin) {
       items.push({
-        id: 'appointments_mgmt',
-        title: t('settings.sections.appointmentsManagement', 'Appointments management'),
-      });
-      items.push({
         id: 'recurring',
         title: t('settings.sections.recurringTitle', 'Recurring appointments'),
       });
@@ -1352,7 +1347,6 @@ export default function SettingsScreen() {
   const [showRecurringModal, setShowRecurringModal] = useState(false);
   const [isSubmittingRecurring, setIsSubmittingRecurring] = useState(false);
   const [showManageRecurringModal, setShowManageRecurringModal] = useState(false);
-  const [showAddAppointmentModal, setShowAddAppointmentModal] = useState(false);
   const [isLoadingRecurring, setIsLoadingRecurring] = useState(false);
   const [recurringList, setRecurringList] = useState<any[]>([]);
   const [clientSearch, setClientSearch] = useState('');
@@ -2117,21 +2111,6 @@ export default function SettingsScreen() {
 
         {isAdmin && (
           <>
-            <View onLayout={onSettingsSectionLayout('appointments_mgmt')}>
-              <View style={styles.sectionTitleWrapper}>
-                <Text style={styles.sectionTitleNew}>{t('settings.sections.appointmentsManagement','Appointments management')}</Text>
-              </View>
-            </View>
-            <View style={styles.cardNew}>
-              {renderSettingItem(
-                <Calendar size={20} color={businessColors.primary} />,
-                t('adminEx.appointmentsAdmin.addAppointment','add appointment'),
-                t('adminEx.appointmentsAdmin.summary','Appointment Summary'),
-                undefined,
-                () => setShowAddAppointmentModal(true)
-              )}
-            </View>
-
             <View onLayout={onSettingsSectionLayout('recurring')}>
               <View style={styles.sectionTitleWrapper}>
                 <Text style={styles.sectionTitleNew}>{t('settings.sections.recurringTitle','Recurring appointments')}</Text>
@@ -4228,15 +4207,6 @@ export default function SettingsScreen() {
         </SafeAreaView>
       </Modal>
 
-
-      {/* Add Appointment Modal */}
-      <AddAppointmentModal
-        visible={showAddAppointmentModal}
-        onClose={() => setShowAddAppointmentModal(false)}
-        onSuccess={() => {
-          // אפשר להוסיף כאן רענון של רשימת התורים אם צריך
-        }}
-      />
 
       {/* Add Admin Modal */}
       <AddAdminModal

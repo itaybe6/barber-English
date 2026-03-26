@@ -9,14 +9,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Entypo } from '@expo/vector-icons';
-import Animated, {
-  FadeInDown,
-  FadeOutDown,
-  KeyboardState,
-  LinearTransition,
-  useAnimatedKeyboard,
-  useAnimatedStyle,
-} from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeOutDown, LinearTransition } from 'react-native-reanimated';
 import { useColors } from '@/src/theme/ThemeProvider';
 
 const DEFAULT_DURATION = 500;
@@ -52,16 +45,11 @@ export function FabButton({
   const spacing = closedSize * 0.18;
   const closeIconSize = Math.round(closedSize * 0.32);
   const openIconSize = Math.round(closedSize * 0.48);
-  const { height: keyboardHeight, state } = useAnimatedKeyboard();
 
-  const openBg = '#FFFFFF';
+  const openBg = colors.surface;
   const closedBg = colors.primary;
   const iconOnClosed = '#FFFFFF';
   const iconOnOpen = colors.text;
-
-  const keyboardHeightStyle = useAnimatedStyle(() => ({
-    marginBottom: state.value === KeyboardState.OPEN ? keyboardHeight.value - 72 + spacing : 0,
-  }));
 
   const openWidth = Math.min(openedSize, screenW - horizontalInset * 2);
   /** סגור: פינה; פתוח: ממורכז אופקית כדי שלא תהיה סטייה */
@@ -73,12 +61,12 @@ export function FabButton({
 
   /** Icon + Pressable padding (6 each side) — keep text from sitting under the hit target */
   const closeBtnOuterH = closeIconSize + 12;
-  const closeReserved = closeIconSize + 40;
-  const contentInsetStyle = I18nManager.isRTL
-    ? { paddingRight: closeReserved, paddingLeft: 0 }
-    : { paddingLeft: closeReserved, paddingRight: 0 };
-
-  const closeBtnPos = I18nManager.isRTL ? { right: spacing * 0.35 } : { left: spacing * 0.35 };
+  /**
+   * Close sits in the physical top-end corner; content uses symmetric horizontal padding.
+   * (Asymmetric reserve for LTR+Hebrew text caused a large empty band on the leading edge.)
+   */
+  const openPaddingH = 18;
+  const closeBtnEndInset = openPaddingH - 2;
 
   /**
    * Close is absolutely positioned (top: closeBtnTop) and does not reserve flow space.
@@ -102,7 +90,7 @@ export function FabButton({
           borderRadius: isOpen ? 22 : closedSize / 2,
           backgroundColor: isOpen ? openBg : closedBg,
           paddingTop: isOpen ? spacing * 1.2 : 0,
-          paddingHorizontal: isOpen ? spacing * 1.2 : 0,
+          paddingHorizontal: isOpen ? openPaddingH : 0,
           paddingBottom: isOpen ? spacing * 1.2 : 0,
           ...Platform.select({
             ios: {
@@ -115,7 +103,6 @@ export function FabButton({
           }),
         },
         panelStyle,
-        keyboardHeightStyle,
       ]}
     >
       {!isOpen ? (
@@ -140,7 +127,7 @@ export function FabButton({
           <Pressable
             onPress={onPress}
             hitSlop={12}
-            style={[styles.closeBtn, closeBtnPos, { top: closeBtnTop }]}
+            style={[styles.closeBtn, { top: closeBtnTop, right: closeBtnEndInset }]}
             accessibilityRole="button"
             accessibilityLabel="סגירה"
           >
@@ -149,7 +136,6 @@ export function FabButton({
           <View
             style={[
               styles.rtlContent,
-              contentInsetStyle,
               { direction: I18nManager.isRTL ? 'rtl' : 'ltr', paddingTop: rtlContentPaddingTop },
             ]}
           >

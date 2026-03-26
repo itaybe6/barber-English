@@ -844,7 +844,15 @@
       "deleteAppointment": "Delete appointment",
       "deleteTitle": "Delete appointment",
       "deleteMessage": "This will permanently remove the appointment. This action cannot be undone.",
-      "openActions": "Open appointment actions"
+      "openActions": "Open appointment actions",
+      "loadClientsFailed": "Error loading client list",
+      "loadServicesFailed": "Error loading services list",
+      "fillAllRequired": "Please fill in all required fields",
+      "userNotLogged": "User not logged in",
+      "scheduled": "Appointment scheduled successfully",
+      "scheduleFailed": "Error scheduling appointment",
+      "selectDateAndService": "Please select date and service first",
+      "selectClientPlaceholder": "Select client..."
     },
     "calendarViewMode": {
       "day": "Day",
@@ -857,6 +865,16 @@
       "today": "Today",
       "monthTapDayHint": "Tap a day to see all appointments"
     },
+    "calendarAdd": {
+      "choiceTitle": "What would you like to add?",
+      "choiceSubtitle": "Choose a client appointment or a personal calendar note for the selected day",
+      "optionAppointment": "Appointment",
+      "optionAppointmentHint": "Book a client by service and time",
+      "optionReminder": "Calendar reminder",
+      "optionReminderHint": "A note for you — does not block slots",
+      "backToChoice": "Back to options",
+      "fabAccessibility": "Add to calendar"
+    },
     "appointmentsAdmin": {
       "loadingForDate": "Loading appointments for {{date}}...",
       "emptyTitle": "No appointments for this day",
@@ -868,7 +886,23 @@
       "deleteAppointment": "Delete appointment",
       "deleteTitle": "Delete appointment",
       "deleteMessage": "This will permanently remove the appointment. This action cannot be undone.",
-      "openActions": "Open appointment actions"
+      "openActions": "Open appointment actions",
+      "addAppointment": "Add appointment",
+      "summary": "Appointment Summary",
+      "client": "Client",
+      "pickClient": "Pick the client for this appointment",
+      "pickDate": "Select the date for this appointment",
+      "pickService": "Choose the service to perform",
+      "selectServicePlaceholder": "Select service...",
+      "selectClientPlaceholder": "Select client...",
+      "pickTime": "Pick an available time slot",
+      "loadClientsFailed": "Error loading client list",
+      "loadServicesFailed": "Error loading services list",
+      "fillAllRequired": "Please fill in all required fields",
+      "userNotLogged": "User not logged in",
+      "scheduled": "Appointment scheduled successfully",
+      "scheduleFailed": "Error scheduling appointment",
+      "selectDateAndService": "Please select date and service first"
     },
     "hoursAdmin": {
       "title": "Working hours",
@@ -954,18 +988,7 @@
       "waiting": "Waiting",
       "emptyTitle": "No waitlist entries for this day",
       "emptySubtitle": "No clients are waiting for this day"
-    },
-    "appointments": {
-      "loadClientsFailed": "Error loading client list",
-      "loadServicesFailed": "Error loading services list",
-      "fillAllRequired": "Please fill in all required fields",
-      "userNotLogged": "User not logged in",
-      "scheduled": "Appointment scheduled successfully",
-      "scheduleFailed": "Error scheduling appointment",
-      "selectDateAndService": "Please select date and service first",
-      "selectClientPlaceholder": "Select client..."
     }
-    
   },
   "swap": {
     "title": "Swap Appointment",

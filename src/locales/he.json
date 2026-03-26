@@ -866,6 +866,16 @@
       "today": "היום",
       "monthTapDayHint": "הקישו על יום כדי לראות את כל התורים"
     },
+    "calendarAdd": {
+      "choiceTitle": "מה תרצה להוסיף?",
+      "choiceSubtitle": "בחרו תור ללקוח או תזכורת פנימית ליום הנבחר",
+      "optionAppointment": "תור",
+      "optionAppointmentHint": "קביעת תור ללקוח לפי שירות ושעה",
+      "optionReminder": "תזכורת ביומן",
+      "optionReminderHint": "תזכורת לעצמך — לא חוסמת משבצות",
+      "backToChoice": "חזרה לבחירה",
+      "fabAccessibility": "הוספה ליומן"
+    },
     "appointmentsAdmin": {
       "loadingForDate": "טוען תורים עבור {{date}}...",
       "emptyTitle": "אין תורים ליום זה",

@@ -1,23 +1,33 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
   Alert,
   ActivityIndicator,
   Modal,
-  SafeAreaView,
   TextInput,
   Pressable,
   Dimensions,
-  Animated,
-  Easing,
+  Platform,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
-import { Calendar, Search, User, Clock, CalendarDays, X } from 'lucide-react-native';
+import { Calendar, Search, User, Clock, CalendarDays, X, Check } from 'lucide-react-native';
 import { Calendar as RNCalendar, LocaleConfig } from 'react-native-calendars';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  FadeInDown,
+  FadeInUp,
+  FadeIn,
+  type SharedValue,
+} from 'react-native-reanimated';
 import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
 import { servicesApi } from '@/lib/api/services';
@@ -26,20 +36,31 @@ import { useAuthStore } from '@/stores/authStore';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useTranslation } from 'react-i18next';
 
-const { width } = Dimensions.get('window');
+const { width: SCREEN_W } = Dimensions.get('window');
 
-// English locale for react-native-calendars
 LocaleConfig.locales['en'] = {
-  monthNames: ['January','February','March','April','May','June','July','August','September','October','November','December'],
-  monthNamesShort: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
-  dayNames: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
-  dayNamesShort: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+  monthNames: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+  monthNamesShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+  dayNames: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+  dayNamesShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
   today: 'Today',
   direction: 'ltr',
 };
+
+LocaleConfig.locales['he'] = {
+  monthNames: ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'],
+  monthNamesShort: ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יוני', 'יולי', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'],
+  dayNames: ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'],
+  dayNamesShort: ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'],
+  today: 'היום',
+  direction: 'rtl',
+};
+
 LocaleConfig.defaultLocale = 'en';
 
-// Helper function to format date as YYYY-MM-DD in local timezone
+const STEP_SPRING = { damping: 26, stiffness: 260, mass: 0.85 };
+const STEP_TIMING_MS = 420;
+
 function formatDateToLocalString(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -47,7 +68,6 @@ function formatDateToLocalString(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-// Helper function to convert 24-hour format to 12-hour AM/PM format
 function formatTimeToAMPM(time24: string): string {
   const [hours, minutes] = time24.split(':');
   const hour24 = parseInt(hours, 10);
@@ -56,57 +76,165 @@ function formatTimeToAMPM(time24: string): string {
   return `${hour12}:${minutes} ${ampm}`;
 }
 
+function triggerLightHaptic() {
+  try {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  } catch {
+    /* optional */
+  }
+}
+
+function triggerMediumHaptic() {
+  try {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  } catch {
+    /* optional */
+  }
+}
+
+function StepDotCell({
+  index,
+  label,
+  stepSv,
+  primary,
+}: {
+  index: number;
+  label: string;
+  stepSv: SharedValue<number>;
+  primary: string;
+}) {
+  const dotAnim = useAnimatedStyle(() => {
+    const current = stepSv.value === index;
+    const done = stepSv.value > index;
+    return {
+      transform: [{ scale: current ? 1.22 : done ? 1 : 0.9 }],
+      opacity: stepSv.value < index ? 0.42 : 1,
+    };
+  });
+
+  const ringAnim = useAnimatedStyle(() => {
+    const done = stepSv.value > index;
+    const current = stepSv.value === index;
+    return {
+      borderColor: current || done ? primary : '#D1D1D6',
+      backgroundColor: done ? primary : '#FFFFFF',
+    };
+  });
+
+  const checkAnim = useAnimatedStyle(() => ({
+    opacity: stepSv.value > index ? 1 : 0,
+    transform: [{ scale: stepSv.value > index ? 1 : 0.5 }],
+  }));
+
+  const labelAnim = useAnimatedStyle(() => {
+    const on = stepSv.value >= index;
+    return { opacity: on ? 1 : 0.5 };
+  });
+
+  return (
+    <View style={styles.stepperLabelWrap}>
+      <Animated.View style={[styles.stepDotOuter, ringAnim]}>
+        <Animated.View style={[styles.stepDotInner, dotAnim]}>
+          <Animated.View style={checkAnim}>
+            <Check size={9} color="#FFFFFF" strokeWidth={3} />
+          </Animated.View>
+        </Animated.View>
+      </Animated.View>
+      <Animated.Text style={[styles.stepLabelText, labelAnim]} numberOfLines={1}>
+        {label}
+      </Animated.Text>
+    </View>
+  );
+}
+
+/** Renders step dots; stepSv must mirror current step (0–3). */
+function StepDotRow({ labels, stepSv, primary }: { labels: string[]; stepSv: SharedValue<number>; primary: string }) {
+  return (
+    <View style={styles.stepperLabels}>
+      {labels.map((label, idx) => (
+        <StepDotCell key={String(idx)} index={idx} label={label} stepSv={stepSv} primary={primary} />
+      ))}
+    </View>
+  );
+}
+
 interface AddAppointmentModalProps {
   visible: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  /** Pre-fill the date step with this calendar day (local midnight). */
+  initialDate?: Date | null;
 }
 
-export default function AddAppointmentModal({ visible, onClose, onSuccess }: AddAppointmentModalProps) {
+export default function AddAppointmentModal({
+  visible,
+  onClose,
+  onSuccess,
+  initialDate = null,
+}: AddAppointmentModalProps) {
   const user = useAuthStore((state) => state.user);
   const { colors: businessColors } = useBusinessColors();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const primary = businessColors.primary;
+  const secondary = businessColors.secondary;
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedClient, setSelectedClient] = useState<{ name: string; phone: string } | null>(null);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
-  const [calendarMarked, setCalendarMarked] = useState<any>({});
-  
-  // Dropdown states
+
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [showServiceDropdown, setShowServiceDropdown] = useState(false);
   const [showTimeDropdown, setShowTimeDropdown] = useState(false);
-  
-  // Data states
+
   const [clients, setClients] = useState<Array<{ name: string; phone: string }>>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [availableTimes, setAvailableTimes] = useState<string[]>([]);
   const [isLoadingTimes, setIsLoadingTimes] = useState(false);
-  const [lastTimesForDate, setLastTimesForDate] = useState<string | null>(null);
-  
-  // Stepper state (0: client, 1: service, 2: date, 3: time)
+
   const [currentStep, setCurrentStep] = useState<number>(0);
-  const translateX = useRef(new Animated.Value(0)).current;
-  const progressAnim = useRef(new Animated.Value(0)).current; // 0..1
-  const [viewportWidth, setViewportWidth] = useState<number>(width);
-  
-  // Search states
+  const [viewportWidth, setViewportWidth] = useState<number>(SCREEN_W);
+
+  const translateX = useSharedValue(0);
+  const progress = useSharedValue(0);
+  const stepSv = useSharedValue(0);
+  const currentStepRef = useRef(0);
+
   const [clientSearch, setClientSearch] = useState('');
   const [filteredClients, setFilteredClients] = useState<Array<{ name: string; phone: string }>>([]);
 
-  // Load initial data
+  const stepLabels = useMemo(
+    () => [
+      t('admin.appointmentsAdmin.client', 'Client'),
+      t('booking.field.service', 'Service'),
+      t('booking.field.date', 'Date'),
+      t('booking.field.time', 'Time'),
+    ],
+    [t]
+  );
+
+  const dateLocale = i18n.language?.startsWith('he') ? 'he-IL' : 'en-US';
+
   useEffect(() => {
     if (visible) {
-      loadClients();
-      loadServices();
-      resetForm();
-      goToStep(0, false);
+      LocaleConfig.defaultLocale = i18n.language?.startsWith('he') ? 'he' : 'en';
     }
-  }, [visible]);
+  }, [visible, i18n.language]);
 
-  // Filter clients based on search
+  useEffect(() => {
+    if (!visible) return;
+    loadClients();
+    loadServices();
+    resetForm();
+    goToStep(0, false);
+    if (initialDate) {
+      const d = new Date(initialDate);
+      d.setHours(0, 0, 0, 0);
+      setSelectedDate(d);
+    }
+  }, [visible, initialDate]);
+
   useEffect(() => {
     const query = clientSearch.trim().toLowerCase();
     if (query === '') {
@@ -114,35 +242,42 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
     } else {
       setFilteredClients(
         clients.filter(
-          client =>
-            client.name.toLowerCase().includes(query) ||
-            client.phone.includes(query)
+          (client) => client.name.toLowerCase().includes(query) || client.phone.includes(query)
         )
       );
     }
   }, [clientSearch, clients]);
 
+  /** Reanimated `entering` on off-screen step panes often never finishes → stuck opacity 0. Open services when landing on step 1. */
+  useEffect(() => {
+    if (currentStep === 1) {
+      setShowServiceDropdown(true);
+    } else {
+      setShowServiceDropdown(false);
+    }
+  }, [currentStep]);
+
   const loadClients = async () => {
     try {
       const { getBusinessId } = await import('@/lib/supabase');
       const businessId = getBusinessId();
-      
+
       const { data, error } = await supabase
         .from('users')
         .select('name, phone')
         .eq('user_type', 'client')
         .eq('business_id', businessId)
         .order('name');
-      
+
       if (error) throw error;
-      
+
       const validClients = (data || [])
         .filter((client: any) => client.phone && client.phone.trim() !== '')
         .map((client: any) => ({
-          name: client.name || 'Client',
+          name: client.name || t('admin.appointmentsAdmin.client', 'Client'),
           phone: client.phone,
         }));
-      
+
       setClients(validClients);
       setFilteredClients(validClients);
     } catch (error) {
@@ -161,7 +296,7 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
     }
   };
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setSelectedDate(null);
     setSelectedClient(null);
     setSelectedService(null);
@@ -171,51 +306,59 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
     setShowServiceDropdown(false);
     setShowTimeDropdown(false);
     setAvailableTimes([]);
-    setCurrentMonth(new Date());
     setCurrentStep(0);
-    translateX.setValue(0);
-    progressAnim.setValue(0);
-  };
+    currentStepRef.current = 0;
+    translateX.value = 0;
+    progress.value = 0;
+    stepSv.value = 0;
+  }, [translateX, progress, stepSv]);
 
-  const goToStep = (next: number, animate: boolean = true) => {
-    const clamped = Math.max(0, Math.min(3, next));
-    setCurrentStep(clamped);
-    if (animate) {
-      Animated.timing(translateX, {
-        toValue: -clamped * (viewportWidth || width),
-        duration: 280,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
-      Animated.timing(progressAnim, {
-        toValue: clamped / 3,
-        duration: 280,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: false,
-      }).start();
-    } else {
-      translateX.setValue(-clamped * (viewportWidth || width));
-      progressAnim.setValue(clamped / 3);
-    }
-  };
+  const goToStep = useCallback(
+    (next: number, animate: boolean = true) => {
+      const clamped = Math.max(0, Math.min(3, next));
+      setCurrentStep(clamped);
+      currentStepRef.current = clamped;
+      stepSv.value = clamped;
+      const w = viewportWidth || SCREEN_W;
+      if (animate) {
+        triggerLightHaptic();
+        translateX.value = withSpring(-clamped * w, STEP_SPRING);
+        progress.value = withTiming(clamped / 3, { duration: STEP_TIMING_MS });
+      } else {
+        translateX.value = -clamped * w;
+        progress.value = clamped / 3;
+      }
+    },
+    [viewportWidth, translateX, progress, stepSv]
+  );
 
   const goNext = () => goToStep(currentStep + 1);
-  const goBack = () => goToStep(currentStep - 1);
+  const goBack = () => {
+    triggerLightHaptic();
+    goToStep(currentStep - 1);
+  };
+
+  const stepsRowStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  const progressFillStyle = useAnimatedStyle(() => ({
+    width: `${progress.value * 100}%`,
+  }));
 
   const loadAvailableTimesForDate = async (date: Date) => {
     if (!selectedService) return;
-    
+
     setIsLoadingTimes(true);
     setAvailableTimes([]);
-    
+
     try {
       const dateString = formatDateToLocalString(date);
       const dayOfWeek = date.getDay();
-      
-      // Get business hours for this day: prefer user-specific row, fallback to global (null user_id)
+
       const { getBusinessId } = await import('@/lib/supabase');
       const businessId = getBusinessId();
-      
+
       let businessHours: any | null = null;
       try {
         const { data: bhUser } = await supabase
@@ -245,22 +388,22 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
         return;
       }
 
-      // Build time windows and slot duration (normalize to HH:mm to avoid HH:mm:ss mismatches)
       const normalize = (s: any) => String(s).slice(0, 5);
       const startTime = normalize(businessHours.start_time);
       const endTime = normalize(businessHours.end_time);
-      const slotDuration = (selectedService?.duration_minutes && selectedService.duration_minutes > 0
-        ? selectedService.duration_minutes
-        : (businessHours.slot_duration_minutes || 60));
-      
-      // Subtract breaks from the main window
+      const slotDuration =
+        selectedService?.duration_minutes && selectedService.duration_minutes > 0
+          ? selectedService.duration_minutes
+          : businessHours.slot_duration_minutes || 60;
+
       type Window = { start: string; end: string };
       const baseWindows: Window[] = [{ start: startTime, end: endTime }];
       const brks: Array<{ start_time: string; end_time: string }> = (businessHours as any).breaks || [];
-      const singleBreak = (businessHours.break_start_time && businessHours.break_end_time)
-        ? [{ start_time: businessHours.break_start_time, end_time: businessHours.break_end_time }]
-        : [];
-      const allBreaks = [...brks, ...singleBreak].map(b => ({
+      const singleBreak =
+        businessHours.break_start_time && businessHours.break_end_time
+          ? [{ start_time: businessHours.break_start_time, end_time: businessHours.break_end_time }]
+          : [];
+      const allBreaks = [...brks, ...singleBreak].map((b) => ({
         start_time: normalize(b.start_time),
         end_time: normalize(b.end_time),
       }));
@@ -279,12 +422,11 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
           }
           result = next;
         }
-        return result.filter(w => w.start < w.end);
+        return result.filter((w) => w.start < w.end);
       };
 
       const windows = subtractBreaks(baseWindows, allBreaks);
 
-      // Helpers to add and compare HH:mm
       const addMinutes = (hhmm: string, minutes: number): string => {
         const [h, m] = hhmm.split(':').map((x: string) => parseInt(x, 10));
         const total = h * 60 + m + minutes;
@@ -294,17 +436,15 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       };
       const compareTimes = (a: string, b: string) => a.localeCompare(b);
 
-      // Generate time slots aligned to service duration within open windows, ensuring the full service fits
       const slots: string[] = [];
       for (const w of windows) {
-        let t = w.start as string;
-        while (compareTimes(addMinutes(t, slotDuration), w.end) <= 0) {
-          slots.push(t.slice(0, 5));
-          t = addMinutes(t, slotDuration);
+        let tt = w.start as string;
+        while (compareTimes(addMinutes(tt, slotDuration), w.end) <= 0) {
+          slots.push(tt.slice(0, 5));
+          tt = addMinutes(tt, slotDuration);
         }
       }
 
-      // Check for existing appointments and remove booked slots
       const { data: existingAppointments } = await supabase
         .from('appointments')
         .select('slot_time, is_available')
@@ -318,27 +458,22 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
           .map((apt: any) => String(apt.slot_time).slice(0, 5))
       );
 
-      // Subtract date-specific constraints
       const { data: constraintsRows } = await supabase
         .from('business_constraints')
         .select('start_time, end_time')
         .eq('business_id', businessId)
         .eq('date', dateString)
         .order('start_time');
-      const withinConstraint = (t: string) => {
+      const withinConstraint = (slot: string) => {
         return (constraintsRows || []).some((c: any) => {
-          const s = String(c.start_time).slice(0,5);
-          const e = String(c.end_time).slice(0,5);
-          return s <= t && t < e;
+          const s = String(c.start_time).slice(0, 5);
+          const e = String(c.end_time).slice(0, 5);
+          return s <= slot && slot < e;
         });
       };
 
-      const availableSlots = slots
-        .filter(slot => !bookedTimes.has(slot))
-        .filter(slot => !withinConstraint(slot));
+      const availableSlots = slots.filter((slot) => !bookedTimes.has(slot)).filter((slot) => !withinConstraint(slot));
       setAvailableTimes(availableSlots);
-      setLastTimesForDate(dateString);
-      
     } catch (error) {
       console.error('Error loading available times:', error);
       Alert.alert(t('error.generic', 'Error'), t('settings.recurring.timesLoadFailed', 'Failed to load available times. Please try again.'));
@@ -350,31 +485,25 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
   const handleDateSelect = (date: Date) => {
     setSelectedDate(date);
     setSelectedTime(null);
-    // Open time dropdown and start loading immediately for better UX
     setShowTimeDropdown(true);
     setIsLoadingTimes(true);
-    
-    // Load available times for selected date
     if (selectedService) {
       loadAvailableTimesForDate(date);
     } else {
-      // If no service yet, we'll fetch after service selection
       setIsLoadingTimes(false);
     }
-    // Auto-advance to time step
     goToStep(3);
+    triggerMediumHaptic();
   };
 
   const handleServiceSelect = (service: Service) => {
     setSelectedService(service);
     setShowServiceDropdown(false);
-    
-    // If date is already selected, reload available times
+    triggerMediumHaptic();
     if (selectedDate) {
       setIsLoadingTimes(true);
       loadAvailableTimesForDate(selectedDate);
     }
-    // Auto-advance to next step
     goToStep(2);
   };
 
@@ -389,11 +518,10 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       return;
     }
 
-    // Final check - verify the time is still available
     const dateString = formatDateToLocalString(selectedDate);
     const { getBusinessId } = await import('@/lib/supabase');
     const businessId = getBusinessId();
-    
+
     const { data: conflictingAppointments } = await supabase
       .from('appointments')
       .select('id')
@@ -408,31 +536,32 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
     }
 
     setIsSubmitting(true);
-    
+    triggerMediumHaptic();
+
     try {
-      const { error } = await supabase
-        .from('appointments')
-        .insert({
-          business_id: businessId,
-          slot_date: dateString,
-          slot_time: `${selectedTime}:00`,
-          is_available: false,
-          client_name: selectedClient.name,
-          client_phone: selectedClient.phone,
-          service_name: selectedService.name,
-          user_id: user.id, // שמירת ה-ID של הספר שיוצר את התור
-          barber_id: user.id, // שמירת ה-ID של הספר שמבצע את השירות
-        });
+      const { error } = await supabase.from('appointments').insert({
+        business_id: businessId,
+        slot_date: dateString,
+        slot_time: `${selectedTime}:00`,
+        is_available: false,
+        client_name: selectedClient.name,
+        client_phone: selectedClient.phone,
+        service_name: selectedService.name,
+        user_id: user.id,
+        barber_id: user.id,
+      });
 
       if (error) throw error;
 
       Alert.alert(t('success.generic', 'Success'), t('admin.appointmentsAdmin.scheduled', 'Appointment scheduled successfully'), [
-        { text: 'OK', onPress: () => {
-          onSuccess?.();
-          onClose();
-        }}
+        {
+          text: t('ok', 'OK'),
+          onPress: () => {
+            onSuccess?.();
+            onClose();
+          },
+        },
       ]);
-      
     } catch (error) {
       console.error('Error creating appointment:', error);
       Alert.alert(t('error.generic', 'Error'), t('admin.appointmentsAdmin.scheduleFailed', 'Error scheduling appointment'));
@@ -440,6 +569,48 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
       setIsSubmitting(false);
     }
   };
+
+  const calendarTheme = useMemo(
+    () => ({
+      textDayFontSize: 16,
+      textMonthFontSize: 17,
+      textDayHeaderFontSize: 13,
+      arrowColor: primary,
+      selectedDayBackgroundColor: primary,
+      todayTextColor: primary,
+      dayTextColor: '#1C1C1E',
+      monthTextColor: '#1C1C1E',
+      textDisabledColor: '#C6C6C8',
+      textDayFontWeight: '500' as const,
+      'stylesheet.calendar.header': {
+        week: {
+          flexDirection: 'row' as const,
+          justifyContent: 'space-around' as const,
+          paddingHorizontal: 0,
+        },
+        dayHeader: {
+          flex: 1,
+          textAlign: 'center' as const,
+          fontSize: 12,
+          fontWeight: '700' as const,
+          color: '#8E8E93',
+        },
+      },
+      'stylesheet.calendar.main': {
+        week: {
+          flexDirection: 'row' as const,
+          justifyContent: 'space-around' as const,
+          paddingHorizontal: 0,
+        },
+        day: {
+          flex: 1,
+          alignItems: 'center' as const,
+          justifyContent: 'center' as const,
+        },
+      },
+    }),
+    [primary]
+  );
 
   const renderDatePicker = () => {
     const today = new Date();
@@ -449,11 +620,13 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
     return (
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <CalendarDays size={20} color={'#000000'} />
+          <LinearGradient colors={[primary + '22', primary + '08']} style={styles.iconBubble}>
+            <CalendarDays size={20} color={primary} />
+          </LinearGradient>
           <Text style={styles.sectionTitle}>{t('booking.field.date', 'Date')}</Text>
         </View>
         <Text style={styles.sectionSubtitle}>{t('admin.appointmentsAdmin.pickDate', 'Select the date for this appointment')}</Text>
-        <View style={styles.calendarContainer}>
+        <View style={[styles.calendarContainer, { borderColor: primary + '28' }]}>
           <RNCalendar
             current={selected || undefined}
             minDate={minDate}
@@ -461,52 +634,15 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
               const date = new Date(day.dateString);
               handleDateSelect(date);
             }}
-            markedDates={selected ? { [selected]: { selected: true, selectedColor: '#000000' } } : undefined}
+            markedDates={selected ? { [selected]: { selected: true, selectedColor: primary } } : undefined}
             enableSwipeMonths
             hideDayNames={false}
             firstDay={0}
-            style={{ 
+            style={{
               direction: 'ltr',
               width: '100%',
             }}
-            theme={{
-              textDayFontSize: 16,
-              textMonthFontSize: 16,
-              textDayHeaderFontSize: 14,
-              arrowColor: '#000000',
-              selectedDayBackgroundColor: '#000000',
-              todayTextColor: '#000000',
-              dayTextColor: '#000000',
-              monthTextColor: '#000000',
-              textDisabledColor: '#C6C6C8',
-              // Force LTR order for header and weeks
-              'stylesheet.calendar.header': {
-                week: { 
-                  flexDirection: 'row',
-                  justifyContent: 'space-around',
-                  paddingHorizontal: 0,
-                },
-                dayHeader: {
-                  flex: 1,
-                  textAlign: 'center',
-                  fontSize: 14,
-                  fontWeight: '600',
-                  color: '#000000',
-                },
-              },
-              'stylesheet.calendar.main': {
-                week: { 
-                  flexDirection: 'row',
-                  justifyContent: 'space-around',
-                  paddingHorizontal: 0,
-                },
-                day: {
-                  flex: 1,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                },
-              },
-            }}
+            theme={calendarTheme as any}
           />
         </View>
       </View>
@@ -516,85 +652,78 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
   const renderClientSelector = () => (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <User size={20} color={'#000000'} />
+        <LinearGradient colors={[primary + '33', primary + '12']} style={styles.iconBubble}>
+          <User size={20} color={primary} />
+        </LinearGradient>
         <Text style={styles.sectionTitle}>{t('admin.appointmentsAdmin.client', 'Client')}</Text>
       </View>
       <Text style={styles.sectionSubtitle}>{t('admin.appointmentsAdmin.pickClient', 'Pick the client for this appointment')}</Text>
-      
+
       {!selectedClient ? (
         <>
-          <View style={[styles.selectorButton, styles.grayField]}>
-            <View style={styles.selectorContent}>
-              <TextInput
-                style={styles.selectorTextInput}
-                value={clientSearch}
-                onChangeText={setClientSearch}
-                placeholder={t('admin.appointmentsAdmin.selectClientPlaceholder', 'Select client...')}
-                placeholderTextColor={Colors.subtext}
-                textAlign="left"
-                onFocus={() => setShowClientDropdown(true)}
-              />
-              <View style={styles.selectorIcon}>
-                <Search size={16} color={Colors.subtext} />
+          <View style={[styles.selectorShell, styles.selectorGlow, { shadowColor: primary }]}>
+            <View style={[styles.selectorButton, styles.grayField]}>
+              <View style={styles.selectorContent}>
+                <TextInput
+                  style={styles.selectorTextInput}
+                  value={clientSearch}
+                  onChangeText={setClientSearch}
+                  placeholder={t('admin.appointmentsAdmin.selectClientPlaceholder', 'Select client...')}
+                  placeholderTextColor={Colors.subtext}
+                  textAlign="left"
+                  onFocus={() => setShowClientDropdown(true)}
+                />
+                <Search size={18} color={Colors.subtext} />
               </View>
             </View>
           </View>
 
-          {showClientDropdown && (
+          {showClientDropdown ? (
             <View style={styles.dropdownContainer}>
-              <ScrollView style={styles.dropdownList} showsVerticalScrollIndicator={false}>
+              <ScrollView style={styles.dropdownList} showsVerticalScrollIndicator={false} nestedScrollEnabled>
                 {filteredClients.slice(0, 50).map((client, idx) => (
-                  <Pressable
-                    key={client.phone}
-                    style={[
-                      styles.dropdownItem,
-                      idx === Math.min(filteredClients.length, 50) - 1 && styles.dropdownItemLast
-                    ]}
-                    onPress={() => {
-                      setSelectedClient(client);
-                      setShowClientDropdown(false);
-                      setClientSearch('');
-                      // Auto-advance
-                      goToStep(1);
-                    }}
-                  >
-                    <View style={styles.clientAvatar}>
-                      <Text style={styles.clientAvatarText}>
-                        {client.name.charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
-                    <View style={styles.clientInfo}>
-                      <Text style={styles.clientName}>{client.name}</Text>
-                      <Text style={styles.clientPhone}>{client.phone}</Text>
-                    </View>
-                  </Pressable>
-                ))}
-                {filteredClients.length === 0 && (
-                  <View style={styles.emptyState}>
-                    <Text style={styles.emptyStateText}>{t('common.noResults','No results')}</Text>
+                  <View key={client.phone}>
+                    <Pressable
+                      style={({ pressed }) => [styles.dropdownItem, pressed && styles.dropdownItemPressed]}
+                      onPress={() => {
+                        triggerLightHaptic();
+                        setSelectedClient(client);
+                        setShowClientDropdown(false);
+                        setClientSearch('');
+                        goToStep(1);
+                      }}
+                    >
+                      <LinearGradient colors={[primary, secondary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.clientAvatar}>
+                        <Text style={styles.clientAvatarText}>{client.name.charAt(0).toUpperCase()}</Text>
+                      </LinearGradient>
+                      <View style={styles.clientInfo}>
+                        <Text style={styles.clientName}>{client.name}</Text>
+                        <Text style={styles.clientPhone}>{client.phone}</Text>
+                      </View>
+                    </Pressable>
                   </View>
-                )}
+                ))}
+                {filteredClients.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateText}>{t('common.noResults', 'No results')}</Text>
+                  </View>
+                ) : null}
               </ScrollView>
             </View>
-          )}
+          ) : null}
         </>
       ) : (
-        <View style={styles.selectedClientCard}>
-          <View style={styles.clientAvatar}>
-            <Text style={styles.clientAvatarText}>
-              {selectedClient.name.charAt(0).toUpperCase()}
-            </Text>
-          </View>
+        <View style={[styles.selectedClientCard, { borderColor: primary + '40' }]}>
+          <LinearGradient colors={[primary, secondary]} style={styles.clientAvatar}>
+            <Text style={styles.clientAvatarText}>{selectedClient.name.charAt(0).toUpperCase()}</Text>
+          </LinearGradient>
           <View style={styles.selectedClientInfo}>
             <Text style={styles.selectedClientName}>{selectedClient.name}</Text>
             <Text style={styles.selectedClientPhone}>{selectedClient.phone}</Text>
           </View>
-          <TouchableOpacity 
-            onPress={() => setSelectedClient(null)}
-            style={styles.changeButton}
-          >
-            <Text style={[styles.changeButtonText, { color: businessColors.primary }]}>{t('common.change', 'Change')}</Text>
-          </TouchableOpacity>
+          <Pressable onPress={() => setSelectedClient(null)} style={({ pressed }) => [styles.changeButton, pressed && { opacity: 0.7 }]}>
+            <Text style={[styles.changeButtonText, { color: primary }]}>{t('common.change', 'Change')}</Text>
+          </Pressable>
         </View>
       )}
     </View>
@@ -603,240 +732,308 @@ export default function AddAppointmentModal({ visible, onClose, onSuccess }: Add
   const renderServiceSelector = () => (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Calendar size={20} color={'#000000'} />
+        <LinearGradient colors={[primary + '33', primary + '12']} style={styles.iconBubble}>
+          <Calendar size={20} color={primary} />
+        </LinearGradient>
         <Text style={styles.sectionTitle}>{t('booking.field.service', 'Service')}</Text>
       </View>
       <Text style={styles.sectionSubtitle}>{t('admin.appointmentsAdmin.pickService', 'Choose the service to perform')}</Text>
-      
-      <Pressable 
-        style={[styles.selectorButton, styles.grayField]} 
+
+      <Pressable
+        style={({ pressed }) => [
+          styles.selectorShell,
+          styles.selectorGlow,
+          { shadowColor: primary },
+          pressed && { transform: [{ scale: 0.992 }] },
+        ]}
         onPress={() => setShowServiceDropdown(!showServiceDropdown)}
       >
-        <View style={styles.selectorContent}>
-          <Text style={selectedService ? styles.selectorText : styles.selectorPlaceholder}>
-            {selectedService ? `${selectedService.name} · $${selectedService.price}` : t('admin.appointmentsAdmin.selectServicePlaceholder', 'Select service...')}
-          </Text>
-          <View style={styles.selectorIcon}>
-            <Calendar size={16} color={Colors.subtext} />
+        <View style={[styles.selectorButton, styles.grayField]}>
+          <View style={styles.selectorContent}>
+            <Text style={selectedService ? styles.selectorText : styles.selectorPlaceholder}>
+              {selectedService
+                ? `${selectedService.name} · ₪${selectedService.price}`
+                : t('admin.appointmentsAdmin.selectServicePlaceholder', 'Select service...')}
+            </Text>
+            <Calendar size={18} color={Colors.subtext} />
           </View>
         </View>
       </Pressable>
-      
-      {showServiceDropdown && (
+
+      {showServiceDropdown ? (
         <View style={styles.dropdownContainer}>
-          <ScrollView style={styles.dropdownList} showsVerticalScrollIndicator={false}>
-            {services.map((service, idx) => (
-              <Pressable
-                key={service.id}
-                style={[
-                  styles.dropdownItem,
-                  idx === services.length - 1 && styles.dropdownItemLast
-                ]}
-                onPress={() => handleServiceSelect(service)}
-              >
-                <View style={styles.serviceInfo}>
-                  <Text style={styles.serviceName}>{service.name}</Text>
-                  <Text style={styles.servicePrice}>${service.price}</Text>
+          <ScrollView style={styles.dropdownList} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+            {services.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>
+                  {t('booking.noServices', 'No services available')}
+                </Text>
+              </View>
+            ) : (
+              services.map((service) => (
+                <View key={service.id}>
+                  <Pressable
+                    style={({ pressed }) => [styles.dropdownItem, pressed && styles.dropdownItemPressed]}
+                    onPress={() => handleServiceSelect(service)}
+                  >
+                    <View style={styles.serviceInfo}>
+                      <Text style={styles.serviceName}>{service.name}</Text>
+                      <Text style={styles.servicePrice}>₪{service.price}</Text>
+                    </View>
+                  </Pressable>
                 </View>
-              </Pressable>
-            ))}
+              ))
+            )}
           </ScrollView>
         </View>
-      )}
+      ) : null}
     </View>
   );
 
   const renderTimeSelector = () => (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Clock size={20} color={'#000000'} />
+        <LinearGradient colors={[primary + '33', primary + '12']} style={styles.iconBubble}>
+          <Clock size={20} color={primary} />
+        </LinearGradient>
         <Text style={styles.sectionTitle}>{t('booking.field.time', 'Time')}</Text>
       </View>
       <Text style={styles.sectionSubtitle}>{t('admin.appointmentsAdmin.pickTime', 'Pick an available time slot')}</Text>
-      
-      <Pressable 
-        style={[
-          styles.selectorButton,
-          styles.grayField,
-          { opacity: selectedDate && selectedService ? 1 : 0.6 }
-        ]} 
+
+      <Pressable
+        style={({ pressed }) => [
+          styles.selectorShell,
+          styles.selectorGlow,
+          { shadowColor: primary },
+          { opacity: selectedDate && selectedService ? 1 : 0.55 },
+          pressed && selectedDate && selectedService ? { transform: [{ scale: 0.992 }] } : null,
+        ]}
         onPress={() => {
           if (!selectedDate || !selectedService) {
             Alert.alert(t('error.generic', 'Error'), t('admin.appointmentsAdmin.selectDateAndService', 'Please select date and service first'));
             return;
           }
-          // Ensure times are up-to-date when opening
           if (!showTimeDropdown) {
             setIsLoadingTimes(true);
             loadAvailableTimesForDate(selectedDate);
           }
           setShowTimeDropdown(!showTimeDropdown);
+          triggerLightHaptic();
         }}
       >
-        <View style={styles.selectorContent}>
-          <Text style={selectedTime ? styles.selectorText : styles.selectorPlaceholder}>
-            {selectedTime ? formatTimeToAMPM(selectedTime) : (isLoadingTimes ? t('selectTime.loadingTimes', 'Loading available times...') : t('selectTime.selectTime', 'Select Time'))}
-          </Text>
-          <View style={styles.selectorIcon}>
-            <Clock size={16} color={Colors.subtext} />
+        <View style={[styles.selectorButton, styles.grayField]}>
+          <View style={styles.selectorContent}>
+            <Text style={selectedTime ? styles.selectorText : styles.selectorPlaceholder}>
+              {selectedTime
+                ? formatTimeToAMPM(selectedTime)
+                : isLoadingTimes
+                  ? t('selectTime.loadingTimes', 'Loading available times...')
+                  : t('selectTime.selectTime', 'Select Time')}
+            </Text>
+            <Clock size={18} color={Colors.subtext} />
           </View>
         </View>
       </Pressable>
-      
-      {showTimeDropdown && (
-        <View style={styles.dropdownContainer}>
-          <ScrollView style={styles.dropdownList} showsVerticalScrollIndicator={false}>
-            {isLoadingTimes ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color={Colors.primary} />
-                <Text style={styles.loadingText}>{t('selectTime.loadingTimes', 'Loading available times...')}</Text>
-              </View>
-            ) : availableTimes.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyStateText}>{t('selectTime.noTimes', 'No available times for this day')}</Text>
-              </View>
-            ) : (
-              availableTimes.map((time, idx) => (
-                <Pressable
-                  key={time}
-                  style={[
-                    styles.dropdownItem,
-                    idx === availableTimes.length - 1 && styles.dropdownItemLast
-                  ]}
-                  onPress={() => {
-                    setSelectedTime(time);
-                    setShowTimeDropdown(false);
-                  }}
-                >
-                  <Text style={styles.timeText}>{formatTimeToAMPM(time)}</Text>
-                </Pressable>
-              ))
-            )}
-          </ScrollView>
+
+      {showTimeDropdown ? (
+        <View style={styles.timeChipsWrap}>
+          {isLoadingTimes ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={primary} />
+              <Text style={styles.loadingText}>{t('selectTime.loadingTimes', 'Loading available times...')}</Text>
+            </View>
+          ) : availableTimes.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>{t('selectTime.noTimes', 'No available times for this day')}</Text>
+            </View>
+          ) : (
+            <View style={styles.timeChipsInner}>
+              {availableTimes.map((time) => {
+                const sel = selectedTime === time;
+                return (
+                  <View key={time}>
+                    <Pressable
+                      onPress={() => {
+                        triggerMediumHaptic();
+                        setSelectedTime(time);
+                        setShowTimeDropdown(false);
+                      }}
+                      style={({ pressed }) => [{ transform: [{ scale: pressed ? 0.96 : 1 }] }]}
+                    >
+                      {sel ? (
+                        <LinearGradient colors={[primary, secondary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.timeChipActive}>
+                          <Text style={styles.timeChipTextActive}>{formatTimeToAMPM(time)}</Text>
+                        </LinearGradient>
+                      ) : (
+                        <View style={styles.timeChipIdle}>
+                          <Text style={styles.timeChipTextIdle}>{formatTimeToAMPM(time)}</Text>
+                        </View>
+                      )}
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </View>
-      )}
+      ) : null}
     </View>
   );
 
+  const navPrimaryDisabled =
+    (currentStep === 0 && !selectedClient) ||
+    (currentStep === 1 && !selectedService) ||
+    (currentStep === 2 && !selectedDate) ||
+    (currentStep === 3 && (!selectedTime || isSubmitting));
+
+  const summaryReady = !!(selectedDate && selectedClient && selectedService && selectedTime);
+
   return (
-    <>
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-            <X size={20} color={Colors.text} />
-          </TouchableOpacity>
-          <Text style={[styles.title, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>{t('admin.appointmentsAdmin.addAppointment', 'Add appointment')}</Text>
-          <View style={{ width: 60 }} />
-        </View>
-
-        <View style={styles.bodyWrapper}>
-        <KeyboardAwareScreenScroll style={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          {/* Stepper */}
-          <View style={styles.stepperContainer}>
-            <View style={styles.stepperTrack}>
-              <Animated.View
-                style={[styles.stepperProgress, { backgroundColor: businessColors.primary, width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]}
-              />
-            </View>
-            <View style={styles.stepperLabels}>
-              {[t('admin.appointmentsAdmin.client','Client'), t('booking.field.service','Service'), t('booking.field.date','Date'), t('booking.field.time','Time')].map((label, idx) => (
-                <View key={label} style={styles.stepperLabelWrap}>
-                  <View style={[styles.stepDot, { borderColor: idx <= currentStep ? businessColors.primary : '#D1D1D6', backgroundColor: idx < currentStep ? businessColors.primary : '#FFFFFF' }]} />
-                  <Text style={[styles.stepLabelText, { color: idx <= currentStep ? businessColors.primary : '#8E8E93' }]}>{label}</Text>
-                </View>
-              ))}
-            </View>
+        <Animated.View entering={FadeIn.duration(400)} style={styles.headerWrap}>
+          <LinearGradient colors={['#FFFFFF', '#FAFAFC', '#F4F4F8']} style={StyleSheet.absoluteFill} />
+          <View style={[styles.headerAccent, { backgroundColor: primary }]} />
+          <View style={styles.header}>
+            <Pressable
+              onPress={() => {
+                triggerLightHaptic();
+                onClose();
+              }}
+              style={({ pressed }) => [styles.closeButton, pressed && { opacity: 0.75, transform: [{ scale: 0.94 }] }]}
+            >
+              <BlurView intensity={Platform.OS === 'ios' ? 28 : 18} tint="light" style={styles.closeBlur}>
+                <X size={20} color={Colors.text} />
+              </BlurView>
+            </Pressable>
+            <Text style={styles.title} numberOfLines={1}>
+              {t('admin.appointmentsAdmin.addAppointment', 'Add appointment')}
+            </Text>
+            <View style={{ width: 44 }} />
           </View>
+        </Animated.View>
 
-          {/* Animated steps viewport */}
-          <View style={styles.groupCard}>
-            <View style={styles.stepsViewport} onLayout={(e) => {
-              const w = e.nativeEvent.layout.width;
-              if (w && w > 0) {
-                setViewportWidth(w);
-                // Keep current step position aligned to new width
-                translateX.setValue(-currentStep * w);
-              }
-            }}>
-              <Animated.View style={[styles.stepsContainer, { width: (viewportWidth || width) * 4, transform: [{ translateX }] }]}> 
-                <View style={[styles.stepPane, { width: viewportWidth || width }]}>
-                  {renderClientSelector()}
-                </View>
-                <View style={[styles.stepPane, { width: viewportWidth || width }]}>
-                  {renderServiceSelector()}
-                </View>
-                <View style={[styles.stepPane, { width: viewportWidth || width }]}>
-                  {renderDatePicker()}
-                </View>
-                <View style={[styles.stepPane, { width: viewportWidth || width }]}>
-                  {renderTimeSelector()}
+        <LinearGradient colors={['#ECECF3', '#F2F2F7', '#EFEFF5']} style={styles.bodyWrapper}>
+          <KeyboardAwareScreenScroll
+            style={styles.content}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Animated.View entering={FadeInDown.delay(80).springify()} style={styles.stepperContainer}>
+              <View style={styles.stepperTrack}>
+                <Animated.View style={[styles.stepperProgressTrack]} />
+                <Animated.View style={[styles.stepperProgress, { backgroundColor: primary }, progressFillStyle]} />
+              </View>
+              <StepDotRow labels={stepLabels} stepSv={stepSv} primary={primary} />
+            </Animated.View>
+
+            <Animated.View entering={FadeInUp.delay(120).springify()} style={styles.groupCard}>
+              <LinearGradient
+                colors={['#FFFFFF', '#FBFBFD']}
+                style={StyleSheet.absoluteFill}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+              />
+              <View style={[styles.groupCardBorder, { borderColor: primary + '18' }]} />
+              <View style={styles.stepsViewport} onLayout={(e) => {
+                const w = e.nativeEvent.layout.width;
+                if (w > 0 && w !== viewportWidth) {
+                  setViewportWidth(w);
+                  translateX.value = -currentStepRef.current * w;
+                }
+              }}>
+                <Animated.View
+                  style={[
+                    styles.stepsContainer,
+                    { width: (viewportWidth || SCREEN_W) * 4 },
+                    stepsRowStyle,
+                  ]}
+                >
+                  <View style={[styles.stepPane, { width: viewportWidth || SCREEN_W }]}>{renderClientSelector()}</View>
+                  <View style={[styles.stepPane, { width: viewportWidth || SCREEN_W }]}>{renderServiceSelector()}</View>
+                  <View style={[styles.stepPane, { width: viewportWidth || SCREEN_W }]}>{renderDatePicker()}</View>
+                  <View style={[styles.stepPane, { width: viewportWidth || SCREEN_W }]}>{renderTimeSelector()}</View>
+                </Animated.View>
+              </View>
+
+              <View style={styles.stepNavRow}>
+                <Pressable
+                  onPress={goBack}
+                  disabled={currentStep === 0}
+                  style={({ pressed }) => [
+                    styles.stepNavButtonWrap,
+                    currentStep === 0 && styles.stepNavButtonDisabled,
+                    pressed && currentStep > 0 ? { transform: [{ scale: 0.97 }] } : null,
+                  ]}
+                >
+                  <BlurView intensity={22} tint="light" style={styles.stepNavBlur}>
+                    <Text style={[styles.stepNavText, currentStep === 0 && styles.stepNavTextDisabled]}>{t('back', 'Back')}</Text>
+                  </BlurView>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => {
+                    if (currentStep < 3) goNext();
+                    else void handleSubmit();
+                  }}
+                  disabled={navPrimaryDisabled}
+                  style={({ pressed }) => [{ transform: [{ scale: pressed && !navPrimaryDisabled ? 0.97 : 1 }] }]}
+                >
+                  <LinearGradient
+                    colors={navPrimaryDisabled ? ['#C7C7CC', '#AEAEB2'] : [primary, secondary]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[styles.stepNavPrimary, navPrimaryDisabled && { opacity: 0.85 }]}
+                  >
+                    {isSubmitting && currentStep === 3 ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                      <Text style={styles.stepNavPrimaryText}>
+                        {currentStep < 3 ? t('next', 'Next') : isSubmitting ? t('settings.common.saving', 'Saving...') : t('done', 'Done')}
+                      </Text>
+                    )}
+                  </LinearGradient>
+                </Pressable>
+              </View>
+            </Animated.View>
+
+            {summaryReady ? (
+              <Animated.View entering={FadeInUp.springify()} style={[styles.summaryCard, { borderColor: primary + '30' }]}>
+                <LinearGradient colors={[primary + '14', 'transparent']} style={styles.summaryGradientHeader} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+                <Text style={styles.summaryTitle}>{t('admin.appointmentsAdmin.summary', 'Appointment Summary')}</Text>
+                <View style={styles.summaryContent}>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>{t('admin.appointmentsAdmin.client', 'Client')}:</Text>
+                    <Text style={styles.summaryValue}>{selectedClient?.name}</Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>{t('booking.field.service', 'Service')}:</Text>
+                    <Text style={styles.summaryValue}>{selectedService?.name}</Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>{t('booking.field.date', 'Date')}:</Text>
+                    <Text style={styles.summaryValue}>
+                      {selectedDate
+                        ? selectedDate.toLocaleDateString(dateLocale, {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                            weekday: 'long',
+                          })
+                        : ''}
+                    </Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>{t('booking.field.time', 'Time')}:</Text>
+                    <Text style={styles.summaryValue}>{selectedTime ? formatTimeToAMPM(selectedTime) : ''}</Text>
+                  </View>
                 </View>
               </Animated.View>
-            </View>
-            {/* Navigation controls */}
-            <View style={styles.stepNavRow}>
-              <TouchableOpacity onPress={goBack} disabled={currentStep === 0} style={[styles.stepNavButton, currentStep === 0 && styles.stepNavButtonDisabled]}> 
-                <Text style={[styles.stepNavText, currentStep === 0 && styles.stepNavTextDisabled]}>{t('back', 'Back')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={currentStep < 3 ? goNext : handleSubmit}
-                disabled={
-                  (currentStep === 0 && !selectedClient) ||
-                  (currentStep === 1 && !selectedService) ||
-                  (currentStep === 2 && !selectedDate) ||
-                  (currentStep === 3 && (!selectedTime || isSubmitting))
-                }
-                style={[styles.stepNavPrimary, { backgroundColor: businessColors.primary },
-                  ((currentStep === 0 && !selectedClient) || (currentStep === 1 && !selectedService) || (currentStep === 2 && !selectedDate) || (currentStep === 3 && (!selectedTime || isSubmitting))) && { opacity: 0.6 }
-                ]}
-              >
-                <Text style={styles.stepNavPrimaryText}>{currentStep < 3 ? t('next', 'Next') : (isSubmitting ? t('settings.common.saving', 'Saving...') : t('done', 'Done'))}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-          
-          {/* Summary */}
-          {selectedDate && selectedClient && selectedService && selectedTime && (
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryTitle}>{t('admin.appointmentsAdmin.summary', 'Appointment Summary')}</Text>
-              <View style={styles.summaryContent}>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryValue}>{selectedClient.name}</Text>
-                  <Text style={styles.summaryLabel}>{t('admin.appointmentsAdmin.client','Client')}:</Text>
-                </View>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryValue}>{selectedService.name}</Text>
-                  <Text style={styles.summaryLabel}>{t('booking.field.service','Service')}:</Text>
-                </View>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryValue}>
-                    {selectedDate.toLocaleDateString('en-US', { 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric',
-                      weekday: 'long'
-                    })}
-                  </Text>
-                  <Text style={styles.summaryLabel}>{t('booking.field.date','Date')}:</Text>
-                </View>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryValue}>{formatTimeToAMPM(selectedTime)}</Text>
-                  <Text style={styles.summaryLabel}>{t('booking.field.time','Time')}:</Text>
-                </View>
-              </View>
-            </View>
-          )}
-        </KeyboardAwareScreenScroll>
-        </View>
+            ) : null}
+          </KeyboardAwareScreenScroll>
+        </LinearGradient>
       </View>
     </Modal>
-    </>
   );
 }
 
@@ -845,132 +1042,160 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
-  bodyWrapper: {
-    flex: 1,
-    backgroundColor: '#F2F2F7',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: 'hidden',
+  headerWrap: {
+    backgroundColor: '#FFFFFF',
+    paddingTop: Platform.OS === 'ios' ? 8 : 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(60,60,67,0.12)',
   },
-  // (styles for success modal were removed)
+  headerAccent: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 3,
+    opacity: 0.95,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 0,
-    borderBottomColor: 'transparent',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    minHeight: 52,
   },
   closeButton: {
+    zIndex: 10,
+  },
+  closeBlur: {
     width: 44,
     height: 44,
     borderRadius: 22,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: -4,
-    zIndex: 10,
-  },
-  closeButtonText: {
-    fontSize: 17,
-    color: '#7B61FF',
-    fontWeight: '500',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.6)',
   },
   title: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#000000',
     flex: 1,
+    fontSize: 19,
+    fontWeight: '700',
+    color: '#0A0A0B',
     textAlign: 'center',
+    letterSpacing: -0.3,
   },
-  submitButton: {
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    minWidth: 60,
-    minHeight: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  submitButtonText: {
-    fontSize: 17,
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  submitButtonTextDisabled: {
-    color: '#8E8E93',
+  bodyWrapper: {
+    flex: 1,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    overflow: 'hidden',
   },
   content: {
     flex: 1,
-    padding: 20,
+    padding: 18,
+    paddingBottom: 28,
   },
   stepperContainer: {
-    marginBottom: 12,
+    marginBottom: 16,
   },
   stepperTrack: {
-    height: 4,
-    backgroundColor: '#E5E5EA',
-    borderRadius: 2,
+    height: 6,
+    borderRadius: 3,
     overflow: 'hidden',
+    backgroundColor: 'transparent',
+  },
+  stepperProgressTrack: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#E5E5EA',
+    borderRadius: 3,
   },
   stepperProgress: {
     height: '100%',
+    borderRadius: 3,
   },
   stepperLabels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 8,
+    marginTop: 12,
   },
   stepperLabelWrap: {
     alignItems: 'center',
     flex: 1,
+    minWidth: 0,
   },
-  stepDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+  stepDotOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 2,
-    marginBottom: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
     backgroundColor: '#FFFFFF',
   },
+  stepDotInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   stepLabelText: {
-    fontSize: 12,
-    color: '#8E8E93',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#636366',
+    textAlign: 'center',
+    letterSpacing: -0.2,
+  },
+  iconBubble: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
   },
   section: {
-    marginBottom: 32,
+    marginBottom: 8,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
-    justifyContent: 'flex-start',
+    marginBottom: 10,
   },
   sectionSubtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#8E8E93',
-    marginTop: -6,
-    marginBottom: 10,
+    marginTop: -4,
+    marginBottom: 12,
     textAlign: 'left',
+    lineHeight: 19,
   },
   sectionTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#000000',
-    marginLeft: 8,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#0A0A0B',
+    flex: 1,
     textAlign: 'left',
+    letterSpacing: -0.4,
+  },
+  selectorShell: {
+    borderRadius: 16,
+  },
+  selectorGlow: {
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 3,
   },
   selectorButton: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E5E5EA',
+    borderColor: 'rgba(0,0,0,0.06)',
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 16,
   },
   grayField: {
     backgroundColor: '#F2F2F7',
@@ -981,12 +1206,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 10,
   },
   selectorText: {
     fontSize: 17,
     color: '#000000',
     flex: 1,
     textAlign: 'left',
+    fontWeight: '600',
   },
   selectorPlaceholder: {
     fontSize: 17,
@@ -1000,72 +1227,45 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'left',
     paddingVertical: 0,
-  },
-  selectorIcon: {
-    marginRight: 8,
+    fontWeight: '500',
   },
   dropdownContainer: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#E5E5EA',
-    marginTop: 8,
+    borderColor: 'rgba(0,0,0,0.06)',
+    marginTop: 12,
     maxHeight: 300,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#E5E5EA',
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 17,
-    color: '#000000',
-    textAlign: 'left',
-    paddingVertical: 8,
-  },
-  clearButton: {
-    padding: 4,
-    marginLeft: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 8,
+    overflow: 'hidden',
   },
   dropdownList: {
-    maxHeight: 250,
+    maxHeight: 280,
   },
   dropdownItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 0,
-    marginBottom: 8,
+    paddingVertical: 14,
   },
-  dropdownItemLast: {
-    borderBottomWidth: 0,
-    marginBottom: 0,
+  dropdownItemPressed: {
+    backgroundColor: 'rgba(0,0,0,0.04)',
   },
   clientAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#7B61FF',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   clientAvatarText: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
     color: '#FFFFFF',
   },
   clientInfo: {
@@ -1074,11 +1274,11 @@ const styles = StyleSheet.create({
   },
   clientName: {
     fontSize: 17,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#000000',
   },
   clientPhone: {
-    fontSize: 15,
+    fontSize: 14,
     color: '#8E8E93',
     marginTop: 2,
   },
@@ -1088,65 +1288,17 @@ const styles = StyleSheet.create({
   },
   serviceName: {
     fontSize: 17,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#000000',
   },
   servicePrice: {
     fontSize: 15,
     color: '#8E8E93',
     marginTop: 2,
-  },
-  timeText: {
-    fontSize: 17,
     fontWeight: '500',
-    color: '#000000',
-    textAlign: 'left',
-    flex: 1,
-  },
-  selectedClientCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  selectedClientInfo: {
-    flex: 1,
-    alignItems: 'flex-start',
-    marginLeft: 12,
-  },
-  selectedClientName: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#000000',
-  },
-  selectedClientPhone: {
-    fontSize: 15,
-    color: '#8E8E93',
-    marginTop: 2,
-  },
-  changeButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  changeButtonText: {
-    fontSize: 15,
-    color: '#007AFF',
-    fontWeight: '600',
-  },
-  loadingContainer: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 15,
-    color: '#8E8E93',
-    marginTop: 8,
   },
   emptyState: {
-    padding: 20,
+    padding: 24,
     alignItems: 'center',
   },
   emptyStateText: {
@@ -1154,30 +1306,80 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     textAlign: 'center',
   },
-  datePickerContainer: {
-    paddingHorizontal: 4,
+  selectedClientCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
   },
-  // Calendar container for react-native-calendars
+  selectedClientInfo: {
+    flex: 1,
+    alignItems: 'flex-start',
+    marginLeft: 4,
+  },
+  selectedClientName: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#000000',
+  },
+  selectedClientPhone: {
+    fontSize: 14,
+    color: '#8E8E93',
+    marginTop: 2,
+  },
+  changeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  changeButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  loadingContainer: {
+    padding: 24,
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 15,
+    color: '#8E8E93',
+    marginTop: 10,
+    fontWeight: '500',
+  },
   calendarContainer: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    padding: 8,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    padding: 10,
     direction: 'ltr',
     width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 20,
+    elevation: 4,
   },
   groupCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 22,
+    padding: 18,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.1,
+    shadowRadius: 28,
+    elevation: 10,
+  },
+  groupCardBorder: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#E5E5EA',
-    padding: 16,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    pointerEvents: 'none',
   },
   stepsViewport: {
     overflow: 'hidden',
@@ -1186,121 +1388,140 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   stepPane: {
-    paddingRight: 4,
+    paddingHorizontal: 2,
+    minHeight: 280,
   },
   stepNavRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 16,
+    gap: 12,
   },
-  stepNavButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: '#F2F2F7',
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
+  stepNavButtonWrap: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    minWidth: 112,
+  },
+  stepNavBlur: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
   stepNavButtonDisabled: {
-    opacity: 0.6,
+    opacity: 0.45,
   },
   stepNavText: {
     color: '#1C1C1E',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   stepNavTextDisabled: {
-    color: '#8E8E93',
+    color: '#AEAEB2',
   },
   stepNavPrimary: {
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 16,
+    minWidth: 132,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
   },
   stepNavPrimaryText: {
     color: '#FFFFFF',
     fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  timeChipsWrap: {
+    marginTop: 14,
+    paddingVertical: 4,
+  },
+  timeChipsInner: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  timeChipActive: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
+  },
+  timeChipIdle: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
+    backgroundColor: '#EDEEF2',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+  },
+  timeChipTextActive: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  timeChipTextIdle: {
+    color: '#1C1C1E',
+    fontSize: 15,
     fontWeight: '700',
   },
-  dateOption: {
-    width: 70,
-    height: 80,
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 6,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  dateOptionSelected: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  dateOptionToday: {
-    borderColor: '#007AFF',
-    borderWidth: 2,
-  },
-  dateOptionText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#000000',
-  },
-  dateOptionTextSelected: {
-    color: '#FFFFFF',
-  },
-  dateOptionDay: {
-    fontSize: 12,
-    color: '#8E8E93',
-    marginTop: 4,
-  },
   summaryCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 22,
     padding: 20,
-    marginTop: 16,
-    marginBottom: 32,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    marginTop: 18,
+    marginBottom: 24,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  summaryGradientHeader: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 72,
   },
   summaryTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#000000',
+    fontWeight: '800',
+    color: '#0A0A0B',
     marginBottom: 16,
     textAlign: 'left',
+    letterSpacing: -0.4,
   },
   summaryContent: {
-    gap: 12,
+    gap: 14,
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    gap: 12,
   },
   summaryLabel: {
-    fontSize: 15,
+    fontSize: 14,
     color: '#8E8E93',
-    fontWeight: '500',
+    fontWeight: '600',
     textAlign: 'left',
+    maxWidth: '36%',
   },
   summaryValue: {
     fontSize: 15,
     color: '#000000',
-    fontWeight: '600',
-    textAlign: 'left',
+    fontWeight: '700',
+    textAlign: 'right',
     flex: 1,
-    marginLeft: 8,
   },
 });

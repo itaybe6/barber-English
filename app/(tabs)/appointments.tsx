@@ -53,7 +53,8 @@ import {
   useAdminCalendarPlusAnchorWindow,
   useAdminCalendarReminderFabRegistration,
 } from '@/contexts/AdminCalendarReminderFabContext';
-import { ChevronLeft, ChevronRight, CheckCircle, StickyNote } from 'lucide-react-native';
+import { Calendar, ChevronLeft, ChevronRight, CheckCircle, StickyNote } from 'lucide-react-native';
+import AddAppointmentModal from '@/components/AddAppointmentModal';
 import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
@@ -682,13 +683,13 @@ export default function AdminAppointmentsScreen() {
   const [calendarReminders, setCalendarReminders] = useState<CalendarReminder[]>([]);
   const [rangeReminders, setRangeReminders] = useState<Map<string, CalendarReminder[]>>(new Map());
 
-  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [showCalendarFabSheet, setShowCalendarFabSheet] = useState(false);
+  const [calendarFabStep, setCalendarFabStep] = useState<'choice' | 'reminder'>('choice');
+  const [showAddAppointmentModal, setShowAddAppointmentModal] = useState(false);
 
   const reminderFabPanelStyle = useMemo(() => {
     const win = Dimensions.get('window');
     const openedPanelWidth = win.width * 0.88;
-    /** היסט שמאלה ממרכז גיאומטרי (החלון נראה יותר מדי ימינה) */
-    const OPEN_LEFT_BIAS = 32;
     /** גובה משוער לפאנל פתוח — ליישור אנכי קרוב למרכז */
     const EST_OPEN_HEIGHT = win.height * 0.52;
 
@@ -700,12 +701,11 @@ export default function AdminAppointmentsScreen() {
       };
     }
 
-    if (showReminderModal) {
-      const centeredLeft =
-        (reminderOverlayWin.width - openedPanelWidth) / 2 - OPEN_LEFT_BIAS;
+    if (showCalendarFabSheet) {
+      const centeredLeft = (reminderOverlayWin.width - openedPanelWidth) / 2;
       const topAligned = Math.max(
         12,
-        (reminderOverlayWin.height - EST_OPEN_HEIGHT) / 2
+        (reminderOverlayWin.height - EST_OPEN_HEIGHT) / 2 - 60
       );
       return {
         left: Math.max(8, centeredLeft),
@@ -733,7 +733,7 @@ export default function AdminAppointmentsScreen() {
       bottom: insets.bottom + 12,
     };
   }, [
-    showReminderModal,
+    showCalendarFabSheet,
     plusAnchorWindow,
     reminderOverlayWin,
     insets.bottom,
@@ -1347,42 +1347,76 @@ export default function AdminAppointmentsScreen() {
   }, [user?.id, selectedDateStr, calendarView, weekRangeChronoBounds, selectedDate]);
 
   const closeReminderModal = useCallback(() => {
-    setShowReminderModal(false);
+    setShowCalendarFabSheet(false);
+    setCalendarFabStep('choice');
     setEditingReminder(null);
     setShowReminderAndroidTime(false);
   }, []);
 
-  useEffect(() => {
-    if (!showReminderModal || Platform.OS !== 'android') return;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      closeReminderModal();
-      return true;
-    });
-    return () => sub.remove();
-  }, [showReminderModal, closeReminderModal]);
-
-  const openNewReminderModal = useCallback(() => {
+  const initNewReminderFields = useCallback(() => {
     setEditingReminder(null);
     setReminderTitle('');
     setReminderNotes('');
     setReminderTimeDate(timeOnDate('09:00', selectedDate));
     setReminderDuration(30);
     setReminderColorKey('blue');
-    setShowReminderModal(true);
   }, [selectedDate]);
 
+  const onCalendarFabPickReminder = useCallback(() => {
+    initNewReminderFields();
+    setCalendarFabStep('reminder');
+  }, [initNewReminderFields]);
+
+  const onCalendarFabPickAppointment = useCallback(() => {
+    setShowCalendarFabSheet(false);
+    setCalendarFabStep('choice');
+    setShowAddAppointmentModal(true);
+  }, []);
+
+  const handleAddAppointmentModalSuccess = useCallback(() => {
+    void loadAppointmentsForDate(selectedDateStr, true, calendarView === 'month');
+    if (calendarView === 'month') {
+      void reloadMonthMarks();
+    }
+    if (calendarView === 'week' && weekRangeChronoBounds) {
+      void loadAppointmentsForRange(weekRangeChronoBounds.start, weekRangeChronoBounds.end);
+    }
+  }, [
+    loadAppointmentsForDate,
+    selectedDateStr,
+    calendarView,
+    reloadMonthMarks,
+    loadAppointmentsForRange,
+    weekRangeChronoBounds,
+  ]);
+
+  useEffect(() => {
+    if ((!showCalendarFabSheet && !showAddAppointmentModal) || Platform.OS !== 'android') return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      closeReminderModal();
+      setShowAddAppointmentModal(false);
+      return true;
+    });
+    return () => sub.remove();
+  }, [showCalendarFabSheet, showAddAppointmentModal, closeReminderModal]);
+
   const reminderFabTabPress = useCallback(() => {
-    if (showReminderModal) closeReminderModal();
-    else openNewReminderModal();
-  }, [showReminderModal, closeReminderModal, openNewReminderModal]);
+    if (showCalendarFabSheet || showAddAppointmentModal) {
+      closeReminderModal();
+      setShowAddAppointmentModal(false);
+    } else {
+      setCalendarFabStep('choice');
+      setShowCalendarFabSheet(true);
+    }
+  }, [showCalendarFabSheet, showAddAppointmentModal, closeReminderModal]);
 
   useEffect(() => {
     setReminderFabRegistration({
-      isOpen: showReminderModal,
+      isOpen: showCalendarFabSheet || showAddAppointmentModal,
       onPress: reminderFabTabPress,
     });
     return () => setReminderFabRegistration(null);
-  }, [showReminderModal, reminderFabTabPress, setReminderFabRegistration]);
+  }, [showCalendarFabSheet, showAddAppointmentModal, reminderFabTabPress, setReminderFabRegistration]);
 
   const openEditReminderModal = useCallback(
     (r: CalendarReminder) => {
@@ -1401,7 +1435,8 @@ export default function AdminAppointmentsScreen() {
       setReminderTimeDate(timeOnDate(r.start_time, day));
       setReminderDuration(r.duration_minutes || 30);
       setReminderColorKey((r.color_key as CalendarReminderColorKey) || 'blue');
-      setShowReminderModal(true);
+      setCalendarFabStep('reminder');
+      setShowCalendarFabSheet(true);
     },
     [selectedDate]
   );
@@ -2178,7 +2213,7 @@ export default function AdminAppointmentsScreen() {
         </View>
       </Modal>
 
-      {showReminderModal ? (
+      {showCalendarFabSheet ? (
         <Pressable
           style={[StyleSheet.absoluteFill, styles.reminderFabBackdrop]}
           onPress={closeReminderModal}
@@ -2194,30 +2229,95 @@ export default function AdminAppointmentsScreen() {
           style={[StyleSheet.absoluteFill, { direction: 'ltr' } as const]}
         >
         <CalendarReminderFabPanel
-          isOpen={showReminderModal}
+          isOpen={showCalendarFabSheet}
           onFabPress={reminderFabTabPress}
           title={
-            editingReminder
-              ? tHe('admin.calendarReminder.editTitle', 'עריכת תזכורת')
-              : tHe('admin.calendarReminder.newTitle', 'תזכורת ביומן')
+            calendarFabStep === 'choice'
+              ? tHe('admin.calendarAdd.choiceTitle', 'מה תרצה להוסיף?')
+              : editingReminder
+                ? tHe('admin.calendarReminder.editTitle', 'עריכת תזכורת')
+                : tHe('admin.calendarReminder.newTitle', 'תזכורת ביומן')
           }
-          subtitle={tHe(
-            'admin.calendarReminder.hint',
-            'לא חוסם תורים — מוצג לצד התורים לעזרה לארגון היום'
-          )}
+          subtitle={
+            calendarFabStep === 'choice'
+              ? tHe('admin.calendarAdd.choiceSubtitle', 'בחרו תור ללקוח או תזכורת פנימית ליום הנבחר')
+              : tHe(
+                  'admin.calendarReminder.hint',
+                  'לא חוסם תורים — מוצג לצד התורים לעזרה לארגון היום'
+                )
+          }
           backgroundColor={calendarPrimary}
           isRtl={isRtl}
-          fabAccessibilityLabel={tHe('admin.calendarReminder.addFab', 'הוספת תזכורת ליומן')}
+          fabAccessibilityLabel={tHe('admin.calendarAdd.fabAccessibility', 'הוספה ליומן')}
           externalTriggerOnly
           externalAnchorSize={reminderExternalAnchorSize}
           panelStyle={reminderFabPanelStyle}
         >
+          {calendarFabStep === 'choice' ? (
+            <View style={styles.calendarFabChoiceWrap}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.calendarFabChoiceCard,
+                  pressed && styles.calendarFabChoiceCardPressed,
+                ]}
+                onPress={onCalendarFabPickAppointment}
+                accessibilityRole="button"
+                accessibilityLabel={tHe('admin.calendarAdd.optionAppointment', 'תור')}
+              >
+                <View style={[styles.calendarFabChoiceIconWrap, { backgroundColor: `${calendarPrimary}18` }]}>
+                  <Calendar size={26} color={calendarPrimary} />
+                </View>
+                <View style={styles.calendarFabChoiceTextCol}>
+                  <Text style={styles.calendarFabChoiceTitle}>
+                    {tHe('admin.calendarAdd.optionAppointment', 'תור')}
+                  </Text>
+                  <Text style={styles.calendarFabChoiceHint}>
+                    {tHe('admin.calendarAdd.optionAppointmentHint', 'קביעת תור ללקוח לפי שירות ושעה')}
+                  </Text>
+                </View>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.calendarFabChoiceCard,
+                  pressed && styles.calendarFabChoiceCardPressed,
+                ]}
+                onPress={onCalendarFabPickReminder}
+                accessibilityRole="button"
+                accessibilityLabel={tHe('admin.calendarAdd.optionReminder', 'תזכורת ביומן')}
+              >
+                <View style={[styles.calendarFabChoiceIconWrap, { backgroundColor: '#E8EAED' }]}>
+                  <StickyNote size={26} color="#5F6368" />
+                </View>
+                <View style={styles.calendarFabChoiceTextCol}>
+                  <Text style={styles.calendarFabChoiceTitle}>
+                    {tHe('admin.calendarAdd.optionReminder', 'תזכורת ביומן')}
+                  </Text>
+                  <Text style={styles.calendarFabChoiceHint}>
+                    {tHe('admin.calendarAdd.optionReminderHint', 'תזכורת לעצמך — לא חוסמת משבצות')}
+                  </Text>
+                </View>
+              </Pressable>
+            </View>
+          ) : (
           <KeyboardAwareScreenScroll
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             style={{ maxHeight: Dimensions.get('window').height * 0.58 }}
             contentContainerStyle={styles.reminderFabScrollContent}
           >
+            {!editingReminder ? (
+              <TouchableOpacity
+                style={styles.calendarFabBackRow}
+                onPress={() => setCalendarFabStep('choice')}
+                accessibilityRole="button"
+                accessibilityLabel={tHe('admin.calendarAdd.backToChoice', 'חזרה לבחירה')}
+              >
+                <ChevronRight size={22} color={calendarPrimary} />
+                <Text style={[styles.calendarFabBackText, { color: calendarPrimary }]}>
+                  {tHe('admin.calendarAdd.backToChoice', 'חזרה לבחירה')}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
             <Text style={styles.reminderFieldLabel}>{tHe('admin.calendarReminder.fieldTitle', 'כותרת')}</Text>
             <TextInput
               value={reminderTitle}
@@ -2341,6 +2441,7 @@ export default function AdminAppointmentsScreen() {
               <Text style={[styles.reminderCancelText, { color: calendarPrimary }]}>{tHe('cancel', 'ביטול')}</Text>
             </TouchableOpacity>
           </KeyboardAwareScreenScroll>
+          )}
         </CalendarReminderFabPanel>
         </View>
       )}
@@ -2356,6 +2457,13 @@ export default function AdminAppointmentsScreen() {
           }}
         />
       ) : null}
+
+      <AddAppointmentModal
+        visible={showAddAppointmentModal}
+        onClose={() => setShowAddAppointmentModal(false)}
+        onSuccess={handleAddAppointmentModalSuccess}
+        initialDate={selectedDate}
+      />
     </View>
   );
 }
@@ -3200,6 +3308,65 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 22,
+  },
+  calendarFabChoiceWrap: {
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 18,
+    gap: 12,
+  },
+  calendarFabChoiceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E8EAED',
+    backgroundColor: '#FAFAFA',
+  },
+  calendarFabChoiceCardPressed: {
+    opacity: 0.88,
+  },
+  calendarFabChoiceIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarFabChoiceTextCol: {
+    flex: 1,
+    gap: 4,
+  },
+  calendarFabChoiceTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1C1C1E',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  calendarFabChoiceHint: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#636366',
+    textAlign: 'right',
+    lineHeight: 16,
+    writingDirection: 'rtl',
+  },
+  calendarFabBackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    marginBottom: 4,
+    paddingVertical: 6,
+  },
+  calendarFabBackText: {
+    fontSize: 15,
+    fontWeight: '700',
+    writingDirection: 'rtl',
   },
   reminderCard: {
     position: 'absolute',

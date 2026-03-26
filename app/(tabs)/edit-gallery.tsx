@@ -516,14 +516,21 @@ export default function EditGalleryScreen() {
         duration={480}
         grabberColor={colors.primary}
       >
-        <Text style={[styles.fabSheetTitle, { color: colors.text }]}>{t('admin.gallery.addDesign', 'הוספת עיצוב')}</Text>
-        <Text style={[styles.fabSheetSubtitle, { color: colors.textSecondary }]}>{t('admin.gallery.helper', 'ניתן לבחור מספר תמונות. הראשונה תשמש כתמונת שער.')}</Text>
+        <View style={styles.fabSheetHeader}>
+          <Text style={[styles.fabSheetTitle, { color: colors.text }]}>{t('admin.gallery.addDesign', 'הוספת עיצוב')}</Text>
+          <Text style={[styles.fabSheetSubtitle, { color: colors.textSecondary }]}>
+            {t('admin.gallery.helper', 'ניתן לבחור מספר תמונות. הראשונה תשמש כתמונת שער.')}
+          </Text>
+        </View>
 
         <KeyboardAwareScreenScroll
           keyboardShouldPersistTaps="handled"
           style={{ maxHeight: fabMaxScrollH }}
-          contentContainerStyle={{ paddingBottom: 16 }}
+          contentContainerStyle={{ paddingBottom: 24 }}
           showsVerticalScrollIndicator={false}
+          extraScrollHeight={96}
+          extraHeight={20}
+          enableResetScrollToCoords={false}
         >
           {adminUsers.length > 1 && (
             <View style={[styles.block, { opacity: isCreating ? 0.55 : 1 }]}>
@@ -552,22 +559,26 @@ export default function EditGalleryScreen() {
 
           <TouchableOpacity
             onPress={pickImages}
-            style={[styles.pickCard, { borderColor: colors.primary + '44', backgroundColor: colors.primary + '0D' }]}
+            style={[styles.pickCard, { borderColor: colors.primary + '55', backgroundColor: colors.primary + '0C' }]}
             activeOpacity={0.88}
             disabled={isCreating}
           >
-            <View style={[styles.pickIconCircle, { backgroundColor: colors.primary + '22' }]}>
-              <ImagePlus size={26} color={colors.primary} strokeWidth={2} />
-            </View>
             <View style={styles.pickTextCol}>
               <Text style={[styles.pickTitle, styles.fabTextRight, { color: colors.text }]}>{t('admin.gallery.selectImages', 'בחר/י תמונות')}</Text>
-              <Text style={[styles.pickSub, styles.fabTextRight, { color: colors.textSecondary }]}>{t('admin.gallery.photoDropHint', 'עד 10 תמונות · דחיסה אוטומטית')}</Text>
+              <Text style={[styles.pickSub, styles.fabTextRight, { color: colors.textSecondary }]}>
+                {t('admin.gallery.photoDropHint', 'עד 10 תמונות · דחיסה אוטומטית')}
+              </Text>
             </View>
-            {pickedAssets.length > 0 ? (
-              <View style={[styles.countBadge, { backgroundColor: colors.primary }]}>
-                <Text style={styles.countBadgeText}>{pickedAssets.length}</Text>
+            <View style={styles.pickCardTrailing}>
+              {pickedAssets.length > 0 ? (
+                <View style={[styles.countBadge, { backgroundColor: colors.primary }]}>
+                  <Text style={styles.countBadgeText}>{pickedAssets.length}</Text>
+                </View>
+              ) : null}
+              <View style={[styles.pickIconCircle, { backgroundColor: colors.primary + '24' }]}>
+                <ImagePlus size={26} color={colors.primary} strokeWidth={2} />
               </View>
-            ) : null}
+            </View>
           </TouchableOpacity>
 
           {pickedAssets.length > 0 && (
@@ -595,7 +606,12 @@ export default function EditGalleryScreen() {
 
           <Text style={[styles.fieldLabel, styles.fabTextRight, { color: colors.textSecondary }]}>{t('admin.gallery.nameLabel', 'שם לתצוגה')}</Text>
           <TextInput
-            style={[styles.fieldInput, styles.fabTextRight, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border, opacity: isCreating ? 0.55 : 1 }]}
+            style={[
+              styles.fieldInput,
+              styles.fabTextRight,
+              styles.fabFieldInput,
+              { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border, opacity: isCreating ? 0.55 : 1 },
+            ]}
             placeholder={t('admin.gallery.namePlaceholder', 'שם העיצוב')}
             placeholderTextColor={colors.textSecondary}
             value={name}
@@ -605,7 +621,7 @@ export default function EditGalleryScreen() {
 
           <TouchableOpacity
             onPress={handleCreate}
-            style={[styles.primaryBtn, { backgroundColor: colors.primary, marginTop: 18, opacity: isLoading || isCreating ? 0.85 : 1 }]}
+            style={[styles.fabPrimaryBtn, { backgroundColor: colors.primary, opacity: isLoading || isCreating ? 0.85 : 1 }]}
             disabled={isLoading || isCreating}
           >
             {isCreating ? (
@@ -788,28 +804,48 @@ function createStyles(colors: ThemeColors, windowWidth: number) {
       backgroundColor: 'rgba(0,0,0,0.38)',
       zIndex: 10000,
     },
+    fabSheetHeader: {
+      width: '100%',
+      paddingRight: 46,
+      marginBottom: 4,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border,
+      paddingBottom: 14,
+    },
     fabSheetTitle: {
-      fontSize: 20,
+      fontSize: 21,
       fontWeight: '700',
       width: '100%',
       textAlign: 'right',
-      letterSpacing: -0.2,
+      letterSpacing: -0.35,
+      lineHeight: 28,
     },
     fabSheetSubtitle: {
       fontSize: 13,
-      marginTop: 6,
-      marginBottom: 12,
-      lineHeight: 19,
+      marginTop: 8,
+      lineHeight: 19.5,
       width: '100%',
       textAlign: 'right',
+      opacity: 0.92,
     },
     fabTextRight: {
       textAlign: 'right',
       textTransform: 'none',
       letterSpacing: 0,
     },
+    fabFieldInput: {
+      minHeight: Platform.OS === 'ios' ? 50 : 48,
+    },
     pickTextCol: {
       flex: 1,
+      minWidth: 0,
+      paddingEnd: 8,
+    },
+    pickCardTrailing: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      flexShrink: 0,
     },
     searchRow: {
       flexDirection: 'row',
@@ -946,16 +982,44 @@ function createStyles(colors: ThemeColors, windowWidth: number) {
       alignItems: 'center',
       justifyContent: 'center',
     },
+    fabPrimaryBtn: {
+      marginTop: 20,
+      borderRadius: 16,
+      paddingVertical: 16,
+      minHeight: 52,
+      alignItems: 'center',
+      justifyContent: 'center',
+      ...Platform.select({
+        ios: {
+          shadowColor: colors.primary,
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.28,
+          shadowRadius: 10,
+        },
+        android: { elevation: 3 },
+      }),
+    },
     primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 17 },
     rowCenter: { flexDirection: 'row', alignItems: 'center' },
     pickCard: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 16,
-      borderRadius: 18,
-      borderWidth: 1.5,
-      gap: 14,
-      marginTop: 6,
+      justifyContent: 'space-between',
+      alignSelf: 'stretch',
+      paddingVertical: 16,
+      paddingHorizontal: 16,
+      borderRadius: 20,
+      borderWidth: StyleSheet.hairlineWidth * 2,
+      marginTop: 8,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.06,
+          shadowRadius: 8,
+        },
+        android: { elevation: 1 },
+      }),
     },
     pickIconCircle: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
     pickTitle: { fontSize: 16, fontWeight: '700' },

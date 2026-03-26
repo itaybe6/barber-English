@@ -11,8 +11,9 @@ import BarberSelection from '@/components/book-appointment/BarberSelection';
 import ServiceSelection from '@/components/book-appointment/ServiceSelection';
 import DaySelection from '@/components/book-appointment/DaySelection';
 import TimeSelection, { type TimeSelectionProps } from '@/components/book-appointment/TimeSelection';
-import BookingSuccessAnimation from '@/components/book-appointment/BookingSuccessAnimation';
-import { MotiView } from 'moti';
+import BookingSuccessAnimatedOverlay, {
+  type SuccessLine,
+} from '@/components/book-appointment/BookingSuccessAnimatedOverlay';
 import BookingStepTabs, { getBookingStepBarTopFromBottom } from '@/components/book-appointment/BookingStepTabs';
 
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
@@ -420,17 +421,8 @@ export default function BookAppointment() {
   const [refreshTick, setRefreshTick] = useState(0);
   const [globalBreakMinutes, setGlobalBreakMinutes] = useState<number>(0);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [successModalPhase, setSuccessModalPhase] = useState<'burst' | 'details'>('burst');
-  const [successMessage, setSuccessMessage] = useState('');
-  const onSuccessAnimationComplete = React.useCallback(() => {
-    setSuccessModalPhase('details');
-  }, []);
-
-  useEffect(() => {
-    if (showSuccessModal) {
-      setSuccessModalPhase('burst');
-    }
-  }, [showSuccessModal]);
+  const [successWasReplace, setSuccessWasReplace] = useState(false);
+  const [successAnimKey, setSuccessAnimKey] = useState(0);
   const scrollRef = React.useRef<ScrollView | null>(null);
   // Step 1 → Step 2 animated transition on initial scroll
   const introFade = useSharedValue(1);
@@ -569,9 +561,8 @@ export default function BookAppointment() {
 
   const days = getNextNDays(bookingOpenDays);
   const selectedDate = selectedDay !== null ? days[selectedDay]?.fullDate : null;
-  const footerVisible =
-    (currentStep === 3 && selectedDay !== null) ||
-    currentStep === 4;
+  /** Step-4 booking uses the bottom-bar checkmark; no footer CTA on time step. */
+  const footerVisible = currentStep === 3 && selectedDay !== null;
   const buttonHeight = 56;
   const contentBottomPadding = footerVisible
     ? footerBottom + buttonHeight + 12
@@ -1375,16 +1366,8 @@ export default function BookAppointment() {
 
       if (allBooked) {
         const allNames = selectedServices.map(s => s.name).join(' + ');
-        const dateUs = selectedDate ? new Date(selectedDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '';
-        const endTime = _toHHMM(_toMinutes(selectedTime) + totalDuration);
-        const baseMessage = selectedServices.length === 1
-          ? `Your appointment for\n"${allNames}"\n\nhas been scheduled for\n${dateUs}\n${selectedTime}`
-          : `Your appointment for\n"${allNames}"\n\nhas been scheduled for\n${dateUs}\n${selectedTime} - ${endTime}`;
-        const message = existingAppointmentToCancel
-          ? `התור הקודם בוטל והתור החדש נקבע בהצלחה!\n\n${baseMessage}`
-          : baseMessage;
-         
-        setSuccessMessage(message);
+        setSuccessWasReplace(!!existingAppointmentToCancel);
+        setSuccessAnimKey((k) => k + 1);
         setShowSuccessModal(true);
 
         try {
@@ -1516,6 +1499,81 @@ export default function BookAppointment() {
     onSelectTime: (time) => setSelectedTime(time as any),
   };
 
+  const bookingSuccessLines = useMemo((): SuccessLine[] => {
+    if (!showSuccessModal || selectedTime === null || selectedDay === null || selectedServices.length === 0) {
+      return [];
+    }
+    const allNames = selectedServices.map((s) => s.name).join(' + ');
+    const loc = (i18n?.language || 'he').startsWith('he') ? 'he-IL' : 'en-US';
+    const dateFormatted = selectedDate
+      ? new Date(selectedDate).toLocaleDateString(loc, {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        })
+      : '';
+    const multi = selectedServices.length > 1;
+    const timeEnd = multi ? _toHHMM(_toMinutes(selectedTime) + totalDuration) : '';
+
+    const lines: SuccessLine[] = [
+      {
+        variant: 'headline',
+        text: t('booking.successAnimatedHeadline', 'התור נקבע בהצלחה'),
+      },
+    ];
+    if (successWasReplace) {
+      lines.push({
+        variant: 'body',
+        text: t('booking.successReplacedNote', 'התור הקודם בוטל — התור החדש נשמר.'),
+      });
+    }
+    lines.push({
+      variant: 'accent',
+      text: multi
+        ? `${t('booking.field.services', 'שירותים')}: ${allNames}`
+        : `${t('booking.field.service', 'שירות')}: ${allNames}`,
+    });
+    if (selectedBarber?.name) {
+      lines.push({
+        variant: 'body',
+        text: `${t('booking.step.barber', 'ספר/ית')}: ${selectedBarber.name}`,
+      });
+    }
+    lines.push({
+      variant: 'body',
+      text: `${t('booking.field.date', 'תאריך')}: ${dateFormatted}`,
+    });
+    lines.push({
+      variant: 'body',
+      text: multi
+        ? `${t('booking.field.time', 'שעה')}: ${selectedTime} – ${timeEnd}`
+        : `${t('booking.field.time', 'שעה')}: ${selectedTime}`,
+    });
+    if (multi) {
+      lines.push({
+        variant: 'body',
+        text:
+          totalPrice > 0
+            ? `${totalDuration} ${t('booking.min', 'דק׳')} · ₪${totalPrice}`
+            : `${totalDuration} ${t('booking.min', 'דק׳')}`,
+      });
+    }
+    return lines;
+  }, [
+    showSuccessModal,
+    successWasReplace,
+    selectedServices,
+    selectedDate,
+    selectedTime,
+    selectedDay,
+    selectedBarber,
+    i18n?.language,
+    t,
+    totalDuration,
+    totalPrice,
+  ]);
+
   return (
     <View style={{ flex: 1, backgroundColor: 'transparent' }}>
       {/* Background (changes with scroll for steps 1-2, cross-fade for steps 3-4) */}
@@ -1561,7 +1619,12 @@ export default function BookAppointment() {
           advanceNext={
             currentStep < 4
               ? { enabled: bookingAdvanceNextEnabled, onPress: advanceToNextStep }
-              : undefined
+              : {
+                  enabled: !!selectedTime,
+                  loading: isCheckingAppointments,
+                  onPress: handleBookAppointment,
+                  variant: 'confirm' as const,
+                }
           }
         />
       {/* Header removed on steps 3-4 per request */}
@@ -1704,27 +1767,6 @@ export default function BookAppointment() {
             </TouchableOpacity>
           );
         })()}
-        {Number(currentStep) === 4 && selectedTime && (
-          <TouchableOpacity
-            style={[
-              styles.bookButton,
-              { backgroundColor: colors.primary },
-              isCheckingAppointments && { opacity: 0.65 },
-            ]}
-            onPress={handleBookAppointment}
-            activeOpacity={0.88}
-            disabled={isCheckingAppointments}
-          >
-            {isCheckingAppointments ? (
-              <Text style={styles.bookButtonText}>{t('booking.checking', 'Checking...')}</Text>
-            ) : (
-              <>
-                <Ionicons name="calendar-outline" size={20} color="#FFFFFF" />
-                <Text style={styles.bookButtonText}>{t('booking.bookNow', 'Book Appointment')}</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
         </View>
       )}
 
@@ -1886,7 +1928,7 @@ export default function BookAppointment() {
         </Modal>
       )}
 
-      {/* Success: full-screen burst, then details card */}
+      {/* Success: word-by-word SlideInDown (see BookingSuccessAnimatedOverlay) */}
       {showSuccessModal && (
         <Modal
           visible={showSuccessModal}
@@ -1895,149 +1937,63 @@ export default function BookAppointment() {
           statusBarTranslucent
           onRequestClose={() => setShowSuccessModal(false)}
         >
-          <View style={styles.successModalRoot}>
-            {successModalPhase === 'burst' && (
-              <View style={styles.successFullscreenBurst}>
-                <BookingSuccessAnimation
-                  color="#34C759"
-                  coverScreen
-                  onComplete={onSuccessAnimationComplete}
-                />
-              </View>
-            )}
-            {successModalPhase === 'details' && (
-              <>
-                <BlurView style={StyleSheet.absoluteFill} intensity={26} tint="dark" />
-                <MotiView
-                  from={{ opacity: 0, translateY: 18 }}
-                  animate={{ opacity: 1, translateY: 0 }}
-                  transition={{ type: 'timing', duration: 380 }}
-                  style={styles.successDetailsWrap}
-                >
-                  <View style={styles.successCard}>
-                    <BlurView intensity={36} tint="light" style={styles.successBlur} />
-                    <View style={styles.successTint} />
-                    <View style={styles.successSheen} />
-                    <View style={styles.successInnerBorder} />
-                    <View style={styles.successStaticIconWrap}>
-                      <View style={styles.successStaticIconCircle}>
-                        <Ionicons name="checkmark" size={40} color="#34C759" />
-                      </View>
-                    </View>
-                    <Text style={styles.modalTitle}>{t('booking.successTitle', 'Appointment Successfully Booked!')}</Text>
-                    <Text style={styles.modalMessage} numberOfLines={0} allowFontScaling={false}>
-                      {successMessage}
-                    </Text>
-                    <View style={styles.scheduleBlock}>
-                      <Text style={styles.scheduleLine}>{t('booking.scheduledFor', 'has been scheduled for')}</Text>
-                      <Text style={styles.scheduleDate}>
-                        {selectedDate ? new Date(selectedDate).toLocaleDateString(i18n?.language === 'he' ? 'he-IL' : 'en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : ''}
-                      </Text>
-                      <Text style={styles.scheduleTime}>{selectedTime || ''}</Text>
-                    </View>
-                    <View style={styles.modalInfoSection}>
-                      <Text style={styles.modalInfoTitle}>{t('booking.yourInfo', 'Your info')}</Text>
-                      {selectedServices.length > 0 && (
-                        <View style={styles.modalInfoRow}>
-                          <Ionicons name="pricetag-outline" size={18} color="#8E8E93" style={styles.modalInfoIcon} />
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.modalInfoText}>
-                              <Text style={styles.modalInfoLabel}>
-                                {selectedServices.length > 1 ? t('booking.field.services', 'Services') : t('booking.field.service', 'Service')}:{' '}
-                              </Text>
-                              {selectedServices.map(s => s.name).join(' + ')}
-                            </Text>
-                            {selectedServices.length > 1 && (
-                              <Text style={[styles.modalInfoText, { marginTop: 2, color: '#8E8E93', fontSize: 13 }]}>
-                                {totalDuration} {t('booking.min', 'min')}  ·  ₪{totalPrice}
-                              </Text>
-                            )}
-                          </View>
-                        </View>
-                      )}
-                      <View style={styles.modalInfoRow}>
-                        <Ionicons name="calendar-outline" size={18} color="#8E8E93" style={styles.modalInfoIcon} />
-                        <Text style={styles.modalInfoText}><Text style={styles.modalInfoLabel}>{t('booking.field.date', 'Date')}: </Text>{selectedDate ? new Date(selectedDate).toLocaleDateString(i18n?.language === 'he' ? 'he-IL' : undefined) : '-'}</Text>
-                      </View>
-                      <View style={styles.modalInfoRow}>
-                        <Ionicons name="time-outline" size={18} color="#8E8E93" style={styles.modalInfoIcon} />
-                        <Text style={styles.modalInfoText}>
-                          <Text style={styles.modalInfoLabel}>{t('booking.field.time', 'Time')}: </Text>
-                          {selectedTime || '-'}
-                          {selectedServices.length > 1 && selectedTime ? ` - ${_toHHMM(_toMinutes(selectedTime) + totalDuration)}` : ''}
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={styles.modalButtons}>
-                      <TouchableOpacity
-                        style={[styles.modalButton, styles.modalButtonCalendar]}
-                        onPress={async () => {
-                          try {
-                            const duration = totalDuration || 60;
-                            const dateStr = selectedDate ? toLocalDateStr(selectedDate) : '';
-                            const timeStr = selectedTime || '00:00';
-                            const start = new Date(`${dateStr}T${timeStr}:00`);
-                            const end = new Date(start.getTime() + duration * 60000);
+          <BookingSuccessAnimatedOverlay
+            key={successAnimKey}
+            lines={bookingSuccessLines}
+            rtl={(i18n?.language || 'he').startsWith('he')}
+            accentColor={colors.primary}
+            onDismiss={() => {
+              setShowSuccessModal(false);
+              try {
+                (router as any).replace?.('/(client-tabs)/appointments');
+              } catch {
+                router.back();
+              }
+            }}
+            onAddToCalendar={async () => {
+              try {
+                const duration = totalDuration || 60;
+                const dateStr = selectedDate ? toLocalDateStr(selectedDate) : '';
+                const timeStr = selectedTime || '00:00';
+                const start = new Date(`${dateStr}T${timeStr}:00`);
+                const end = new Date(start.getTime() + duration * 60000);
 
-                            const perm = await Calendar.requestCalendarPermissionsAsync();
-                            if (perm.status !== 'granted') {
-                              Alert.alert(t('booking.permissionsRequired', 'נדרש אישור'), t('booking.calendarPermissionMessage', 'נדרש אישור גישה ליומן כדי להוסיף אירוע.'));
-                              return;
-                            }
+                const perm = await Calendar.requestCalendarPermissionsAsync();
+                if (perm.status !== 'granted') {
+                  Alert.alert(t('booking.permissionsRequired', 'נדרש אישור'), t('booking.calendarPermissionMessage', 'נדרש אישור גישה ליומן כדי להוסיף אירוע.'));
+                  return;
+                }
 
-                            let calendarId: string | undefined;
-                            if (Platform.OS === 'ios') {
-                              const defCal = await Calendar.getDefaultCalendarAsync();
-                              calendarId = defCal?.id;
-                            } else {
-                              const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
-                              calendarId = cals.find((c: any) => (c.allowsModifications || c.accessLevel === Calendar.CalendarAccessLevel.OWNER))?.id || cals[0]?.id;
-                            }
+                let calendarId: string | undefined;
+                if (Platform.OS === 'ios') {
+                  const defCal = await Calendar.getDefaultCalendarAsync();
+                  calendarId = defCal?.id;
+                } else {
+                  const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+                  calendarId = cals.find((c: any) => (c.allowsModifications || c.accessLevel === Calendar.CalendarAccessLevel.OWNER))?.id || cals[0]?.id;
+                }
 
-                            if (!calendarId) {
-                              Alert.alert(t('error.generic', 'שגיאה'), t('booking.noCalendar', 'לא נמצא יומן שניתן לכתוב אליו.'));
-                              return;
-                            }
+                if (!calendarId) {
+                  Alert.alert(t('error.generic', 'שגיאה'), t('booking.noCalendar', 'לא נמצא יומן שניתן לכתוב אליו.'));
+                  return;
+                }
 
-                            const allNames = selectedServices.map(s => s.name).join(' + ');
-                            await Calendar.createEventAsync(calendarId, {
-                              title: allNames || t('booking.calendarEventTitle','Appointment'),
-                              startDate: start,
-                              endDate: end,
-                              notes: t('booking.calendarNotes','Booked via the app'),
-                            });
+                const allNames = selectedServices.map(s => s.name).join(' + ');
+                await Calendar.createEventAsync(calendarId, {
+                  title: allNames || t('booking.calendarEventTitle','Appointment'),
+                  startDate: start,
+                  endDate: end,
+                  notes: t('booking.calendarNotes','Booked via the app'),
+                });
 
-                            Alert.alert(t('booking.added', 'נוסף'), t('booking.eventAdded', 'האירוע נוסף ליומן שלך.'));
-                          } catch (e) {
-                            Alert.alert(t('error.generic', 'שגיאה'), t('booking.eventAddFailed', 'לא ניתן להוסיף את האירוע ליומן.'));
-                          }
-                        }}
-                        activeOpacity={0.9}
-                      >
-                        <View style={styles.modalButtonRow}>
-                          <Ionicons name="calendar-outline" size={20} color="#FFFFFF" style={styles.modalButtonIcon} />
-                          <Text style={styles.modalButtonCalendarText}>{t('booking.addToCalendar', 'Add to Calendar')}</Text>
-                        </View>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.modalButton, styles.modalButtonConfirm]}
-                        onPress={() => {
-                          setShowSuccessModal(false);
-                          try {
-                            (router as any).replace?.('/(client-tabs)/appointments');
-                          } catch {
-                            router.back();
-                          }
-                        }}
-                      >
-                        <Text style={styles.modalButtonText}>{t('booking.gotIt', 'Got it')}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </MotiView>
-              </>
-            )}
-          </View>
+                Alert.alert(t('booking.added', 'נוסף'), t('booking.eventAdded', 'האירוע נוסף ליומן שלך.'));
+              } catch (e) {
+                Alert.alert(t('error.generic', 'שגיאה'), t('booking.eventAddFailed', 'לא ניתן להוסיף את האירוע ליומן.'));
+              }
+            }}
+            addToCalendarLabel={t('booking.addToCalendar', 'Add to Calendar')}
+            gotItLabel={t('booking.gotIt', 'Got it')}
+          />
         </Modal>
       )}
     </SafeAreaView>
@@ -3582,84 +3538,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     backdropFilter: 'blur(10px)',
   },
-  successModalRoot: {
-    flex: 1,
-    backgroundColor: '#0a0a0a',
-  },
-  successFullscreenBurst: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-  },
-  successDetailsWrap: {
-    flex: 1,
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: '6%',
-  },
-  successStaticIconWrap: {
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  successStaticIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  successCard: {
-    width: '88%',
-    maxWidth: 460,
-    borderRadius: 28,
-    paddingVertical: 22,
-    paddingHorizontal: 22,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.35,
-    shadowRadius: 30,
-    elevation: 16,
-  },
-  successBlur: {
-    ...StyleSheet.absoluteFillObject as any,
-    borderRadius: 28,
-  },
-  successTint: {
-    ...StyleSheet.absoluteFillObject as any,
-    backgroundColor: 'rgba(255,255,255,0.14)'
-  },
-  successSheen: {
-    position: 'absolute',
-    top: -24,
-    left: -12,
-    width: '70%',
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255,255,255,0.28)',
-    opacity: 0.5,
-    transform: [{ rotate: '-18deg' }],
-  },
-  successInnerBorder: {
-    position: 'absolute',
-    top: 1,
-    left: 1,
-    right: 1,
-    bottom: 1,
-    borderRadius: 27,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)'
-  },
   modalContent: {
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
@@ -3743,31 +3621,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     letterSpacing: -0.2,
     fontWeight: '500',
   },
-  scheduleBlock: {
-    width: '100%',
-    backgroundColor: 'rgba(118,118,128,0.12)',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  scheduleLine: {
-    fontSize: 14,
-    color: '#475569',
-    marginBottom: 6,
-  },
-  scheduleDate: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0F172A',
-    marginBottom: 2,
-  },
-  scheduleTime: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -3850,36 +3703,6 @@ const createStyles = (colors: any) => StyleSheet.create({
   modalIconWrapper: {
     alignItems: 'center',
     marginBottom: 8,
-  },
-  modalInfoSection: {
-    marginTop: 12,
-    marginBottom: 4,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: 'rgba(118,118,128,0.08)',
-    borderRadius: 12,
-  },
-  modalInfoTitle: {
-    fontSize: 13,
-    color: '#8E8E93',
-    fontWeight: '600',
-    marginBottom: 6,
-  },
-  modalInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  modalInfoIcon: {
-    marginRight: 8,
-  },
-  modalInfoText: {
-    fontSize: 15,
-    color: '#1C1C1E',
-  },
-  modalInfoLabel: {
-    color: '#3A3A3C',
-    fontWeight: '600',
   },
   modalButtonCancelText: {
     color: colors.primary,

@@ -220,6 +220,8 @@
   "appointments.lateCancel.title": "Cannot Cancel Appointment",
   "appointments.lateCancel.message": "Appointments can be canceled up to {{hours}} hours before the time. For short notice cancellations, please contact the manager.",
   "appointments.sendMessage": "Send Message",
+  "appointments.clientCancelled.title": "Appointment canceled",
+  "appointments.clientCancelled.content": "Your appointment for \"{{service}}\" on {{date}} at {{time}} was canceled successfully.",
   "close": "Close",
   "selectTime.title": "Book Appointment",
   "selectTime.subtitle": "Select service, day and time",

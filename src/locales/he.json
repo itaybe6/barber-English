@@ -222,6 +222,8 @@
   "appointments.lateCancel.title": "לא ניתן לבטל תור",
   "appointments.lateCancel.message": "ניתן לבטל תורים עד {{hours}} שעות לפני המועד. לביטול בהתראה קצרה, אנא צור קשר עם המנהל.",
   "appointments.sendMessage": "שליחת הודעה",
+  "appointments.clientCancelled.title": "התור בוטל",
+  "appointments.clientCancelled.content": "התור שלך ל־\"{{service}}\" בתאריך {{date}} בשעה {{time}} בוטל בהצלחה.",
   "close": "סגור",
   "selectTime.title": "קביעת תור",
   "selectTime.subtitle": "בחר/י שירות, יום ושעה",

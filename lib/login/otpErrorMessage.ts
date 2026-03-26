@@ -29,6 +29,11 @@ export function otpErrorMessage(t: TFunction, code: string | undefined): string 
       return t('login.otp.errorTooMany', 'יותר מדי ניסיונות שגויים. בקש קוד חדש.');
     case 'phone_registered':
       return t('register.phoneExists.message', 'מספר זה כבר רשום.');
+    case 'phone_not_registered':
+      return t(
+        'login.otp.errorPhoneNotRegistered',
+        'מספר הטלפון אינו רשום אצלנו. ניתן להירשם בעמוד ההרשמה.',
+      );
     default:
       return code && code !== 'send_failed'
         ? `${t('common.retry', 'נסה שוב')} (${code})`

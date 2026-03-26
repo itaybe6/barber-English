@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,11 +14,12 @@ import {
 } from 'react-native';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import Animated, {
-  useAnimatedStyle,
-  withTiming,
-  withSpring,
-  useSharedValue,
   Easing,
+  runOnJS,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  useSharedValue,
 } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, Link } from 'expo-router';
@@ -41,11 +42,16 @@ import {
   writeLoginFailures,
 } from '@/lib/login/loginPhoneFailure';
 import { otpErrorMessage } from '@/lib/login/otpErrorMessage';
+import { LoginEntranceSection } from '@/components/login/LoginEntranceSection';
+import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
-/** Title row under status bar (primary-colored app header) */
-const LOGIN_HEADER_CONTENT_H = 52;
+/** Toast motion (Y = off-screen above). Kept name stable for Reanimated worklets / Metro cache. */
+const PHONE_NOT_REGISTERED_TOAST_HIDE_Y = -140;
+const PHONE_NOT_REGISTERED_TOAST_VISIBLE_MS = 3000;
+
+type LoginSmsToastKind = 'phone_required' | 'phone_not_registered';
 
 // ─── Color helpers ────────────────────────────────────────────────────────────
 function hexToRgba(hex: string, a: number): string {
@@ -68,6 +74,29 @@ function shiftHex(hex: string, delta: number): string {
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
+/** Same idea as admin pick-primary-color: full-screen brand gradient. */
+function darkenHex(hex: string, ratio: number): string {
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return hex;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const f = 1 - ratio;
+  const to = (n: number) => Math.round(Math.max(0, Math.min(255, n * f))).toString(16).padStart(2, '0');
+  return `#${to(r)}${to(g)}${to(b)}`;
+}
+
+function lightenHex(hex: string, ratio: number): string {
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return hex;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const mix = (c: number) => Math.min(255, Math.round(c + (255 - c) * ratio));
+  const to = (n: number) => n.toString(16).padStart(2, '0');
+  return `#${to(mix(r))}${to(mix(g))}${to(mix(b))}`;
+}
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -85,6 +114,8 @@ export default function LoginScreen() {
   const [phoneFocused, setPhoneFocused] = useState(false);
   const [passFocused, setPassFocused] = useState(false);
   const [loginFailureCount, setLoginFailureCount] = useState(0);
+  /** Top toast for SMS login (empty phone / not registered). */
+  const [loginSmsToast, setLoginSmsToast] = useState<LoginSmsToastKind | null>(null);
 
   const login = useAuthStore((state) => state.login);
   const { colors: businessColors } = useBusinessColors();
@@ -92,7 +123,26 @@ export default function LoginScreen() {
   const isRtl = i18n.language?.startsWith('he') ?? true;
 
   const primary = businessColors.primary;
-  const onPrimary = readableOnHex(primary);
+
+  const loginGradient = useMemo(
+    () => [lightenHex(primary, 0.1), darkenHex(primary, 0.42)] as const,
+    [primary],
+  );
+  const gradientEnd = loginGradient[1];
+  const contrastAnchor = useMemo(() => darkenHex(primary, 0.22), [primary]);
+  const useLightFg = readableOnHex(contrastAnchor) === '#FFFFFF';
+  const heroText = useLightFg ? '#FFFFFF' : '#141414';
+  const heroMuted = useLightFg ? 'rgba(255,255,255,0.86)' : 'rgba(0,0,0,0.62)';
+  const heroFaint = useLightFg ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.28)';
+  const phoneBorderUnfocus = useLightFg ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.22)';
+  const phoneBorderFocus = useLightFg ? '#FFFFFF' : primary;
+  const ctaGlassBg = useLightFg ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.1)';
+  const ctaGlassBorder = useLightFg ? 'rgba(255,255,255,0.48)' : 'rgba(0,0,0,0.18)';
+  const ctaTextCol = useLightFg ? '#FFFFFF' : '#111111';
+  /** Solid light CTA on dark gradients — avoids “muddy” translucent orange. */
+  const ctaElevatedBg = useLightFg ? '#FFFFFF' : ctaGlassBg;
+  const ctaElevatedLabel = useLightFg ? '#141414' : ctaTextCol;
+  const ctaElevatedBorder = useLightFg ? 'rgba(0,0,0,0.1)' : ctaGlassBorder;
 
   const phoneKey = normalizePhoneKey(phone);
   const isLoginLocked = phoneKey.length > 0 && loginFailureCount >= MAX_LOGIN_FAILURES;
@@ -113,25 +163,54 @@ export default function LoginScreen() {
     };
   }, [phone]);
 
-  // ── Form panel entrance (slide-up + fade, runs once on mount) ──
-  const formSlide = useSharedValue(30);
-  const formAlpha = useSharedValue(0);
-
-  useEffect(() => {
-    formSlide.value = withTiming(0, { duration: 480, easing: Easing.out(Easing.quad) });
-    formAlpha.value = withTiming(1, { duration: 420, easing: Easing.out(Easing.ease) });
-  }, []);
-
-  const formEntranceStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: formSlide.value }],
-    opacity: formAlpha.value,
-  }));
-
   // ── Button press ──
   const btnScale = useSharedValue(1);
-  const btnAnimStyle = useAnimatedStyle(() => ({
+  const btnScaleStyle = useAnimatedStyle(() => ({
     transform: [{ scale: btnScale.value }],
   }));
+
+  const loginSmsToastY = useSharedValue(PHONE_NOT_REGISTERED_TOAST_HIDE_Y);
+  const loginSmsToastOpacity = useSharedValue(0);
+  const loginSmsToastStyle = useAnimatedStyle(() => ({
+    opacity: loginSmsToastOpacity.value,
+    transform: [{ translateY: loginSmsToastY.value }],
+  }));
+
+  useEffect(() => {
+    if (!loginSmsToast) {
+      loginSmsToastOpacity.value = withTiming(0, { duration: 180 });
+      loginSmsToastY.value = withTiming(PHONE_NOT_REGISTERED_TOAST_HIDE_Y, {
+        duration: 260,
+        easing: Easing.in(Easing.cubic),
+      });
+      return;
+    }
+    loginSmsToastY.value = PHONE_NOT_REGISTERED_TOAST_HIDE_Y;
+    loginSmsToastOpacity.value = 0;
+    loginSmsToastY.value = withSpring(0, {
+      damping: 19,
+      stiffness: 280,
+      mass: 0.85,
+    });
+    loginSmsToastOpacity.value = withTiming(1, {
+      duration: 320,
+      easing: Easing.out(Easing.cubic),
+    });
+    const id = setTimeout(() => {
+      loginSmsToastOpacity.value = withTiming(0, {
+        duration: 220,
+        easing: Easing.in(Easing.quad),
+      });
+      loginSmsToastY.value = withTiming(
+        PHONE_NOT_REGISTERED_TOAST_HIDE_Y,
+        { duration: 300, easing: Easing.in(Easing.cubic) },
+        (finished) => {
+          if (finished) runOnJS(setLoginSmsToast)(null);
+        },
+      );
+    }, PHONE_NOT_REGISTERED_TOAST_VISIBLE_MS);
+    return () => clearTimeout(id);
+  }, [loginSmsToast, loginSmsToastY, loginSmsToastOpacity]);
 
   // ── Login handler ──
   const reportFailedLogin = async (key: string, kind: 'password' | 'otp' = 'password') => {
@@ -155,7 +234,7 @@ export default function LoginScreen() {
 
   const handleSendLoginOtp = async () => {
     if (!phone.trim()) {
-      Alert.alert(t('error.generic', 'שגיאה'), t('login.fillPhone', 'יש להזין מספר טלפון'));
+      setLoginSmsToast('phone_required');
       return;
     }
     const key = normalizePhoneKey(phone);
@@ -168,13 +247,24 @@ export default function LoginScreen() {
       );
       return;
     }
+    const registered = await usersApi.hasUserWithPhoneForBusiness(phone.trim());
+    if (registered === false) {
+      setLoginSmsToast('phone_not_registered');
+      return;
+    }
     setIsLoading(true);
     try {
       const res = await authPhoneOtpApi.sendLoginOtp(phone.trim());
       if (!res.ok) {
-        Alert.alert(t('error.generic', 'שגיאה'), otpErrorMessage(t, res.error));
+        if (res.error === 'phone_not_registered') {
+          setLoginSmsToast('phone_not_registered');
+        } else {
+          setLoginSmsToast(null);
+          Alert.alert(t('error.generic', 'שגיאה'), otpErrorMessage(t, res.error));
+        }
         return;
       }
+      setLoginSmsToast(null);
       router.push({
         pathname: '/login-otp',
         params: { phone: phone.trim() },
@@ -294,28 +384,53 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.root}>
-      <StatusBar style={onPrimary === '#FFFFFF' ? 'light' : 'dark'} />
+    <View style={[styles.root, { backgroundColor: gradientEnd }]}>
+      <LinearGradient colors={[...loginGradient]} style={StyleSheet.absoluteFill} />
+      {Platform.OS !== 'web' ? (
+        <BrandLavaLampBackground
+          primaryColor={primary}
+          baseColor={gradientEnd}
+          count={4}
+          duration={16000}
+          blurIntensity={48}
+        />
+      ) : null}
+      <StatusBar style={useLightFg ? 'light' : 'dark'} />
 
-      <View
-        style={[styles.screenHeader, { backgroundColor: primary, paddingTop: insets.top }]}
-        accessibilityRole="header"
-      >
-        <View style={styles.screenHeaderInner}>
-          <Text
-            style={[styles.screenHeaderTitle, { color: onPrimary }]}
-            numberOfLines={1}
-            accessibilityRole="header"
-          >
-            {t('login.screenHeader', 'התחברות')}
-          </Text>
-        </View>
-      </View>
+      {loginSmsToast ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.phoneNotRegisteredToastWrap,
+            { paddingTop: insets.top + 10 },
+            loginSmsToastStyle,
+          ]}
+          accessibilityRole="alert"
+          accessibilityLiveRegion="polite"
+        >
+          <View style={styles.phoneNotRegisteredToastPill}>
+            <View style={styles.phoneNotRegisteredToastRow}>
+              <View
+                style={[styles.phoneNotRegisteredToastDot, { backgroundColor: businessColors.error }]}
+                accessibilityElementsHidden
+              />
+              <Text style={styles.phoneNotRegisteredToastText}>
+                {loginSmsToast === 'phone_required'
+                  ? t('login.otp.tagPhoneRequired', 'אנא הזינו מספר טלפון תקין')
+                  : t('login.otp.tagPhoneNotRegistered', 'מספר הטלפון אינו רשום אצלנו')}
+              </Text>
+            </View>
+          </View>
+        </Animated.View>
+      ) : null}
 
-      <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         <KeyboardAwareScreenScroll
-          style={styles.keyboardAvoid}
-          contentContainerStyle={styles.scroll}
+          style={[styles.keyboardAvoid, { backgroundColor: 'transparent' }]}
+          contentContainerStyle={[
+            styles.scroll,
+            { backgroundColor: 'transparent', justifyContent: 'center', paddingVertical: 16 },
+          ]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           showsVerticalScrollIndicator={false}
@@ -328,79 +443,61 @@ export default function LoginScreen() {
             accessible={false}
             style={[
               styles.dismissKeyboardArea,
-              { minHeight: SH - insets.top - LOGIN_HEADER_CONTENT_H },
+              {
+                minHeight: Math.max(SH - insets.top - insets.bottom, 480),
+                justifyContent: 'center',
+              },
             ]}
             onPress={Keyboard.dismiss}
           >
-            {/* ── FORM ZONE ── */}
-            <Animated.View
-              style={[styles.formZone, formEntranceStyle, { paddingBottom: bottomPad + 28 }]}
+            {/* ── FORM ZONE (staggered fade-in-down per block) ── */}
+            <View
+              style={[styles.formZone, { paddingBottom: bottomPad + 32, paddingTop: 8 }]}
               collapsable={false}
             >
-              {/* Title */}
-              <View style={styles.header}>
-                <Text style={[styles.titleText, { color: businessColors.text }]}>
+              <LoginEntranceSection delayMs={0} style={styles.header}>
+                <Text style={[styles.titleText, { color: heroText }]}>
                   {t('login.form.title', 'נתראה בפנים')}
                 </Text>
-                <Text
-                  style={[
-                    styles.subtitleText,
-                    { color: businessColors.textSecondary },
-                    { textAlign: isRtl ? 'right' : 'left' },
-                  ]}
-                >
+                <Text style={[styles.subtitleText, { color: heroMuted }]}>
                   {usePasswordLogin
                     ? t('login.form.subtitle', 'הכנס את הפרטים שלך כדי להמשיך')
-                    : t('login.otp.subtitlePhone', 'הזן מספר טלפון — נשלח אליך קוד ב-SMS')}
+                    : t('login.otp.subtitlePhone', 'הזינו נייד — נשלח קוד אימות ב-SMS')}
                 </Text>
-              </View>
+              </LoginEntranceSection>
 
-              {/* Phone field — label forced to visual right (RTL strip) */}
-              <View style={styles.fieldWrap} collapsable={false}>
+              <LoginEntranceSection delayMs={260} style={styles.fieldWrap}>
                 <View
                   style={[
-                    styles.fieldLabelPhoneWrap,
-                    isRtl
-                      ? styles.fieldLabelPhoneWrapRtl
-                      : styles.fieldLabelPhoneWrapLtr,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.fieldLabel,
-                      styles.fieldLabelPhoneText,
-                      { color: businessColors.textSecondary },
-                    ]}
-                  >
-                    {t('login.field.phone', 'טלפון')}
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.inputRow,
-                    { flexDirection: isRtl ? 'row-reverse' : 'row' },
+                    styles.phoneOpenRow,
+                    /** `row` (not row-reverse): with app RTL, flex-start is on the right — Phone first → icon on the right, flush with the field. */
+                    { flexDirection: 'row' },
                     {
-                      borderColor: phoneFocused ? primary : 'rgba(0,0,0,0.1)',
-                      backgroundColor: phoneFocused ? hexToRgba(primary, 0.03) : '#F7F7F7',
+                      borderBottomColor: phoneFocused ? phoneBorderFocus : phoneBorderUnfocus,
+                      borderBottomWidth: phoneFocused ? 2.5 : 1.5,
                     },
                   ]}
                 >
-                  <View accessible={false}>
+                  <View style={styles.phoneOpenIconSlot} accessible={false}>
                     <Phone
-                      size={19}
-                      color={phoneFocused ? primary : '#ABABAB'}
-                      strokeWidth={1.7}
+                      size={18}
+                      color={phoneFocused ? phoneBorderFocus : heroFaint}
+                      strokeWidth={1.5}
                     />
                   </View>
                   <TextInput
                     style={[
-                      styles.input,
-                      { textAlign: isRtl ? 'right' : 'left', color: businessColors.text },
+                      styles.phoneOpenInput,
+                      { textAlign: isRtl ? 'right' : 'left', color: heroText },
                     ]}
+                    accessibilityLabel={t('login.field.phone', 'טלפון')}
                     placeholder={t('profile.edit.phonePlaceholder', 'מספר טלפון')}
-                    placeholderTextColor="#C0C0C0"
+                    placeholderTextColor={heroFaint}
                     value={phone}
-                    onChangeText={setPhone}
+                    onChangeText={(v) => {
+                      setPhone(v);
+                      setLoginSmsToast(null);
+                    }}
                     keyboardType="phone-pad"
                     autoCorrect={false}
                     textContentType="telephoneNumber"
@@ -410,15 +507,14 @@ export default function LoginScreen() {
                     onBlur={() => setPhoneFocused(false)}
                   />
                 </View>
-              </View>
+              </LoginEntranceSection>
 
-              {/* Password field */}
               {usePasswordLogin ? (
-                <View style={styles.fieldWrap} collapsable={false}>
+                <LoginEntranceSection delayMs={480} style={styles.fieldWrap}>
                   <Text
                     style={[
                       styles.fieldLabel,
-                      { color: businessColors.textSecondary, textAlign: isRtl ? 'right' : 'left' },
+                      { color: heroMuted, textAlign: isRtl ? 'right' : 'left' },
                     ]}
                   >
                     {t('login.field.password', 'סיסמה')}
@@ -427,22 +523,31 @@ export default function LoginScreen() {
                     style={[
                       styles.inputRow,
                       { flexDirection: isRtl ? 'row-reverse' : 'row' },
-                      {
-                        borderColor: passFocused ? primary : 'rgba(0,0,0,0.1)',
-                        backgroundColor: passFocused ? hexToRgba(primary, 0.03) : '#F7F7F7',
-                      },
+                      useLightFg
+                        ? {
+                            borderColor: passFocused ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.32)',
+                            backgroundColor: passFocused ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.12)',
+                          }
+                        : {
+                            borderColor: passFocused ? primary : 'rgba(0,0,0,0.1)',
+                            backgroundColor: passFocused ? hexToRgba(primary, 0.06) : '#F7F7F7',
+                          },
                     ]}
                   >
                     <View accessible={false}>
-                      <Lock size={19} color={passFocused ? primary : '#ABABAB'} strokeWidth={1.7} />
+                      <Lock
+                        size={19}
+                        color={passFocused ? (useLightFg ? '#FFFFFF' : primary) : useLightFg ? heroFaint : '#ABABAB'}
+                        strokeWidth={1.7}
+                      />
                     </View>
                     <TextInput
                       style={[
                         styles.input,
-                        { textAlign: isRtl ? 'right' : 'left', color: businessColors.text },
+                        { textAlign: isRtl ? 'right' : 'left', color: heroText },
                       ]}
                       placeholder={t('login.passwordPlaceholder', 'סיסמה')}
-                      placeholderTextColor="#C0C0C0"
+                      placeholderTextColor={useLightFg ? 'rgba(255,255,255,0.45)' : '#C0C0C0'}
                       value={password}
                       onChangeText={setPassword}
                       secureTextEntry={!showPassword}
@@ -465,48 +570,64 @@ export default function LoginScreen() {
                       }
                     >
                       {showPassword ? (
-                        <EyeOff size={19} color={passFocused ? primary : '#ABABAB'} strokeWidth={1.7} />
+                        <EyeOff
+                          size={19}
+                          color={passFocused ? (useLightFg ? '#FFFFFF' : primary) : useLightFg ? heroFaint : '#ABABAB'}
+                          strokeWidth={1.7}
+                        />
                       ) : (
-                        <Eye size={19} color={passFocused ? primary : '#ABABAB'} strokeWidth={1.7} />
+                        <Eye
+                          size={19}
+                          color={passFocused ? (useLightFg ? '#FFFFFF' : primary) : useLightFg ? heroFaint : '#ABABAB'}
+                          strokeWidth={1.7}
+                        />
                       )}
                     </TouchableOpacity>
                   </View>
-                </View>
+                </LoginEntranceSection>
               ) : null}
 
               {isLoginLocked ? (
-                <Text
-                  style={[
-                    styles.lockBanner,
-                    { color: businessColors.warning, textAlign: isRtl ? 'right' : 'left' },
-                  ]}
-                >
-                  {t('login.lockedHint', 'התחברות למספר טלפון זה חסמה עקב ניסיונות שגויים חוזרים.')}
-                </Text>
+                <LoginEntranceSection delayMs={560}>
+                  <Text
+                    style={[
+                      styles.lockBanner,
+                      { color: businessColors.warning, textAlign: isRtl ? 'right' : 'left' },
+                    ]}
+                  >
+                    {t('login.lockedHint', 'התחברות למספר טלפון זה חסמה עקב ניסיונות שגויים חוזרים.')}
+                  </Text>
+                </LoginEntranceSection>
               ) : null}
 
-              {/* CTA button */}
-              <Animated.View style={[btnAnimStyle, styles.btnWrap]}>
-                <TouchableOpacity
-                  onPressIn={() => { btnScale.value = withTiming(0.97, { duration: 90 }); }}
-                  onPressOut={() => { btnScale.value = withSpring(1, { damping: 16, stiffness: 280 }); }}
-                  onPress={handleLogin}
-                  disabled={isLoading || isLoginLocked}
-                  activeOpacity={1}
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: isLoading || isLoginLocked }}
-                >
-                  <View style={[styles.btnOuter, (isLoading || isLoginLocked) && styles.btnOuterDisabled]}>
-                    <LinearGradient
-                      colors={[shiftHex(primary, 16), primary, shiftHex(primary, -20)]}
-                      start={{ x: 0, y: 0.5 }}
-                      end={{ x: 1, y: 0.5 }}
-                      style={styles.btn}
+              {/* CTA: entrance layer → press-scale layer → button content */}
+              <LoginEntranceSection delayMs={740} style={styles.btnWrap}>
+                <Animated.View style={btnScaleStyle}>
+                  <TouchableOpacity
+                    onPressIn={() => { btnScale.value = withTiming(0.97, { duration: 90 }); }}
+                    onPressOut={() => { btnScale.value = withSpring(1, { damping: 16, stiffness: 280 }); }}
+                    onPress={handleLogin}
+                    disabled={isLoading || isLoginLocked}
+                    activeOpacity={1}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: isLoading || isLoginLocked }}
+                  >
+                    <View
+                      style={[
+                        styles.btnOuter,
+                        useLightFg ? styles.btnOuterElevated : null,
+                        (isLoading || isLoginLocked) && styles.btnOuterDisabled,
+                        {
+                          backgroundColor: ctaElevatedBg,
+                          borderWidth: useLightFg ? 1 : StyleSheet.hairlineWidth * 2,
+                          borderColor: ctaElevatedBorder,
+                        },
+                      ]}
                     >
                       {isLoading ? (
-                        <ActivityIndicator color="#FFFFFF" size="small" />
+                        <ActivityIndicator color={ctaElevatedLabel} size="small" />
                       ) : (
-                        <Text style={styles.btnText}>
+                        <Text style={[styles.btnText, { color: ctaElevatedLabel }]}>
                           {isLoginLocked
                             ? t('login.cta.locked', 'התחברות חסומה')
                             : usePasswordLogin
@@ -514,18 +635,20 @@ export default function LoginScreen() {
                               : t('login.cta.sendOtp', 'שלח קוד ב-SMS')}
                         </Text>
                       )}
-                    </LinearGradient>
-                  </View>
-                </TouchableOpacity>
-              </Animated.View>
+                    </View>
+                  </TouchableOpacity>
+                </Animated.View>
+              </LoginEntranceSection>
 
-              {/* Links */}
-              <View style={styles.linksWrap}>
+              <LoginEntranceSection delayMs={980} style={styles.linksWrap}>
                 <TouchableOpacity
-                  onPress={() => setUsePasswordLogin((v) => !v)}
+                  onPress={() => {
+                    setUsePasswordLogin((v) => !v);
+                    setLoginSmsToast(null);
+                  }}
                   hitSlop={{ top: 10, bottom: 10 }}
                 >
-                  <Text style={[styles.linkMuted, { color: businessColors.textSecondary, textAlign: 'center' }]}>
+                  <Text style={[styles.linkMuted, { color: heroMuted, textAlign: 'center' }]}>
                     {usePasswordLogin
                       ? t('login.switchToOtp', 'התחברות עם קוד SMS')
                       : t('login.switchToPassword', 'כניסת מנהל / סיסמה')}
@@ -534,30 +657,37 @@ export default function LoginScreen() {
 
                 {usePasswordLogin ? (
                   <TouchableOpacity onPress={() => setIsForgotOpen(true)} hitSlop={{ top: 10, bottom: 10 }}>
-                    <Text style={[styles.linkMuted, { color: businessColors.textSecondary, textAlign: 'center' }]}>
+                    <Text style={[styles.linkMuted, { color: heroMuted, textAlign: 'center' }]}>
                       {t('login.forgotPassword', 'שכחת סיסמה?')}
                     </Text>
                   </TouchableOpacity>
                 ) : null}
 
                 <View style={styles.dividerRow}>
-                  <View style={styles.divider} />
+                  <View
+                    style={[
+                      styles.divider,
+                      {
+                        backgroundColor: useLightFg ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.12)',
+                      },
+                    ]}
+                  />
                 </View>
 
                 <View style={[styles.registerRow, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
-                  <Text style={[styles.registerText, { color: businessColors.textSecondary }]}>
+                  <Text style={[styles.registerText, { color: heroMuted }]}>
                     {t('login.noAccount', 'אין לך חשבון?')}
                   </Text>
                   <Link href="/register" asChild>
                     <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
-                      <Text style={[styles.registerAction, { color: primary }]}>
+                      <Text style={[styles.registerAction, { color: useLightFg ? '#FFFFFF' : primary }]}>
                         {t('login.signUpNow', 'הרשם עכשיו')}
                       </Text>
                     </TouchableOpacity>
                   </Link>
                 </View>
-              </View>
-            </Animated.View>
+              </LoginEntranceSection>
+            </View>
           </Pressable>
         </KeyboardAwareScreenScroll>
       </SafeAreaView>
@@ -694,22 +824,52 @@ const styles = StyleSheet.create({
   // ── Root & scaffold ──
   root: {
     flex: 1,
+  },
+  phoneNotRegisteredToastWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    zIndex: 50,
+    alignItems: 'center',
+    paddingHorizontal: 18,
+  },
+  phoneNotRegisteredToastPill: {
+    alignSelf: 'center',
+    maxWidth: '92%',
     backgroundColor: '#FFFFFF',
+    borderRadius: 999,
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    elevation: 8,
   },
-  screenHeader: {},
-  screenHeaderInner: {
-    minHeight: LOGIN_HEADER_CONTENT_H,
-    justifyContent: 'center',
-    paddingHorizontal: 20,
+  phoneNotRegisteredToastRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    maxWidth: '100%',
   },
-  screenHeaderTitle: {
-    fontSize: 17,
+  phoneNotRegisteredToastDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    flexShrink: 0,
+  },
+  phoneNotRegisteredToastText: {
+    flexShrink: 1,
+    color: '#111111',
+    fontSize: 14,
     fontWeight: '600',
+    lineHeight: 20,
     textAlign: 'center',
-    letterSpacing: 0.2,
   },
   safeArea: {
     flex: 1,
+    backgroundColor: 'transparent',
   },
   keyboardAvoid: {
     flex: 1,
@@ -725,16 +885,16 @@ const styles = StyleSheet.create({
 
   // ── FORM ZONE ──
   formZone: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
     paddingHorizontal: 26,
-    paddingTop: 24,
-    minHeight: SH * 0.6,
+    /** Height follows content so vertical centering in the scroll works. */
+    width: '100%',
   },
 
   // ── Header ──
   header: {
     alignItems: 'center',
-    marginBottom: 26,
+    marginBottom: 14,
   },
   titleText: {
     fontSize: 24,
@@ -761,21 +921,27 @@ const styles = StyleSheet.create({
     letterSpacing: 0.7,
     textTransform: 'uppercase',
   },
-  fieldLabelPhoneWrap: {
-    width: '100%',
-    marginBottom: 8,
+  /** Phone: open “canvas” — underline only, no boxed fill */
+  phoneOpenRow: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    paddingTop: 2,
+    paddingBottom: 1,
+    minHeight: 48,
+    gap: 6,
   },
-  fieldLabelPhoneWrapRtl: {
-    direction: 'rtl',
-    alignItems: 'flex-start',
+  phoneOpenIconSlot: {
+    paddingBottom: 1,
+    opacity: 0.95,
   },
-  fieldLabelPhoneWrapLtr: {
-    direction: 'ltr',
-    alignItems: 'flex-end',
-  },
-  fieldLabelPhoneText: {
-    marginBottom: 0,
-    textAlign: 'right',
+  phoneOpenInput: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '400',
+    letterSpacing: 0.2,
+    paddingVertical: Platform.OS === 'ios' ? 8 : 7,
+    paddingHorizontal: 0,
+    margin: 0,
   },
   inputRow: {
     flexDirection: 'row',
@@ -811,25 +977,32 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   btnOuter: {
-    borderRadius: 16,
-    overflow: 'hidden',
+    minHeight: 54,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    /**
+     * NO overflow:hidden here — combining overflow:hidden with shadow and transform
+     * forces extra compositing layers that cause stutter on entry animation.
+     * Corner clipping is handled by borderRadius alone.
+     */
     shadowColor: '#000',
-    shadowOpacity: 0.22,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  /** Light lift for white CTA on gradient — kept soft to avoid heavy halo */
+  btnOuterElevated: {
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
     elevation: 6,
   },
   btnOuterDisabled: {
     opacity: 0.46,
   },
-  btn: {
-    minHeight: 56,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
   btnText: {
-    color: '#FFFFFF',
     fontSize: 17,
     fontWeight: '700',
     letterSpacing: 0.3,

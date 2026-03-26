@@ -33,7 +33,7 @@ async function invokeAuthPhoneOtp(body: Record<string, unknown>): Promise<FnResp
 
   if (error instanceof FunctionsHttpError && error.context) {
     try {
-      const ct = error.context.headers.get('content-type') || '';
+      const ct = (error.context.headers.get('content-type') || '').toLowerCase();
       if (ct.includes('application/json')) {
         const j = await error.context.json();
         if (j && typeof j === 'object') {

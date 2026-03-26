@@ -238,6 +238,13 @@ export default function LoginOtpScreen() {
     try {
       const res = await authPhoneOtpApi.sendLoginOtp(phone);
       if (!res.ok) {
+        if (res.error === 'phone_not_registered') {
+          const msg = otpErrorMessage(t, res.error);
+          Alert.alert(t('login.otp.phoneNotRegisteredTitle', 'מספר לא רשום'), msg, [
+            { text: t('ok', 'אישור'), onPress: () => router.replace('/login') },
+          ]);
+          return;
+        }
         Alert.alert(t('error.generic', 'שגיאה'), otpErrorMessage(t, res.error));
         return;
       }
@@ -281,7 +288,6 @@ export default function LoginOtpScreen() {
             >
               {t('login.otp.heroTitle', 'רק עוד צעד קטן')}
             </Text>
-            <View style={[styles.heroAccent, { backgroundColor: primary }]} />
             <Text
               style={[styles.hint, { color: businessColors.textSecondary }]}
               numberOfLines={3}
@@ -490,15 +496,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.35,
     lineHeight: 32,
     paddingHorizontal: 12,
-    marginBottom: 14,
-  },
-  heroAccent: {
-    width: 44,
-    height: 4,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 18,
-    opacity: 0.92,
+    marginBottom: 12,
   },
   hint: {
     fontSize: 15,

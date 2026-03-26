@@ -201,6 +201,8 @@ export default function RegisterScreen() {
         return t('register.error.birthInvalid', 'תאריך לידה לא תקין.');
       case 'update_failed':
         return t('register.error.updateFailed', 'שמירת הפרופיל נכשלה. נסו שוב.');
+      case 'create_user_failed':
+        return t('register.error.createUserFailed', 'יצירת החשבון נכשלה. נסו שוב.');
       case 'missing_name':
         return t('register.error.nameRequired', 'נא להזין שם מלא');
       default:
@@ -402,7 +404,7 @@ export default function RegisterScreen() {
       t('register.profile.abortTitle', 'לצאת מההרשמה?'),
       t(
         'register.profile.abortMessage',
-        'החשבון נוצר — תוכלו להתחבר עם הטלפון אחרי אישור המנהל. אם תצאו עכשיו, השם והתמונה לא יישמרו.',
+        'ההרשמה עדיין לא הושלמה — אפשר יהיה להמשיך מאותו מספר טלפון. אם תצאו עכשיו, השם והתמונה לא יישמרו.',
       ),
       [
         { text: t('register.profile.abortStay', 'המשך למלא'), style: 'cancel' },

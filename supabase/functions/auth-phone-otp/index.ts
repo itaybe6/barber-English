@@ -410,7 +410,7 @@ serve(async (req) => {
       const tokenHash = await sha256Hex(profileSetupToken);
       const { data: tokRows, error: tokSelErr } = await admin
         .from("auth_register_profile_tokens")
-        .select("id, user_id, expires_at, used_at")
+        .select("id, user_id, phone, expires_at, used_at")
         .eq("business_id", businessId)
         .eq("token_hash", tokenHash)
         .limit(1);
@@ -434,24 +434,63 @@ serve(async (req) => {
         birthDate = birthRaw;
       }
 
-      const updatePayload: Record<string, unknown> = { name };
-      if (birthDate) updatePayload.birth_date = birthDate;
-      else updatePayload.birth_date = null;
-      if (imageUrl) {
-        updatePayload.image_url = imageUrl;
-      }
+      const regPhone = String(tok.phone || "").trim();
+      const profileFields: Record<string, unknown> = { name };
+      if (birthDate) profileFields.birth_date = birthDate;
+      else profileFields.birth_date = null;
+      if (imageUrl) profileFields.image_url = imageUrl;
 
-      const { data: updatedUser, error: updErr } = await admin
-        .from("users")
-        .update(updatePayload)
-        .eq("id", tok.user_id)
-        .eq("business_id", businessId)
-        .select("id, name, phone")
-        .maybeSingle();
+      let displayName = name;
+      let displayPhone = regPhone;
 
-      if (updErr || !updatedUser) {
-        console.error("[auth-phone-otp] complete profile update", updErr);
-        return json({ ok: false, error: "update_failed" }, 500);
+      if (tok.user_id) {
+        // Legacy: user row already existed (old flow after verify_register_otp).
+        const { data: updatedUser, error: updErr } = await admin
+          .from("users")
+          .update(profileFields)
+          .eq("id", tok.user_id)
+          .eq("business_id", businessId)
+          .select("id, name, phone")
+          .maybeSingle();
+
+        if (updErr || !updatedUser) {
+          console.error("[auth-phone-otp] complete profile update", updErr);
+          return json({ ok: false, error: "update_failed" }, 500);
+        }
+        displayName = updatedUser.name || name;
+        displayPhone = String(updatedUser.phone || "").trim();
+      } else {
+        if (!regPhone) {
+          return json({ ok: false, error: "invalid_token" }, 400);
+        }
+        const { data: allUsers } = await admin
+          .from("users")
+          .select("phone")
+          .eq("business_id", businessId);
+        if (userExistsForRegister(allUsers || [], regPhone)) {
+          return json({ ok: false, error: "phone_registered" }, 400);
+        }
+        const randomSecret = `otp_only_${crypto.randomUUID()}`;
+        const { data: inserted, error: insUserErr } = await admin
+          .from("users")
+          .insert({
+            ...profileFields,
+            phone: regPhone,
+            email: null,
+            user_type: "client",
+            business_id: businessId,
+            password_hash: randomSecret,
+            client_approved: false,
+          })
+          .select("id, name, phone")
+          .single();
+
+        if (insUserErr || !inserted) {
+          console.error("[auth-phone-otp] complete profile insert user", insUserErr);
+          return json({ ok: false, error: "create_user_failed" }, 500);
+        }
+        displayName = inserted.name || name;
+        displayPhone = String(inserted.phone || "").trim();
       }
 
       await admin
@@ -462,8 +501,8 @@ serve(async (req) => {
       await notifyAdminsNewClient(
         admin,
         businessId,
-        updatedUser.name || name,
-        String(updatedUser.phone || "").trim(),
+        displayName,
+        displayPhone,
       );
 
       return json({ ok: true });
@@ -788,56 +827,38 @@ serve(async (req) => {
         return json({ ok: false, error: "phone_registered" }, 400);
       }
 
-      const randomSecret = `otp_only_${crypto.randomUUID()}`;
-      const placeholderName = "משתמש חדש";
-      const { data: inserted, error: insUserErr } = await admin
-        .from("users")
-        .insert({
-          name: placeholderName,
-          user_type: "client",
-          phone: phone.trim(),
-          email: null,
-          business_id: businessId,
-          password_hash: randomSecret,
-          client_approved: false,
-        })
-        .select("*")
-        .single();
-
-      if (insUserErr || !inserted) {
-        console.error("[auth-phone-otp] insert user", insUserErr);
-        return json({ ok: false, error: "create_user_failed" }, 500);
-      }
-
       const profileSetupToken = randomProfileSetupToken();
       const tokenHash = await sha256Hex(profileSetupToken);
       const profileTokenExpires = new Date(
         Date.now() + 60 * 60 * 1000,
       ).toISOString();
+      const phoneTrimmed = phone.trim();
       const { error: tokErr } = await admin
         .from("auth_register_profile_tokens")
         .insert({
           business_id: businessId,
-          user_id: inserted.id,
+          user_id: null,
+          phone: phoneTrimmed,
           token_hash: tokenHash,
           expires_at: profileTokenExpires,
         });
       if (tokErr) {
         console.error("[auth-phone-otp] profile token insert", tokErr);
-        await admin.from("users").delete().eq("id", inserted.id);
         return json({ ok: false, error: "db_error" }, 500);
       }
 
+      // Opaque id for storage uploads only — no users row until complete_register_profile.
+      const uploadSessionId = crypto.randomUUID();
       return json({
         ok: true,
         profile_setup_token: profileSetupToken,
         user: {
-          id: inserted.id,
-          name: inserted.name,
-          phone: inserted.phone,
-          email: inserted.email ?? null,
-          user_type: inserted.user_type,
-          image_url: inserted.image_url ?? null,
+          id: uploadSessionId,
+          name: "",
+          phone: phoneTrimmed,
+          email: null,
+          user_type: "client",
+          image_url: null,
           client_approved: false,
           block: false,
         },

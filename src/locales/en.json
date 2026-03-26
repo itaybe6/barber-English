@@ -426,7 +426,7 @@
     },
     "profile": {
       "abortTitle": "Leave registration?",
-      "abortMessage": "Your account was created — you can sign in with your phone after approval. If you leave now, name and photo won’t be saved.",
+      "abortMessage": "Registration isn’t finished yet — you can continue with the same phone number. If you leave now, name and photo won’t be saved.",
       "abortStay": "Continue",
       "abortLeave": "Leave",
       "title": "A few more details",
@@ -458,7 +458,8 @@
       "sessionExpired": "Registration session expired. Please start again.",
       "tokenUsed": "Registration was already completed. Sign in with your phone.",
       "birthInvalid": "Invalid birth date.",
-      "updateFailed": "Could not save profile. Try again."
+      "updateFailed": "Could not save profile. Try again.",
+      "createUserFailed": "Could not create the account. Try again."
     },
     "phoneExists": { "title": "Phone number already exists", "message": "This phone number is already registered in the system. Please use a different phone number or sign in to your existing account." },
     "createError": "An error occurred creating the account. Please try again.",

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, LayoutChangeEvent, Dimensions } from 'react-native';
 import { CalendarAnimatedProvider, useBookingCalendarContext } from './animated-context';
 import { ScrollContainer } from './scroll-container';
@@ -51,6 +51,8 @@ function CalendarShell({
   const { pageWidth, scrollViewRef } = useBookingCalendarContext();
   const [layoutW, setLayoutW] = useState(() => Dimensions.get('window').width - 64);
   const [activeMonthIndex, setActiveMonthIndex] = useState(0);
+  const activeMonthIndexRef = useRef(activeMonthIndex);
+  activeMonthIndexRef.current = activeMonthIndex;
 
   const monthCount = calendarData.length;
 
@@ -65,6 +67,15 @@ function CalendarShell({
   useLayoutEffect(() => {
     pageWidth.value = Math.max(1, layoutW);
   }, [layoutW, pageWidth]);
+
+  /** Keep scroll aligned when layout / month count changes (inverted pages: logical 0 = max offset). */
+  useLayoutEffect(() => {
+    if (layoutW <= 0 || monthCount < 1) return;
+    const w = Math.max(1, pageWidth.value);
+    const logical = activeMonthIndexRef.current;
+    const physical = monthCount - 1 - logical;
+    scrollViewRef.current?.scrollTo({ x: physical * w, animated: false });
+  }, [layoutW, monthCount, pageWidth, scrollViewRef]);
 
   const cellSize = Math.max(34, Math.floor((Math.max(1, layoutW) - 32) / 7));
   const weekdayNames = useMemo(() => getShortWeekdayNames(language), [language]);
@@ -83,8 +94,9 @@ function CalendarShell({
       const clamped = Math.max(0, Math.min(monthCount - 1, index));
       setActiveMonthIndex(clamped);
       const w = pageWidth.value;
+      const physical = monthCount - 1 - clamped;
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ x: clamped * Math.max(1, w), animated: true });
+        scrollViewRef.current?.scrollTo({ x: physical * Math.max(1, w), animated: true });
       }, 0);
     },
     [monthCount, pageWidth, scrollViewRef]
@@ -102,21 +114,27 @@ function CalendarShell({
         primaryColor={primaryColor}
         onGoToIndex={goToMonthIndex}
       />
-      <ScrollContainer monthCount={monthCount} onActiveIndexChange={onActiveIndexChange}>
-        {calendarData.map((month, index) => (
-          <View key={`${month.label}-${index}`} style={{ width: layoutW, direction: 'ltr' }}>
-            <Days
-              data={month}
-              rangeStart={rangeStart}
-              rangeEnd={rangeEnd}
-              dayAvailability={dayAvailability}
-              selectedDate={selectedDate}
-              cellSize={cellSize}
-              primaryColor={primaryColor}
-              onDayPress={handleDayPress}
-            />
-          </View>
-        ))}
+      <ScrollContainer
+        monthCount={monthCount}
+        invertedPaging
+        onActiveIndexChange={onActiveIndexChange}
+      >
+        {[...calendarData]
+          .map((month, index) => (
+            <View key={`${month.label}-${index}`} style={{ width: layoutW, direction: 'ltr' }}>
+              <Days
+                data={month}
+                rangeStart={rangeStart}
+                rangeEnd={rangeEnd}
+                dayAvailability={dayAvailability}
+                selectedDate={selectedDate}
+                cellSize={cellSize}
+                primaryColor={primaryColor}
+                onDayPress={handleDayPress}
+              />
+            </View>
+          ))
+          .reverse()}
       </ScrollContainer>
       <View
         style={{

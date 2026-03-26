@@ -1,46 +1,48 @@
-import React, { Children, type PropsWithChildren } from 'react';
-import { I18nManager, View, type NativeSyntheticEvent, type NativeScrollEvent, type ViewStyle } from 'react-native';
+import React, { type PropsWithChildren } from 'react';
+import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import Animated, { useAnimatedScrollHandler } from 'react-native-reanimated';
 import { useBookingCalendarContext } from './animated-context';
 import { DAYS_HEADER_HEIGHT, MONTHS_HEIGHT } from './constants';
 
 type Props = PropsWithChildren<{
   monthCount: number;
+  /** When true: pages are rendered last→first; scroll offset maps so swiping right moves to the next month. */
+  invertedPaging: boolean;
   onActiveIndexChange?: (index: number) => void;
 }>;
 
-/** Mirror horizontal scroll so in RTL a rightward swipe moves to the next month (chronologically). */
-const RTL_MIRROR: ViewStyle = { transform: [{ scaleX: -1 }] };
-
-export function ScrollContainer({ children, monthCount, onActiveIndexChange }: Props) {
+export function ScrollContainer({
+  children,
+  monthCount,
+  invertedPaging,
+  onActiveIndexChange,
+}: Props) {
   const { scrollOffsetX, activeIndexProgress, scrollViewRef, pageWidth } = useBookingCalendarContext();
-  const rtl = I18nManager.isRTL;
 
-  const scrollHandler = useAnimatedScrollHandler({
-    onScroll: (event) => {
-      const offsetX = event.contentOffset.x;
-      const w = pageWidth.get();
-      scrollOffsetX.set(offsetX);
-      activeIndexProgress.set(offsetX / Math.max(1, w));
+  const scrollHandler = useAnimatedScrollHandler(
+    {
+      onScroll: (event) => {
+        const offsetX = event.contentOffset.x;
+        const w = pageWidth.get();
+        scrollOffsetX.set(offsetX);
+        const physical = offsetX / Math.max(1, w);
+        if (invertedPaging) {
+          activeIndexProgress.set(monthCount - 1 - physical);
+        } else {
+          activeIndexProgress.set(physical);
+        }
+      },
     },
-  });
+    [monthCount, invertedPaging]
+  );
 
   const reportIndex = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const x = e.nativeEvent.contentOffset.x;
     const w = pageWidth.value;
-    const idx = Math.max(0, Math.min(monthCount - 1, Math.round(x / Math.max(1, w))));
-    onActiveIndexChange?.(idx);
+    const physical = Math.max(0, Math.min(monthCount - 1, Math.round(x / Math.max(1, w))));
+    const logical = invertedPaging ? monthCount - 1 - physical : physical;
+    onActiveIndexChange?.(logical);
   };
-
-  const mirroredChildren = rtl
-    ? Children.map(children, (child, index) =>
-        child ? (
-          <View key={`cal-page-${index}`} style={RTL_MIRROR}>
-            {child}
-          </View>
-        ) : null
-      )
-    : children;
 
   return (
     <Animated.ScrollView
@@ -52,10 +54,10 @@ export function ScrollContainer({ children, monthCount, onActiveIndexChange }: P
       pagingEnabled
       directionalLockEnabled
       onMomentumScrollEnd={reportIndex}
-      style={rtl ? RTL_MIRROR : undefined}
+      style={{ direction: 'ltr' }}
       contentContainerStyle={{ paddingTop: MONTHS_HEIGHT + DAYS_HEADER_HEIGHT }}
     >
-      {mirroredChildren}
+      {children}
     </Animated.ScrollView>
   );
 }

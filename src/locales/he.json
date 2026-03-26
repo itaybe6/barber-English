@@ -818,6 +818,8 @@
     },
     "appointments": {
       "loadingForDate": "טוען תורים עבור {{date}}...",
+      "navPrev": "תקופה קודמת",
+      "navNext": "תקופה הבאה",
       "emptyTitle": "אין תורים ליום זה",
       "emptySubtitle": "בחר/י יום אחר מהסרגל העליון",
       "chooseAction": "בחר/י פעולה",
@@ -828,6 +830,11 @@
       "deleteTitle": "מחיקת תור",
       "deleteMessage": "פעולה זו תמחק את התור לצמיתות. לא ניתן לבטל פעולה זו.",
       "openActions": "פתח/י אפשרויות לתור"
+    },
+    "calendarViewMode": {
+      "day": "יומי",
+      "week": "שבועי",
+      "month": "חודשי"
     },
     "appointmentsAdmin": {
       "loadingForDate": "טוען תורים עבור {{date}}...",

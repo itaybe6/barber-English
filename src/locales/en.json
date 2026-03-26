@@ -817,6 +817,8 @@
     },
     "appointments": {
       "loadingForDate": "Loading appointments for {{date}}...",
+      "navPrev": "Previous period",
+      "navNext": "Next period",
       "emptyTitle": "No appointments for this day",
       "emptySubtitle": "Choose another day from the top bar",
       "chooseAction": "Choose an action",
@@ -827,6 +829,11 @@
       "deleteTitle": "Delete appointment",
       "deleteMessage": "This will permanently remove the appointment. This action cannot be undone.",
       "openActions": "Open appointment actions"
+    },
+    "calendarViewMode": {
+      "day": "Day",
+      "week": "Week",
+      "month": "Month"
     },
     "appointmentsAdmin": {
       "loadingForDate": "Loading appointments for {{date}}...",

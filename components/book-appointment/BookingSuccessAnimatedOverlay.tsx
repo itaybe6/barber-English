@@ -6,15 +6,14 @@ import {
   Text,
   ScrollView,
   Platform,
-  Dimensions,
+  I18nManager,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { AnimatedSentence } from '@/components/book-appointment/AnimatedSentence';
-
-const { width: SCREEN_W } = Dimensions.get('window');
+import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
 
 export interface SuccessLine {
   text: string;
@@ -44,23 +43,35 @@ function computeBaseDelays(texts: string[], stagger: number, lineGapMs: number):
   return delays;
 }
 
-/** Lighten accentColor by mixing with white at given ratio (0=original, 1=white). */
-function alphaHex(hex: string, alpha: number): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  const a = Math.round(alpha * 255)
-    .toString(16)
-    .padStart(2, '0');
-  return `#${hex.slice(1)}${a}`;
+function darkenHex(hex: string, ratio: number): string {
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return hex;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const f = 1 - ratio;
+  const to = (n: number) => Math.round(Math.max(0, Math.min(255, n * f))).toString(16).padStart(2, '0');
+  return `#${to(r)}${to(g)}${to(b)}`;
 }
 
+function lightenHex(hex: string, ratio: number): string {
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return hex;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const mix = (c: number) => Math.min(255, Math.round(c + (255 - c) * ratio));
+  const to = (n: number) => n.toString(16).padStart(2, '0');
+  return `#${to(mix(r))}${to(mix(g))}${to(mix(b))}`;
+}
+
+/** All copy flush to the physical left; Hebrew word order preserved via AnimatedSentence rtl + shrink-wrap. */
 export default function BookingSuccessAnimatedOverlay({
   lines,
   rtl,
   accentColor,
-  stagger = 80,
-  lineGapMs = 140,
+  stagger = 72,
+  lineGapMs = 120,
   onDismiss,
   onAddToCalendar,
   addToCalendarLabel,
@@ -74,152 +85,139 @@ export default function BookingSuccessAnimatedOverlay({
     [texts, stagger, lineGapMs]
   );
 
-  const textAlign = rtl ? ('right' as const) : ('left' as const);
-  const writingDirection = rtl ? ('rtl' as const) : ('ltr' as const);
+  const loginGradient = useMemo(
+    () => [lightenHex(accentColor, 0.1), darkenHex(accentColor, 0.42)] as const,
+    [accentColor]
+  );
+  const gradientEnd = loginGradient[1];
 
-  /** Split headline from rest */
+  const writingDirection = rtl ? ('rtl' as const) : ('ltr' as const);
+  /** Physical left edge of the screen (under forceRTL, flex-start is the right side). */
+  const edgeStart = I18nManager.isRTL ? ('flex-end' as const) : ('flex-start' as const);
+
   const headlineLines = displayLines.filter((l) => l.variant === 'headline');
   const detailLines = displayLines.filter((l) => l.variant !== 'headline');
   const headlineIndexOffset = 0;
   const detailIndexOffset = headlineLines.length;
 
+  const headlineStyle = [
+    styles.headline,
+    { textAlign: 'left' as const, writingDirection, color: '#FFFFFF' },
+  ];
+
   return (
-    <View style={[styles.root, { direction: rtl ? 'rtl' : 'ltr' }]}>
-      {/* Rich background gradient — deep forest night */}
-      <LinearGradient
-        colors={['#050e06', '#0a1a0d', '#0d2410', '#06120a']}
-        locations={[0, 0.35, 0.7, 1]}
-        start={{ x: 0.15, y: 0 }}
-        end={{ x: 0.85, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-
-      {/* Subtle radial-like glow blob behind headline */}
-      <View
-        pointerEvents="none"
-        style={[
-          styles.glowBlob,
-          {
-            backgroundColor: alphaHex(accentColor, 0.13),
-            width: SCREEN_W * 1.2,
-            height: SCREEN_W * 1.2,
-            borderRadius: SCREEN_W * 0.6,
-            top: -SCREEN_W * 0.3,
-            left: -SCREEN_W * 0.1,
-          },
-        ]}
-      />
-
-      {/* Noise / grain overlay — pure CSS-style using nested views */}
-      <View pointerEvents="none" style={[styles.grainOverlay, StyleSheet.absoluteFill]} />
+    <View style={[styles.root, { backgroundColor: gradientEnd }]}>
+      <LinearGradient colors={[...loginGradient]} style={StyleSheet.absoluteFill} />
+      {Platform.OS !== 'web' ? (
+        <BrandLavaLampBackground
+          primaryColor={accentColor}
+          baseColor={gradientEnd}
+          count={4}
+          duration={16000}
+          blurIntensity={48}
+        />
+      ) : null}
 
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 148 },
+          {
+            paddingTop: insets.top + 36,
+            paddingBottom: insets.bottom + 118,
+            alignItems: edgeStart,
+          },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ── Headline block ── */}
-        <View style={[styles.headlineBlock, { alignItems: textAlign === 'right' ? 'flex-end' : 'flex-start' }]}>
-          {headlineLines.map((line, i) => {
-            const delay = baseDelays[headlineIndexOffset + i] ?? 0;
-            return (
-              <View key={`h-${i}`} style={styles.lineWrapHeadline}>
-                <AnimatedSentence
-                  stagger={stagger}
-                  baseDelay={delay}
-                  style={[styles.headline, { textAlign, writingDirection, color: accentColor }]}
-                  maxFontSizeMultiplier={1.1}
-                >
-                  {line.text}
-                </AnimatedSentence>
-              </View>
-            );
-          })}
-        </View>
+        <View style={[styles.copyBlock, { alignItems: edgeStart }]}>
+          <View style={[styles.headlineBlock, { alignItems: edgeStart }]}>
+            {headlineLines.map((line, i) => {
+              const delay = baseDelays[headlineIndexOffset + i] ?? 0;
+              return (
+                <View key={`h-${i}`} style={[styles.lineWrap, { alignSelf: edgeStart }]}>
+                  <AnimatedSentence
+                    rtl={rtl}
+                    fullWidth={false}
+                    stagger={stagger}
+                    baseDelay={delay}
+                    style={headlineStyle}
+                    maxFontSizeMultiplier={1.05}
+                  >
+                    {line.text}
+                  </AnimatedSentence>
+                </View>
+              );
+            })}
+          </View>
 
-        {/* Divider line */}
-        <View
-          style={[
-            styles.divider,
-            {
-              backgroundColor: alphaHex(accentColor, 0.35),
-              alignSelf: rtl ? 'flex-end' : 'flex-start',
-            },
-          ]}
-        />
+          <View style={[styles.divider, { alignSelf: edgeStart }]} />
 
-        {/* ── Detail lines ── */}
-        <View
-          style={[
-            styles.detailBlock,
-            { alignItems: textAlign === 'right' ? 'flex-end' : 'flex-start' },
-          ]}
-        >
-          {detailLines.map((line, i) => {
-            const variant = line.variant ?? 'body';
-            const delay = baseDelays[detailIndexOffset + i] ?? 0;
-            const isAccent = variant === 'accent';
-            const textStyle = isAccent
-              ? [
-                  styles.detailAccent,
-                  { textAlign, writingDirection, color: accentColor },
-                ]
-              : [styles.detailBody, { textAlign, writingDirection }];
-            return (
-              <View key={`d-${i}`} style={styles.lineWrapDetail}>
-                <AnimatedSentence
-                  stagger={stagger}
-                  baseDelay={delay}
-                  style={textStyle}
-                  maxFontSizeMultiplier={1.2}
-                >
-                  {line.text}
-                </AnimatedSentence>
-              </View>
-            );
-          })}
+          <View style={[styles.detailBlock, { alignItems: edgeStart }]}>
+            {detailLines.map((line, i) => {
+              const delay = baseDelays[detailIndexOffset + i] ?? 0;
+              const variant = line.variant ?? 'body';
+              const detailStyle =
+                variant === 'accent'
+                  ? [
+                      styles.detailAccent,
+                      {
+                        textAlign: 'left' as const,
+                        writingDirection,
+                        color: 'rgba(255,255,255,0.96)',
+                      },
+                    ]
+                  : [
+                      styles.detailBody,
+                      {
+                        textAlign: 'left' as const,
+                        writingDirection,
+                        color: 'rgba(255,255,255,0.82)',
+                      },
+                    ];
+              return (
+                <View key={`d-${i}`} style={[styles.lineWrapDetail, { alignSelf: edgeStart }]}>
+                  <AnimatedSentence
+                    rtl={rtl}
+                    fullWidth={false}
+                    stagger={stagger}
+                    baseDelay={delay}
+                    style={detailStyle}
+                    maxFontSizeMultiplier={1.2}
+                  >
+                    {line.text}
+                  </AnimatedSentence>
+                </View>
+              );
+            })}
+          </View>
         </View>
       </ScrollView>
 
-      {/* ── Footer ── */}
-      <LinearGradient
-        colors={['transparent', 'rgba(5,14,6,0.97)', '#050e06']}
-        locations={[0, 0.28, 1]}
-        style={[
-          styles.footerGradient,
-          { paddingBottom: Math.max(insets.bottom + 4, 20), paddingHorizontal: 22 },
-        ]}
+      <View
+        style={[styles.footerBar, { paddingBottom: Math.max(insets.bottom, 14) }]}
         pointerEvents="box-none"
       >
-        <TouchableOpacity
-          style={[styles.btnSecondary, { borderColor: alphaHex(accentColor, 0.7) }]}
-          onPress={onAddToCalendar}
-          activeOpacity={0.82}
-        >
-          <Ionicons
-            name="calendar-outline"
-            size={19}
-            color={accentColor}
-            style={styles.btnIcon}
-          />
-          <Text style={[styles.btnSecondaryText, { color: accentColor }]}>
-            {addToCalendarLabel}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.footerInner}>
+          <TouchableOpacity
+            style={[styles.btnSecondary, { borderColor: 'rgba(255,255,255,0.55)' }]}
+            onPress={onAddToCalendar}
+            activeOpacity={0.82}
+          >
+            <Ionicons name="calendar-outline" size={21} color="#FFFFFF" />
+            <Text style={styles.btnSecondaryText}>{addToCalendarLabel}</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.btnPrimary, { backgroundColor: accentColor }]}
-          onPress={onDismiss}
-          activeOpacity={0.88}
-        >
-          {/* Sheen on primary button */}
-          <View style={styles.btnSheen} />
-          <Text style={styles.btnPrimaryText}>{gotItLabel}</Text>
-        </TouchableOpacity>
-      </LinearGradient>
+          <TouchableOpacity
+            style={[styles.btnSecondary, { borderColor: 'rgba(255,255,255,0.55)' }]}
+            onPress={onDismiss}
+            activeOpacity={0.82}
+            accessibilityRole="button"
+          >
+            <Text style={styles.btnSecondaryText}>{gotItLabel}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     </View>
   );
 }
@@ -227,119 +225,90 @@ export default function BookingSuccessAnimatedOverlay({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#050e06',
   },
-  glowBlob: {
-    position: 'absolute',
-    opacity: 1,
-  },
-  grainOverlay: {
-    opacity: 0.03,
-    backgroundColor: '#ffffff',
-  },
-
-  /* ── Scroll ── */
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 26,
+    paddingHorizontal: 22,
+    width: '100%',
   },
-
-  /* ── Headline ── */
+  copyBlock: {
+    width: '100%',
+  },
   headlineBlock: {
     marginBottom: 20,
+    width: '100%',
   },
-  lineWrapHeadline: {
+  lineWrap: {
+    maxWidth: '100%',
     overflow: 'hidden',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   headline: {
-    fontSize: 54,
+    fontSize: 76,
     fontWeight: '900',
-    letterSpacing: -1.8,
-    lineHeight: 62,
-  },
-
-  /* ── Divider ── */
-  divider: {
-    height: 2,
-    width: 52,
-    borderRadius: 2,
-    marginBottom: 28,
-  },
-
-  /* ── Detail lines ── */
-  detailBlock: {
-    gap: 6,
+    letterSpacing: -2.8,
+    lineHeight: 84,
+    textShadowColor: 'rgba(0,0,0,0.28)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 10,
   },
   lineWrapDetail: {
+    maxWidth: '100%',
     overflow: 'hidden',
-  },
-  detailAccent: {
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-    lineHeight: 30,
+    marginBottom: 4,
   },
   detailBody: {
-    fontSize: 18,
-    fontWeight: '400',
-    letterSpacing: -0.2,
-    color: 'rgba(200, 230, 210, 0.78)',
-    lineHeight: 26,
+    fontSize: 22,
+    fontWeight: '600',
+    letterSpacing: -0.24,
+    lineHeight: 30,
   },
-
-  /* ── Footer ── */
-  footerGradient: {
+  detailAccent: {
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.32,
+    lineHeight: 32,
+  },
+  divider: {
+    height: 3,
+    width: 56,
+    borderRadius: 2,
+    marginBottom: 22,
+    backgroundColor: 'rgba(255,255,255,0.55)',
+  },
+  detailBlock: {
+    gap: 6,
+    width: '100%',
+  },
+  footerBar: {
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 0,
-    paddingTop: 56,
-    gap: 10,
+    bottom: 52,
+    paddingTop: 12,
+    paddingHorizontal: 22,
+    backgroundColor: 'transparent',
   },
-  btnPrimary: {
-    borderRadius: 16,
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.45,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-  btnSheen: {
-    position: 'absolute',
-    top: -30,
-    left: -20,
-    width: '70%',
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    transform: [{ rotate: '-12deg' }],
-  },
-  btnPrimaryText: {
-    color: '#ffffff',
-    fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: 0.2,
+  footerInner: {
+    width: '100%',
+    gap: 12,
+    alignItems: 'stretch',
   },
   btnSecondary: {
     borderRadius: 16,
-    paddingVertical: 14,
+    paddingVertical: 15,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    borderWidth: 1.5,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    gap: 10,
+    borderWidth: 2,
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
   btnSecondaryText: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     letterSpacing: 0.1,
-  },
-  btnIcon: {
-    marginEnd: 8,
+    color: '#FFFFFF',
   },
 });

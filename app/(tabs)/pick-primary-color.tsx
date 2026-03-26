@@ -138,6 +138,11 @@ export default function PickPrimaryColorScreen() {
     setShowHsvPicker(false);
   }, [addCustomColor]);
 
+  /** Hidden tab screen: `router.back()` often pops to the default tab (home), not settings. */
+  const exitToSettings = useCallback(() => {
+    router.replace('/(tabs)/settings' as const);
+  }, [router]);
+
   const confirmAndSave = useCallback(async () => {
     if (savingLock.current) return;
     savingLock.current = true;
@@ -146,7 +151,7 @@ export default function PickPrimaryColorScreen() {
       const ok = await updatePrimaryColor(previewHex);
       if (ok) {
         triggerColorUpdate();
-        router.back();
+        exitToSettings();
       } else {
         Alert.alert(t('error.generic', 'Error'), t('color.updateFailed', 'Unable to update the color'));
       }
@@ -157,7 +162,7 @@ export default function PickPrimaryColorScreen() {
       savingLock.current = false;
       setIsSaving(false);
     }
-  }, [previewHex, router, t, triggerColorUpdate, updatePrimaryColor]);
+  }, [exitToSettings, previewHex, t, triggerColorUpdate, updatePrimaryColor]);
 
   return (
     <View style={styles.root}>
@@ -173,7 +178,7 @@ export default function PickPrimaryColorScreen() {
         {/* Header */}
         <View style={[styles.header, { paddingTop: Math.max(8, insets.top > 0 ? 0 : 8) }]}>
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={exitToSettings}
             hitSlop={12}
             disabled={isSaving}
             style={styles.backBtn}

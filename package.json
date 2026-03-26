@@ -90,6 +90,7 @@
   },
   "dependencies": {
     "@animatereactnative/marquee": "^0.5.2",
+    "@expo-google-fonts/inter": "^0.2.3",
     "@expo/metro-runtime": "~6.1.2",
     "@expo/vector-icons": "^15.1.1",
     "@faker-js/faker": "^9.9.0",
@@ -133,6 +134,7 @@
     "expo-updates": "~29.0.11",
     "expo-web-browser": "~15.0.7",
     "i18next": "^25.6.0",
+    "install": "^0.13.0",
     "lodash": "^4.17.21",
     "lucide-react-native": "^0.536.0",
     "moti": "^0.29.0",

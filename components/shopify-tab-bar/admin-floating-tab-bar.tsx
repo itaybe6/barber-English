@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef } from "react";
-import { View, StyleSheet, useWindowDimensions } from "react-native";
+import { View, StyleSheet, Text, useWindowDimensions } from "react-native";
 import { useRouter, useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 import {
   CalendarDays,
   Clock,
@@ -15,6 +16,18 @@ import { TabButton } from "./tab-button";
 import { useColors } from "@/src/theme/ThemeProvider";
 import { useAdminCalendarView } from "@/contexts/AdminCalendarViewContext";
 import type { CalendarViewMode } from "@/components/admin-calendar/calendarViewMode";
+
+/** ברירות מחדל — אם המפתח ב־JSON לא נטען (cache / Metro), עדיין יוצג טקסט תקין */
+const CALENDAR_MODE_LABEL_HE: Record<CalendarViewMode, string> = {
+  month: "חודשי",
+  week: "שבועי",
+  day: "יומי",
+};
+const CALENDAR_MODE_LABEL_EN: Record<CalendarViewMode, string> = {
+  month: "Month",
+  week: "Week",
+  day: "Day",
+};
 import { CalendarViewModeIcon } from "@/components/admin-calendar/CalendarViewMenuIcons";
 import {
   useAdminCalendarReminderFab,
@@ -24,12 +37,14 @@ import {
 const INACTIVE = "#8a8a8a";
 const ICON_ACTIVE = "#ffffff";
 
-const CALENDAR_VIEW_ORDER: CalendarViewMode[] = ["day", "week", "month"];
+/** חודשי משמאל, שבועי במרכז, יומי מימין — direction: ltr על ה־inner */
+const CALENDAR_VIEW_ORDER: CalendarViewMode[] = ["month", "week", "day"];
 
 export const AdminFloatingTabBar: React.FC = () => {
   const router = useRouter();
   const segments = useSegments();
   const insets = useSafeAreaInsets();
+  const { t, i18n } = useTranslation();
   const { primary } = useColors();
   const { calendarView, setCalendarView } = useAdminCalendarView();
   const reminderFab = useAdminCalendarReminderFab();
@@ -94,14 +109,36 @@ export const AdminFloatingTabBar: React.FC = () => {
             {CALENDAR_VIEW_ORDER.map((mode) => {
               const focused = calendarView === mode;
               const fg = focused ? ICON_ACTIVE : INACTIVE;
+              const lng = typeof i18n.language === "string" ? i18n.language : "";
+              const fallback = lng.startsWith("he")
+                ? CALENDAR_MODE_LABEL_HE[mode]
+                : CALENDAR_MODE_LABEL_EN[mode];
+              const label = String(
+                t(`admin.calendarViewMode.${mode}`, { defaultValue: fallback })
+              );
               return (
                 <TabButton
                   key={mode}
                   focused={focused}
                   activeColor={primary}
                   onPress={() => setCalendarView(mode)}
+                  buttonPadding={6}
+                  accessibilityLabel={label}
+                  accessibilityRole="button"
                 >
-                  <CalendarViewModeIcon mode={mode} color={fg} iconSize={22} />
+                  <View style={styles.calendarModeCell}>
+                    <CalendarViewModeIcon mode={mode} color={fg} iconSize={20} />
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.calendarModeLabel,
+                        { color: fg },
+                        lng.startsWith("he") ? { writingDirection: "rtl" as const } : null,
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </View>
                 </TabButton>
               );
             })}
@@ -209,8 +246,22 @@ const styles = StyleSheet.create({
   },
   center: {
     flexDirection: "row",
+    alignItems: "stretch",
+    justifyContent: "center",
+  },
+  calendarModeCell: {
     alignItems: "center",
     justifyContent: "center",
+    gap: 4,
+    paddingVertical: 3,
+    minWidth: 54,
+    maxWidth: 76,
+  },
+  calendarModeLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    textAlign: "center",
+    letterSpacing: -0.15,
   },
   border: {
     borderWidth: 1,

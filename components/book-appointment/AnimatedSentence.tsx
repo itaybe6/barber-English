@@ -9,6 +9,10 @@ export type AnimatedSentenceProps = TextProps & {
   stagger?: number;
   /** Extra delay before the first word (ms), e.g. to sequence multiple sentences. */
   baseDelay?: number;
+  /** Word order + wrap edge for RTL (Hebrew). */
+  rtl?: boolean;
+  /** When false, row shrink-wraps so the block can align to one screen edge (e.g. left). */
+  fullWidth?: boolean;
 };
 
 export const AnimatedSentence = memo(
@@ -18,6 +22,8 @@ export const AnimatedSentence = memo(
     onEnterFinish,
     stagger = 100,
     baseDelay = 0,
+    rtl = false,
+    fullWidth = true,
     ...rest
   }: AnimatedSentenceProps) => {
     if (typeof children !== 'string') {
@@ -35,7 +41,16 @@ export const AnimatedSentence = memo(
     const fontSize = typeof flat?.fontSize === 'number' ? flat.fontSize : 50;
 
     return (
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }} key={trimmed}>
+      <View
+        style={{
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          gap: 4,
+          ...(fullWidth ? { width: '100%' as const } : { alignSelf: 'flex-start' as const }),
+          ...(rtl ? { direction: 'rtl' as const } : null),
+        }}
+        key={trimmed}
+      >
         {words.map((word, index) => (
           <View style={{ overflow: 'hidden' }} key={`word-${index}-${word}`}>
             <Animated.Text

@@ -1,5 +1,22 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, RefreshControl, StatusBar } from 'react-native';
+import React, { useState, useEffect, useCallback, Children, cloneElement, isValidElement, memo } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  TouchableOpacity,
+  RefreshControl,
+  StatusBar,
+  FlatList,
+  type ViewStyle,
+} from 'react-native';
+import Animated, {
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+  type SharedValue,
+} from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -8,10 +25,218 @@ import Colors from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
 import { notificationsApi } from '@/lib/api/notifications';
 import { Notification } from '@/lib/supabase';
-import { Ionicons } from '@expo/vector-icons';
 import { Bell, Clock, CheckCircle, AlertCircle, Calendar, XCircle, User } from 'lucide-react-native';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { formatTimeFromDate } from '@/lib/utils/timeFormat';
+
+const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Notification>);
+
+const SCROLL_ROW_OFFSET = 0;
+
+function parseNotificationContentStatic(title: string, content: string) {
+  try {
+    let text = content || '';
+    if (title) {
+      const safeTitle = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      text = text.replace(new RegExp(safeTitle, 'g'), '').trim();
+    }
+
+    let name: string | undefined;
+    let phone: string | undefined;
+    const namePhoneMatch = text.match(/([A-Za-z\-\s']+)\s*\((0\d{8,10})\)/);
+    if (namePhoneMatch) {
+      name = namePhoneMatch[1].trim();
+      phone = namePhoneMatch[2];
+      text = text.replace(namePhoneMatch[0], '').trim();
+    } else {
+      const phoneMatch = text.match(/\((0\d{8,10})\)/);
+      if (phoneMatch) {
+        phone = phoneMatch[1];
+        text = text.replace(phoneMatch[0], '').trim();
+      }
+    }
+
+    const serviceMatch = text.match(/"([^\"]+)"/);
+    const service = serviceMatch ? serviceMatch[1] : undefined;
+    if (serviceMatch) text = text.replace(serviceMatch[0], service || '').trim();
+
+    const dateMatch = text.match(/(\d{4}-\d{2}-\d{2})/);
+    const timeMatch = text.match(/(\d{2}:\d{2})(?::\d{2})?/);
+    let datePretty: string | undefined;
+    let timePretty: string | undefined;
+    if (dateMatch) {
+      const dt = new Date(`${dateMatch[1]}T00:00:00`);
+      datePretty = dt.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+      text = text.replace(dateMatch[1], '').trim();
+    }
+    if (timeMatch) {
+      const tm = timeMatch[1];
+      const [h, m] = tm.split(':');
+      const fake = new Date();
+      fake.setHours(Number(h), Number(m));
+      timePretty = formatTimeFromDate(fake);
+      text = text.replace(timeMatch[0], '').trim();
+    }
+
+    text = text.replace(/\s{2,}/g, ' ').trim();
+
+    return { primary: text, name, phone, service, datePretty, timePretty };
+  } catch {
+    return { primary: content } as const;
+  }
+}
+
+type ParsedNotification = ReturnType<typeof parseNotificationContentStatic>;
+
+interface NotificationListRowProps {
+  notification: Notification;
+  index: number;
+  scrollY: SharedValue<number>;
+  itemY?: SharedValue<number>;
+  itemHeight?: SharedValue<number>;
+  onPress: (n: Notification) => void;
+  isAdminReminder: (n: Notification) => boolean;
+  getTitleStatusIcon: (title: string) => React.ReactNode;
+  ios: {
+    readonly background: string;
+    readonly card: string;
+    readonly border: string;
+    readonly primary: string;
+    readonly secondary: string;
+    readonly success: string;
+    readonly warning: string;
+    readonly error: string;
+  };
+}
+
+const NotificationListRow = memo(function NotificationListRow({
+  notification,
+  index,
+  scrollY,
+  itemY,
+  itemHeight,
+  onPress,
+  isAdminReminder,
+  getTitleStatusIcon,
+  ios,
+}: NotificationListRowProps) {
+  const fallbackY = useSharedValue(0);
+  const fallbackH = useSharedValue(0);
+  const itemY_sv = itemY ?? fallbackY;
+  const itemH_sv = itemHeight ?? fallbackH;
+
+  const stylez = useAnimatedStyle(() => {
+    const h = itemH_sv.value;
+    const y = itemY_sv.value;
+    if (h === 0) {
+      return {
+        opacity: 1,
+        transform: [{ perspective: 1 }, { translateY: 0 }, { scale: 1 }] as ViewStyle['transform'],
+      };
+    }
+
+    return {
+      opacity: interpolate(scrollY.value, [y - 1, y, y + h], [1, 1, 0]),
+      transform: [
+        { perspective: h * 4 },
+        {
+          translateY: interpolate(
+            scrollY.value,
+            [y - index * SCROLL_ROW_OFFSET - 1, y - index * SCROLL_ROW_OFFSET, y - index * SCROLL_ROW_OFFSET + 1],
+            [0, 0, 1]
+          ),
+        },
+        {
+          scale: interpolate(scrollY.value, [y - 1, y, y + h], [1, 1, 0]),
+        },
+      ] as ViewStyle['transform'],
+    };
+  });
+
+  const parsed: ParsedNotification = parseNotificationContentStatic(notification.title, notification.content);
+
+  return (
+    <Animated.View style={[styles.notificationRowWrap, stylez]}>
+      <TouchableOpacity
+        style={[
+          styles.notificationCard,
+          styles.notificationCardNoMargin,
+          !notification.is_read && styles.unreadCard,
+        ]}
+        onPress={() => onPress(notification)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.titleRow}>
+          <View style={styles.titleWithIcon}>
+            {getTitleStatusIcon(notification.title)}
+            <Text style={styles.notificationTitle}>{notification.title}</Text>
+          </View>
+          {isAdminReminder(notification) ? <Clock size={18} color={Colors.primary} /> : null}
+        </View>
+        <View>
+          {parsed.primary ? <Text style={styles.notificationContent}>{parsed.primary}</Text> : null}
+          <View style={styles.detailsContainer}>
+            {parsed.name ? (
+              <View style={styles.detailRow}>
+                <View style={styles.detailIcon}>
+                  <User size={14} color="#8E8E93" />
+                </View>
+                <Text style={styles.detailText}>{parsed.name}</Text>
+              </View>
+            ) : null}
+            {parsed.datePretty ? (
+              <View style={styles.detailRow}>
+                <View style={styles.detailIcon}>
+                  <Calendar size={14} color="#8E8E93" />
+                </View>
+                <Text style={styles.detailText}>{parsed.datePretty}</Text>
+              </View>
+            ) : null}
+            {parsed.timePretty ? (
+              <View style={styles.detailRow}>
+                <View style={styles.detailIcon}>
+                  <Clock size={14} color="#8E8E93" />
+                </View>
+                <Text style={styles.detailText}>{parsed.timePretty}</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+
+        {(notification as { push_sent?: boolean }).push_sent && (
+          <View style={styles.pushStatus}>
+            <CheckCircle size={14} color={ios.success} />
+            <Text style={styles.pushStatusText}>נשלח בהצלחה</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    </Animated.View>
+  );
+});
+
+const NotificationsCellRenderer = memo(function NotificationsCellRenderer({
+  children,
+  ...props
+}: React.ComponentProps<typeof View> & { children: React.ReactNode }) {
+  const itemY = useSharedValue(0);
+  const itemHeight = useSharedValue(0);
+  return (
+    <View
+      {...props}
+      onLayout={(ev) => {
+        itemY.value = ev.nativeEvent.layout.y;
+        itemHeight.value = ev.nativeEvent.layout.height;
+      }}
+    >
+      {Children.map(children, (child) => {
+        if (isValidElement(child)) {
+          return cloneElement(child, { itemY, itemHeight } as Partial<NotificationListRowProps>);
+        }
+        return child;
+      })}
+    </View>
+  );
+});
 
 export default function ClientNotificationsScreen() {
   const { t, i18n } = useTranslation();
@@ -211,63 +436,6 @@ export default function ClientNotificationsScreen() {
     }
   };
 
-  // Parse raw content into structured fields for iconified rendering
-  const parseNotificationContent = (title: string, content: string) => {
-    try {
-      let text = content || '';
-      if (title) {
-        const safeTitle = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        text = text.replace(new RegExp(safeTitle, 'g'), '').trim();
-      }
-
-      // Name (Heb/Eng) and phone in parentheses
-      let name: string | undefined;
-      let phone: string | undefined;
-      const namePhoneMatch = text.match(/([A-Za-z\-\s']+)\s*\((0\d{8,10})\)/);
-      if (namePhoneMatch) {
-        name = namePhoneMatch[1].trim();
-        phone = namePhoneMatch[2];
-        text = text.replace(namePhoneMatch[0], '').trim();
-      } else {
-        const phoneMatch = text.match(/\((0\d{8,10})\)/);
-        if (phoneMatch) {
-          phone = phoneMatch[1];
-          text = text.replace(phoneMatch[0], '').trim();
-        }
-      }
-
-      // Service in quotes
-      const serviceMatch = text.match(/"([^\"]+)"/);
-      const service = serviceMatch ? serviceMatch[1] : undefined;
-      if (serviceMatch) text = text.replace(serviceMatch[0], service || '').trim();
-
-      // Date and time
-      const dateMatch = text.match(/(\d{4}-\d{2}-\d{2})/);
-      const timeMatch = text.match(/(\d{2}:\d{2})(?::\d{2})?/);
-      let datePretty: string | undefined;
-      let timePretty: string | undefined;
-      if (dateMatch) {
-        const dt = new Date(`${dateMatch[1]}T00:00:00`);
-        datePretty = dt.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
-        text = text.replace(dateMatch[1], '').trim();
-      }
-      if (timeMatch) {
-        const tm = timeMatch[1];
-        const [h, m] = tm.split(':');
-        const fake = new Date();
-        fake.setHours(Number(h), Number(m));
-        timePretty = formatTimeFromDate(fake);
-        text = text.replace(timeMatch[0], '').trim();
-      }
-
-      text = text.replace(/\s{2,}/g, ' ').trim();
-
-      return { primary: text, name, phone, service, datePretty, timePretty };
-    } catch {
-      return { primary: content } as const;
-    }
-  };
-
   const getTitleStatusIcon = (title: string) => {
     const t = (title || '').toLowerCase();
     if (/cancel/.test(t)) return <XCircle size={18} color="#FF3B30" />;
@@ -325,18 +493,16 @@ export default function ClientNotificationsScreen() {
     }
   });
 
+  const scrollY = useSharedValue(0);
+  const onNotificationsScroll = useAnimatedScrollHandler((ev) => {
+    scrollY.value = ev.contentOffset.y;
+  });
+
   if (loading) {
     return (
-      <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: ios.background }}>
+        <StatusBar barStyle="dark-content" backgroundColor={ios.background} />
         <View style={styles.container}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color={Colors.text} />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>{t('notifications.title', 'Notifications')}</Text>
-            <View style={styles.headerRight} />
-          </View>
           <View style={styles.contentWrapper}>
             <View style={styles.loadingContainer}>
               <Text style={styles.loadingText}>{t('notifications.loading', 'Loading notifications...')}</Text>
@@ -348,17 +514,9 @@ export default function ClientNotificationsScreen() {
   }
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: ios.background }}>
+      <StatusBar barStyle="dark-content" backgroundColor={ios.background} />
       <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={Colors.text} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t('notifications.title', 'Notifications')}</Text>
-          <View style={styles.headerRight} />
-        </View>
         <View style={styles.contentWrapper}>
         {/* Filters */}
         {isAdmin && (
@@ -397,84 +555,41 @@ export default function ClientNotificationsScreen() {
           </ScrollView>
         )}
 
-          <ScrollView
+          <AnimatedFlatList
+            data={filteredNotifications}
+            keyExtractor={(item) => item.id}
+            onScroll={onNotificationsScroll}
+            scrollEventThrottle={16}
+            CellRendererComponent={NotificationsCellRenderer}
+            renderItem={({ item, index }) => (
+              <NotificationListRow
+                notification={item}
+                index={index}
+                scrollY={scrollY}
+                onPress={handleNotificationPress}
+                isAdminReminder={isAdminReminder}
+                getTitleStatusIcon={getTitleStatusIcon}
+                ios={ios}
+              />
+            )}
+            contentContainerStyle={[
+              styles.scrollContent,
+              styles.notificationsListContent,
+              { paddingBottom: bottomPadding, flexGrow: 1 },
+            ]}
             style={styles.scrollView}
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPadding }]}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-            }
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             showsVerticalScrollIndicator={false}
-          >
-            {filteredNotifications.length === 0 ? (
+            ListEmptyComponent={
               <View style={styles.emptyContainer}>
                 <Bell size={64} color={ios.secondary} />
                 <Text style={styles.emptyTitle}>{t('notifications.empty', 'No notifications')}</Text>
-                <Text style={styles.emptySubtitle}>{t('notifications.emptySubtitle', 'When you have a new notification, it will appear here')}</Text>
+                <Text style={styles.emptySubtitle}>
+                  {t('notifications.emptySubtitle', 'When you have a new notification, it will appear here')}
+                </Text>
               </View>
-            ) : (
-              <View style={styles.notificationsContainer}>
-                {filteredNotifications.map((notification) => (
-                  <TouchableOpacity
-                    key={notification.id}
-                    style={[
-                      styles.notificationCard,
-                      !notification.is_read && styles.unreadCard
-                    ]}
-                    onPress={() => handleNotificationPress(notification)}
-                    activeOpacity={0.7}
-                  >
-                    
-                    <View style={styles.titleRow}>
-                      <View style={styles.titleWithIcon}>
-                        {getTitleStatusIcon(notification.title)}
-                        <Text style={styles.notificationTitle}>{notification.title}</Text>
-                      </View>
-                      {isAdminReminder(notification) ? (
-                        <Clock size={18} color={Colors.primary} />
-                      ) : null}
-                    </View>
-                    {(() => {
-                      const parsed = parseNotificationContent(notification.title, notification.content);
-                      return (
-                        <View>
-                          {parsed.primary ? (
-                            <Text style={styles.notificationContent}>{parsed.primary}</Text>
-                          ) : null}
-                          <View style={styles.detailsContainer}>
-                            {parsed.name ? (
-                              <View style={styles.detailRow}>
-                                <View style={styles.detailIcon}><User size={14} color="#8E8E93" /></View>
-                                <Text style={styles.detailText}>{parsed.name}</Text>
-                              </View>
-                            ) : null}
-                            {parsed.datePretty ? (
-                              <View style={styles.detailRow}>
-                                <View style={styles.detailIcon}><Calendar size={14} color="#8E8E93" /></View>
-                                <Text style={styles.detailText}>{parsed.datePretty}</Text>
-                              </View>
-                            ) : null}
-                            {parsed.timePretty ? (
-                              <View style={styles.detailRow}>
-                                <View style={styles.detailIcon}><Clock size={14} color="#8E8E93" /></View>
-                                <Text style={styles.detailText}>{parsed.timePretty}</Text>
-                              </View>
-                            ) : null}
-                          </View>
-                        </View>
-                      );
-                    })()}
-                    
-                    {(notification as any).push_sent && (
-                      <View style={styles.pushStatus}>
-                        <CheckCircle size={14} color={ios.success} />
-                        <Text style={styles.pushStatusText}>נשלח בהצלחה</Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </ScrollView>
+            }
+          />
         </View>
       </View>
     </SafeAreaView>
@@ -484,7 +599,7 @@ export default function ClientNotificationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F2F2F7',
   },
   loadingContainer: {
     flex: 1,
@@ -495,34 +610,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#8E8E93',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 0,
-    borderBottomColor: 'transparent',
-    backgroundColor: '#FFFFFF',
-  },
   contentWrapper: {
     flex: 1,
     backgroundColor: '#F2F2F7',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 8,
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#1C1C1E',
-    letterSpacing: -0.3,
-  },
-  headerRight: {
-    width: 40,
   },
   scrollView: {
     flex: 1,
@@ -551,9 +644,15 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
   },
-  notificationsContainer: {
+  notificationsListContent: {
     paddingHorizontal: 20,
     paddingTop: 16,
+  },
+  notificationRowWrap: {
+    marginBottom: 12,
+  },
+  notificationCardNoMargin: {
+    marginBottom: 0,
   },
   notificationCard: {
     backgroundColor: '#FFFFFF',

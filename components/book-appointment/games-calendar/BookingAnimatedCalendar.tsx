@@ -104,7 +104,7 @@ function CalendarShell({
       />
       <ScrollContainer monthCount={monthCount} onActiveIndexChange={onActiveIndexChange}>
         {calendarData.map((month, index) => (
-          <View key={`${month.label}-${index}`} style={{ width: layoutW }}>
+          <View key={`${month.label}-${index}`} style={{ width: layoutW, direction: 'ltr' }}>
             <Days
               data={month}
               rangeStart={rangeStart}
@@ -126,6 +126,7 @@ function CalendarShell({
           right: 0,
           height: DAYS_HEADER_HEIGHT,
           flexDirection: 'row',
+          direction: 'ltr',
           alignItems: 'center',
           justifyContent: 'space-between',
           paddingHorizontal: 16,

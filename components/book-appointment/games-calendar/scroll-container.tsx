@@ -1,5 +1,5 @@
-import React, { type PropsWithChildren } from 'react';
-import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import React, { Children, type PropsWithChildren } from 'react';
+import { I18nManager, View, type NativeSyntheticEvent, type NativeScrollEvent, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedScrollHandler } from 'react-native-reanimated';
 import { useBookingCalendarContext } from './animated-context';
 import { DAYS_HEADER_HEIGHT, MONTHS_HEIGHT } from './constants';
@@ -9,8 +9,12 @@ type Props = PropsWithChildren<{
   onActiveIndexChange?: (index: number) => void;
 }>;
 
+/** Mirror horizontal scroll so in RTL a rightward swipe moves to the next month (chronologically). */
+const RTL_MIRROR: ViewStyle = { transform: [{ scaleX: -1 }] };
+
 export function ScrollContainer({ children, monthCount, onActiveIndexChange }: Props) {
   const { scrollOffsetX, activeIndexProgress, scrollViewRef, pageWidth } = useBookingCalendarContext();
+  const rtl = I18nManager.isRTL;
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -28,6 +32,16 @@ export function ScrollContainer({ children, monthCount, onActiveIndexChange }: P
     onActiveIndexChange?.(idx);
   };
 
+  const mirroredChildren = rtl
+    ? Children.map(children, (child, index) =>
+        child ? (
+          <View key={`cal-page-${index}`} style={RTL_MIRROR}>
+            {child}
+          </View>
+        ) : null
+      )
+    : children;
+
   return (
     <Animated.ScrollView
       ref={scrollViewRef}
@@ -38,9 +52,10 @@ export function ScrollContainer({ children, monthCount, onActiveIndexChange }: P
       pagingEnabled
       directionalLockEnabled
       onMomentumScrollEnd={reportIndex}
+      style={rtl ? RTL_MIRROR : undefined}
       contentContainerStyle={{ paddingTop: MONTHS_HEIGHT + DAYS_HEADER_HEIGHT }}
     >
-      {children}
+      {mirroredChildren}
     </Animated.ScrollView>
   );
 }

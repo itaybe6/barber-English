@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, I18nManager } from 'react-native';
 import type { MonthEntry } from './utils';
 import { MONTHS_HEIGHT } from './constants';
 
@@ -10,19 +10,39 @@ type Props = {
   onGoToIndex: (index: number) => void;
 };
 
-const labelStyle = (isCenter: boolean) => ({
-  fontSize: isCenter ? 17 : 13,
-  fontWeight: (isCenter ? '800' : '600') as '800' | '600',
-  color: isCenter ? '#111827' : '#6B7280',
+const labelStyle = (isCurrent: boolean) => ({
+  fontSize: isCurrent ? 17 : 13,
+  fontWeight: (isCurrent ? '800' : '600') as '800' | '600',
+  color: isCurrent ? '#111827' : '#6B7280',
   textTransform: 'uppercase' as const,
   textAlign: 'center' as const,
   paddingHorizontal: 4,
 });
 
+const sidePressStyle = {
+  paddingHorizontal: 10,
+  paddingVertical: 4,
+  borderBottomWidth: 3,
+  borderBottomColor: 'transparent' as const,
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
+};
+
+const currentStyle = (primaryColor: string) => ({
+  paddingHorizontal: 10,
+  paddingVertical: 4,
+  borderBottomWidth: 3,
+  borderBottomColor: primaryColor,
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
+});
+
 /**
- * Always shows three columns: previous | current | next month (fixed width thirds).
+ * Selected month is always at the visual right; previous / next sit to its left (RTL & LTR).
+ * No empty flex columns — siblings hug the right edge.
  */
 export function ThreeMonthHeader({ data, activeIndex, primaryColor, onGoToIndex }: Props) {
+  const rtl = I18nManager.isRTL;
   const n = data.length;
   const safeIndex = Math.max(0, Math.min(n - 1, activeIndex));
 
@@ -30,15 +50,37 @@ export function ThreeMonthHeader({ data, activeIndex, primaryColor, onGoToIndex 
   const currEntry = data[safeIndex];
   const nextEntry = safeIndex < n - 1 ? data[safeIndex + 1] : null;
 
-  const emptyThird = () => (
-    <View
-      style={{
-        flex: 1,
-        borderBottomWidth: 3,
-        borderBottomColor: 'transparent',
-      }}
-    />
+  const currentEl = (
+    <View key="cur" style={currentStyle(primaryColor)}>
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={labelStyle(true)}>
+        {currEntry?.label ?? ''}
+      </Text>
+    </View>
   );
+
+  const nextEl = nextEntry ? (
+    <Pressable
+      key="next"
+      onPress={() => onGoToIndex(safeIndex + 1)}
+      style={sidePressStyle}
+    >
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={labelStyle(false)}>
+        {nextEntry.label}
+      </Text>
+    </Pressable>
+  ) : null;
+
+  const prevEl = prevEntry ? (
+    <Pressable
+      key="prev"
+      onPress={() => onGoToIndex(safeIndex - 1)}
+      style={sidePressStyle}
+    >
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={labelStyle(false)}>
+        {prevEntry.label}
+      </Text>
+    </Pressable>
+  ) : null;
 
   return (
     <View
@@ -49,63 +91,26 @@ export function ThreeMonthHeader({ data, activeIndex, primaryColor, onGoToIndex 
         right: 0,
         height: MONTHS_HEIGHT,
         flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: rtl ? 'flex-start' : 'flex-end',
+        paddingHorizontal: 12,
+        gap: 8,
         zIndex: 5,
         backgroundColor: '#FFFFFF',
       }}
     >
-      {prevEntry ? (
-        <Pressable
-          onPress={() => onGoToIndex(safeIndex - 1)}
-          style={{
-            flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingVertical: 4,
-            borderBottomWidth: 3,
-            borderBottomColor: 'transparent',
-          }}
-        >
-          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={labelStyle(false)}>
-            {prevEntry.label}
-          </Text>
-        </Pressable>
+      {rtl ? (
+        <>
+          {currentEl}
+          {nextEl}
+          {prevEl}
+        </>
       ) : (
-        emptyThird()
-      )}
-
-      <View
-        style={{
-          flex: 1,
-          alignItems: 'center',
-          justifyContent: 'center',
-          paddingVertical: 4,
-          borderBottomWidth: 3,
-          borderBottomColor: primaryColor,
-        }}
-      >
-        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={labelStyle(true)}>
-          {currEntry?.label ?? ''}
-        </Text>
-      </View>
-
-      {nextEntry ? (
-        <Pressable
-          onPress={() => onGoToIndex(safeIndex + 1)}
-          style={{
-            flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingVertical: 4,
-            borderBottomWidth: 3,
-            borderBottomColor: 'transparent',
-          }}
-        >
-          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={labelStyle(false)}>
-            {nextEntry.label}
-          </Text>
-        </Pressable>
-      ) : (
-        emptyThird()
+        <>
+          {prevEl}
+          {nextEl}
+          {currentEl}
+        </>
       )}
     </View>
   );

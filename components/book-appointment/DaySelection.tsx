@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, useWindowDimensions } from 'react-native';
+import { View, useWindowDimensions, I18nManager } from 'react-native';
 import BookingAnimatedCalendar from '@/components/book-appointment/games-calendar/BookingAnimatedCalendar';
 
 type DayObj = { fullDate: Date };
@@ -48,7 +48,13 @@ export default function DaySelection({
       }}
     >
       <View style={[styles.calendarSectionCard, { marginTop: 0 }]}>
-        <View style={[styles.calendarFixedBox, { direction: 'ltr' }]}>
+        <View
+          style={[
+            styles.calendarFixedBox,
+            /* Hebrew/RTL: natural horizontal scroll + weekday order; English keeps LTR calendar */
+            !I18nManager.isRTL && { direction: 'ltr' },
+          ]}
+        >
           <BookingAnimatedCalendar
             bookingOpenDays={bookingOpenDays}
             dayAvailability={dayAvailability}

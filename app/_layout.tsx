@@ -73,7 +73,13 @@ export default function RootLayout() {
     if (!isAuthenticated) {
       const currentTop = segments[0];
       // Allow staying on login/register or public client group
-      const isAllowed = currentTop === '(client-tabs)' || currentTop === 'login' || currentTop === 'register' || typeof currentTop === 'undefined';
+      const topSeg = currentTop as string | undefined;
+      const isAllowed =
+        topSeg === '(client-tabs)' ||
+        topSeg === 'login' ||
+        topSeg === 'login-otp' ||
+        topSeg === 'register' ||
+        typeof topSeg === 'undefined';
       if (!isAllowed) {
         router.replace('/(client-tabs)');
       }
@@ -189,6 +195,7 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(client-tabs)" />
         <Stack.Screen name="login" />
+        <Stack.Screen name="login-otp" />
         <Stack.Screen name="register" />
         <Stack.Screen name="(super-admin)" />
       </Stack>

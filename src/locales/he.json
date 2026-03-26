@@ -400,8 +400,9 @@
   "category": { "gel": "לק ג'ל", "feet": "לק ברגליים", "manicure": "מניקור" },
   "admin2": { "hoursAdmin": { "title": "אילוצי עבודה", "segment": { "hours": "שעות", "singleDay": "יום אחד", "multiDays": "מספר ימים" }, "pickDateShort": "בחר/י תאריך", "closedHours": "שעות סגורות", "pickDateAllDay": "בחירת תאריך (סגור כל היום)", "pickDateRangeAllDay": "בחירת טווח תאריכים (סגור כל היום)", "selectedRange": ":טווח נבחר", "allDay": "כל היום", "chooseClosedHours": "בחר/י שעות סגורות", "start": "התחלה", "end": "סיום", "upcomingConstraints": "אילוצים קרובים", "noUpcomingConstraints": "אין אילוצים קרובים", "noReason": "ללא סיבה", "saveCTA": "שמור אילוצים" } },
   "login": {
+    "screenHeader": "התחברות",
     "form": {
-      "title": "התחברות לחשבון",
+      "title": "נתראה בפנים",
       "subtitle": "הזן/י את הפרטים שלך כדי להיכנס לחשבון"
     },
     "cta": { "signIn": "התחבר/י", "signingIn": "מתחבר/ת…", "locked": "התחברות חסומה" },
@@ -425,7 +426,12 @@
     "signInError": "אירעה שגיאה במהלך ההתחברות",
     "enterEmail": "אנא הזן/י אימייל",
     "resetError": "שגיאה בבקשת איפוס סיסמה",
-    "emailSent": { "title": "האימייל נשלח", "message": "שלחנו אימייל לאיפוס סיסמה. בדקו את תיבת הדואר." }
+    "emailSent": { "title": "האימייל נשלח", "message": "שלחנו אימייל לאיפוס סיסמה. בדקו את תיבת הדואר." },
+    "otp": {
+      "heroTitle": "רק עוד צעד קטן",
+      "passcodeHint": "הזן את הקוד בן 6 הספרות שנשלח ב-SMS",
+      "a11y": { "delete": "מחק" }
+    }
   },
   "register": {
     "steps": { "phone": "טלפון", "code": "קוד", "profile": "פרופיל" },

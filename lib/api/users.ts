@@ -192,7 +192,7 @@ export const usersApi = {
   },
 
   // Create new user
-  async createUser(userData: Omit<User, 'id' | 'created_at' | 'updated_at'> & { email?: string }): Promise<User | null> {
+  async createUser(userData: Omit<User, 'id' | 'created_at' | 'updated_at'>): Promise<User | null> {
     try {
       const businessId = getBusinessId();
       
@@ -222,7 +222,7 @@ export const usersApi = {
   },
 
   // Create new user with password
-  async createUserWithPassword(userData: Omit<User, 'id' | 'created_at' | 'updated_at'> & { email?: string }, password: string): Promise<User | null> {
+  async createUserWithPassword(userData: Omit<User, 'id' | 'created_at' | 'updated_at'>, password: string): Promise<User | null> {
     try {
       const businessId = getBusinessId();
       
@@ -255,6 +255,7 @@ export const usersApi = {
     try {
       const businessId = getBusinessId();
       const payload: any = { ...updates };
+      delete payload.email;
       // If a plain password is provided, hash it before saving
       if ((updates as any)?.password) {
         payload.password_hash = this.hashPassword((updates as any).password);

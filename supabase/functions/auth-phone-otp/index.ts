@@ -441,7 +441,7 @@ serve(async (req) => {
       if (imageUrl) profileFields.image_url = imageUrl;
 
       const userSelect =
-        "id, name, phone, email, user_type, image_url, client_approved, block";
+        "id, name, phone, user_type, image_url, client_approved, block";
 
       let displayName = name;
       let displayPhone = regPhone;
@@ -476,7 +476,7 @@ serve(async (req) => {
           id: updatedUser.id,
           name: updatedUser.name,
           phone: updatedUser.phone,
-          email: updatedUser.email ?? null,
+          email: null,
           user_type: updatedUser.user_type,
           image_url: updatedUser.image_url ?? null,
           client_approved: updatedUser.client_approved !== false,
@@ -499,7 +499,6 @@ serve(async (req) => {
           .insert({
             ...profileFields,
             phone: regPhone,
-            email: null,
             user_type: "client",
             business_id: businessId,
             password_hash: randomSecret,
@@ -518,7 +517,7 @@ serve(async (req) => {
           id: inserted.id,
           name: inserted.name,
           phone: inserted.phone,
-          email: inserted.email ?? null,
+          email: null,
           user_type: inserted.user_type,
           image_url: inserted.image_url ?? null,
           client_approved: inserted.client_approved !== false,
@@ -711,7 +710,7 @@ serve(async (req) => {
           id: user.id,
           name: user.name,
           phone: user.phone,
-          email: user.email ?? null,
+          email: null,
           user_type: user.user_type,
           image_url: user.image_url ?? null,
           client_approved: user.client_approved !== false,

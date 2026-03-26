@@ -33,7 +33,6 @@ import {
   Plus,
   Trash2,
   TrendingUp,
-  TrendingDown,
   DollarSign,
   Briefcase,
   Mail,
@@ -78,8 +77,8 @@ const MONTH_NAMES_HE = [
 
 export default function FinanceScreen() {
   const router = useRouter();
-  const { colors: businessColors } = useBusinessColors();
-  const primaryColor = businessColors.primary || '#000000';
+  const { colors: theme } = useBusinessColors();
+  const primaryColor = theme.primary || '#000000';
 
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -156,6 +155,10 @@ export default function FinanceScreen() {
   };
 
   const netProfit = totalIncome - totalExpenses;
+
+  /** Share of income consumed by expenses — quick scan; label + % (not color-only). */
+  const expenseToIncomePct =
+    totalIncome > 0 ? Math.min(100, Math.round((totalExpenses / totalIncome) * 100)) : null;
 
   const formatCurrency = (amount: number) =>
     `₪${Math.round(amount).toLocaleString('he-IL')}`;
@@ -257,8 +260,6 @@ export default function FinanceScreen() {
     }
   };
 
-  const netColor = netProfit >= 0 ? '#16A34A' : '#EF4444';
-
   // --- Loading State ---
   if (loading) {
     return (
@@ -266,7 +267,7 @@ export default function FinanceScreen() {
         <SafeAreaView style={styles.container} edges={['top']}>
           <View style={styles.loadingWrap}>
             <ActivityIndicator size="large" color={primaryColor} />
-            <Text style={styles.loadingText}>טוען נתונים פיננסיים...</Text>
+            <Text style={[styles.loadingText, { color: theme.textSecondary }]}>טוען נתונים פיננסיים...</Text>
           </View>
         </SafeAreaView>
       </View>
@@ -279,12 +280,20 @@ export default function FinanceScreen() {
       <SafeAreaView style={styles.container} edges={['top']}>
 
         {/* ── Header ── */}
-        <View style={styles.topBar}>
+        <View style={[styles.topBar, { backgroundColor: theme.surface, borderBottomColor: `${theme.border}18` }]}>
           {/* In RTL row: first element is rightmost → back button on right */}
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <ChevronRight size={26} color={Colors.text} />
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={[styles.backBtn, { backgroundColor: styles.rtlRoot.backgroundColor }]}
+            accessibilityRole="button"
+            accessibilityLabel="חזור"
+          >
+            <ChevronRight size={26} color={theme.text} />
           </TouchableOpacity>
-          <Text style={styles.topBarTitle}>מעקב פיננסי</Text>
+          <View style={styles.topBarTitleBlock}>
+            <Text style={[styles.topBarTitle, { color: theme.text }]}>מעקב פיננסי</Text>
+            <Text style={[styles.topBarSubtitle, { color: theme.textSecondary }]}>הכנסות, הוצאות ודוח לרואה חשבון</Text>
+          </View>
           <View style={{ width: 44 }} />
         </View>
 
@@ -309,14 +318,26 @@ export default function FinanceScreen() {
 
               {/* Month Navigator — in RTL row: prev on RIGHT, next on LEFT */}
               <View style={styles.monthRow}>
-                <TouchableOpacity onPress={goToPreviousMonth} style={styles.monthArrowBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                <TouchableOpacity
+                  onPress={goToPreviousMonth}
+                  style={styles.monthArrowBtn}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="חודש קודם"
+                >
                   <ChevronRight size={22} color="rgba(255,255,255,0.85)" />
                 </TouchableOpacity>
                 <View style={styles.monthCenter}>
                   <Text style={styles.monthNameHe}>{MONTH_NAMES_HE[month - 1]}</Text>
                   <Text style={styles.monthYearHe}>{year}</Text>
                 </View>
-                <TouchableOpacity onPress={goToNextMonth} style={styles.monthArrowBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                <TouchableOpacity
+                  onPress={goToNextMonth}
+                  style={styles.monthArrowBtn}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="חודש הבא"
+                >
                   <ChevronLeft size={22} color="rgba(255,255,255,0.85)" />
                 </TouchableOpacity>
               </View>
@@ -327,32 +348,45 @@ export default function FinanceScreen() {
                 {netProfit >= 0 ? '+' : ''}{formatCurrency(netProfit)}
               </Text>
 
-              {/* Income / Expenses mini cards */}
+              {/* Income / Expenses mini cards (bento strip) */}
               <View style={styles.heroMiniRow}>
                 <View style={styles.heroMiniCard}>
-                  <View style={styles.heroMiniIcon}>
-                    <ArrowUpRight size={14} color="#16A34A" />
+                  <View style={[styles.heroMiniIcon, { backgroundColor: 'rgba(220,252,231,0.95)' }]}>
+                    <ArrowUpRight size={14} color={theme.success} />
                   </View>
                   <Text style={styles.heroMiniLabel}>הכנסות</Text>
                   <Text style={styles.heroMiniValue}>{formatCurrency(totalIncome)}</Text>
                 </View>
                 <View style={styles.heroMiniDivider} />
                 <View style={styles.heroMiniCard}>
-                  <View style={[styles.heroMiniIcon, { backgroundColor: '#FEE2E2' }]}>
-                    <ArrowDownRight size={14} color="#EF4444" />
+                  <View style={[styles.heroMiniIcon, { backgroundColor: 'rgba(254,226,226,0.95)' }]}>
+                    <ArrowDownRight size={14} color={theme.error} />
                   </View>
                   <Text style={styles.heroMiniLabel}>הוצאות</Text>
                   <Text style={styles.heroMiniValue}>{formatCurrency(totalExpenses)}</Text>
                 </View>
               </View>
+
+              {expenseToIncomePct !== null ? (
+                <View style={styles.heroRatioBlock} accessibilityLabel={`הוצאות מהוות ${expenseToIncomePct} אחוז מההכנסות`}>
+                  <View style={styles.heroRatioHead}>
+                    <Text style={styles.heroRatioCaption}>הוצאות ביחס להכנסות</Text>
+                    <Text style={styles.heroRatioPct}>{expenseToIncomePct}%</Text>
+                  </View>
+                  <View style={styles.heroRatioTrack}>
+                    <View style={[styles.heroRatioFill, { width: `${expenseToIncomePct}%` }]} />
+                  </View>
+                </View>
+              ) : null}
             </LinearGradient>
           </View>
 
           {/* ── Income Breakdown ── RTL: מימין לשמאל */}
           <View style={styles.sectionTitleWrap}>
-            <Text style={styles.sectionTitle}>פירוט הכנסות</Text>
+            <Text style={[styles.sectionEyebrow, { color: primaryColor }]}>פעילות החודש</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>פירוט הכנסות</Text>
           </View>
-          <View style={styles.card}>
+          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: `${theme.border}14` }]}>
             {incomeBreakdown.length === 0 ? (
               <View style={styles.emptyState}>
                 <TrendingUp size={36} color="#E5E7EB" />
@@ -377,7 +411,9 @@ export default function FinanceScreen() {
                       </Text>
                     </View>
                     <View style={styles.incomeTotalBlock}>
-                      <Text style={styles.incomeServiceTotal}>{formatCurrency(item.total)}</Text>
+                      <Text style={[styles.incomeServiceTotal, { color: theme.success }]}>
+                        {formatCurrency(item.total)}
+                      </Text>
                       <Text style={styles.incomeServiceSub}>
                         {item.count} תורים × {formatCurrency(item.price)}
                       </Text>
@@ -385,8 +421,8 @@ export default function FinanceScreen() {
                   </View>
                 ))}
                 <View style={styles.incomeTotalRow}>
-                  <Text style={styles.totalLabel}>סך הכל הכנסות</Text>
-                  <Text style={[styles.totalAmount, { color: '#16A34A' }]}>
+                  <Text style={[styles.totalLabel, { color: theme.text }]}>סך הכל הכנסות</Text>
+                  <Text style={[styles.totalAmount, { color: theme.success }]}>
                     {formatCurrency(totalIncome)}
                   </Text>
                 </View>
@@ -397,18 +433,20 @@ export default function FinanceScreen() {
 
           {/* ── Expenses ── */}
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>הוצאות</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>הוצאות</Text>
             <TouchableOpacity
               style={[styles.addExpenseBtn, { backgroundColor: primaryColor }]}
               onPress={() => setShowAddExpense(true)}
               activeOpacity={0.82}
+              accessibilityRole="button"
+              accessibilityLabel="הוסף הוצאה חדשה"
             >
               <Plus size={16} color="#fff" />
               <Text style={styles.addExpenseBtnText}>הוסף הוצאה</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.card}>
+          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: `${theme.border}14` }]}>
             {expenses.length === 0 ? (
               <View style={styles.emptyState}>
                 <DollarSign size={36} color="#E5E7EB" />
@@ -448,15 +486,17 @@ export default function FinanceScreen() {
                         </TouchableOpacity>
                       )}
                       <View style={styles.expenseActions}>
-                        <Text style={styles.expenseAmount}>
+                        <Text style={[styles.expenseAmount, { color: theme.error }]}>
                           -{formatCurrency(Number(expense.amount))}
                         </Text>
                         <TouchableOpacity
                           onPress={() => handleDeleteExpense(expense)}
                           style={styles.deleteBtn}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          accessibilityRole="button"
+                          accessibilityLabel={`מחק הוצאה ${expense.description || (CATEGORY_CONFIG[expense.category] || CATEGORY_CONFIG.other).label}`}
                         >
-                          <Trash2 size={17} color="#EF4444" />
+                          <Trash2 size={17} color={theme.error} />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -464,8 +504,8 @@ export default function FinanceScreen() {
                 })}
                 <View style={styles.rowDivider} />
                 <View style={[styles.expenseRow, styles.totalRow]}>
-                  <Text style={styles.totalLabel}>סך הכל הוצאות</Text>
-                  <Text style={[styles.totalAmount, { color: '#EF4444' }]}>
+                  <Text style={[styles.totalLabel, { color: theme.text }]}>סך הכל הוצאות</Text>
+                  <Text style={[styles.totalAmount, { color: theme.error }]}>
                     {formatCurrency(totalExpenses)}
                   </Text>
                 </View>
@@ -475,9 +515,10 @@ export default function FinanceScreen() {
 
           {/* ── Accountant Settings ── */}
           <View style={styles.sectionTitleWrap}>
-            <Text style={styles.sectionTitle}>הגדרות רואה חשבון</Text>
+            <Text style={[styles.sectionEyebrow, { color: primaryColor }]}>אוטומציה</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>הגדרות רואה חשבון</Text>
           </View>
-          <View style={styles.card}>
+          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: `${theme.border}14` }]}>
             <Text style={styles.settingsHint}>
               הדוח תמיד על החודש שחלף (הכנסות והוצאות מפורטות). בוחרים את היום בחודש (1–28) ואת השעה לפי שעון ישראל שבה יישלח המייל לרואה החשבון.
             </Text>
@@ -597,14 +638,14 @@ export default function FinanceScreen() {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
           >
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { backgroundColor: theme.surface }]}>
             <View style={styles.modalHandle} />
 
             {/* Modal header — in RTL: title on RIGHT, close on LEFT */}
             <View style={styles.modalTopRow}>
               <Text style={styles.modalTitle}>הוספת הוצאה</Text>
               <TouchableOpacity onPress={() => { setShowAddExpense(false); setNewExpenseReceipt(null); }} style={styles.modalCloseBtn}>
-                <X size={22} color={Colors.subtext} />
+                <X size={22} color={theme.textSecondary} />
               </TouchableOpacity>
             </View>
 
@@ -713,7 +754,7 @@ export default function FinanceScreen() {
             activeOpacity={1}
             onPress={() => setShowAccountantPreview(false)}
           />
-          <View style={[styles.previewModalSheet, { borderTopColor: primaryColor }]}>
+          <View style={[styles.previewModalSheet, { borderTopColor: primaryColor, backgroundColor: theme.surface }]}>
             <View style={styles.modalHandle} />
             <View style={styles.modalTopRow}>
               <Text style={styles.modalTitle}>תצוגת דוח לרואה חשבון</Text>
@@ -722,7 +763,7 @@ export default function FinanceScreen() {
                 style={styles.modalCloseBtn}
                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               >
-                <X size={22} color={Colors.subtext} />
+                <X size={22} color={theme.textSecondary} />
               </TouchableOpacity>
             </View>
 
@@ -896,7 +937,7 @@ export default function FinanceScreen() {
         >
           <TouchableOpacity
             activeOpacity={1}
-            style={[styles.successModalBox, { borderTopColor: primaryColor }]}
+            style={[styles.successModalBox, { borderTopColor: primaryColor, backgroundColor: theme.surface }]}
             onPress={(e) => e.stopPropagation()}
           >
             <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 12 }}>
@@ -923,7 +964,7 @@ export default function FinanceScreen() {
             activeOpacity={1}
             onPress={() => setShowReportDayModal(false)}
           />
-          <View style={[styles.modalSheet, { paddingBottom: 28 }]}>
+          <View style={[styles.modalSheet, { paddingBottom: 28, backgroundColor: theme.surface }]}>
             <Text style={styles.modalSectionLabel}>בחר יום בחודש</Text>
             <FlatList
               data={REPORT_DAY_OPTIONS}
@@ -961,7 +1002,7 @@ export default function FinanceScreen() {
       <Modal visible={showReportTimeModal} animationType="slide" transparent statusBarTranslucent>
         {Platform.OS === 'web' ? (
           <View style={styles.successModalOverlay}>
-            <View style={[styles.successModalBox, { maxWidth: 360 }]}>
+            <View style={[styles.successModalBox, { maxWidth: 360, backgroundColor: theme.surface }]}>
               <Text style={styles.modalSectionLabel}>שעה (24 שעות, לדוגמה 09:30)</Text>
               <TextInput
                 style={styles.fieldInput}
@@ -983,7 +1024,7 @@ export default function FinanceScreen() {
                 <Text style={styles.successModalBtnText}>אישור</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setShowReportTimeModal(false)} style={{ marginTop: 14 }}>
-                <Text style={{ textAlign: 'center', color: Colors.subtext, fontWeight: '600' }}>ביטול</Text>
+                <Text style={{ textAlign: 'center', color: theme.textSecondary, fontWeight: '600' }}>ביטול</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -994,7 +1035,7 @@ export default function FinanceScreen() {
               activeOpacity={1}
               onPress={() => setShowReportTimeModal(false)}
             />
-            <View style={[styles.modalSheet, styles.timePickerSheet]}>
+            <View style={[styles.modalSheet, styles.timePickerSheet, { backgroundColor: theme.surface }]}>
               <View style={styles.modalHandle} />
               <Text style={[styles.modalSectionLabel, { marginBottom: 8 }]}>שעת שליחה</Text>
               {/* UIDatePicker breaks inside RTL + white sheet when system is dark — force LTR, light theme, explicit size */}
@@ -1004,7 +1045,7 @@ export default function FinanceScreen() {
                   mode="time"
                   display="spinner"
                   themeVariant="light"
-                  textColor={Colors.text}
+                  textColor={theme.text}
                   style={styles.timePickerIOSNative}
                   onChange={(_, d) => {
                     if (d) setReportTimeDate(d);
@@ -1074,16 +1115,38 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 
-  // ── Top bar ──
+  // ── Top bar (clean app-bar + subtitle, 21st-style spacing) ──
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     backgroundColor: Colors.white,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E7EB',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
+      },
+      android: { elevation: 1 },
+    }),
+  },
+  topBarTitleBlock: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  topBarSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 2,
+    lineHeight: 16,
   },
   backBtn: {
     width: 44,
@@ -1094,9 +1157,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F4F6FB',
   },
   topBarTitle: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: '800',
-    color: Colors.text,
+    letterSpacing: -0.2,
     textAlign: 'center',
   },
 
@@ -1194,6 +1257,42 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  heroRatioBlock: {
+    marginTop: 18,
+    width: '100%',
+  },
+  heroRatioHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  heroRatioCaption: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.78)',
+    textAlign: 'right',
+    flex: 1,
+    writingDirection: 'rtl',
+  },
+  heroRatioPct: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  heroRatioTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    overflow: 'hidden',
+  },
+  heroRatioFill: {
+    height: '100%',
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.92)',
   },
   heroMiniCard: {
     flex: 1,
@@ -1227,20 +1326,29 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // ── Sections ── (RTL: flex-start = right)
+  // ── Sections ── (eyebrow + title stack, RTL)
   sectionTitleWrap: {
     width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
+    flexDirection: 'column',
+    alignItems: 'stretch',
     paddingHorizontal: 16,
     marginBottom: 10,
     marginTop: 22,
+    gap: 4,
+  },
+  sectionEyebrow: {
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'right',
+    letterSpacing: 0.3,
+    opacity: 0.92,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '800',
     color: Colors.text,
     textAlign: 'right',
+    letterSpacing: -0.15,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -1266,10 +1374,12 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 
-  // ── Card ──
+  // ── Card (outlined surface — readable on busy backgrounds) ──
   card: {
     backgroundColor: Colors.white,
-    borderRadius: 20,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(15, 23, 42, 0.06)',
     marginHorizontal: 16,
     marginBottom: 20,
     padding: 20,
@@ -1340,7 +1450,6 @@ const styles = StyleSheet.create({
   incomeServiceTotal: {
     fontSize: 19,
     fontWeight: '800',
-    color: '#16A34A',
   },
   incomeServiceSub: {
     fontSize: 11,
@@ -1440,7 +1549,6 @@ const styles = StyleSheet.create({
   expenseAmount: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#EF4444',
     textAlign: 'right',
   },
   deleteBtn: {

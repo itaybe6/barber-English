@@ -16,6 +16,28 @@ const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const resendApiKey = Deno.env.get("RESEND_API_KEY");
 const fromEmail = Deno.env.get("RESET_FROM_EMAIL") || "onboarding@resend.dev";
 
+/** Resolve auth user id by email (public.users no longer stores email). */
+async function findAuthUserIdByEmail(admin, emailNorm) {
+  const target = String(emailNorm || "").trim().toLowerCase();
+  if (!target) return null;
+  let page = 1;
+  const perPage = 1000;
+  const maxPages = 100;
+  while (page <= maxPages) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+    if (error) {
+      console.error("[reset-password] listUsers", error);
+      return null;
+    }
+    const users = data?.users || [];
+    const hit = users.find((u) => String(u.email || "").toLowerCase() === target);
+    if (hit?.id) return hit.id;
+    if (users.length < perPage) break;
+    page++;
+  }
+  return null;
+}
+
 // Decode the demo hash scheme used by the app
 function decodeDemoHash(hash) {
   if (!hash || typeof hash !== "string") return null;
@@ -64,8 +86,19 @@ serve(async (req) => {
 
     const admin = createClient(supabaseUrl, serviceRoleKey);
 
-    // Query users table by email (and phone if provided)
-    let q = admin.from("users").select("id, name, email, phone, password_hash").eq("email", email).limit(1);
+    const authUserId = await findAuthUserIdByEmail(admin, email);
+    if (!authUserId) {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+
+    let q = admin
+      .from("users")
+      .select("id, name, phone, password_hash")
+      .eq("id", authUserId)
+      .limit(1);
     if (phone && typeof phone === "string" && phone.trim().length > 0) {
       q = q.eq("phone", phone.trim());
     }

@@ -16,6 +16,7 @@ import { usersApi } from '@/lib/api/users';
 import { servicesApi } from '@/lib/api/services';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
+import SwapRequestModal from '@/components/SwapRequestModal';
 
 type TabType = 'upcoming' | 'past';
 
@@ -146,6 +147,8 @@ export default function ClientAppointmentsScreen() {
   const { colors } = useBusinessColors();
   const [serviceIdList, setServiceIdList] = useState<string[]>([]);
   const [serviceNameList, setServiceNameList] = useState<string[]>([]);
+  const [showSwapModal, setShowSwapModal] = useState(false);
+  const [swapAppointment, setSwapAppointment] = useState<AvailableTimeSlot | null>(null);
 
   // Load manager phone (first admin user)
   useEffect(() => {
@@ -662,17 +665,30 @@ export default function ClientAppointmentsScreen() {
               <BarberAvatar barberId={nextAppointment!.barber_id} size={48} />
             </View>
             
-            {/* Cancel button in top left corner */}
-            <TouchableOpacity
-              style={styles.heroCancelButtonTopLeft}
-              onPress={() => handleCancelAppointment(nextAppointment!)}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="close" size={16} color="#FF3B30" />
-              <Text style={styles.heroCancelButtonText}>{t('cancel', 'Cancel')}</Text>
-            </TouchableOpacity>
-
-            {/* Location removed for client cards per request */}
+            {/* Action buttons in top left corner */}
+            <View style={styles.topLeftActions}>
+              <TouchableOpacity
+                style={styles.heroCancelButtonTopLeft}
+                onPress={() => handleCancelAppointment(nextAppointment!)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="close" size={16} color="#FF3B30" />
+                <Text style={styles.heroCancelButtonText}>{t('cancel', 'Cancel')}</Text>
+              </TouchableOpacity>
+              {user?.user_type !== 'admin' && (
+                <TouchableOpacity
+                  style={[styles.heroSwapButtonTopLeft, { backgroundColor: colors.primary + '18' }]}
+                  onPress={() => {
+                    setSwapAppointment(nextAppointment!);
+                    setShowSwapModal(true);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="swap-horizontal" size={16} color={colors.primary} />
+                  <Text style={[styles.heroSwapButtonText, { color: colors.primary }]}>{t('swap.swap', 'Swap')}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
               <Text style={styles.heroServiceNameNext}>{nextAppointment!.service_name || t('booking.field.service', 'Service')}</Text>
 
@@ -860,17 +876,30 @@ export default function ClientAppointmentsScreen() {
               <BarberAvatar barberId={item.barber_id} size={48} />
             </View>
             
-            {/* Cancel button in top left corner */}
-            <TouchableOpacity
-              style={styles.heroCancelButtonTopLeft}
-              onPress={() => handleCancelAppointment(item)}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="close" size={16} color="#FF3B30" />
-              <Text style={styles.heroCancelButtonText}>{t('cancel', 'Cancel')}</Text>
-            </TouchableOpacity>
-
-            {/* Location removed for client cards per request */}
+            {/* Action buttons in top left corner */}
+            <View style={styles.topLeftActions}>
+              <TouchableOpacity
+                style={styles.heroCancelButtonTopLeft}
+                onPress={() => handleCancelAppointment(item)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="close" size={16} color="#FF3B30" />
+                <Text style={styles.heroCancelButtonText}>{t('cancel', 'Cancel')}</Text>
+              </TouchableOpacity>
+              {user?.user_type !== 'admin' && (
+                <TouchableOpacity
+                  style={[styles.heroSwapButtonTopLeft, { backgroundColor: colors.primary + '18' }]}
+                  onPress={() => {
+                    setSwapAppointment(item);
+                    setShowSwapModal(true);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="swap-horizontal" size={16} color={colors.primary} />
+                  <Text style={[styles.heroSwapButtonText, { color: colors.primary }]}>{t('swap.swap', 'Swap')}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
             <Text style={styles.heroServiceNameNext}>{item.service_name || 'Service'}</Text>
 
@@ -1170,6 +1199,22 @@ export default function ClientAppointmentsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Swap Request Modal */}
+      <SwapRequestModal
+        visible={showSwapModal}
+        appointment={swapAppointment}
+        userPhone={user?.phone || ''}
+        userName={user?.name}
+        onClose={() => {
+          setShowSwapModal(false);
+          setSwapAppointment(null);
+        }}
+        onSuccess={() => {
+          setShowSwapModal(false);
+          setSwapAppointment(null);
+        }}
+      />
 
       {/* Late-cancel blocked Modal */}
       <Modal
@@ -1562,10 +1607,16 @@ const styles = StyleSheet.create<any>({
     justifyContent: 'center',
     zIndex: 2,
   },
-  heroCancelButtonTopLeft: {
+  topLeftActions: {
     position: 'absolute',
     top: -6,
     left: -6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    zIndex: 2,
+  },
+  heroCancelButtonTopLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -1573,12 +1624,28 @@ const styles = StyleSheet.create<any>({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    zIndex: 2,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 4,
+  },
+  heroSwapButtonTopLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  heroSwapButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   heroCancelButtonText: {
     fontSize: 12,

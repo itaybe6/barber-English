@@ -908,6 +908,32 @@
     }
     
   },
+  "swap": {
+    "title": "Swap Appointment",
+    "swap": "Swap",
+    "selectDays": "Which days work for you?",
+    "selectDaysHint": "Select the days you would like to swap to",
+    "selectTimeRange": "What time range works?",
+    "selectTimeRangeHint": "Choose the hours you prefer for the swap",
+    "from": "From",
+    "to": "To",
+    "daysSelected": "days selected",
+    "submit": "Submit Swap Request",
+    "selectAtLeastOneDay": "Please select at least one day",
+    "invalidTimeRange": "End time must be after start time",
+    "requestCreated": "Your swap request has been created. We will notify you when a match is found!",
+    "createFailed": "Failed to create swap request",
+    "opportunitiesTitle": "Swap Opportunities",
+    "opportunitiesSubtitle": "Clients looking to swap times with you",
+    "theirSlot": "Available slot",
+    "yourSlot": "Your slot",
+    "swapNow": "Swap Now",
+    "confirmTitle": "Confirm Swap",
+    "confirmMessage": "Swap your appointment on {{myDate}} at {{myTime}} with the appointment on {{theirDate}} at {{theirTime}}?",
+    "execute": "Swap",
+    "swapSuccess": "Appointments have been swapped successfully!",
+    "swapFailed": "Failed to swap appointments"
+  },
   "finance": {
     "title": "Finance",
     "subtitle": "Track income, expenses, and send reports",

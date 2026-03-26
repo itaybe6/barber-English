@@ -29,7 +29,6 @@ export default function ClientProfileScreen() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editName, setEditName] = useState<string>('');
   const [editPhone, setEditPhone] = useState<string>('');
-  const [editEmail, setEditEmail] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
   const [editPassword, setEditPassword] = useState<string>('');
   const [showEditPassword, setShowEditPassword] = useState<boolean>(false);
@@ -175,7 +174,6 @@ export default function ClientProfileScreen() {
       onPress: async () => {
         setEditName(user?.name ?? '');
         setEditPhone(user?.phone ?? '');
-        setEditEmail((user as any)?.email ?? '');
         setEditPassword('');
         setIsEditOpen(true);
         // Try to load freshest user details (email, etc.)
@@ -185,7 +183,6 @@ export default function ClientProfileScreen() {
             if (full) {
               setEditName(full.name ?? '');
               setEditPhone(full.phone ?? '');
-              setEditEmail((full as any)?.email ?? '');
             }
           }
         } catch {}
@@ -382,9 +379,6 @@ export default function ClientProfileScreen() {
                 </View>
                 <Text style={[styles.profileName, styles.profileNameOnGradient, styles.centerText]}>{user?.name || t('valuedClient', 'Valued Client')}</Text>
                 <Text style={[styles.profilePhone, styles.profilePhoneOnGradient, styles.centerText]}>{user?.phone || t('profile.phone', 'Phone number')}</Text>
-                {(user as any)?.email ? (
-                  <Text style={[styles.profileEmail, styles.centerText]}>{(user as any).email}</Text>
-                ) : null}
               </View>
 
               <View style={styles.statsRow}>
@@ -535,19 +529,6 @@ export default function ClientProfileScreen() {
               />
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{t('profile.edit.email', 'Email')}</Text>
-              <TextInput
-                value={editEmail}
-                onChangeText={setEditEmail}
-                placeholder={t('profile.edit.emailPlaceholder', 'name@example.com')}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={styles.textInput}
-                textAlign="left"
-              />
-            </View>
-            <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>{t('profile.edit.newPassword', 'New Password')}</Text>
               <View style={styles.inputWrapper}>
                 <TextInput
@@ -586,12 +567,11 @@ export default function ClientProfileScreen() {
                     const updated = await usersApi.updateUser(user.id, {
                       name: editName.trim(),
                       phone: editPhone.trim(),
-                      email: (editEmail || '').trim() ? (editEmail || '').trim() : (null as any),
                       language: i18n.language?.startsWith('he') ? 'he' : 'en',
                       ...(editPassword.trim() ? { password: editPassword.trim() } : {}),
                     } as any);
                     if (updated) {
-                      updateUserProfile({ name: updated.name as any, phone: (updated as any).phone, email: (updated as any).email, language: (updated as any).language } as any);
+                      updateUserProfile({ name: updated.name as any, phone: (updated as any).phone, language: (updated as any).language } as any);
                     } else {
                       Alert.alert(t('error.generic','Error'), t('profile.saveFailed','Failed to save profile'));
                       return;

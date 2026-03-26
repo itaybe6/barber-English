@@ -38,6 +38,10 @@ export type CalendarReminderFabPanelProps = {
   openedWidth?: number;
   closedSize?: number;
   fabAccessibilityLabel?: string;
+  /** כפתור הפלוס מחוץ לפאנל (למשל בסרגל הטאבים); האנימציה נשארת עם LinearTransition */
+  externalTriggerOnly?: boolean;
+  /** גודל כפתור הפלוס במסך — כיווץ סגור מתאים לכפתור כדי שההתרחבות תתחיל ממנו */
+  externalAnchorSize?: { width: number; height: number } | null;
 };
 
 export function CalendarReminderFabPanel({
@@ -53,6 +57,8 @@ export function CalendarReminderFabPanel({
   openedWidth = SCREEN_WIDTH * 0.88,
   closedSize = 56,
   fabAccessibilityLabel,
+  externalTriggerOnly = false,
+  externalAnchorSize = null,
 }: CalendarReminderFabPanelProps) {
   const spacing = closedSize * 0.2;
   const closeIconSize = closedSize * 0.32;
@@ -62,6 +68,11 @@ export function CalendarReminderFabPanel({
   const wasOpenRef = useRef(false);
 
   useEffect(() => {
+    if (externalTriggerOnly) {
+      wasOpenRef.current = isOpen;
+      setHoldWhiteUntilShrinkDone(false);
+      return;
+    }
     if (isOpen) {
       wasOpenRef.current = true;
       setHoldWhiteUntilShrinkDone(false);
@@ -73,10 +84,19 @@ export function CalendarReminderFabPanel({
       const t = setTimeout(() => setHoldWhiteUntilShrinkDone(false), duration);
       return () => clearTimeout(t);
     }
-  }, [isOpen, duration]);
+  }, [isOpen, duration, externalTriggerOnly]);
 
-  const whiteSurface = isOpen || holdWhiteUntilShrinkDone;
+  const whiteSurface =
+    isOpen || (!externalTriggerOnly && holdWhiteUntilShrinkDone);
   const fabFullyCollapsed = !isOpen && !holdWhiteUntilShrinkDone;
+  const collapsedExternal = externalTriggerOnly && !isOpen;
+  const anchorW = externalAnchorSize?.width ?? 0;
+  const anchorH = externalAnchorSize?.height ?? 0;
+  const hasAnchorDims = anchorW > 0 && anchorH > 0;
+  const collapsedW =
+    collapsedExternal && hasAnchorDims ? anchorW : collapsedExternal ? 0 : closedSize;
+  const collapsedH =
+    collapsedExternal && hasAnchorDims ? anchorH : collapsedExternal ? 0 : closedSize;
 
   const { height: keyboardHeight, state } = useAnimatedKeyboard();
 
@@ -87,19 +107,30 @@ export function CalendarReminderFabPanel({
     };
   });
 
-  const iconAnchor = isRtl ? { left: 0 as const } : { right: 0 as const };
+  /** טריגר חיצוני משמאל — עוגן שמאלי; בלי זה ב־RTL הרוחב עלול להתרחב מימין */
+  const iconAnchor = externalTriggerOnly
+    ? ({ left: 0 as const } as const)
+    : isRtl
+      ? { left: 0 as const }
+      : { right: 0 as const };
 
   return (
     <Animated.View
       style={[
         styles.panel,
         panelStyle,
+        externalTriggerOnly && ({ direction: 'ltr' } as ViewStyle),
         {
-          width: isOpen ? openedWidth : closedSize,
-          minHeight: closedSize,
-          maxHeight: isOpen ? SCREEN_HEIGHT * 0.88 : closedSize,
-          borderRadius: closedSize / 2,
-          padding: spacing,
+          width: isOpen ? openedWidth : collapsedW,
+          minHeight: collapsedExternal ? collapsedH : closedSize,
+          maxHeight: isOpen ? SCREEN_HEIGHT * 0.88 : collapsedH,
+          borderRadius: collapsedExternal
+            ? hasAnchorDims
+              ? anchorH / 2
+              : 0
+            : closedSize / 2,
+          padding: collapsedExternal ? 0 : spacing,
+          opacity: collapsedExternal ? 0 : 1,
           backgroundColor: whiteSurface ? '#FFFFFF' : backgroundColor,
           borderWidth: whiteSurface ? StyleSheet.hairlineWidth : 0,
           borderColor: whiteSurface ? '#E8EAED' : 'transparent',
@@ -107,49 +138,52 @@ export function CalendarReminderFabPanel({
         keyboardHeightStyle,
       ]}
       layout={LinearTransition.duration(duration)}
+      pointerEvents={collapsedExternal ? 'none' : 'auto'}
     >
-      <TouchableWithoutFeedback
-        onPress={onFabPress}
-        accessibilityRole="button"
-        accessibilityLabel={fabAccessibilityLabel}
-        accessibilityState={{ expanded: isOpen }}
-      >
-        <Animated.View
-          style={[
-            {
-              justifyContent: 'center',
-              alignItems: 'center',
-              position: 'absolute',
-              top: 0,
-              width: closedSize,
-              height: closedSize,
-              zIndex: 2,
-            },
-            iconAnchor,
-          ]}
-          layout={LinearTransition.duration(duration)}
+      {(!externalTriggerOnly || isOpen) ? (
+        <TouchableWithoutFeedback
+          onPress={onFabPress}
+          accessibilityRole="button"
+          accessibilityLabel={fabAccessibilityLabel}
+          accessibilityState={{ expanded: isOpen }}
         >
-          {isOpen ? (
-            <AnimatedEntypo
-              key="close"
-              name="cross"
-              size={closeIconSize}
-              color="#3C4043"
-              entering={FadeIn.duration(duration)}
-              exiting={FadeOut.duration(duration)}
-            />
-          ) : (
-            <AnimatedEntypo
-              key="open"
-              name="plus"
-              size={openIconSize}
-              color={fabFullyCollapsed ? '#FFFFFF' : '#3C4043'}
-              entering={FadeIn.duration(duration)}
-              exiting={FadeOut.duration(duration)}
-            />
-          )}
-        </Animated.View>
-      </TouchableWithoutFeedback>
+          <Animated.View
+            style={[
+              {
+                justifyContent: 'center',
+                alignItems: 'center',
+                position: 'absolute',
+                top: 0,
+                width: closedSize,
+                height: closedSize,
+                zIndex: 2,
+              },
+              iconAnchor,
+            ]}
+            layout={LinearTransition.duration(duration)}
+          >
+            {isOpen ? (
+              <AnimatedEntypo
+                key="close"
+                name="cross"
+                size={closeIconSize}
+                color="#3C4043"
+                entering={FadeIn.duration(duration)}
+                exiting={FadeOut.duration(duration)}
+              />
+            ) : !externalTriggerOnly ? (
+              <AnimatedEntypo
+                key="open"
+                name="plus"
+                size={openIconSize}
+                color={fabFullyCollapsed ? '#FFFFFF' : '#3C4043'}
+                entering={FadeIn.duration(duration)}
+                exiting={FadeOut.duration(duration)}
+              />
+            ) : null}
+          </Animated.View>
+        </TouchableWithoutFeedback>
+      ) : null}
 
       {isOpen ? (
         <Animated.View
@@ -178,7 +212,6 @@ const styles = StyleSheet.create({
   panel: {
     position: 'absolute',
     overflow: 'hidden',
-    bottom: 96,
     zIndex: 60,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },

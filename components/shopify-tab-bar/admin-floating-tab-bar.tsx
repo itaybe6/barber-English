@@ -1,92 +1,187 @@
-import React from "react";
-import { View, StyleSheet } from "react-native";
+import React, { useCallback, useEffect, useRef } from "react";
+import { View, StyleSheet, useWindowDimensions } from "react-native";
 import { useRouter, useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   CalendarDays,
   Clock,
   Home,
+  Plus,
   Settings,
   Users,
   Wallet,
 } from "lucide-react-native";
 import { TabButton } from "./tab-button";
 import { useColors } from "@/src/theme/ThemeProvider";
+import { useAdminCalendarView } from "@/contexts/AdminCalendarViewContext";
+import type { CalendarViewMode } from "@/components/admin-calendar/calendarViewMode";
+import { CalendarViewModeIcon } from "@/components/admin-calendar/CalendarViewMenuIcons";
+import {
+  useAdminCalendarReminderFab,
+  useAdminCalendarSetPlusAnchorWindow,
+} from "@/contexts/AdminCalendarReminderFabContext";
 
 const INACTIVE = "#8a8a8a";
 const ICON_ACTIVE = "#ffffff";
+
+const CALENDAR_VIEW_ORDER: CalendarViewMode[] = ["day", "week", "month"];
 
 export const AdminFloatingTabBar: React.FC = () => {
   const router = useRouter();
   const segments = useSegments();
   const insets = useSafeAreaInsets();
   const { primary } = useColors();
+  const { calendarView, setCalendarView } = useAdminCalendarView();
+  const reminderFab = useAdminCalendarReminderFab();
+  const setPlusAnchorWindow = useAdminCalendarSetPlusAnchorWindow();
+  const plusPillRef = useRef<View>(null);
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
   const currentTab = segments[1] as string | undefined;
-  const isActive = (tab: string) => currentTab === tab || (tab === "index" && !currentTab);
+  const isActive = (tab: string) =>
+    currentTab === tab || (tab === "index" && !currentTab);
 
   const iconColor = (tab: string) => (isActive(tab) ? ICON_ACTIVE : INACTIVE);
 
+  const measurePlusInWindow = useCallback(() => {
+    plusPillRef.current?.measureInWindow((x, y, width, height) => {
+      if (width > 0 && height > 0) {
+        setPlusAnchorWindow({ x, y, width, height });
+      }
+    });
+  }, [setPlusAnchorWindow]);
+
+  useEffect(() => {
+    if (currentTab !== "appointments") {
+      setPlusAnchorWindow(null);
+    }
+  }, [currentTab, setPlusAnchorWindow]);
+
+  useEffect(() => {
+    if (currentTab !== "appointments") return;
+    const id = requestAnimationFrame(() => measurePlusInWindow());
+    return () => cancelAnimationFrame(id);
+  }, [currentTab, measurePlusInWindow, windowWidth, windowHeight]);
+
+  if (isActive("appointments")) {
+    return (
+      <View
+        style={[styles.root, { bottom: insets.bottom + 12 }]}
+        pointerEvents="box-none"
+      >
+        {/* direction: ltr — פלוס משמאל, בית מימין, תצוגות באמצע (גם ב־RTL) */}
+        <View style={[styles.inner, styles.innerCalendarBar]}>
+          <View
+            ref={plusPillRef}
+            onLayout={measurePlusInWindow}
+            style={[styles.pill, styles.border, styles.shadow]}
+          >
+            <TabButton
+              focused={!!reminderFab?.isOpen}
+              activeColor={primary}
+              onPress={() => reminderFab?.onPress()}
+            >
+              <Plus
+                size={22}
+                color={reminderFab?.isOpen ? ICON_ACTIVE : INACTIVE}
+              />
+            </TabButton>
+          </View>
+
+          <View
+            style={[styles.pill, styles.center, styles.border, styles.shadow]}
+          >
+            {CALENDAR_VIEW_ORDER.map((mode) => {
+              const focused = calendarView === mode;
+              const fg = focused ? ICON_ACTIVE : INACTIVE;
+              return (
+                <TabButton
+                  key={mode}
+                  focused={focused}
+                  activeColor={primary}
+                  onPress={() => setCalendarView(mode)}
+                >
+                  <CalendarViewModeIcon mode={mode} color={fg} iconSize={22} />
+                </TabButton>
+              );
+            })}
+          </View>
+
+          <View style={[styles.pill, styles.border, styles.shadow]}>
+            <TabButton
+              focused={isActive("index")}
+              activeColor={primary}
+              onPress={() => router.push("/(tabs)")}
+            >
+              <Home size={22} color={iconColor("index")} />
+            </TabButton>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
-    <View style={[styles.root, { bottom: insets.bottom + 12 }]} pointerEvents="box-none">
+    <View
+      style={[styles.root, { bottom: insets.bottom + 12 }]}
+      pointerEvents="box-none"
+    >
       <View style={styles.inner}>
-      {/* Left standalone – Home */}
-      <View style={[styles.pill, styles.border, styles.shadow]}>
-        <TabButton
-          focused={isActive("index")}
-          activeColor={primary}
-          onPress={() => router.push("/(tabs)")}
-        >
-          <Home size={22} color={iconColor("index")} />
-        </TabButton>
-      </View>
+        <View style={[styles.pill, styles.border, styles.shadow]}>
+          <TabButton
+            focused={isActive("index")}
+            activeColor={primary}
+            onPress={() => router.push("/(tabs)")}
+          >
+            <Home size={22} color={iconColor("index")} />
+          </TabButton>
+        </View>
 
-      {/* Center pill */}
-      <View style={[styles.pill, styles.center, styles.border, styles.shadow]}>
-        <TabButton
-          focused={isActive("waitlist")}
-          activeColor={primary}
-          onPress={() => router.push("/(tabs)/waitlist")}
+        <View
+          style={[styles.pill, styles.center, styles.border, styles.shadow]}
         >
-          <Users size={22} color={iconColor("waitlist")} />
-        </TabButton>
+          <TabButton
+            focused={isActive("waitlist")}
+            activeColor={primary}
+            onPress={() => router.push("/(tabs)/waitlist")}
+          >
+            <Users size={22} color={iconColor("waitlist")} />
+          </TabButton>
 
-        <TabButton
-          focused={isActive("appointments")}
-          activeColor={primary}
-          onPress={() => router.push("/(tabs)/appointments")}
-        >
-          <CalendarDays size={22} color={iconColor("appointments")} />
-        </TabButton>
+          <TabButton
+            focused={isActive("appointments")}
+            activeColor={primary}
+            onPress={() => router.push("/(tabs)/appointments")}
+          >
+            <CalendarDays size={22} color={iconColor("appointments")} />
+          </TabButton>
 
-        <TabButton
-          focused={isActive("business-hours")}
-          activeColor={primary}
-          onPress={() => router.push("/(tabs)/business-hours")}
-        >
-          <Clock size={22} color={iconColor("business-hours")} />
-        </TabButton>
+          <TabButton
+            focused={isActive("business-hours")}
+            activeColor={primary}
+            onPress={() => router.push("/(tabs)/business-hours")}
+          >
+            <Clock size={22} color={iconColor("business-hours")} />
+          </TabButton>
 
-        <TabButton
-          focused={isActive("finance")}
-          activeColor={primary}
-          onPress={() => router.push("/(tabs)/finance")}
-        >
-          <Wallet size={22} color={iconColor("finance")} />
-        </TabButton>
+          <TabButton
+            focused={isActive("finance")}
+            activeColor={primary}
+            onPress={() => router.push("/(tabs)/finance")}
+          >
+            <Wallet size={22} color={iconColor("finance")} />
+          </TabButton>
+        </View>
 
-      </View>
-
-      {/* Right standalone – Settings */}
-      <View style={[styles.pill, styles.border, styles.shadow]}>
-        <TabButton
-          focused={isActive("settings")}
-          activeColor={primary}
-          onPress={() => router.push("/(tabs)/settings")}
-        >
-          <Settings size={22} color={iconColor("settings")} />
-        </TabButton>
-      </View>
+        <View style={[styles.pill, styles.border, styles.shadow]}>
+          <TabButton
+            focused={isActive("settings")}
+            activeColor={primary}
+            onPress={() => router.push("/(tabs)/settings")}
+          >
+            <Settings size={22} color={iconColor("settings")} />
+          </TabButton>
+        </View>
       </View>
     </View>
   );
@@ -103,6 +198,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  innerCalendarBar: {
+    direction: "ltr",
   },
   pill: {
     backgroundColor: "#ffffff",

@@ -6,8 +6,6 @@ import LoginRequiredModal from "@/components/LoginRequiredModal";
 import { MenuProvider } from "@/components/shopify-tab-bar/menu-provider";
 import { AnimatedTabsContainer } from "@/components/shopify-tab-bar/animated-tabs-container";
 import { ClientFloatingTabBar } from "@/components/shopify-tab-bar/client-floating-tab-bar";
-import { Menu, CLIENT_MENU_ITEMS } from "@/components/shopify-tab-bar/menu";
-
 export default function ClientTabsLayout() {
   const router = useRouter();
   const { t } = useTranslation();
@@ -39,8 +37,6 @@ export default function ClientTabsLayout() {
         </AnimatedTabsContainer>
 
         <ClientFloatingTabBar setLoginModal={setLoginModal} />
-
-        <Menu items={CLIENT_MENU_ITEMS} />
 
         <LoginRequiredModal
           visible={loginModal.visible}

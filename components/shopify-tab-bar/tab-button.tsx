@@ -12,6 +12,8 @@ interface TabButtonProps {
   onPress: () => void;
   children: ReactNode;
   activeColor?: string;
+  /** Default 14 — use a larger value for oversized tab bars (e.g. booking). */
+  buttonPadding?: number;
 }
 
 export const TabButton: FC<TabButtonProps> = ({
@@ -19,6 +21,7 @@ export const TabButton: FC<TabButtonProps> = ({
   onPress,
   children,
   activeColor = "#F5F5F5",
+  buttonPadding = 14,
 }) => {
   const scale = useSharedValue(1);
   const bg = useSharedValue(focused ? activeColor : "#ffffff");
@@ -49,7 +52,7 @@ export const TabButton: FC<TabButtonProps> = ({
         bg.set(focused ? activeColor : "#ffffff");
       }}
     >
-      <Animated.View style={[styles.button, rStyle]}>
+      <Animated.View style={[styles.button, { padding: buttonPadding }, rStyle]}>
         {children}
       </Animated.View>
     </Pressable>
@@ -58,7 +61,6 @@ export const TabButton: FC<TabButtonProps> = ({
 
 const styles = StyleSheet.create({
   button: {
-    padding: 14,
     borderRadius: 999,
   },
 });

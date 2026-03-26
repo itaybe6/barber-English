@@ -758,9 +758,9 @@ export const superAdminApi = {
 
       // 3. Create default services
       const defaultServices = [
-        { name: 'Gel Nails', price: 150, duration_minutes: 60, is_active: true, business_id: businessId },
-        { name: 'Gel Removal', price: 50, duration_minutes: 30, is_active: true, business_id: businessId },
-        { name: 'Manicure', price: 80, duration_minutes: 45, is_active: true, business_id: businessId },
+        { name: 'שירות 1', price: 150, duration_minutes: 60, is_active: true, business_id: businessId },
+        { name: 'שירות 2', price: 50, duration_minutes: 30, is_active: true, business_id: businessId },
+        { name: 'שירות 3', price: 80, duration_minutes: 45, is_active: true, business_id: businessId },
       ];
 
       const { error: servicesError } = await supabase.from('services').insert(defaultServices);

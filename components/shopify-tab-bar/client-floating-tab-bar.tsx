@@ -2,22 +2,19 @@ import React from "react";
 import { View, StyleSheet, Alert } from "react-native";
 import { useRouter, useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { withSpring } from "react-native-reanimated";
 import {
   CalendarDays,
   CalendarPlus,
   Home,
   Image,
-  Menu as MenuIcon,
   User,
 } from "lucide-react-native";
 import { TabButton } from "./tab-button";
-import { useMenu } from "./menu-provider";
 import { useAuthStore } from "@/stores/authStore";
 import { useTranslation } from "react-i18next";
+import { getClientTabBarBottomInset } from "@/constants/clientTabBarInsets";
 import { useColors } from "@/src/theme/ThemeProvider";
 
-const MENU_SPRING = { damping: 130, stiffness: 1400 };
 const INACTIVE = "#8a8a8a";
 const ICON_ACTIVE = "#ffffff";
 
@@ -31,7 +28,6 @@ export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
   const router = useRouter();
   const segments = useSegments();
   const insets = useSafeAreaInsets();
-  const { menuProgress } = useMenu();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
   const isBlocked = Boolean((user as any)?.block);
@@ -77,8 +73,7 @@ export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
     router.push("/(client-tabs)/book-appointment");
   };
 
-  /** Sit just above the home indicator; avoid +12px “lift” that leaves a visible gray strip below the bar */
-  const bottomInset = insets.bottom > 0 ? insets.bottom + 2 : 8;
+  const bottomInset = getClientTabBarBottomInset(insets.bottom);
 
   return (
     <View style={[styles.root, { bottom: bottomInset }]} pointerEvents="box-none">
@@ -113,11 +108,6 @@ export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
           onPress={() => navigate("/(client-tabs)/appointments", true)}
         >
           <CalendarDays size={22} color={iconColor("appointments")} />
-        </TabButton>
-
-        {/* Menu trigger */}
-        <TabButton focused={false} activeColor={primary} onPress={() => menuProgress.set(withSpring(1, MENU_SPRING))}>
-          <MenuIcon size={22} color={INACTIVE} />
         </TabButton>
       </View>
 

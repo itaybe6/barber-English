@@ -555,7 +555,7 @@ export default function SuperAdminDashboard() {
 
       <View style={styles.infoBox}>
         <Text style={styles.infoText}>
-          3 שירותים יווצרו אוטומטית: לק ג'ל, הסרת ג'ל, ומניקור.
+          3 שירותים יווצרו אוטומטית: שירות 1, שירות 2 ושירות 3.
         </Text>
         <Ionicons name="sparkles" size={18} color={ACCENT} />
       </View>

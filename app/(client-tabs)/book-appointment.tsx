@@ -1474,19 +1474,34 @@ export default function BookAppointment() {
 
   const TOP_OFFSET = Math.round(safeAreaInsets.top + 8);
 
-  const handleBookingStepBack = React.useCallback(() => {
-    if (currentStep > 1) {
-      setCurrentStep((currentStep - 1) as 1 | 2 | 3 | 4);
-    } else if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/(client-tabs)' as any);
-    }
-  }, [currentStep, router]);
-
   const handleBookingHome = React.useCallback(() => {
     router.replace('/(client-tabs)' as any);
   }, [router]);
+
+  const advanceToNextStep = React.useCallback(() => {
+    if (currentStep === 1 && selectedBarber) {
+      setCurrentStep(2);
+      return;
+    }
+    if (currentStep === 2 && selectedServices.length > 0) {
+      if (isTransitioning.current) return;
+      isTransitioning.current = true;
+      step2Fade.value = withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) }, () => {
+        runOnJS(setCurrentStep)(3);
+        step2Fade.value = 1;
+        isTransitioning.current = false;
+      });
+      return;
+    }
+    if (currentStep === 3 && selectedDay !== null) {
+      setCurrentStep(4);
+    }
+  }, [currentStep, selectedBarber, selectedServices.length, selectedDay]);
+
+  const bookingAdvanceNextEnabled =
+    (currentStep === 1 && !!selectedBarber) ||
+    (currentStep === 2 && selectedServices.length > 0) ||
+    (currentStep === 3 && selectedDay !== null);
 
   const timeSelectionProps: TimeSelectionProps = {
     visible:
@@ -1541,9 +1556,13 @@ export default function BookAppointment() {
           canGoService={!!selectedBarber}
           canGoDay={!!selectedService}
           canGoTime={selectedDay !== null}
-          onBack={handleBookingStepBack}
           onHome={handleBookingHome}
           onChangeStep={(step) => setCurrentStep(Number(step) as any)}
+          advanceNext={
+            currentStep < 4
+              ? { enabled: bookingAdvanceNextEnabled, onPress: advanceToNextStep }
+              : undefined
+          }
         />
       {/* Header removed on steps 3-4 per request */}
       <View style={[
@@ -1563,9 +1582,6 @@ export default function BookAppointment() {
                   ? bookingBarTopFromBottom + 20
                   : contentBottomPadding,
             },
-            (currentStep === 1) ? { minHeight: CAROUSEL_HEIGHT + 100 } : null,
-            /* Step 1: pin barber block to bottom. Step 2: no flex-end — avoids empty flex gap + nested FlatList layout bugs */
-            (currentStep === 1) ? { flexGrow: 1, justifyContent: 'flex-end' } : null,
           ]}
           showsVerticalScrollIndicator={false}
             refreshControl={currentStep >= 3 ? <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#000" /> : undefined}
@@ -1604,7 +1620,6 @@ export default function BookAppointment() {
             setIsLoadingSlots(false);
             setDayAvailability({});
           }}
-          onContinue={selectedBarber ? () => setCurrentStep(2) : undefined}
         />
 
         {/* Step 2: Service Selection - Multi-select grid */}
@@ -1634,7 +1649,6 @@ export default function BookAppointment() {
             setShowReplaceModal(false);
             setExistingAppointment(null);
           }}
-          onContinue={selectedServices.length > 0 ? () => setCurrentStep(3) : undefined}
         />
 
         {/* Step 3: Day Selection */}

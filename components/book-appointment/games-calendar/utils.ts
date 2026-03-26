@@ -22,6 +22,24 @@ export function buildForwardMonthsFromNow(monthsAhead: number, locale: string): 
   return months;
 }
 
+/** Past + future months around today (inclusive). E.g. 12,12 → 25 months. */
+export function buildMonthRange(monthsBack: number, monthsForward: number, locale: string): MonthEntry[] {
+  const loc = locale === 'he' ? 'he-IL' : 'en-US';
+  const now = new Date();
+  const months: MonthEntry[] = [];
+  const start = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
+  const total = monthsBack + monthsForward + 1;
+  for (let i = 0; i < total; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
+    const label = d.toLocaleString(loc, {
+      month: 'long',
+      year: 'numeric',
+    });
+    months.push({ label, date: new Date(d.getFullYear(), d.getMonth(), 1) });
+  }
+  return months;
+}
+
 /** Monday-first weeks (same layout as Make It Animated Juventus calendar). */
 export function getMonthWeeks(monthObj: MonthEntry): (Date | null)[][] {
   const year = monthObj.date.getFullYear();

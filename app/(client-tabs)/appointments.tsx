@@ -997,21 +997,6 @@ export default function ClientAppointmentsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View style={{ width: 22 }} />
-          <View style={{ alignItems: 'center' }}>
-            <Text style={styles.headerTitle}>
-              {user?.user_type === 'admin' ? t('appointments.mySchedule', 'My Schedule') : t('appointments.myAppointments', 'My Appointments')}
-            </Text>
-            <Text style={styles.headerSubtitle}>
-              {user?.user_type === 'admin' ? t('appointments.subtitle.admin', 'Your appointments as a barber') : t('appointments.subtitle.client', 'Upcoming and past appointments')}
-            </Text>
-          </View>
-          <View style={{ width: 22 }} />
-        </View>
-      </View>
-
       <View style={styles.container}>
         <View style={styles.toggleContainer}>
           <View style={styles.toggleWrapper}>
@@ -1336,7 +1321,7 @@ export default function ClientAppointmentsScreen() {
 const styles = StyleSheet.create<any>({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F2F2F7',
   },
   container: {
     flex: 1,
@@ -1344,34 +1329,6 @@ const styles = StyleSheet.create<any>({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 8,
-  },
-  header: {
-    height: 104,
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 16,
-    backgroundColor: Colors.white,
-  },
-  headerContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerSpacer: {
-    width: 44,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.text,
-    letterSpacing: -0.2,
-    textAlign: 'center',
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: Colors.subtext,
-    marginTop: 6,
   },
   loadingContainer: {
     flex: 1,

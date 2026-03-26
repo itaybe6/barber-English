@@ -11,6 +11,8 @@ type DaysProps = {
   cellSize: number;
   primaryColor: string;
   onDayPress: (date: Date) => void;
+  /** `availability` = green/red dot (booking). `count` = numeric badge (admin). */
+  displayMode?: 'availability' | 'count';
 };
 
 function sameDate(a: Date, b: Date) {
@@ -30,6 +32,7 @@ export function Days({
   cellSize,
   primaryColor,
   onDayPress,
+  displayMode = 'availability',
 }: DaysProps) {
   const weeks = getMonthWeeks(data);
   const rangeStartDay = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), rangeStart.getDate());
@@ -57,7 +60,8 @@ export function Days({
             }
             const inRange = date >= rangeStartDay && date <= rangeEndDay;
             const dsIso = toIso(date);
-            const hasAvail = (dayAvailability[dsIso] ?? 0) > 0;
+            const availCount = dayAvailability[dsIso] ?? 0;
+            const hasAvail = availCount > 0;
             const isSel = selectedDate ? sameDate(date, selectedDate) : false;
 
             return (
@@ -87,17 +91,41 @@ export function Days({
                 >
                   {date.getDate()}
                 </Text>
-                {inRange && (
-                  <View
-                    style={{
-                      width: 7,
-                      height: 7,
-                      borderRadius: 4,
-                      marginTop: 3,
-                      backgroundColor: hasAvail ? '#34C759' : '#FF3B30',
-                    }}
-                  />
-                )}
+                {inRange &&
+                  (displayMode === 'count' ? (
+                    <View
+                      style={{
+                        marginTop: 3,
+                        minWidth: 20,
+                        height: 20,
+                        paddingHorizontal: 5,
+                        borderRadius: 10,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: hasAvail ? primaryColor : '#E5E7EB',
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          fontWeight: '800',
+                          color: hasAvail ? '#FFFFFF' : '#9CA3AF',
+                        }}
+                      >
+                        {availCount > 99 ? '99+' : String(availCount)}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View
+                      style={{
+                        width: 7,
+                        height: 7,
+                        borderRadius: 4,
+                        marginTop: 3,
+                        backgroundColor: hasAvail ? '#34C759' : '#FF3B30',
+                      }}
+                    />
+                  ))}
               </TouchableOpacity>
             );
           })}

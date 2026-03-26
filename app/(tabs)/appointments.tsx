@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Dimensions,
   I18nManager,
+  useWindowDimensions,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -46,6 +47,7 @@ import {
   type AnchorRect,
 } from '@/components/admin-calendar/AppointmentActionsAnchorSheet';
 import { AppointmentsCalendarLoader } from '@/components/admin-calendar/AppointmentsCalendarLoader';
+import BookingAnimatedCalendar from '@/components/book-appointment/games-calendar/BookingAnimatedCalendar';
 import { CalendarReminderFabPanel } from '@/components/CalendarReminderFabPanel';
 import { useAdminCalendarView } from '@/contexts/AdminCalendarViewContext';
 import {
@@ -660,6 +662,11 @@ export default function AdminAppointmentsScreen() {
   const [selectedAppointment, setSelectedAppointment] = useState<AvailableTimeSlot | null>(null);
   const [isCancelling, setIsCancelling] = useState<boolean>(false);
   const [markedDates, setMarkedDates] = useState<Set<string>>(new Set());
+  /** Booked appointments per day (barber scope) — month grid badge */
+  const [appointmentCountsByDate, setAppointmentCountsByDate] = useState<Record<string, number>>({});
+  const [monthDayModalDate, setMonthDayModalDate] = useState<string | null>(null);
+  const [modalDayAppointments, setModalDayAppointments] = useState<AvailableTimeSlot[]>([]);
+  const [modalDayLoading, setModalDayLoading] = useState(false);
   const [actionsModal, setActionsModal] = useState<{
     open: boolean;
     appointment: AvailableTimeSlot | null;
@@ -761,11 +768,12 @@ export default function AdminAppointmentsScreen() {
     return `${y}-${m}-${d}`;
   }, [selectedDate]);
 
-  const loadAppointmentsForDate = useCallback(async (dateString: string, isRefresh: boolean = false) => {
+  const loadAppointmentsForDate = useCallback(
+    async (dateString: string, isRefresh: boolean = false, quiet: boolean = false) => {
     try {
       if (isRefresh) {
         setRefreshing(true);
-      } else {
+      } else if (!quiet) {
         setIsLoading(true);
       }
 
@@ -808,11 +816,13 @@ export default function AdminAppointmentsScreen() {
     } finally {
       if (isRefresh) {
         setRefreshing(false);
-      } else {
+      } else if (!quiet) {
         setIsLoading(false);
       }
     }
-  }, [user?.id]);
+  },
+  [user?.id]
+);
 
   const loadAppointmentsForRange = useCallback(
     async (startDateStr: string, endDateStr: string) => {
@@ -914,58 +924,98 @@ export default function AdminAppointmentsScreen() {
       }
     };
     loadBH();
-    loadAppointmentsForDate(selectedDateStr);
-  }, [selectedDate, selectedDateStr, loadAppointmentsForDate]);
+    void loadAppointmentsForDate(selectedDateStr, false, calendarView === 'month');
+  }, [selectedDate, selectedDateStr, loadAppointmentsForDate, calendarView]);
 
-  // Load marked dates (days with at least one booked appointment) for the current month
-  useEffect(() => {
-    const loadMonthMarks = async () => {
-      try {
-        // If no logged-in user, do not show any marks
-        if (!user?.id) {
-          setMarkedDates(new Set());
-          return;
-        }
-
-        const year = selectedDate.getFullYear();
-        const month = selectedDate.getMonth();
-        const firstOfMonth = new Date(year, month, 1);
-        firstOfMonth.setHours(0, 0, 0, 0);
-        const firstOfNextMonth = new Date(year, month + 1, 1);
-        firstOfNextMonth.setHours(0, 0, 0, 0);
-
-        const fmt = (d: Date) => {
-          const y = d.getFullYear();
-          const m = String(d.getMonth() + 1).padStart(2, '0');
-          const da = String(d.getDate()).padStart(2, '0');
-          return `${y}-${m}-${da}`;
-        };
-
-        const { data, error } = await supabase
-          .from('appointments')
-          .select('slot_date')
-          .eq('is_available', false)
-          .eq('barber_id', user.id)
-          .gte('slot_date', fmt(firstOfMonth))
-          .lt('slot_date', fmt(firstOfNextMonth));
-
-        if (error) {
-          console.error('Error loading month marks:', error);
-          setMarkedDates(new Set());
-          return;
-        }
-
-        const unique = new Set<string>((data as any[] | null)?.map((r: any) => r.slot_date) || []);
-        const reminderDates = await listCalendarReminderDatesInMonth(year, month, user.id);
-        reminderDates.forEach((d) => unique.add(d));
-        setMarkedDates(unique);
-      } catch (e) {
-        console.error('Error in loadMonthMarks:', e);
+  const reloadMonthMarks = useCallback(async () => {
+    try {
+      if (!user?.id) {
         setMarkedDates(new Set());
+        setAppointmentCountsByDate({});
+        return;
       }
+
+      const year = selectedDate.getFullYear();
+      const month = selectedDate.getMonth();
+      const firstOfMonth = new Date(year, month, 1);
+      firstOfMonth.setHours(0, 0, 0, 0);
+      const firstOfNextMonth = new Date(year, month + 1, 1);
+      firstOfNextMonth.setHours(0, 0, 0, 0);
+
+      const fmt = (d: Date) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const da = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${da}`;
+      };
+
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('slot_date')
+        .eq('is_available', false)
+        .eq('barber_id', user.id)
+        .gte('slot_date', fmt(firstOfMonth))
+        .lt('slot_date', fmt(firstOfNextMonth));
+
+      if (error) {
+        console.error('Error loading month marks:', error);
+        setMarkedDates(new Set());
+        setAppointmentCountsByDate({});
+        return;
+      }
+
+      const counts: Record<string, number> = {};
+      (data as any[] | null)?.forEach((r: any) => {
+        const k = r.slot_date as string;
+        if (!k) return;
+        counts[k] = (counts[k] ?? 0) + 1;
+      });
+      setAppointmentCountsByDate(counts);
+
+      const unique = new Set<string>(Object.keys(counts));
+      const reminderDates = await listCalendarReminderDatesInMonth(year, month, user.id);
+      reminderDates.forEach((d) => unique.add(d));
+      setMarkedDates(unique);
+    } catch (e) {
+      console.error('Error in reloadMonthMarks:', e);
+      setMarkedDates(new Set());
+      setAppointmentCountsByDate({});
+    }
+  }, [selectedDate, user?.id]);
+
+  useEffect(() => {
+    void reloadMonthMarks();
+  }, [reloadMonthMarks]);
+
+  useEffect(() => {
+    if (!monthDayModalDate || !user?.id) {
+      setModalDayAppointments([]);
+      setModalDayLoading(false);
+      return;
+    }
+    let alive = true;
+    setModalDayLoading(true);
+    (async () => {
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('slot_date', monthDayModalDate)
+        .eq('is_available', false)
+        .eq('barber_id', user.id)
+        .order('slot_time', { ascending: true });
+      if (!alive) return;
+      if (error) {
+        console.error('Error loading modal day appointments:', error);
+        setModalDayAppointments([]);
+      } else {
+        setModalDayAppointments((data as unknown as AvailableTimeSlot[]) || []);
+      }
+      setModalDayLoading(false);
+    })();
+    return () => {
+      alive = false;
     };
-    loadMonthMarks();
-  }, [selectedDate.getFullYear(), selectedDate.getMonth(), user?.id]);
+  }, [monthDayModalDate, user?.id]);
 
   // Scroll to morning by default for convenience
   useEffect(() => {
@@ -976,8 +1026,11 @@ export default function AdminAppointmentsScreen() {
   }, [selectedDateStr, dayStart]);
 
   const onRefresh = useCallback(() => {
-    loadAppointmentsForDate(selectedDateStr, true);
-  }, [loadAppointmentsForDate, selectedDateStr]);
+    void loadAppointmentsForDate(selectedDateStr, true, calendarView === 'month');
+    if (calendarView === 'month') {
+      void reloadMonthMarks();
+    }
+  }, [loadAppointmentsForDate, selectedDateStr, calendarView, reloadMonthMarks]);
 
   // Helpers for the time grid
   const minutesFromMidnight = (time?: string | null): number => {
@@ -1047,22 +1100,6 @@ export default function AdminAppointmentsScreen() {
     if (!weekRangeChronoBounds) return;
     void loadAppointmentsForRange(weekRangeChronoBounds.start, weekRangeChronoBounds.end);
   }, [calendarView, weekRangeChronoBounds, loadAppointmentsForRange]);
-
-  type AgendaRow =
-    | { kind: 'appt'; sortKey: number; appt: AvailableTimeSlot }
-    | { kind: 'reminder'; sortKey: number; rem: CalendarReminder };
-
-  const agendaRows = useMemo((): AgendaRow[] => {
-    const rows: AgendaRow[] = [];
-    appointments.forEach((appt) => {
-      rows.push({ kind: 'appt', sortKey: minutesFromMidnight(appt.slot_time), appt });
-    });
-    calendarReminders.forEach((rem) => {
-      rows.push({ kind: 'reminder', sortKey: minutesFromMidnight(rem.start_time), rem });
-    });
-    rows.sort((a, b) => a.sortKey - b.sortKey);
-    return rows;
-  }, [appointments, calendarReminders]);
 
   const nowLineOffsetY = useMemo(() => {
     if (calendarView !== 'day') return null;
@@ -1228,13 +1265,17 @@ export default function AdminAppointmentsScreen() {
         if (dateKey) removeBookedFromRangeMap(selectedAppointment.id, dateKey);
         setShowCancelModal(false);
         setSelectedAppointment(null);
+        void reloadMonthMarks();
+        if (monthDayModalDate && dateKey === monthDayModalDate) {
+          setModalDayAppointments((prev) => prev.filter((a) => a.id !== selectedAppointment.id));
+        }
       }
     } catch (e) {
       console.error('Error in confirmCancelAppointment:', e);
     } finally {
       setIsCancelling(false);
     }
-  }, [selectedAppointment, removeBookedFromRangeMap]);
+  }, [selectedAppointment, removeBookedFromRangeMap, reloadMonthMarks, monthDayModalDate]);
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [appointmentToDelete, setAppointmentToDelete] = useState<AvailableTimeSlot | null>(null);
@@ -1264,13 +1305,17 @@ export default function AdminAppointmentsScreen() {
         setShowDeleteModal(false);
         setAppointmentToDelete(null);
         requestCloseActionsModal();
+        void reloadMonthMarks();
+        if (monthDayModalDate && dateKey === monthDayModalDate) {
+          setModalDayAppointments((prev) => prev.filter((a) => a.id !== appointmentToDelete.id));
+        }
       }
     } catch (e) {
       console.error('Error in confirmDeleteAppointment:', e);
     } finally {
       setIsDeleting(false);
     }
-  }, [appointmentToDelete, removeBookedFromRangeMap, requestCloseActionsModal]);
+  }, [appointmentToDelete, removeBookedFromRangeMap, requestCloseActionsModal, reloadMonthMarks, monthDayModalDate]);
 
   const refreshCalendarRemindersOnly = useCallback(async () => {
     if (!user?.id) return;
@@ -1450,11 +1495,37 @@ export default function AdminAppointmentsScreen() {
 
   const calendarPrimary = businessColors.primary || GC_BLUE;
   const calendarRipple = `${calendarPrimary}2A`;
+  const { height: windowHeight } = useWindowDimensions();
+
+  const adminMonthAnchorKey = useMemo(
+    () => `${selectedDate.getFullYear()}-${selectedDate.getMonth()}`,
+    [selectedDate]
+  );
+
+  const onAdminCalendarMonthVisible = useCallback((monthFirstDay: Date) => {
+    setSelectedDate((prev) => {
+      const y = monthFirstDay.getFullYear();
+      const m = monthFirstDay.getMonth();
+      const lastD = new Date(y, m + 1, 0).getDate();
+      const day = Math.min(prev.getDate(), lastD);
+      const d = new Date(y, m, day);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    });
+  }, []);
+
+  const onAdminCalendarDayPress = useCallback((date: Date) => {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    setSelectedDate(d);
+    setMonthDayModalDate(_formatLocalYyyyMmDd(d));
+  }, []);
 
   return (
     <View style={styles.gcRoot}>
       <View style={[styles.gcTopChrome, { paddingTop: insets.top }]}>
         <View style={styles.gcHeader}>
+        {calendarView !== 'month' ? (
         <View
           style={[
             styles.gcNavTrack,
@@ -1518,19 +1589,20 @@ export default function AdminAppointmentsScreen() {
             <ChevronLeft size={22} color={calendarPrimary} strokeWidth={2.5} />
           </Pressable>
         </View>
+        ) : null}
         </View>
       </View>
 
-      {calendarView !== 'week' && (
+      {calendarView === 'day' && (
         <DaySelector
           selectedDate={selectedDate}
           onSelectDate={setSelectedDate}
-          mode={calendarView === 'month' ? 'month' : 'week'}
+          mode="week"
           markedDates={markedDates}
         />
       )}
 
-      {isLoading ? (
+      {isLoading && calendarView !== 'month' ? (
         <View style={styles.loaderContainer}>
           <AppointmentsCalendarLoader
             accentColor={calendarPrimary}
@@ -1809,8 +1881,8 @@ export default function AdminAppointmentsScreen() {
             </ScrollView>
           ) : (
             <ScrollView
-              style={styles.gcAgendaScroll}
-              contentContainerStyle={styles.gcAgendaScrollContent}
+              style={styles.gcMonthScroll}
+              contentContainerStyle={styles.gcMonthScrollContent}
               keyboardShouldPersistTaps="always"
               refreshControl={
                 <RefreshControl
@@ -1823,92 +1895,135 @@ export default function AdminAppointmentsScreen() {
                 />
               }
             >
-              <View style={styles.agendaSectionHeader}>
-                <Text style={[styles.agendaSectionKicker, { color: calendarPrimary }]} numberOfLines={1}>
-                  {(() => {
-                    const p = _gregorianDayHeaderParts(selectedDate);
-                    return p.weekday ? `${p.weekday} · ${p.dayNum}` : selectedDateStr;
-                  })()}
-                </Text>
-                <Text style={styles.agendaSectionTitle} numberOfLines={2}>
-                  {tHe('admin.calendar.monthAgendaHint', 'אירועים ליום הנבחר')}
-                </Text>
-              </View>
-              {agendaRows.length === 0 ? (
-                <View style={styles.agendaEmpty}>
-                  <Ionicons name="calendar-outline" size={40} color="#DADCE0" />
-                  <Text style={styles.agendaEmptyTitle}>{tHe('admin.calendar.agendaEmpty', 'אין אירועים ביום זה')}</Text>
-                  <Text style={styles.agendaEmptySub}>{tHe('admin.calendar.agendaEmptySub', 'הוסיפו תור או תזכורת מהכפתור +')}</Text>
+              <View
+                style={{
+                  width: '100%',
+                  minHeight: Math.max(520, windowHeight * 0.58),
+                  justifyContent: 'center',
+                  paddingVertical: 12,
+                }}
+              >
+                <View style={styles.bookingCalendarSectionCard}>
+                  <View
+                    style={[
+                      styles.bookingCalendarFixedBox,
+                      !I18nManager.isRTL && { direction: 'ltr' },
+                    ]}
+                  >
+                    <BookingAnimatedCalendar
+                      variant="admin"
+                      dayAvailability={appointmentCountsByDate}
+                      selectedDate={selectedDate}
+                      language={typeof i18n.language === 'string' && i18n.language.startsWith('he') ? 'he' : 'en'}
+                      primaryColor={calendarPrimary}
+                      adminAnchorMonthKey={adminMonthAnchorKey}
+                      onAdminVisibleMonthChange={onAdminCalendarMonthVisible}
+                      onAdminDayPress={onAdminCalendarDayPress}
+                    />
+                  </View>
                 </View>
-              ) : (
-                agendaRows.map((row) => {
-                  if (row.kind === 'appt') {
-                    const appt = row.appt;
-                    const dur = appt.duration_minutes || 30;
-                    return (
-                      <Pressable
-                        key={`ag-appt-${appt.id}`}
-                        style={({ pressed }) => [styles.agendaCard, pressed && { opacity: 0.92 }]}
-                        onPress={() => openActionsMenuFromRefMap(appt, dayAptRefMap)}
-                      >
-                        <View
-                          ref={(n) => registerDayAptRef(appt.id, n)}
-                          collapsable={false}
-                          style={{
-                            width: '100%',
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            gap: 12,
-                            minHeight: 44,
-                          }}
-                        >
-                          <View style={[styles.agendaBar, { backgroundColor: calendarPrimary }]} />
-                          <View style={styles.agendaCardBody}>
-                            <Text style={styles.agendaTime}>
-                              {formatTime(appt.slot_time)} – {formatTime(addMinutes(appt.slot_time, dur))}
-                            </Text>
-                            <Text style={styles.agendaTitle} numberOfLines={2}>
-                              {[appt.client_name || tHe('admin.calendar.client', 'לקוח'), appt.service_name].filter(Boolean).join(' · ')}
-                            </Text>
-                          </View>
-                          <Ionicons name="chevron-back" size={20} color="#DADCE0" />
-                        </View>
-                      </Pressable>
-                    );
-                  }
-                  const rem = row.rem;
-                  const pal = reminderPalette(rem.color_key);
-                  const dur = rem.duration_minutes || 30;
-                  return (
-                    <TouchableOpacity
-                      key={`ag-rem-${rem.id}`}
-                      style={styles.agendaCard}
-                      onPress={() => openEditReminderModal(rem)}
-                      activeOpacity={0.88}
-                    >
-                      <View style={[styles.agendaBar, { backgroundColor: pal.bar }]} />
-                      <View style={styles.agendaCardBody}>
-                        <Text style={styles.agendaTime}>
-                          {formatTime(rem.start_time)} – {formatTime(addMinutes(rem.start_time, dur))}
-                        </Text>
-                        <Text style={styles.agendaTitle} numberOfLines={2}>
-                          {rem.title}
-                        </Text>
-                        {!!rem.notes ? (
-                          <Text style={styles.agendaNotes} numberOfLines={2}>
-                            {rem.notes}
-                          </Text>
-                        ) : null}
-                      </View>
-                      <StickyNote size={20} color={pal.bar} />
-                    </TouchableOpacity>
-                  );
-                })
-              )}
+              </View>
+              <Text style={styles.gcMonthHint} numberOfLines={2}>
+                {tHe('admin.calendar.monthTapDayHint', 'הקישו על יום כדי לראות את כל התורים')}
+              </Text>
             </ScrollView>
           )}
         </>
       )}
+
+      <Modal
+        visible={monthDayModalDate !== null}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setMonthDayModalDate(null)}
+      >
+        <View style={styles.monthModalRoot}>
+          <Pressable
+            style={styles.monthModalBackdrop}
+            onPress={() => setMonthDayModalDate(null)}
+            accessibilityRole="button"
+            accessibilityLabel={tHe('close', 'סגור')}
+          />
+          <View style={[styles.monthModalSheet, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={[styles.monthModalHeader, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
+              <Text style={styles.monthModalTitle} numberOfLines={2}>
+                {monthDayModalDate
+                  ? (() => {
+                      const parts = monthDayModalDate.split('-').map((x) => parseInt(x, 10));
+                      const yy = parts[0];
+                      const mm = parts[1];
+                      const dd = parts[2];
+                      if (!yy || !mm || !dd) return monthDayModalDate;
+                      const d = new Date(yy, mm - 1, dd);
+                      const p = _gregorianDayHeaderParts(d);
+                      return p.weekday ? `${p.weekday} · ${p.dayNum}` : monthDayModalDate;
+                    })()
+                  : ''}
+              </Text>
+              <Pressable
+                hitSlop={12}
+                onPress={() => setMonthDayModalDate(null)}
+                accessibilityLabel={tHe('close', 'סגור')}
+              >
+                <Entypo name="cross" size={22} color="#5F6368" />
+              </Pressable>
+            </View>
+            {modalDayLoading ? (
+              <View style={styles.monthModalLoading}>
+                <ActivityIndicator color={calendarPrimary} />
+              </View>
+            ) : modalDayAppointments.length === 0 ? (
+              <View style={styles.monthModalEmpty}>
+                <Ionicons name="calendar-outline" size={44} color="#DADCE0" />
+                <Text style={styles.monthModalEmptyTitle}>
+                  {tHe('admin.calendar.monthModalEmpty', 'אין תורים ביום זה')}
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                style={styles.monthModalList}
+                contentContainerStyle={styles.monthModalListContent}
+                keyboardShouldPersistTaps="always"
+                showsVerticalScrollIndicator={false}
+              >
+                {modalDayAppointments.map((appt) => {
+                  const dur = appt.duration_minutes || 30;
+                  return (
+                    <Pressable
+                      key={`md-appt-${appt.id}`}
+                      style={({ pressed }) => [styles.agendaCard, pressed && { opacity: 0.92 }]}
+                      onPress={() => openActionsMenu(appt)}
+                    >
+                      <View
+                        ref={(n) => registerDayAptRef(appt.id, n)}
+                        collapsable={false}
+                        style={{
+                          width: '100%',
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 12,
+                          minHeight: 44,
+                        }}
+                      >
+                        <View style={[styles.agendaBar, { backgroundColor: calendarPrimary }]} />
+                        <View style={styles.agendaCardBody}>
+                          <Text style={styles.agendaTime}>
+                            {formatTime(appt.slot_time)} – {formatTime(addMinutes(appt.slot_time, dur))}
+                          </Text>
+                          <Text style={styles.agendaTitle} numberOfLines={2}>
+                            {[appt.client_name || tHe('admin.calendar.client', 'לקוח'), appt.service_name].filter(Boolean).join(' · ')}
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-back" size={20} color="#DADCE0" />
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {actionsModal.appointment && actionsModal.anchor ? (
         <AppointmentActionsAnchorSheet
@@ -2421,6 +2536,102 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 120,
+  },
+  gcMonthScroll: {
+    flex: 1,
+    backgroundColor: GC_PAGE_BG,
+  },
+  gcMonthScrollContent: {
+    paddingTop: 4,
+    paddingBottom: 120,
+  },
+  /** Same chrome as client `book-appointment` day step */
+  bookingCalendarSectionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    marginHorizontal: 16,
+    marginTop: 8,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  bookingCalendarFixedBox: {
+    minHeight: 400,
+    height: 430,
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  gcMonthHint: {
+    fontSize: 13,
+    color: '#80868B',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  monthModalRoot: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  monthModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  monthModalSheet: {
+    backgroundColor: GC_SURFACE,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: '78%',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
+      },
+      android: { elevation: 16 },
+    }),
+  },
+  monthModalHeader: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    gap: 12,
+  },
+  monthModalTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#202124',
+    writingDirection: 'rtl',
+  },
+  monthModalLoading: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  monthModalEmpty: {
+    alignItems: 'center',
+    paddingVertical: 36,
+    gap: 10,
+  },
+  monthModalEmptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#5F6368',
+    writingDirection: 'rtl',
+  },
+  monthModalList: {
+    maxHeight: 420,
+  },
+  monthModalListContent: {
+    paddingBottom: 8,
   },
   agendaSectionHeader: {
     marginBottom: 14,

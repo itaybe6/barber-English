@@ -25,7 +25,7 @@ import { notificationsApi } from '@/lib/api/notifications';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
 import { User } from '@/lib/supabase';
-import Animated, { useSharedValue, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, Easing } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, withDelay, Easing, FadeIn } from 'react-native-reanimated';
 import type { SharedValue } from 'react-native-reanimated';
 
 
@@ -440,12 +440,25 @@ export default function BookAppointment() {
   // Shared scroll progress for full-screen backdrops (like the reference animation)
   const barberBgScrollX = useSharedValue(0);
   const serviceBgScrollX = useSharedValue(0);
+  /** Opacity only — translateY on exit made the next step (calendar) feel like it “jumps” up when swapping. */
   const step2FadeStyle = useAnimatedStyle(() => ({
     opacity: step2Fade.value,
-    transform: [{ translateY: interpolate(step2Fade.value, [0, 1], [20, 0], Extrapolate.CLAMP) }],
   }));
   const hasTriggeredStep3 = React.useRef(false);
   const isTransitioning = React.useRef(false);
+  /** Must run on JS thread: setState + shared value reset + refs (Reanimated completion runs on UI runtime). */
+  const finalizeStep2ToDay = React.useCallback(() => {
+    try { scrollRef.current?.scrollTo({ y: 0, animated: false }); } catch {}
+    setCurrentStep(3);
+    step2Fade.value = 1;
+    hasTriggeredStep3.current = false;
+    isTransitioning.current = false;
+  }, []);
+  const abortStep2Transition = React.useCallback(() => {
+    step2Fade.value = 1;
+    hasTriggeredStep3.current = false;
+    isTransitioning.current = false;
+  }, []);
   const handleScrollTransitions = React.useCallback((e: any) => {
     try {
       if (isTransitioning.current) return;
@@ -460,16 +473,17 @@ export default function BookAppointment() {
         if (y > 16 && selectedServices.length > 0 && !hasTriggeredStep3.current) {
           hasTriggeredStep3.current = true;
           isTransitioning.current = true;
-          step2Fade.value = withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) }, () => {
-            runOnJS(setCurrentStep)(3);
-            step2Fade.value = 1;
-            hasTriggeredStep3.current = false;
-            isTransitioning.current = false;
+          step2Fade.value = withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) }, (finished) => {
+            if (finished === false) {
+              runOnJS(abortStep2Transition)();
+            } else {
+              runOnJS(finalizeStep2ToDay)();
+            }
           });
         }
       }
     } catch {}
-  }, [currentStep, selectedBarber?.id, selectedServicesKey]);
+  }, [currentStep, selectedBarber?.id, selectedServicesKey, finalizeStep2ToDay, abortStep2Transition]);
 
   useEffect(() => {
     if (currentStep === 1) {
@@ -1469,17 +1483,19 @@ export default function BookAppointment() {
     if (currentStep === 2 && selectedServices.length > 0) {
       if (isTransitioning.current) return;
       isTransitioning.current = true;
-      step2Fade.value = withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) }, () => {
-        runOnJS(setCurrentStep)(3);
-        step2Fade.value = 1;
-        isTransitioning.current = false;
+      step2Fade.value = withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) }, (finished) => {
+        if (finished === false) {
+          runOnJS(abortStep2Transition)();
+        } else {
+          runOnJS(finalizeStep2ToDay)();
+        }
       });
       return;
     }
     if (currentStep === 3 && selectedDay !== null) {
       setCurrentStep(4);
     }
-  }, [currentStep, selectedBarber, selectedServices.length, selectedDay]);
+  }, [currentStep, selectedBarber, selectedServices.length, selectedDay, finalizeStep2ToDay, abortStep2Transition]);
 
   const bookingAdvanceNextEnabled =
     (currentStep === 1 && !!selectedBarber) ||
@@ -1640,10 +1656,8 @@ export default function BookAppointment() {
           contentContainerStyle={[
             styles.scrollContent,
             {
-              paddingBottom:
-                currentStep === 1 || currentStep === 2
-                  ? bookingBarTopFromBottom + 20
-                  : contentBottomPadding,
+              /* Same bottom inset for steps 1–3 avoids a layout jump when leaving service step */
+              paddingBottom: contentBottomPadding,
             },
           ]}
           showsVerticalScrollIndicator={false}

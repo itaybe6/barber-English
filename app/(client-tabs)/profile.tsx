@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Modal, Pressable, TextInput, ActivityIndicator, Switch, Image } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Modal, Pressable, TextInput, ActivityIndicator, Switch, Image, Platform, type LayoutChangeEvent } from 'react-native';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,11 +12,17 @@ import { LogOut } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
-import { formatTime12Hour } from '@/lib/utils/timeFormat';
  
-import { supabase, AvailableTimeSlot } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { usersApi } from '@/lib/api/users';
 import { notificationsApi } from '@/lib/api/notifications';
+import Reanimated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated';
 
 export default function ClientProfileScreen() {
   const router = useRouter();
@@ -24,27 +30,53 @@ export default function ClientProfileScreen() {
   const { user, logout, updateUserProfile, notificationsEnabled, setNotificationsEnabled } = useAuthStore();
   const insets = useSafeAreaInsets();
   const { colors: businessColors } = useBusinessColors();
-  const [isLoading, setIsLoading] = useState(true);
-  const [pastAppointments, setPastAppointments] = useState<AvailableTimeSlot[]>([]);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editName, setEditName] = useState<string>('');
   const [editPhone, setEditPhone] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
   const [editPassword, setEditPassword] = useState<string>('');
   const [showEditPassword, setShowEditPassword] = useState<boolean>(false);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
   const [isLanguageOpen, setIsLanguageOpen] = useState(false);
   const [pushEnabled, setPushEnabled] = useState<boolean>(notificationsEnabled);
-  const [isUpcomingOpen, setIsUpcomingOpen] = useState(false);
-  const [upcomingAppointments, setUpcomingAppointments] = useState<AvailableTimeSlot[]>([]);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-  const formatTimeHHMM = (t?: string | null): string => {
-    if (!t) return '';
-    return formatTime12Hour(t);
+
+  /** Same bank-app style 3D collapse on scroll as admin `settings.tsx` */
+  const clientProfileScrollY = useSharedValue(0);
+  const clientProfileHeaderBlockHeight = useSharedValue(120);
+  const onClientProfileScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      clientProfileScrollY.value = e.contentOffset.y;
+    },
+  });
+  const clientProfileDummySpacerStyle = useAnimatedStyle(() => ({
+    height: clientProfileHeaderBlockHeight.value,
+  }));
+  const clientProfileCardFlipStyle = useAnimatedStyle(() => {
+    const y = Math.max(clientProfileScrollY.value, 0);
+    const h = Math.max(clientProfileHeaderBlockHeight.value, 72);
+    return {
+      transform: [
+        { perspective: h * 5 },
+        {
+          translateY: interpolate(y, [0, h], [0, -h * 0.5], Extrapolation.CLAMP),
+        },
+        {
+          rotateX: `${interpolate(y, [0, h], [0, 88], Extrapolation.CLAMP)}deg`,
+        },
+      ],
+      opacity: interpolate(y, [0, h * 0.55, h], [1, 0.92, 0], Extrapolation.CLAMP),
+    };
+  });
+  const onClientProfileHeaderLayout = (e: LayoutChangeEvent) => {
+    const next = e.nativeEvent.layout.height;
+    if (next > 0) {
+      clientProfileHeaderBlockHeight.value = next;
+    }
   };
+
   const guessMimeFromUri = (uriOrName: string): string => {
     const ext = uriOrName.split('.').pop()?.toLowerCase().split('?')[0] || 'jpg';
     if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
@@ -263,145 +295,21 @@ export default function ClientProfileScreen() {
     },
   ];
 
-  useEffect(() => {
-    const loadAppointments = async () => {
-      try {
-        setIsLoading(true);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const todayStr = today.toISOString().split('T')[0];
-
-        const { getBusinessId } = await import('@/lib/supabase');
-        const businessId = getBusinessId();
-        
-        let query = supabase
-          .from('appointments')
-          .select('*')
-          .eq('business_id', businessId)
-          .eq('is_available', false)
-          .lt('slot_date', todayStr);
-
-        // Strictly filter by current client within current business
-        if (user?.phone?.trim()) {
-          query = query.eq('client_phone', user.phone.trim());
-        } else if (user?.name?.trim()) {
-          query = query.eq('client_name', user.name.trim());
-        }
-
-        query = query
-          .order('slot_date', { ascending: false })
-          .order('slot_time', { ascending: false });
-
-        const { data, error } = await query;
-        if (error) throw error;
-
-        let items: AvailableTimeSlot[] = (data || []).filter((slot) => String(slot.business_id) === String(businessId));
-
-        setPastAppointments(items);
-
-        // Upcoming appointments count
-        let upcomingQuery = supabase
-          .from('appointments')
-          .select('*')
-          .eq('business_id', businessId)
-          .eq('is_available', false)
-          .gte('slot_date', todayStr);
-
-        // Strictly filter by current client within current business
-        if (user?.phone?.trim()) {
-          upcomingQuery = upcomingQuery.eq('client_phone', user.phone.trim());
-        } else if (user?.name?.trim()) {
-          upcomingQuery = upcomingQuery.eq('client_name', user.name.trim());
-        }
-
-        upcomingQuery = upcomingQuery
-          .order('slot_date', { ascending: true })
-          .order('slot_time', { ascending: true });
-
-        const { data: upcomingData, error: upcomingError } = await upcomingQuery;
-        if (upcomingError) throw upcomingError;
-
-        let upcomingItems: AvailableTimeSlot[] = (upcomingData || []).filter((slot) => String(slot.business_id) === String(businessId));
-        setUpcomingAppointments(upcomingItems);
-      } catch (e) {
-        console.error('Error loading past appointments:', e);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadAppointments();
-  }, [user?.name, user?.phone]);
-
   return (
     <View style={styles.container}>
 
       <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1 }}>
         <View style={styles.contentWrapper}>
-          <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Profile Header */}
-        <View style={styles.headerContainer}>
-          <View
-            style={[styles.gradientHeader, { paddingTop: 16 + insets.top, backgroundColor: Colors.white }]}
+          <View style={styles.profileScrollHost}>
+          <Reanimated.ScrollView
+            style={styles.profileScrollFill}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            onScroll={onClientProfileScroll}
+            scrollEventThrottle={16}
+            keyboardShouldPersistTaps="handled"
           >
-
-            <View style={styles.profileCard}>
-              <View style={styles.profileTop}>
-                <View style={styles.avatarWrap}>
-                  <LinearGradient
-                    colors={[businessColors.primary, businessColors.primary]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.avatarGradientRing}
-                  >
-                    <View style={styles.profileAvatar}>
-                      {user?.image_url ? (
-                        <Image source={{ uri: user.image_url }} style={styles.avatarImage} />
-                      ) : (
-                        <Ionicons name="person-outline" size={28} color="#2F2F2F" />
-                      )}
-                    </View>
-                  </LinearGradient>
-                  <TouchableOpacity style={styles.avatarPlusWrap} onPress={pickAndUploadAvatar} disabled={isUploadingAvatar}>
-                    <LinearGradient
-                      colors={[businessColors.primary, businessColors.primary]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.avatarPlus}
-                    >
-                      {isUploadingAvatar ? (
-                        <ActivityIndicator color="#FFFFFF" size="small" />
-                      ) : (
-                        <Ionicons name="add" size={16} color="#FFFFFF" />
-                      )}
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-                <Text style={[styles.profileName, styles.profileNameOnGradient, styles.centerText]}>{user?.name || t('valuedClient', 'Valued Client')}</Text>
-                <Text style={[styles.profilePhone, styles.profilePhoneOnGradient, styles.centerText]}>{user?.phone || t('profile.phone', 'Phone number')}</Text>
-              </View>
-
-              <View style={styles.statsRow}>
-                <TouchableOpacity style={styles.statChip} onPress={() => setIsUpcomingOpen(true)}>
-                  <Ionicons name="calendar-outline" size={14} color={businessColors.primary} />
-                  <Text style={styles.statChipText}>Upcoming {upcomingAppointments.length}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.statChip} onPress={() => setIsHistoryOpen(true)}>
-                  <Ionicons name="time-outline" size={14} color={businessColors.primary} />
-                  <Text style={styles.statChipText}>Past {pastAppointments.length}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* Section Header: Settings */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{t('profile.settings', 'Settings')}</Text>
-          <Text style={styles.sectionSubtitle}>{t('profile.settingsSubtitle', 'Manage profile details, notifications, and terms')}</Text>
-        </View>
-
-        {/* No inline history. Use the menu item to open the sheet. */}
+            <Reanimated.View style={clientProfileDummySpacerStyle} />
 
         {/* Menu Items */}
         <View style={styles.menuContainer}>
@@ -469,7 +377,55 @@ export default function ClientProfileScreen() {
         </TouchableOpacity>
 
         <Text style={styles.versionText}>{t('settings.sections.version','Version')} 1.0.0</Text>
-          </ScrollView>
+          </Reanimated.ScrollView>
+
+          <View pointerEvents="box-none" style={styles.clientProfileStickyHost}>
+            <View style={styles.clientProfileHeaderMeasure} onLayout={onClientProfileHeaderLayout}>
+              <Reanimated.View style={[styles.clientProfileCardOuter, clientProfileCardFlipStyle]}>
+                <View
+                  style={[styles.gradientHeader, { paddingTop: 8 + insets.top, backgroundColor: Colors.white }]}
+                >
+                  <View style={styles.profileCard}>
+                    <View style={styles.profileTop}>
+                      <View style={styles.avatarWrap}>
+                        <LinearGradient
+                          colors={[businessColors.primary, businessColors.primary]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.avatarGradientRing}
+                        >
+                          <View style={styles.profileAvatar}>
+                            {user?.image_url ? (
+                              <Image source={{ uri: user.image_url }} style={styles.avatarImage} />
+                            ) : (
+                              <Ionicons name="person-outline" size={28} color="#2F2F2F" />
+                            )}
+                          </View>
+                        </LinearGradient>
+                        <TouchableOpacity style={styles.avatarPlusWrap} onPress={pickAndUploadAvatar} disabled={isUploadingAvatar}>
+                          <LinearGradient
+                            colors={[businessColors.primary, businessColors.primary]}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.avatarPlus}
+                          >
+                            {isUploadingAvatar ? (
+                              <ActivityIndicator color="#FFFFFF" size="small" />
+                            ) : (
+                              <Ionicons name="add" size={16} color="#FFFFFF" />
+                            )}
+                          </LinearGradient>
+                        </TouchableOpacity>
+                      </View>
+                      <Text style={[styles.profileName, styles.profileNameOnGradient, styles.centerText]}>{user?.name || t('valuedClient', 'Valued Client')}</Text>
+                      <Text style={[styles.profilePhone, styles.profilePhoneOnGradient, styles.centerText]}>{user?.phone || t('profile.phone', 'Phone number')}</Text>
+                    </View>
+                  </View>
+                </View>
+              </Reanimated.View>
+            </View>
+          </View>
+          </View>
         </View>
       </SafeAreaView>
 
@@ -648,60 +604,6 @@ export default function ClientProfileScreen() {
         </View>
       </Modal>
 
-      {/* History Bottom Sheet */}
-      <Modal visible={isHistoryOpen} transparent animationType="slide" onRequestClose={() => setIsHistoryOpen(false)}>
-        <View style={styles.historyOverlay}>
-          <View style={styles.historySheet}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetHeader}>
-              <View style={{ width: 44 }} />
-              <Text style={styles.sheetTitle}>{t('profile.history.title', 'Appointment History')}</Text>
-              <TouchableOpacity onPress={() => setIsHistoryOpen(false)} style={styles.sheetCloseBtn}>
-                <Ionicons name="close" size={22} color={Colors.text} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView contentContainerStyle={styles.historyList} showsVerticalScrollIndicator={true}>
-              {isLoading ? (
-                <View style={styles.historyLoadingState}>
-                  <ActivityIndicator color={businessColors.primary} />
-                  <Text style={styles.historyLoadingText}>{t('profile.history.loading', 'Loading appointment history...')}</Text>
-                </View>
-              ) : pastAppointments.length === 0 ? (
-                <View style={styles.historyEmpty}>
-                  <Ionicons name="calendar-outline" size={56} color={businessColors.primary} />
-                  <Text style={styles.historyEmptyTitle}>{t('profile.history.emptyTitle', 'No past appointments')}</Text>
-                  <Text style={styles.historyEmptySubtitle}>{t('profile.history.emptySubtitle', "When there's history, it'll appear here")}</Text>
-                </View>
-              ) : (
-                pastAppointments.map((item) => (
-                  <View key={`${item.id}-${item.slot_date}-${item.slot_time}`} style={styles.historyCard}>
-                    <View style={styles.historyCardHeader}>
-                      <Text style={styles.historyService}>{item.service_name || t('booking.field.service', 'Service')}</Text>
-                      <View style={styles.statusPill}>
-                        <Ionicons name="checkmark-circle" size={16} color={businessColors.primary} />
-                        <Text style={styles.statusPillText}>{t('appointments.completed', 'Completed')}</Text>
-                      </View>
-                    </View>
-                    <View style={styles.historyCardBody}>
-                      <View style={styles.historyMeta}>
-                        <Ionicons name="calendar" size={16} color={businessColors.primary} />
-                        <Text style={styles.historyMetaText}>{new Date(item.slot_date).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' })}</Text>
-                      </View>
-                      <View style={styles.historyMeta}>
-                        <Ionicons name="time" size={16} color="#8E8E93" />
-                        <Text style={styles.historyMetaText}>{formatTimeHHMM(item.slot_time)}</Text>
-                      </View>
-                    </View>
-                  </View>
-                ))
-              )}
-              <View style={{ height: 24 }} />
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
       {/* Terms of Use Bottom Sheet */}
       <Modal visible={isTermsOpen} transparent animationType="slide" onRequestClose={() => setIsTermsOpen(false)}>
         <View style={styles.historyOverlay}>
@@ -779,59 +681,6 @@ export default function ClientProfileScreen() {
           </View>
         </View>
       </Modal>
-
-      {/* Upcoming Appointments Bottom Sheet */}
-      <Modal visible={isUpcomingOpen} transparent animationType="slide" onRequestClose={() => setIsUpcomingOpen(false)}>
-        <View style={styles.historyOverlay}>
-          <View style={styles.historySheet}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetHeader}>
-              <View style={{ width: 44 }} />
-              <Text style={styles.sheetTitle}>{t('profile.upcoming.title','Upcoming Appointments')}</Text>
-              <TouchableOpacity onPress={() => setIsUpcomingOpen(false)} style={styles.sheetCloseBtn}>
-                <Ionicons name="close" size={22} color={Colors.text} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView contentContainerStyle={styles.historyList} showsVerticalScrollIndicator={true}>
-              {isLoading ? (
-                <View style={styles.historyLoadingState}>
-                  <ActivityIndicator color={businessColors.primary} />
-                  <Text style={styles.historyLoadingText}>{t('profile.upcoming.loading','Loading upcoming appointments...')}</Text>
-                </View>
-              ) : upcomingAppointments.length === 0 ? (
-                <View style={styles.historyEmpty}>
-                  <Ionicons name="calendar-outline" size={56} color={businessColors.primary} />
-                  <Text style={styles.historyEmptyTitle}>{t('profile.upcoming.emptyTitle','No upcoming appointments')}</Text>
-                  <Text style={styles.historyEmptySubtitle}>{t('profile.upcoming.emptySubtitle','When appointments are booked, they will appear here')}</Text>
-                </View>
-              ) : (
-                upcomingAppointments.map((item) => (
-                  <View key={`${item.id}-${item.slot_date}-${item.slot_time}`} style={styles.historyCard}>
-                    <View style={styles.historyCardHeader}>
-                      <Text style={styles.historyService}>{item.service_name || t('booking.field.service','Service')}</Text>
-                      <View style={[styles.statusPill, { backgroundColor: `${businessColors.primary}20` }]}>
-                        <Ionicons name="calendar" size={16} color={businessColors.primary} />
-                        <Text style={[styles.statusPillText, { color: businessColors.primary }]}>{t('appointments.upcoming','Upcoming')}</Text>
-                      </View>
-                    </View>
-                    <View style={styles.historyCardBody}>
-                      <View style={styles.historyMeta}>
-                        <Ionicons name="calendar" size={16} color={businessColors.primary} />
-                        <Text style={styles.historyMetaText}>{new Date(item.slot_date).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' })}</Text>
-                      </View>
-                      <View style={styles.historyMeta}>
-                        <Ionicons name="time" size={16} color="#8E8E93" />
-                        <Text style={styles.historyMetaText}>{formatTimeHHMM(item.slot_time)}</Text>
-                      </View>
-                    </View>
-                  </View>
-                ))
-              )}
-              <View style={{ height: 24 }} />
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -846,8 +695,32 @@ const styles = StyleSheet.create<any>({
     backgroundColor: '#F8F9FA',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    marginTop: 20,
-    paddingTop: 16,
+    marginTop: 10,
+    paddingTop: 8,
+  },
+  profileScrollHost: {
+    flex: 1,
+  },
+  profileScrollFill: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  clientProfileStickyHost: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 2,
+    ...Platform.select({
+      android: { elevation: 4 },
+    }),
+  },
+  clientProfileHeaderMeasure: {
+    marginBottom: 2,
+  },
+  clientProfileCardOuter: {
+    borderRadius: 22,
+    overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
@@ -879,7 +752,7 @@ const styles = StyleSheet.create<any>({
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
     paddingTop: 0,
-    paddingBottom: 20,
+    paddingBottom: 12,
     paddingHorizontal: 20,
   },
   profileHeader: {
@@ -892,8 +765,8 @@ const styles = StyleSheet.create<any>({
     backgroundColor: '#FFFFFF',
     borderRadius: 18,
     paddingHorizontal: 16,
-    paddingTop: 26,
-    paddingBottom: 20,
+    paddingTop: 14,
+    paddingBottom: 12,
     marginHorizontal: 8,
     shadowColor: '#000',
     shadowOpacity: 0.06,
@@ -903,8 +776,8 @@ const styles = StyleSheet.create<any>({
   },
   profileTop: {
     alignItems: 'center',
-    marginBottom: 10,
-    gap: 6,
+    marginBottom: 0,
+    gap: 4,
   },
   centerText: {
     textAlign: 'center',
@@ -1262,59 +1135,6 @@ const styles = StyleSheet.create<any>({
     color: Colors.subtext,
     textAlign: 'left',
   },
-  statsContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginTop: -10,
-    marginBottom: 24,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  statChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderColor: '#E5E7EB',
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  statChipText: {
-    color: Colors.text,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    marginHorizontal: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: Colors.primary,
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: Colors.subtext,
-    textAlign: 'center',
-  },
   quickActionsContainer: {
     flexDirection: 'row',
     paddingHorizontal: 20,
@@ -1348,27 +1168,9 @@ const styles = StyleSheet.create<any>({
     fontWeight: '500',
     textAlign: 'center',
   },
-  sectionHeader: {
-    paddingHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 12,
-    alignItems: 'flex-start',
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: Colors.text,
-    marginBottom: 4,
-    textAlign: 'left',
-  },
-  sectionSubtitle: {
-    fontSize: 13,
-    color: Colors.subtext,
-    opacity: 0.8,
-    textAlign: 'left',
-  },
   menuContainer: {
     paddingHorizontal: 20,
+    marginTop: 8,
     marginBottom: 18,
   },
   menuItem: {

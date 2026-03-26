@@ -769,7 +769,17 @@
       "createFailed": "Failed to add design",
       "saveFailed": "Failed to save design",
       "deleteFailed": "Failed to delete design",
-      "atLeastOneImageRequired": "At least one image is required"
+      "atLeastOneImageRequired": "At least one image is required",
+      "addSheetTitle": "Add to gallery",
+      "addSheetSubtitle": "Choose photos, add a name, and publish. The first photo is the cover — tap any thumbnail to change it.",
+      "photoDropTitle": "Tap to add photos",
+      "photoDropHint": "Up to 10 images · JPEG optimized automatically",
+      "tapForCover": "Tap a photo to set as cover",
+      "nameLabel": "Display name",
+      "manageFull": "Edit & delete items",
+      "emptyTitle": "No designs yet",
+      "emptySubtitle": "Show clients your work — add your first photos.",
+      "emptyCta": "Add photos"
     },
     "products": {
       "title": "Products",

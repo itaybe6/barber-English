@@ -770,7 +770,17 @@
       "createFailed": "כשל בהוספת העיצוב",
       "saveFailed": "כשל בשמירת העיצוב",
       "deleteFailed": "כשל במחיקת העיצוב",
-      "atLeastOneImageRequired": "נדרשת לפחות תמונה אחת"
+      "atLeastOneImageRequired": "נדרשת לפחות תמונה אחת",
+      "addSheetTitle": "הוספה לגלריה",
+      "addSheetSubtitle": "בחרו תמונות, תנו שם ופרסמו. התמונה הראשונה היא השער — אפשר להחליף בלחיצה על תמונה.",
+      "photoDropTitle": "לחצו להוספת תמונות",
+      "photoDropHint": "עד 10 תמונות · דחיסה אוטומטית",
+      "tapForCover": "לחצו על תמונה כדי להגדיר כשער",
+      "nameLabel": "שם לתצוגה",
+      "manageFull": "עריכה ומחיקה",
+      "emptyTitle": "עדיין אין עיצובים",
+      "emptySubtitle": "הציגו ללקוחות את העבודה שלכם — הוסיפו תמונות.",
+      "emptyCta": "הוספת תמונות"
     },
     "products": {
       "title": "מוצרים",

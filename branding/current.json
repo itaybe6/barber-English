@@ -121,12 +121,10 @@
         },
         "EXPO_PUBLIC_SUPABASE_URL": "https://vqstsrobzbykfivlahxa.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxc3Rzcm9iemJ5a2ZpdmxhaHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc2MDM1MjUsImV4cCI6MjA3MzE3OTUyNX0.iW4vYBC3usEqACGug6BNDkB7PJdHZ75lXo8TJO2x30k",
-        "EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY": "AIzaSyAVHoNZSAuWDnCArgFn1gAqA9bxkSuhdJ8",
-        "EXPO_PUBLIC_GOOGLE_PLACES_KEY": "AIzaSyAVHoNZSAuWDnCArgFn1gAqA9bxkSuhdJ8",
         "EXPO_PUBLIC_SA_P": "",
         "EXPO_PUBLIC_SA_K": "",
         "PULSEEM_MAIN_API_KEY": "",
-        "EXPO_PUBLIC_PROJECT_ID": "98671cac-90d9-42b1-8228-225df1dc4f9e"
+        "EXPO_PUBLIC_PROJECT_ID": "8efaeaeb-7141-4328-a75f-5d56de528df1"
       }
     }
   },
@@ -157,9 +155,5 @@
       "secondary": "System"
     }
   },
-<<<<<<< HEAD
-  "timestamp": "2026-03-26T11:20:40.659Z"
-=======
-  "timestamp": "2026-03-25T22:42:15.619Z"
->>>>>>> 9a13fd39e663afe04449d2cbf1c9a4839f068dd5
+  "timestamp": "2026-03-26T11:31:14.501Z"
 }

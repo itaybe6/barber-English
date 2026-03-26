@@ -394,6 +394,7 @@
   "common": { "tryAgain": "אירעה שגיאה. נסו שוב.", "client": "לקוח", "smsOpenFailed": "לא ניתן לפתוח את אפליקציית ה-SMS במכשיר זה", "searchPlaceholder": "חפש...", "user": "משתמש", "retry": "נסה שוב", "emailOpenFailed": "לא ניתן לפתוח את אפליקציית האימייל במכשיר זה", "phoneOpenFailed": "לא ניתן לפתוח את אפליקציית הטלפון במכשיר זה" },
   "common.openWebsite": "פתיחת אתר",
   "common.loading": "טוען...",
+  "common.clear": "נקה",
   "common.choose": "בחר/י",
   "common.change": "שנה/י",
   "common.eg": "למשל",
@@ -844,12 +845,26 @@
       "deleteAppointment": "מחיקת תור",
       "deleteTitle": "מחיקת תור",
       "deleteMessage": "פעולה זו תמחק את התור לצמיתות. לא ניתן לבטל פעולה זו.",
-      "openActions": "פתח/י אפשרויות לתור"
+      "openActions": "פתח/י אפשרויות לתור",
+      "loadClientsFailed": "שגיאה בטעינת רשימת הלקוחות",
+      "loadServicesFailed": "שגיאה בטעינת רשימת השירותים",
+      "fillAllRequired": "אנא מלא/י את כל השדות הנדרשים",
+      "userNotLogged": "המשתמש לא מחובר",
+      "scheduled": "התור נקבע בהצלחה",
+      "scheduleFailed": "שגיאה בקביעת התור",
+      "selectDateAndService": "אנא בחר/י תאריך ושירות תחילה",
+      "selectClientPlaceholder": "בחר/י לקוח..."
     },
     "calendarViewMode": {
       "day": "יומי",
       "week": "שבועי",
       "month": "חודשי"
+    },
+    "calendar": {
+      "appointmentPill": "{{count}} תורים",
+      "appointmentPillSingle": "תור אחד",
+      "today": "היום",
+      "monthTapDayHint": "הקישו על יום כדי לראות את כל התורים"
     },
     "appointmentsAdmin": {
       "loadingForDate": "טוען תורים עבור {{date}}...",
@@ -862,7 +877,23 @@
       "deleteAppointment": "מחיקת תור",
       "deleteTitle": "מחיקת תור",
       "deleteMessage": "פעולה זו תמחק את התור לצמיתות. לא ניתן לבטל פעולה זו.",
-      "openActions": "פתח/י אפשרויות לתור"
+      "openActions": "פתח/י אפשרויות לתור",
+      "addAppointment": "הוספת תור",
+      "summary": "סיכום תור",
+      "client": "לקוח",
+      "pickClient": "בחר/י לקוח לתור",
+      "pickDate": "בחר/י את התאריך לתור זה",
+      "pickService": "בחר/י את השירות לביצוע",
+      "selectServicePlaceholder": "בחר/י שירות...",
+      "selectClientPlaceholder": "בחר/י לקוח...",
+      "pickTime": "בחר/י חלון זמן פנוי",
+      "loadClientsFailed": "שגיאה בטעינת רשימת הלקוחות",
+      "loadServicesFailed": "שגיאה בטעינת רשימת השירותים",
+      "fillAllRequired": "אנא מלא/י את כל השדות הנדרשים",
+      "userNotLogged": "המשתמש לא מחובר",
+      "scheduled": "התור נקבע בהצלחה",
+      "scheduleFailed": "שגיאה בקביעת התור",
+      "selectDateAndService": "אנא בחר/י תאריך ושירות תחילה"
     },
     "hoursAdmin": {
       "title": "שעות עבודה",
@@ -902,7 +933,19 @@
       "breakPrefix": "הפסקה",
       "loading": "טוען שעות עבודה...",
       "breaksInvalid": "כל הפסקה חייבת להיות בתוך שעות העבודה וללא חפיפה",
-      "noOverlapBreaks": "אין חפיפה בין הפסקות"
+      "noOverlapBreaks": "אין חפיפה בין הפסקות",
+      "open": "פתוח",
+      "constraintsDesc": "תאריכים ושעות סגורות",
+      "breakListSingle": "הפסקה: ",
+      "breakListNumbered": "הפסקה #{{num}}: ",
+      "summaryBreakNumbered": "הפסקה #{{num}}: ",
+      "summaryBreakSingle": "הפסקה: ",
+      "selectDate": "נא לבחור תאריך",
+      "endAfterStart": "שעת הסיום חייבת להיות אחרי שעת ההתחלה",
+      "selectDateRange": "נא לבחור טווח תאריכים",
+      "invalidDateRange": "טווח תאריכים לא תקין",
+      "saved": "האילוצים נשמרו בהצלחה",
+      "enterReason": "הזן/י סיבה"
     },
     "notificationsComposer": {
       "subtitle": "שליחת הודעה לכל הלקוחות",
@@ -936,18 +979,7 @@
       "waiting": "ממתין/ה",
       "emptyTitle": "אין רשומות לרשימת ההמתנה ביום זה",
       "emptySubtitle": "אין לקוחות שממתינים ליום זה"
-    },
-    "appointments": {
-      "loadClientsFailed": "שגיאה בטעינת רשימת הלקוחות",
-      "loadServicesFailed": "שגיאה בטעינת רשימת השירותים",
-      "fillAllRequired": "אנא מלא/י את כל השדות הנדרשים",
-      "userNotLogged": "המשתמש לא מחובר",
-      "scheduled": "התור נקבע בהצלחה",
-      "scheduleFailed": "שגיאה בקביעת התור",
-      "selectDateAndService": "אנא בחר/י תאריך ושירות תחילה",
-      "selectClientPlaceholder": "בחר/י לקוח..."
     }
-    
   },
   "swap": {
     "title": "החלפת תור",

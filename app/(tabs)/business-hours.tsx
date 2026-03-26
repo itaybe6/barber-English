@@ -19,7 +19,6 @@ import Animated, {
   LinearTransition,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import BusinessConstraintsModal from '@/components/BusinessConstraintsModal';
@@ -241,7 +240,6 @@ const TimePicker: React.FC<TimePickerProps & { primaryColor?: string; useAmPm?: 
 
 export default function BusinessHoursScreen() {
   const { t, i18n } = useTranslation();
-  const router = useRouter();
   const { user } = useAuthStore();
   const { colors: businessColors } = useBusinessColors();
   const [businessHours, setBusinessHours] = useState<BusinessHours[]>([]);
@@ -259,13 +257,13 @@ export default function BusinessHoursScreen() {
 
   const getDayName = (dayOfWeek: number) => {
     const dayNames = [
-      t('day.sunday','Sunday'),
-      t('day.monday','Monday'),
-      t('day.tuesday','Tuesday'),
-      t('day.wednesday','Wednesday'),
-      t('day.thursday','Thursday'),
-      t('day.friday','Friday'),
-      t('day.saturday','Saturday')
+      t('day.sunday'),
+      t('day.monday'),
+      t('day.tuesday'),
+      t('day.wednesday'),
+      t('day.thursday'),
+      t('day.friday'),
+      t('day.saturday'),
     ];
     return dayNames[dayOfWeek] || '';
   };
@@ -307,7 +305,7 @@ export default function BusinessHoursScreen() {
         // Prefer per-barber setting; fallback to 0 if none
         setGlobalBreakMinutes(Math.max(0, Math.min(180, Number(perUserBreak ?? 0))));
       } catch (err) {
-        setError(t('admin.hours.loadFailed','Failed to fetch business hours'));
+        setError(t('admin.hours.loadFailed'));
         console.error(err);
       } finally {
         setIsLoading(false);
@@ -333,7 +331,7 @@ export default function BusinessHoursScreen() {
         return updated ? [...prev, updated as any] : prev;
       });
     } catch (err) {
-      setError(t('admin.hours.updateFailed','Failed to update business hours'));
+      setError(t('admin.hours.updateFailed'));
       console.error(err);
     }
   };
@@ -362,21 +360,21 @@ export default function BusinessHoursScreen() {
     if (editingDay !== null) {
       {
         if (tempStartTime >= tempEndTime) {
-          Alert.alert(t('error.generic','Error'), t('admin.hours.endAfterStart','End time must be after start time'));
+          Alert.alert(t('error.generic'), t('admin.hours.endAfterStart'));
           return;
         }
         // validate multiple breaks (only if useBreaks is on)
         const allBreaks = useBreaks ? tempBreaks.slice() : [];
         for (const b of allBreaks) {
           if (!(tempStartTime < b.start_time && b.start_time < b.end_time && b.end_time <= tempEndTime)) {
-            Alert.alert(t('error.generic','Error'), t('admin.hours.breaksInvalid','Each break must be within work hours and non-overlapping'));
+            Alert.alert(t('error.generic'), t('admin.hours.breaksInvalid'));
             return;
           }
         }
         const sortedBreaks = allBreaks.sort((a, b) => a.start_time.localeCompare(b.start_time));
         for (let i = 1; i < sortedBreaks.length; i++) {
           if (!(sortedBreaks[i - 1].end_time <= sortedBreaks[i].start_time)) {
-            Alert.alert(t('error.generic','Error'), t('admin.hours.noOverlapBreaks','Breaks must not overlap'));
+            Alert.alert(t('error.generic'), t('admin.hours.noOverlapBreaks'));
             return;
           }
         }
@@ -412,7 +410,7 @@ export default function BusinessHoursScreen() {
 
         setEditingDay(null);
       } catch (err) {
-        setError(t('admin.hours.saveDayFailed','Failed to save business hours'));
+        setError(t('admin.hours.saveDayFailed'));
         console.error(err);
       }
     }
@@ -446,7 +444,7 @@ export default function BusinessHoursScreen() {
               <View style={[styles.statusPill, isActive ? styles.statusPillOpen : styles.statusPillClosed]}>
                 <View style={[styles.statusDot, { backgroundColor: isActive ? Colors.success : Colors.tertiaryText }]} />
                 <Text style={[styles.statusText, { color: isActive ? Colors.success : Colors.secondaryText }]}>
-                  {isActive ? t('admin.hours.open', 'פתוח') : t('admin.hours.closed', 'סגור')}
+                  {isActive ? t('admin.hours.open') : t('admin.hours.closed')}
                 </Text>
               </View>
             </View>
@@ -469,7 +467,10 @@ export default function BusinessHoursScreen() {
                           <View key={`${b.start_time}-${b.end_time}-${i}`} style={styles.timeContainer}>
                             <Ionicons name="cafe-outline" size={13} color={Colors.tertiaryText} />
                             <Text style={[styles.dayTime, { color: Colors.tertiaryText, fontSize: 13 }]}>
-                              {dayBreaks.length > 1 ? `Break #${i + 1}: ` : 'Break: '}<Text style={styles.ltrText}>{formatRangeLtrDisplay(b.start_time, b.end_time, useAmPm)}</Text>
+                              {dayBreaks.length > 1
+                                ? t('admin.hours.breakListNumbered', { num: i + 1 })
+                                : t('admin.hours.breakListSingle')}
+                              <Text style={styles.ltrText}>{formatRangeLtrDisplay(b.start_time, b.end_time, useAmPm)}</Text>
                             </Text>
                           </View>
                         ))}
@@ -481,7 +482,8 @@ export default function BusinessHoursScreen() {
                       <View style={[styles.timeContainer, { marginTop: 4 }]}>
                         <Ionicons name="cafe-outline" size={13} color={Colors.tertiaryText} />
                         <Text style={[styles.dayTime, { color: Colors.tertiaryText, fontSize: 13 }]}>
-                          הפסקה: <Text style={styles.ltrText}>{formatRangeLtrDisplay(dayHours.break_start_time, dayHours.break_end_time, useAmPm)}</Text>
+                          {t('admin.hours.breakListSingle')}
+                          <Text style={styles.ltrText}>{formatRangeLtrDisplay(dayHours.break_start_time, dayHours.break_end_time, useAmPm)}</Text>
                         </Text>
                       </View>
                     );
@@ -514,10 +516,10 @@ export default function BusinessHoursScreen() {
             <Animated.View layout={_layout} style={styles.workHoursSection}>
               <View style={styles.sectionHeader}>
                 <Ionicons name="briefcase-outline" size={16} color={businessColors.primary} />
-                <Text style={[styles.sectionTitle, { color: businessColors.primary }]}>{t('admin.hours.workHours','Work hours')}</Text>
+                <Text style={[styles.sectionTitle, { color: businessColors.primary }]}>{t('admin.hours.workHours')}</Text>
               </View>
               <View style={styles.toggleRow}>
-                <Text style={styles.toggleLabel}>{t('admin.hours.showBreaksQuestion','Show and set breaks?')}</Text>
+                <Text style={styles.toggleLabel}>{t('admin.hours.showBreaksQuestion')}</Text>
                 <Switch
                   value={useBreaks}
                   onValueChange={setUseBreaks}
@@ -531,7 +533,7 @@ export default function BusinessHoursScreen() {
                   <TimePicker
                     value={tempStartTime}
                     onValueChange={setTempStartTime}
-                    label={t('admin.hours.startTime','Start time')}
+                    label={t('admin.hours.startTime')}
                     options={startTimeOptions}
                     isBreakTime={false}
                     primaryColor={businessColors.primary}
@@ -556,7 +558,7 @@ export default function BusinessHoursScreen() {
                         setTempEndTime(v);
                       }
                     }}
-                    label={t('admin.hours.endTime','End time')}
+                    label={t('admin.hours.endTime')}
                     options={endTimeOptions}
                     isBreakTime={false}
                     primaryColor={businessColors.primary}
@@ -571,7 +573,7 @@ export default function BusinessHoursScreen() {
               <Animated.View layout={_layout} style={styles.breakHoursSection}>
                 <View style={styles.sectionHeader}>
                   <Ionicons name="cafe-outline" size={16} color={Colors.warning} />
-                  <Text style={[styles.sectionTitle, { color: Colors.warning }]}>{t('admin.hours.breaks','Breaks')}</Text>
+                  <Text style={[styles.sectionTitle, { color: Colors.warning }]}>{t('admin.hours.breaks')}</Text>
                 </View>
                 <Animated.View layout={_layout} style={{ gap: 12 }}>
                   {tempBreaks.map((b, idx) => (
@@ -585,7 +587,7 @@ export default function BusinessHoursScreen() {
                           <Ionicons name="close" size={14} color={Colors.danger} />
                         </TouchableOpacity>
                         <View style={styles.breakNumberRow}>
-                          <Text style={styles.breakNumber}>{t('admin.hours.breakNumber','Break #{{num}}',{ num: idx + 1 })}</Text>
+                          <Text style={styles.breakNumber}>{t('admin.hours.breakNumber', { num: idx + 1 })}</Text>
                           <Ionicons name="cafe" size={13} color={Colors.warning} />
                         </View>
                       </View>
@@ -596,7 +598,7 @@ export default function BusinessHoursScreen() {
                             onValueChange={(v) => {
                               setTempBreaks(prev => prev.map(x => x.id === b.id ? { ...x, start_time: v } : x));
                             }}
-                            label={t('admin.hours.start','Start')}
+                            label={t('admin.hours.start')}
                             options={startTimeOptions}
                             isBreakTime
                             primaryColor={businessColors.primary}
@@ -612,7 +614,7 @@ export default function BusinessHoursScreen() {
                             onValueChange={(v) => {
                               setTempBreaks(prev => prev.map(x => x.id === b.id ? { ...x, end_time: v } : x));
                             }}
-                            label={t('admin.hours.end','End')}
+                            label={t('admin.hours.end')}
                             options={endTimeOptions}
                             isBreakTime
                             primaryColor={businessColors.primary}
@@ -629,7 +631,7 @@ export default function BusinessHoursScreen() {
                     activeOpacity={0.8}
                   >
                     <Ionicons name="add-circle-outline" size={16} color={Colors.warning} />
-                    <Text style={styles.addBreakText}>{t('admin.hours.addBreak','Add break')}</Text>
+                    <Text style={styles.addBreakText}>{t('admin.hours.addBreak')}</Text>
                   </TouchableOpacity>
                 </Animated.View>
               </Animated.View>
@@ -639,16 +641,19 @@ export default function BusinessHoursScreen() {
             <Animated.View layout={_layout} style={styles.daySummary}>
               <View style={styles.summaryHeader}>
                 <Ionicons name="calendar-outline" size={14} color={Colors.success} />
-                <Text style={styles.summaryTitle}>{t('admin.hours.daySummary','Day summary')}</Text>
+                <Text style={styles.summaryTitle}>{t('admin.hours.daySummary')}</Text>
               </View>
               <View style={styles.summaryContent}>
-                <Text style={styles.summaryText}>{t('admin.hours.workPrefix','Work')}: <Text style={styles.ltrText}>{formatRangeLtrDisplay(tempStartTime, tempEndTime, useAmPm)}</Text></Text>
+                <Text style={styles.summaryText}>{t('admin.hours.workPrefix')}: <Text style={styles.ltrText}>{formatRangeLtrDisplay(tempStartTime, tempEndTime, useAmPm)}</Text></Text>
                 {useBreaks ? (
                   tempBreaks.length > 0 ? (
                     <View style={{ gap: 4 }}>
                       {tempBreaks.map((b, i) => (
                         <Text key={b.id} style={styles.summaryBreak}>
-                          {`Break ${tempBreaks.length > 1 ? '#' + (i + 1) + ': ' : ''}`}<Text style={styles.ltrText}>{formatRangeLtrDisplay(b.start_time, b.end_time, useAmPm)}</Text>
+                          {tempBreaks.length > 1
+                            ? t('admin.hours.summaryBreakNumbered', { num: i + 1 })
+                            : t('admin.hours.summaryBreakSingle')}
+                          <Text style={styles.ltrText}>{formatRangeLtrDisplay(b.start_time, b.end_time, useAmPm)}</Text>
                         </Text>
                       ))}
                     </View>
@@ -656,7 +661,7 @@ export default function BusinessHoursScreen() {
                 ) : (
                   tempBreakStartTime && tempBreakEndTime ? (
                     <Text style={styles.summaryBreak}>
-                      {t('admin.hours.breakPrefix','Break')}: <Text style={styles.ltrText}>{formatRangeLtrDisplay(tempBreakStartTime, tempBreakEndTime, useAmPm)}</Text>
+                      {t('admin.hours.breakPrefix')}: <Text style={styles.ltrText}>{formatRangeLtrDisplay(tempBreakStartTime, tempBreakEndTime, useAmPm)}</Text>
                     </Text>
                   ) : null
                 )}
@@ -669,7 +674,7 @@ export default function BusinessHoursScreen() {
                 onPress={() => setEditingDay(null)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.cancelButtonText}>{t('cancel','Cancel')}</Text>
+                <Text style={styles.cancelButtonText}>{t('cancel')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -677,7 +682,7 @@ export default function BusinessHoursScreen() {
                 onPress={handleSaveDay}
                 activeOpacity={0.7}
               >
-                <Text style={styles.saveButtonText}>{t('save','Save')}</Text>
+                <Text style={styles.saveButtonText}>{t('save')}</Text>
               </TouchableOpacity>
             </View>
           </Animated.View>
@@ -691,7 +696,7 @@ export default function BusinessHoursScreen() {
       <SafeAreaView edges={['top', 'left', 'right']} style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>{t('admin.hours.loading','Loading working hours...')}</Text>
+          <Text style={styles.loadingText}>{t('admin.hours.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -702,8 +707,8 @@ export default function BusinessHoursScreen() {
       {/* Header within a top-only SafeArea to keep top background white */}
       <SafeAreaView edges={['top']} style={{ backgroundColor: Colors.card }}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>{t('admin.hours.title','Working hours')}</Text>
-          <Text style={styles.headerSubtitle}>{t('admin.hours.subtitle','Set your weekly working schedule and breaks')}</Text>
+          <Text style={styles.headerTitle}>{t('admin.hours.title')}</Text>
+          <Text style={styles.headerSubtitle}>{t('admin.hours.subtitle')}</Text>
         </View>
       </SafeAreaView>
 
@@ -726,8 +731,8 @@ export default function BusinessHoursScreen() {
               <Ionicons name="remove-circle-outline" size={18} color={businessColors.primary} />
             </View>
             <View style={styles.constraintsTextBlock}>
-              <Text style={[styles.constraintsButtonTitle, { color: businessColors.primary }]}>{t('admin.hours.manageConstraints','ניהול מגבלות')}</Text>
-              <Text style={styles.constraintsButtonSubtitle}>{t('admin.hours.constraintsDesc','תאריכים ושעות סגורים')}</Text>
+              <Text style={[styles.constraintsButtonTitle, { color: businessColors.primary }]}>{t('admin.hours.manageConstraints')}</Text>
+              <Text style={styles.constraintsButtonSubtitle}>{t('admin.hours.constraintsDesc')}</Text>
             </View>
             <Ionicons name="chevron-back" size={16} color={Colors.tertiaryText} />
           </TouchableOpacity>
@@ -737,10 +742,10 @@ export default function BusinessHoursScreen() {
           <View style={styles.globalBreakCard}>
             <View style={styles.sectionHeader}>
               <Ionicons name="timer-outline" size={18} color={businessColors.primary} />
-              <Text style={[styles.sectionTitle, { color: businessColors.primary }]}>{t('admin.hours.breakMinutes','Break minutes')}</Text>
+              <Text style={[styles.sectionTitle, { color: businessColors.primary }]}>{t('admin.hours.breakMinutes')}</Text>
             </View>
             <Text style={{ color: Colors.secondaryText, textAlign: 'left', marginBottom: 12 }}>
-              {t('admin.hours.breakHint','Choose the number of minutes to add between appointments. 0 keeps no fixed break.')}
+              {t('admin.hours.breakHint')}
             </Text>
             <TouchableOpacity
               style={styles.breakPickerButton}
@@ -748,7 +753,7 @@ export default function BusinessHoursScreen() {
               activeOpacity={0.85}
             >
               <BlurView intensity={30} tint="light" style={styles.breakPickerInner}>
-                <Text style={[styles.dropdownButtonText, { color: Colors.text }]}> {globalBreakMinutes} {t('admin.hours.min','min')}</Text>
+                <Text style={[styles.dropdownButtonText, { color: Colors.text }]}> {globalBreakMinutes} {t('admin.hours.min')}</Text>
                 {isSavingGlobalBreak ? (
                   <ActivityIndicator size="small" color={Colors.text} />
                 ) : (
@@ -770,7 +775,7 @@ export default function BusinessHoursScreen() {
           <View style={[styles.bottomSheet, { backgroundColor: Colors.card }]}>
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
-              <Text style={[styles.sheetTitle, { color: businessColors.primary }]}>{t('admin.hours.breakBetween','Break between appointments')}</Text>
+              <Text style={[styles.sheetTitle, { color: businessColors.primary }]}>{t('admin.hours.breakBetween')}</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 <TouchableOpacity onPress={() => setIsBreakPickerOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                   <Ionicons name="close" size={20} color={Colors.secondaryText} />
@@ -786,7 +791,7 @@ export default function BusinessHoursScreen() {
                       }
                       setIsBreakPickerOpen(false);
                     } catch (e) {
-                      Alert.alert(t('error.generic','Error'), t('admin.hours.saveBreakFailed','Failed to save break. Please try again.'));
+                      Alert.alert(t('error.generic'), t('admin.hours.saveBreakFailed'));
                     } finally {
                       setIsSavingGlobalBreak(false);
                     }

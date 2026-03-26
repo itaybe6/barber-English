@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
-import { View, Text, Pressable, Platform } from 'react-native';
-import { getMonthWeeks, type MonthEntry } from './utils';
+import { View, Text, Pressable, Platform, StyleSheet } from 'react-native';
+import { getMonthWeeks, formatHebrewDay, type MonthEntry } from './utils';
 
 type DaysProps = {
   data: MonthEntry;
@@ -11,15 +11,22 @@ type DaysProps = {
   cellSize: number;
   primaryColor: string;
   onDayPress: (date: Date) => void;
-  /** `availability` = dot (booking). `count` = numeric badge (admin). */
+  /** `availability` = green tint (booking). `count` = admin pills with counts. */
   displayMode?: 'availability' | 'count';
+  /** Show Hebrew calendar date below the Gregorian number — admin iPhone style */
+  showHebrewDates?: boolean;
+  /** Thin horizontal line under each week row (iOS month list) */
+  showWeekSeparators?: boolean;
+  /** Admin only: label for days with bookings, e.g. "3 תורים" */
+  formatAppointmentBadge?: (count: number) => string;
 };
 
 const TODAY = new Date();
 TODAY.setHours(0, 0, 0, 0);
 
-/** iOS red for "today" indicator — same as Apple Calendar */
 const IOS_TODAY_RED = '#FF3B30';
+const AVAIL_DAY_FILL = '#D8F3E1';
+const AVAIL_DAY_TEXT = '#0D4F2C';
 
 function sameDate(a: Date, b: Date) {
   return (
@@ -31,6 +38,68 @@ function sameDate(a: Date, b: Date) {
 
 function toIso(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** #RRGGBB → #RRGGBBAA (alpha 00–FF) */
+function hexWithAlpha(hex: string, aa: string): string {
+  const raw = String(hex || '').replace('#', '').trim();
+  if (raw.length !== 6) return `${hex}30`;
+  return `#${raw}${aa}`;
+}
+
+function AdminAppointmentPill({
+  label,
+  primaryColor,
+  onPrimaryCircle,
+  maxWidth,
+}: {
+  label: string;
+  primaryColor: string;
+  onPrimaryCircle: boolean;
+  maxWidth: number;
+}) {
+  const bg = onPrimaryCircle ? 'rgba(255,255,255,0.26)' : hexWithAlpha(primaryColor, '22');
+  const fg = onPrimaryCircle ? '#FFFFFF' : primaryColor;
+  const border = onPrimaryCircle ? 'rgba(255,255,255,0.45)' : hexWithAlpha(primaryColor, '55');
+
+  return (
+    <View
+      style={{
+        maxWidth,
+        paddingHorizontal: 5,
+        paddingVertical: 4,
+        borderRadius: 10,
+        backgroundColor: bg,
+        borderWidth: StyleSheet.hairlineWidth * 2,
+        borderColor: border,
+        ...Platform.select({
+          ios: {
+            shadowColor: primaryColor,
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: onPrimaryCircle ? 0.15 : 0.12,
+            shadowRadius: 3,
+          },
+          android: { elevation: onPrimaryCircle ? 0 : 1 },
+        }),
+      }}
+    >
+      <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.65}
+        style={{
+          fontSize: 9,
+          fontWeight: '700',
+          color: fg,
+          textAlign: 'center',
+          letterSpacing: -0.1,
+          includeFontPadding: false,
+        }}
+      >
+        {label}
+      </Text>
+    </View>
+  );
 }
 
 // ─── Individual Day Cell ──────────────────────────────────────────────────────
@@ -45,6 +114,8 @@ type DayCellProps = {
   cellSize: number;
   primaryColor: string;
   displayMode: 'availability' | 'count';
+  showHebrewDates: boolean;
+  formatAppointmentBadge?: (count: number) => string;
   onDayPress: (date: Date) => void;
 };
 
@@ -58,25 +129,36 @@ const DayCell = React.memo(function DayCell({
   cellSize,
   primaryColor,
   displayMode,
+  showHebrewDates,
+  formatAppointmentBadge,
   onDayPress,
 }: DayCellProps) {
-  // Circle size is slightly smaller than the cell so there's breathing room
-  const circleSize = Math.min(cellSize - 2, 40);
+  const circleSize = Math.min(cellSize - 4, 36);
 
-  // Color logic — mirrors iOS Calendar exactly
+  const showBookingGreen =
+    displayMode === 'availability' && inRange && hasAvail && !isSel && !isToday;
+  const showAvailGreen = showBookingGreen;
+
   const circleColor = isToday
     ? IOS_TODAY_RED
     : isSel
     ? primaryColor
+    : showAvailGreen
+    ? AVAIL_DAY_FILL
     : 'transparent';
 
-  const textColor = isToday || isSel ? '#FFFFFF' : inRange ? '#1C1C1E' : '#C7C7CC';
+  const textColor =
+    isToday || isSel ? '#FFFFFF' : showAvailGreen ? AVAIL_DAY_TEXT : inRange ? '#1C1C1E' : '#C7C7CC';
 
   const isPast = !isToday && date < TODAY;
-  const textOpacity = isPast && inRange && !isSel && !isToday ? 0.42 : 1;
+  const textOpacity = isPast && inRange && !isSel && !isToday && !showAvailGreen ? 0.4 : 1;
 
-  // Dots / badge (only if in range and has events)
-  const showIndicator = inRange && hasAvail;
+  const onCircle = isToday || isSel;
+
+  const hebrewDay = showHebrewDates ? formatHebrewDay(date) : '';
+
+  const fmtBadge = formatAppointmentBadge ?? ((c: number) => `${c} תורים`);
+  const badgeLabel = displayMode === 'count' && hasAvail ? fmtBadge(availCount) : null;
 
   return (
     <Pressable
@@ -86,90 +168,100 @@ const DayCell = React.memo(function DayCell({
         width: cellSize,
         alignItems: 'center',
         paddingVertical: 3,
-        opacity: pressed && inRange ? 0.65 : 1,
+        opacity: pressed && inRange ? 0.6 : 1,
       })}
       accessibilityRole="button"
-      accessibilityLabel={`${date.getDate()}`}
+      accessibilityLabel={badgeLabel ? `${date.getDate()}, ${badgeLabel}` : `${date.getDate()}`}
       accessibilityState={{ selected: isSel, disabled: !inRange }}
     >
-      {/* Day circle */}
-      <View
-        style={{
-          width: circleSize,
-          height: circleSize,
-          borderRadius: circleSize / 2,
-          backgroundColor: circleColor,
-          alignItems: 'center',
-          justifyContent: 'center',
-          ...(isToday && !isSel
-            ? Platform.select({
-                ios: {
-                  shadowColor: IOS_TODAY_RED,
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.35,
-                  shadowRadius: 5,
-                },
-                android: { elevation: 3 },
-              })
-            : {}),
-        }}
-      >
-        <Text
+      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <View
           style={{
-            fontSize: circleSize >= 38 ? 17 : 15,
-            fontWeight: isToday || isSel ? '700' : '400',
-            color: textColor,
-            opacity: textOpacity,
-            includeFontPadding: false,
-            lineHeight: circleSize,
+            width: circleSize,
+            height: circleSize,
+            borderRadius: circleSize / 2,
+            backgroundColor: circleColor,
+            alignItems: 'center',
+            justifyContent: 'center',
+            ...(showBookingGreen
+              ? {
+                  borderWidth: StyleSheet.hairlineWidth * 2,
+                  borderColor: 'rgba(52,199,89,0.4)',
+                }
+              : {}),
+            ...(isToday && !isSel
+              ? Platform.select({
+                  ios: {
+                    shadowColor: IOS_TODAY_RED,
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.35,
+                    shadowRadius: 4,
+                  },
+                  android: { elevation: 3 },
+                })
+              : {}),
           }}
         >
-          {date.getDate()}
-        </Text>
+          <Text
+            style={{
+              fontSize: circleSize >= 34 ? 16 : 14,
+              fontWeight: isToday || isSel ? '700' : showAvailGreen ? '600' : '400',
+              color: textColor,
+              opacity: textOpacity,
+              includeFontPadding: false,
+              lineHeight: circleSize,
+            }}
+          >
+            {date.getDate()}
+          </Text>
+        </View>
       </View>
 
-      {/* Indicator row */}
-      <View style={{ height: 8, justifyContent: 'center', alignItems: 'center', marginTop: 2 }}>
-        {showIndicator && (
-          displayMode === 'count' ? (
-            /* Count pill — admin mode */
-            <View
-              style={{
-                minWidth: 18,
-                height: 14,
-                borderRadius: 7,
-                paddingHorizontal: 4,
-                backgroundColor: isSel || isToday
-                  ? 'rgba(255,255,255,0.28)'
-                  : `${primaryColor}1A`,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: 9,
-                  fontWeight: '800',
-                  letterSpacing: 0.1,
-                  color: isSel || isToday ? '#FFFFFF' : primaryColor,
-                  includeFontPadding: false,
-                }}
-              >
-                {availCount > 99 ? '99+' : String(availCount)}
-              </Text>
-            </View>
-          ) : (
-            /* Single dot — booking availability mode */
-            <View
-              style={{
-                width: 5,
-                height: 5,
-                borderRadius: 2.5,
-                backgroundColor: isSel || isToday ? '#FFFFFF' : (hasAvail ? '#34C759' : '#FF3B30'),
-              }}
-            />
-          )
-        )}
+      {showHebrewDates && (
+        <Text
+          numberOfLines={1}
+          style={{
+            fontSize: 9.5,
+            fontWeight: '400',
+            color: onCircle ? 'rgba(255,255,255,0.0)' : inRange ? '#8E8E93' : '#D1D1D6',
+            includeFontPadding: false,
+            marginTop: 1,
+            lineHeight: 12,
+            textAlign: 'center',
+            width: cellSize,
+          }}
+        >
+          {hebrewDay}
+        </Text>
+      )}
+
+      <View
+        style={{
+          minHeight: displayMode === 'count' && badgeLabel ? 26 : showHebrewDates ? 10 : 8,
+          justifyContent: 'center',
+          alignItems: 'center',
+          marginTop: showHebrewDates ? 2 : 2,
+          paddingHorizontal: 1,
+        }}
+      >
+        {inRange && hasAvail && displayMode === 'count' && badgeLabel ? (
+          <AdminAppointmentPill
+            label={badgeLabel}
+            primaryColor={primaryColor}
+            onPrimaryCircle={onCircle}
+            maxWidth={cellSize + 4}
+          />
+        ) : null}
+        {inRange && hasAvail && displayMode === 'availability' && onCircle ? (
+          <View
+            style={{
+              width: 5,
+              height: 5,
+              borderRadius: 2.5,
+              backgroundColor: 'rgba(255,255,255,0.9)',
+            }}
+          />
+        ) : null}
       </View>
     </Pressable>
   );
@@ -187,6 +279,9 @@ export function Days({
   primaryColor,
   onDayPress,
   displayMode = 'availability',
+  showHebrewDates = false,
+  showWeekSeparators = false,
+  formatAppointmentBadge,
 }: DaysProps) {
   const weeks = getMonthWeeks(data);
 
@@ -199,51 +294,68 @@ export function Days({
     [rangeEnd]
   );
 
+  const countPillExtra = displayMode === 'count' ? 28 : 0;
+
   return (
-    <View style={{ width: '100%', paddingHorizontal: 16, paddingBottom: 10 }}>
-      {weeks.map((week, weekIndex) => (
-        <View
-          key={weekIndex}
-          style={{
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-          }}
-        >
-          {week.map((date, dayIndex) => {
-            if (!date) {
+    <View style={{ width: '100%', paddingHorizontal: 16, paddingBottom: 10, direction: 'ltr' }}>
+      {weeks.map((week, weekIndex) => {
+        const displayWeek = [...week].reverse();
+        return (
+          <View
+            key={weekIndex}
+            style={{
+              flexDirection: 'row',
+              direction: 'ltr',
+              justifyContent: 'space-between',
+              ...(showWeekSeparators && weekIndex < weeks.length - 1
+                ? {
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: 'rgba(60, 60, 67, 0.18)',
+                    paddingBottom: 6,
+                    marginBottom: 2,
+                  }
+                : {}),
+            }}
+          >
+            {displayWeek.map((date, dayIndex) => {
+              if (!date) {
+                const emptyH = cellSize + (showHebrewDates ? 26 : 13) + countPillExtra;
+                return (
+                  <View
+                    key={`e-${weekIndex}-${dayIndex}`}
+                    style={{ width: cellSize, height: emptyH }}
+                  />
+                );
+              }
+
+              const inRange = date >= rangeStartDay && date <= rangeEndDay;
+              const dsIso = toIso(date);
+              const availCount = dayAvailability[dsIso] ?? 0;
+              const hasAvail = availCount > 0;
+              const isSel = selectedDate ? sameDate(date, selectedDate) : false;
+              const isToday = sameDate(date, TODAY);
+
               return (
-                <View
-                  key={`e-${weekIndex}-${dayIndex}`}
-                  style={{ width: cellSize, height: cellSize + 13 }}
+                <DayCell
+                  key={dsIso}
+                  date={date}
+                  inRange={inRange}
+                  isSel={isSel}
+                  isToday={isToday}
+                  availCount={availCount}
+                  hasAvail={hasAvail}
+                  cellSize={cellSize}
+                  primaryColor={primaryColor}
+                  displayMode={displayMode}
+                  showHebrewDates={showHebrewDates}
+                  formatAppointmentBadge={formatAppointmentBadge}
+                  onDayPress={onDayPress}
                 />
               );
-            }
-
-            const inRange = date >= rangeStartDay && date <= rangeEndDay;
-            const dsIso = toIso(date);
-            const availCount = dayAvailability[dsIso] ?? 0;
-            const hasAvail = availCount > 0;
-            const isSel = selectedDate ? sameDate(date, selectedDate) : false;
-            const isToday = sameDate(date, TODAY);
-
-            return (
-              <DayCell
-                key={dsIso}
-                date={date}
-                inRange={inRange}
-                isSel={isSel}
-                isToday={isToday}
-                availCount={availCount}
-                hasAvail={hasAvail}
-                cellSize={cellSize}
-                primaryColor={primaryColor}
-                displayMode={displayMode}
-                onDayPress={onDayPress}
-              />
-            );
-          })}
-        </View>
-      ))}
+            })}
+          </View>
+        );
+      })}
     </View>
   );
 }

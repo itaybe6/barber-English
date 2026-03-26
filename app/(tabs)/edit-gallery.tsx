@@ -15,10 +15,10 @@ import {
   Pressable,
   RefreshControl,
   useWindowDimensions,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
-import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useDesignsStore } from '@/stores/designsStore';
 import type { Design, User } from '@/lib/supabase';
@@ -28,14 +28,19 @@ import { supabase } from '@/lib/supabase';
 import { usersApi } from '@/lib/api/users';
 import { compressImages } from '@/lib/utils/imageCompression';
 import { useTranslation } from 'react-i18next';
-import { Plus, Search, ImagePlus, LayoutGrid, X } from 'lucide-react-native';
+import { Search, ImagePlus, LayoutGrid, X } from 'lucide-react-native';
 import { useColors, type ThemeColors } from '@/src/theme/ThemeProvider';
+import { FabButton } from '@/components/FabButton';
 
 const numColumns = 2;
 
 export default function EditGalleryScreen() {
-  const { t } = useTranslation();
-  const router = useRouter();
+  const { t: tRoot } = useTranslation();
+  const t = useCallback(
+    (key: string, defaultValue?: string, options?: Record<string, unknown>) =>
+      tRoot(key, { ...(options ?? {}), defaultValue, lng: 'he' } as object),
+    [tRoot]
+  );
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const colors = useColors();
@@ -64,6 +69,16 @@ export default function EditGalleryScreen() {
     fetchDesigns();
     loadAdminUsers();
   }, []);
+
+  useEffect(() => {
+    if (!createVisible) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (isCreating) return true;
+      setCreateVisible(false);
+      return true;
+    });
+    return () => sub.remove();
+  }, [createVisible, isCreating]);
 
   const loadAdminUsers = async () => {
     try {
@@ -381,7 +396,12 @@ export default function EditGalleryScreen() {
     }
   };
 
-  const closeCreateModal = useCallback(() => {
+  const toggleCreateFab = useCallback(() => {
+    if (isCreating) return;
+    setCreateVisible((open) => !open);
+  }, [isCreating]);
+
+  const closeCreateFab = useCallback(() => {
     if (!isCreating) setCreateVisible(false);
   }, [isCreating]);
 
@@ -399,49 +419,20 @@ export default function EditGalleryScreen() {
         <Text style={styles.emptySubtitle}>
           {isSearchEmpty ? t('admin.gallery.tryDifferentSearch', 'Try another name or clear the search') : t('admin.gallery.emptySubtitle', 'Show clients your work — add your first photos.')}
         </Text>
-        {!isSearchEmpty && (
-          <TouchableOpacity style={[styles.emptyCta, { backgroundColor: colors.primary }]} onPress={() => setCreateVisible(true)} activeOpacity={0.9}>
-            <Plus size={20} color="#fff" strokeWidth={2.5} />
-            <Text style={styles.emptyCtaText}>{t('admin.gallery.emptyCta', 'Add photos')}</Text>
-          </TouchableOpacity>
-        )}
       </View>
     );
   }, [colors.primary, designs.length, filtered.length, isLoading, search, styles, t]);
 
+  const fabMaxScrollH = Math.round(Dimensions.get('window').height * 0.52);
+
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <SafeAreaView edges={['top']} style={{ backgroundColor: colors.background }}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={[styles.headerIconBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
-            accessibilityRole="button"
-            accessibilityLabel={t('back', 'Back')}
-          >
-            <Ionicons name="arrow-forward" size={22} color={colors.text} />
-          </TouchableOpacity>
-          <View style={styles.headerTitles}>
-            <Text style={[styles.headerTitle, { color: colors.text }]}>{t('admin.gallery.edit', 'Edit Gallery')}</Text>
-            <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-              {t('admin.gallery.editScreenHint', '{{count}} designs · tap to edit', { count: designs.length })}
-            </Text>
-          </View>
-          <TouchableOpacity
-            onPress={() => setCreateVisible(true)}
-            style={[styles.headerAddBtn, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
-            accessibilityRole="button"
-            accessibilityLabel={t('admin.gallery.addDesign', 'Add Design')}
-          >
-            <Plus size={24} color="#fff" strokeWidth={2.5} />
-          </TouchableOpacity>
-        </View>
-
-        <View style={[styles.searchRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={[styles.searchRow, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 6 }]}>
           <Search size={18} color={colors.textSecondary} strokeWidth={2} />
           <TextInput
             style={[styles.searchInput, { color: colors.text }]}
-            placeholder={t('admin.gallery.searchDesigns', 'Search by name')}
+            placeholder={t('admin.gallery.searchDesigns', 'חיפוש לפי שם')}
             placeholderTextColor={colors.textSecondary}
             value={search}
             onChangeText={setSearch}
@@ -449,7 +440,7 @@ export default function EditGalleryScreen() {
             clearButtonMode="while-editing"
           />
           {search.length > 0 ? (
-            <TouchableOpacity onPress={() => setSearch('')} hitSlop={12} accessibilityRole="button">
+            <TouchableOpacity onPress={() => setSearch('')} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('common.clear', 'נקה')}>
               <X size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           ) : null}
@@ -505,6 +496,129 @@ export default function EditGalleryScreen() {
           )}
         </View>
       </SafeAreaView>
+
+      {createVisible ? (
+        <Pressable
+          style={[styles.fabBackdrop, { paddingBottom: insets.bottom }]}
+          onPress={closeCreateFab}
+          accessibilityRole="button"
+          accessibilityLabel={t('close', 'סגירה')}
+        />
+      ) : null}
+
+      <FabButton
+        isOpen={createVisible}
+        onPress={toggleCreateFab}
+        bottom={insets.bottom + 88}
+        horizontalInset={20}
+        openedSize={windowWidth * 0.92}
+        closedSize={58}
+        duration={480}
+        grabberColor={colors.primary}
+      >
+        <Text style={[styles.fabSheetTitle, { color: colors.text }]}>{t('admin.gallery.addDesign', 'הוספת עיצוב')}</Text>
+        <Text style={[styles.fabSheetSubtitle, { color: colors.textSecondary }]}>{t('admin.gallery.helper', 'ניתן לבחור מספר תמונות. הראשונה תשמש כתמונת שער.')}</Text>
+
+        <KeyboardAwareScreenScroll
+          keyboardShouldPersistTaps="handled"
+          style={{ maxHeight: fabMaxScrollH }}
+          contentContainerStyle={{ paddingBottom: 16 }}
+          showsVerticalScrollIndicator={false}
+        >
+          {adminUsers.length > 1 && (
+            <View style={[styles.block, { opacity: isCreating ? 0.55 : 1 }]}>
+              <Text style={[styles.fieldLabel, styles.fabTextRight, { color: colors.textSecondary }]}>{t('admin.gallery.selectAdmin', 'בחר/י מנהל')}</Text>
+              <View style={styles.chipRow}>
+                {adminUsers.map((user) => {
+                  const on = selectedUserId === user.id;
+                  return (
+                    <TouchableOpacity
+                      key={user.id}
+                      onPress={() => !isCreating && setSelectedUserId(user.id)}
+                      style={[
+                        styles.chip,
+                        { borderColor: colors.border, backgroundColor: colors.surface },
+                        on && { backgroundColor: colors.primary, borderColor: colors.primary },
+                      ]}
+                      disabled={isCreating}
+                    >
+                      <Text style={[styles.chipText, { color: colors.text }, on && { color: '#fff', fontWeight: '600' }]}>{user.name}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
+          <TouchableOpacity
+            onPress={pickImages}
+            style={[styles.pickCard, { borderColor: colors.primary + '44', backgroundColor: colors.primary + '0D' }]}
+            activeOpacity={0.88}
+            disabled={isCreating}
+          >
+            <View style={[styles.pickIconCircle, { backgroundColor: colors.primary + '22' }]}>
+              <ImagePlus size={26} color={colors.primary} strokeWidth={2} />
+            </View>
+            <View style={styles.pickTextCol}>
+              <Text style={[styles.pickTitle, styles.fabTextRight, { color: colors.text }]}>{t('admin.gallery.selectImages', 'בחר/י תמונות')}</Text>
+              <Text style={[styles.pickSub, styles.fabTextRight, { color: colors.textSecondary }]}>{t('admin.gallery.photoDropHint', 'עד 10 תמונות · דחיסה אוטומטית')}</Text>
+            </View>
+            {pickedAssets.length > 0 ? (
+              <View style={[styles.countBadge, { backgroundColor: colors.primary }]}>
+                <Text style={styles.countBadgeText}>{pickedAssets.length}</Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+
+          {pickedAssets.length > 0 && (
+            <FlatList
+              data={pickedAssets}
+              keyExtractor={(item, idx) => `${item.uri}-${idx}`}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingVertical: 12, gap: 10 }}
+              renderItem={({ item, index }) => (
+                <View style={styles.previewSlot}>
+                  <Image source={{ uri: item.uri }} style={styles.previewImg} />
+                  <TouchableOpacity
+                    onPress={() => setPickedAssets((prev) => prev.filter((_, i) => i !== index))}
+                    style={[styles.previewX, { backgroundColor: colors.error }]}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    disabled={isCreating}
+                  >
+                    <Ionicons name="close" size={14} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              )}
+            />
+          )}
+
+          <Text style={[styles.fieldLabel, styles.fabTextRight, { color: colors.textSecondary }]}>{t('admin.gallery.nameLabel', 'שם לתצוגה')}</Text>
+          <TextInput
+            style={[styles.fieldInput, styles.fabTextRight, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border, opacity: isCreating ? 0.55 : 1 }]}
+            placeholder={t('admin.gallery.namePlaceholder', 'שם העיצוב')}
+            placeholderTextColor={colors.textSecondary}
+            value={name}
+            onChangeText={setName}
+            editable={!isCreating}
+          />
+
+          <TouchableOpacity
+            onPress={handleCreate}
+            style={[styles.primaryBtn, { backgroundColor: colors.primary, marginTop: 18, opacity: isLoading || isCreating ? 0.85 : 1 }]}
+            disabled={isLoading || isCreating}
+          >
+            {isCreating ? (
+              <View style={styles.rowCenter}>
+                <ActivityIndicator color="#fff" size="small" />
+                <Text style={[styles.primaryBtnText, { marginStart: 10 }]}>{t('admin.gallery.uploadingImages', 'מעלה תמונות...')}</Text>
+              </View>
+            ) : (
+              <Text style={styles.primaryBtnText}>{isLoading ? t('common.loading', 'טוען...') : t('admin.gallery.publish', 'פרסום')}</Text>
+            )}
+          </TouchableOpacity>
+        </KeyboardAwareScreenScroll>
+      </FabButton>
 
       {/* Edit — bottom sheet */}
       <Modal
@@ -646,134 +760,6 @@ export default function EditGalleryScreen() {
           </SafeAreaView>
         </View>
       </Modal>
-
-      {/* Create — bottom sheet */}
-      <Modal
-        visible={createVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => {
-          if (!isCreating) closeCreateModal();
-        }}
-      >
-        <View style={styles.sheetRoot}>
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={() => {
-              if (!isCreating) closeCreateModal();
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={t('close', 'Close')}
-          />
-          <SafeAreaView edges={['bottom']} style={[styles.sheetCard, { backgroundColor: colors.background }]}>
-            <View style={[styles.sheetGrabber, { backgroundColor: colors.border }]} />
-            <View style={styles.sheetHeader}>
-              <View>
-                <Text style={[styles.sheetTitle, { color: colors.text }]}>{t('admin.gallery.addDesign', 'Add Design')}</Text>
-                <Text style={[styles.sheetHint, { color: colors.textSecondary }]}>{t('admin.gallery.helper', 'You can select multiple images. The first one will be used as the cover image.')}</Text>
-              </View>
-              <TouchableOpacity onPress={closeCreateModal} style={[styles.sheetCloseBtn, { backgroundColor: colors.surface, opacity: isCreating ? 0.45 : 1 }]} disabled={isCreating}>
-                <X size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            <KeyboardAwareScreenScroll keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 28 }}>
-              {adminUsers.length > 1 && (
-                <View style={[styles.block, { opacity: isCreating ? 0.55 : 1 }]}>
-                  <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>{t('admin.gallery.selectAdmin', 'Select Admin')}</Text>
-                  <View style={styles.chipRow}>
-                    {adminUsers.map((user) => {
-                      const on = selectedUserId === user.id;
-                      return (
-                        <TouchableOpacity
-                          key={user.id}
-                          onPress={() => !isCreating && setSelectedUserId(user.id)}
-                          style={[
-                            styles.chip,
-                            { borderColor: colors.border, backgroundColor: colors.surface },
-                            on && { backgroundColor: colors.primary, borderColor: colors.primary },
-                          ]}
-                          disabled={isCreating}
-                        >
-                          <Text style={[styles.chipText, { color: colors.text }, on && { color: '#fff', fontWeight: '600' }]}>{user.name}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-              )}
-
-              <TouchableOpacity
-                onPress={pickImages}
-                style={[styles.pickCard, { borderColor: colors.primary + '44', backgroundColor: colors.primary + '0D' }]}
-                activeOpacity={0.88}
-                disabled={isCreating}
-              >
-                <View style={[styles.pickIconCircle, { backgroundColor: colors.primary + '22' }]}>
-                  <ImagePlus size={26} color={colors.primary} strokeWidth={2} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.pickTitle, { color: colors.text }]}>{t('admin.gallery.selectImages', 'Select Images')}</Text>
-                  <Text style={[styles.pickSub, { color: colors.textSecondary }]}>{t('admin.gallery.photoDropHint', 'Up to 10 images · JPEG optimized automatically')}</Text>
-                </View>
-                {pickedAssets.length > 0 ? (
-                  <View style={[styles.countBadge, { backgroundColor: colors.primary }]}>
-                    <Text style={styles.countBadgeText}>{pickedAssets.length}</Text>
-                  </View>
-                ) : null}
-              </TouchableOpacity>
-
-              {pickedAssets.length > 0 && (
-                <FlatList
-                  data={pickedAssets}
-                  keyExtractor={(item, idx) => `${item.uri}-${idx}`}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ paddingVertical: 12, gap: 10 }}
-                  renderItem={({ item, index }) => (
-                    <View style={styles.previewSlot}>
-                      <Image source={{ uri: item.uri }} style={styles.previewImg} />
-                      <TouchableOpacity
-                        onPress={() => setPickedAssets((prev) => prev.filter((_, i) => i !== index))}
-                        style={[styles.previewX, { backgroundColor: colors.error }]}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        disabled={isCreating}
-                      >
-                        <Ionicons name="close" size={14} color="#fff" />
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                />
-              )}
-
-              <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>{t('admin.gallery.nameLabel', 'Display name')}</Text>
-              <TextInput
-                style={[styles.fieldInput, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border, opacity: isCreating ? 0.55 : 1 }]}
-                placeholder={t('admin.gallery.namePlaceholder', 'Design name')}
-                placeholderTextColor={colors.textSecondary}
-                value={name}
-                onChangeText={setName}
-                editable={!isCreating}
-              />
-
-              <TouchableOpacity
-                onPress={handleCreate}
-                style={[styles.primaryBtn, { backgroundColor: colors.primary, marginTop: 20, opacity: isLoading || isCreating ? 0.85 : 1 }]}
-                disabled={isLoading || isCreating}
-              >
-                {isCreating ? (
-                  <View style={styles.rowCenter}>
-                    <ActivityIndicator color="#fff" size="small" />
-                    <Text style={[styles.primaryBtnText, { marginLeft: 10 }]}>{t('admin.gallery.uploadingImages', 'Uploading images...')}</Text>
-                  </View>
-                ) : (
-                  <Text style={styles.primaryBtnText}>{isLoading ? t('common.loading', 'Loading...') : t('admin.gallery.publish', 'Publish')}</Text>
-                )}
-              </TouchableOpacity>
-            </KeyboardAwareScreenScroll>
-          </SafeAreaView>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -797,40 +783,34 @@ function createStyles(colors: ThemeColors, windowWidth: number) {
         android: { elevation: 0 },
       }),
     },
-    headerRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: paddingH,
-      paddingTop: 8,
-      paddingBottom: 14,
-      gap: 12,
+    fabBackdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.38)',
+      zIndex: 10000,
     },
-    headerIconBtn: {
-      width: 44,
-      height: 44,
-      borderRadius: 14,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: StyleSheet.hairlineWidth,
+    fabSheetTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      width: '100%',
+      textAlign: 'right',
+      letterSpacing: -0.2,
     },
-    headerAddBtn: {
-      width: 48,
-      height: 48,
-      borderRadius: 16,
-      alignItems: 'center',
-      justifyContent: 'center',
-      ...Platform.select({
-        ios: {
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: 0.35,
-          shadowRadius: 12,
-        },
-        android: { elevation: 6 },
-      }),
+    fabSheetSubtitle: {
+      fontSize: 13,
+      marginTop: 6,
+      marginBottom: 12,
+      lineHeight: 19,
+      width: '100%',
+      textAlign: 'right',
     },
-    headerTitles: { flex: 1 },
-    headerTitle: { fontSize: 22, fontWeight: '700', letterSpacing: -0.3 },
-    headerSubtitle: { fontSize: 13, marginTop: 3, fontWeight: '500' },
+    fabTextRight: {
+      textAlign: 'right',
+      textTransform: 'none',
+      letterSpacing: 0,
+    },
+    pickTextCol: {
+      flex: 1,
+    },
     searchRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -892,15 +872,6 @@ function createStyles(colors: ThemeColors, windowWidth: number) {
     emptyIconCircle: { width: 88, height: 88, borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
     emptyTitle: { fontSize: 20, fontWeight: '700', color: colors.text, textAlign: 'center', marginBottom: 8 },
     emptySubtitle: { fontSize: 15, color: colors.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 22 },
-    emptyCta: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      paddingVertical: 14,
-      paddingHorizontal: 22,
-      borderRadius: 14,
-    },
-    emptyCtaText: { color: '#fff', fontSize: 16, fontWeight: '700' },
     sheetRoot: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
     sheetCard: {
       borderTopLeftRadius: 22,

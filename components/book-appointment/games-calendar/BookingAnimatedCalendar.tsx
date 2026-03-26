@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, LayoutChangeEvent, Dimensions, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { CalendarAnimatedProvider, useBookingCalendarContext } from './animated-context';
 import { ScrollContainer } from './scroll-container';
 import { ThreeMonthHeader } from './three-month-header';
@@ -10,6 +11,7 @@ import {
   buildMonthRange,
   CALENDAR_FORWARD_MONTH_STEPS,
   getShortWeekdayNames,
+  getSingleLetterHebrewWeekdays,
   type MonthEntry,
 } from './utils';
 
@@ -68,6 +70,7 @@ function CalendarShell({
   initialLogicalIndex: number;
   displayMode: 'availability' | 'count';
 }) {
+  const { t } = useTranslation();
   const { pageWidth, scrollViewRef } = useBookingCalendarContext();
   const [layoutW, setLayoutW] = useState(() => Dimensions.get('window').width - 64);
   const [activeMonthIndex, setActiveMonthIndex] = useState(initialLogicalIndex);
@@ -96,8 +99,23 @@ function CalendarShell({
     scrollViewRef.current?.scrollTo({ x: physical * w, animated: false });
   }, [layoutW, monthCount, pageWidth, scrollViewRef]);
 
+  const isAdmin = variant === 'admin';
   const cellSize = Math.max(34, Math.floor((Math.max(1, layoutW) - 32) / 7));
-  const weekdayNames = useMemo(() => getShortWeekdayNames(language), [language]);
+  const weekdayNames = useMemo(
+    () => isAdmin ? getSingleLetterHebrewWeekdays() : getShortWeekdayNames(language),
+    [isAdmin, language]
+  );
+
+  const formatAppointmentBadge = useMemo(
+    () =>
+      displayMode === 'count'
+        ? (c: number) =>
+            c === 1
+              ? String(t('admin.calendar.appointmentPillSingle'))
+              : String(t('admin.calendar.appointmentPill', { count: c }))
+        : undefined,
+    [displayMode, t]
+  );
 
   const handleDayPress = useCallback(
     (date: Date) => {
@@ -177,6 +195,8 @@ function CalendarShell({
                 primaryColor={primaryColor}
                 onDayPress={handleDayPress}
                 displayMode={displayMode}
+                showHebrewDates={isAdmin}
+                formatAppointmentBadge={formatAppointmentBadge}
               />
             </View>
           ))
@@ -208,11 +228,11 @@ function CalendarShell({
             style={{
               width: cellSize,
               textAlign: 'center',
-              fontSize: 11,
-              fontWeight: '600',
+              fontSize: isAdmin ? 13 : 11,
+              fontWeight: isAdmin ? '500' : '600',
               color: '#8E8E93',
-              letterSpacing: 0.3,
-              textTransform: 'uppercase',
+              letterSpacing: isAdmin ? 0 : 0.3,
+              textTransform: isAdmin ? 'none' : 'uppercase',
               includeFontPadding: false,
             }}
           >

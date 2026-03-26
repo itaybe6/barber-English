@@ -374,6 +374,7 @@
   "common": { "tryAgain": "An error occurred. Please try again.", "client": "Client", "smsOpenFailed": "SMS app cannot be opened on this device", "searchPlaceholder": "Search...", "user": "User", "retry": "Retry", "emailOpenFailed": "Cannot open email client on this device", "phoneOpenFailed": "Unable to open the dialer on this device" },
   "common.openWebsite": "Open website",
   "common.loading": "Loading...",
+  "common.clear": "Clear",
   "common.choose": "Choose",
   "common.change": "Change",
   "common.eg": "e.g.",
@@ -850,6 +851,12 @@
       "week": "Week",
       "month": "Month"
     },
+    "calendar": {
+      "appointmentPill": "{{count}} appts",
+      "appointmentPillSingle": "1 appt",
+      "today": "Today",
+      "monthTapDayHint": "Tap a day to see all appointments"
+    },
     "appointmentsAdmin": {
       "loadingForDate": "Loading appointments for {{date}}...",
       "emptyTitle": "No appointments for this day",
@@ -907,7 +914,13 @@
       "selectDateRange": "Please select a date range",
       "invalidDateRange": "Invalid date range",
       "saved": "Constraints saved successfully",
-      "enterReason": "Enter reason"
+      "enterReason": "Enter reason",
+      "open": "Open",
+      "constraintsDesc": "Closed dates and hours",
+      "breakListSingle": "Break: ",
+      "breakListNumbered": "Break #{{num}}: ",
+      "summaryBreakNumbered": "Break #{{num}}: ",
+      "summaryBreakSingle": "Break: "
     },
     "notificationsComposer": {
       "subtitle": "Send a message to all clients",

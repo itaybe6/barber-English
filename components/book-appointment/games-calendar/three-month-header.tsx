@@ -11,7 +11,20 @@ type Props = {
   onGoToIndex: (index: number) => void;
 };
 
-const HIT_SLOP = { top: 14, bottom: 14, left: 14, right: 14 };
+const HIT_SLOP = { top: 16, bottom: 16, left: 16, right: 16 };
+
+/** Extract just the month name (without year) using Gregorian calendar */
+function formatMonthOnly(date: Date): string {
+  try {
+    return new Intl.DateTimeFormat('he-IL-u-ca-gregory', { month: 'long' }).format(date);
+  } catch {
+    try {
+      return new Intl.DateTimeFormat('he-IL', { month: 'long' }).format(date);
+    } catch {
+      return '';
+    }
+  }
+}
 
 export function ThreeMonthHeader({ data, activeIndex, primaryColor, onGoToIndex }: Props) {
   const n = data.length;
@@ -20,6 +33,9 @@ export function ThreeMonthHeader({ data, activeIndex, primaryColor, onGoToIndex 
 
   const canGoPrev = safeIndex > 0;
   const canGoNext = safeIndex < n - 1;
+
+  const monthName = currEntry ? formatMonthOnly(currEntry.date) : '';
+  const yearStr = currEntry ? String(currEntry.date.getFullYear()) : '';
 
   return (
     <View
@@ -34,8 +50,7 @@ export function ThreeMonthHeader({ data, activeIndex, primaryColor, onGoToIndex 
         flexDirection: 'row',
         alignItems: 'center',
         direction: 'ltr',
-        paddingHorizontal: 6,
-        // Subtle bottom separator
+        paddingHorizontal: 4,
         borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: 'rgba(0,0,0,0.08)',
       }}
@@ -46,46 +61,54 @@ export function ThreeMonthHeader({ data, activeIndex, primaryColor, onGoToIndex 
         disabled={!canGoPrev}
         hitSlop={HIT_SLOP}
         style={({ pressed }) => ({
-          width: 44,
-          height: 44,
+          width: 48,
+          height: 48,
           alignItems: 'center',
           justifyContent: 'center',
-          borderRadius: 22,
+          borderRadius: 24,
           opacity: !canGoPrev ? 0.18 : 1,
-          backgroundColor:
-            pressed && canGoPrev
-              ? `${primaryColor}12`
-              : 'transparent',
+          backgroundColor: pressed && canGoPrev ? `${primaryColor}15` : 'transparent',
         })}
         accessibilityRole="button"
         accessibilityLabel="חודש קודם"
       >
-        <ChevronLeft
-          size={21}
-          color={primaryColor}
-          strokeWidth={2.6}
-        />
+        <ChevronLeft size={22} color={primaryColor} strokeWidth={2.5} />
       </Pressable>
 
-      {/* Month + Year title */}
-      <View style={{ flex: 1, alignItems: 'center', paddingHorizontal: 4 }}>
+      {/* Month name + Year — large iOS Calendar style */}
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         <Text
           numberOfLines={1}
           adjustsFontSizeToFit
-          minimumFontScale={0.8}
+          minimumFontScale={0.75}
           style={{
-            fontSize: 17,
+            fontSize: 26,
             fontWeight: '700',
             color: '#1C1C1E',
-            letterSpacing: -0.3,
+            letterSpacing: -0.5,
             textAlign: 'center',
+            includeFontPadding: false,
+            lineHeight: 30,
             ...Platform.select({
               ios: { fontFamily: 'System' },
               android: { fontFamily: 'sans-serif-medium' },
             }),
           }}
         >
-          {currEntry?.label ?? ''}
+          {monthName}
+        </Text>
+        <Text
+          style={{
+            fontSize: 13,
+            fontWeight: '400',
+            color: '#8E8E93',
+            textAlign: 'center',
+            marginTop: 1,
+            includeFontPadding: false,
+            lineHeight: 16,
+          }}
+        >
+          {yearStr}
         </Text>
       </View>
 
@@ -95,27 +118,19 @@ export function ThreeMonthHeader({ data, activeIndex, primaryColor, onGoToIndex 
         disabled={!canGoNext}
         hitSlop={HIT_SLOP}
         style={({ pressed }) => ({
-          width: 44,
-          height: 44,
+          width: 48,
+          height: 48,
           alignItems: 'center',
           justifyContent: 'center',
-          borderRadius: 22,
+          borderRadius: 24,
           opacity: !canGoNext ? 0.18 : 1,
-          backgroundColor:
-            pressed && canGoNext
-              ? `${primaryColor}12`
-              : 'transparent',
+          backgroundColor: pressed && canGoNext ? `${primaryColor}15` : 'transparent',
         })}
         accessibilityRole="button"
         accessibilityLabel="חודש הבא"
       >
-        <ChevronRight
-          size={21}
-          color={primaryColor}
-          strokeWidth={2.6}
-        />
+        <ChevronRight size={22} color={primaryColor} strokeWidth={2.5} />
       </Pressable>
     </View>
   );
 }
-

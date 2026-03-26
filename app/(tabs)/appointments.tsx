@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   Dimensions,
   I18nManager,
-  useWindowDimensions,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -47,7 +46,7 @@ import {
   type AnchorRect,
 } from '@/components/admin-calendar/AppointmentActionsAnchorSheet';
 import { AppointmentsCalendarLoader } from '@/components/admin-calendar/AppointmentsCalendarLoader';
-import BookingAnimatedCalendar from '@/components/book-appointment/games-calendar/BookingAnimatedCalendar';
+import AdminVerticalMonthCalendar from '@/components/book-appointment/games-calendar/AdminVerticalMonthCalendar';
 import { CalendarReminderFabPanel } from '@/components/CalendarReminderFabPanel';
 import { useAdminCalendarView } from '@/contexts/AdminCalendarViewContext';
 import {
@@ -1495,7 +1494,6 @@ export default function AdminAppointmentsScreen() {
 
   const calendarPrimary = businessColors.primary || GC_BLUE;
   const calendarRipple = `${calendarPrimary}2A`;
-  const { height: windowHeight } = useWindowDimensions();
 
   const adminMonthAnchorKey = useMemo(
     () => `${selectedDate.getFullYear()}-${selectedDate.getMonth()}`,
@@ -1521,10 +1519,22 @@ export default function AdminAppointmentsScreen() {
     setMonthDayModalDate(_formatLocalYyyyMmDd(d));
   }, []);
 
+  const onAdminCalendarJumpToDate = useCallback((date: Date) => {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    setSelectedDate(d);
+  }, []);
+
   return (
-    <View style={styles.gcRoot}>
-      <View style={[styles.gcTopChrome, { paddingTop: insets.top }]}>
-        <View style={styles.gcHeader}>
+    <View style={[styles.gcRoot, calendarView === 'month' && styles.gcRootMonth]}>
+      <View
+        style={[
+          styles.gcTopChrome,
+          { paddingTop: insets.top },
+          calendarView === 'month' && styles.gcTopChromeMonth,
+        ]}
+      >
+        <View style={[styles.gcHeader, calendarView === 'month' && styles.gcHeaderMonth]}>
         {calendarView !== 'month' ? (
         <View
           style={[
@@ -1880,53 +1890,22 @@ export default function AdminAppointmentsScreen() {
               )}
             </ScrollView>
           ) : (
-            <ScrollView
-              style={styles.gcMonthScroll}
-              contentContainerStyle={styles.gcMonthScrollContent}
-              keyboardShouldPersistTaps="always"
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={onRefresh}
-                  colors={[calendarPrimary]}
-                  tintColor={calendarPrimary}
-                  title={t('refreshing', 'Refreshing...')}
-                  titleColor={Colors.subtext}
-                />
-              }
-            >
-              <View
-                style={{
-                  width: '100%',
-                  minHeight: Math.max(520, windowHeight * 0.58),
-                  justifyContent: 'center',
-                  paddingVertical: 12,
-                }}
-              >
-                <View style={styles.bookingCalendarSectionCard}>
-                  <View
-                    style={[
-                      styles.bookingCalendarFixedBox,
-                      !I18nManager.isRTL && { direction: 'ltr' },
-                    ]}
-                  >
-                    <BookingAnimatedCalendar
-                      variant="admin"
-                      dayAvailability={appointmentCountsByDate}
-                      selectedDate={selectedDate}
-                      language={typeof i18n.language === 'string' && i18n.language.startsWith('he') ? 'he' : 'en'}
-                      primaryColor={calendarPrimary}
-                      adminAnchorMonthKey={adminMonthAnchorKey}
-                      onAdminVisibleMonthChange={onAdminCalendarMonthVisible}
-                      onAdminDayPress={onAdminCalendarDayPress}
-                    />
-                  </View>
-                </View>
-              </View>
-              <Text style={styles.gcMonthHint} numberOfLines={2}>
-                {tHe('admin.calendar.monthTapDayHint', 'הקישו על יום כדי לראות את כל התורים')}
-              </Text>
-            </ScrollView>
+            <View style={styles.gcMonthFullBleed}>
+              <AdminVerticalMonthCalendar
+                dayAvailability={appointmentCountsByDate}
+                selectedDate={selectedDate}
+                language={typeof i18n.language === 'string' && i18n.language.startsWith('he') ? 'he' : 'en'}
+                primaryColor={calendarPrimary}
+                anchorMonthKey={adminMonthAnchorKey}
+                onVisibleMonthChange={onAdminCalendarMonthVisible}
+                onDayPress={onAdminCalendarDayPress}
+                onJumpToDate={onAdminCalendarJumpToDate}
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                todayLabel={tHe('admin.calendar.today', 'היום')}
+                monthHint={tHe('admin.calendar.monthTapDayHint', 'הקישו על יום כדי לראות את כל התורים')}
+              />
+            </View>
           )}
         </>
       )}
@@ -2457,6 +2436,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: GC_PAGE_BG,
   },
+  gcRootMonth: {
+    backgroundColor: '#FFFFFF',
+  },
   gcTopChrome: {
     backgroundColor: GC_HEADER_CHROME,
   },
@@ -2539,46 +2521,21 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 120,
   },
-  gcMonthScroll: {
-    flex: 1,
-    backgroundColor: '#F2F2F7',
-  },
-  gcMonthScrollContent: {
-    paddingTop: 6,
-    paddingBottom: 120,
-  },
-  /** iOS-style month calendar card */
-  bookingCalendarSectionCard: {
+  gcTopChromeMonth: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    marginHorizontal: 14,
-    marginTop: 10,
-    padding: 0,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.09,
-        shadowRadius: 20,
-      },
-      android: { elevation: 6 },
-    }),
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(60, 60, 67, 0.12)',
   },
-  bookingCalendarFixedBox: {
-    minHeight: 420,
-    borderRadius: 20,
-    overflow: 'hidden',
+  gcHeaderMonth: {
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 0,
+    paddingTop: 4,
+    paddingBottom: 4,
+    ...Platform.select({ ios: { shadowOpacity: 0 }, android: { elevation: 0 } }),
   },
-  gcMonthHint: {
-    fontSize: 12,
-    color: '#8E8E93',
-    textAlign: 'center',
-    writingDirection: 'rtl',
-    paddingHorizontal: 24,
-    paddingTop: 10,
-    paddingBottom: 16,
-    letterSpacing: 0.1,
+  gcMonthFullBleed: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
   },
   monthModalRoot: {
     flex: 1,

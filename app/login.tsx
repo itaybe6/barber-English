@@ -4,12 +4,14 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   Alert,
   Image,
   Dimensions,
   Platform,
   ActivityIndicator,
+  Keyboard,
 } from 'react-native';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import Animated, {
@@ -18,7 +20,6 @@ import Animated, {
   withSpring,
   withRepeat,
   withSequence,
-  withDelay,
   useSharedValue,
   interpolate,
   Easing,
@@ -39,7 +40,7 @@ import { authPhoneOtpApi } from '@/lib/api/authPhoneOtp';
 import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const { width: SW, height: SH } = Dimensions.get('window');
+const { width: SW } = Dimensions.get('window');
 
 const MAX_LOGIN_FAILURES = 5;
 const loginFailuresStorageKey = (phoneKey: string) => `@login_failures:${phoneKey}`;
@@ -83,82 +84,6 @@ function shiftHex(hex: string, delta: number): string {
   const g = clamp(parseInt(h.slice(2, 4), 16) + delta);
   const b = clamp(parseInt(h.slice(4, 6), 16) + delta);
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-}
-
-// ─── Animated drifting circle ─────────────────────────────────────────────────
-interface CircleProps {
-  size: number;
-  left: number;
-  top: number;
-  color: string;
-  driftMs: number;
-  delayMs: number;
-  driftX: number;
-  driftY: number;
-}
-
-function DriftingCircle({ size, left, top, color, driftMs, delayMs, driftX, driftY }: CircleProps) {
-  const tx = useSharedValue(0);
-  const ty = useSharedValue(0);
-  const op = useSharedValue(0.15);
-
-  useEffect(() => {
-    tx.value = withDelay(
-      delayMs,
-      withRepeat(
-        withSequence(
-          withTiming(driftX, { duration: driftMs, easing: Easing.inOut(Easing.ease) }),
-          withTiming(-driftX * 0.6, { duration: driftMs * 0.8, easing: Easing.inOut(Easing.ease) }),
-          withTiming(0, { duration: driftMs * 0.7, easing: Easing.inOut(Easing.ease) }),
-        ),
-        -1,
-        false,
-      ),
-    );
-    ty.value = withDelay(
-      delayMs + 400,
-      withRepeat(
-        withSequence(
-          withTiming(-driftY, { duration: driftMs * 0.9, easing: Easing.inOut(Easing.ease) }),
-          withTiming(driftY * 0.7, { duration: driftMs, easing: Easing.inOut(Easing.ease) }),
-          withTiming(0, { duration: driftMs * 0.8, easing: Easing.inOut(Easing.ease) }),
-        ),
-        -1,
-        false,
-      ),
-    );
-    op.value = withDelay(
-      delayMs,
-      withRepeat(
-        withSequence(
-          withTiming(0.32, { duration: driftMs * 1.1, easing: Easing.inOut(Easing.ease) }),
-          withTiming(0.08, { duration: driftMs * 1.1, easing: Easing.inOut(Easing.ease) }),
-        ),
-        -1,
-        false,
-      ),
-    );
-  }, []);
-
-  const s = useAnimatedStyle(() => ({
-    transform: [{ translateX: tx.value }, { translateY: ty.value }],
-    opacity: op.value,
-  }));
-
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[{
-        position: 'absolute',
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        backgroundColor: color,
-        left,
-        top,
-      }, s]}
-    />
-  );
 }
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
@@ -429,6 +354,7 @@ export default function LoginScreen() {
   };
 
   const handleLogin = async () => {
+    Keyboard.dismiss();
     if (!usePasswordLogin) {
       if (loginStep === 'phone') {
         await handleSendLoginOtp();
@@ -551,40 +477,36 @@ export default function LoginScreen() {
   return (
     <View style={styles.root}>
 
-      {/* ── Warm editorial background — soft orbs, restrained motion (UI/UX Pro Max) ── */}
+      {/* ── Calm studio backdrop: neutral base + restrained brand wash (static, readable) ── */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         <LinearGradient
-          colors={['#FDFCFA', '#F7F4F0', '#F2EFE9']}
+          colors={['#E9E6E2', '#F1EEEA', '#F8F6F4', '#FDFCFB']}
+          locations={[0, 0.32, 0.64, 1]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
         <LinearGradient
-          colors={[hexToRgba(primary, 0.07), 'transparent']}
-          start={{ x: 0.2, y: 0 }}
-          end={{ x: 0.9, y: 0.45 }}
+          colors={[
+            hexToRgba(primary, 0.1),
+            hexToRgba(primary, 0.035),
+            'rgba(255,255,255,0)',
+          ]}
+          locations={[0, 0.28, 1]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 0.72 }}
           style={StyleSheet.absoluteFill}
-          pointerEvents="none"
         />
-        <DriftingCircle
-          size={380}
-          left={-120}
-          top={-100}
-          color={hexToRgba(shiftHex(primary, 15), 0.22)}
-          driftMs={14000}
-          delayMs={0}
-          driftX={28}
-          driftY={22}
-        />
-        <DriftingCircle
-          size={280}
-          left={SW * 0.35}
-          top={SH * 0.42}
-          color={hexToRgba(shiftHex(primary, -25), 0.18)}
-          driftMs={16000}
-          delayMs={900}
-          driftX={-22}
-          driftY={26}
+        <LinearGradient
+          colors={[
+            'rgba(255,255,255,0)',
+            'rgba(255,255,255,0)',
+            hexToRgba(shiftHex(primary, -12), 0.065),
+          ]}
+          locations={[0, 0.52, 1]}
+          start={{ x: 0, y: 1 }}
+          end={{ x: 1, y: 0.35 }}
+          style={StyleSheet.absoluteFill}
         />
       </View>
 
@@ -593,16 +515,27 @@ export default function LoginScreen() {
         <KeyboardAwareScreenScroll
           style={styles.keyboardAvoid}
           contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="always"
-          keyboardDismissMode={Platform.OS === 'ios' ? 'none' : 'on-drag'}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           showsVerticalScrollIndicator={false}
           bounces={false}
           alwaysBounceVertical={false}
           overScrollMode="never"
           removeClippedSubviews={false}
         >
-          {/* Centered login block: logo + card */}
-          <View style={styles.centeredBlock} pointerEvents="box-none">
+          <Pressable
+            accessible={false}
+            style={[
+              styles.dismissKeyboardArea,
+              {
+                minHeight:
+                  Dimensions.get('window').height - insets.top,
+              },
+            ]}
+            onPress={Keyboard.dismiss}
+          >
+            {/* Centered login block: logo + card */}
+            <View style={styles.centeredBlock} pointerEvents="box-none">
             {/* Logo — plain View (no Reanimated entering — can break TextInput focus) */}
             <View style={styles.logoSection} pointerEvents="box-none">
               <Animated.View style={logoFloatStyle} pointerEvents="box-none">
@@ -982,6 +915,7 @@ export default function LoginScreen() {
               </BlurView>
             </View>
           </View>
+          </Pressable>
         </KeyboardAwareScreenScroll>
       </SafeAreaView>
 
@@ -1116,7 +1050,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#FDFCFA',
+    backgroundColor: '#F1EEEA',
   },
   safeArea: {
     flex: 1,
@@ -1130,6 +1064,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 28,
     paddingBottom: 32,
+  },
+  dismissKeyboardArea: {
+    flexGrow: 1,
+    width: '100%',
+    alignSelf: 'stretch',
+    justifyContent: 'center',
   },
 
   centeredBlock: {

@@ -64,7 +64,6 @@ export interface User {
   name: string;
   user_type: 'admin' | 'client';
   phone: string;
-  email?: string;
   /** YYYY-MM-DD when set */
   birth_date?: string | null;
   password_hash?: string;
@@ -303,6 +302,28 @@ export interface BusinessExpense {
   expense_date: string; // YYYY-MM-DD
   receipt_url?: string | null;
   created_at: string;
+}
+
+// Swap request interface for appointment swapping between clients
+export interface SwapRequest {
+  id: string;
+  business_id: string;
+  appointment_id: string;
+  requester_phone: string;
+  requester_name?: string;
+  original_date: string;
+  original_time: string;
+  original_service_name?: string;
+  original_duration_minutes: number;
+  original_barber_id?: string;
+  preferred_dates: string[];
+  preferred_time_from: string;
+  preferred_time_to: string;
+  status: 'active' | 'matched' | 'completed' | 'cancelled';
+  matched_appointment_id?: string;
+  matched_user_phone?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 // Product interface for products table

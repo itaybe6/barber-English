@@ -13,7 +13,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
-import { X, User, Phone, Mail, Lock } from 'lucide-react-native';
+import { X, User, Phone, Lock } from 'lucide-react-native';
 import { usersApi } from '@/lib/api/users';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import Colors from '@/constants/colors';
@@ -33,13 +33,12 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
   // Form fields
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  // Wizard step state (0: basic, 1: email, 2: password, 3: review)
+  // Wizard step state (0: basic, 1: password, 2: review)
   const [step, setStep] = useState(0);
-  const maxStep = 3;
+  const maxStep = 2;
   const translateX = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current; // 0..1
   const { width } = Dimensions.get('window');
@@ -48,7 +47,6 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
   const resetForm = () => {
     setName('');
     setPhone('');
-    setEmail('');
     setPassword('');
     setConfirmPassword('');
     setStep(0);
@@ -79,18 +77,6 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
       return false;
     }
     
-    if (!email.trim()) {
-      Alert.alert(t('error.generic', 'Error'), t('settings.admin.emailRequired', 'Please enter an email address'));
-      return false;
-    }
-    
-    // Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
-      Alert.alert(t('error.generic', 'Error'), t('settings.admin.emailInvalid', 'Please enter a valid email address'));
-      return false;
-    }
-    
     if (!password.trim()) {
       Alert.alert(t('error.generic', 'Error'), t('settings.admin.passwordRequired', 'Please enter a password'));
       return false;
@@ -118,14 +104,10 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
       return hasName && isUsPhone;
     }
     if (step === 1) {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      return emailRegex.test(email.trim());
-    }
-    if (step === 2) {
       return password.trim().length >= 6 && password === confirmPassword && !!password;
     }
     return true;
-  }, [step, name, phone, email, password, confirmPassword]);
+  }, [step, name, phone, password, confirmPassword]);
 
   const goToStep = (next: number, animate: boolean = true) => {
     const clamped = Math.max(0, Math.min(maxStep, next));
@@ -162,7 +144,6 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
       const newAdmin = await usersApi.createUserWithPassword({
         name: name.trim(),
         phone: phone.trim(),
-        email: email.trim() || undefined,
         user_type: 'admin',
         business_id: '', // Will be set automatically by the API
       }, password);
@@ -218,7 +199,7 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
               />
             </View>
             <View style={styles.stepperLabels}>
-              {[t('settings.admin.step.basic','Basic'), t('settings.admin.step.email','Email'), t('settings.admin.step.password','Password'), t('settings.admin.step.review','Review')].map((label, idx) => (
+              {[t('settings.admin.step.basic','Basic'), t('settings.admin.step.password','Password'), t('settings.admin.step.review','Review')].map((label, idx) => (
                 <View key={label} style={styles.stepperLabelWrap}>
                   <View style={[styles.stepDot, { borderColor: idx <= step ? businessColors.primary : '#D1D1D6', backgroundColor: idx < step ? businessColors.primary : '#FFFFFF' }]} />
                   <Text style={[styles.stepLabelText, { color: idx <= step ? businessColors.primary : '#8E8E93' }]}>{label}</Text>
@@ -236,7 +217,7 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
                 translateX.setValue(-step * w);
               }
             }}>
-              <Animated.View style={[styles.stepsContainer, { width: (viewportWidth || width) * 4, transform: [{ translateX }] }]}> 
+              <Animated.View style={[styles.stepsContainer, { width: (viewportWidth || width) * 3, transform: [{ translateX }] }]}> 
                 <View style={[styles.stepPane, { width: viewportWidth || width }]}> 
                   {/* Step 0: Basic */}
                   <View style={styles.inputGroup}>
@@ -274,28 +255,7 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
                   </View>
                 </View>
                 <View style={[styles.stepPane, { width: viewportWidth || width }]}> 
-                  {/* Step 1: Email */}
-                  <View style={styles.inputGroup}>
-                  <Text style={styles.label}>{t('settings.admin.emailLabel', 'Email Address *')}</Text>
-                    <View style={styles.inputContainer}>
-                      <Mail size={20} color="#666" style={styles.inputIcon} />
-                      <TextInput
-                        style={styles.input}
-                        value={email}
-                        onChangeText={setEmail}
-                        placeholder={t('settings.admin.emailPlaceholder', 'example@email.com')}
-                        placeholderTextColor="#999"
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                        textAlign="left"
-                        returnKeyType="done"
-                        underlineColorAndroid="transparent"
-                      />
-                    </View>
-                  </View>
-                </View>
-                <View style={[styles.stepPane, { width: viewportWidth || width }]}> 
-                  {/* Step 2: Password */}
+                  {/* Step 1: Password */}
                   <View style={styles.inputGroup}>
                   <Text style={styles.label}>{t('settings.admin.passwordLabel', 'Password *')}</Text>
                     <View style={styles.inputContainer}>
@@ -333,11 +293,10 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
                   </View>
                 </View>
                 <View style={[styles.stepPane, { width: viewportWidth || width }]}> 
-                  {/* Step 3: Review */}
+                  {/* Step 2: Review */}
                   <Text style={[styles.label, { marginBottom: 12 }]}>{t('settings.admin.review', 'Review')}</Text>
                   <View style={styles.reviewRow}><Text style={styles.reviewLabel}>{t('settings.admin.reviewName', 'Name')}</Text><Text style={styles.reviewValue}>{name.trim()}</Text></View>
                   <View style={styles.reviewRow}><Text style={styles.reviewLabel}>{t('settings.admin.reviewPhone', 'Phone')}</Text><Text style={styles.reviewValue}>{phone.trim()}</Text></View>
-                  <View style={styles.reviewRow}><Text style={styles.reviewLabel}>{t('settings.admin.reviewEmail', 'Email')}</Text><Text style={styles.reviewValue}>{email.trim()}</Text></View>
                 </View>
               </Animated.View>
             </View>

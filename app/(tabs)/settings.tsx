@@ -275,7 +275,6 @@ export default function SettingsScreen() {
   const [showEditAdminModal, setShowEditAdminModal] = useState(false);
   const [adminNameDraft, setAdminNameDraft] = useState('');
   const [adminPhoneDraft, setAdminPhoneDraft] = useState('');
-  const [adminEmailDraft, setAdminEmailDraft] = useState('');
   const [isSavingAdmin, setIsSavingAdmin] = useState(false);
   const [isUploadingAdminAvatar, setIsUploadingAdminAvatar] = useState(false);
 
@@ -1630,8 +1629,7 @@ export default function SettingsScreen() {
     return (adminUsers || []).filter((u: any) => {
       const name = String(u?.name || '').toLowerCase();
       const phone = String(u?.phone || '').toLowerCase();
-      const email = String(u?.email || '').toLowerCase();
-      return name.includes(q) || phone.includes(q) || email.includes(q);
+      return name.includes(q) || phone.includes(q);
     });
   }, [adminUsers, manageEmpSearch]);
 
@@ -2479,7 +2477,6 @@ export default function SettingsScreen() {
               onPress={() => {
                 setAdminNameDraft(user?.name || '');
                 setAdminPhoneDraft(user?.phone || '');
-                setAdminEmailDraft((user as any)?.email || '');
                 setShowEditAdminModal(true);
               }}
             >
@@ -2515,9 +2512,6 @@ export default function SettingsScreen() {
                       </Text>
                       <Text style={styles.adminPhone} numberOfLines={1}>
                         {user?.phone || 'Phone Number'}
-                      </Text>
-                      <Text style={styles.adminEmail} numberOfLines={1}>
-                        {(user as any)?.email || 'Email Address'}
                       </Text>
                     </View>
                   </View>
@@ -2736,12 +2730,10 @@ export default function SettingsScreen() {
                     {
                       name: adminNameDraft.trim() as any,
                       phone: adminPhoneDraft.trim() as any,
-                      // pass null to clear email when empty
-                      email: (adminEmailDraft || '').trim() ? (adminEmailDraft || '').trim() : (null as any),
                     } as any
                   );
                   if (updated) {
-                    updateUserProfile({ name: updated.name as any, phone: (updated as any).phone, email: (updated as any).email } as any);
+                    updateUserProfile({ name: updated.name as any, phone: (updated as any).phone } as any);
                     setShowEditAdminModal(false);
                   } else {
                     Alert.alert(t('error.generic','Error'), t('settings.admin.saveDetailsFailed','Failed to save admin details'));
@@ -2783,9 +2775,6 @@ export default function SettingsScreen() {
               </View>
               <Text style={styles.modalAdminName}>{adminNameDraft || user?.name || t('settings.admin.admin','Admin')}</Text>
               <Text style={styles.modalAdminMeta}>{adminPhoneDraft || (user as any)?.phone || ''}</Text>
-              {(adminEmailDraft || (user as any)?.email) ? (
-                <Text style={styles.modalAdminMeta}>{adminEmailDraft || (user as any)?.email}</Text>
-              ) : null}
               <View style={{ marginTop: 8 }}>
                 <TouchableOpacity onPress={handlePickAdminAvatar} style={[styles.pickButton, { alignSelf: 'center', backgroundColor: '#F2F2F7', borderColor: '#E5E5EA' }]} activeOpacity={0.85} disabled={isUploadingAdminAvatar}>
                   <Text style={styles.pickButtonText}>{isUploadingAdminAvatar ? t('settings.common.uploading','Uploading...') : t('settings.profile.changeProfilePicture','Change profile picture')}</Text>
@@ -2815,26 +2804,6 @@ export default function SettingsScreen() {
                   placeholderTextColor={Colors.subtext}
                   keyboardType="phone-pad"
                   textAlign="left"
-                />
-              </View>
-              <View style={[styles.inputContainer, { marginBottom: 0 }]}>
-                <Text style={styles.inputLabel}>{t('profile.edit.email','Email')}</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={adminEmailDraft}
-                  onChangeText={setAdminEmailDraft}
-                  placeholder={t('profile.edit.emailPlaceholder','name@example.com')}
-                  placeholderTextColor={Colors.subtext}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  textAlign="left"
-                  onFocus={() => {
-                    // Scroll to bottom when email field is focused
-                    setTimeout(() => {
-                      // This will help ensure the field is visible
-                    }, 100);
-                  }}
                 />
               </View>
             </View>
@@ -3463,7 +3432,6 @@ export default function SettingsScreen() {
                                 <View style={{ alignItems: 'flex-start', flex: 1 }}>
                                   <Text style={styles.previewNotificationTitle}>{adm.name || 'Admin'}</Text>
                                   {!!adm.phone && <Text style={styles.previewNotificationContent}>{adm.phone}</Text>}
-                                  {!!adm.email && <Text style={styles.previewNotificationContent}>{adm.email}</Text>}
                                 </View>
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                                   {isExpanded ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}

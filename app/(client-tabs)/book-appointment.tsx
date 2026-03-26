@@ -340,6 +340,14 @@ const bookingApi = {
   },
 };
 
+// Format Date to YYYY-MM-DD using local time (avoids UTC shift in toISOString)
+const toLocalDateStr = (d: Date): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 // Generate next N days with Hebrew day names
 const getNextNDays = (n: number) => {
   const today = new Date();
@@ -573,7 +581,7 @@ export default function BookAppointment() {
   const getAvailableTimeSlotsForDate = () => {
     if (!selectedDate) return [];
     const serviceDuration = totalDuration || 60;
-    const dateStr = selectedDate.toISOString().split('T')[0];
+    const dateStr = toLocalDateStr(selectedDate);
     const dow = selectedDate.getDay(); // 0..6
 
     // Gather busy intervals (start/end minutes) for that date
@@ -779,7 +787,7 @@ export default function BookAppointment() {
       setIsLoadingSlots(true);
       try {
         const date = days[selectedDay].fullDate;
-        const dateString = date.toISOString().split('T')[0];
+        const dateString = toLocalDateStr(date);
         const slots = await bookingApi.getAvailableSlots(dateString, selectedBarber?.id);
         // Load business hours for DOW and cache time windows on global for this session
         const dayOfWeek = date.getDay();
@@ -798,7 +806,19 @@ export default function BookAppointment() {
           bhQuery = bhQuery.is('user_id', null);
         }
 
-        const { data: bhRow } = await bhQuery.maybeSingle();
+        let { data: bhRow } = await bhQuery.maybeSingle();
+        // Fallback: if no barber-specific hours found, try global hours
+        if (!bhRow && selectedBarber?.id) {
+          const { data: globalBh } = await supabase
+            .from('business_hours')
+            .select('*')
+            .eq('day_of_week', dayOfWeek)
+            .eq('is_active', true)
+            .eq('business_id', businessId)
+            .is('user_id', null)
+            .maybeSingle();
+          bhRow = globalBh;
+        }
         if (!isStale && bhRow) {
           type Window = { start: string; end: string };
           const base: Window[] = [{ start: bhRow.start_time, end: bhRow.end_time }];
@@ -984,7 +1004,7 @@ export default function BookAppointment() {
         };
 
         const checks = await Promise.all(days.map(async (d) => {
-          const dateStr = d.fullDate.toISOString().split('T')[0];
+          const dateStr = toLocalDateStr(d.fullDate);
           // fetch existing appointments for that date
           const slots = await bookingApi.getAvailableSlots(dateStr, selectedBarber?.id);
           const busyIntervals: { startMin: number; endMin: number }[] = (() => {
@@ -1020,7 +1040,19 @@ export default function BookAppointment() {
             bhQuery = bhQuery.is('user_id', null);
           }
 
-          const { data: bhRow } = await bhQuery.maybeSingle();
+          let { data: bhRow } = await bhQuery.maybeSingle();
+          // Fallback: if no barber-specific hours found, try global hours
+          if (!bhRow && selectedBarber?.id) {
+            const { data: globalBh } = await supabase
+              .from('business_hours')
+              .select('*')
+              .eq('day_of_week', dow)
+              .eq('is_active', true)
+              .eq('business_id', businessId)
+              .is('user_id', null)
+              .maybeSingle();
+            bhRow = globalBh;
+          }
           if (!bhRow) return [dateStr, 0] as const;
           type Window = { start: string; end: string };
           const base: Window[] = [{ start: bhRow.start_time, end: bhRow.end_time }];
@@ -1140,7 +1172,7 @@ export default function BookAppointment() {
     setIsLoadingSlots(true);
     try {
       const date = days[selectedDay].fullDate;
-      const dateString = date.toISOString().split('T')[0];
+      const dateString = toLocalDateStr(date);
       const slots = await bookingApi.getAvailableSlots(dateString, selectedBarber?.id);
       // Refresh business hours windows cache for this DOW
       const dayOfWeek = date.getDay();
@@ -1159,7 +1191,19 @@ export default function BookAppointment() {
         bhQuery = bhQuery.is('user_id', null);
       }
 
-      const { data: bhRow } = await bhQuery.maybeSingle();
+      let { data: bhRow } = await bhQuery.maybeSingle();
+      // Fallback: if no barber-specific hours found, try global hours
+      if (!bhRow && selectedBarber?.id) {
+        const { data: globalBh } = await supabase
+          .from('business_hours')
+          .select('*')
+          .eq('day_of_week', dayOfWeek)
+          .eq('is_active', true)
+          .eq('business_id', businessId)
+          .is('user_id', null)
+          .maybeSingle();
+        bhRow = globalBh;
+      }
       if (bhRow) {
         type Window = { start: string; end: string };
         const base: Window[] = [{ start: bhRow.start_time, end: bhRow.end_time }];
@@ -1239,7 +1283,7 @@ export default function BookAppointment() {
       return;
     }
 
-    const dateString = selectedDate?.toISOString().split('T')[0];
+    const dateString = selectedDate ? toLocalDateStr(selectedDate) : undefined;
     
     // Guard: disallow booking in constrained windows
     try {
@@ -1345,7 +1389,7 @@ export default function BookAppointment() {
 
         try {
           const title = 'נקבע תור חדש';
-          const dateFmt = selectedDate?.toISOString().split('T')[0];
+          const dateFmt = selectedDate ? toLocalDateStr(selectedDate) : '';
           const content = `${user?.name || 'לקוח'} (${user?.phone || ''}) קבע/ה תור ל"${allNames}" בתאריך ${dateFmt} בשעה ${selectedTime}`;
           if (selectedBarber?.id) {
             notificationsApi.createAdminNotificationForUserId(selectedBarber.id, title, content, 'system').catch(() => {});
@@ -1397,7 +1441,7 @@ export default function BookAppointment() {
       return;
     }
 
-    const dateString = selectedDate?.toISOString().split('T')[0];
+    const dateString = selectedDate ? toLocalDateStr(selectedDate) : undefined;
     const slotToBook = availableSlots.find(
       slot => slot.slot_date === dateString && 
               slot.slot_time === selectedTime && 
@@ -1622,7 +1666,7 @@ export default function BookAppointment() {
           {/* Step 1 & 2 buttons moved into overlay; footer shown from step 3 onwards */}
 
         {currentStep === 3 && selectedDay !== null && (() => {
-          const dateStr = selectedDate?.toISOString().split('T')[0] || '';
+          const dateStr = selectedDate ? toLocalDateStr(selectedDate) : '';
           const hasAvailForSelected = dateStr ? ((dayAvailability[dateStr] ?? 0) > 0) : false;
           if (hasAvailForSelected) { return null; }
           return (
@@ -1915,7 +1959,7 @@ export default function BookAppointment() {
                         onPress={async () => {
                           try {
                             const duration = totalDuration || 60;
-                            const dateStr = selectedDate?.toISOString().split('T')[0] || '';
+                            const dateStr = selectedDate ? toLocalDateStr(selectedDate) : '';
                             const timeStr = selectedTime || '00:00';
                             const start = new Date(`${dateStr}T${timeStr}:00`);
                             const end = new Date(start.getTime() + duration * 60000);

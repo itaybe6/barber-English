@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
   Dimensions,
@@ -14,6 +14,7 @@ import {
   Modal,
   Linking,
   Alert,
+  BackHandler,
   Platform,
   TextInput,
   Pressable,
@@ -39,7 +40,15 @@ import { checkWaitlistAndNotify, notifyServiceWaitlistClients } from '@/lib/api/
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { ChevronLeft, ChevronRight, CheckCircle, Plus, StickyNote } from 'lucide-react-native';
+import { CalendarReminderFabPanel } from '@/components/CalendarReminderFabPanel';
+import type { CalendarViewMode } from '@/components/admin-calendar/calendarViewMode';
+import { CalendarViewModeIcon } from '@/components/admin-calendar/CalendarViewMenuIcons';
+import { useAdminCalendarView } from '@/contexts/AdminCalendarViewContext';
+import {
+  useAdminCalendarPlusAnchorWindow,
+  useAdminCalendarReminderFabRegistration,
+} from '@/contexts/AdminCalendarReminderFabContext';
+import { ChevronLeft, ChevronRight, CheckCircle, StickyNote } from 'lucide-react-native';
 import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
@@ -110,50 +119,9 @@ type DayBlock = {
   formatted: string; // YYYY-MM-DD
 };
 
-/** תצוגות בסגנון Google Calendar */
-type CalendarViewMode = 'schedule' | 'day' | 'threeDay' | 'week' | 'month';
-
 const GC_BLUE = '#1A73E8';
 const GC_SURFACE = '#FFFFFF';
 const GC_PAGE_BG = '#F8F9FA';
-
-function ThreeDayMenuIcon({ color }: { color: string }) {
-  const h = 18;
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: h }}>
-      {[0.55, 0.95, 0.7].map((f, i) => (
-        <View
-          key={i}
-          style={{
-            width: 5,
-            height: Math.max(8, h * f),
-            borderRadius: 1,
-            backgroundColor: color,
-          }}
-        />
-      ))}
-    </View>
-  );
-}
-
-function WeekMenuIcon({ color }: { color: string }) {
-  const h = 18;
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 2, height: h }}>
-      {[0.5, 0.85, 0.65, 0.9].map((f, i) => (
-        <View
-          key={i}
-          style={{
-            width: 4,
-            height: Math.max(7, h * f),
-            borderRadius: 1,
-            backgroundColor: color,
-          }}
-        />
-      ))}
-    </View>
-  );
-}
 
 const { width: _screenWidth } = Dimensions.get('window');
 const _daysInWeekToDisplay = 7;
@@ -236,17 +204,21 @@ function _safeIntl(locale: string, options: Intl.DateTimeFormatOptions) {
   }
 }
 
-function _hebrewHeaderParts(date: Date) {
+/** ימי השבוע בעברית — א׳=ראשון … ש׳=שבת (מתאים ל־Date.getDay()) */
+const HEBREW_DOW_LETTERS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'] as const;
+
+/** יום חודש לועזי + שם יום — תואם לעמודות הגריד (לא לוח עברי) */
+function _gregorianDayHeaderParts(date: Date) {
   const fmt =
-    _safeIntl('he-IL-u-ca-hebrew', { weekday: 'short', day: 'numeric' }) ||
-    _safeIntl('he-IL', { weekday: 'short', day: 'numeric' });
-  if (!fmt?.formatToParts) {
-    const raw = fmt?.format(date) ?? '';
-    return { dayNum: raw, weekday: '' };
+    _safeIntl('he-IL-u-ca-gregory', { weekday: 'short' }) ||
+    _safeIntl('he-IL', { weekday: 'short' });
+  let weekday = '';
+  if (fmt?.formatToParts) {
+    weekday = fmt.formatToParts(date).find((p) => p.type === 'weekday')?.value ?? '';
+  } else {
+    weekday = fmt?.format(date) ?? '';
   }
-  const parts = fmt.formatToParts(date);
-  const dayNum = parts.find((p) => p.type === 'day')?.value ?? '';
-  const weekday = parts.find((p) => p.type === 'weekday')?.value ?? '';
+  const dayNum = String(date.getDate());
   return { dayNum, weekday };
 }
 
@@ -267,7 +239,9 @@ function _formatHebrewTimeLabel(date: Date) {
 
 const HeaderDay = memo(
   ({ day, columnWidth, headerHeight, isSelected, isToday, onPress }: { day: DayBlock; columnWidth: number; headerHeight: number; isSelected: boolean; isToday?: boolean; onPress?: () => void }) => {
-    const { dayNum, weekday } = _hebrewHeaderParts(day.date);
+    const { dayNum, weekday } = _gregorianDayHeaderParts(day.date);
+    const dow = day.date.getDay();
+    const hebDow = HEBREW_DOW_LETTERS[dow] ?? '';
     return (
       <TouchableOpacity
         onPress={onPress}
@@ -278,20 +252,29 @@ const HeaderDay = memo(
             justifyContent: 'center',
             width: columnWidth,
             height: headerHeight,
-            paddingBottom: 6,
-            paddingTop: 6,
+            paddingBottom: 4,
+            paddingTop: 4,
             backgroundColor: isSelected ? '#F0F4FF' : 'transparent',
           },
           weekStyles.borderRight,
           weekStyles.borderBottom,
         ]}
       >
-        <Text style={[weekStyles.headerWeekday, { writingDirection: 'rtl', color: isSelected ? GC_BLUE : '#5F6368' }]}>{weekday}</Text>
-        <View style={[
-          weekStyles.headerDayCircle,
-          isToday && weekStyles.headerDayCircleToday,
-          isSelected && weekStyles.headerDayCircleSelected,
-        ]}>
+        <Text
+          style={[
+            weekStyles.headerHebrewDow,
+            { writingDirection: 'rtl', color: isSelected ? GC_BLUE : '#5F6368' },
+          ]}
+        >
+          {hebDow}
+        </Text>
+        <View
+          style={[
+            weekStyles.headerDayCircle,
+            isToday && weekStyles.headerDayCircleToday,
+            isSelected && weekStyles.headerDayCircleSelected,
+          ]}
+        >
           <Text
             style={[
               weekStyles.headerDayNum,
@@ -303,6 +286,9 @@ const HeaderDay = memo(
             {dayNum}
           </Text>
         </View>
+        {weekday ? (
+          <Text style={[weekStyles.headerWeekday, { writingDirection: 'rtl', color: isSelected ? GC_BLUE : '#5F6368' }]}>{weekday}</Text>
+        ) : null}
       </TouchableOpacity>
     );
   }
@@ -468,7 +454,32 @@ export default function AdminAppointmentsScreen() {
     I18nManager.isRTL || (typeof i18n.language === 'string' && i18n.language.startsWith('he'));
   const user = useAuthStore((state) => state.user);
   const { colors: businessColors } = useBusinessColors();
-  const [calendarView, setCalendarView] = useState<CalendarViewMode>('week');
+  const { calendarView, setCalendarView } = useAdminCalendarView();
+  const insets = useSafeAreaInsets();
+  const setReminderFabRegistration = useAdminCalendarReminderFabRegistration();
+  const plusAnchorWindow = useAdminCalendarPlusAnchorWindow();
+  const reminderOverlayRef = useRef<View>(null);
+  const [reminderOverlayWin, setReminderOverlayWin] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+
+  const measureReminderOverlay = useCallback(() => {
+    reminderOverlayRef.current?.measureInWindow((x, y, width, height) => {
+      if (width > 0 && height > 0) {
+        setReminderOverlayWin({ x, y, width, height });
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!plusAnchorWindow) return;
+    const id = requestAnimationFrame(() => measureReminderOverlay());
+    return () => cancelAnimationFrame(id);
+  }, [plusAnchorWindow, measureReminderOverlay]);
+
   const [showViewMenu, setShowViewMenu] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const d = new Date();
@@ -491,6 +502,70 @@ export default function AdminAppointmentsScreen() {
   const [rangeReminders, setRangeReminders] = useState<Map<string, CalendarReminder[]>>(new Map());
 
   const [showReminderModal, setShowReminderModal] = useState(false);
+
+  const reminderFabPanelStyle = useMemo(() => {
+    const win = Dimensions.get('window');
+    const openedPanelWidth = win.width * 0.88;
+    /** היסט שמאלה ממרכז גיאומטרי (החלון נראה יותר מדי ימינה) */
+    const OPEN_LEFT_BIAS = 32;
+    /** גובה משוער לפאנל פתוח — ליישור אנכי קרוב למרכז */
+    const EST_OPEN_HEIGHT = win.height * 0.52;
+
+    if (!reminderOverlayWin) {
+      return {
+        left: 16,
+        right: undefined,
+        bottom: insets.bottom + 12,
+      };
+    }
+
+    if (showReminderModal) {
+      const centeredLeft =
+        (reminderOverlayWin.width - openedPanelWidth) / 2 - OPEN_LEFT_BIAS;
+      const topAligned = Math.max(
+        12,
+        (reminderOverlayWin.height - EST_OPEN_HEIGHT) / 2
+      );
+      return {
+        left: Math.max(8, centeredLeft),
+        right: undefined,
+        top: topAligned,
+      };
+    }
+
+    if (plusAnchorWindow) {
+      const bottomAlign =
+        reminderOverlayWin.y +
+        reminderOverlayWin.height -
+        plusAnchorWindow.y -
+        plusAnchorWindow.height;
+      return {
+        left: Math.max(0, plusAnchorWindow.x - reminderOverlayWin.x),
+        right: undefined,
+        bottom: Math.max(0, bottomAlign),
+      };
+    }
+
+    return {
+      left: 16,
+      right: undefined,
+      bottom: insets.bottom + 12,
+    };
+  }, [
+    showReminderModal,
+    plusAnchorWindow,
+    reminderOverlayWin,
+    insets.bottom,
+  ]);
+
+  const reminderExternalAnchorSize = useMemo(
+    () =>
+      plusAnchorWindow
+        ? { width: plusAnchorWindow.width, height: plusAnchorWindow.height }
+        : null,
+    [plusAnchorWindow]
+  );
+
   const [editingReminder, setEditingReminder] = useState<CalendarReminder | null>(null);
   const [reminderTitle, setReminderTitle] = useState('');
   const [reminderNotes, setReminderNotes] = useState('');
@@ -776,29 +851,23 @@ export default function AdminAppointmentsScreen() {
       // Hebrew / RTL week in LTR grid: שבת משמאל, א׳ מימין ליד עמודת השעות (זרימת שבוע מימין לשמאל).
       return weekGridReverseDays ? [...days].reverse() : days;
     }
-    if (calendarView === 'threeDay') {
-      const d0 = new Date(selectedDate);
-      d0.setHours(0, 0, 0, 0);
-      const days = _buildDays(d0, 3);
-      return weekGridReverseDays ? [...days].reverse() : days;
-    }
     return [];
   }, [selectedDateStr, calendarView, weekGridReverseDays]);
 
   const gridDims = useMemo(() => {
     const sw = Dimensions.get('window').width;
-    const cols = calendarView === 'threeDay' ? 3 : 7;
+    const cols = 7;
     const timeCol = 48;
     const inner = sw - timeCol;
     // For week view, enforce a minimum width per day so cards are readable; enables horizontal scroll
-    const minDaySize = calendarView === 'threeDay' ? 110 : 82;
+    const minDaySize = 82;
     const daySize = Math.max(inner / cols, minDaySize);
     const hourSize = 72;
     return { cols, daySize, hourSize, timeCol, padBottom: hourSize * 2 };
-  }, [calendarView]);
+  }, []);
 
   useEffect(() => {
-    if (calendarView !== 'week' && calendarView !== 'threeDay') return;
+    if (calendarView !== 'week') return;
     if (gridDays.length === 0) return;
     void loadAppointmentsForRange(gridDays[0]!.formatted, gridDays[gridDays.length - 1]!.formatted);
   }, [calendarView, gridDays, loadAppointmentsForRange]);
@@ -841,7 +910,7 @@ export default function AdminAppointmentsScreen() {
   });
 
   const scrollWeekGridToInitialOffset = useCallback(() => {
-    if ((calendarView !== 'week' && calendarView !== 'threeDay') || gridDays.length === 0) return;
+    if (calendarView !== 'week' || gridDays.length === 0) return;
     const sw = Dimensions.get('window').width;
     const totalWidth = gridDays.length * gridDims.daySize;
     const visibleWidth = sw - gridDims.timeCol;
@@ -1003,7 +1072,7 @@ export default function AdminAppointmentsScreen() {
     if (!user?.id) return;
     const rem = await listCalendarRemindersForDate(selectedDateStr, user.id);
     setCalendarReminders(rem);
-    if ((calendarView === 'week' || calendarView === 'threeDay') && gridDays.length > 0) {
+    if (calendarView === 'week' && gridDays.length > 0) {
       const list = await listCalendarRemindersForRange(
         gridDays[0]!.formatted,
         gridDays[gridDays.length - 1]!.formatted,
@@ -1035,6 +1104,15 @@ export default function AdminAppointmentsScreen() {
     setShowReminderAndroidTime(false);
   }, []);
 
+  useEffect(() => {
+    if (!showReminderModal || Platform.OS !== 'android') return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      closeReminderModal();
+      return true;
+    });
+    return () => sub.remove();
+  }, [showReminderModal, closeReminderModal]);
+
   const openNewReminderModal = useCallback(() => {
     setEditingReminder(null);
     setReminderTitle('');
@@ -1044,6 +1122,19 @@ export default function AdminAppointmentsScreen() {
     setReminderColorKey('blue');
     setShowReminderModal(true);
   }, [selectedDate]);
+
+  const reminderFabTabPress = useCallback(() => {
+    if (showReminderModal) closeReminderModal();
+    else openNewReminderModal();
+  }, [showReminderModal, closeReminderModal, openNewReminderModal]);
+
+  useEffect(() => {
+    setReminderFabRegistration({
+      isOpen: showReminderModal,
+      onPress: reminderFabTabPress,
+    });
+    return () => setReminderFabRegistration(null);
+  }, [showReminderModal, reminderFabTabPress, setReminderFabRegistration]);
 
   const openEditReminderModal = useCallback(
     (r: CalendarReminder) => {
@@ -1157,26 +1248,11 @@ export default function AdminAppointmentsScreen() {
     { id: 'day', label: tHe('admin.calendar.viewDay', 'יומי'), subtitle: tHe('admin.calendar.viewDaySub', 'תצוגת יום בודד') },
     { id: 'week', label: tHe('admin.calendar.viewWeek', 'שבועי'), subtitle: tHe('admin.calendar.viewWeekSub', 'כל ימי השבוע') },
     { id: 'month', label: tHe('admin.calendar.viewMonth', 'חודשי'), subtitle: tHe('admin.calendar.viewMonthSub', 'תצוגת חודש מלא') },
-    { id: 'threeDay', label: tHe('admin.calendar.viewThreeDay', '3 ימים'), subtitle: tHe('admin.calendar.viewThreeDaySub', 'שלושה ימים רצופים') },
-    { id: 'schedule', label: tHe('admin.calendar.viewSchedule', 'לוח זמנים'), subtitle: tHe('admin.calendar.viewScheduleSub', 'רשימת אירועים') },
   ];
 
   const renderViewMenuIcon = (id: CalendarViewMode, active: boolean) => {
     const c = active ? GC_BLUE : '#5F6368';
-    switch (id) {
-      case 'schedule':
-        return <Ionicons name="list-outline" size={22} color={c} />;
-      case 'day':
-        return <Ionicons name="today-outline" size={22} color={c} />;
-      case 'threeDay':
-        return <ThreeDayMenuIcon color={c} />;
-      case 'week':
-        return <WeekMenuIcon color={c} />;
-      case 'month':
-        return <Ionicons name="grid-outline" size={22} color={c} />;
-      default:
-        return null;
-    }
+    return <CalendarViewModeIcon mode={id} color={c} />;
   };
 
   return (
@@ -1211,7 +1287,7 @@ export default function AdminAppointmentsScreen() {
             style={styles.gcMonthNav}
             activeOpacity={0.7}
           >
-            <ChevronLeft size={20} color="#5F6368" />
+            <ChevronRight size={20} color="#5F6368" />
           </TouchableOpacity>
           <Text style={styles.gcMonthTitle} numberOfLines={1}>
             {_formatGregorianMonthYear(selectedDate)}
@@ -1227,12 +1303,12 @@ export default function AdminAppointmentsScreen() {
             style={styles.gcMonthNav}
             activeOpacity={0.7}
           >
-            <ChevronRight size={20} color="#5F6368" />
+            <ChevronLeft size={20} color="#5F6368" />
           </TouchableOpacity>
         </View>
       </View>
 
-      {calendarView !== 'week' && calendarView !== 'threeDay' && (
+      {calendarView !== 'week' && (
         <DaySelector
           selectedDate={selectedDate}
           onSelectDate={setSelectedDate}
@@ -1250,7 +1326,7 @@ export default function AdminAppointmentsScreen() {
         </View>
       ) : (
         <>
-          {calendarView === 'week' || calendarView === 'threeDay' ? (
+          {calendarView === 'week' ? (
             <View style={weekStyles.container}>
               <View style={weekStyles.row}>
                 <Animated.ScrollView
@@ -1523,14 +1599,12 @@ export default function AdminAppointmentsScreen() {
               <View style={styles.agendaSectionHeader}>
                 <Text style={styles.agendaSectionKicker} numberOfLines={1}>
                   {(() => {
-                    const p = _hebrewHeaderParts(selectedDate);
+                    const p = _gregorianDayHeaderParts(selectedDate);
                     return p.weekday ? `${p.weekday} · ${p.dayNum}` : selectedDateStr;
                   })()}
                 </Text>
                 <Text style={styles.agendaSectionTitle} numberOfLines={2}>
-                  {calendarView === 'month'
-                    ? tHe('admin.calendar.monthAgendaHint', 'אירועים ליום הנבחר')
-                    : tHe('admin.calendar.scheduleTitle', 'לוח זמנים ליום')}
+                  {tHe('admin.calendar.monthAgendaHint', 'אירועים ליום הנבחר')}
                 </Text>
               </View>
               {agendaRows.length === 0 ? (
@@ -1617,6 +1691,11 @@ export default function AdminAppointmentsScreen() {
                     active && (isRtl ? styles.viewMenuRowActiveRtl : styles.viewMenuRowActiveLtr),
                   ]}
                   onPress={() => {
+                    if (opt.id === 'week') {
+                      const t0 = new Date();
+                      t0.setHours(0, 0, 0, 0);
+                      setSelectedDate(t0);
+                    }
                     setCalendarView(opt.id);
                     setShowViewMenu(false);
                   }}
@@ -1816,39 +1895,46 @@ export default function AdminAppointmentsScreen() {
         </View>
       </Modal>
 
+      {showReminderModal ? (
+        <Pressable
+          style={[StyleSheet.absoluteFill, styles.reminderFabBackdrop]}
+          onPress={closeReminderModal}
+          accessibilityLabel={tHe('admin.calendarReminder.closeBackdrop', 'סגירה')}
+        />
+      ) : null}
+
       {!!user?.id && !isLoading && (
-        <TouchableOpacity
-          style={[
-            styles.reminderFab,
-            { backgroundColor: businessColors.primary || '#1A73E8' },
-            isRtl ? { left: 20, right: undefined } : { right: 20, left: undefined },
-          ]}
-          onPress={openNewReminderModal}
-          activeOpacity={0.88}
-          accessibilityLabel={tHe('admin.calendarReminder.addFab', 'הוספת תזכורת ליומן')}
+        <View
+          ref={reminderOverlayRef}
+          onLayout={measureReminderOverlay}
+          pointerEvents="box-none"
+          style={[StyleSheet.absoluteFill, { direction: 'ltr' } as const]}
         >
-          <Plus size={28} color="#FFFFFF" strokeWidth={2.5} />
-        </TouchableOpacity>
-      )}
-
-      <Modal visible={showReminderModal} transparent animationType="slide" onRequestClose={closeReminderModal}>
-        <View style={styles.reminderModalRoot}>
-          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={closeReminderModal} />
-          <View style={styles.reminderSheet}>
-            <KeyboardAwareScreenScroll keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <View style={styles.reminderSheetHandle} />
-            <Text style={styles.reminderSheetTitle}>
-              {editingReminder
-                ? tHe('admin.calendarReminder.editTitle', 'עריכת תזכורת')
-                : tHe('admin.calendarReminder.newTitle', 'תזכורת ביומן')}
-            </Text>
-            <Text style={styles.reminderSheetHint}>
-              {tHe(
-                'admin.calendarReminder.hint',
-                'לא חוסם תורים — מוצג לצד התורים לעזרה לארגון היום (כמו באירוע בגוגל קלנדר).'
-              )}
-            </Text>
-
+        <CalendarReminderFabPanel
+          isOpen={showReminderModal}
+          onFabPress={reminderFabTabPress}
+          title={
+            editingReminder
+              ? tHe('admin.calendarReminder.editTitle', 'עריכת תזכורת')
+              : tHe('admin.calendarReminder.newTitle', 'תזכורת ביומן')
+          }
+          subtitle={tHe(
+            'admin.calendarReminder.hint',
+            'לא חוסם תורים — מוצג לצד התורים לעזרה לארגון היום'
+          )}
+          backgroundColor={businessColors.primary || '#1A73E8'}
+          isRtl={isRtl}
+          fabAccessibilityLabel={tHe('admin.calendarReminder.addFab', 'הוספת תזכורת ליומן')}
+          externalTriggerOnly
+          externalAnchorSize={reminderExternalAnchorSize}
+          panelStyle={reminderFabPanelStyle}
+        >
+          <KeyboardAwareScreenScroll
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            style={{ maxHeight: Dimensions.get('window').height * 0.58 }}
+            contentContainerStyle={styles.reminderFabScrollContent}
+          >
             <Text style={styles.reminderFieldLabel}>{tHe('admin.calendarReminder.fieldTitle', 'כותרת')}</Text>
             <TextInput
               value={reminderTitle}
@@ -1971,10 +2057,10 @@ export default function AdminAppointmentsScreen() {
             <TouchableOpacity style={styles.reminderCancelTextBtn} onPress={closeReminderModal}>
               <Text style={styles.reminderCancelText}>{tHe('cancel', 'ביטול')}</Text>
             </TouchableOpacity>
-            </KeyboardAwareScreenScroll>
-          </View>
+          </KeyboardAwareScreenScroll>
+        </CalendarReminderFabPanel>
         </View>
-      </Modal>
+      )}
 
       {Platform.OS === 'android' && showReminderAndroidTime ? (
         <DateTimePicker
@@ -2866,21 +2952,14 @@ const styles = StyleSheet.create({
     color: '#FF3B30',
     fontWeight: '700',
   },
-  reminderFab: {
-    position: 'absolute',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    bottom: 96,
-    right: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.22,
-    shadowRadius: 8,
-    elevation: 6,
-    zIndex: 50,
+  reminderFabBackdrop: {
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    zIndex: 55,
+  },
+  reminderFabScrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 22,
   },
   reminderCard: {
     position: 'absolute',
@@ -2920,44 +2999,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#3C3C43',
-    writingDirection: 'rtl',
-  },
-  reminderModalRoot: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  reminderSheet: {
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 28,
-    maxHeight: '88%',
-  },
-  reminderSheetHandle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#D1D1D6',
-    marginBottom: 12,
-  },
-  reminderSheetTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: Colors.text,
-    textAlign: 'center',
-    marginBottom: 6,
-    writingDirection: 'rtl',
-  },
-  reminderSheetHint: {
-    fontSize: 13,
-    color: Colors.subtext,
-    textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 18,
     writingDirection: 'rtl',
   },
   reminderFieldLabel: {
@@ -3116,11 +3157,19 @@ const weekStyles = StyleSheet.create({
     borderLeftWidth: StyleSheet.hairlineWidth,
     backgroundColor: GC_SURFACE,
   },
-  headerWeekday: {
-    fontSize: 11,
-    fontWeight: '700',
+  headerHebrewDow: {
+    fontSize: 12,
+    fontWeight: '800',
     color: '#5F6368',
     marginBottom: 2,
+    textAlign: 'center',
+  },
+  headerWeekday: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#5F6368',
+    marginTop: 2,
+    textAlign: 'center',
   },
   headerDayCircle: {
     minWidth: 32,

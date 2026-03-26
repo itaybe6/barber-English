@@ -421,6 +421,7 @@ export default function BusinessHoursScreen() {
   const renderDayCard = (dayOfWeek: number) => {
     const dayHours = businessHours.find(h => h.day_of_week === dayOfWeek);
     const isEditing = editingDay === dayOfWeek;
+    const isActive = dayHours?.is_active ?? false;
 
     // Unified time options for all pickers (every 10 minutes)
     const allTenMinuteOptions = generateTenMinuteOptions();
@@ -429,245 +430,258 @@ export default function BusinessHoursScreen() {
     const endTimeOptions = allTenMinuteOptions.filter(t => t > tempStartTime);
 
     return (
-      <AnimatedTouchableOpacity layout={_layout} key={dayOfWeek} style={styles.dayCard} activeOpacity={0.9} onPress={() => { if (!isEditing) { handleEditDay(dayOfWeek); } }} disabled={isEditing}>
+      <AnimatedTouchableOpacity
+        layout={_layout}
+        key={dayOfWeek}
+        style={[styles.dayCard, isActive && styles.dayCardActive]}
+        activeOpacity={0.9}
+        onPress={() => { if (!isEditing) { handleEditDay(dayOfWeek); } }}
+        disabled={isEditing}
+      >
         <Animated.View layout={_layout} style={styles.dayHeader}>
           <Animated.View layout={_layout} style={styles.dayInfo}>
-            <Text style={styles.dayName}>{getDayName(dayOfWeek)}</Text>
-                      {dayHours && dayHours.is_active && !isEditing && (
-            <View>
-              <View style={styles.timeContainer}>
-                <Ionicons name="time-outline" size={16} color={Colors.secondaryText} />
-                <Text style={styles.dayTime}>
-                  <Text style={styles.ltrText}>{formatRangeLtrDisplay(dayHours.start_time, dayHours.end_time, useAmPm)}</Text>
+            {/* Day name + status pill on same row */}
+            <View style={styles.dayNameRow}>
+              <Text style={styles.dayName}>{getDayName(dayOfWeek)}</Text>
+              <View style={[styles.statusPill, isActive ? styles.statusPillOpen : styles.statusPillClosed]}>
+                <View style={[styles.statusDot, { backgroundColor: isActive ? Colors.success : Colors.tertiaryText }]} />
+                <Text style={[styles.statusText, { color: isActive ? Colors.success : Colors.secondaryText }]}>
+                  {isActive ? t('admin.hours.open', 'פתוח') : t('admin.hours.closed', 'סגור')}
                 </Text>
               </View>
-              {/* Breaks summary: show all configured breaks if present, otherwise show single break fields */}
-              {(() => {
-                const dayBreaks = (((dayHours as any).breaks || []) as Array<{ start_time: string; end_time: string }>);
-                if (dayBreaks.length > 0) {
-                  return (
-                    <View style={{ marginTop: 4, gap: 2 }}>
-                      {dayBreaks.map((b, i) => (
-                        <View key={`${b.start_time}-${b.end_time}-${i}`} style={styles.timeContainer}>
-                          <Ionicons name="cafe-outline" size={14} color={Colors.secondaryText} />
-                          <Text style={[styles.dayTime, { color: Colors.secondaryText, fontSize: 13 }]}> 
-                            {dayBreaks.length > 1 ? `Break #${i + 1}: ` : 'Break: '}<Text style={styles.ltrText}>{formatRangeLtrDisplay(b.start_time, b.end_time, useAmPm)}</Text>
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  );
-                }
-                if (dayHours.break_start_time && dayHours.break_end_time) {
-                  return (
-                    <View style={[styles.timeContainer, { marginTop: 4 }]}>
-                      <Ionicons name="cafe-outline" size={14} color={Colors.secondaryText} />
-                      <Text style={[styles.dayTime, { color: Colors.secondaryText, fontSize: 13 }]}> 
-                        הפסקה: <Text style={styles.ltrText}>{formatRangeLtrDisplay(dayHours.break_start_time, dayHours.break_end_time, useAmPm)}</Text>
-                      </Text>
-                    </View>
-                  );
-                }
-                return null;
-              })()}
             </View>
-          )}
-            {dayHours && !dayHours.is_active && (
-              <View style={styles.closedContainer}>
-                <Ionicons name="close-circle-outline" size={16} color={Colors.secondaryText} />
-                <Text style={styles.dayClosedText}>{t('admin.hours.closed','Closed')}</Text>
+
+            {/* Time summary (active, not editing) */}
+            {isActive && !isEditing && (
+              <View>
+                <View style={styles.timeContainer}>
+                  <Ionicons name="time-outline" size={14} color={Colors.secondaryText} />
+                  <Text style={styles.dayTime}>
+                    <Text style={styles.ltrText}>{formatRangeLtrDisplay(dayHours.start_time, dayHours.end_time, useAmPm)}</Text>
+                  </Text>
+                </View>
+                {(() => {
+                  const dayBreaks = (((dayHours as any).breaks || []) as Array<{ start_time: string; end_time: string }>);
+                  if (dayBreaks.length > 0) {
+                    return (
+                      <View style={{ marginTop: 4, gap: 2 }}>
+                        {dayBreaks.map((b, i) => (
+                          <View key={`${b.start_time}-${b.end_time}-${i}`} style={styles.timeContainer}>
+                            <Ionicons name="cafe-outline" size={13} color={Colors.tertiaryText} />
+                            <Text style={[styles.dayTime, { color: Colors.tertiaryText, fontSize: 13 }]}>
+                              {dayBreaks.length > 1 ? `Break #${i + 1}: ` : 'Break: '}<Text style={styles.ltrText}>{formatRangeLtrDisplay(b.start_time, b.end_time, useAmPm)}</Text>
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    );
+                  }
+                  if (dayHours.break_start_time && dayHours.break_end_time) {
+                    return (
+                      <View style={[styles.timeContainer, { marginTop: 4 }]}>
+                        <Ionicons name="cafe-outline" size={13} color={Colors.tertiaryText} />
+                        <Text style={[styles.dayTime, { color: Colors.tertiaryText, fontSize: 13 }]}>
+                          הפסקה: <Text style={styles.ltrText}>{formatRangeLtrDisplay(dayHours.break_start_time, dayHours.break_end_time, useAmPm)}</Text>
+                        </Text>
+                      </View>
+                    );
+                  }
+                  return null;
+                })()}
               </View>
             )}
           </Animated.View>
-          
+
           <Animated.View layout={_layout} style={styles.dayControls}>
+            {/* Chevron tap affordance for active, non-editing days */}
+            {isActive && !isEditing && (
+              <Ionicons name="chevron-down" size={15} color={Colors.tertiaryText} />
+            )}
             <Switch
-              value={dayHours?.is_active || false}
+              value={isActive}
               onValueChange={(value) => handleDayToggle(dayOfWeek, value)}
               trackColor={{ false: Colors.border, true: `${businessColors.primary}30` }}
-              thumbColor={(dayHours?.is_active || false) ? businessColors.primary : Colors.card}
+              thumbColor={isActive ? businessColors.primary : Colors.card}
               ios_backgroundColor={Colors.border}
               style={styles.switch}
             />
           </Animated.View>
         </Animated.View>
 
-              {isEditing && (
-        <Animated.View style={styles.editContainer} layout={_layout} entering={_entering} exiting={_exiting}>
-          {/* Slot Duration Section removed – now global setting */}
-          {/* Work Hours Section */}
-          <Animated.View layout={_layout} style={styles.workHoursSection}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="briefcase-outline" size={18} color={Colors.primary} />
-              <Text style={styles.sectionTitle}>{t('admin.hours.workHours','Work hours')}</Text>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <Text style={{ color: Colors.text, fontWeight: '600' }}>{t('admin.hours.showBreaksQuestion','Show and set breaks?')}</Text>
-              <Switch
-                value={useBreaks}
-                onValueChange={setUseBreaks}
-                trackColor={{ false: Colors.border, true: `${businessColors.primary}30` }}
-                thumbColor={useBreaks ? businessColors.primary : Colors.card}
-                ios_backgroundColor={Colors.border}
-              />
-            </View>
-            <View style={styles.timeRow}>
-              <View style={styles.timeColumn}>
-                <TimePicker
-                  value={tempStartTime}
-                  onValueChange={setTempStartTime}
-                  label={t('admin.hours.startTime','Start time')}
-                  options={startTimeOptions}
-                  isBreakTime={false}
-                  primaryColor={businessColors.primary}
-                  useAmPm={useAmPm}
+        {isEditing && (
+          <Animated.View style={styles.editContainer} layout={_layout} entering={_entering} exiting={_exiting}>
+            {/* Work Hours Section */}
+            <Animated.View layout={_layout} style={styles.workHoursSection}>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="briefcase-outline" size={16} color={businessColors.primary} />
+                <Text style={[styles.sectionTitle, { color: businessColors.primary }]}>{t('admin.hours.workHours','Work hours')}</Text>
+              </View>
+              <View style={styles.toggleRow}>
+                <Text style={styles.toggleLabel}>{t('admin.hours.showBreaksQuestion','Show and set breaks?')}</Text>
+                <Switch
+                  value={useBreaks}
+                  onValueChange={setUseBreaks}
+                  trackColor={{ false: Colors.border, true: `${businessColors.primary}30` }}
+                  thumbColor={useBreaks ? businessColors.primary : Colors.card}
+                  ios_backgroundColor={Colors.border}
                 />
               </View>
-              
-              <View style={styles.timeSeparator}>
-                <Ionicons name="arrow-forward" size={16} color={Colors.secondaryText} />
-              </View>
-              
-              <View style={styles.timeColumn}>
-                <TimePicker
-                  value={tempEndTime}
-                  onValueChange={(v) => {
-                    // Ensure end > start
-                    if (v <= tempStartTime) {
-                      const options = generateTenMinuteOptions();
-                      const next = options.find(t => t > tempStartTime) || v;
-                      setTempEndTime(next);
-                    } else {
-                      setTempEndTime(v);
-                    }
-                  }}
-                  label={t('admin.hours.endTime','End time')}
-                  options={endTimeOptions}
-                  isBreakTime={false}
-                  primaryColor={businessColors.primary}
-                  useAmPm={useAmPm}
-                />
-              </View>
-            </View>
-          </Animated.View>
+              <View style={styles.timeRow}>
+                <View style={styles.timeColumn}>
+                  <TimePicker
+                    value={tempStartTime}
+                    onValueChange={setTempStartTime}
+                    label={t('admin.hours.startTime','Start time')}
+                    options={startTimeOptions}
+                    isBreakTime={false}
+                    primaryColor={businessColors.primary}
+                    useAmPm={useAmPm}
+                  />
+                </View>
 
-          {/* Multiple Breaks Section */}
-          {useBreaks && (
-          <Animated.View layout={_layout} style={styles.breakHoursSection}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="cafe-outline" size={18} color={Colors.secondaryText} />
-              <Text style={styles.sectionTitle}>{t('admin.hours.breaks','Breaks')}</Text>
-            </View>
-            <Animated.View layout={_layout} style={{ gap: 12 }}>
-              {tempBreaks.map((b, idx) => (
-                <Animated.View key={b.id} layout={_layout} entering={_entering} exiting={_fadeExit} style={styles.breakItemRow}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <TouchableOpacity
-                      onPress={() => setTempBreaks(prev => prev.filter(x => x.id !== b.id))}
-                      style={styles.breakDeleteButton}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="close" size={16} color={Colors.danger} />
-                    </TouchableOpacity>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Text style={{ fontSize: 15, fontWeight: '700', color: Colors.text }}>{t('admin.hours.breakNumber','Break #{{num}}',{ num: idx + 1 })}</Text>
-                      <Ionicons name="cafe" size={14} color={Colors.secondaryText} />
-                    </View>
-                  </View>
-                  <View style={styles.timeRow}>
-                    <View style={styles.timeColumn}>
-                      <TimePicker
-                        value={b.start_time}
-                        onValueChange={(v) => {
-                          setTempBreaks(prev => prev.map(x => x.id === b.id ? { ...x, start_time: v } : x));
-                        }}
-                        label={t('admin.hours.start','Start')}
-                        options={startTimeOptions}
-                        isBreakTime
-                        primaryColor={businessColors.primary}
-                        useAmPm={useAmPm}
-                      />
-                    </View>
-                    <View style={styles.timeSeparator}>
-                      <Ionicons name="arrow-back" size={16} color={Colors.secondaryText} />
-                    </View>
-                    <View style={styles.timeColumn}>
-                      <TimePicker
-                        value={b.end_time}
-                        onValueChange={(v) => {
-                          setTempBreaks(prev => prev.map(x => x.id === b.id ? { ...x, end_time: v } : x));
-                        }}
-                        label={t('admin.hours.end','End')}
-                        options={endTimeOptions}
-                        isBreakTime
-                        primaryColor={businessColors.primary}
-                        useAmPm={useAmPm}
-                      />
-                    </View>
-                  </View>
-                  {idx < tempBreaks.length - 1 && <View style={styles.breakDivider} />}
-                </Animated.View>
-              ))}
-              <TouchableOpacity
-                onPress={() => setTempBreaks(prev => ([...prev, makeBreakWindow()]))}
-                style={{ paddingVertical: 14, alignItems: 'center', borderRadius: 16, backgroundColor: 'rgba(255,149,0,0.08)', borderWidth: 1, borderColor: 'rgba(255,149,0,0.2)' }}
-                activeOpacity={0.8}
-              >
-                <Text style={{ color: Colors.warning, fontWeight: '700' }}>{t('admin.hours.addBreak','Add break')}</Text>
-              </TouchableOpacity>
+                <View style={styles.timeSeparator}>
+                  <Ionicons name="arrow-forward" size={16} color={Colors.secondaryText} />
+                </View>
+
+                <View style={styles.timeColumn}>
+                  <TimePicker
+                    value={tempEndTime}
+                    onValueChange={(v) => {
+                      // Ensure end > start
+                      if (v <= tempStartTime) {
+                        const options = generateTenMinuteOptions();
+                        const next = options.find(t => t > tempStartTime) || v;
+                        setTempEndTime(next);
+                      } else {
+                        setTempEndTime(v);
+                      }
+                    }}
+                    label={t('admin.hours.endTime','End time')}
+                    options={endTimeOptions}
+                    isBreakTime={false}
+                    primaryColor={businessColors.primary}
+                    useAmPm={useAmPm}
+                  />
+                </View>
+              </View>
             </Animated.View>
-          </Animated.View>
-          )}
 
-          {/* Break Hours Section removed per UX – we use only the multi-breaks UI */}
+            {/* Multiple Breaks Section */}
+            {useBreaks && (
+              <Animated.View layout={_layout} style={styles.breakHoursSection}>
+                <View style={styles.sectionHeader}>
+                  <Ionicons name="cafe-outline" size={16} color={Colors.warning} />
+                  <Text style={[styles.sectionTitle, { color: Colors.warning }]}>{t('admin.hours.breaks','Breaks')}</Text>
+                </View>
+                <Animated.View layout={_layout} style={{ gap: 12 }}>
+                  {tempBreaks.map((b, idx) => (
+                    <Animated.View key={b.id} layout={_layout} entering={_entering} exiting={_fadeExit} style={styles.breakItemRow}>
+                      <View style={styles.breakItemHeader}>
+                        <TouchableOpacity
+                          onPress={() => setTempBreaks(prev => prev.filter(x => x.id !== b.id))}
+                          style={styles.breakDeleteButton}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="close" size={14} color={Colors.danger} />
+                        </TouchableOpacity>
+                        <View style={styles.breakNumberRow}>
+                          <Text style={styles.breakNumber}>{t('admin.hours.breakNumber','Break #{{num}}',{ num: idx + 1 })}</Text>
+                          <Ionicons name="cafe" size={13} color={Colors.warning} />
+                        </View>
+                      </View>
+                      <View style={styles.timeRow}>
+                        <View style={styles.timeColumn}>
+                          <TimePicker
+                            value={b.start_time}
+                            onValueChange={(v) => {
+                              setTempBreaks(prev => prev.map(x => x.id === b.id ? { ...x, start_time: v } : x));
+                            }}
+                            label={t('admin.hours.start','Start')}
+                            options={startTimeOptions}
+                            isBreakTime
+                            primaryColor={businessColors.primary}
+                            useAmPm={useAmPm}
+                          />
+                        </View>
+                        <View style={styles.timeSeparator}>
+                          <Ionicons name="arrow-back" size={16} color={Colors.secondaryText} />
+                        </View>
+                        <View style={styles.timeColumn}>
+                          <TimePicker
+                            value={b.end_time}
+                            onValueChange={(v) => {
+                              setTempBreaks(prev => prev.map(x => x.id === b.id ? { ...x, end_time: v } : x));
+                            }}
+                            label={t('admin.hours.end','End')}
+                            options={endTimeOptions}
+                            isBreakTime
+                            primaryColor={businessColors.primary}
+                            useAmPm={useAmPm}
+                          />
+                        </View>
+                      </View>
+                      {idx < tempBreaks.length - 1 && <View style={styles.breakDivider} />}
+                    </Animated.View>
+                  ))}
+                  <TouchableOpacity
+                    onPress={() => setTempBreaks(prev => ([...prev, makeBreakWindow()]))}
+                    style={styles.addBreakButton}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="add-circle-outline" size={16} color={Colors.warning} />
+                    <Text style={styles.addBreakText}>{t('admin.hours.addBreak','Add break')}</Text>
+                  </TouchableOpacity>
+                </Animated.View>
+              </Animated.View>
+            )}
 
-          {/* Day Summary */}
-          <Animated.View layout={_layout} style={styles.daySummary}>
-            <View style={styles.summaryHeader}>
-              <Ionicons name="calendar-outline" size={16} color={Colors.primary} />
-              <Text style={styles.summaryTitle}>{t('admin.hours.daySummary','Day summary')}</Text>
-            </View>
-            <View style={styles.summaryContent}>
-              <Text style={styles.summaryText}>{t('admin.hours.workPrefix','Work')}: <Text style={styles.ltrText}>{formatRangeLtrDisplay(tempStartTime, tempEndTime, useAmPm)}</Text></Text>
-              {useBreaks ? (
-                tempBreaks.length > 0 ? (
-                  <View style={{ gap: 4 }}>
-                    {tempBreaks.map((b, i) => (
-                      <Text key={b.id} style={styles.summaryBreak}>
-                        {`Break ${tempBreaks.length > 1 ? '#' + (i + 1) + ': ' : ''}`}<Text style={styles.ltrText}>{formatRangeLtrDisplay(b.start_time, b.end_time, useAmPm)}</Text>
-                      </Text>
-                    ))}
-                  </View>
-                ) : null
-              ) : (
-                tempBreakStartTime && tempBreakEndTime ? (
-                  <Text style={styles.summaryBreak}>
-                    {t('admin.hours.breakPrefix','Break')}: <Text style={styles.ltrText}>{formatRangeLtrDisplay(tempBreakStartTime, tempBreakEndTime, useAmPm)}</Text>
-                  </Text>
-                ) : null
-              )}
+            {/* Day Summary */}
+            <Animated.View layout={_layout} style={styles.daySummary}>
+              <View style={styles.summaryHeader}>
+                <Ionicons name="calendar-outline" size={14} color={Colors.success} />
+                <Text style={styles.summaryTitle}>{t('admin.hours.daySummary','Day summary')}</Text>
+              </View>
+              <View style={styles.summaryContent}>
+                <Text style={styles.summaryText}>{t('admin.hours.workPrefix','Work')}: <Text style={styles.ltrText}>{formatRangeLtrDisplay(tempStartTime, tempEndTime, useAmPm)}</Text></Text>
+                {useBreaks ? (
+                  tempBreaks.length > 0 ? (
+                    <View style={{ gap: 4 }}>
+                      {tempBreaks.map((b, i) => (
+                        <Text key={b.id} style={styles.summaryBreak}>
+                          {`Break ${tempBreaks.length > 1 ? '#' + (i + 1) + ': ' : ''}`}<Text style={styles.ltrText}>{formatRangeLtrDisplay(b.start_time, b.end_time, useAmPm)}</Text>
+                        </Text>
+                      ))}
+                    </View>
+                  ) : null
+                ) : (
+                  tempBreakStartTime && tempBreakEndTime ? (
+                    <Text style={styles.summaryBreak}>
+                      {t('admin.hours.breakPrefix','Break')}: <Text style={styles.ltrText}>{formatRangeLtrDisplay(tempBreakStartTime, tempBreakEndTime, useAmPm)}</Text>
+                    </Text>
+                  ) : null
+                )}
+              </View>
+            </Animated.View>
+
+            <View style={styles.editActions}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setEditingDay(null)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.cancelButtonText}>{t('cancel','Cancel')}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.saveButton, { backgroundColor: businessColors.primary, shadowColor: businessColors.primary }]}
+                onPress={handleSaveDay}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.saveButtonText}>{t('save','Save')}</Text>
+              </TouchableOpacity>
             </View>
           </Animated.View>
-          
-          <View style={styles.editActions}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setEditingDay(null)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.cancelButtonText}>{t('cancel','Cancel')}</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.saveButton, { backgroundColor: businessColors.primary, shadowColor: businessColors.primary }]}
-              onPress={handleSaveDay}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.saveButtonText}>{t('save','Save')}</Text>
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
-      )}
+        )}
       </AnimatedTouchableOpacity>
     );
   };
@@ -701,15 +715,21 @@ export default function BusinessHoursScreen() {
             contentContainerStyle={styles.scrollContent}
           >
 
-        {/* Constraints button */}
+        {/* Constraints button — secondary settings-row style */}
         <View style={{ paddingHorizontal: 24, marginBottom: 12 }}>
           <TouchableOpacity
             onPress={() => setIsConstraintsOpen(true)}
-            activeOpacity={0.9}
-            style={[styles.constraintsButton, { backgroundColor: businessColors.primary, shadowColor: businessColors.primary }]}
+            activeOpacity={0.8}
+            style={styles.constraintsButton}
           >
-            <Ionicons name="remove-circle-outline" size={18} color={'#FFFFFF'} />
-            <Text style={styles.constraintsButtonText}>{t('admin.hours.manageConstraints','Manage constraints (closed dates/hours)')}</Text>
+            <View style={[styles.constraintsIconBadge, { backgroundColor: `${businessColors.primary}12` }]}>
+              <Ionicons name="remove-circle-outline" size={18} color={businessColors.primary} />
+            </View>
+            <View style={styles.constraintsTextBlock}>
+              <Text style={[styles.constraintsButtonTitle, { color: businessColors.primary }]}>{t('admin.hours.manageConstraints','ניהול מגבלות')}</Text>
+              <Text style={styles.constraintsButtonSubtitle}>{t('admin.hours.constraintsDesc','תאריכים ושעות סגורים')}</Text>
+            </View>
+            <Ionicons name="chevron-back" size={16} color={Colors.tertiaryText} />
           </TouchableOpacity>
         </View>
         {/* Global constant break between appointments */}
@@ -932,19 +952,41 @@ const styles = StyleSheet.create({
   constraintsButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderRadius: 18,
+    gap: 12,
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    paddingHorizontal: 16,
     paddingVertical: 14,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  constraintsButtonText: {
-    color: Colors.card,
-    fontWeight: '800',
+  constraintsIconBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  constraintsTextBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  constraintsButtonTitle: {
+    fontSize: 15,
+    fontWeight: '700',
     letterSpacing: -0.2,
+    textAlign: 'right',
+  },
+  constraintsButtonSubtitle: {
+    fontSize: 12,
+    color: Colors.secondaryText,
+    fontWeight: '400',
+    textAlign: 'right',
   },
   contentWrapper: {
     flex: 1,
@@ -1018,15 +1060,19 @@ const styles = StyleSheet.create({
   dayCard: {
     backgroundColor: Colors.card,
     borderRadius: 20,
-    padding: 24,
+    padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.06,
     shadowRadius: 16,
     elevation: 4,
-    borderWidth: 0.5,
-    borderColor: 'rgba(142, 142, 147, 0.1)',
+    borderWidth: 1,
+    borderColor: Colors.border,
     overflow: 'visible',
+  },
+  dayCardActive: {
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.success,
   },
   dayHeader: {
     flexDirection: 'row',
@@ -1037,12 +1083,42 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'flex-start',
   },
+  dayNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+    flexWrap: 'wrap',
+  },
   dayName: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: Colors.text,
-    marginBottom: 8,
     letterSpacing: -0.3,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 20,
+    gap: 4,
+  },
+  statusPillOpen: {
+    backgroundColor: 'rgba(52, 199, 89, 0.1)',
+  },
+  statusPillClosed: {
+    backgroundColor: 'rgba(142, 142, 147, 0.1)',
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: -0.1,
   },
   timeContainer: {
     flexDirection: 'row',
@@ -1074,7 +1150,7 @@ const styles = StyleSheet.create({
   dayControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 8,
   },
   editButton: {
     width: 40,
@@ -1358,11 +1434,16 @@ const styles = StyleSheet.create({
     height: 40,
   },
   globalBreakCard: {
-    backgroundColor: 'rgba(0, 0, 0, 0.06)',
+    backgroundColor: Colors.card,
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.12)',
+    borderColor: Colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
   },
   breakPickerButton: {
     borderRadius: 12,
@@ -1420,14 +1501,62 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
     gap: 8,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     color: Colors.text,
     letterSpacing: -0.3,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  toggleLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text,
+    flex: 1,
+    textAlign: 'right',
+    marginLeft: 8,
+  },
+  breakItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  breakNumberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  breakNumber: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.text,
+    letterSpacing: -0.2,
+  },
+  addBreakButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 13,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,149,0,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,149,0,0.2)',
+  },
+  addBreakText: {
+    color: Colors.warning,
+    fontWeight: '700',
+    fontSize: 14,
+    letterSpacing: -0.2,
   },
   optionalLabel: {
     fontSize: 14,

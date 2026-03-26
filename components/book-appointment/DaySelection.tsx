@@ -86,7 +86,7 @@ export default function DaySelection({
                         return <View key={`c-${year}-${month}-${wi}-${di}`} style={[styles.calendarCell, { backgroundColor: 'transparent' }]} />;
                       }
                       const inRange = dateObj >= content.rangeStart && dateObj <= content.end;
-                      const dsIso = dateObj.toISOString().split('T')[0];
+                      const dsIso = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
                       const hasAvail = (dayAvailability[dsIso] ?? 0) > 0;
                       const isSel = selectedDate ? content.isSameDate(dateObj, selectedDate) : false;
                       return (

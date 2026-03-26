@@ -29,6 +29,7 @@ import { useTranslation } from 'react-i18next';
 import { Marquee } from '@animatereactnative/marquee';
 import Reanimated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { manicureImages } from '@/src/constants/manicureImages';
+import SwapOpportunities from '@/components/SwapOpportunities';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_ITEM_SIZE = Platform.OS === 'web' ? SCREEN_WIDTH * 0.24 : SCREEN_WIDTH * 0.45;
@@ -933,6 +934,9 @@ export default function ClientHomeScreen() {
             </View>
           </View>
         )}
+
+        {/* Swap Opportunities Section */}
+        <SwapOpportunities />
 
         {/* Appointments Section */}
         <View style={[styles.sectionContainer, { marginTop: 16 }]}> 

@@ -142,6 +142,7 @@
   "register.success.pendingApproval": "החשבון נוצר. העסק יאשר אותו בקרוב.\n\nתוכל/י להתחבר עם הטלפון והסיסמה אחרי האישור.\n\nטלפון: {{phone}}",
   "admin.insights.title": "תובנות חודשיות",
   "admin.insights.noData": "אין נתוני תורים החודש",
+  "admin.insights.booked": "מוזמנו",
   "admin.insights.completed": "הושלמו",
   "admin.insights.cancelled": "בוטלו",
   "admin.insights.noShow": "לא הגיעו",
@@ -908,6 +909,32 @@
       "selectClientPlaceholder": "בחר/י לקוח..."
     }
     
+  },
+  "swap": {
+    "title": "החלפת תור",
+    "swap": "החלף",
+    "selectDays": "באילו ימים מתאים לך?",
+    "selectDaysHint": "בחר/י את הימים שאליהם תרצה/י להחליף",
+    "selectTimeRange": "באיזה טווח שעות?",
+    "selectTimeRangeHint": "בחר/י את השעות המועדפות להחלפה",
+    "from": "משעה",
+    "to": "עד שעה",
+    "daysSelected": "ימים נבחרו",
+    "submit": "שלח בקשת החלפה",
+    "selectAtLeastOneDay": "יש לבחור לפחות יום אחד",
+    "invalidTimeRange": "שעת הסיום חייבת להיות אחרי שעת ההתחלה",
+    "requestCreated": "בקשת ההחלפה נוצרה בהצלחה. נעדכן אותך כשימצא התאמה!",
+    "createFailed": "יצירת בקשת ההחלפה נכשלה",
+    "opportunitiesTitle": "תורים להחלפה",
+    "opportunitiesSubtitle": "לקוחות שמחפשים להחליף זמנים איתך",
+    "theirSlot": "משבצת זמינה",
+    "yourSlot": "המשבצת שלך",
+    "swapNow": "החלף עכשיו",
+    "confirmTitle": "אישור החלפה",
+    "confirmMessage": "להחליף את התור שלך ב-{{myDate}} בשעה {{myTime}} עם התור ב-{{theirDate}} בשעה {{theirTime}}?",
+    "execute": "החלף",
+    "swapSuccess": "התורים הוחלפו בהצלחה!",
+    "swapFailed": "החלפת התורים נכשלה"
   },
   "finance": {
     "title": "פיננסים",

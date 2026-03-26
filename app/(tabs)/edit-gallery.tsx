@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   FlatList,
   Image,
-  Dimensions,
   TextInput,
   Alert,
   Platform,
@@ -14,8 +13,10 @@ import {
   ActivityIndicator,
   Pressable,
   RefreshControl,
+  ScrollView,
   useWindowDimensions,
   BackHandler,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
@@ -42,9 +43,16 @@ export default function EditGalleryScreen() {
     [tRoot]
   );
   const insets = useSafeAreaInsets();
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const [keyboardH, setKeyboardH] = useState(0);
   const colors = useColors();
-  const styles = useMemo(() => createStyles(colors, windowWidth), [colors, windowWidth]);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', (e) => setKeyboardH(e.endCoordinates.height));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardH(0));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+  const styles = useMemo(() => createStyles(colors, windowWidth, windowHeight), [colors, windowWidth, windowHeight]);
 
   const { designs, fetchDesigns, createDesign, deleteDesign, updateDesign, isLoading } = useDesignsStore();
 
@@ -423,7 +431,17 @@ export default function EditGalleryScreen() {
     );
   }, [colors.primary, designs.length, filtered.length, isLoading, search, styles, t]);
 
-  const fabMaxScrollH = Math.round(Dimensions.get('window').height * 0.52);
+  /**
+   * Available height above keyboard for the FAB scroll area.
+   * Subtracts: keyboard height, FAB bottom offset, header (title+subtitle ~90), panel padding.
+   */
+  const fabBottom = insets.bottom + 88;
+  const fabHeaderH = 90;
+  const fabPaddingV = 24;
+  const fabMaxScrollH = Math.max(
+    180,
+    windowHeight - fabBottom - fabHeaderH - fabPaddingV - keyboardH - 16
+  );
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -523,14 +541,11 @@ export default function EditGalleryScreen() {
           </Text>
         </View>
 
-        <KeyboardAwareScreenScroll
+        <ScrollView
           keyboardShouldPersistTaps="handled"
           style={{ maxHeight: fabMaxScrollH }}
           contentContainerStyle={{ paddingBottom: 24 }}
           showsVerticalScrollIndicator={false}
-          extraScrollHeight={96}
-          extraHeight={20}
-          enableResetScrollToCoords={false}
         >
           {adminUsers.length > 1 && (
             <View style={[styles.block, { opacity: isCreating ? 0.55 : 1 }]}>
@@ -633,7 +648,7 @@ export default function EditGalleryScreen() {
               <Text style={styles.primaryBtnText}>{isLoading ? t('common.loading', 'טוען...') : t('admin.gallery.publish', 'פרסום')}</Text>
             )}
           </TouchableOpacity>
-        </KeyboardAwareScreenScroll>
+        </ScrollView>
       </FabButton>
 
       {/* Edit — bottom sheet */}
@@ -780,7 +795,7 @@ export default function EditGalleryScreen() {
   );
 }
 
-function createStyles(colors: ThemeColors, windowWidth: number) {
+function createStyles(colors: ThemeColors, windowWidth: number, windowHeight: number) {
   const paddingH = 20;
   const gap = 10;
   const layout = { paddingH, gap };
@@ -914,7 +929,7 @@ function createStyles(colors: ThemeColors, windowWidth: number) {
       borderTopRightRadius: 22,
       paddingHorizontal: 20,
       paddingTop: 10,
-      maxHeight: Dimensions.get('window').height * 0.92,
+      maxHeight: windowHeight * 0.92,
     },
     sheetGrabber: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 14 },
     sheetHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6, gap: 12 },

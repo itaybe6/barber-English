@@ -37,6 +37,10 @@ import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useTranslation } from 'react-i18next';
 
 const { width: SCREEN_W } = Dimensions.get('window');
+/** Horizontal padding: scroll (18) + group card (18) each side — matches first layout pass before onLayout. */
+const SCROLL_H_PAD = 18;
+const GROUP_CARD_H_PAD = 18;
+const INITIAL_STEP_VIEWPORT = Math.max(280, SCREEN_W - SCROLL_H_PAD * 2 - GROUP_CARD_H_PAD * 2);
 
 LocaleConfig.locales['en'] = {
   monthNames: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
@@ -194,7 +198,7 @@ export default function AddAppointmentModal({
   const [isLoadingTimes, setIsLoadingTimes] = useState(false);
 
   const [currentStep, setCurrentStep] = useState<number>(0);
-  const [viewportWidth, setViewportWidth] = useState<number>(SCREEN_W);
+  const [viewportWidth, setViewportWidth] = useState<number>(INITIAL_STEP_VIEWPORT);
 
   const translateX = useSharedValue(0);
   const progress = useSharedValue(0);
@@ -319,7 +323,7 @@ export default function AddAppointmentModal({
       setCurrentStep(clamped);
       currentStepRef.current = clamped;
       stepSv.value = clamped;
-      const w = viewportWidth || SCREEN_W;
+      const w = viewportWidth > 0 ? viewportWidth : INITIAL_STEP_VIEWPORT;
       if (animate) {
         triggerLightHaptic();
         translateX.value = withSpring(-clamped * w, STEP_SPRING);
@@ -750,7 +754,11 @@ export default function AddAppointmentModal({
       >
         <View style={[styles.selectorButton, styles.grayField]}>
           <View style={styles.selectorContent}>
-            <Text style={selectedService ? styles.selectorText : styles.selectorPlaceholder}>
+            <Text
+              style={selectedService ? styles.selectorText : styles.selectorPlaceholder}
+              numberOfLines={2}
+              ellipsizeMode="tail"
+            >
               {selectedService
                 ? `${selectedService.name} · ₪${selectedService.price}`
                 : t('admin.appointmentsAdmin.selectServicePlaceholder', 'Select service...')}
@@ -823,7 +831,11 @@ export default function AddAppointmentModal({
       >
         <View style={[styles.selectorButton, styles.grayField]}>
           <View style={styles.selectorContent}>
-            <Text style={selectedTime ? styles.selectorText : styles.selectorPlaceholder}>
+            <Text
+              style={selectedTime ? styles.selectorText : styles.selectorPlaceholder}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
               {selectedTime
                 ? formatTimeToAMPM(selectedTime)
                 : isLoadingTimes
@@ -916,6 +928,7 @@ export default function AddAppointmentModal({
         <LinearGradient colors={['#ECECF3', '#F2F2F7', '#EFEFF5']} style={styles.bodyWrapper}>
           <KeyboardAwareScreenScroll
             style={styles.content}
+            contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
@@ -935,24 +948,35 @@ export default function AddAppointmentModal({
                 end={{ x: 0.5, y: 1 }}
               />
               <View style={[styles.groupCardBorder, { borderColor: primary + '18' }]} />
-              <View style={styles.stepsViewport} onLayout={(e) => {
-                const w = e.nativeEvent.layout.width;
-                if (w > 0 && w !== viewportWidth) {
-                  setViewportWidth(w);
-                  translateX.value = -currentStepRef.current * w;
-                }
-              }}>
+              <View
+                style={styles.stepsViewport}
+                onLayout={(e) => {
+                  const w = e.nativeEvent.layout.width;
+                  if (w > 0 && Math.abs(w - viewportWidth) > 0.5) {
+                    setViewportWidth(w);
+                    translateX.value = -currentStepRef.current * w;
+                  }
+                }}
+              >
                 <Animated.View
                   style={[
                     styles.stepsContainer,
-                    { width: (viewportWidth || SCREEN_W) * 4 },
+                    { width: (viewportWidth > 0 ? viewportWidth : INITIAL_STEP_VIEWPORT) * 4 },
                     stepsRowStyle,
                   ]}
                 >
-                  <View style={[styles.stepPane, { width: viewportWidth || SCREEN_W }]}>{renderClientSelector()}</View>
-                  <View style={[styles.stepPane, { width: viewportWidth || SCREEN_W }]}>{renderServiceSelector()}</View>
-                  <View style={[styles.stepPane, { width: viewportWidth || SCREEN_W }]}>{renderDatePicker()}</View>
-                  <View style={[styles.stepPane, { width: viewportWidth || SCREEN_W }]}>{renderTimeSelector()}</View>
+                  <View style={[styles.stepPane, { width: viewportWidth > 0 ? viewportWidth : INITIAL_STEP_VIEWPORT }]}>
+                    <View style={styles.stepPaneInner}>{renderClientSelector()}</View>
+                  </View>
+                  <View style={[styles.stepPane, { width: viewportWidth > 0 ? viewportWidth : INITIAL_STEP_VIEWPORT }]}>
+                    <View style={styles.stepPaneInner}>{renderServiceSelector()}</View>
+                  </View>
+                  <View style={[styles.stepPane, { width: viewportWidth > 0 ? viewportWidth : INITIAL_STEP_VIEWPORT }]}>
+                    <View style={styles.stepPaneInner}>{renderDatePicker()}</View>
+                  </View>
+                  <View style={[styles.stepPane, { width: viewportWidth > 0 ? viewportWidth : INITIAL_STEP_VIEWPORT }]}>
+                    <View style={styles.stepPaneInner}>{renderTimeSelector()}</View>
+                  </View>
                 </Animated.View>
               </View>
 
@@ -977,13 +1001,16 @@ export default function AddAppointmentModal({
                     else void handleSubmit();
                   }}
                   disabled={navPrimaryDisabled}
-                  style={({ pressed }) => [{ transform: [{ scale: pressed && !navPrimaryDisabled ? 0.97 : 1 }] }]}
+                  style={({ pressed }) => [
+                    styles.stepNavPrimaryWrap,
+                    pressed && !navPrimaryDisabled ? { transform: [{ scale: 0.985 }] } : null,
+                  ]}
                 >
                   <LinearGradient
                     colors={navPrimaryDisabled ? ['#C7C7CC', '#AEAEB2'] : [primary, secondary]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
-                    style={[styles.stepNavPrimary, navPrimaryDisabled && { opacity: 0.85 }]}
+                    style={[styles.stepNavPrimary, navPrimaryDisabled && { opacity: 0.88 }]}
                   >
                     {isSubmitting && currentStep === 3 ? (
                       <ActivityIndicator color="#FFFFFF" size="small" />
@@ -1003,16 +1030,20 @@ export default function AddAppointmentModal({
                 <Text style={styles.summaryTitle}>{t('admin.appointmentsAdmin.summary', 'Appointment Summary')}</Text>
                 <View style={styles.summaryContent}>
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>{t('admin.appointmentsAdmin.client', 'Client')}:</Text>
-                    <Text style={styles.summaryValue}>{selectedClient?.name}</Text>
+                    <Text style={styles.summaryLabel}>{t('admin.appointmentsAdmin.client', 'Client')}</Text>
+                    <Text style={styles.summaryValue} numberOfLines={3} ellipsizeMode="tail">
+                      {selectedClient?.name}
+                    </Text>
                   </View>
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>{t('booking.field.service', 'Service')}:</Text>
-                    <Text style={styles.summaryValue}>{selectedService?.name}</Text>
+                    <Text style={styles.summaryLabel}>{t('booking.field.service', 'Service')}</Text>
+                    <Text style={styles.summaryValue} numberOfLines={3} ellipsizeMode="tail">
+                      {selectedService?.name}
+                    </Text>
                   </View>
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>{t('booking.field.date', 'Date')}:</Text>
-                    <Text style={styles.summaryValue}>
+                    <Text style={styles.summaryLabel}>{t('booking.field.date', 'Date')}</Text>
+                    <Text style={styles.summaryValue} numberOfLines={3} ellipsizeMode="tail">
                       {selectedDate
                         ? selectedDate.toLocaleDateString(dateLocale, {
                             year: 'numeric',
@@ -1023,8 +1054,8 @@ export default function AddAppointmentModal({
                         : ''}
                     </Text>
                   </View>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>{t('booking.field.time', 'Time')}:</Text>
+                  <View style={[styles.summaryRow, styles.summaryRowLast]}>
+                    <Text style={styles.summaryLabel}>{t('booking.field.time', 'Time')}</Text>
                     <Text style={styles.summaryValue}>{selectedTime ? formatTimeToAMPM(selectedTime) : ''}</Text>
                   </View>
                 </View>
@@ -1093,17 +1124,30 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 18,
+    alignSelf: 'stretch',
+    width: '100%',
+    maxWidth: '100%',
+    paddingHorizontal: SCROLL_H_PAD,
+    paddingTop: SCROLL_H_PAD,
     paddingBottom: 28,
   },
+  scrollContent: {
+    flexGrow: 1,
+    width: '100%',
+    alignItems: 'stretch',
+  },
   stepperContainer: {
-    marginBottom: 16,
+    marginBottom: 18,
+    width: '100%',
+    alignSelf: 'stretch',
   },
   stepperTrack: {
     height: 6,
     borderRadius: 3,
     overflow: 'hidden',
     backgroundColor: 'transparent',
+    width: '100%',
+    alignSelf: 'stretch',
   },
   stepperProgressTrack: {
     ...StyleSheet.absoluteFillObject,
@@ -1118,6 +1162,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 12,
+    width: '100%',
+    alignSelf: 'stretch',
   },
   stepperLabelWrap: {
     alignItems: 'center',
@@ -1149,28 +1195,33 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   iconBubble: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginEnd: 12,
   },
   section: {
-    marginBottom: 8,
+    marginBottom: 4,
+    width: '100%',
+    alignSelf: 'stretch',
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 10,
+    width: '100%',
   },
   sectionSubtitle: {
     fontSize: 14,
     color: '#8E8E93',
-    marginTop: -4,
-    marginBottom: 12,
+    marginTop: -2,
+    marginBottom: 14,
     textAlign: 'left',
-    lineHeight: 19,
+    lineHeight: 20,
+    width: '100%',
+    alignSelf: 'stretch',
   },
   sectionTitle: {
     fontSize: 20,
@@ -1182,6 +1233,8 @@ const styles = StyleSheet.create({
   },
   selectorShell: {
     borderRadius: 16,
+    width: '100%',
+    alignSelf: 'stretch',
   },
   selectorGlow: {
     shadowOffset: { width: 0, height: 4 },
@@ -1196,6 +1249,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0,0,0,0.06)',
     paddingHorizontal: 16,
     paddingVertical: 16,
+    width: '100%',
+    minHeight: 54,
+    justifyContent: 'center',
   },
   grayField: {
     backgroundColor: '#F2F2F7',
@@ -1207,6 +1263,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 10,
+    width: '100%',
+    minWidth: 0,
   },
   selectorText: {
     fontSize: 17,
@@ -1225,6 +1283,7 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: '#000000',
     flex: 1,
+    minWidth: 0,
     textAlign: 'left',
     paddingVertical: 0,
     fontWeight: '500',
@@ -1236,6 +1295,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0,0,0,0.06)',
     marginTop: 12,
     maxHeight: 300,
+    width: '100%',
+    alignSelf: 'stretch',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.12,
@@ -1251,6 +1312,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
+    width: '100%',
+    minWidth: 0,
   },
   dropdownItemPressed: {
     backgroundColor: 'rgba(0,0,0,0.04)',
@@ -1261,7 +1324,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginEnd: 12,
   },
   clientAvatarText: {
     fontSize: 17,
@@ -1271,11 +1334,13 @@ const styles = StyleSheet.create({
   clientInfo: {
     flex: 1,
     alignItems: 'flex-start',
+    minWidth: 0,
   },
   clientName: {
     fontSize: 17,
     fontWeight: '600',
     color: '#000000',
+    alignSelf: 'stretch',
   },
   clientPhone: {
     fontSize: 14,
@@ -1285,6 +1350,8 @@ const styles = StyleSheet.create({
   serviceInfo: {
     flex: 1,
     alignItems: 'flex-start',
+    minWidth: 0,
+    width: '100%',
   },
   serviceName: {
     fontSize: 17,
@@ -1300,6 +1367,8 @@ const styles = StyleSheet.create({
   emptyState: {
     padding: 24,
     alignItems: 'center',
+    width: '100%',
+    alignSelf: 'stretch',
   },
   emptyStateText: {
     fontSize: 15,
@@ -1313,6 +1382,8 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     flexDirection: 'row',
     alignItems: 'center',
+    width: '100%',
+    alignSelf: 'stretch',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.08,
@@ -1322,7 +1393,8 @@ const styles = StyleSheet.create({
   selectedClientInfo: {
     flex: 1,
     alignItems: 'flex-start',
-    marginLeft: 4,
+    marginStart: 4,
+    minWidth: 0,
   },
   selectedClientName: {
     fontSize: 17,
@@ -1345,6 +1417,8 @@ const styles = StyleSheet.create({
   loadingContainer: {
     padding: 24,
     alignItems: 'center',
+    width: '100%',
+    alignSelf: 'stretch',
   },
   loadingText: {
     fontSize: 15,
@@ -1356,9 +1430,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     borderWidth: 1.5,
-    padding: 10,
+    padding: 8,
     direction: 'ltr',
     width: '100%',
+    alignSelf: 'stretch',
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.06,
@@ -1366,49 +1442,71 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   groupCard: {
-    borderRadius: 22,
-    padding: 18,
+    borderRadius: 24,
+    padding: GROUP_CARD_H_PAD,
     overflow: 'hidden',
+    width: '100%',
+    alignSelf: 'stretch',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.1,
-    shadowRadius: 28,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.11,
+    shadowRadius: 32,
+    elevation: 12,
   },
   groupCardBorder: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 22,
+    borderRadius: 24,
     borderWidth: 1,
     pointerEvents: 'none',
   },
   stepsViewport: {
     overflow: 'hidden',
+    width: '100%',
+    alignSelf: 'stretch',
   },
   stepsContainer: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
   },
   stepPane: {
-    paddingHorizontal: 2,
+    paddingHorizontal: 0,
+    minHeight: 300,
+    alignItems: 'stretch',
+  },
+  stepPaneInner: {
+    width: '100%',
+    flex: 1,
+    minWidth: 0,
     minHeight: 280,
   },
   stepNavRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 16,
+    alignItems: 'stretch',
+    marginTop: 20,
     gap: 12,
+    width: '100%',
+    alignSelf: 'stretch',
   },
   stepNavButtonWrap: {
     borderRadius: 16,
     overflow: 'hidden',
-    minWidth: 112,
+    minWidth: 108,
+    flexShrink: 0,
+    justifyContent: 'center',
+  },
+  stepNavPrimaryWrap: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   stepNavBlur: {
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    minHeight: 52,
   },
   stepNavButtonDisabled: {
     opacity: 0.45,
@@ -1422,16 +1520,18 @@ const styles = StyleSheet.create({
     color: '#AEAEB2',
   },
   stepNavPrimary: {
-    paddingVertical: 14,
-    paddingHorizontal: 28,
+    flex: 1,
+    width: '100%',
+    minHeight: 52,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
     borderRadius: 16,
-    minWidth: 132,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
+    shadowOpacity: 0.22,
+    shadowRadius: 14,
     elevation: 6,
   },
   stepNavPrimaryText: {
@@ -1443,11 +1543,15 @@ const styles = StyleSheet.create({
   timeChipsWrap: {
     marginTop: 14,
     paddingVertical: 4,
+    width: '100%',
+    alignSelf: 'stretch',
   },
   timeChipsInner: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
+    width: '100%',
+    justifyContent: 'flex-start',
   },
   timeChipActive: {
     paddingHorizontal: 16,
@@ -1473,18 +1577,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   summaryCard: {
-    borderRadius: 22,
+    borderRadius: 24,
     padding: 20,
-    marginTop: 18,
-    marginBottom: 24,
+    marginTop: 20,
+    marginBottom: 28,
     backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
     overflow: 'hidden',
+    width: '100%',
+    alignSelf: 'stretch',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 24,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.11,
+    shadowRadius: 28,
+    elevation: 9,
   },
   summaryGradientHeader: {
     position: 'absolute',
@@ -1502,20 +1608,30 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
   },
   summaryContent: {
-    gap: 14,
+    gap: 0,
+    width: '100%',
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     gap: 12,
+    width: '100%',
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(60,60,67,0.12)',
+  },
+  summaryRowLast: {
+    borderBottomWidth: 0,
+    paddingBottom: 4,
   },
   summaryLabel: {
     fontSize: 14,
     color: '#8E8E93',
     fontWeight: '600',
     textAlign: 'left',
-    maxWidth: '36%',
+    flexShrink: 0,
+    maxWidth: '38%',
   },
   summaryValue: {
     fontSize: 15,
@@ -1523,5 +1639,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'right',
     flex: 1,
+    minWidth: 0,
+    lineHeight: 21,
   },
 });

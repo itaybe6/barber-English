@@ -7,7 +7,6 @@ import {
   Pressable,
   StyleSheet,
   Alert,
-  Image,
   Dimensions,
   Platform,
   ActivityIndicator,
@@ -18,52 +17,35 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   withSpring,
-  withRepeat,
-  withSequence,
   useSharedValue,
-  interpolate,
   Easing,
 } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, Link } from 'expo-router';
-import { Phone, Lock, KeyRound, Mail, Eye, EyeOff } from 'lucide-react-native';
+import { Phone, Lock, Mail, Eye, EyeOff } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from '@/stores/authStore';
 import { usersApi } from '@/lib/api/users';
 import { supabase, getBusinessId } from '@/lib/supabase';
 import { findUserByCredentials, isValidUserType, UserType } from '@/constants/auth';
-import { getCurrentClientLogo } from '@/src/theme/assets';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { superAdminApi } from '@/lib/api/superAdmin';
 import { authPhoneOtpApi } from '@/lib/api/authPhoneOtp';
 import { useTranslation } from 'react-i18next';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { readableOnHex } from '@/lib/utils/readableOnHex';
+import {
+  MAX_LOGIN_FAILURES,
+  normalizePhoneKey,
+  readLoginFailures,
+  writeLoginFailures,
+} from '@/lib/login/loginPhoneFailure';
+import { otpErrorMessage } from '@/lib/login/otpErrorMessage';
 
-const { width: SW } = Dimensions.get('window');
+const { width: SW, height: SH } = Dimensions.get('window');
 
-const MAX_LOGIN_FAILURES = 5;
-const loginFailuresStorageKey = (phoneKey: string) => `@login_failures:${phoneKey}`;
-
-function normalizePhoneKey(phone: string): string {
-  return phone.trim().replace(/\s+/g, '');
-}
-
-async function readLoginFailures(phoneKey: string): Promise<number> {
-  if (!phoneKey) return 0;
-  const raw = await AsyncStorage.getItem(loginFailuresStorageKey(phoneKey));
-  const n = raw ? parseInt(raw, 10) : 0;
-  return Number.isFinite(n) && n > 0 ? n : 0;
-}
-
-async function writeLoginFailures(phoneKey: string, count: number): Promise<void> {
-  if (!phoneKey) return;
-  if (count <= 0) {
-    await AsyncStorage.removeItem(loginFailuresStorageKey(phoneKey));
-  } else {
-    await AsyncStorage.setItem(loginFailuresStorageKey(phoneKey), String(count));
-  }
-}
+/** Title row under status bar (primary-colored app header) */
+const LOGIN_HEADER_CONTENT_H = 52;
 
 // ─── Color helpers ────────────────────────────────────────────────────────────
 function hexToRgba(hex: string, a: number): string {
@@ -93,10 +75,7 @@ export default function LoginScreen() {
 
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [otpCode, setOtpCode] = useState('');
-  const [loginStep, setLoginStep] = useState<'phone' | 'code'>('phone');
   const [usePasswordLogin, setUsePasswordLogin] = useState(false);
-  const [otpCooldownSec, setOtpCooldownSec] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isForgotOpen, setIsForgotOpen] = useState(false);
@@ -105,7 +84,6 @@ export default function LoginScreen() {
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [phoneFocused, setPhoneFocused] = useState(false);
   const [passFocused, setPassFocused] = useState(false);
-  const [otpFocused, setOtpFocused] = useState(false);
   const [loginFailureCount, setLoginFailureCount] = useState(0);
 
   const login = useAuthStore((state) => state.login);
@@ -114,6 +92,7 @@ export default function LoginScreen() {
   const isRtl = i18n.language?.startsWith('he') ?? true;
 
   const primary = businessColors.primary;
+  const onPrimary = readableOnHex(primary);
 
   const phoneKey = normalizePhoneKey(phone);
   const isLoginLocked = phoneKey.length > 0 && loginFailureCount >= MAX_LOGIN_FAILURES;
@@ -134,44 +113,18 @@ export default function LoginScreen() {
     };
   }, [phone]);
 
-  useEffect(() => {
-    if (otpCooldownSec <= 0) return;
-    const id = setInterval(() => setOtpCooldownSec((s) => Math.max(0, s - 1)), 1000);
-    return () => clearInterval(id);
-  }, [otpCooldownSec]);
+  // ── Form panel entrance (slide-up + fade, runs once on mount) ──
+  const formSlide = useSharedValue(30);
+  const formAlpha = useSharedValue(0);
 
   useEffect(() => {
-    if (usePasswordLogin) {
-      setLoginStep('phone');
-      setOtpCode('');
-    }
-  }, [usePasswordLogin]);
-
-  // ── Logo float ──
-  const logoFloat = useSharedValue(0);
-  const logoGlow = useSharedValue(0);
-
-  useEffect(() => {
-    logoFloat.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 4200, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0, { duration: 4200, easing: Easing.inOut(Easing.ease) }),
-      ), -1, false
-    );
-    logoGlow.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 3600, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0, { duration: 3600, easing: Easing.inOut(Easing.ease) }),
-      ), -1, false
-    );
+    formSlide.value = withTiming(0, { duration: 480, easing: Easing.out(Easing.quad) });
+    formAlpha.value = withTiming(1, { duration: 420, easing: Easing.out(Easing.ease) });
   }, []);
 
-  const logoFloatStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(logoFloat.value, [0, 1], [0, -6]) }],
-  }));
-  const logoGlowStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(logoGlow.value, [0, 1], [0.06, 0.22]),
-    transform: [{ scale: interpolate(logoGlow.value, [0, 1], [0.94, 1.08]) }],
+  const formEntranceStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: formSlide.value }],
+    opacity: formAlpha.value,
   }));
 
   // ── Button press ──
@@ -200,47 +153,6 @@ export default function LoginScreen() {
     }
   };
 
-  const otpErrorMessage = (code: string | undefined): string => {
-    switch (code) {
-      case 'pulseem_not_configured':
-        return t(
-          'login.otp.errorPulseem',
-          'שליחת SMS לא הוגדרה: נדרשים מזהה משתמש, סיסמה ומספר שולח פולסים (Web Service). מפתח API בלבד לא מספיק — הגדר בסופר־אדמין.',
-        );
-      case 'business_not_found':
-        return t(
-          'login.otp.errorBusiness',
-          'מזהה העסק לא נמצא במסד. בדוק BUSINESS_ID ב-.env.',
-        );
-      case 'db_error':
-      case 'server_error':
-        return t(
-          'login.otp.errorServer',
-          'שגיאת שרת. ודא מיגרציית OTP והפונקציה auth-phone-otp ב-Supabase.',
-        );
-      case 'invoke_network':
-        return t(
-          'login.otp.errorInvoke',
-          'לא ניתן להגיע לשרת (Edge Function). בדוק פריסה ואינטרנט.',
-        );
-      case 'rate_limit_sends':
-        return t('login.otp.errorRateLimit', 'נשלחו יותר מדי קודים לשעה. נסה שוב מאוחר יותר.');
-      case 'sms_send_failed':
-        return t('login.otp.errorSms', 'שליחת ה-SMS נכשלה. נסה שוב.');
-      case 'wrong_code':
-      case 'no_active_code':
-        return t('login.otp.errorWrongCode', 'קוד שגוי או שפג תוקפו. בקש קוד חדש.');
-      case 'too_many_attempts':
-        return t('login.otp.errorTooMany', 'יותר מדי ניסיונות שגויים. בקש קוד חדש.');
-      case 'phone_registered':
-        return t('register.phoneExists.message', 'מספר זה כבר רשום.');
-      default:
-        return code && code !== 'send_failed'
-          ? `${t('common.retry', 'נסה שוב')} (${code})`
-          : t('common.tryAgain', 'נסה שוב');
-    }
-  };
-
   const handleSendLoginOtp = async () => {
     if (!phone.trim()) {
       Alert.alert(t('error.generic', 'שגיאה'), t('login.fillPhone', 'יש להזין מספר טלפון'));
@@ -260,86 +172,13 @@ export default function LoginScreen() {
     try {
       const res = await authPhoneOtpApi.sendLoginOtp(phone.trim());
       if (!res.ok) {
-        Alert.alert(t('error.generic', 'שגיאה'), otpErrorMessage(res.error));
+        Alert.alert(t('error.generic', 'שגיאה'), otpErrorMessage(t, res.error));
         return;
       }
-      setLoginStep('code');
-      setOtpCode('');
-      setOtpCooldownSec(45);
-      Alert.alert(
-        t('login.otp.sentTitle', 'קוד נשלח'),
-        t(
-          'login.otp.sentBody',
-          'אם המספר רשום אצלנו, תקבל הודעת SMS עם קוד אימות. הזן אותו למטה.'
-        )
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleVerifyLoginOtp = async () => {
-    const digits = otpCode.replace(/\D/g, '');
-    if (digits.length !== 6) {
-      Alert.alert(t('error.generic', 'שגיאה'), t('login.otp.enterSix', 'הזן את 6 הספרות שנשלחו ב-SMS'));
-      return;
-    }
-    const key = normalizePhoneKey(phone);
-    const existingFailures = await readLoginFailures(key);
-    if (existingFailures >= MAX_LOGIN_FAILURES) {
-      setLoginFailureCount(existingFailures);
-      Alert.alert(
-        t('login.tooManyAttemptsTitle', 'התחברות נחסמה'),
-        t('login.tooManyAttemptsMessage', 'בוצעו יותר מדי ניסיונות התחברות שגויים למספר זה. לא ניתן להתחבר כעת.')
-      );
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const res = await authPhoneOtpApi.verifyLoginOtp(phone.trim(), digits);
-      if (!res.ok || !res.user) {
-        const next = (await readLoginFailures(key)) + 1;
-        await writeLoginFailures(key, next);
-        setLoginFailureCount(next);
-        if (next >= MAX_LOGIN_FAILURES) {
-          Alert.alert(
-            t('login.tooManyAttemptsTitle', 'התחברות נחסמה'),
-            t('login.tooManyAttemptsMessage', 'בוצעו יותר מדי ניסיונות התחברות שגויים למספר זה. לא ניתן להתחבר כעת.')
-          );
-        } else {
-          const remaining = MAX_LOGIN_FAILURES - next;
-          Alert.alert(
-            t('error.generic', 'שגיאה'),
-            `${otpErrorMessage(res.error)}\n\n${t('login.attemptsRemaining', 'נותרו {{n}} ניסיונות.', { n: remaining })}`
-          );
-        }
-        return;
-      }
-      const authUser = res.user;
-      if (authUser.block) {
-        await writeLoginFailures(key, 0);
-        Alert.alert(t('account.blocked', 'חשבון חסום'), t('login.blockedCannotSignIn', 'החשבון שלך חסום. פנה למנהל.'));
-        return;
-      }
-      if (!isValidUserType(authUser.user_type)) {
-        await writeLoginFailures(key, 0);
-        Alert.alert(t('error.generic', 'שגיאה'), t('login.invalidUserType', 'סוג משתמש לא תקין'));
-        return;
-      }
-      await writeLoginFailures(key, 0);
-      const appUser = {
-        id: authUser.id,
-        phone: authUser.phone,
-        type: authUser.user_type,
-        name: authUser.name,
-        email: authUser.email ?? null,
-        image_url: authUser.image_url ?? null,
-        user_type: authUser.user_type,
-        block: authUser.block ?? false,
-        client_approved: authUser.client_approved !== false,
-      } as any;
-      login(appUser);
-      router.replace(appUser.type === 'admin' ? '/(tabs)' : '/(client-tabs)');
+      router.push({
+        pathname: '/login-otp',
+        params: { phone: phone.trim() },
+      } as unknown as Parameters<typeof router.push>[0]);
     } finally {
       setIsLoading(false);
     }
@@ -348,11 +187,7 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     Keyboard.dismiss();
     if (!usePasswordLogin) {
-      if (loginStep === 'phone') {
-        await handleSendLoginOtp();
-      } else {
-        await handleVerifyLoginOtp();
-      }
+      await handleSendLoginOtp();
       return;
     }
     if (!phone.trim() || !password.trim()) {
@@ -460,42 +295,24 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.root}>
+      <StatusBar style={onPrimary === '#FFFFFF' ? 'light' : 'dark'} />
 
-      {/* ── Calm studio backdrop: neutral base + restrained brand wash (static, readable) ── */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <LinearGradient
-          colors={['#E9E6E2', '#F1EEEA', '#F8F6F4', '#FDFCFB']}
-          locations={[0, 0.32, 0.64, 1]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <LinearGradient
-          colors={[
-            hexToRgba(primary, 0.1),
-            hexToRgba(primary, 0.035),
-            'rgba(255,255,255,0)',
-          ]}
-          locations={[0, 0.28, 1]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 0.72 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <LinearGradient
-          colors={[
-            'rgba(255,255,255,0)',
-            'rgba(255,255,255,0)',
-            hexToRgba(shiftHex(primary, -12), 0.065),
-          ]}
-          locations={[0, 0.52, 1]}
-          start={{ x: 0, y: 1 }}
-          end={{ x: 1, y: 0.35 }}
-          style={StyleSheet.absoluteFill}
-        />
+      <View
+        style={[styles.screenHeader, { backgroundColor: primary, paddingTop: insets.top }]}
+        accessibilityRole="header"
+      >
+        <View style={styles.screenHeaderInner}>
+          <Text
+            style={[styles.screenHeaderTitle, { color: onPrimary }]}
+            numberOfLines={1}
+            accessibilityRole="header"
+          >
+            {t('login.screenHeader', 'התחברות')}
+          </Text>
+        </View>
       </View>
 
-      {/* ── Content — same pattern as register.tsx for reliable keyboard focus ─ */}
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <SafeAreaView style={styles.safeArea} edges={['bottom']}>
         <KeyboardAwareScreenScroll
           style={styles.keyboardAvoid}
           contentContainerStyle={styles.scroll}
@@ -511,394 +328,236 @@ export default function LoginScreen() {
             accessible={false}
             style={[
               styles.dismissKeyboardArea,
-              {
-                minHeight:
-                  Dimensions.get('window').height - insets.top,
-              },
+              { minHeight: SH - insets.top - LOGIN_HEADER_CONTENT_H },
             ]}
             onPress={Keyboard.dismiss}
           >
-            {/* Centered login block: logo + card */}
-            <View style={styles.centeredBlock} pointerEvents="box-none">
-            {/* Logo — plain View (no Reanimated entering — can break TextInput focus) */}
-            <View style={styles.logoSection} pointerEvents="box-none">
-              <Animated.View style={logoFloatStyle} pointerEvents="box-none">
-                <Animated.View
-                  pointerEvents="none"
-                  style={[styles.logoGlow, { backgroundColor: hexToRgba(primary, 1) }, logoGlowStyle]}
-                />
-                <Image
-                  source={getCurrentClientLogo()}
-                  style={styles.logo}
-                  resizeMode="contain"
-                />
-              </Animated.View>
-            </View>
+            {/* ── FORM ZONE ── */}
+            <Animated.View
+              style={[styles.formZone, formEntranceStyle, { paddingBottom: bottomPad + 28 }]}
+              collapsable={false}
+            >
+              {/* Title */}
+              <View style={styles.header}>
+                <Text style={[styles.titleText, { color: businessColors.text }]}>
+                  {t('login.form.title', 'נתראה בפנים')}
+                </Text>
+                <Text
+                  style={[
+                    styles.subtitleText,
+                    { color: businessColors.textSecondary },
+                    { textAlign: isRtl ? 'right' : 'left' },
+                  ]}
+                >
+                  {usePasswordLogin
+                    ? t('login.form.subtitle', 'הכנס את הפרטים שלך כדי להמשיך')
+                    : t('login.otp.subtitlePhone', 'הזן מספר טלפון — נשלח אליך קוד ב-SMS')}
+                </Text>
+              </View>
 
-            {/* Form — glass card, visible labels, RTL-aware (register parity) */}
-            <View style={styles.cardWrapper} collapsable={false}>
-              <BlurView intensity={Platform.OS === 'ios' ? 42 : 24} tint="light" style={styles.cardBlur}>
-                <View style={[styles.cardInner, { paddingBottom: bottomPad + 12 }]}>
-                  <View style={[styles.accentCapsule, { backgroundColor: hexToRgba(primary, 0.55) }]} />
-
-                  <View style={styles.header}>
-                    <Text style={[styles.titleText, { color: businessColors.text }]}>
-                      {usePasswordLogin
-                        ? t('login.form.title', 'כניסה לחשבון')
-                        : loginStep === 'code'
-                          ? t('login.otp.title', 'קוד אימות')
-                          : t('login.form.title', 'כניסה לחשבון')}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.subtitleText,
-                        { color: businessColors.textSecondary },
-                        { textAlign: isRtl ? 'right' : 'left' },
-                      ]}
-                    >
-                      {usePasswordLogin
-                        ? t('login.form.subtitle', 'הכנס את הפרטים שלך כדי להמשיך')
-                        : loginStep === 'code'
-                          ? t('login.otp.subtitle', 'הזן את הקוד בן 6 הספרות שנשלח ב-SMS')
-                          : t('login.otp.subtitlePhone', 'הזן מספר טלפון — נשלח אליך קוד ב-SMS')}
-                    </Text>
+              {/* Phone field — label forced to visual right (RTL strip) */}
+              <View style={styles.fieldWrap} collapsable={false}>
+                <View
+                  style={[
+                    styles.fieldLabelPhoneWrap,
+                    isRtl
+                      ? styles.fieldLabelPhoneWrapRtl
+                      : styles.fieldLabelPhoneWrapLtr,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.fieldLabel,
+                      styles.fieldLabelPhoneText,
+                      { color: businessColors.textSecondary },
+                    ]}
+                  >
+                    {t('login.field.phone', 'טלפון')}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.inputRow,
+                    { flexDirection: isRtl ? 'row-reverse' : 'row' },
+                    {
+                      borderColor: phoneFocused ? primary : 'rgba(0,0,0,0.1)',
+                      backgroundColor: phoneFocused ? hexToRgba(primary, 0.03) : '#F7F7F7',
+                    },
+                  ]}
+                >
+                  <View accessible={false}>
+                    <Phone
+                      size={19}
+                      color={phoneFocused ? primary : '#ABABAB'}
+                      strokeWidth={1.7}
+                    />
                   </View>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      { textAlign: isRtl ? 'right' : 'left', color: businessColors.text },
+                    ]}
+                    placeholder={t('profile.edit.phonePlaceholder', 'מספר טלפון')}
+                    placeholderTextColor="#C0C0C0"
+                    value={phone}
+                    onChangeText={setPhone}
+                    keyboardType="phone-pad"
+                    autoCorrect={false}
+                    textContentType="telephoneNumber"
+                    showSoftInputOnFocus
+                    editable={!isLoginLocked}
+                    onFocus={() => setPhoneFocused(true)}
+                    onBlur={() => setPhoneFocused(false)}
+                  />
+                </View>
+              </View>
 
-                  <View style={styles.fieldWrap} collapsable={false}>
-                    <Text
-                      style={[
-                        styles.fieldLabel,
-                        { color: businessColors.textSecondary, textAlign: isRtl ? 'right' : 'left' },
-                      ]}
-                    >
-                      {t('login.field.phone', 'טלפון')}
-                    </Text>
-                    <View
-                      style={[
-                        styles.inputRow,
-                        { flexDirection: isRtl ? 'row-reverse' : 'row' },
-                        {
-                          borderColor: phoneFocused ? primary : hexToRgba(businessColors.border, 0.35),
-                          backgroundColor: hexToRgba(businessColors.surface, 0.65),
-                        },
-                      ]}
-                    >
-                      <View accessible={false}>
-                        <Phone
-                          size={20}
-                          color={phoneFocused ? primary : businessColors.textSecondary}
-                          strokeWidth={1.65}
-                        />
-                      </View>
-                      <TextInput
-                        style={[
-                          styles.input,
-                          { textAlign: isRtl ? 'right' : 'left', color: businessColors.text },
-                        ]}
-                        placeholder={t('profile.edit.phonePlaceholder', 'מספר טלפון')}
-                        placeholderTextColor={hexToRgba(businessColors.textSecondary, 0.55)}
-                        value={phone}
-                        onChangeText={setPhone}
-                        keyboardType="phone-pad"
-                        autoCorrect={false}
-                        textContentType="telephoneNumber"
-                        showSoftInputOnFocus
-                        editable={
-                          !isLoginLocked && (usePasswordLogin || loginStep === 'phone')
-                        }
-                        onFocus={() => setPhoneFocused(true)}
-                        onBlur={() => setPhoneFocused(false)}
-                      />
+              {/* Password field */}
+              {usePasswordLogin ? (
+                <View style={styles.fieldWrap} collapsable={false}>
+                  <Text
+                    style={[
+                      styles.fieldLabel,
+                      { color: businessColors.textSecondary, textAlign: isRtl ? 'right' : 'left' },
+                    ]}
+                  >
+                    {t('login.field.password', 'סיסמה')}
+                  </Text>
+                  <View
+                    style={[
+                      styles.inputRow,
+                      { flexDirection: isRtl ? 'row-reverse' : 'row' },
+                      {
+                        borderColor: passFocused ? primary : 'rgba(0,0,0,0.1)',
+                        backgroundColor: passFocused ? hexToRgba(primary, 0.03) : '#F7F7F7',
+                      },
+                    ]}
+                  >
+                    <View accessible={false}>
+                      <Lock size={19} color={passFocused ? primary : '#ABABAB'} strokeWidth={1.7} />
                     </View>
-                  </View>
-
-                  {!usePasswordLogin && loginStep === 'code' ? (
-                    <View style={styles.fieldWrap} collapsable={false}>
-                      <Text
-                        style={[
-                          styles.fieldLabel,
-                          { color: businessColors.textSecondary, textAlign: isRtl ? 'right' : 'left' },
-                        ]}
-                      >
-                        {t('login.field.otp', 'קוד אימות')}
-                      </Text>
-                      <View
-                        style={[
-                          styles.inputRow,
-                          { flexDirection: isRtl ? 'row-reverse' : 'row' },
-                          {
-                            borderColor: otpFocused ? primary : hexToRgba(businessColors.border, 0.35),
-                            backgroundColor: hexToRgba(businessColors.surface, 0.65),
-                          },
-                        ]}
-                      >
-                        <View accessible={false}>
-                          <KeyRound
-                            size={20}
-                            color={otpFocused ? primary : businessColors.textSecondary}
-                            strokeWidth={1.65}
-                          />
-                        </View>
-                        <TextInput
-                          style={[
-                            styles.input,
-                            { textAlign: isRtl ? 'right' : 'left', color: businessColors.text },
-                          ]}
-                          placeholder={t('login.otp.placeholder', 'קוד 6 ספרות')}
-                          placeholderTextColor={hexToRgba(businessColors.textSecondary, 0.55)}
-                          value={otpCode}
-                          onChangeText={(v) => setOtpCode(v.replace(/\D/g, '').slice(0, 6))}
-                          keyboardType="number-pad"
-                          maxLength={6}
-                          autoCorrect={false}
-                          showSoftInputOnFocus
-                          editable={!isLoginLocked}
-                          onFocus={() => setOtpFocused(true)}
-                          onBlur={() => setOtpFocused(false)}
-                        />
-                      </View>
-                      <TouchableOpacity
-                        onPress={() => {
-                          setLoginStep('phone');
-                          setOtpCode('');
-                        }}
-                        style={styles.otpBackRow}
-                        hitSlop={{ top: 8, bottom: 8 }}
-                      >
-                        <Text style={[styles.otpBackText, { color: primary }]}>
-                          {t('login.otp.changePhone', 'שינוי מספר טלפון')}
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={handleSendLoginOtp}
-                        disabled={isLoading || otpCooldownSec > 0 || isLoginLocked}
-                        style={styles.otpBackRow}
-                        hitSlop={{ top: 8, bottom: 8 }}
-                      >
-                        <Text
-                          style={[
-                            styles.otpBackText,
-                            {
-                              color:
-                                otpCooldownSec > 0
-                                  ? businessColors.textSecondary
-                                  : primary,
-                            },
-                          ]}
-                        >
-                          {otpCooldownSec > 0
-                            ? t('login.otp.resendWait', 'שלח שוב בעוד {{s}} שניות', {
-                                s: otpCooldownSec,
-                              })
-                            : t('login.otp.resend', 'שלח קוד מחדש')}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : null}
-
-                  {usePasswordLogin ? (
-                    <View style={styles.fieldWrap} collapsable={false}>
-                      <Text
-                        style={[
-                          styles.fieldLabel,
-                          { color: businessColors.textSecondary, textAlign: isRtl ? 'right' : 'left' },
-                        ]}
-                      >
-                        {t('login.field.password', 'סיסמה')}
-                      </Text>
-                      <View
-                        style={[
-                          styles.inputRow,
-                          { flexDirection: isRtl ? 'row-reverse' : 'row' },
-                          {
-                            borderColor: passFocused ? primary : hexToRgba(businessColors.border, 0.35),
-                            backgroundColor: hexToRgba(businessColors.surface, 0.65),
-                          },
-                        ]}
-                      >
-                        <View accessible={false}>
-                          <Lock
-                            size={20}
-                            color={passFocused ? primary : businessColors.textSecondary}
-                            strokeWidth={1.65}
-                          />
-                        </View>
-                        <TextInput
-                          style={[
-                            styles.input,
-                            { textAlign: isRtl ? 'right' : 'left', color: businessColors.text },
-                          ]}
-                          placeholder={t('login.passwordPlaceholder', 'סיסמה')}
-                          placeholderTextColor={hexToRgba(businessColors.textSecondary, 0.55)}
-                          value={password}
-                          onChangeText={setPassword}
-                          secureTextEntry={!showPassword}
-                          autoCapitalize="none"
-                          textContentType="password"
-                          showSoftInputOnFocus
-                          editable={!isLoginLocked}
-                          onFocus={() => setPassFocused(true)}
-                          onBlur={() => setPassFocused(false)}
-                        />
-                        <TouchableOpacity
-                          onPress={() => setShowPassword((v) => !v)}
-                          style={styles.eyeBtn}
-                          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                          accessibilityRole="button"
-                          accessibilityLabel={
-                            showPassword
-                              ? t('login.a11y.hidePassword', 'הסתר סיסמה')
-                              : t('login.a11y.showPassword', 'הצג סיסמה')
-                          }
-                        >
-                          {showPassword ? (
-                            <EyeOff
-                              size={20}
-                              color={passFocused ? primary : businessColors.textSecondary}
-                              strokeWidth={1.65}
-                            />
-                          ) : (
-                            <Eye
-                              size={20}
-                              color={passFocused ? primary : businessColors.textSecondary}
-                              strokeWidth={1.65}
-                            />
-                          )}
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ) : null}
-
-                  {isLoginLocked ? (
-                    <Text
+                    <TextInput
                       style={[
-                        styles.lockBanner,
-                        { color: businessColors.warning, textAlign: isRtl ? 'right' : 'left' },
+                        styles.input,
+                        { textAlign: isRtl ? 'right' : 'left', color: businessColors.text },
                       ]}
-                    >
-                      {t(
-                        'login.lockedHint',
-                        'התחברות למספר טלפון זה חסמה עקב ניסיונות שגויים חוזרים.',
-                      )}
-                    </Text>
-                  ) : null}
-
-                  <Animated.View style={btnAnimStyle}>
+                      placeholder={t('login.passwordPlaceholder', 'סיסמה')}
+                      placeholderTextColor="#C0C0C0"
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      textContentType="password"
+                      showSoftInputOnFocus
+                      editable={!isLoginLocked}
+                      onFocus={() => setPassFocused(true)}
+                      onBlur={() => setPassFocused(false)}
+                    />
                     <TouchableOpacity
-                      onPressIn={() => {
-                        btnScale.value = withTiming(0.97, { duration: 90 });
-                      }}
-                      onPressOut={() => {
-                        btnScale.value = withSpring(1, { damping: 16, stiffness: 280 });
-                      }}
-                      onPress={handleLogin}
-                      disabled={isLoading || isLoginLocked}
-                      activeOpacity={1}
+                      onPress={() => setShowPassword((v) => !v)}
+                      style={styles.eyeBtn}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                       accessibilityRole="button"
-                      accessibilityState={{ disabled: isLoading || isLoginLocked }}
+                      accessibilityLabel={
+                        showPassword
+                          ? t('login.a11y.hidePassword', 'הסתר סיסמה')
+                          : t('login.a11y.showPassword', 'הצג סיסמה')
+                      }
                     >
-                      <View
-                        style={[
-                          styles.btnOuter,
-                          (isLoading || isLoginLocked) && styles.btnOuterDisabled,
-                        ]}
-                      >
-                        <LinearGradient
-                          colors={[
-                            shiftHex(primary, 18),
-                            primary,
-                            shiftHex(primary, -22),
-                          ]}
-                          start={{ x: 0, y: 0.5 }}
-                          end={{ x: 1, y: 0.5 }}
-                          style={styles.btn}
-                        >
-                          {isLoading ? (
-                            <ActivityIndicator color="#FFFFFF" size="small" />
-                          ) : (
-                            <Text style={styles.btnText}>
-                              {isLoginLocked
-                                ? t('login.cta.locked', 'התחברות חסומה')
-                                : usePasswordLogin
-                                  ? t('login.cta.signIn', 'כניסה')
-                                  : loginStep === 'code'
-                                    ? t('login.cta.verifyOtp', 'אמת קוד והתחבר')
-                                    : t('login.cta.sendOtp', 'שלח קוד ב-SMS')}
-                            </Text>
-                          )}
-                        </LinearGradient>
-                      </View>
+                      {showPassword ? (
+                        <EyeOff size={19} color={passFocused ? primary : '#ABABAB'} strokeWidth={1.7} />
+                      ) : (
+                        <Eye size={19} color={passFocused ? primary : '#ABABAB'} strokeWidth={1.7} />
+                      )}
                     </TouchableOpacity>
-                  </Animated.View>
-
-                  <View style={styles.linksWrap}>
-                    <TouchableOpacity
-                      onPress={() => setUsePasswordLogin((v) => !v)}
-                      hitSlop={{ top: 10, bottom: 10 }}
-                    >
-                      <Text
-                        style={[
-                          styles.linkMuted,
-                          { color: businessColors.textSecondary },
-                          { textAlign: 'center' },
-                        ]}
-                      >
-                        {usePasswordLogin
-                          ? t('login.switchToOtp', 'התחברות עם קוד SMS')
-                          : t('login.switchToPassword', 'כניסת מנהל / סיסמה')}
-                      </Text>
-                    </TouchableOpacity>
-
-                    {usePasswordLogin ? (
-                      <TouchableOpacity
-                        onPress={() => setIsForgotOpen(true)}
-                        hitSlop={{ top: 10, bottom: 10 }}
-                      >
-                        <Text
-                          style={[
-                            styles.linkMuted,
-                            { color: businessColors.textSecondary },
-                            { textAlign: 'center' },
-                          ]}
-                        >
-                          {t('login.forgotPassword', 'שכחת סיסמה?')}
-                        </Text>
-                      </TouchableOpacity>
-                    ) : null}
-
-                    <View style={styles.dividerRow}>
-                      <View
-                        style={[
-                          styles.divider,
-                          { backgroundColor: hexToRgba(businessColors.border, 0.25) },
-                        ]}
-                      />
-                    </View>
-
-                    <View
-                      style={[
-                        styles.registerRow,
-                        { flexDirection: isRtl ? 'row-reverse' : 'row' },
-                      ]}
-                    >
-                      <Text
-                        style={[styles.registerText, { color: businessColors.textSecondary }]}
-                      >
-                        {t('login.noAccount', 'אין לך חשבון?')}
-                      </Text>
-                      <Link href="/register" asChild>
-                        <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
-                          <Text style={[styles.registerAction, { color: primary }]}>
-                            {t('login.signUpNow', 'הרשם עכשיו')}
-                          </Text>
-                        </TouchableOpacity>
-                      </Link>
-                    </View>
                   </View>
                 </View>
-              </BlurView>
-            </View>
-          </View>
+              ) : null}
+
+              {isLoginLocked ? (
+                <Text
+                  style={[
+                    styles.lockBanner,
+                    { color: businessColors.warning, textAlign: isRtl ? 'right' : 'left' },
+                  ]}
+                >
+                  {t('login.lockedHint', 'התחברות למספר טלפון זה חסמה עקב ניסיונות שגויים חוזרים.')}
+                </Text>
+              ) : null}
+
+              {/* CTA button */}
+              <Animated.View style={[btnAnimStyle, styles.btnWrap]}>
+                <TouchableOpacity
+                  onPressIn={() => { btnScale.value = withTiming(0.97, { duration: 90 }); }}
+                  onPressOut={() => { btnScale.value = withSpring(1, { damping: 16, stiffness: 280 }); }}
+                  onPress={handleLogin}
+                  disabled={isLoading || isLoginLocked}
+                  activeOpacity={1}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: isLoading || isLoginLocked }}
+                >
+                  <View style={[styles.btnOuter, (isLoading || isLoginLocked) && styles.btnOuterDisabled]}>
+                    <LinearGradient
+                      colors={[shiftHex(primary, 16), primary, shiftHex(primary, -20)]}
+                      start={{ x: 0, y: 0.5 }}
+                      end={{ x: 1, y: 0.5 }}
+                      style={styles.btn}
+                    >
+                      {isLoading ? (
+                        <ActivityIndicator color="#FFFFFF" size="small" />
+                      ) : (
+                        <Text style={styles.btnText}>
+                          {isLoginLocked
+                            ? t('login.cta.locked', 'התחברות חסומה')
+                            : usePasswordLogin
+                              ? t('login.cta.signIn', 'כניסה')
+                              : t('login.cta.sendOtp', 'שלח קוד ב-SMS')}
+                        </Text>
+                      )}
+                    </LinearGradient>
+                  </View>
+                </TouchableOpacity>
+              </Animated.View>
+
+              {/* Links */}
+              <View style={styles.linksWrap}>
+                <TouchableOpacity
+                  onPress={() => setUsePasswordLogin((v) => !v)}
+                  hitSlop={{ top: 10, bottom: 10 }}
+                >
+                  <Text style={[styles.linkMuted, { color: businessColors.textSecondary, textAlign: 'center' }]}>
+                    {usePasswordLogin
+                      ? t('login.switchToOtp', 'התחברות עם קוד SMS')
+                      : t('login.switchToPassword', 'כניסת מנהל / סיסמה')}
+                  </Text>
+                </TouchableOpacity>
+
+                {usePasswordLogin ? (
+                  <TouchableOpacity onPress={() => setIsForgotOpen(true)} hitSlop={{ top: 10, bottom: 10 }}>
+                    <Text style={[styles.linkMuted, { color: businessColors.textSecondary, textAlign: 'center' }]}>
+                      {t('login.forgotPassword', 'שכחת סיסמה?')}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+
+                <View style={styles.dividerRow}>
+                  <View style={styles.divider} />
+                </View>
+
+                <View style={[styles.registerRow, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
+                  <Text style={[styles.registerText, { color: businessColors.textSecondary }]}>
+                    {t('login.noAccount', 'אין לך חשבון?')}
+                  </Text>
+                  <Link href="/register" asChild>
+                    <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
+                      <Text style={[styles.registerAction, { color: primary }]}>
+                        {t('login.signUpNow', 'הרשם עכשיו')}
+                      </Text>
+                    </TouchableOpacity>
+                  </Link>
+                </View>
+              </View>
+            </Animated.View>
           </Pressable>
         </KeyboardAwareScreenScroll>
       </SafeAreaView>
@@ -1032,9 +691,22 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  // ── Root & scaffold ──
   root: {
     flex: 1,
-    backgroundColor: '#F1EEEA',
+    backgroundColor: '#FFFFFF',
+  },
+  screenHeader: {},
+  screenHeaderInner: {
+    minHeight: LOGIN_HEADER_CONTENT_H,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  screenHeaderTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: 0.2,
   },
   safeArea: {
     flex: 1,
@@ -1044,113 +716,81 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 28,
-    paddingBottom: 32,
   },
   dismissKeyboardArea: {
     flexGrow: 1,
     width: '100%',
     alignSelf: 'stretch',
-    justifyContent: 'center',
   },
 
-  centeredBlock: {
-    width: '100%',
-    maxWidth: 420,
-    alignSelf: 'center',
-    paddingHorizontal: 22,
+  // ── FORM ZONE ──
+  formZone: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 26,
+    paddingTop: 24,
+    minHeight: SH * 0.6,
   },
 
-  logoSection: {
-    alignItems: 'center',
-    paddingBottom: 22,
-  },
-  logoGlow: {
-    position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    alignSelf: 'center',
-    top: -40,
-  },
-  logo: {
-    width: SW * 0.62,
-    height: 108,
-    alignSelf: 'center',
-  },
-
-  cardWrapper: {
-    borderRadius: 26,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth * 2,
-    borderColor: 'rgba(45, 42, 38, 0.08)',
-    shadowColor: '#1a1208',
-    shadowOpacity: 0.08,
-    shadowRadius: 32,
-    shadowOffset: { width: 0, height: 16 },
-    elevation: 8,
-  },
-  cardBlur: {
-    width: '100%',
-  },
-  cardInner: {
-    paddingHorizontal: 22,
-    paddingTop: 4,
-    backgroundColor: Platform.OS === 'android' ? 'rgba(255,255,255,0.78)' : 'transparent',
-  },
-
-  accentCapsule: {
-    width: 36,
-    height: 3,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 16,
-    marginBottom: 20,
-  },
-
+  // ── Header ──
   header: {
     alignItems: 'center',
-    marginBottom: 22,
-    paddingHorizontal: 4,
+    marginBottom: 26,
   },
   titleText: {
-    fontSize: 26,
-    fontWeight: '600',
+    fontSize: 24,
+    fontWeight: '700',
     marginBottom: 8,
-    letterSpacing: 0.2,
+    letterSpacing: -0.2,
     textAlign: 'center',
   },
   subtitleText: {
     fontSize: 14,
-    lineHeight: 22,
+    lineHeight: 21,
     textAlign: 'center',
-    maxWidth: 320,
+    maxWidth: 300,
   },
 
+  // ── Fields ──
   fieldWrap: {
-    marginBottom: 16,
+    marginBottom: 14,
   },
   fieldLabel: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     marginBottom: 8,
-    letterSpacing: 0.15,
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+  },
+  fieldLabelPhoneWrap: {
+    width: '100%',
+    marginBottom: 8,
+  },
+  fieldLabelPhoneWrapRtl: {
+    direction: 'rtl',
+    alignItems: 'flex-start',
+  },
+  fieldLabelPhoneWrapLtr: {
+    direction: 'ltr',
+    alignItems: 'flex-end',
+  },
+  fieldLabelPhoneText: {
+    marginBottom: 0,
+    textAlign: 'right',
   },
   inputRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 18,
-    minHeight: 56,
-    paddingHorizontal: 16,
-    paddingVertical: 4,
+    borderRadius: 14,
+    minHeight: 54,
+    paddingHorizontal: 15,
+    paddingVertical: 2,
     borderWidth: 1,
-    gap: 12,
+    gap: 11,
   },
   input: {
     flex: 1,
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '400',
     paddingVertical: Platform.OS === 'ios' ? 12 : 10,
   },
   lockBanner: {
@@ -1166,45 +806,40 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
+  // ── CTA Button ──
+  btnWrap: {
+    marginTop: 10,
+  },
   btnOuter: {
-    borderRadius: 18,
+    borderRadius: 16,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 6 },
     elevation: 6,
-    marginTop: 4,
   },
   btnOuterDisabled: {
-    opacity: 0.5,
+    opacity: 0.46,
   },
   btn: {
     minHeight: 56,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    paddingHorizontal: 20,
   },
   btnText: {
     color: '#FFFFFF',
     fontSize: 17,
     fontWeight: '700',
-    letterSpacing: 0.25,
+    letterSpacing: 0.3,
   },
 
+  // ── Links ──
   linksWrap: {
     alignItems: 'center',
-    marginTop: 22,
+    marginTop: 20,
     gap: 12,
-  },
-  otpBackRow: {
-    alignSelf: 'flex-start',
-    marginTop: 8,
-  },
-  otpBackText: {
-    fontSize: 14,
-    fontWeight: '600',
   },
   linkMuted: {
     fontSize: 14,
@@ -1212,19 +847,20 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   dividerRow: {
-    width: '42%',
+    width: '44%',
     alignItems: 'center',
-    marginVertical: 4,
+    marginVertical: 2,
   },
   divider: {
     width: '100%',
     height: StyleSheet.hairlineWidth,
+    backgroundColor: '#E5E5E5',
   },
   registerRow: {
     alignItems: 'center',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 6,
+    gap: 5,
     rowGap: 4,
   },
   registerText: {
@@ -1235,9 +871,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
+  // ── Forgot Password Modal ──
   modalOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(26, 18, 12, 0.48)',
+    backgroundColor: 'rgba(10, 9, 7, 0.6)',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 22,
@@ -1245,73 +882,75 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 400,
-    backgroundColor: '#FDFCFA',
-    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 26,
     overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth * 2,
-    borderColor: 'rgba(45, 42, 38, 0.08)',
-    shadowColor: '#1a1208',
-    shadowOpacity: 0.2,
-    shadowRadius: 28,
-    shadowOffset: { width: 0, height: 14 },
-    elevation: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.28,
+    shadowRadius: 32,
+    shadowOffset: { width: 0, height: 16 },
+    elevation: 16,
   },
   modalStripe: {
     height: 4,
     width: '100%',
   },
   modalBody: {
-    padding: 22,
+    padding: 24,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: '600',
+    fontWeight: '700',
     textAlign: 'center',
     marginBottom: 8,
-    letterSpacing: 0.2,
+    letterSpacing: -0.1,
   },
   modalSubtitle: {
     fontSize: 13,
     textAlign: 'center',
-    marginBottom: 18,
+    marginBottom: 20,
     lineHeight: 20,
   },
   modalFieldLabel: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     marginBottom: 6,
-    letterSpacing: 0.12,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
   },
   modalInputRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: 13,
     minHeight: 52,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: 'rgba(45, 42, 38, 0.1)',
-    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderColor: 'rgba(0,0,0,0.1)',
+    backgroundColor: '#F7F7F7',
     gap: 10,
   },
   modalInput: {
     flex: 1,
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '400',
     paddingVertical: Platform.OS === 'ios' ? 10 : 8,
   },
   modalActions: {
+    flexDirection: 'row',
     gap: 12,
     marginTop: 20,
   },
   modalBtn: {
     flex: 1,
     minHeight: 50,
-    borderRadius: 16,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cancelBtn: {
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: '#F4F4F4',
     borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
   },
   cancelBtnText: {
     fontSize: 15,

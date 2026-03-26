@@ -1,0 +1,23 @@
+{
+  "name": "barber-demo-video",
+  "version": "1.0.0",
+  "description": "15-second product demo video for EliyaMoshe barber booking app",
+  "main": "src/index.ts",
+  "scripts": {
+    "preview": "npx remotion preview",
+    "render": "npx remotion render BarberDemo out/demo.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.440",
+    "@remotion/google-fonts": "^4.0.291",
+    "@remotion/transitions": "^4.0.291",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "remotion": "^4.0.291"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "typescript": "^5.4.0"
+  }
+}

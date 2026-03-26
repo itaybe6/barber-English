@@ -384,8 +384,9 @@
   "category": { "gel": "Gel polish", "feet": "Pedicure polish", "manicure": "Manicure" },
   "admin2": { "hoursAdmin": { "title": "Work constraints", "segment": { "hours": "Hours", "singleDay": "Single day", "multiDays": "Multiple days" }, "pickDateShort": "Pick a date", "closedHours": "Closed hours", "pickDateAllDay": "Pick a date (closed all day)", "pickDateRangeAllDay": "Pick a date range (closed all day)", "selectedRange": "Selected range:", "allDay": "All day", "chooseClosedHours": "Choose closed hours", "start": "Start", "end": "End", "upcomingConstraints": "Upcoming constraints", "noUpcomingConstraints": "No upcoming constraints", "noReason": "No reason", "saveCTA": "Save constraints" } },
   "login": {
+    "screenHeader": "Sign in",
     "form": {
-      "title": "Sign in your account",
+      "title": "See you inside",
       "subtitle": "Enter your details to access your account"
     },
     "cta": { "signIn": "Sign In", "signingIn": "Signing in…", "locked": "Sign-in blocked" },
@@ -409,7 +410,12 @@
     "signInError": "An error occurred during sign-in",
     "enterEmail": "Please enter an email",
     "resetError": "Error requesting password reset",
-    "emailSent": { "title": "Email Sent", "message": "We sent you a password reset email. Check your inbox." }
+    "emailSent": { "title": "Email Sent", "message": "We sent you a password reset email. Check your inbox." },
+    "otp": {
+      "heroTitle": "One quick step",
+      "passcodeHint": "Enter the 6-digit code we sent by SMS",
+      "a11y": { "delete": "Delete" }
+    }
   },
   "register": {
     "steps": { "phone": "Phone", "code": "Code", "profile": "Profile" },

@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { View, useWindowDimensions, I18nManager } from 'react-native';
+import BookingAnimatedCalendar from '@/components/book-appointment/games-calendar/BookingAnimatedCalendar';
 
 type DayObj = { fullDate: Date };
 
@@ -12,6 +13,8 @@ type Props = {
   selectedDayIndex: number | null;
   dayAvailability: Record<string, number>;
   language: string;
+  /** Business primary (theme) for selection + month indicator */
+  primaryColor: string;
   onSelectDayIndex: (index: number | null) => void;
   onClearTime: () => void;
 };
@@ -22,113 +25,48 @@ export default function DaySelection({
   days,
   bookingOpenDays,
   selectedDate,
-  selectedDayIndex,
   dayAvailability,
   language,
+  primaryColor,
   onSelectDayIndex,
   onClearTime,
 }: Props) {
-  const content = React.useMemo(() => {
-    const start = new Date();
-    const end = new Date();
-    end.setDate(start.getDate() + Math.max(0, bookingOpenDays - 1));
-
-    const monthStart = new Date(start.getFullYear(), start.getMonth(), 1);
-    const monthEnd = new Date(end.getFullYear(), end.getMonth(), 1);
-
-    const months: Date[] = [];
-    const cursor = new Date(monthStart);
-    while (cursor <= monthEnd) {
-      months.push(new Date(cursor));
-      cursor.setMonth(cursor.getMonth() + 1);
-    }
-
-    const isSameDate = (a: Date, b: Date) => a.toDateString() === b.toDateString();
-    const rangeStart = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-
-    return { start, end, months, isSameDate, rangeStart };
-  }, [bookingOpenDays]);
+  const { height: windowHeight } = useWindowDimensions();
 
   if (!visible) return null;
 
+  /** Taller slot + vertical centering so the calendar sits nearer the middle of the screen */
+  const centerSlotMinHeight = Math.max(520, windowHeight * 0.58);
+
   return (
-    <View style={[styles.section, styles.calendarSectionCard]}>
-      <View style={styles.calendarFixedBox}>
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {content.months.map((m) => {
-            const year = m.getFullYear();
-            const month = m.getMonth();
-            const firstDayIdx = new Date(year, month, 1).getDay();
-            const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-            const cells: (Date | null)[] = Array(firstDayIdx).fill(null);
-            for (let d = 1; d <= daysInMonth; d++) {
-              cells.push(new Date(year, month, d));
-            }
-
-            const weeks: (Date | null)[][] = [];
-            for (let i = 0; i < cells.length; i += 7) {
-              weeks.push(cells.slice(i, i + 7));
-            }
-
-            const monthLabel = new Date(year, month, 1).toLocaleString(language === 'he' ? 'he-IL' : 'en-US', {
-              month: 'long',
-              year: 'numeric',
-            });
-
-            return (
-              <View key={`m-${year}-${month}`} style={{ marginBottom: 10 }}>
-                <Text style={styles.calendarMonthTitle}>{monthLabel}</Text>
-                {weeks.map((week, wi) => (
-                  <View key={`w-${year}-${month}-${wi}`} style={styles.calendarGrid}>
-                    {week.map((dateObj, di) => {
-                      if (!dateObj) {
-                        return <View key={`c-${year}-${month}-${wi}-${di}`} style={[styles.calendarCell, { backgroundColor: 'transparent' }]} />;
-                      }
-                      const inRange = dateObj >= content.rangeStart && dateObj <= content.end;
-                      const dsIso = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
-                      const hasAvail = (dayAvailability[dsIso] ?? 0) > 0;
-                      const isSel = selectedDate ? content.isSameDate(dateObj, selectedDate) : false;
-                      return (
-                        <TouchableOpacity
-                          key={`c-${year}-${month}-${wi}-${di}`}
-                          disabled={!inRange}
-                          onPress={() => {
-                            const idx = days.findIndex((d) => d.fullDate.toDateString() === dateObj.toDateString());
-                            onSelectDayIndex(idx >= 0 ? idx : null);
-                            onClearTime();
-                          }}
-                          style={[
-                            styles.calendarCell,
-                            !inRange && styles.calendarCellDisabled,
-                            isSel && styles.calendarCellSelected,
-                          ]}
-                          activeOpacity={0.7}
-                        >
-                          <Text
-                            style={{
-                              fontSize: 14,
-                              fontWeight: '700',
-                              color: isSel ? '#FFFFFF' : !inRange ? '#C7C7CC' : '#374151',
-                            }}
-                          >
-                            {dateObj.getDate()}
-                          </Text>
-                          {inRange && (
-                            <View style={[styles.calendarAvailDot, { backgroundColor: hasAvail ? '#34C759' : '#FF3B30' }]} />
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                ))}
-              </View>
-            );
-          })}
-        </ScrollView>
+    <View
+      style={{
+        width: '100%',
+        minHeight: centerSlotMinHeight,
+        justifyContent: 'center',
+        paddingVertical: 12,
+      }}
+    >
+      <View style={[styles.calendarSectionCard, { marginTop: 0 }]}>
+        <View
+          style={[
+            styles.calendarFixedBox,
+            /* Hebrew/RTL: natural horizontal scroll + weekday order; English keeps LTR calendar */
+            !I18nManager.isRTL && { direction: 'ltr' },
+          ]}
+        >
+          <BookingAnimatedCalendar
+            bookingOpenDays={bookingOpenDays}
+            dayAvailability={dayAvailability}
+            selectedDate={selectedDate}
+            days={days}
+            language={language}
+            primaryColor={primaryColor}
+            onSelectDayIndex={onSelectDayIndex}
+            onClearTime={onClearTime}
+          />
+        </View>
       </View>
-      {/* Legends intentionally removed for a cleaner rectangular calendar view */}
     </View>
   );
 }
-

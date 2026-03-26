@@ -25,6 +25,11 @@ export type TabsProps = {
   style?: ViewStyle;
   /** Icon on top, animated label below (e.g. booking step bar) */
   stacked?: boolean;
+  /**
+   * When true (default), tab order is mirrored in RTL. Set false for a fixed left-to-right order
+   * (e.g. booking: barber → service → date → time).
+   */
+  rtlMirror?: boolean;
 };
 type AnimatedIconProps = {
   name: LucideIconName;
@@ -54,12 +59,14 @@ export default function AnimatedTabs({
   inactiveBackgroundColor = '#ddd',
   style,
   stacked = false,
+  rtlMirror = true,
 }: TabsProps) {
   const isRTL = I18nManager.isRTL;
+  const mirror = rtlMirror && isRTL;
 
-  // In RTL: render tabs right-to-left so "first" tab stays on the left visually
-  const displayData = isRTL ? [...data].reverse() : data;
-  const displaySelected = isRTL ? data.length - 1 - selectedIndex : selectedIndex;
+  // In RTL (when rtlMirror): render tabs right-to-left so "first" tab stays on the start edge
+  const displayData = mirror ? [...data].reverse() : data;
+  const displaySelected = mirror ? data.length - 1 - selectedIndex : selectedIndex;
 
   return (
     <Animated.View
@@ -75,36 +82,41 @@ export default function AnimatedTabs({
     >
       {displayData.map((item, displayIndex) => {
         // Map display index back to real index for onChange
-        const realIndex = isRTL ? data.length - 1 - displayIndex : displayIndex;
+        const realIndex = mirror ? data.length - 1 - displayIndex : displayIndex;
         const isSelected = displayIndex === displaySelected;
 
         const labelFontSize = stacked ? 10 : 14;
         const labelWeight = stacked ? ('600' as const) : ('700' as const);
         const iconSize = stacked ? 18 : 20;
+        const stackedMinH = stacked ? 54 : 48;
+        const stackedRadius = stacked ? 12 : 14;
+        const stackedGap = stacked ? 2 : _spacing;
+        const stackedPadH = stacked ? _spacing : _spacing * 2;
+        const stackedPadV = stacked ? 6 : _spacing * 2;
 
         return (
           <MotiView
             layout={layoutAnimation}
             key={`${item.icon}-${displayIndex}`}
-            animate={{
-              backgroundColor: isSelected ? activeBackgroundColor : inactiveBackgroundColor,
-            }}
             style={{
               flex: isSelected ? 2 : 1,
-              borderRadius: stacked ? 12 : 14,
+              borderRadius: stackedRadius,
               overflow: 'hidden',
-              minHeight: stacked ? 54 : 48,
+              minHeight: stackedMinH,
+              // Apply on `style`, not `animate` — Moti/Reanimated often fails to paint
+              // `activeBackgroundColor` when animating from `transparent` (booking step bar).
+              backgroundColor: isSelected ? activeBackgroundColor : inactiveBackgroundColor,
             }}
           >
             <Pressable
               style={{
                 flex: 1,
                 flexDirection: stacked ? 'column' : 'row',
-                gap: stacked ? 2 : _spacing,
+                gap: stackedGap,
                 justifyContent: 'center',
                 alignItems: 'center',
-                paddingHorizontal: stacked ? _spacing : _spacing * 2,
-                paddingVertical: stacked ? 6 : _spacing * 2,
+                paddingHorizontal: stackedPadH,
+                paddingVertical: stackedPadV,
               }}
               onPress={() => onChange?.(realIndex)}
             >

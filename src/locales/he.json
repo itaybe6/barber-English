@@ -93,6 +93,9 @@
   "booking.price": "₪",
   "booking.selectBarber": "בחר/י איש שירות",
   "booking.selectBarberHint": "עם מי תרצה/י לקבוע?",
+  "booking.selectBarberCarouselHint": "גלולו בין אנשי הצוות — לחצו לבחירה",
+  "booking.barberSpecialist": "איש מקצוע",
+  "booking.noBarbers": "אין אנשי צוות זמינים",
   "booking.continue": "המשך",
   "booking.bookNow": "קבע תור",
   "booking.checking": "בודק..."

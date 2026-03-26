@@ -23,6 +23,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import type { Service } from '@/lib/supabase';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
+import { BOOKING_TABS_HEIGHT } from '@/components/book-appointment/BookingStepTabs';
+import { getClientTabBarBottomInset } from '@/constants/clientTabBarInsets';
 
 const SCREEN = Dimensions.get('window');
 const WIN_H = SCREEN.height;
@@ -204,7 +206,6 @@ type Props = {
   externalScrollX?: SharedValue<number>;
   t: any;
   onSelectService: (service: Service, index: number) => void;
-  onContinue?: () => void;
 };
 
 export default function ServiceSelection({
@@ -219,7 +220,6 @@ export default function ServiceSelection({
   selectedServiceIds,
   t,
   onSelectService,
-  onContinue,
 }: Props) {
   const { height: windowHeight } = useWindowDimensions();
   const { colors } = useBusinessColors();
@@ -230,9 +230,8 @@ export default function ServiceSelection({
   /** Matches book-appointment spacer below step tabs: `TOP_OFFSET + 12` */
   const SCROLL_TOP_EXTRA = 12;
   /** Same inset as booking step bar / client floating tab bar */
-  const tabBarBottomOffset = safeAreaBottom > 0 ? safeAreaBottom + 2 : 8;
-  /** Keep aligned with `BOOKING_TABS_HEIGHT` in BookingStepTabs */
-  const TAB_ROW_HEIGHT = 62;
+  const tabBarBottomOffset = getClientTabBarBottomInset(safeAreaBottom);
+  const TAB_ROW_HEIGHT = BOOKING_TABS_HEIGHT;
   const LIST_GAP_ABOVE_TAB = 10;
   const bottomChrome = tabBarBottomOffset + TAB_ROW_HEIGHT + LIST_GAP_ABOVE_TAB;
 
@@ -272,7 +271,7 @@ export default function ServiceSelection({
 
   if (!visible) return null;
 
-  const footerPad = Math.max(safeAreaBottom, 20) + 120;
+  const footerPad = Math.max(safeAreaBottom, 20) + 72;
 
   return (
     <Animated.View
@@ -341,23 +340,7 @@ export default function ServiceSelection({
                   />
                 );
               })}
-              {onContinue && (selectedServiceIds?.length ?? 0) > 0 ? (
-                <Animated.View entering={FadeInDown.delay(120).duration(380)} style={styles.continueBtnWrap}>
-                  <TouchableOpacity
-                    onPress={onContinue}
-                    activeOpacity={0.88}
-                    style={[styles.continueBtn, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
-                  >
-                    <Text style={styles.continueBtnText}>
-                      {t('booking.continue', 'Continue')}
-                      {(selectedServiceIds?.length ?? 0) > 1 ? ` (${selectedServiceIds!.length})` : ''}
-                    </Text>
-                    <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
-                  </TouchableOpacity>
-                </Animated.View>
-              ) : (
-                <View style={{ height: 8 }} />
-              )}
+              <View style={{ height: 8 }} />
             </Animated.ScrollView>
 
             {/* Title floats above scroll; gradient hides hard edge so carousel runs underneath */}
@@ -484,31 +467,5 @@ const styles = StyleSheet.create({
     color: '#374151',
     fontSize: 12,
     fontWeight: '600',
-  },
-  continueBtnWrap: {
-    marginTop: 28,
-    alignItems: 'center',
-    paddingHorizontal: 8,
-  },
-  continueBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 16,
-    paddingHorizontal: 36,
-    borderRadius: 28,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
-    width: '100%',
-    maxWidth: 400,
-  },
-  continueBtnText: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: -0.3,
   },
 });

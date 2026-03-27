@@ -523,7 +523,10 @@
       "hoursBefore": "Hours before appointment",
       "customHoursTitle": "Custom Hours",
       "customHoursMessage": "Enter number of hours (0-168):",
-      "customHoursLabel": "Custom hours..."
+      "customHoursLabel": "Custom hours...",
+      "clientSwapTitle": "Client appointment swap",
+      "clientSwapSubtitle": "Allow clients to exchange time slots with each other",
+      "clientSwapSaveFailed": "Could not update swap setting"
     },
     "notifications": { "subtitle": "Receive notifications about appointments and updates" },
     "services": {

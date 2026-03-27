@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { useAuthStore } from '@/stores/authStore';
 import { swapRequestsApi } from '@/lib/api/swapRequests';
+import { businessProfileApi, isClientSwapEnabled } from '@/lib/api/businessProfile';
 import { supabase, getBusinessId } from '@/lib/supabase';
 import type { SwapRequest, Appointment } from '@/lib/supabase';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
@@ -36,6 +37,11 @@ export default function SwapOpportunities() {
     if (!user?.phone) return;
     setIsLoading(true);
     try {
+      const profile = await businessProfileApi.getProfile();
+      if (!isClientSwapEnabled(profile)) {
+        setOpportunities([]);
+        return;
+      }
       const businessId = getBusinessId();
       const today = new Date();
       const dates: string[] = [];

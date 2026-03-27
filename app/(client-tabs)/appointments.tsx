@@ -11,7 +11,7 @@ import { supabase, getBusinessId } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { checkWaitlistAndNotify, notifyServiceWaitlistClients } from '@/lib/api/waitlistNotifications';
 import { notificationsApi } from '@/lib/api/notifications';
-import { businessProfileApi } from '@/lib/api/businessProfile';
+import { businessProfileApi, isClientSwapEnabled } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
 import { servicesApi } from '@/lib/api/services';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
@@ -149,6 +149,7 @@ export default function ClientAppointmentsScreen() {
   const [serviceNameList, setServiceNameList] = useState<string[]>([]);
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [swapAppointment, setSwapAppointment] = useState<AvailableTimeSlot | null>(null);
+  const [clientSwapEnabled, setClientSwapEnabled] = useState(true);
 
   // Load manager phone (first admin user)
   useEffect(() => {
@@ -186,6 +187,7 @@ export default function ClientAppointmentsScreen() {
         if (profile?.min_cancellation_hours !== undefined) {
           setMinCancellationHours(profile.min_cancellation_hours);
         }
+        setClientSwapEnabled(isClientSwapEnabled(profile));
       } catch (error) {
         console.error('Error loading business address:', error);
       }
@@ -363,7 +365,17 @@ export default function ClientAppointmentsScreen() {
     loadUserAppointments();
   }, [loadUserAppointments]);
 
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback(async () => {
+    try {
+      const profile = await businessProfileApi.getProfile();
+      if (profile?.address) setBusinessAddress(String(profile.address));
+      if (profile?.min_cancellation_hours !== undefined) {
+        setMinCancellationHours(profile.min_cancellation_hours);
+      }
+      setClientSwapEnabled(isClientSwapEnabled(profile));
+    } catch {
+      // keep previous policy values
+    }
     loadUserAppointments(true);
   }, [loadUserAppointments]);
 
@@ -675,7 +687,7 @@ export default function ClientAppointmentsScreen() {
                 <Ionicons name="close" size={16} color="#FF3B30" />
                 <Text style={styles.heroCancelButtonText}>{t('cancel', 'Cancel')}</Text>
               </TouchableOpacity>
-              {user?.user_type !== 'admin' && (
+              {user?.user_type !== 'admin' && clientSwapEnabled && (
                 <TouchableOpacity
                   style={[styles.heroSwapButtonTopLeft, { backgroundColor: colors.primary + '18' }]}
                   onPress={() => {
@@ -735,7 +747,7 @@ export default function ClientAppointmentsScreen() {
         </LinearGradient>
       </View>
     );
-  }, [activeTab, nextAppointment, formatDate, formatTime, handleCancelAppointment, businessAddress, colors.primary]);
+  }, [activeTab, nextAppointment, formatDate, formatTime, handleCancelAppointment, businessAddress, colors.primary, clientSwapEnabled, user?.user_type, t, getBarberName]);
 
   // Handle cancel appointment
   function handleCancelAppointment(appointment: AvailableTimeSlot) {
@@ -933,7 +945,7 @@ export default function ClientAppointmentsScreen() {
                 <Ionicons name="close" size={16} color="#FF3B30" />
                 <Text style={styles.heroCancelButtonText}>{t('cancel', 'Cancel')}</Text>
               </TouchableOpacity>
-              {user?.user_type !== 'admin' && (
+              {user?.user_type !== 'admin' && clientSwapEnabled && (
                 <TouchableOpacity
                   style={[styles.heroSwapButtonTopLeft, { backgroundColor: colors.primary + '18' }]}
                   onPress={() => {
@@ -993,7 +1005,7 @@ export default function ClientAppointmentsScreen() {
         </LinearGradient>
       </View>
     );
-  }, [formatDate, formatTime, activeTab, handleCancelAppointment, businessAddress, colors.primary]);
+  }, [formatDate, formatTime, activeTab, handleCancelAppointment, businessAddress, colors.primary, clientSwapEnabled, user?.user_type, t, getBarberName]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>

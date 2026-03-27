@@ -265,6 +265,8 @@ export interface BusinessProfile {
   // New per-barber reminder minutes map: { [userId: string]: number | null }
   reminder_minutes_by_user?: Record<string, number | null>;
   min_cancellation_hours?: number;
+  /** When false, clients cannot use appointment swap with other clients. Defaults to true if unset. */
+  client_swap_enabled?: boolean;
   primary_color?: string; // Hex color code for primary UI color
   // Number of days forward to open booking window; defaults to 7 on server (legacy - now use booking_open_days_by_user)
   booking_open_days?: number;

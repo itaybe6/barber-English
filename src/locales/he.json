@@ -543,7 +543,10 @@
       "hoursBefore": "שעות לפני התור",
       "customHoursTitle": "שעות מותאמות",
       "customHoursMessage": "הזן/י מספר שעות (0-168):",
-      "customHoursLabel": "שעות מותאמות..."
+      "customHoursLabel": "שעות מותאמות...",
+      "clientSwapTitle": "החלפת תורים בין לקוחות",
+      "clientSwapSubtitle": "לקוחות יוכלו להציע ולבצע החלפת משבצות זמן",
+      "clientSwapSaveFailed": "לא ניתן לעדכן את הגדרת ההחלפה"
     },
     "notifications": { "subtitle": "קבל/י התראות על תורים ועדכונים" },
     "services": {

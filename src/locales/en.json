@@ -774,7 +774,29 @@
       "notificationsUnreadLine_one": "You have 1 unread notification",
       "notificationsUnreadLine_other": "You have {{count}} unread notifications",
       "notificationsAllClear": "No unread notifications",
-      "broadcastTile": "Broadcast"
+      "broadcastTile": "Notify all clients"
+    },
+    "broadcastComposer": {
+      "triggerLabel": "Notify all clients",
+      "headerTitle": "Send notification to all clients",
+      "subtitle": "Creates a new in-app notification for each client (by the phone number on their account).",
+      "titleLabel": "Title",
+      "titlePlaceholder": "e.g. This week's offer",
+      "contentLabel": "Message",
+      "contentPlaceholder": "Write what clients will see in their notifications screen...",
+      "previewHint": "Preview",
+      "previewTitlePlaceholder": "Title",
+      "previewContentPlaceholder": "Message will appear here",
+      "cancel": "Cancel",
+      "sendAll": "Send to all clients",
+      "sending": "Sending...",
+      "error": "Error",
+      "errorFill": "Please enter a title and message",
+      "success": "Sent",
+      "successMsg": "A new notification was created for each eligible client.",
+      "ok": "OK",
+      "failMsg": "Could not send. Check your connection or ensure at least one client has a phone number.",
+      "accessibilitySend": "Send notification to all clients"
     },
     "gallery": {
       "title": "Gallery",

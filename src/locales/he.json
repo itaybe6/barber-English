@@ -775,7 +775,29 @@
       "notificationsUnreadLine_one": "יש לך התראה אחת שלא נקראה",
       "notificationsUnreadLine_other": "יש לך {{count}} התראות שלא נקראו",
       "notificationsAllClear": "אין התראות חדשות",
-      "broadcastTile": "הודעת שידור"
+      "broadcastTile": "התראה לכל הלקוחות"
+    },
+    "broadcastComposer": {
+      "triggerLabel": "התראה לכל הלקוחות",
+      "headerTitle": "שליחת התראה לכל הלקוחות",
+      "subtitle": "נוצרת התראה חדשה אצל כל לקוח (לפי מספר הטלפון הרשום באפליקציה).",
+      "titleLabel": "כותרת",
+      "titlePlaceholder": "למשל: מבצע השבוע",
+      "contentLabel": "תוכן ההתראה",
+      "contentPlaceholder": "כתבו כאן את ההודעה שייראו הלקוחות במסך ההתראות...",
+      "previewHint": "תצוגה מקדימה",
+      "previewTitlePlaceholder": "כותרת",
+      "previewContentPlaceholder": "התוכן יופיע כאן",
+      "cancel": "ביטול",
+      "sendAll": "שליחה לכל הלקוחות",
+      "sending": "שולח...",
+      "error": "שגיאה",
+      "errorFill": "נא למלא כותרת ותוכן",
+      "success": "נשלח",
+      "successMsg": "נוצרה התראה חדשה לכל הלקוחות הרלוונטיים.",
+      "ok": "אישור",
+      "failMsg": "לא ניתן לשלוח. בדקו חיבור או שיש לפחות לקוח אחד עם מספר טלפון.",
+      "accessibilitySend": "שליחת התראה לכל הלקוחות"
     },
     "gallery": {
       "title": "גלריה",

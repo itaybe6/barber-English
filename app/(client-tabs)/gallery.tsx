@@ -12,6 +12,8 @@ import { ScrollView } from 'react-native';
 import { supabase, getBusinessId } from '@/lib/supabase';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { Product } from '@/lib/api/products';
+import { filterUrlsForCompactGrid } from '@/lib/utils/designGalleryMedia';
+import { GalleryDesignSlide } from '@/components/GalleryDesignSlide';
 
 const { width } = Dimensions.get('window');
 const numColumns = 2;
@@ -68,6 +70,7 @@ const DesignTile = memo(({ item, onOpen, uploaderUser, businessColors, isProduct
     Animated.timing(imageOpacity, { toValue: 1, duration: 250, useNativeDriver: true }).start();
   };
   const urls = (item as DesignItem).image_urls && (item as DesignItem).image_urls.length > 0 ? (item as DesignItem).image_urls : [item.image_url];
+  const tileUrls = filterUrlsForCompactGrid(urls);
   return (
     <Animated.View style={[styles.tile, { transform: [{ scale }] }]}> 
       <Pressable
@@ -85,14 +88,16 @@ const DesignTile = memo(({ item, onOpen, uploaderUser, businessColors, isProduct
             nestedScrollEnabled
             style={{ flex: 1 }}
           >
-            {urls.map((url, idx) => (
+            {tileUrls.map((url, idx) => (
               <View key={`${item.id}-img-${idx}`} style={{ width: slideSize, height: slideSize }}>
-                <Animated.Image
-                  source={{ uri: url }}
-                  style={[styles.image, { opacity: imageOpacity }]}
-                  resizeMode="cover"
-                  onLoad={onLoad}
-                />
+                <Animated.View style={{ flex: 1, opacity: imageOpacity }}>
+                  <GalleryDesignSlide
+                    uri={url}
+                    style={styles.image}
+                    resizeMode="cover"
+                    onVisualReady={onLoad}
+                  />
+                </Animated.View>
               </View>
             ))}
           </ScrollView>
@@ -415,7 +420,12 @@ export default function GalleryScreen() {
               >
                 {viewerImages.map((url, idx) => (
                   <View key={`viewer-${idx}`} style={{ width, height: '80%', justifyContent: 'center', alignItems: 'center' }}>
-                    <Image source={{ uri: url }} style={{ width: width, height: '100%' }} resizeMode="contain" />
+                    <GalleryDesignSlide
+                      uri={url}
+                      style={{ width, height: '100%' }}
+                      resizeMode="contain"
+                      videoInteractive
+                    />
                   </View>
                 ))}
               </ScrollView>

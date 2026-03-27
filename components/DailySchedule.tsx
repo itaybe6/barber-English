@@ -165,25 +165,26 @@ export default function DailySchedule({
       <TouchableOpacity
         activeOpacity={0.88}
         onPress={onRefresh}
-        style={[
-          styles.nextCard,
-          nextAppointment && { borderColor: `${colors.primary}30` },
-        ]}
+        style={styles.nextCard}
       >
-        {/* Header */}
-        <View style={[styles.nextHeader, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-          <View style={[styles.nextHeaderIcon, { backgroundColor: `${colors.primary}18` }]}>
-            <Ionicons name="time-outline" size={15} color={colors.primary} />
-          </View>
-          <Text style={[styles.nextHeaderTitle, { color: '#64748B' }]}>
-            {t('appointments.next', 'Next appointment')}
-          </Text>
+        {/* Header — direction:'ltr' כופה שמאל→ימין תמיד: חץ משמאל, כותרת+שעון מימין (לא תלוי ב־I18nManager) */}
+        <View style={styles.nextHeader}>
           <Ionicons
             name={isRTL ? 'chevron-forward' : 'chevron-back'}
             size={15}
             color="#CBD5E1"
-            style={{ marginRight: isRTL ? undefined : 'auto', marginLeft: isRTL ? 'auto' : undefined }}
           />
+          <View style={styles.nextHeaderTitleGroup}>
+            <Text
+              style={[styles.nextHeaderTitle, { textAlign: isRTL ? 'right' : 'left' }]}
+              numberOfLines={1}
+            >
+              {t('appointments.next', 'Next appointment')}
+            </Text>
+            <View style={[styles.nextHeaderIcon, { backgroundColor: `${colors.primary}18` }]}>
+              <Ionicons name="time-outline" size={15} color={colors.primary} />
+            </View>
+          </View>
         </View>
 
         {/* Divider */}
@@ -225,22 +226,34 @@ export default function DailySchedule({
                   {nextAppointment.client_name || t('booking.unknown', 'Unknown')}
                 </Text>
 
-                <View style={styles.pillsRow}>
-                  {nextAppointment.service_name && (
+                <View
+                  style={[
+                    styles.pillsStack,
+                    { alignItems: isRTL ? 'flex-end' : 'flex-start' },
+                  ]}
+                >
+                  {nextAppointment.service_name ? (
                     <View style={[styles.servicePill, { backgroundColor: `${colors.primary}14` }]}>
                       <Text style={[styles.serviceText, { color: colors.primary }]}>
                         {nextAppointment.service_name}
                       </Text>
                     </View>
-                  )}
-                  {nextAppointment.duration_minutes > 0 && (
-                    <View style={styles.durationPill}>
+                  ) : null}
+                  {nextAppointment.duration_minutes > 0 ? (
+                    <View
+                      style={[
+                        styles.durationPill,
+                        { flexDirection: isRTL ? 'row-reverse' : 'row' },
+                      ]}
+                    >
                       <Ionicons name="timer-outline" size={11} color="#94A3B8" />
                       <Text style={styles.durationText}>
-                        {nextAppointment.duration_minutes} {t('min', 'min')}
+                        {t('booking.minutes', {
+                          count: nextAppointment.duration_minutes,
+                        })}
                       </Text>
                     </View>
-                  )}
+                  ) : null}
                 </View>
               </View>
             </View>
@@ -338,30 +351,36 @@ const createStyles = (colors: any) => StyleSheet.create({
     bottom: -15,
   },
 
-  /* ── Next Appointment Card ── */
+  /* ── Next Appointment Card — רקע surface + צל (בלי overflow:hidden כדי שלא ייחתך הצל ב‑iOS) ── */
   nextCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#F1F5F9',
-    overflow: 'hidden',
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
-        shadowOpacity: 0.07,
-        shadowRadius: 12,
-        shadowOffset: { width: 0, height: 4 },
+        shadowColor: '#1e293b',
+        shadowOpacity: 0.09,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 5 },
       },
-      android: { elevation: 3 },
+      android: { elevation: 5 },
     }),
   },
   nextHeader: {
     flexDirection: 'row',
+    /** כופה פריסה לוגית LTR לשורה הזו בלבד — בלי היפוך גלובלי של RTL */
+    direction: 'ltr',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 13,
     paddingBottom: 11,
+  },
+  nextHeaderTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 1,
+    minWidth: 0,
   },
   nextHeaderIcon: {
     width: 26,
@@ -374,8 +393,8 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: 0.2,
-    flex: 1,
-    textAlign: 'right',
+    color: '#64748B',
+    flexShrink: 1,
   },
   headerDivider: {
     height: 1,
@@ -442,11 +461,10 @@ const createStyles = (colors: any) => StyleSheet.create({
     color: '#1E293B',
     letterSpacing: -0.3,
   },
-  pillsRow: {
-    flexDirection: 'row-reverse',
-    flexWrap: 'wrap',
+  pillsStack: {
+    width: '100%',
+    flexDirection: 'column',
     gap: 6,
-    alignItems: 'center',
   },
   servicePill: {
     borderRadius: 8,
@@ -459,9 +477,8 @@ const createStyles = (colors: any) => StyleSheet.create({
     letterSpacing: 0.1,
   },
   durationPill: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
     backgroundColor: '#F8FAFC',
     borderRadius: 8,
     paddingHorizontal: 8,

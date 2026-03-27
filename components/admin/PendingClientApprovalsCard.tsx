@@ -1,4 +1,7 @@
 import * as React from 'react';
+export interface PendingClientApprovalsCardHandle {
+  open: () => void;
+}
 import {
   View,
   Text,
@@ -46,14 +49,25 @@ interface ThemeColors {
   textSecondary: string;
 }
 
-export function PendingClientApprovalsCard({
-  colors,
-  openSheetNonce = 0,
-}: {
+interface Props {
   colors: ThemeColors;
   /** Increment (e.g. from home deep link) to open the approvals sheet when ready */
   openSheetNonce?: number;
-}) {
+  /** When true the inline gradient banner is suppressed (caller manages the trigger) */
+  hideBanner?: boolean;
+  /** Called whenever the pending count changes */
+  onCountChange?: (count: number) => void;
+}
+
+export const PendingClientApprovalsCard = React.forwardRef<
+  PendingClientApprovalsCardHandle,
+  Props
+>(function PendingClientApprovalsCard({
+  colors,
+  openSheetNonce = 0,
+  hideBanner = false,
+  onCountChange,
+}, ref) {
   const { t } = useTranslation();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -76,17 +90,26 @@ export function PendingClientApprovalsCard({
   const translateY = useSharedValue(offBottom);
   const prevOpenSheetNonce = React.useRef(0);
 
+  // Expose open() to parent via ref
+  React.useImperativeHandle(ref, () => ({
+    open: () => {
+      setModalOpen(true);
+      load();
+    },
+  }), [load]);
+
   const load = React.useCallback(async () => {
     if (!isAdmin) return;
     setLoading(true);
     try {
       const list = await usersApi.getPendingClients();
       setPending(list);
+      onCountChange?.(list.length);
     } finally {
       setLoading(false);
       setInitialized(true);
     }
-  }, [isAdmin]);
+  }, [isAdmin, onCountChange]);
 
   React.useEffect(() => {
     if (openSheetNonce <= prevOpenSheetNonce.current) return;
@@ -236,7 +259,7 @@ export function PendingClientApprovalsCard({
 
   return (
     <>
-      {count > 0 ? (
+      {!hideBanner && count > 0 ? (
         <TouchableOpacity
           style={styles.bannerWrap}
           activeOpacity={0.92}
@@ -521,7 +544,7 @@ export function PendingClientApprovalsCard({
       </Modal>
     </>
   );
-}
+});
 
 const styles = StyleSheet.create({
   bannerWrap: {

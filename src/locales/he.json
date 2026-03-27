@@ -144,17 +144,26 @@
   "admin.pendingClients.notificationBody": "{{name}} ({{phone}}) נרשם/ה וממתין/ה לאישורך באפליקציה.",
   "login.pendingApprovalTitle": "ממתין לאישור",
   "login.pendingApprovalMessage": "החשבון ממתין לאישור העסק. תוכל/י להתחבר לאחר האישור.",
+<<<<<<< HEAD
   "login.awaitingAdminToEnterApp": "עליך לחכות לאישור המנהל לפני שניתן להיכנס לאפליקציה.\n\nלאחר האישור תוכל/י להתחבר שוב עם מספר הטלפון.\n\nטלפון: {{phone}}",
   "register.pendingApprovalTitle": "נרשמת בהצלחה",
   "register.success.pendingApproval": "החשבון נוצר. המנהל יאשר אותך בקרוב.\n\nלאחר האישור תוכל/י להתחבר עם מספר הטלפון ולקבוע תורים.\n\nטלפון: {{phone}}",
   "admin.insights.title": "תובנות חודשיות",
   "admin.insights.noData": "אין נתוני תורים החודש",
+=======
+  "register.success.pendingApproval": "החשבון נוצר. העסק יאשר אותו בקרוב.\n\nתוכל/י להתחבר עם הטלפון והסיסמה אחרי האישור.\n\nטלפון: {{phone}}",
+  "admin.insights.title": "מצב תורים חודשי",
+  "admin.insights.noData": "אין עדיין נתונים להצגה",
+>>>>>>> 98ff99eb6849f25b938c2b0ea89c6b9c459af70c
   "admin.insights.booked": "מוזמנו",
   "admin.insights.completed": "הושלמו",
   "admin.insights.cancelled": "בוטלו",
   "admin.insights.noShow": "לא הגיעו",
   "admin.insights.total": "סה״כ",
   "admin.insights.newClientsThisMonth": "לקוחות חדשים נוספו החודש",
+  "admin.insights.monthLegend": "תורים החודש",
+  "admin.insights.todayLegend": "תורים להיום",
+  "admin.insights.newClientsLegend": "לקוחות חדשים",
   "admin.hero.edit": "מדיה ראשית",
   "admin.hero.subtitle": "ניהול המדיה הראשית בראש הדף",
   "admin.gallery.subtitle": "הצג ונהל את תמונות העיצויים של הסלון",
@@ -765,7 +774,8 @@
       "notificationsCardTitle": "ההתראות שלך",
       "notificationsUnreadLine_one": "יש לך התראה אחת שלא נקראה",
       "notificationsUnreadLine_other": "יש לך {{count}} התראות שלא נקראו",
-      "notificationsAllClear": "אין התראות חדשות"
+      "notificationsAllClear": "אין התראות חדשות",
+      "broadcastTile": "הודעת שידור"
     },
     "gallery": {
       "title": "גלריה",

@@ -25,6 +25,8 @@ export interface FabButtonProps {
   bottom?: number;
   horizontalInset?: number;
   grabberColor?: string;
+  /** When true, no floating X — put close in your own header to avoid extra top padding. */
+  hideCloseButton?: boolean;
 }
 
 export function FabButton({
@@ -38,6 +40,7 @@ export function FabButton({
   bottom = 80,
   horizontalInset = 16,
   grabberColor,
+  hideCloseButton = false,
 }: FabButtonProps) {
   const colors = useColors();
   const { width: screenW } = useWindowDimensions();
@@ -75,7 +78,9 @@ export function FabButton({
   const closeBtnTop = 20;
   const grabberFlowEnd = 4 + 4 + 10;
   const closeBottom = closeBtnTop + closeBtnOuterH;
-  const rtlContentPaddingTop = Math.max(2, closeBottom - grabberFlowEnd + 10);
+  const rtlContentPaddingTop = hideCloseButton
+    ? 4
+    : Math.max(2, closeBottom - grabberFlowEnd + 10);
 
   return (
     <Animated.View
@@ -123,16 +128,24 @@ export function FabButton({
           exiting={FadeOutDown.duration(duration)}
           style={styles.openInner}
         >
-          <View style={[styles.grabber, { backgroundColor: grabberColor ?? colors.primary }]} />
-          <Pressable
-            onPress={onPress}
-            hitSlop={12}
-            style={[styles.closeBtn, { top: closeBtnTop, right: closeBtnEndInset }]}
-            accessibilityRole="button"
-            accessibilityLabel="סגירה"
-          >
-            <Entypo name="cross" size={closeIconSize} color={iconOnOpen} />
-          </Pressable>
+          <View
+            style={[
+              styles.grabber,
+              { backgroundColor: grabberColor ?? colors.primary },
+              hideCloseButton ? { marginBottom: 6 } : null,
+            ]}
+          />
+          {!hideCloseButton ? (
+            <Pressable
+              onPress={onPress}
+              hitSlop={12}
+              style={[styles.closeBtn, { top: closeBtnTop, right: closeBtnEndInset }]}
+              accessibilityRole="button"
+              accessibilityLabel="סגירה"
+            >
+              <Entypo name="cross" size={closeIconSize} color={iconOnOpen} />
+            </Pressable>
+          ) : null}
           <View
             style={[
               styles.rtlContent,

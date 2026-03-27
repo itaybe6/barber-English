@@ -15,9 +15,11 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuthStore } from '@/stores/authStore';
 import { Design } from '@/lib/supabase';
-import { supabase } from '@/lib/supabase';
+import { supabase, getBusinessId } from '@/lib/supabase';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { useTranslation } from 'react-i18next';
 
@@ -25,6 +27,31 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH * 0.38; // Increased from 0.32 to 0.38 for larger cards
 const CARD_HEIGHT = 240; // Increased from 200 to 240 for taller cards
 const CARD_SPACING = 16; // Increased spacing between cards
+
+const AVATAR_PLACEHOLDER = require('@/assets/images/user.png');
+
+/** Remote avatar with local fallback; expo-image handles Supabase public URLs more reliably than RN Image. */
+function UploaderAvatar({
+  imageUrl,
+  style,
+}: {
+  imageUrl?: string | null;
+  style: object;
+}) {
+  const [failed, setFailed] = useState(false);
+  const trimmed = imageUrl?.trim();
+  const useRemote = Boolean(trimmed) && !failed;
+  return (
+    <ExpoImage
+      source={useRemote ? { uri: trimmed as string } : AVATAR_PLACEHOLDER}
+      style={style}
+      contentFit="cover"
+      cachePolicy="memory-disk"
+      onError={() => setFailed(true)}
+      transition={150}
+    />
+  );
+}
 
 interface DesignCarouselProps {
   designs: Design[];
@@ -54,6 +81,8 @@ export default function DesignCarousel({
   const scrollViewRef = useRef<ScrollView>(null);
   const colors = useColors();
   const { t } = useTranslation();
+  const sessionUserId = useAuthStore((s) => s.user?.id);
+  const sessionImageUrl = useAuthStore((s) => s.user?.image_url);
   
   // Animation values for floating elements
   const floatingAnim = useRef(new Animated.Value(0)).current;
@@ -94,10 +123,12 @@ export default function DesignCarousel({
         const userIds = [...new Set(designs.map(design => design.user_id).filter(Boolean))];
         
         if (userIds.length > 0) {
+          const businessId = getBusinessId();
           const { data: profiles, error } = await supabase
             .from('users')
             .select('id, name, image_url')
-            .in('id', userIds);
+            .in('id', userIds)
+            .eq('business_id', businessId);
           
           if (error) {
             console.error('Error fetching user profiles:', error);
@@ -114,7 +145,15 @@ export default function DesignCarousel({
               image_url: profile.image_url
             };
           });
-          
+
+          // Prefer session image_url for logged-in uploader (fresh after Settings upload; avoids stale/null DB read).
+          const session = useAuthStore.getState().user;
+          const sid = session?.id;
+          const simg = session?.image_url?.trim();
+          if (sid && simg && profilesMap[sid]) {
+            profilesMap[sid] = { ...profilesMap[sid], image_url: simg };
+          }
+
           setUserProfiles(profilesMap);
         } else {
           // Set empty map so all designs show placeholder
@@ -131,6 +170,20 @@ export default function DesignCarousel({
       fetchUserProfiles();
     }
   }, [designs]);
+
+  // Patch avatar when auth store updates (e.g. profile photo saved in Settings).
+  useEffect(() => {
+    const simg = sessionImageUrl?.trim();
+    if (!sessionUserId || !simg) return;
+    setUserProfiles((prev) => {
+      if (!prev[sessionUserId]) return prev;
+      if (prev[sessionUserId].image_url?.trim() === simg) return prev;
+      return {
+        ...prev,
+        [sessionUserId]: { ...prev[sessionUserId], image_url: simg },
+      };
+    });
+  }, [sessionUserId, sessionImageUrl]);
 
   useEffect(() => {
     const startAnimations = () => {
@@ -255,13 +308,10 @@ export default function DesignCarousel({
             
             {/* Admin Profile Picture Overlay on Bottom Center */}
             <View style={styles.adminProfileOverlay}>
-              <Image 
-                source={{ 
-                  uri: userProfile?.image_url || 'https://via.placeholder.com/40x40/007AFF/FFFFFF?text=👤' 
-                }} 
+              <UploaderAvatar
+                key={`${design.user_id}-${userProfile?.image_url ?? ''}`}
+                imageUrl={userProfile?.image_url}
                 style={styles.adminProfileImage}
-                onError={(error) => {
-                }}
               />
             </View>
           </View>
@@ -344,10 +394,9 @@ export default function DesignCarousel({
                   )}
                   {selectedDesign.user_id && userProfiles[selectedDesign.user_id] && (
                     <View style={styles.modalUserInfo}>
-                      <Image
-                        source={{ 
-                          uri: userProfiles[selectedDesign.user_id].image_url || 'https://via.placeholder.com/24x24/007AFF/FFFFFF?text=👤' 
-                        }}
+                      <UploaderAvatar
+                        key={`modal-${selectedDesign.user_id}-${userProfiles[selectedDesign.user_id].image_url ?? ''}`}
+                        imageUrl={userProfiles[selectedDesign.user_id].image_url}
                         style={styles.modalUserImage}
                       />
                       <Text style={styles.modalUserName}>

@@ -983,24 +983,50 @@ export default function HomeScreen() {
         {/* ── GALLERY SECTION ── */}
         {isAdmin && (
           <View style={styles.galleryCard}>
-            <View style={styles.galleryCardHeader}>
-              <Text style={[styles.galleryCardTitle, { color: colors.text }]}>
-                {t('admin.gallery.title', 'גלרייה')}
-              </Text>
-              <TouchableOpacity
-                style={[styles.galleryEditBtn, { backgroundColor: `${colors.primary}14` }]}
-                activeOpacity={0.8}
-                onPress={() => router.push('/(tabs)/edit-gallery')}
-              >
-                <Ionicons name="pencil-outline" size={15} color={colors.primary} />
-                <Text style={[styles.galleryEditBtnText, { color: colors.primary }]}>
-                  {t('admin.gallery.edit', 'עריכה')}
+            {(designsFromStore?.length ?? 0) > 0 ? (
+              <View style={styles.galleryCardHeader}>
+                <Text style={[styles.galleryCardTitle, { color: colors.text }]}>
+                  {t('admin.gallery.title', 'גלרייה')}
                 </Text>
-              </TouchableOpacity>
-            </View>
-            {isLoadingDesigns
-              ? <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 12 }} />
-              : <DesignCarousel designs={designsFromStore as any} showHeader={false} />}
+                <TouchableOpacity
+                  style={[styles.galleryEditBtn, { backgroundColor: `${colors.primary}14` }]}
+                  activeOpacity={0.8}
+                  onPress={() => router.push('/(tabs)/edit-gallery')}
+                >
+                  <Ionicons name="pencil-outline" size={15} color={colors.primary} />
+                  <Text style={[styles.galleryEditBtnText, { color: colors.primary }]}>
+                    {t('admin.gallery.edit', 'עריכה')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+            {isLoadingDesigns ? (
+              <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 12 }} />
+            ) : (designsFromStore?.length ?? 0) === 0 ? (
+              <View style={styles.galleryEmpty}>
+                <View style={[styles.galleryEmptyIconWrap, { backgroundColor: `${colors.primary}14` }]}>
+                  <Ionicons name="images-outline" size={34} color={colors.primary} />
+                </View>
+                <Text style={[styles.galleryEmptyTitle, { color: colors.text }]}>
+                  {t('admin.gallery.homeEmptyTitle')}
+                </Text>
+                <Text style={[styles.galleryEmptySubtitle, { color: colors.textSecondary }]}>
+                  {t('admin.gallery.homeEmptySubtitle')}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.galleryEmptyCta, { backgroundColor: colors.primary }]}
+                  activeOpacity={0.88}
+                  onPress={() => router.push('/(tabs)/edit-gallery')}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('admin.gallery.homeEmptyCta')}
+                >
+                  <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.galleryEmptyCtaText}>{t('admin.gallery.homeEmptyCta')}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <DesignCarousel designs={designsFromStore as any} showHeader={false} />
+            )}
           </View>
         )}
 
@@ -1500,6 +1526,48 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   galleryEditBtnText: {
     fontSize: 13,
+    fontWeight: '700',
+  },
+  galleryEmpty: {
+    alignItems: 'center',
+    paddingVertical: 28,
+    paddingHorizontal: 12,
+  },
+  galleryEmptyIconWrap: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  galleryEmptyTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    textAlign: 'center',
+    letterSpacing: -0.2,
+    marginBottom: 8,
+    lineHeight: 24,
+  },
+  galleryEmptySubtitle: {
+    fontSize: 14,
+    fontWeight: '400',
+    textAlign: 'center',
+    lineHeight: 21,
+    marginBottom: 20,
+    maxWidth: 300,
+  },
+  galleryEmptyCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+  },
+  galleryEmptyCtaText: {
+    color: '#FFFFFF',
+    fontSize: 15,
     fontWeight: '700',
   },
   /* ─── Content Sections (kept for products) ─── */

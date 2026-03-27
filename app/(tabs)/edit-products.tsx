@@ -129,7 +129,11 @@ export default function EditProductsScreen() {
 
   const goBackProd = () => goToProdStep(prodStep - 1);
 
-  const handleImageSelection = async (imageUri: string, isPreset: boolean) => {
+  const handleImageSelection = async (
+    imageUri: string,
+    isPreset: boolean,
+    sourceDims?: { width: number; height: number }
+  ) => {
     try {
       setIsUploadingImage(true);
       
@@ -141,7 +145,9 @@ export default function EditProductsScreen() {
           quality: 0.7,
           maxWidth: 800,
           maxHeight: 800,
-          format: 'jpeg'
+          format: 'jpeg',
+          sourceWidth: sourceDims?.width,
+          sourceHeight: sourceDims?.height,
         });
         
         // Upload compressed image
@@ -198,7 +204,8 @@ export default function EditProductsScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        await handleImageSelection(result.assets[0].uri, false);
+        const a = result.assets[0];
+        await handleImageSelection(a.uri, false, { width: a.width, height: a.height });
       }
     } catch (error) {
       console.error('Error opening camera:', error);
@@ -216,7 +223,8 @@ export default function EditProductsScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        await handleImageSelection(result.assets[0].uri, false);
+        const a = result.assets[0];
+        await handleImageSelection(a.uri, false, { width: a.width, height: a.height });
       }
     } catch (error) {
       console.error('Error opening image library:', error);

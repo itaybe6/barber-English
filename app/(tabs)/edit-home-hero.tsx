@@ -135,8 +135,12 @@ export default function EditHomeHeroScreen() {
 
       setIsUploading(true);
 
-      const originalUris = result.assets.map((a: any) => a.uri).filter(Boolean);
-      const compressed = await compressImages(originalUris, {
+      const sources = result.assets.map((a) => ({
+        uri: a.uri,
+        width: a.width,
+        height: a.height,
+      }));
+      const compressed = await compressImages(sources, {
         quality: 0.7,
         maxWidth: 1200,
         maxHeight: 1200,

@@ -17,10 +17,12 @@ import {
   useWindowDimensions,
   BackHandler,
   Keyboard,
+  I18nManager,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Image as ExpoImage } from 'expo-image';
 import { useDesignsStore } from '@/stores/designsStore';
 import type { Design, User } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,6 +34,9 @@ import { useTranslation } from 'react-i18next';
 import { Search, ImagePlus, LayoutGrid, X } from 'lucide-react-native';
 import { useColors, type ThemeColors } from '@/src/theme/ThemeProvider';
 import { FabButton } from '@/components/FabButton';
+import { useAuthStore } from '@/stores/authStore';
+import { useGalleryCreateDraftStore } from '@/stores/galleryCreateDraftStore';
+import { useEditGalleryTabBarRegistration } from '@/contexts/EditGalleryTabBarContext';
 
 const numColumns = 2;
 
@@ -55,9 +60,12 @@ export default function EditGalleryScreen() {
   const styles = useMemo(() => createStyles(colors, windowWidth, windowHeight), [colors, windowWidth, windowHeight]);
 
   const { designs, fetchDesigns, createDesign, deleteDesign, updateDesign, isLoading } = useDesignsStore();
+  const currentUserId = useAuthStore((s) => s.user?.id);
 
   const [name, setName] = useState('');
-  const [pickedAssets, setPickedAssets] = useState<Array<{ uri: string; base64?: string | null; mimeType?: string | null; fileName?: string | null }>>([]);
+  const pickedAssets = useGalleryCreateDraftStore((s) => s.pickedAssets);
+  const setPickedAssets = useGalleryCreateDraftStore((s) => s.setPickedAssets);
+  const clearPickedAssets = useGalleryCreateDraftStore((s) => s.clearPickedAssets);
   const [search, setSearch] = useState('');
   const [createVisible, setCreateVisible] = useState(false);
   const [adminUsers, setAdminUsers] = useState<User[]>([]);
@@ -72,6 +80,8 @@ export default function EditGalleryScreen() {
   const [editImages, setEditImages] = useState<EditImage[]>([]);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [editPickerVisible, setEditPickerVisible] = useState(false);
+  const [createStep, setCreateStep] = useState<1 | 2>(1);
 
   useEffect(() => {
     fetchDesigns();
@@ -79,26 +89,43 @@ export default function EditGalleryScreen() {
   }, []);
 
   useEffect(() => {
+    if (!createVisible) setCreateStep(1);
+  }, [createVisible]);
+
+  useEffect(() => {
     if (!createVisible) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (isCreating) return true;
+      if (createStep === 2) {
+        setCreateStep(1);
+        return true;
+      }
       setCreateVisible(false);
       return true;
     });
     return () => sub.remove();
-  }, [createVisible, isCreating]);
+  }, [createVisible, isCreating, createStep]);
 
   const loadAdminUsers = async () => {
     try {
       const users = await usersApi.getAdminUsers();
       setAdminUsers(users);
       if (users.length > 0) {
-        setSelectedUserId(users[0].id);
+        const uid = useAuthStore.getState().user?.id;
+        const self = uid ? users.find((u) => u.id === uid) : undefined;
+        setSelectedUserId((prev) => (prev ? prev : self?.id ?? users[0].id));
       }
     } catch (error) {
       console.error('Error loading admin users:', error);
     }
   };
+
+  /** Default "attributed barber" to the logged-in admin so gallery shows their profile photo. */
+  useEffect(() => {
+    if (!createVisible || adminUsers.length === 0) return;
+    const self = currentUserId ? adminUsers.find((u) => u.id === currentUserId) : undefined;
+    setSelectedUserId(self?.id ?? adminUsers[0].id);
+  }, [createVisible, adminUsers, currentUserId]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -114,6 +141,17 @@ export default function EditGalleryScreen() {
     if (ext === 'webp') return 'image/webp';
     return 'image/jpeg';
   };
+
+  /** When compression fails, still show & upload using the picker's URIs (Android content:// is sensitive). */
+  const pickedAssetsFromPicker = (
+    assets: { uri: string; base64?: string | null; fileName?: string | null }[]
+  ) =>
+    assets.map((a, index) => ({
+      uri: a.uri,
+      base64: a.base64 ?? null,
+      mimeType: guessMimeFromUri(a.fileName || a.uri),
+      fileName: a.fileName ?? `picked_${Date.now()}_${index}.jpg`,
+    }));
 
   const base64ToUint8Array = (base64: string): Uint8Array => {
     const clean = base64.replace(/^data:[^;]+;base64,/, '');
@@ -193,17 +231,23 @@ export default function EditGalleryScreen() {
       selectionLimit: 10,
       base64: false,
     });
-    if (!result.canceled) {
-      try {
-        const imageUris = result.assets.map((a) => a.uri);
-        const compressedImages = await compressImages(imageUris, {
-          quality: 0.7,
-          maxWidth: 1200,
-          maxHeight: 1200,
-          format: 'jpeg',
-        });
+    if (!result.canceled && result.assets?.length) {
+      const immediate = pickedAssetsFromPicker(result.assets);
+      // Persist in Zustand immediately so UI updates even if this screen remounts while the picker closes (Android).
+      useGalleryCreateDraftStore.getState().setPickedAssets(immediate);
 
-        setPickedAssets(
+      try {
+        const compressedImages = await compressImages(
+          result.assets.map((a) => ({ uri: a.uri, width: a.width, height: a.height })),
+          {
+            quality: 0.7,
+            maxWidth: 1200,
+            maxHeight: 1200,
+            format: 'jpeg',
+          }
+        );
+
+        useGalleryCreateDraftStore.getState().setPickedAssets(
           compressedImages.map((compressed, index) => ({
             uri: compressed.uri,
             base64: null,
@@ -213,7 +257,7 @@ export default function EditGalleryScreen() {
         );
       } catch (error) {
         console.error('Error compressing images:', error);
-        Alert.alert(t('error.generic', 'Error'), t('admin.gallery.processFailed', 'Failed to process selected images'));
+        // Originals already in store from immediate update above
       }
     }
   };
@@ -251,13 +295,15 @@ export default function EditGalleryScreen() {
     });
     if (!result.canceled && result.assets.length > 0) {
       try {
-        const imageUris = result.assets.map((a) => a.uri);
-        const compressedImages = await compressImages(imageUris, {
-          quality: 0.7,
-          maxWidth: 1200,
-          maxHeight: 1200,
-          format: 'jpeg',
-        });
+        const compressedImages = await compressImages(
+          result.assets.map((a) => ({ uri: a.uri, width: a.width, height: a.height })),
+          {
+            quality: 0.7,
+            maxWidth: 1200,
+            maxHeight: 1200,
+            format: 'jpeg',
+          }
+        );
 
         const newItems: EditImage[] = compressedImages.map((compressed, index) => ({
           kind: 'local',
@@ -271,7 +317,11 @@ export default function EditGalleryScreen() {
         setEditImages((prev) => [...prev, ...newItems]);
       } catch (error) {
         console.error('Error compressing images:', error);
-        Alert.alert(t('error.generic', 'Error'), t('admin.gallery.processFailed', 'Failed to process selected images'));
+        const fallback = pickedAssetsFromPicker(result.assets).map((asset) => ({
+          kind: 'local' as const,
+          asset,
+        }));
+        setEditImages((prev) => [...prev, ...fallback]);
       }
     }
   };
@@ -391,7 +441,7 @@ export default function EditGalleryScreen() {
       if (created) {
         Alert.alert(t('success.generic', 'Success'), t('admin.gallery.createSuccess', 'Design added to gallery'));
         setName('');
-        setPickedAssets([]);
+        clearPickedAssets();
         setCreateVisible(false);
       } else {
         Alert.alert(t('error.generic', 'Error'), t('admin.gallery.createFailed', 'Failed to add design'));
@@ -413,6 +463,25 @@ export default function EditGalleryScreen() {
     if (!isCreating) setCreateVisible(false);
   }, [isCreating]);
 
+  const openCreateFromTab = useCallback(() => {
+    if (isCreating) return;
+    setCreateVisible(true);
+  }, [isCreating]);
+
+  const openEditPickerFromTab = useCallback(() => {
+    setEditPickerVisible(true);
+  }, []);
+
+  const editTabBarActions = useMemo(
+    () => ({
+      openCreate: openCreateFromTab,
+      openEditPicker: openEditPickerFromTab,
+    }),
+    [openCreateFromTab, openEditPickerFromTab]
+  );
+
+  useEditGalleryTabBarRegistration(editTabBarActions);
+
   const tileSize = (windowWidth - styles._layout.paddingH * 2 - styles._layout.gap * (numColumns - 1)) / numColumns;
 
   const listEmpty = useMemo(() => {
@@ -432,41 +501,82 @@ export default function EditGalleryScreen() {
   }, [colors.primary, designs.length, filtered.length, isLoading, search, styles, t]);
 
   /**
-   * Available height above keyboard for the FAB scroll area.
-   * Subtracts: keyboard height, FAB bottom offset, header (title+subtitle ~90), panel padding.
+   * FAB sits above the admin tab bar. On step 2, when the keyboard is open, lift the sheet by
+   * the keyboard height so the name field stays visible (same idea as KeyboardAware on login).
    */
-  const fabBottom = insets.bottom + 88;
   const fabHeaderH = 90;
   const fabPaddingV = 24;
+  /** Lift sheet above keyboard on step 2 only — do not combine with KeyboardAware inside absolute FAB (double offset hides the field). */
+  const fabBottomOffset =
+    createVisible && createStep === 2 && keyboardH > 0
+      ? keyboardH + 10
+      : insets.bottom + 88;
   const fabMaxScrollH = Math.max(
-    180,
-    windowHeight - fabBottom - fabHeaderH - fabPaddingV - keyboardH - 16
+    200,
+    windowHeight - fabBottomOffset - fabHeaderH - fabPaddingV - 20
   );
 
+  const pageBg = colors.background;
+
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      <SafeAreaView edges={['top']} style={{ backgroundColor: colors.background }}>
-        <View style={[styles.searchRow, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 6 }]}>
-          <Search size={18} color={colors.textSecondary} strokeWidth={2} />
-          <TextInput
-            style={[styles.searchInput, { color: colors.text }]}
-            placeholder={t('admin.gallery.searchDesigns', 'חיפוש לפי שם')}
-            placeholderTextColor={colors.textSecondary}
-            value={search}
-            onChangeText={setSearch}
-            returnKeyType="search"
-            clearButtonMode="while-editing"
-          />
-          {search.length > 0 ? (
-            <TouchableOpacity onPress={() => setSearch('')} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('common.clear', 'נקה')}>
-              <X size={18} color={colors.textSecondary} />
-            </TouchableOpacity>
-          ) : null}
+    <View style={[styles.screen, { backgroundColor: pageBg }]}>
+      <SafeAreaView edges={['top']} style={{ backgroundColor: pageBg }}>
+        <View style={[styles.searchRowWrap, { backgroundColor: pageBg }]}>
+          <View
+            style={[
+              styles.searchRow,
+              { direction: 'ltr' } as const,
+              {
+                backgroundColor: colors.text + '0A',
+                ...Platform.select({
+                  ios: {
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.04,
+                    shadowRadius: 6,
+                  },
+                  android: { elevation: 0 },
+                }),
+              },
+            ]}
+          >
+            <TextInput
+              style={[
+                styles.searchInput,
+                {
+                  color: colors.text,
+                  /* Row is forced LTR so the magnifying glass stays on the physical right; keep text/placeholder flush to that side. */
+                  textAlign: 'right',
+                  writingDirection: 'rtl',
+                },
+              ]}
+              placeholder={t('admin.gallery.searchDesigns', 'חיפוש לפי שם')}
+              placeholderTextColor={colors.textSecondary}
+              value={search}
+              onChangeText={setSearch}
+              returnKeyType="search"
+              clearButtonMode="never"
+            />
+            {search.length > 0 ? (
+              <TouchableOpacity
+                onPress={() => setSearch('')}
+                hitSlop={12}
+                style={[styles.searchClearBtn, { backgroundColor: colors.text + '0D' }]}
+                accessibilityRole="button"
+                accessibilityLabel={t('common.clear', 'נקה')}
+              >
+                <X size={17} color={colors.textSecondary} strokeWidth={2.25} />
+              </TouchableOpacity>
+            ) : null}
+            <View style={[styles.searchIconBubble, { backgroundColor: colors.primary + '18' }]}>
+              <Search size={19} color={colors.primary} strokeWidth={2.25} />
+            </View>
+          </View>
         </View>
       </SafeAreaView>
 
-      <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.bodySafe}>
-        <View style={[styles.contentCurve, { backgroundColor: colors.surface }]}>
+      <SafeAreaView edges={['left', 'right', 'bottom']} style={[styles.bodySafe, { backgroundColor: pageBg }]}>
+        <View style={[styles.contentMain, { backgroundColor: pageBg }]}>
           {isLoading && designs.length === 0 ? (
             <View style={styles.loadingCenter}>
               <ActivityIndicator size="large" color={colors.primary} />
@@ -524,132 +634,245 @@ export default function EditGalleryScreen() {
         />
       ) : null}
 
+      {createVisible ? (
       <FabButton
-        isOpen={createVisible}
+        isOpen
         onPress={toggleCreateFab}
-        bottom={insets.bottom + 88}
+        bottom={fabBottomOffset}
         horizontalInset={20}
         openedSize={windowWidth * 0.92}
         closedSize={58}
         duration={480}
         grabberColor={colors.primary}
+        hideCloseButton
       >
         <View style={styles.fabSheetHeader}>
-          <Text style={[styles.fabSheetTitle, { color: colors.text }]}>{t('admin.gallery.addDesign', 'הוספת עיצוב')}</Text>
-          <Text style={[styles.fabSheetSubtitle, { color: colors.textSecondary }]}>
-            {t('admin.gallery.helper', 'ניתן לבחור מספר תמונות. הראשונה תשמש כתמונת שער.')}
-          </Text>
+          <View style={styles.fabSheetHeaderSpacer} />
+          <View style={styles.fabSheetHeaderBody}>
+            <Text style={[styles.fabSheetTitle, { color: colors.text }]}>
+              {createStep === 1
+                ? t('admin.gallery.createStep1Title', 'בחירת תמונות')
+                : t('admin.gallery.createStep2Title', 'שם לעיצוב')}
+            </Text>
+            <Text style={[styles.fabSheetSubtitle, { color: colors.textSecondary }]}>
+              {createStep === 1
+                ? t('admin.gallery.createStep1Subtitle', 'ניתן לבחור עד 10 תמונות. הראשונה תשמש כתמונת שער.')
+                : t('admin.gallery.createStep2Subtitle', 'בחרו שם ברור שיופיע ללקוחות בגלריה.')}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={toggleCreateFab}
+            disabled={isCreating}
+            hitSlop={14}
+            style={[styles.fabHeaderCloseBtn, { backgroundColor: colors.text + '0C' }]}
+            accessibilityRole="button"
+            accessibilityLabel={t('close', 'סגירה')}
+          >
+            <X size={20} color={colors.textSecondary} strokeWidth={2.25} />
+          </TouchableOpacity>
         </View>
 
         <ScrollView
           keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
           style={{ maxHeight: fabMaxScrollH }}
           contentContainerStyle={{ paddingBottom: 24 }}
           showsVerticalScrollIndicator={false}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         >
-          {adminUsers.length > 1 && (
-            <View style={[styles.block, { opacity: isCreating ? 0.55 : 1 }]}>
-              <Text style={[styles.fieldLabel, styles.fabTextRight, { color: colors.textSecondary }]}>{t('admin.gallery.selectAdmin', 'בחר/י מנהל')}</Text>
-              <View style={styles.chipRow}>
-                {adminUsers.map((user) => {
-                  const on = selectedUserId === user.id;
-                  return (
-                    <TouchableOpacity
-                      key={user.id}
-                      onPress={() => !isCreating && setSelectedUserId(user.id)}
-                      style={[
-                        styles.chip,
-                        { borderColor: colors.border, backgroundColor: colors.surface },
-                        on && { backgroundColor: colors.primary, borderColor: colors.primary },
-                      ]}
-                      disabled={isCreating}
-                    >
-                      <Text style={[styles.chipText, { color: colors.text }, on && { color: '#fff', fontWeight: '600' }]}>{user.name}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          )}
-
-          <TouchableOpacity
-            onPress={pickImages}
-            style={[styles.pickCard, { borderColor: colors.primary + '55', backgroundColor: colors.primary + '0C' }]}
-            activeOpacity={0.88}
-            disabled={isCreating}
-          >
-            <View style={styles.pickTextCol}>
-              <Text style={[styles.pickTitle, styles.fabTextRight, { color: colors.text }]}>{t('admin.gallery.selectImages', 'בחר/י תמונות')}</Text>
-              <Text style={[styles.pickSub, styles.fabTextRight, { color: colors.textSecondary }]}>
-                {t('admin.gallery.photoDropHint', 'עד 10 תמונות · דחיסה אוטומטית')}
-              </Text>
-            </View>
-            <View style={styles.pickCardTrailing}>
-              {pickedAssets.length > 0 ? (
-                <View style={[styles.countBadge, { backgroundColor: colors.primary }]}>
-                  <Text style={styles.countBadgeText}>{pickedAssets.length}</Text>
-                </View>
-              ) : null}
-              <View style={[styles.pickIconCircle, { backgroundColor: colors.primary + '24' }]}>
-                <ImagePlus size={26} color={colors.primary} strokeWidth={2} />
-              </View>
-            </View>
-          </TouchableOpacity>
-
-          {pickedAssets.length > 0 && (
-            <FlatList
-              data={pickedAssets}
-              keyExtractor={(item, idx) => `${item.uri}-${idx}`}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingVertical: 12, gap: 10 }}
-              renderItem={({ item, index }) => (
-                <View style={styles.previewSlot}>
-                  <Image source={{ uri: item.uri }} style={styles.previewImg} />
-                  <TouchableOpacity
-                    onPress={() => setPickedAssets((prev) => prev.filter((_, i) => i !== index))}
-                    style={[styles.previewX, { backgroundColor: colors.error }]}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    disabled={isCreating}
-                  >
-                    <Ionicons name="close" size={14} color="#fff" />
-                  </TouchableOpacity>
+          {createStep === 1 ? (
+            <>
+              {adminUsers.length > 1 && (
+                <View style={[styles.block, { opacity: isCreating ? 0.55 : 1 }]}>
+                  <Text style={[styles.fieldLabel, styles.fabTextRight, { color: colors.textSecondary }]}>
+                    {t('admin.gallery.selectAdmin', 'בחר/י מנהל')}
+                  </Text>
+                  <View style={styles.chipRow}>
+                    {adminUsers.map((user) => {
+                      const on = selectedUserId === user.id;
+                      return (
+                        <TouchableOpacity
+                          key={user.id}
+                          onPress={() => !isCreating && setSelectedUserId(user.id)}
+                          style={[
+                            styles.chip,
+                            { borderColor: colors.border, backgroundColor: colors.surface },
+                            on && { backgroundColor: colors.primary, borderColor: colors.primary },
+                          ]}
+                          disabled={isCreating}
+                        >
+                          <Text style={[styles.chipText, { color: colors.text }, on && { color: '#fff', fontWeight: '600' }]}>{user.name}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 </View>
               )}
-            />
-          )}
 
-          <Text style={[styles.fieldLabel, styles.fabTextRight, { color: colors.textSecondary }]}>{t('admin.gallery.nameLabel', 'שם לתצוגה')}</Text>
-          <TextInput
-            style={[
-              styles.fieldInput,
-              styles.fabTextRight,
-              styles.fabFieldInput,
-              { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border, opacity: isCreating ? 0.55 : 1 },
-            ]}
-            placeholder={t('admin.gallery.namePlaceholder', 'שם העיצוב')}
-            placeholderTextColor={colors.textSecondary}
-            value={name}
-            onChangeText={setName}
-            editable={!isCreating}
-          />
+              <TouchableOpacity
+                onPress={pickImages}
+                style={[styles.pickCard, { borderColor: colors.primary + '55', backgroundColor: colors.primary + '0C' }]}
+                activeOpacity={0.88}
+                disabled={isCreating}
+              >
+                <View style={styles.pickTextCol}>
+                  <Text style={[styles.pickTitle, styles.fabTextRight, { color: colors.text }]}>{t('admin.gallery.selectImages', 'בחר/י תמונות')}</Text>
+                  <Text style={[styles.pickSub, styles.fabTextRight, { color: colors.textSecondary }]}>
+                    {t('admin.gallery.photoDropHint', 'עד 10 תמונות · דחיסה אוטומטית')}
+                  </Text>
+                </View>
+                <View style={styles.pickCardTrailing}>
+                  {pickedAssets.length > 0 ? (
+                    <View style={[styles.countBadge, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.countBadgeText}>{pickedAssets.length}</Text>
+                    </View>
+                  ) : null}
+                  <View style={[styles.pickIconCircle, { backgroundColor: colors.primary + '24' }]}>
+                    <ImagePlus size={26} color={colors.primary} strokeWidth={2} />
+                  </View>
+                </View>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={handleCreate}
-            style={[styles.fabPrimaryBtn, { backgroundColor: colors.primary, opacity: isLoading || isCreating ? 0.85 : 1 }]}
-            disabled={isLoading || isCreating}
-          >
-            {isCreating ? (
-              <View style={styles.rowCenter}>
-                <ActivityIndicator color="#fff" size="small" />
-                <Text style={[styles.primaryBtnText, { marginStart: 10 }]}>{t('admin.gallery.uploadingImages', 'מעלה תמונות...')}</Text>
+              {pickedAssets.length > 0 ? (
+                <ScrollView
+                  horizontal
+                  nestedScrollEnabled
+                  showsHorizontalScrollIndicator={false}
+                  style={{ maxHeight: 120, direction: I18nManager.isRTL ? 'rtl' : 'ltr' }}
+                  contentContainerStyle={{
+                    flexDirection: 'row',
+                    flexGrow: 1,
+                    justifyContent: 'flex-start',
+                    paddingVertical: 12,
+                    gap: 10,
+                    alignItems: 'center',
+                  }}
+                >
+                  {pickedAssets.map((item, index) => (
+                    <View key={`${item.uri}-${index}`} style={styles.previewSlot}>
+                      <ExpoImage
+                        source={{ uri: item.uri }}
+                        style={styles.previewImg}
+                        contentFit="cover"
+                        cachePolicy="none"
+                        transition={120}
+                      />
+                      <TouchableOpacity
+                        onPress={() => setPickedAssets((prev) => prev.filter((_, i) => i !== index))}
+                        style={[styles.previewX, { backgroundColor: colors.error }]}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        disabled={isCreating}
+                      >
+                        <Ionicons name="close" size={14} color="#fff" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              ) : null}
+
+              <TouchableOpacity
+                onPress={() => setCreateStep(2)}
+                style={[
+                  styles.fabPrimaryBtn,
+                  {
+                    backgroundColor: colors.primary,
+                    opacity: pickedAssets.length === 0 || isCreating ? 0.45 : 1,
+                    marginTop: 8,
+                  },
+                ]}
+                disabled={pickedAssets.length === 0 || isCreating}
+                accessibilityRole="button"
+                accessibilityLabel={t('admin.gallery.createNext', 'המשך')}
+              >
+                <Text style={styles.primaryBtnText}>{t('admin.gallery.createNext', 'המשך')}</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              {pickedAssets.length > 0 ? (
+                <ScrollView
+                  horizontal
+                  nestedScrollEnabled
+                  showsHorizontalScrollIndicator={false}
+                  style={{ maxHeight: 70, direction: I18nManager.isRTL ? 'rtl' : 'ltr' }}
+                  contentContainerStyle={[
+                    styles.createStep2ThumbsRow,
+                    {
+                      flexDirection: 'row',
+                      flexGrow: 1,
+                      justifyContent: 'flex-start',
+                      alignItems: 'center',
+                    },
+                  ]}
+                >
+                  {pickedAssets.slice(0, 8).map((item, idx) => (
+                    <ExpoImage
+                      key={`step2-${item.uri}-${idx}`}
+                      source={{ uri: item.uri }}
+                      style={[styles.createStep2Thumb, { backgroundColor: colors.surface }]}
+                      contentFit="cover"
+                      cachePolicy="none"
+                      transition={120}
+                    />
+                  ))}
+                </ScrollView>
+              ) : null}
+
+              <View
+                style={[
+                  styles.createNameFieldWrap,
+                  { borderBottomColor: colors.text + '22' },
+                ]}
+              >
+                <TextInput
+                  style={[styles.createNameInputLight, { color: colors.text }]}
+                  placeholder={t('admin.gallery.namePlaceholder', 'כתבו כאן את שם העיצוב')}
+                  placeholderTextColor={colors.textSecondary}
+                  value={name}
+                  onChangeText={setName}
+                  editable={!isCreating}
+                  returnKeyType="done"
+                  maxLength={120}
+                  accessibilityLabel={t('admin.gallery.nameLabel', 'שם לתצוגה')}
+                />
               </View>
-            ) : (
-              <Text style={styles.primaryBtnText}>{isLoading ? t('common.loading', 'טוען...') : t('admin.gallery.publish', 'פרסום')}</Text>
-            )}
-          </TouchableOpacity>
+
+              <View style={styles.createFooterRow}>
+                <TouchableOpacity
+                  onPress={() => setCreateStep(1)}
+                  style={[styles.createBackBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                  disabled={isCreating}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('admin.gallery.createBack', 'חזרה')}
+                >
+                  <Text style={[styles.createBackBtnText, { color: colors.text }]}>{t('admin.gallery.createBack', 'חזרה')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleCreate}
+                  style={[
+                    styles.fabPrimaryBtn,
+                    styles.createPublishFlex,
+                    { backgroundColor: colors.primary, opacity: isLoading || isCreating ? 0.85 : 1 },
+                  ]}
+                  disabled={isLoading || isCreating}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('admin.gallery.publish', 'פרסום')}
+                >
+                  {isCreating ? (
+                    <View style={styles.rowCenter}>
+                      <ActivityIndicator color="#fff" size="small" />
+                      <Text style={[styles.primaryBtnText, { marginStart: 10 }]}>{t('admin.gallery.uploadingImages', 'מעלה תמונות...')}</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.primaryBtnText}>{isLoading ? t('common.loading', 'טוען...') : t('admin.gallery.publish', 'פרסום')}</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </ScrollView>
       </FabButton>
+      ) : null}
 
       {/* Edit — bottom sheet */}
       <Modal
@@ -702,7 +925,7 @@ export default function EditGalleryScreen() {
               <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>{t('admin.gallery.nameLabel', 'Display name')}</Text>
               <TextInput
                 style={[styles.fieldInput, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-                placeholder={t('admin.gallery.namePlaceholder', 'Design name')}
+                placeholder={t('admin.gallery.namePlaceholder', 'Type the design name here')}
                 placeholderTextColor={colors.textSecondary}
                 value={editName}
                 onChangeText={setEditName}
@@ -747,7 +970,14 @@ export default function EditGalleryScreen() {
                 keyExtractor={(_, idx) => `edit-thumb-${idx}`}
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingVertical: 6, gap: 10 }}
+                style={{ direction: I18nManager.isRTL ? 'rtl' : 'ltr' }}
+                contentContainerStyle={{
+                  flexDirection: 'row',
+                  flexGrow: 1,
+                  justifyContent: 'flex-start',
+                  paddingVertical: 6,
+                  gap: 10,
+                }}
                 renderItem={({ item, index }) => (
                   <View style={styles.thumbWrap}>
                     <TouchableOpacity
@@ -791,6 +1021,76 @@ export default function EditGalleryScreen() {
           </SafeAreaView>
         </View>
       </Modal>
+
+      <Modal
+        visible={editPickerVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setEditPickerVisible(false)}
+      >
+        <View style={styles.sheetRoot}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setEditPickerVisible(false)}
+            accessibilityRole="button"
+            accessibilityLabel={t('close', 'Close')}
+          />
+          <SafeAreaView edges={['bottom']} style={[styles.sheetCard, { backgroundColor: colors.background }]}>
+            <View style={[styles.sheetGrabber, { backgroundColor: colors.border }]} />
+            <View style={styles.sheetHeader}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[styles.sheetTitle, { color: colors.text }]}>
+                  {t('admin.gallery.pickDesignToEdit', 'Choose a design to edit')}
+                </Text>
+                <Text style={[styles.sheetHint, { color: colors.textSecondary }]}>
+                  {t(
+                    'admin.gallery.pickDesignToEditHint',
+                    'Change the name and images from the next screen. To delete a design, use the trash icon on its card in the grid.'
+                  )}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setEditPickerVisible(false)}
+                style={[styles.sheetCloseBtn, { backgroundColor: colors.surface }]}
+                accessibilityRole="button"
+                accessibilityLabel={t('close', 'Close')}
+              >
+                <X size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={filtered}
+              keyExtractor={(item) => item.id}
+              style={{ maxHeight: windowHeight * 0.52 }}
+              contentContainerStyle={{ paddingBottom: 20 }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={
+                <Text style={[styles.pickerEmpty, { color: colors.textSecondary }]}>
+                  {t('admin.gallery.emptyPicker', 'No designs to edit')}
+                </Text>
+              }
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[styles.pickerRow, { borderBottomColor: colors.border }]}
+                  onPress={() => {
+                    setEditPickerVisible(false);
+                    openEdit(item);
+                  }}
+                  activeOpacity={0.88}
+                  accessibilityRole="button"
+                  accessibilityLabel={item.name}
+                >
+                  <Image source={{ uri: item.image_url }} style={styles.pickerThumb} />
+                  <Text style={[styles.pickerRowTitle, { color: colors.text }]} numberOfLines={2}>
+                    {item.name}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </SafeAreaView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -804,15 +1104,29 @@ function createStyles(colors: ThemeColors, windowWidth: number, windowHeight: nu
     _layout: layout,
     screen: { flex: 1 },
     bodySafe: { flex: 1 },
-    contentCurve: {
+    /** Full-width content on same background as header — no gray “card” or top curve */
+    contentMain: {
       flex: 1,
-      borderTopLeftRadius: 26,
-      borderTopRightRadius: 26,
-      paddingTop: 18,
-      ...Platform.select({
-        ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.06, shadowRadius: 14 },
-        android: { elevation: 0 },
-      }),
+      paddingTop: 4,
+    },
+    searchRowWrap: {
+      paddingHorizontal: paddingH,
+      paddingTop: 8,
+      paddingBottom: 14,
+    },
+    searchIconBubble: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    searchClearBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     fabBackdrop: {
       ...StyleSheet.absoluteFillObject,
@@ -821,11 +1135,33 @@ function createStyles(colors: ThemeColors, windowWidth: number, windowHeight: nu
     },
     fabSheetHeader: {
       width: '100%',
-      paddingRight: 46,
+      flexDirection: 'row',
+      alignItems: 'center',
+      direction: 'ltr',
+      gap: 8,
       marginBottom: 4,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.border,
-      paddingBottom: 14,
+      paddingBottom: 12,
+    },
+    /** Pushes title block + close to the physical right (Hebrew RTL). */
+    fabSheetHeaderSpacer: {
+      flex: 1,
+      minWidth: 0,
+    },
+    fabHeaderCloseBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    fabSheetHeaderBody: {
+      alignItems: 'flex-end',
+      flexShrink: 1,
+      minWidth: 0,
+      maxWidth: '100%',
     },
     fabSheetTitle: {
       fontSize: 21,
@@ -843,6 +1179,40 @@ function createStyles(colors: ThemeColors, windowWidth: number, windowHeight: nu
       textAlign: 'right',
       opacity: 0.92,
     },
+    createStep2ThumbsRow: { paddingVertical: 6, gap: 8, marginBottom: 8 },
+    createStep2Thumb: { width: 52, height: 52, borderRadius: 12 },
+    /** Minimal free-text line — underline only, no inner title */
+    createNameFieldWrap: {
+      marginTop: 14,
+      marginHorizontal: 2,
+      borderBottomWidth: StyleSheet.hairlineWidth * 2,
+      paddingBottom: 4,
+    },
+    createNameInputLight: {
+      fontSize: 17,
+      fontWeight: '400',
+      textAlign: 'right',
+      writingDirection: 'rtl' as const,
+      paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+      paddingHorizontal: 0,
+      margin: 0,
+      letterSpacing: 0.15,
+      lineHeight: 24,
+    },
+    createFooterRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginTop: 22,
+    },
+    createBackBtn: {
+      paddingVertical: 15,
+      paddingHorizontal: 20,
+      borderRadius: 14,
+      borderWidth: StyleSheet.hairlineWidth * 2,
+    },
+    createBackBtnText: { fontSize: 16, fontWeight: '700' },
+    createPublishFlex: { flex: 1, marginTop: 0, minWidth: 0 },
     fabTextRight: {
       textAlign: 'right',
       textTransform: 'none',
@@ -865,15 +1235,21 @@ function createStyles(colors: ThemeColors, windowWidth: number, windowHeight: nu
     searchRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginHorizontal: paddingH,
-      marginBottom: 6,
-      paddingHorizontal: 14,
-      paddingVertical: Platform.OS === 'ios' ? 12 : 10,
-      borderRadius: 14,
-      borderWidth: StyleSheet.hairlineWidth,
+      minHeight: 52,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 26,
+      borderWidth: 0,
       gap: 10,
     },
-    searchInput: { flex: 1, fontSize: 16, padding: 0, margin: 0 },
+    searchInput: {
+      flex: 1,
+      fontSize: 16,
+      fontWeight: '500',
+      padding: 0,
+      margin: 0,
+      paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+    },
     listContent: {
       paddingHorizontal: paddingH,
       paddingTop: 6,
@@ -982,13 +1358,15 @@ function createStyles(colors: ThemeColors, windowWidth: number, windowHeight: nu
     coverPillText: { color: '#fff', fontSize: 10, fontWeight: '700' },
     thumbRemove: {
       position: 'absolute',
-      top: -4,
-      right: -4,
+      top: 4,
+      end: 4,
       width: 24,
       height: 24,
       borderRadius: 12,
       alignItems: 'center',
       justifyContent: 'center',
+      zIndex: 2,
+      elevation: 3,
     },
     primaryBtn: {
       marginTop: 22,
@@ -1041,17 +1419,37 @@ function createStyles(colors: ThemeColors, windowWidth: number, windowHeight: nu
     pickSub: { fontSize: 13, marginTop: 3, lineHeight: 18 },
     countBadge: { minWidth: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
     countBadgeText: { color: '#fff', fontSize: 13, fontWeight: '800' },
-    previewSlot: { position: 'relative' },
-    previewImg: { width: 80, height: 80, borderRadius: 14 },
+    previewSlot: {
+      position: 'relative',
+      width: 80,
+      height: 80,
+      borderRadius: 14,
+      overflow: 'hidden',
+      backgroundColor: colors.surface,
+    },
+    previewImg: { width: '100%', height: '100%' },
     previewX: {
       position: 'absolute',
-      top: -5,
-      right: -5,
+      top: 5,
+      end: 5,
       width: 24,
       height: 24,
       borderRadius: 12,
       alignItems: 'center',
       justifyContent: 'center',
+      zIndex: 2,
+      elevation: 3,
     },
+    pickerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+      paddingVertical: 12,
+      paddingHorizontal: 2,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+    pickerThumb: { width: 52, height: 52, borderRadius: 10, backgroundColor: colors.surface },
+    pickerRowTitle: { flex: 1, fontSize: 16, fontWeight: '600', textAlign: 'right', writingDirection: 'rtl' as const },
+    pickerEmpty: { textAlign: 'center', paddingVertical: 28, fontSize: 15 },
   };
 }

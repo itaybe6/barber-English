@@ -212,13 +212,15 @@ export default function GalleryScreen() {
     });
     if (!result.canceled) {
       try {
-        const imageUris = result.assets.map((a) => a.uri);
-        const compressedImages = await compressImages(imageUris, {
-          quality: 0.7,
-          maxWidth: 1200,
-          maxHeight: 1200,
-          format: 'jpeg',
-        });
+        const compressedImages = await compressImages(
+          result.assets.map((a) => ({ uri: a.uri, width: a.width, height: a.height })),
+          {
+            quality: 0.7,
+            maxWidth: 1200,
+            maxHeight: 1200,
+            format: 'jpeg',
+          }
+        );
         setPickedAssets(
           compressedImages.map((compressed, index) => ({
             uri: compressed.uri,

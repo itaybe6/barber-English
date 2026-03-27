@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Linking, Alert, Animated, Easing, InteractionManager, AppState, Dimensions, RefreshControl, Modal, Platform } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Linking, Alert, Animated, Easing, InteractionManager, AppState, Dimensions, RefreshControl, Modal, Platform, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -29,22 +29,29 @@ import { useTranslation } from 'react-i18next';
 import { Marquee } from '@animatereactnative/marquee';
 import Reanimated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { manicureImages } from '@/src/constants/manicureImages';
+import { Image as ExpoImage } from 'expo-image';
 import SwapOpportunities from '@/components/SwapOpportunities';
 import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const HERO_ITEM_SIZE = Platform.OS === 'web' ? SCREEN_WIDTH * 0.24 : SCREEN_WIDTH * 0.45;
 const HERO_SPACING = Platform.OS === 'web' ? 12 : 8;
 const HERO_BG = '#FFFFFF';
 const HERO_INITIAL_DELAY = 200;
 const HERO_DURATION = 500;
-const HERO_HEIGHT = Math.round(SCREEN_HEIGHT * 0.68);
+const HERO_HEIGHT_FALLBACK = Math.round(SCREEN_HEIGHT * 0.68);
 
 function sanitizeUrlArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
     .map((x) => (typeof x === 'string' ? x.trim() : ''))
     .filter((x) => x.length > 0);
+}
+
+/** Only http(s) URLs load in the client hero; invalid DB values fall back to bundled defaults. */
+function resolveHeroImageUrls(profile: BusinessProfile | null): string[] {
+  const list = sanitizeUrlArray((profile as any)?.home_hero_images);
+  const web = list.filter((u) => /^https?:\/\//i.test(u));
+  return web.length > 0 ? web : [...manicureImages];
 }
 
 function chunkArray<T>(array: T[], size: number): T[][] {
@@ -59,10 +66,14 @@ function chunkArray<T>(array: T[], size: number): T[][] {
 }
 
 function ManicureMarqueeHero({ images }: { images: string[] }) {
+  const { width: winW } = useWindowDimensions();
+  const itemSize = Platform.OS === 'web' ? winW * 0.24 : winW * 0.45;
+  const safeImages = images.length > 0 ? images : manicureImages;
+
   const columns = useMemo(() => {
-    const perColumn = Math.ceil(images.length / 3);
-    return chunkArray(images, perColumn);
-  }, [images]);
+    const perColumn = Math.ceil(safeImages.length / 3);
+    return chunkArray(safeImages, perColumn);
+  }, [safeImages]);
 
   return (
     <View style={styles.manicureHeroRoot} pointerEvents="box-none">
@@ -83,9 +94,8 @@ function ManicureMarqueeHero({ images }: { images: string[] }) {
           >
             <View style={{ flexDirection: 'row', gap: HERO_SPACING }}>
               {column.map((image, index) => (
-                <Reanimated.Image
+                <Reanimated.View
                   key={`manicure-image-${columnIndex}-${index}`}
-                  source={{ uri: image }}
                   entering={
                     columnIndex % 2 === 0
                       ? FadeInRight.duration(HERO_DURATION).delay(
@@ -96,11 +106,20 @@ function ManicureMarqueeHero({ images }: { images: string[] }) {
                         )
                   }
                   style={{
-                    width: HERO_ITEM_SIZE,
+                    width: itemSize,
                     aspectRatio: 1,
                     borderRadius: HERO_SPACING,
+                    overflow: 'hidden',
                   }}
-                />
+                >
+                  <ExpoImage
+                    source={{ uri: image }}
+                    style={{ width: '100%', height: '100%' }}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    transition={120}
+                  />
+                </Reanimated.View>
               ))}
             </View>
           </Marquee>
@@ -235,6 +254,8 @@ export default function ClientHomeScreen() {
   const isBlocked = Boolean((user as any)?.block);
   const awaitingApproval = isClientAwaitingApproval(user);
   const colors = useColors();
+  const { height: winH } = useWindowDimensions();
+  const heroHeight = winH > 0 ? Math.max(280, Math.round(winH * 0.68)) : HERO_HEIGHT_FALLBACK;
   // Ensure light status bar when this screen is focused
   useFocusEffect(
     React.useCallback(() => {
@@ -264,10 +285,7 @@ export default function ClientHomeScreen() {
   const [showMessageModal, setShowMessageModal] = useState(false);
   const [cardWidth, setCardWidth] = useState(0);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
-  const heroImages = useMemo(() => {
-    const list = sanitizeUrlArray((businessProfile as any)?.home_hero_images);
-    return list.length > 0 ? list : manicureImages;
-  }, [businessProfile]);
+  const heroImages = useMemo(() => resolveHeroImageUrls(businessProfile), [businessProfile]);
 
   const [managerPhone, setManagerPhone] = useState<string | null>(null);
   const [businessPhone, setBusinessPhone] = useState<string | null>(null);
@@ -774,7 +792,7 @@ export default function ClientHomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Full Screen Hero with Overlay Header */}
-        <View style={styles.fullScreenHero}>
+        <View style={[styles.fullScreenHero, { height: heroHeight }]}>
           <ManicureMarqueeHero images={heroImages} />
           <LinearGradient
             colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0)', 'rgba(255,255,255,0)']}
@@ -1375,7 +1393,7 @@ const styles = StyleSheet.create<any>({
   // Full Screen Hero Styles
   fullScreenHero: {
     position: 'relative',
-    height: HERO_HEIGHT,
+    height: HERO_HEIGHT_FALLBACK,
     width: '100%',
     zIndex: 0, // Very low z-index so white background can overlap it
     backgroundColor: HERO_BG,
@@ -1434,7 +1452,6 @@ const styles = StyleSheet.create<any>({
   overlayLogo: {
     width: 170,
     height: 60,
-    tintColor: '#FFFFFF',
   },
   overlayNotificationBadge: {
     position: 'absolute',

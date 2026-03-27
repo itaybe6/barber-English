@@ -5,7 +5,16 @@ export interface CompressionOptions {
   maxWidth?: number; // default 1200
   maxHeight?: number; // default 1200
   format?: 'jpeg' | 'png' | 'webp'; // default 'jpeg'
+  /**
+   * When both are set (e.g. from expo-image-picker `asset.width` / `asset.height`),
+   * skips an extra native decode pass that was only used to read dimensions.
+   */
+  sourceWidth?: number;
+  sourceHeight?: number;
 }
+
+/** Picker asset shape — pass through from `result.assets` for faster compression */
+export type ImageCompressionSource = { uri: string; width: number; height: number };
 
 export interface CompressedImageResult {
   uri: string;
@@ -28,19 +37,31 @@ export async function compressImage(
     quality = 0.7,
     maxWidth = 1200,
     maxHeight = 1200,
-    format = 'jpeg'
+    format = 'jpeg',
+    sourceWidth,
+    sourceHeight,
   } = options;
 
   try {
-    // First, get the original image dimensions
-    const originalImage = await ImageManipulator.manipulateAsync(
-      imageUri,
-      [],
-      { format: ImageManipulator.SaveFormat.JPEG }
-    );
+    let originalWidth: number;
+    let originalHeight: number;
+
+    const sw = sourceWidth ?? 0;
+    const sh = sourceHeight ?? 0;
+    if (sw > 0 && sh > 0) {
+      originalWidth = sw;
+      originalHeight = sh;
+    } else {
+      const originalImage = await ImageManipulator.manipulateAsync(
+        imageUri,
+        [],
+        { format: ImageManipulator.SaveFormat.JPEG }
+      );
+      originalWidth = originalImage.width;
+      originalHeight = originalImage.height;
+    }
 
     // Calculate the resize dimensions while maintaining aspect ratio
-    const { width: originalWidth, height: originalHeight } = originalImage;
     
     let resizeWidth = originalWidth;
     let resizeHeight = originalHeight;
@@ -72,26 +93,25 @@ export async function compressImage(
       }
     }
 
-    // Perform the compression
-    const compressedImage = await ImageManipulator.manipulateAsync(
-      imageUri,
-      [
-        {
-          resize: {
-            width: Math.round(resizeWidth),
-            height: Math.round(resizeHeight)
-          }
-        }
-      ],
-      {
-        compress: quality,
-        format: format === 'jpeg' 
-          ? ImageManipulator.SaveFormat.JPEG 
-          : format === 'png' 
+    const saveFormat =
+      format === 'jpeg'
+        ? ImageManipulator.SaveFormat.JPEG
+        : format === 'png'
           ? ImageManipulator.SaveFormat.PNG
-          : ImageManipulator.SaveFormat.WEBP
-      }
-    );
+          : ImageManipulator.SaveFormat.WEBP;
+
+    const needsResize =
+      Math.round(resizeWidth) !== originalWidth || Math.round(resizeHeight) !== originalHeight;
+
+    // Avoid a resize pass when dimensions already fit — one native decode/encode instead of two scaling steps
+    const actions = needsResize
+      ? [{ resize: { width: Math.round(resizeWidth), height: Math.round(resizeHeight) } }]
+      : [];
+
+    const compressedImage = await ImageManipulator.manipulateAsync(imageUri, actions, {
+      compress: quality,
+      format: saveFormat,
+    });
 
     return {
       uri: compressedImage.uri,
@@ -104,19 +124,34 @@ export async function compressImage(
   }
 }
 
+export type CompressImagesInput = string | ImageCompressionSource;
+
 /**
- * Compresses multiple images in parallel
- * @param imageUris - Array of image URIs to compress
- * @param options - Compression options
- * @returns Promise with array of compressed image data
+ * Compresses multiple images sequentially (not in parallel).
+ * Parallel runs stressed Android `content://` URIs from the picker and could fail the whole batch.
+ * Pass `{ uri, width, height }` objects (from the image picker) to avoid a full extra decode per image.
  */
 export async function compressImages(
-  imageUris: string[],
+  inputs: CompressImagesInput[],
   options: CompressionOptions = {}
 ): Promise<CompressedImageResult[]> {
   try {
-    const compressionPromises = imageUris.map(uri => compressImage(uri, options));
-    return await Promise.all(compressionPromises);
+    const { sourceWidth: _sw, sourceHeight: _sh, ...rest } = options;
+    const out: CompressedImageResult[] = [];
+    for (const input of inputs) {
+      if (typeof input === 'string') {
+        out.push(await compressImage(input, rest));
+      } else {
+        out.push(
+          await compressImage(input.uri, {
+            ...rest,
+            sourceWidth: input.width,
+            sourceHeight: input.height,
+          })
+        );
+      }
+    }
+    return out;
   } catch (error) {
     console.error('Error compressing images:', error);
     throw new Error('Failed to compress images');

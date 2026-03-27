@@ -7,6 +7,7 @@ import {
   CalendarDays,
   Clock,
   Home,
+  Pencil,
   Plus,
   Settings,
   Store,
@@ -33,6 +34,7 @@ import {
   useAdminCalendarReminderFab,
   useAdminCalendarSetPlusAnchorWindow,
 } from "@/contexts/AdminCalendarReminderFabContext";
+import { useEditGalleryTabBarGet } from "@/contexts/EditGalleryTabBarContext";
 
 const INACTIVE = "#8a8a8a";
 const ICON_ACTIVE = "#ffffff";
@@ -51,6 +53,7 @@ export const AdminFloatingTabBar: React.FC = () => {
   const setPlusAnchorWindow = useAdminCalendarSetPlusAnchorWindow();
   const plusPillRef = useRef<View>(null);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const getEditGalleryActions = useEditGalleryTabBarGet();
 
   const currentTab = segments[1] as string | undefined;
   const isActive = (tab: string) =>
@@ -158,6 +161,58 @@ export const AdminFloatingTabBar: React.FC = () => {
     );
   }
 
+  if (currentTab === "edit-gallery") {
+    return (
+      <View
+        style={[styles.root, { bottom: insets.bottom + 12 }]}
+        pointerEvents="box-none"
+      >
+        <View
+          style={[styles.inner, styles.innerCalendarBar, styles.editGalleryRow]}
+        >
+          <View
+            style={[styles.pill, styles.center, styles.border, styles.shadow]}
+          >
+            <TabButton
+              focused={false}
+              activeColor={primary}
+              onPress={() => getEditGalleryActions()?.openCreate()}
+              accessibilityLabel={t(
+                "admin.gallery.tabAddDesign",
+                "Add design"
+              )}
+              accessibilityRole="button"
+            >
+              <Plus size={22} color={INACTIVE} />
+            </TabButton>
+            <TabButton
+              focused={false}
+              activeColor={primary}
+              onPress={() => getEditGalleryActions()?.openEditPicker()}
+              accessibilityLabel={t(
+                "admin.gallery.tabEditDesign",
+                "Edit design"
+              )}
+              accessibilityRole="button"
+            >
+              <Pencil size={22} color={INACTIVE} />
+            </TabButton>
+          </View>
+
+          <View style={[styles.pill, styles.border, styles.shadow]}>
+            <TabButton
+              focused={isActive("index")}
+              activeColor={primary}
+              onPress={() => router.push("/(tabs)")}
+            >
+              <Home size={22} color={iconColor("index")} />
+            </TabButton>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View
       style={[styles.root, { bottom: insets.bottom + 12 }]}
@@ -240,6 +295,13 @@ const styles = StyleSheet.create({
   },
   innerCalendarBar: {
     direction: "ltr",
+  },
+  /** Plus+edit pill and home pill grouped and centered — not stretched to screen edges */
+  editGalleryRow: {
+    alignSelf: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingHorizontal: 16,
   },
   pill: {
     backgroundColor: "#ffffff",

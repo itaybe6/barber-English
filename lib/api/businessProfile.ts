@@ -53,6 +53,8 @@ export const businessProfileApi = {
         home_hero_images: [],
         break_by_user: {},
         booking_open_days_by_user: {},
+        reminder_minutes_by_user: {},
+        client_reminder_minutes_by_user: {},
         min_cancellation_hours: 24, // Default 24 hours
         primary_color: '#000000', // Default black color
         booking_open_days: 7,
@@ -97,6 +99,7 @@ export const businessProfileApi = {
         break_by_user: (updates as any).break_by_user,
         booking_open_days_by_user: (updates as any).booking_open_days_by_user,
         reminder_minutes_by_user: (updates as any).reminder_minutes_by_user,
+        client_reminder_minutes_by_user: (updates as any).client_reminder_minutes_by_user,
         min_cancellation_hours: updates.min_cancellation_hours,
         primary_color: updates.primary_color,
             booking_open_days: (updates as any).booking_open_days,
@@ -132,6 +135,7 @@ export const businessProfileApi = {
           break_by_user: (updates as any).break_by_user,
           booking_open_days_by_user: (updates as any).booking_open_days_by_user ?? {},
           reminder_minutes_by_user: (updates as any).reminder_minutes_by_user,
+          client_reminder_minutes_by_user: (updates as any).client_reminder_minutes_by_user,
           min_cancellation_hours: updates.min_cancellation_hours,
           primary_color: updates.primary_color || '#000000',
           booking_open_days: (updates as any).booking_open_days ?? 7,
@@ -231,6 +235,37 @@ export const businessProfileApi = {
     } catch (e) {
       console.error('Error in getReminderMinutesForUser:', e);
       return null;
+    }
+  },
+
+  async getClientReminderMinutesForUser(userId?: string | null): Promise<number | null> {
+    try {
+      const profile = await this.getProfile();
+      const val = (profile as any)?.client_reminder_minutes_by_user && userId
+        ? ((profile as any).client_reminder_minutes_by_user?.[userId] ?? null)
+        : null;
+      return (val === null || typeof val === 'undefined') ? null : Number(val);
+    } catch (e) {
+      console.error('Error in getClientReminderMinutesForUser:', e);
+      return null;
+    }
+  },
+
+  async setClientReminderMinutesForUser(userId: string, minutes: number | null): Promise<void> {
+    const clamped = (minutes === null || typeof minutes === 'undefined')
+      ? null
+      : Math.max(0, Math.min(1440, Math.floor(Number(minutes) || 0)));
+    const businessId = getBusinessId();
+    const profile = await this.getProfile();
+    const currentMap = ((profile as any)?.client_reminder_minutes_by_user ?? {}) as Record<string, number | null>;
+    const nextMap = { ...currentMap, [userId]: clamped };
+    const { error } = await supabase
+      .from('business_profile')
+      .update({ client_reminder_minutes_by_user: nextMap as any })
+      .eq('id', businessId);
+    if (error) {
+      console.error('Error setting client reminder minutes:', error);
+      throw error;
     }
   },
 

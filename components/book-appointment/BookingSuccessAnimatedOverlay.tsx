@@ -27,8 +27,9 @@ type Props = {
   stagger?: number;
   lineGapMs?: number;
   onDismiss: () => void;
-  onAddToCalendar: () => void;
-  addToCalendarLabel: string;
+  /** When omitted, only the primary dismiss button is shown (e.g. pending-approval message). */
+  onAddToCalendar?: () => void;
+  addToCalendarLabel?: string;
   gotItLabel: string;
 };
 
@@ -73,10 +74,11 @@ export default function BookingSuccessAnimatedOverlay({
   stagger = 72,
   lineGapMs = 120,
   onDismiss,
-  onAddToCalendar,
-  addToCalendarLabel,
+  onAddToCalendar: onAddToCalendarProp,
+  addToCalendarLabel: addToCalendarLabelProp,
   gotItLabel,
 }: Props) {
+  const showCalendar = Boolean(onAddToCalendarProp && addToCalendarLabelProp?.trim());
   const insets = useSafeAreaInsets();
   const displayLines = useMemo(() => lines.filter((l) => l.text.trim().length > 0), [lines]);
   const texts = useMemo(() => displayLines.map((l) => l.text), [displayLines]);
@@ -199,14 +201,16 @@ export default function BookingSuccessAnimatedOverlay({
         pointerEvents="box-none"
       >
         <View style={styles.footerInner}>
-          <TouchableOpacity
-            style={[styles.btnSecondary, { borderColor: 'rgba(255,255,255,0.55)' }]}
-            onPress={onAddToCalendar}
-            activeOpacity={0.82}
-          >
-            <Ionicons name="calendar-outline" size={21} color="#FFFFFF" />
-            <Text style={styles.btnSecondaryText}>{addToCalendarLabel}</Text>
-          </TouchableOpacity>
+          {showCalendar ? (
+            <TouchableOpacity
+              style={[styles.btnSecondary, { borderColor: 'rgba(255,255,255,0.55)' }]}
+              onPress={onAddToCalendarProp}
+              activeOpacity={0.82}
+            >
+              <Ionicons name="calendar-outline" size={21} color="#FFFFFF" />
+              <Text style={styles.btnSecondaryText}>{addToCalendarLabelProp}</Text>
+            </TouchableOpacity>
+          ) : null}
 
           <TouchableOpacity
             style={[styles.btnSecondary, { borderColor: 'rgba(255,255,255,0.55)' }]}

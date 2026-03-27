@@ -752,7 +752,11 @@
       "welcome": "ברוך הבא",
       "subtitle": {"line1":"נהל את היום שלך בביטחון","line2":"האפליקציה שומרת על הלוז שלך חד"},
       "clients": "לקוחות",
-      "thisMonth": "החודש"
+      "thisMonth": "החודש",
+      "notificationsCardTitle": "ההתראות שלך",
+      "notificationsUnreadLine_one": "יש לך התראה אחת שלא נקראה",
+      "notificationsUnreadLine_other": "יש לך {{count}} התראות שלא נקראו",
+      "notificationsAllClear": "אין התראות חדשות"
     },
     "gallery": {
       "title": "גלריה",

@@ -344,6 +344,19 @@ async function loadPulseemCredentials(
   };
 }
 
+async function loadRequireClientApproval(
+  admin: ReturnType<typeof createClient>,
+  businessId: string,
+): Promise<boolean> {
+  const { data, error } = await admin
+    .from("business_profile")
+    .select("require_client_approval")
+    .eq("id", businessId)
+    .maybeSingle();
+  if (error || !data) return true;
+  return (data as { require_client_approval?: boolean }).require_client_approval !== false;
+}
+
 async function notifyAdminsNewClient(
   admin: ReturnType<typeof createClient>,
   businessId: string,
@@ -498,6 +511,10 @@ serve(async (req) => {
         if (userExistsForRegister(allUsers || [], regPhone)) {
           return json({ ok: false, error: "phone_registered" }, 400);
         }
+        const requireClientApproval = await loadRequireClientApproval(
+          admin,
+          businessId,
+        );
         const randomSecret = `otp_only_${crypto.randomUUID()}`;
         const { data: inserted, error: insUserErr } = await admin
           .from("users")
@@ -507,7 +524,7 @@ serve(async (req) => {
             user_type: "client",
             business_id: businessId,
             password_hash: randomSecret,
-            client_approved: false,
+            client_approved: !requireClientApproval,
             language: "he",
           })
           .select(userSelect)
@@ -546,12 +563,18 @@ serve(async (req) => {
         .eq("id", tok.id);
 
       try {
-        await notifyAdminsNewClient(
+        const requireClientApproval = await loadRequireClientApproval(
           admin,
           businessId,
-          displayName,
-          displayPhone,
         );
+        if (requireClientApproval && !sessionUser.client_approved) {
+          await notifyAdminsNewClient(
+            admin,
+            businessId,
+            displayName,
+            displayPhone,
+          );
+        }
       } catch (e) {
         console.error("[auth-phone-otp] notifyAdminsNewClient threw", e);
       }

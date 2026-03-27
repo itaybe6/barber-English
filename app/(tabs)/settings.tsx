@@ -13,7 +13,7 @@ import { servicesApi, updateService, createService, deleteService, updateService
 import type { Service } from '@/lib/supabase';
 import { recurringAppointmentsApi } from '@/lib/api/recurringAppointments';
 import { supabase, getBusinessId } from '@/lib/supabase';
-import { businessProfileApi, isClientSwapEnabled } from '@/lib/api/businessProfile';
+import { businessProfileApi, isClientApprovalRequired, isClientSwapEnabled } from '@/lib/api/businessProfile';
 import type { BusinessProfile } from '@/lib/supabase';
 import { 
   HelpCircle, 
@@ -215,6 +215,7 @@ export default function SettingsScreen() {
   const [profileMinCancellationHours, setProfileMinCancellationHours] = useState(24);
   const [profileBookingOpenDays, setProfileBookingOpenDays] = useState(7);
   const [clientSwapEnabled, setClientSwapEnabled] = useState(true);
+  const [requireClientApproval, setRequireClientApproval] = useState(true);
   const [showEditDisplayNameModal, setShowEditDisplayNameModal] = useState(false);
   const [showEditAddressModal, setShowEditAddressModal] = useState(false);
   const [showAddressSheet, setShowAddressSheet] = useState(false);
@@ -282,6 +283,7 @@ export default function SettingsScreen() {
         setProfileMinCancellationHours(p?.min_cancellation_hours || 24);
         setProfileBookingOpenDays(Number(((p as any)?.booking_open_days ?? 7)));
         setClientSwapEnabled(isClientSwapEnabled(p));
+        setRequireClientApproval(isClientApprovalRequired(p));
       }
     } catch (error) {
       console.error('Failed to load business profile:', error);
@@ -535,6 +537,7 @@ export default function SettingsScreen() {
         min_cancellation_hours: profileMinCancellationHours,
         booking_open_days: profileBookingOpenDays as any,
         client_swap_enabled: next,
+        require_client_approval: requireClientApproval,
       });
       if (!updated) {
         setClientSwapEnabled(prev);
@@ -543,6 +546,37 @@ export default function SettingsScreen() {
       }
       setProfile(updated);
       setClientSwapEnabled(isClientSwapEnabled(updated));
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleRequireClientApprovalToggle = async (next: boolean) => {
+    const prev = requireClientApproval;
+    setRequireClientApproval(next);
+    setIsSavingProfile(true);
+    try {
+      const updated = await businessProfileApi.upsertProfile({
+        display_name: (profileDisplayName || '').trim() || null as any,
+        address: (profileAddress || '').trim() || null as any,
+        instagram_url: (profileInstagram || '').trim() || null as any,
+        facebook_url: (profileFacebook || '').trim() || null as any,
+        tiktok_url: (profileTiktok || '').trim() || null as any,
+        min_cancellation_hours: profileMinCancellationHours,
+        booking_open_days: profileBookingOpenDays as any,
+        client_swap_enabled: clientSwapEnabled,
+        require_client_approval: next,
+      });
+      if (!updated) {
+        setRequireClientApproval(prev);
+        Alert.alert(
+          t('error.generic', 'Error'),
+          t('settings.policies.requireClientApprovalSaveFailed', 'Could not update client approval setting'),
+        );
+        return;
+      }
+      setProfile(updated);
+      setRequireClientApproval(isClientApprovalRequired(updated));
     } finally {
       setIsSavingProfile(false);
     }
@@ -2110,8 +2144,44 @@ export default function SettingsScreen() {
               value={clientSwapEnabled}
               onValueChange={handleClientSwapToggle}
               disabled={isSavingProfile}
-              trackColor={{ false: '#E5E5EA', true: `${businessColors.primary}55` }}
-              thumbColor={Platform.OS === 'android' ? (clientSwapEnabled ? businessColors.primary : '#f4f3f4') : undefined}
+              trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+              thumbColor={
+                clientSwapEnabled
+                  ? businessColors.primary
+                  : Platform.OS === 'android'
+                    ? '#f4f3f4'
+                    : undefined
+              }
+              ios_backgroundColor="#E5E5EA"
+            />
+          </View>
+          <View style={styles.settingItemLTR}>
+            <View style={styles.settingIconLTR}>
+              <User size={20} color={businessColors.primary} />
+            </View>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text style={styles.settingTitleLTR}>
+                {t('settings.policies.requireClientApprovalTitle', 'Approve new clients')}
+              </Text>
+              <Text style={styles.settingSubtitleLTR}>
+                {t(
+                  'settings.policies.requireClientApprovalSubtitle',
+                  'When on, new sign-ups wait for your approval before booking',
+                )}
+              </Text>
+            </View>
+            <Switch
+              value={requireClientApproval}
+              onValueChange={handleRequireClientApprovalToggle}
+              disabled={isSavingProfile}
+              trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+              thumbColor={
+                requireClientApproval
+                  ? businessColors.primary
+                  : Platform.OS === 'android'
+                    ? '#f4f3f4'
+                    : undefined
+              }
               ios_backgroundColor="#E5E5EA"
             />
           </View>

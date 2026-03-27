@@ -30,6 +30,7 @@ import { Marquee } from '@animatereactnative/marquee';
 import Reanimated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { manicureImages } from '@/src/constants/manicureImages';
 import SwapOpportunities from '@/components/SwapOpportunities';
+import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_ITEM_SIZE = Platform.OS === 'web' ? SCREEN_WIDTH * 0.24 : SCREEN_WIDTH * 0.45;
@@ -232,6 +233,7 @@ export default function ClientHomeScreen() {
   const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isBlocked = Boolean((user as any)?.block);
+  const awaitingApproval = isClientAwaitingApproval(user);
   const colors = useColors();
   // Ensure light status bar when this screen is focused
   useFocusEffect(
@@ -1035,7 +1037,10 @@ export default function ClientHomeScreen() {
               <View style={styles.bookAppointmentContent}>
                 {/* Book Appointment Button */}
                 <TouchableOpacity
-                  style={[styles.bookAppointmentButton, isBlocked && { opacity: 0.5 }]}
+                  style={[
+                    styles.bookAppointmentButton,
+                    (isBlocked || awaitingApproval) && { opacity: 0.5 },
+                  ]}
                   onPress={() => {
                     if (!isAuthenticated) {
                       setLoginModal({
@@ -1049,10 +1054,14 @@ export default function ClientHomeScreen() {
                       Alert.alert(t('account.blocked'), t('account.blocked.message'));
                       return;
                     }
+                    if (awaitingApproval) {
+                      Alert.alert(t('account.awaitingApproval'), t('account.awaitingApproval.message'));
+                      return;
+                    }
                     router.push('/(client-tabs)/book-appointment');
                   }}
                   activeOpacity={0.8}
-                  disabled={isBlocked}
+                  disabled={isBlocked || awaitingApproval}
                 >
                   <BlurView 
                     intensity={30} 

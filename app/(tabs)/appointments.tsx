@@ -53,8 +53,9 @@ import {
   useAdminCalendarPlusAnchorWindow,
   useAdminCalendarReminderFabRegistration,
 } from '@/contexts/AdminCalendarReminderFabContext';
-import { Calendar, ChevronLeft, ChevronRight, CheckCircle, StickyNote } from 'lucide-react-native';
+import { Ban, Calendar, ChevronLeft, ChevronRight, CheckCircle, StickyNote } from 'lucide-react-native';
 import AddAppointmentModal from '@/components/AddAppointmentModal';
+import BusinessConstraintsModal from '@/components/BusinessConstraintsModal';
 import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
@@ -686,6 +687,7 @@ export default function AdminAppointmentsScreen() {
   const [showCalendarFabSheet, setShowCalendarFabSheet] = useState(false);
   const [calendarFabStep, setCalendarFabStep] = useState<'choice' | 'reminder'>('choice');
   const [showAddAppointmentModal, setShowAddAppointmentModal] = useState(false);
+  const [showConstraintsModal, setShowConstraintsModal] = useState(false);
 
   const reminderFabPanelStyle = useMemo(() => {
     const win = Dimensions.get('window');
@@ -1373,6 +1375,12 @@ export default function AdminAppointmentsScreen() {
     setShowAddAppointmentModal(true);
   }, []);
 
+  const onCalendarFabPickConstraints = useCallback(() => {
+    setShowCalendarFabSheet(false);
+    setCalendarFabStep('choice');
+    setShowConstraintsModal(true);
+  }, []);
+
   const handleAddAppointmentModalSuccess = useCallback(() => {
     void loadAppointmentsForDate(selectedDateStr, true, calendarView === 'month');
     if (calendarView === 'month') {
@@ -1391,16 +1399,22 @@ export default function AdminAppointmentsScreen() {
   ]);
 
   useEffect(() => {
-    if ((!showCalendarFabSheet && !showAddAppointmentModal) || Platform.OS !== 'android') return;
+    if ((!showCalendarFabSheet && !showAddAppointmentModal && !showConstraintsModal) || Platform.OS !== 'android')
+      return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       closeReminderModal();
       setShowAddAppointmentModal(false);
+      setShowConstraintsModal(false);
       return true;
     });
     return () => sub.remove();
-  }, [showCalendarFabSheet, showAddAppointmentModal, closeReminderModal]);
+  }, [showCalendarFabSheet, showAddAppointmentModal, showConstraintsModal, closeReminderModal]);
 
   const reminderFabTabPress = useCallback(() => {
+    if (showConstraintsModal) {
+      setShowConstraintsModal(false);
+      return;
+    }
     if (showCalendarFabSheet || showAddAppointmentModal) {
       closeReminderModal();
       setShowAddAppointmentModal(false);
@@ -1408,15 +1422,21 @@ export default function AdminAppointmentsScreen() {
       setCalendarFabStep('choice');
       setShowCalendarFabSheet(true);
     }
-  }, [showCalendarFabSheet, showAddAppointmentModal, closeReminderModal]);
+  }, [showCalendarFabSheet, showAddAppointmentModal, showConstraintsModal, closeReminderModal]);
 
   useEffect(() => {
     setReminderFabRegistration({
-      isOpen: showCalendarFabSheet || showAddAppointmentModal,
+      isOpen: showCalendarFabSheet || showAddAppointmentModal || showConstraintsModal,
       onPress: reminderFabTabPress,
     });
     return () => setReminderFabRegistration(null);
-  }, [showCalendarFabSheet, showAddAppointmentModal, reminderFabTabPress, setReminderFabRegistration]);
+  }, [
+    showCalendarFabSheet,
+    showAddAppointmentModal,
+    showConstraintsModal,
+    reminderFabTabPress,
+    setReminderFabRegistration,
+  ]);
 
   const openEditReminderModal = useCallback(
     (r: CalendarReminder) => {
@@ -2240,7 +2260,10 @@ export default function AdminAppointmentsScreen() {
           }
           subtitle={
             calendarFabStep === 'choice'
-              ? tHe('admin.calendarAdd.choiceSubtitle', 'בחרו תור ללקוח או תזכורת פנימית ליום הנבחר')
+              ? tHe(
+                  'admin.calendarAdd.choiceSubtitle',
+                  'בחרו תור ללקוח, תזכורת פנימית, או אילוץ שחוסם משבצות'
+                )
               : tHe(
                   'admin.calendarReminder.hint',
                   'לא חוסם תורים — מוצג לצד התורים לעזרה לארגון היום'
@@ -2294,6 +2317,30 @@ export default function AdminAppointmentsScreen() {
                   </Text>
                   <Text style={styles.calendarFabChoiceHint}>
                     {tHe('admin.calendarAdd.optionReminderHint', 'תזכורת לעצמך — לא חוסמת משבצות')}
+                  </Text>
+                </View>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.calendarFabChoiceCard,
+                  pressed && styles.calendarFabChoiceCardPressed,
+                ]}
+                onPress={onCalendarFabPickConstraints}
+                accessibilityRole="button"
+                accessibilityLabel={tHe('admin.calendarAdd.optionConstraints', 'אילוצים')}
+              >
+                <View style={[styles.calendarFabChoiceIconWrap, { backgroundColor: `${calendarPrimary}12` }]}>
+                  <Ban size={26} color={calendarPrimary} />
+                </View>
+                <View style={styles.calendarFabChoiceTextCol}>
+                  <Text style={styles.calendarFabChoiceTitle}>
+                    {tHe('admin.calendarAdd.optionConstraints', 'אילוצים')}
+                  </Text>
+                  <Text style={styles.calendarFabChoiceHint}>
+                    {tHe(
+                      'admin.calendarAdd.optionConstraintsHint',
+                      'חסימת זמן בלוח — לקוחות לא יוכלו לקבוע תור בחלון זה'
+                    )}
                   </Text>
                 </View>
               </Pressable>
@@ -2464,6 +2511,8 @@ export default function AdminAppointmentsScreen() {
         onSuccess={handleAddAppointmentModalSuccess}
         initialDate={selectedDate}
       />
+
+      <BusinessConstraintsModal visible={showConstraintsModal} onClose={() => setShowConstraintsModal(false)} />
     </View>
   );
 }

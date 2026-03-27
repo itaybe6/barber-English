@@ -21,8 +21,6 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import BusinessConstraintsModal from '@/components/BusinessConstraintsModal';
-
 import { businessHoursApi } from '@/lib/api/businessHours';
 import { notifyWaitlistOnBusinessHoursUpdate } from '@/lib/api/waitlistNotifications';
 import { BusinessHours } from '@/lib/supabase';
@@ -250,7 +248,6 @@ export default function BusinessHoursScreen() {
   const [globalBreakMinutes, setGlobalBreakMinutes] = useState<number>(0);
   const [isSavingGlobalBreak, setIsSavingGlobalBreak] = useState<boolean>(false);
   const [isBreakPickerOpen, setIsBreakPickerOpen] = useState<boolean>(false);
-  const [isConstraintsOpen, setIsConstraintsOpen] = useState<boolean>(false);
   const [tempBreakMinutesStr, setTempBreakMinutesStr] = useState<string>('0');
   const isHebrewOrRtl = (i18n?.language?.toLowerCase?.().startsWith('he') ?? false) || (i18n?.dir?.() === 'rtl');
   const useAmPm = user?.user_type === 'admin' && !isHebrewOrRtl;
@@ -720,23 +717,6 @@ export default function BusinessHoursScreen() {
             contentContainerStyle={styles.scrollContent}
           >
 
-        {/* Constraints button — secondary settings-row style */}
-        <View style={{ paddingHorizontal: 24, marginBottom: 12 }}>
-          <TouchableOpacity
-            onPress={() => setIsConstraintsOpen(true)}
-            activeOpacity={0.8}
-            style={styles.constraintsButton}
-          >
-            <View style={[styles.constraintsIconBadge, { backgroundColor: `${businessColors.primary}12` }]}>
-              <Ionicons name="remove-circle-outline" size={18} color={businessColors.primary} />
-            </View>
-            <View style={styles.constraintsTextBlock}>
-              <Text style={[styles.constraintsButtonTitle, { color: businessColors.primary }]}>{t('admin.hours.manageConstraints')}</Text>
-              <Text style={styles.constraintsButtonSubtitle}>{t('admin.hours.constraintsDesc')}</Text>
-            </View>
-            <Ionicons name="chevron-back" size={16} color={Colors.tertiaryText} />
-          </TouchableOpacity>
-        </View>
         {/* Global constant break between appointments */}
         <View style={{ paddingHorizontal: 24, marginBottom: 16 }}>
           <View style={styles.globalBreakCard}>
@@ -832,7 +812,6 @@ export default function BusinessHoursScreen() {
           </ScrollView>
         </View>
       </SafeAreaView>
-      <BusinessConstraintsModal visible={isConstraintsOpen} onClose={() => setIsConstraintsOpen(false)} />
     </View>
   );
 }
@@ -953,45 +932,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-  },
-  constraintsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  constraintsIconBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  constraintsTextBlock: {
-    flex: 1,
-    gap: 2,
-  },
-  constraintsButtonTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-    textAlign: 'right',
-  },
-  constraintsButtonSubtitle: {
-    fontSize: 12,
-    color: Colors.secondaryText,
-    fontWeight: '400',
-    textAlign: 'right',
   },
   contentWrapper: {
     flex: 1,

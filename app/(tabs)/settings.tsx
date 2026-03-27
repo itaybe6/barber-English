@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Switch, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking, Dimensions, type LayoutChangeEvent } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking, Dimensions, Switch, type LayoutChangeEvent } from 'react-native';
 import Constants from 'expo-constants';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import * as ImagePicker from 'expo-image-picker';
@@ -11,13 +11,11 @@ import Colors from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
 import { servicesApi, updateService, createService, deleteService, updateServicesOrderIndexes } from '@/lib/api/services';
 import type { Service } from '@/lib/supabase';
-import { notificationsApi } from '@/lib/api/notifications';
 import { recurringAppointmentsApi } from '@/lib/api/recurringAppointments';
 import { supabase, getBusinessId } from '@/lib/supabase';
-import { businessProfileApi } from '@/lib/api/businessProfile';
+import { businessProfileApi, isClientSwapEnabled } from '@/lib/api/businessProfile';
 import type { BusinessProfile } from '@/lib/supabase';
 import { 
-  Bell, 
   HelpCircle, 
   LogOut, 
   ChevronLeft,
@@ -78,35 +76,6 @@ const shadowStyle = Platform.select({
     elevation: 3,
   },
 });
-
-
-function AppSwitch({ value, onValueChange, primaryColor }: { value: boolean; onValueChange: (v: boolean) => void; primaryColor: string }) {
-  return (
-    <Switch
-      value={value}
-      onValueChange={onValueChange}
-      trackColor={{
-        false: '#E5E5EA',
-        true: `${primaryColor}20`,
-      }}
-      thumbColor={value ? primaryColor : '#FFFFFF'}
-      ios_backgroundColor={'#E5E5EA'}
-      style={{
-        transform: [{ scaleX: 1.0 }, { scaleY: 1.0 }],
-        marginLeft: 8,
-        marginRight: 2,
-        shadowColor: '#000',
-        shadowOpacity: value ? 0.12 : 0.06,
-        shadowRadius: 4,
-        shadowOffset: { width: 0, height: 1 },
-        elevation: value ? 2 : 0,
-        borderRadius: 20,
-        borderWidth: value ? 0 : 1,
-        borderColor: value ? 'transparent' : '#E5E5EA',
-      }}
-    />
-  );
-}
 
 export default function SettingsScreen() {
   const logout = useAuthStore((state) => state.logout);
@@ -210,8 +179,6 @@ export default function SettingsScreen() {
     stickyScrollAnchorRef.current = insets.top + SETTINGS_MAIN_NAV_BELOW_INSET_H + 16;
   }, [insets.top]);
   
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  
   // Notification modal states
   const [showSupportModal, setShowSupportModal] = useState(false);
   
@@ -247,6 +214,7 @@ export default function SettingsScreen() {
   const [profileTiktok, setProfileTiktok] = useState('');
   const [profileMinCancellationHours, setProfileMinCancellationHours] = useState(24);
   const [profileBookingOpenDays, setProfileBookingOpenDays] = useState(7);
+  const [clientSwapEnabled, setClientSwapEnabled] = useState(true);
   const [showEditDisplayNameModal, setShowEditDisplayNameModal] = useState(false);
   const [showEditAddressModal, setShowEditAddressModal] = useState(false);
   const [showAddressSheet, setShowAddressSheet] = useState(false);
@@ -313,6 +281,7 @@ export default function SettingsScreen() {
         setProfileTiktok((p as any)?.tiktok_url || '');
         setProfileMinCancellationHours(p?.min_cancellation_hours || 24);
         setProfileBookingOpenDays(Number(((p as any)?.booking_open_days ?? 7)));
+        setClientSwapEnabled(isClientSwapEnabled(p));
       }
     } catch (error) {
       console.error('Failed to load business profile:', error);
@@ -547,6 +516,33 @@ export default function SettingsScreen() {
       }
       setProfile(updated);
       setProfileMinCancellationHours(updated.min_cancellation_hours || 24);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleClientSwapToggle = async (next: boolean) => {
+    const prev = clientSwapEnabled;
+    setClientSwapEnabled(next);
+    setIsSavingProfile(true);
+    try {
+      const updated = await businessProfileApi.upsertProfile({
+        display_name: (profileDisplayName || '').trim() || null as any,
+        address: (profileAddress || '').trim() || null as any,
+        instagram_url: (profileInstagram || '').trim() || null as any,
+        facebook_url: (profileFacebook || '').trim() || null as any,
+        tiktok_url: (profileTiktok || '').trim() || null as any,
+        min_cancellation_hours: profileMinCancellationHours,
+        booking_open_days: profileBookingOpenDays as any,
+        client_swap_enabled: next,
+      });
+      if (!updated) {
+        setClientSwapEnabled(prev);
+        Alert.alert(t('error.generic', 'Error'), t('settings.policies.clientSwapSaveFailed', 'Could not update swap setting'));
+        return;
+      }
+      setProfile(updated);
+      setClientSwapEnabled(isClientSwapEnabled(updated));
     } finally {
       setIsSavingProfile(false);
     }
@@ -1922,15 +1918,6 @@ export default function SettingsScreen() {
         </View>
         
         <View style={styles.cardNew}>
-          {renderSettingItem(
-            <Bell size={20} color={businessColors.primary} />,
-            t('settings.sections.notifications','Notifications'),
-            t('settings.notifications.subtitle','Receive notifications about appointments and updates'),
-            <AppSwitch value={notificationsEnabled} onValueChange={setNotificationsEnabled} primaryColor={businessColors.primary} />,
-            undefined,
-            true
-          )}
-          
           <View style={styles.settingItemLTR}>
             <View style={styles.settingIconLTR}><Clock size={20} color={businessColors.primary} /></View>
             <View style={{ flex: 1 }}>
@@ -2106,6 +2093,27 @@ export default function SettingsScreen() {
                 }}
               />
             </View>
+          </View>
+          <View style={styles.settingItemLTR}>
+            <View style={styles.settingIconLTR}>
+              <Ionicons name="swap-horizontal" size={20} color={businessColors.primary} />
+            </View>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text style={styles.settingTitleLTR}>
+                {t('settings.policies.clientSwapTitle', 'Client appointment swap')}
+              </Text>
+              <Text style={styles.settingSubtitleLTR}>
+                {t('settings.policies.clientSwapSubtitle', 'Allow clients to exchange time slots with each other')}
+              </Text>
+            </View>
+            <Switch
+              value={clientSwapEnabled}
+              onValueChange={handleClientSwapToggle}
+              disabled={isSavingProfile}
+              trackColor={{ false: '#E5E5EA', true: `${businessColors.primary}55` }}
+              thumbColor={Platform.OS === 'android' ? (clientSwapEnabled ? businessColors.primary : '#f4f3f4') : undefined}
+              ios_backgroundColor="#E5E5EA"
+            />
           </View>
         </View>
 

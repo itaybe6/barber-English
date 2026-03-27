@@ -1,6 +1,11 @@
 import { supabase, getBusinessId } from '@/lib/supabase';
 import type { BusinessProfile } from '@/lib/supabase';
 
+/** True when swapping is allowed for clients; missing column / null treated as enabled. */
+export function isClientSwapEnabled(profile: BusinessProfile | null | undefined): boolean {
+  return profile?.client_swap_enabled !== false;
+}
+
 export const businessProfileApi = {
   async getProfile(): Promise<BusinessProfile | null> {
     try {
@@ -46,6 +51,7 @@ export const businessProfileApi = {
         min_cancellation_hours: 24, // Default 24 hours
         primary_color: '#000000', // Default black color
         booking_open_days: 7,
+        client_swap_enabled: true,
       };
 
       const { data, error } = await supabase
@@ -92,6 +98,7 @@ export const businessProfileApi = {
             accountant_email: (updates as any).accountant_email,
             accountant_report_day_of_month: (updates as any).accountant_report_day_of_month,
             accountant_report_time: (updates as any).accountant_report_time,
+            client_swap_enabled: (updates as any).client_swap_enabled,
           })
           .eq('id', businessId)
           .select('*')
@@ -125,6 +132,7 @@ export const businessProfileApi = {
           accountant_email: (updates as any).accountant_email,
           accountant_report_day_of_month: (updates as any).accountant_report_day_of_month,
           accountant_report_time: (updates as any).accountant_report_time,
+          client_swap_enabled: (updates as any).client_swap_enabled ?? true,
         })
         .select('*')
         .single();

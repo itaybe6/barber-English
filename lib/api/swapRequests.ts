@@ -1,6 +1,12 @@
 import { supabase, getBusinessId } from '../supabase';
 import type { SwapRequest, Appointment } from '../supabase';
 import { notificationsApi } from './notifications';
+import { businessProfileApi, isClientSwapEnabled } from './businessProfile';
+
+async function assertClientSwapAllowed(): Promise<boolean> {
+  const profile = await businessProfileApi.getProfile();
+  return isClientSwapEnabled(profile);
+}
 
 export const swapRequestsApi = {
   async createSwapRequest(params: {
@@ -17,6 +23,9 @@ export const swapRequestsApi = {
     preferredTimeTo: string;
   }): Promise<SwapRequest | null> {
     try {
+      if (!(await assertClientSwapAllowed())) {
+        return null;
+      }
       const businessId = getBusinessId();
 
       // Cancel any existing active swap request for this appointment
@@ -139,6 +148,9 @@ export const swapRequestsApi = {
     userAppointments: Appointment[]
   ): Promise<Array<{ swapRequest: SwapRequest; myAppointment: Appointment }>> {
     try {
+      if (!(await assertClientSwapAllowed())) {
+        return [];
+      }
       const allRequests = await this.getActiveSwapRequests();
       const opportunities: Array<{ swapRequest: SwapRequest; myAppointment: Appointment }> = [];
 
@@ -184,6 +196,9 @@ export const swapRequestsApi = {
     myAppointment: Appointment
   ): Promise<boolean> {
     try {
+      if (!(await assertClientSwapAllowed())) {
+        return false;
+      }
       const businessId = getBusinessId();
 
       // Fetch the requester's appointment (the one they want to swap away)

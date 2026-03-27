@@ -161,16 +161,14 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     padding: 20,
     marginTop: 16,
-    borderWidth: 1,
-    borderColor: '#EAEAEF',
     ...Platform.select({
       ios: {
-        shadowColor: '#1a1a2e',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.07,
-        shadowRadius: 20,
+        shadowColor: '#64748B',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.13,
+        shadowRadius: 16,
       },
-      android: { elevation: 5 },
+      android: { elevation: 6 },
     }),
   },
   loadingWrap: {

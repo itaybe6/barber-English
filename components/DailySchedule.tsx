@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   I18nManager,
   Platform,
+  LayoutChangeEvent,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,13 +18,18 @@ import { useColors } from '@/src/theme/ThemeProvider';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/src/config/i18n';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withTiming,
-  cancelAnimation,
-} from 'react-native-reanimated';
+import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
+
+function darkenHex(hex: string, ratio: number): string {
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return hex;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const f = 1 - ratio;
+  const to = (n: number) => Math.round(Math.max(0, Math.min(255, n * f))).toString(16).padStart(2, '0');
+  return `#${to(r)}${to(g)}${to(b)}`;
+}
 
 interface DailyScheduleProps {
   nextAppointment: AvailableTimeSlot | null;
@@ -57,9 +63,19 @@ export default function DailySchedule({
   const [clientImageUrl, setClientImageUrl] = useState<string | undefined>(undefined);
   const styles = createStyles(colors);
   const { t } = useTranslation();
+  const [todayBannerLayout, setTodayBannerLayout] = useState<{ w: number; h: number } | null>(null);
 
   const isRTL = I18nManager.isRTL;
   const dateLocale = i18n.language === 'he' ? 'he-IL' : 'en-US';
+
+  const onTodayBannerLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    if (width > 0 && height > 0) {
+      setTodayBannerLayout((prev) =>
+        prev && prev.w === width && prev.h === height ? prev : { w: width, h: height }
+      );
+    }
+  }, []);
 
   // Fetch client image
   useEffect(() => {
@@ -91,32 +107,6 @@ export default function DailySchedule({
     return () => { isMounted = false; };
   }, [nextAppointment?.client_phone]);
 
-  // Decorative circle animations for today banner
-  const circle1X = useSharedValue(0);
-  const circle1Y = useSharedValue(0);
-  const circle2X = useSharedValue(0);
-  const circle2Y = useSharedValue(0);
-
-  useEffect(() => {
-    circle1X.value = withRepeat(withTiming(16, { duration: 3400 }), -1, true);
-    circle1Y.value = withRepeat(withTiming(-10, { duration: 4200 }), -1, true);
-    circle2X.value = withRepeat(withTiming(-14, { duration: 3800 }), -1, true);
-    circle2Y.value = withRepeat(withTiming(12, { duration: 4600 }), -1, true);
-    return () => {
-      cancelAnimation(circle1X);
-      cancelAnimation(circle1Y);
-      cancelAnimation(circle2X);
-      cancelAnimation(circle2Y);
-    };
-  }, []);
-
-  const circle1Style = useAnimatedStyle(() => ({
-    transform: [{ translateX: circle1X.value }, { translateY: circle1Y.value }],
-  }));
-  const circle2Style = useAnimatedStyle(() => ({
-    transform: [{ translateX: circle2X.value }, { translateY: circle2Y.value }],
-  }));
-
   // Time formatted with the correct locale (24hr for Hebrew, 12hr otherwise)
   const formattedTime = formatTime12Hour(nextAppointment?.slot_time ?? '');
   const { hm: timeHM, suffix: timeSuffix } = parseFormattedTime(formattedTime);
@@ -126,39 +116,50 @@ export default function DailySchedule({
 
       {/* ── TODAY BANNER ── */}
       <TouchableOpacity activeOpacity={0.85} onPress={() => router.push('/appointments')}>
-        <LinearGradient
-          colors={[colors.primary, `${colors.primary}CC`]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.todayBanner, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}
-        >
-          <View style={[styles.todayLeft, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
-            <Text style={[styles.todayWeekday, { textAlign: isRTL ? 'right' : 'left' }]}>
-              {new Date().toLocaleDateString(dateLocale, { weekday: 'long' })}
-            </Text>
-            <Text style={[styles.todayDate, { textAlign: isRTL ? 'right' : 'left' }]}>
-              {new Date().toLocaleDateString(dateLocale, { month: 'short', day: 'numeric' })}
-            </Text>
-          </View>
+        <View style={styles.todayBannerOuter} onLayout={onTodayBannerLayout}>
+          <LinearGradient
+            colors={[colors.primary, `${colors.primary}CC`]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          {Platform.OS !== 'web' && todayBannerLayout ? (
+            <BrandLavaLampBackground
+              primaryColor={colors.primary}
+              baseColor={darkenHex(colors.primary, 0.22)}
+              layoutWidth={todayBannerLayout.w}
+              layoutHeight={todayBannerLayout.h}
+              count={4}
+              duration={10500}
+              blurIntensity={28}
+            />
+          ) : null}
+          <View style={[styles.todayBannerContent, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+            <View style={[styles.todayLeft, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
+              <Text style={[styles.todayWeekday, { textAlign: isRTL ? 'right' : 'left' }]}>
+                {new Date().toLocaleDateString(dateLocale, { weekday: 'long' })}
+              </Text>
+              <Text style={[styles.todayDate, { textAlign: isRTL ? 'right' : 'left' }]}>
+                {new Date().toLocaleDateString(dateLocale, { month: 'short', day: 'numeric' })}
+              </Text>
+            </View>
 
-          <View style={[styles.todayRight, { alignItems: isRTL ? 'flex-start' : 'flex-end' }]}>
-            {loadingTodayCount ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <>
-                <Text style={[styles.todayCount, { textAlign: isRTL ? 'left' : 'right' }]}>
-                  {todayAppointmentsCount}
-                </Text>
-                <Text style={[styles.todayCountLabel, { textAlign: isRTL ? 'left' : 'right' }]}>
-                  {t('appointments.title', 'Appointments')}
-                </Text>
-              </>
-            )}
+            <View style={[styles.todayRight, { alignItems: isRTL ? 'flex-start' : 'flex-end' }]}>
+              {loadingTodayCount ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Text style={[styles.todayCount, { textAlign: isRTL ? 'left' : 'right' }]}>
+                    {todayAppointmentsCount}
+                  </Text>
+                  <Text style={[styles.todayCountLabel, { textAlign: isRTL ? 'left' : 'right' }]}>
+                    {t('appointments.title', 'Appointments')}
+                  </Text>
+                </>
+              )}
+            </View>
           </View>
-
-          <Animated.View style={[styles.todayDecorCircle, circle1Style]} />
-          <Animated.View style={[styles.todayDecorCircle2, circle2Style]} />
-        </LinearGradient>
+        </View>
       </TouchableOpacity>
 
       {/* ── NEXT APPOINTMENT ── */}
@@ -213,11 +214,9 @@ export default function DailySchedule({
                     </View>
                   )}
                 </View>
-                {/* Online dot */}
-                <View style={[styles.avatarDot, { backgroundColor: '#22C55E' }]} />
               </View>
 
-              {/* Name + Service + Duration */}
+              {/* Name + Service */}
               <View style={[styles.clientInfo, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
                 <Text
                   style={[styles.clientName, { textAlign: isRTL ? 'right' : 'left' }]}
@@ -239,37 +238,20 @@ export default function DailySchedule({
                       </Text>
                     </View>
                   ) : null}
-                  {nextAppointment.duration_minutes > 0 ? (
-                    <View
-                      style={[
-                        styles.durationPill,
-                        { flexDirection: isRTL ? 'row-reverse' : 'row' },
-                      ]}
-                    >
-                      <Ionicons name="timer-outline" size={11} color="#94A3B8" />
-                      <Text style={styles.durationText}>
-                        {t('booking.minutes', {
-                          count: nextAppointment.duration_minutes,
-                        })}
-                      </Text>
-                    </View>
-                  ) : null}
                 </View>
               </View>
             </View>
 
-            {/* Time block (second in DOM → left in RTL) */}
-            <LinearGradient
-              colors={[colors.primary, `${colors.primary}BB`]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.timeBlock}
-            >
-              <Text style={styles.timeHM}>{timeHM}</Text>
+            {/* Vertical divider */}
+            <View style={[styles.timeDivider, { backgroundColor: `${colors.primary}25` }]} />
+
+            {/* Time — plain text, no background */}
+            <View style={styles.timeBlock}>
+              <Text style={[styles.timeHM, { color: colors.primary }]}>{timeHM}</Text>
               {timeSuffix ? (
-                <Text style={styles.timeSuffix}>{timeSuffix}</Text>
+                <Text style={[styles.timeSuffix, { color: `${colors.primary}70` }]}>{timeSuffix}</Text>
               ) : null}
-            </LinearGradient>
+            </View>
           </View>
         ) : (
           /* ── Empty state ── */
@@ -290,13 +272,17 @@ const createStyles = (colors: any) => StyleSheet.create({
     gap: 10,
   },
 
-  /* ── Today Banner ── */
-  todayBanner: {
+  /* ── Today Banner (גרדיאנט + LavaLamp כמו login) ── */
+  todayBannerOuter: {
     borderRadius: 20,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  todayBannerContent: {
     paddingVertical: 18,
     paddingHorizontal: 20,
     alignItems: 'center',
-    overflow: 'hidden',
+    zIndex: 2,
   },
   todayLeft: {
     flex: 1,
@@ -316,7 +302,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     marginTop: 2,
   },
   todayRight: {
-    zIndex: 1,
+    zIndex: 3,
   },
   todayCount: {
     fontSize: 36,
@@ -332,25 +318,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  todayDecorCircle: {
-    position: 'absolute',
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    right: 50,
-    top: -20,
-  },
-  todayDecorCircle2: {
-    position: 'absolute',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    right: 10,
-    bottom: -15,
-  },
-
   /* ── Next Appointment Card — רקע surface + צל (בלי overflow:hidden כדי שלא ייחתך הצל ב‑iOS) ── */
   nextCard: {
     backgroundColor: colors.surface,
@@ -440,16 +407,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarDot: {
-    position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
   clientInfo: {
     flex: 1,
     gap: 6,
@@ -476,54 +433,31 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.1,
   },
-  durationPill: {
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  durationText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#94A3B8',
-  },
 
   /* ── Time Block ── */
+  timeDivider: {
+    width: 1.5,
+    height: 44,
+    borderRadius: 2,
+    marginHorizontal: 4,
+  },
   timeBlock: {
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 82,
-    ...Platform.select({
-      ios: {
-        shadowColor: colors.primary,
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 4 },
-      },
-      android: { elevation: 4 },
-    }),
+    gap: 2,
+    paddingStart: 4,
   },
   timeHM: {
-    fontSize: 26,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: -0.5,
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -1,
     includeFontPadding: false,
   },
   timeSuffix: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.82)',
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginTop: 2,
+    letterSpacing: 0.6,
   },
 
   /* ── States ── */

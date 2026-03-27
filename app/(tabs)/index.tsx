@@ -257,6 +257,7 @@ export default function HomeScreen() {
   const [pendingApprovalsOpenNonce, setPendingApprovalsOpenNonce] = useState(0);
   const [pendingClientsCount, setPendingClientsCount] = useState(0);
   const pendingCardRef = React.useRef<PendingClientApprovalsCardHandle>(null);
+  const [waitlistWaitingCount, setWaitlistWaitingCount] = useState(0);
 
   const formatClientMoney = useCallback(
     (amount: number) => {
@@ -474,6 +475,14 @@ export default function HomeScreen() {
         appointmentsToday: todayApptRes.error ? 0 : todayApptRes.count ?? 0,
         newClientsThisMonth: newClientsRes.error ? 0 : newClientsRes.count ?? 0,
       });
+
+      // ספירת כל הממתינים (סטטוס waiting), בלי סינון תאריך
+      const { count: wCount } = await supabase
+        .from('waitlist_entries')
+        .select('id', { count: 'exact', head: true })
+        .eq('business_id', businessId)
+        .eq('status', 'waiting');
+      setWaitlistWaitingCount(wCount ?? 0);
     } catch (error) {
       console.error('Error in fetchInsightsData:', error);
     } finally {
@@ -849,66 +858,113 @@ export default function HomeScreen() {
           onCountChange={setPendingClientsCount}
         />
 
-        {/* ── 3 QUICK TILES ── */}
+        {/* ── 4 QUICK TILES (3 + waitlist) ── */}
         {isAdmin && (
-          <View style={styles.quickTilesRow}>
-            {/* לקוחות חדשים */}
-            <TouchableOpacity
-              style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
-              activeOpacity={0.82}
-              onPress={() => pendingCardRef.current?.open()}
-              accessibilityRole="button"
-            >
-              <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
-                <Ionicons name="person-add-outline" size={24} color={colors.primary} />
-                {pendingClientsCount > 0 ? (
-                  <View style={[styles.quickTileBadge, { backgroundColor: colors.primary }]}>
-                    <Text style={styles.quickTileBadgeText}>
-                      {pendingClientsCount > 99 ? '99+' : pendingClientsCount}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-              <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
-                {t('admin.pendingClients.bannerTitle')}
-              </Text>
-            </TouchableOpacity>
+          <View style={styles.quickTilesGrid}>
+            {/* שורה ראשונה: 3 טיילים */}
+            <View style={styles.quickTilesRow}>
+              {/* לקוחות חדשים */}
+              <TouchableOpacity
+                style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
+                activeOpacity={0.82}
+                onPress={() => pendingCardRef.current?.open()}
+                accessibilityRole="button"
+              >
+                <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
+                  <Ionicons name="person-add-outline" size={24} color={colors.primary} />
+                  {pendingClientsCount > 0 ? (
+                    <View style={[styles.quickTileBadge, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.quickTileBadgeText}>
+                        {pendingClientsCount > 99 ? '99+' : pendingClientsCount}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
+                  {t('admin.pendingClients.bannerTitle')}
+                </Text>
+              </TouchableOpacity>
 
-            {/* התראות */}
-            <TouchableOpacity
-              style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
-              activeOpacity={0.82}
-              onPress={() => router.push('/(tabs)/notifications')}
-              accessibilityRole="button"
-            >
-              <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
-                <Ionicons name="notifications-outline" size={24} color={colors.primary} />
-                {unreadCount > 0 ? (
-                  <View style={[styles.quickTileBadge, { backgroundColor: colors.primary }]}>
-                    <Text style={styles.quickTileBadgeText}>
-                      {unreadCount > 99 ? '99+' : unreadCount}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-              <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
-                {t('notifications.title', 'התראות')}
-              </Text>
-            </TouchableOpacity>
+              {/* התראות */}
+              <TouchableOpacity
+                style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
+                activeOpacity={0.82}
+                onPress={() => router.push('/(tabs)/notifications')}
+                accessibilityRole="button"
+              >
+                <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
+                  <Ionicons name="notifications-outline" size={24} color={colors.primary} />
+                  {unreadCount > 0 ? (
+                    <View style={[styles.quickTileBadge, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.quickTileBadgeText}>
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
+                  {t('notifications.title', 'התראות')}
+                </Text>
+              </TouchableOpacity>
 
-            {/* שלח הודעה */}
+              {/* שלח הודעה */}
+              <TouchableOpacity
+                style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
+                activeOpacity={0.82}
+                onPress={() => setShowBroadcast(true)}
+                accessibilityRole="button"
+              >
+                <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
+                  <Ionicons name="megaphone-outline" size={24} color={colors.primary} />
+                </View>
+                <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
+                  {t('admin.home.broadcastTile')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* שורה שנייה: רשימת המתנה — מלבן רחב */}
             <TouchableOpacity
-              style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
+              style={[styles.waitlistTile, { backgroundColor: `${colors.primary}0F` }]}
               activeOpacity={0.82}
-              onPress={() => setShowBroadcast(true)}
+              onPress={() => router.push('/(tabs)/waitlist')}
               accessibilityRole="button"
             >
-              <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
-                <Ionicons name="megaphone-outline" size={24} color={colors.primary} />
+              {/* LTR: מונה משמאל | רווח | כותרת+סאב צמודים לאייקון | אייקון מימין (לא לזוז) */}
+              <View style={styles.waitlistTileCount}>
+                <Text style={[styles.waitlistTileCountNum, { color: colors.primary }]}>
+                  {waitlistWaitingCount}
+                </Text>
+                <Text style={[styles.waitlistTileCountLabel, { color: colors.textSecondary }]}>
+                  {t('admin.waitlist.waitingLabel', 'ממתינים')}
+                </Text>
               </View>
-              <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
-                {t('admin.home.broadcastTile')}
-              </Text>
+              <View style={styles.waitlistTileSpacer} />
+              <View style={styles.waitlistTileInfo}>
+                <Text
+                  style={[
+                    styles.waitlistTileTitle,
+                    { color: colors.text },
+                    i18n.language?.startsWith('he') ? styles.waitlistTileTextHe : styles.waitlistTileTextEn,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {t('admin.waitlist.title', 'רשימת המתנה')}
+                </Text>
+                <Text
+                  style={[
+                    styles.waitlistTileSub,
+                    { color: colors.textSecondary },
+                    i18n.language?.startsWith('he') ? styles.waitlistTileTextHe : styles.waitlistTileTextEn,
+                  ]}
+                  numberOfLines={2}
+                >
+                  {t('admin.waitlist.viewAndManage', 'צפייה וניהול לקוחות ממתינים')}
+                </Text>
+              </View>
+              <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
+                <Ionicons name="hourglass-outline" size={24} color={colors.primary} />
+              </View>
             </TouchableOpacity>
           </View>
         )}
@@ -924,53 +980,24 @@ export default function HomeScreen() {
           />
         )}
 
-        {/* ── QUICK ACTIONS ── */}
-        {isAdmin && (
-          <View style={styles.quickActionsSection}>
-
-            <Text style={styles.quickActionsTitle}>{t('admin.home.quickActions', 'Quick Actions')}</Text>
-            <View style={styles.quickActionsStack}>
-
-              <TouchableOpacity style={styles.quickActionCard} activeOpacity={0.8} onPress={() => router.push('/(tabs)/edit-home-hero')}>
-                <View style={[styles.quickActionCardIcon, { backgroundColor: `${colors.primary}15` }]}>
-                  <Ionicons name="images-outline" size={22} color={colors.primary} />
-                </View>
-                <View style={styles.quickActionCardText}>
-                  <Text style={[styles.quickActionCardTitle, { color: colors.text }]}>{t('admin.hero.edit', 'Main Media')}</Text>
-                  <Text style={styles.quickActionCardSub}>{t('admin.hero.subtitle', 'Manage top animation images')}</Text>
-                </View>
-                <Ionicons name="chevron-back" size={16} color="#CBD5E1" />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.quickActionCard} activeOpacity={0.8} onPress={() => router.push('/(tabs)/edit-gallery')}>
-                <View style={[styles.quickActionCardIcon, { backgroundColor: `${colors.primary}15` }]}>
-                  <Ionicons name="grid-outline" size={22} color={colors.primary} />
-                </View>
-                <View style={styles.quickActionCardText}>
-                  <Text style={[styles.quickActionCardTitle, { color: colors.text }]}>{t('admin.gallery.edit', 'Gallery')}</Text>
-                  <Text style={styles.quickActionCardSub}>{t('admin.gallery.subtitle', 'Manage your designs')}</Text>
-                </View>
-                <Ionicons name="chevron-back" size={16} color="#CBD5E1" />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={[styles.quickActionCard, { borderBottomWidth: 0 }]} activeOpacity={0.8} onPress={() => router.push('/(tabs)/waitlist')}>
-                <View style={[styles.quickActionCardIcon, { backgroundColor: `${colors.primary}15` }]}>
-                  <Ionicons name="hourglass-outline" size={22} color={colors.primary} />
-                </View>
-                <View style={styles.quickActionCardText}>
-                  <Text style={[styles.quickActionCardTitle, { color: colors.text }]}>{t('admin.waitlist.title', 'Waitlist')}</Text>
-                  <Text style={styles.quickActionCardSub}>{t('admin.waitlist.quickActionSubtitle', 'View and manage waiting clients')}</Text>
-                </View>
-                <Ionicons name="chevron-back" size={16} color="#CBD5E1" />
-              </TouchableOpacity>
-
-            </View>
-          </View>
-        )}
-
         {/* ── GALLERY SECTION ── */}
         {isAdmin && (
-          <View style={styles.contentSection}>
+          <View style={styles.galleryCard}>
+            <View style={styles.galleryCardHeader}>
+              <Text style={[styles.galleryCardTitle, { color: colors.text }]}>
+                {t('admin.gallery.title', 'גלרייה')}
+              </Text>
+              <TouchableOpacity
+                style={[styles.galleryEditBtn, { backgroundColor: `${colors.primary}14` }]}
+                activeOpacity={0.8}
+                onPress={() => router.push('/(tabs)/edit-gallery')}
+              >
+                <Ionicons name="pencil-outline" size={15} color={colors.primary} />
+                <Text style={[styles.galleryEditBtnText, { color: colors.primary }]}>
+                  {t('admin.gallery.edit', 'עריכה')}
+                </Text>
+              </TouchableOpacity>
+            </View>
             {isLoadingDesigns
               ? <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 12 }} />
               : <DesignCarousel designs={designsFromStore as any} showHeader={false} />}
@@ -1306,12 +1333,82 @@ const createStyles = (colors: any) => StyleSheet.create({
   broadcastBannerChevronWrap: {
     opacity: 0.95,
   },
-  /* ─── 3 Quick Tiles ─── */
+  /* ─── Quick Tiles (3 + waitlist) ─── */
+  quickTilesGrid: {
+    marginTop: 14,
+    marginBottom: 6,
+    gap: 10,
+  },
   quickTilesRow: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 14,
-    marginBottom: 6,
+  },
+  waitlistTile: {
+    borderRadius: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    ...({ direction: 'ltr' } as const),
+    alignItems: 'center',
+    gap: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  waitlistTileInfo: {
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '52%',
+    gap: 2,
+    alignItems: 'flex-end',
+  },
+  waitlistTileSpacer: {
+    flex: 1,
+    minWidth: 6,
+  },
+  waitlistTileTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+    alignSelf: 'stretch',
+  },
+  waitlistTileSub: {
+    fontSize: 12,
+    fontWeight: '500',
+    alignSelf: 'stretch',
+    lineHeight: 16,
+  },
+  waitlistTileTextHe: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  waitlistTileTextEn: {
+    textAlign: 'right',
+    writingDirection: 'ltr',
+  },
+  waitlistTileCount: {
+    alignItems: 'center',
+    minWidth: 56,
+    flexShrink: 0,
+  },
+  waitlistTileCountNum: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -1,
+    lineHeight: 30,
+  },
+  waitlistTileCountLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 13,
+    marginTop: 2,
   },
   quickTile: {
     flex: 1,
@@ -1363,95 +1460,48 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
   },
-  /* ─── Quick Actions ─── */
-  quickActionsSection: {
+  /* ─── Gallery Card ─── */
+  galleryCard: {
     marginTop: 20,
-    marginBottom: 4,
-  },
-  quickActionsTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 10,
-    textAlign: 'left',
-    width: '100%',
-  },
-  quickActionsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    alignSelf: 'stretch',
-  },
-  quickActionsStack: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    overflow: 'hidden',
+    borderRadius: 22,
+    paddingTop: 16,
+    paddingBottom: 8,
+    paddingHorizontal: 16,
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 },
-      android: { elevation: 2 },
+      ios: {
+        shadowColor: '#64748B',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.11,
+        shadowRadius: 14,
+      },
+      android: { elevation: 5 },
     }),
   },
-  quickActionCard: {
+  galleryCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  galleryCardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
+  galleryEditBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  quickActionCardIcon: {
-    width: 40,
-    height: 40,
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  quickActionCardText: {
-    flex: 1,
-    alignItems: 'flex-start',
+  galleryEditBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
-  quickActionCardTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    textAlign: 'right',
-  },
-  quickActionCardSub: {
-    fontSize: 12,
-    color: '#94A3B8',
-    marginTop: 2,
-    textAlign: 'right',
-  },
-  quickActionPill: {
-    flex: 1,
-    backgroundColor: '#F8FAFF',
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderColor: '#EEF2FF',
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
-      android: { elevation: 2 },
-    }),
-  },
-  quickActionIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quickActionText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  /* ─── Content Sections ─── */
+  /* ─── Content Sections (kept for products) ─── */
   contentSection: {
     marginTop: 24,
   },

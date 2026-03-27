@@ -14,6 +14,8 @@
   "login.pleaseSignInToBook": "אנא התחבר כדי לקבוע תור.",
   "account.blocked": "החשבון חסום",
   "account.blocked.message": "החשבון שלך חסום. לא ניתן לקבוע תורים.",
+  "account.awaitingApproval": "ממתין לאישור",
+  "account.awaitingApproval.message": "ההרשמה שלך ממתינה לאישור העסק. עדיין לא ניתן לקבוע תורים.",
   "how.to.get.here": "איך מגיעים",
   "tap.map.for.directions": "הקישו על המפה לפתיחת ניווט",
   "follow.us": "עקבו אחרינו",
@@ -546,7 +548,10 @@
       "customHoursLabel": "שעות מותאמות...",
       "clientSwapTitle": "החלפת תורים בין לקוחות",
       "clientSwapSubtitle": "לקוחות יוכלו להציע ולבצע החלפת משבצות זמן",
-      "clientSwapSaveFailed": "לא ניתן לעדכן את הגדרת ההחלפה"
+      "clientSwapSaveFailed": "לא ניתן לעדכן את הגדרת ההחלפה",
+      "requireClientApprovalTitle": "אישור לקוחות חדשים",
+      "requireClientApprovalSubtitle": "כשמופעל — נרשמים חדשים ממתינים לאישורך לפני קביעת תורים",
+      "requireClientApprovalSaveFailed": "לא ניתן לעדכן את הגדרת אישור הלקוחות"
     },
     "notifications": { "subtitle": "קבל/י התראות על תורים ועדכונים" },
     "services": {

@@ -21,6 +21,7 @@ import { Service } from '@/lib/supabase';
 import { servicesApi } from '@/lib/api/services';
 import { supabase, getBusinessId, Appointment } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
+import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
 import { notificationsApi } from '@/lib/api/notifications';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
@@ -513,6 +514,14 @@ export default function BookAppointment() {
   // Reset all local state when the screen gains focus so each visit starts fresh
   useFocusEffect(
     React.useCallback(() => {
+      if (user && isClientAwaitingApproval(user)) {
+        Alert.alert(
+          t('account.awaitingApproval'),
+          t('account.awaitingApproval.message'),
+          [{ text: t('ok', 'OK'), onPress: () => router.replace('/(client-tabs)' as any) }],
+        );
+        return () => {};
+      }
       const preserve = (globalThis as any).__preserve_booking_state_on_focus__ === true;
       if (preserve) {
         // Coming back from select-time → keep selections and show day step
@@ -534,7 +543,7 @@ export default function BookAppointment() {
       setExistingAppointment(null);
       setDayAvailability({});
       return () => {};
-    }, [])
+    }, [user, t, router])
   );
   // Load per-barber break (minutes) from business_profile.break_by_user whenever barber changes
   useEffect(() => {

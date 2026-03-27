@@ -13,6 +13,8 @@
   "login.pleaseSignInToBook": "Please sign in to book an appointment.",
   "account.blocked": "Account Blocked",
   "account.blocked.message": "Your account is blocked. You cannot book appointments.",
+  "account.awaitingApproval": "Awaiting approval",
+  "account.awaitingApproval.message": "Your registration is waiting for the business to approve. You cannot book appointments yet.",
   "how.to.get.here": "How to get here",
   "tap.map.for.directions": "Tap the map to open directions",
   "follow.us": "Follow us",
@@ -526,7 +528,10 @@
       "customHoursLabel": "Custom hours...",
       "clientSwapTitle": "Client appointment swap",
       "clientSwapSubtitle": "Allow clients to exchange time slots with each other",
-      "clientSwapSaveFailed": "Could not update swap setting"
+      "clientSwapSaveFailed": "Could not update swap setting",
+      "requireClientApprovalTitle": "Approve new clients",
+      "requireClientApprovalSubtitle": "When on, new sign-ups wait for your approval before booking",
+      "requireClientApprovalSaveFailed": "Could not update client approval setting"
     },
     "notifications": { "subtitle": "Receive notifications about appointments and updates" },
     "services": {

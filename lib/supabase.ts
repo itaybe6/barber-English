@@ -267,6 +267,8 @@ export interface BusinessProfile {
   min_cancellation_hours?: number;
   /** When false, clients cannot use appointment swap with other clients. Defaults to true if unset. */
   client_swap_enabled?: boolean;
+  /** When true, new registrations need admin approval (client_approved=false). Defaults to true if unset. */
+  require_client_approval?: boolean;
   primary_color?: string; // Hex color code for primary UI color
   // Number of days forward to open booking window; defaults to 7 on server (legacy - now use booking_open_days_by_user)
   booking_open_days?: number;

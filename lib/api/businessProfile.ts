@@ -6,6 +6,11 @@ export function isClientSwapEnabled(profile: BusinessProfile | null | undefined)
   return profile?.client_swap_enabled !== false;
 }
 
+/** True when new clients must be approved by admin before booking; missing column treated as required. */
+export function isClientApprovalRequired(profile: BusinessProfile | null | undefined): boolean {
+  return profile?.require_client_approval !== false;
+}
+
 export const businessProfileApi = {
   async getProfile(): Promise<BusinessProfile | null> {
     try {
@@ -52,6 +57,7 @@ export const businessProfileApi = {
         primary_color: '#000000', // Default black color
         booking_open_days: 7,
         client_swap_enabled: true,
+        require_client_approval: true,
       };
 
       const { data, error } = await supabase
@@ -99,6 +105,7 @@ export const businessProfileApi = {
             accountant_report_day_of_month: (updates as any).accountant_report_day_of_month,
             accountant_report_time: (updates as any).accountant_report_time,
             client_swap_enabled: (updates as any).client_swap_enabled,
+            require_client_approval: (updates as any).require_client_approval,
           })
           .eq('id', businessId)
           .select('*')
@@ -133,6 +140,7 @@ export const businessProfileApi = {
           accountant_report_day_of_month: (updates as any).accountant_report_day_of_month,
           accountant_report_time: (updates as any).accountant_report_time,
           client_swap_enabled: (updates as any).client_swap_enabled ?? true,
+          require_client_approval: (updates as any).require_client_approval ?? true,
         })
         .select('*')
         .single();

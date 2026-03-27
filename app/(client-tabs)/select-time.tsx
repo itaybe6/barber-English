@@ -13,6 +13,7 @@ import { businessProfileApi } from '@/lib/api/businessProfile';
 import { useAuthStore } from '@/stores/authStore';
 import { notificationsApi } from '@/lib/api/notifications';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
+import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
 
 export default function SelectTimeScreen() {
   const router = useRouter();
@@ -353,6 +354,10 @@ export default function SelectTimeScreen() {
 
   const handleBook = async () => {
     if (!selectedTime) return;
+    if (isClientAwaitingApproval(user)) {
+      Alert.alert(t('account.awaitingApproval'), t('account.awaitingApproval.message'));
+      return;
+    }
     try {
       setBooking(true);
       const businessId = getBusinessId();

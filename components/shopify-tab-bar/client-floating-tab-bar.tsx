@@ -11,6 +11,7 @@ import {
 } from "lucide-react-native";
 import { TabButton } from "./tab-button";
 import { useAuthStore } from "@/stores/authStore";
+import { isClientAwaitingApproval } from "@/lib/utils/clientApproval";
 import { useTranslation } from "react-i18next";
 import { getClientTabBarBottomInset } from "@/constants/clientTabBarInsets";
 import { useColors } from "@/src/theme/ThemeProvider";
@@ -31,6 +32,7 @@ export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
   const isBlocked = Boolean((user as any)?.block);
+  const awaitingApproval = isClientAwaitingApproval(user);
   const { t } = useTranslation();
   const { primary } = useColors();
 
@@ -67,6 +69,16 @@ export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
       Alert.alert(
         t("account.blocked", "Account Blocked"),
         t("account.blocked.message", "Your account is blocked. You cannot book appointments.")
+      );
+      return;
+    }
+    if (awaitingApproval) {
+      Alert.alert(
+        t("account.awaitingApproval", "Awaiting approval"),
+        t(
+          "account.awaitingApproval.message",
+          "Your registration is waiting for the business to approve. You cannot book appointments yet.",
+        ),
       );
       return;
     }

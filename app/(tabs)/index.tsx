@@ -39,7 +39,7 @@ import { Marquee } from '@animatereactnative/marquee';
 import Reanimated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { manicureImages } from '@/src/constants/manicureImages';
 import MonthlyInsightsCard from '@/components/MonthlyInsightsCard';
-import { PendingClientApprovalsCard } from '@/components/admin/PendingClientApprovalsCard';
+import { PendingClientApprovalsCard, PendingClientApprovalsCardHandle } from '@/components/admin/PendingClientApprovalsCard';
 import { clientAppointmentStatsApi } from '@/lib/api/clientAppointmentStats';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -239,9 +239,8 @@ export default function HomeScreen() {
   const [editClientPhone, setEditClientPhone] = useState('');
   const [savingClient, setSavingClient] = useState(false);
   const [insightsData, setInsightsData] = useState({
-    booked: 0,
-    completed: 0,
-    cancelled: 0,
+    appointmentsThisMonth: 0,
+    appointmentsToday: 0,
     newClientsThisMonth: 0,
   });
   const [loadingInsights, setLoadingInsights] = useState(true);
@@ -256,6 +255,8 @@ export default function HomeScreen() {
     Record<string, { totalAppointments: number; avgMonthlySpend: number | null }>
   >({});
   const [pendingApprovalsOpenNonce, setPendingApprovalsOpenNonce] = useState(0);
+  const [pendingClientsCount, setPendingClientsCount] = useState(0);
+  const pendingCardRef = React.useRef<PendingClientApprovalsCardHandle>(null);
 
   const formatClientMoney = useCallback(
     (amount: number) => {
@@ -431,16 +432,30 @@ export default function HomeScreen() {
       const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
       const monthStartIso = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
       const monthEndExclusiveIso = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+      const todayStr = now.toISOString().split('T')[0];
 
-      const [appointmentsRes, newClientsRes] = await Promise.all([
-        supabase
-          .from('appointments')
-          .select('id, status')
-          .eq('business_id', businessId)
-          .eq('is_available', false)
-          .gte('slot_date', firstDayOfMonth)
-          .lte('slot_date', lastDayOfMonth)
-          .in('status', ['pending', 'confirmed', 'completed', 'cancelled', 'no_show']),
+      let monthApptQuery = supabase
+        .from('appointments')
+        .select('id', { count: 'exact', head: true })
+        .eq('business_id', businessId)
+        .eq('is_available', false)
+        .gte('slot_date', firstDayOfMonth)
+        .lte('slot_date', lastDayOfMonth)
+        .in('status', ['pending', 'confirmed', 'completed', 'cancelled', 'no_show']);
+      if (user?.id) monthApptQuery = monthApptQuery.eq('barber_id', user.id);
+
+      let todayApptQuery = supabase
+        .from('appointments')
+        .select('id', { count: 'exact', head: true })
+        .eq('business_id', businessId)
+        .eq('is_available', false)
+        .eq('slot_date', todayStr)
+        .in('status', ['pending', 'confirmed', 'completed', 'cancelled', 'no_show']);
+      if (user?.id) todayApptQuery = todayApptQuery.eq('barber_id', user.id);
+
+      const [monthApptRes, todayApptRes, newClientsRes] = await Promise.all([
+        monthApptQuery,
+        todayApptQuery,
         supabase
           .from('users')
           .select('id', { count: 'exact', head: true })
@@ -450,20 +465,13 @@ export default function HomeScreen() {
           .lt('created_at', monthEndExclusiveIso),
       ]);
 
-      if (appointmentsRes.error) {
-        console.error('Error fetching insights appointments:', appointmentsRes.error);
-      }
-      if (newClientsRes.error) {
-        console.error('Error fetching new clients count:', newClientsRes.error);
-      }
+      if (monthApptRes.error) console.error('Error fetching month appointments count:', monthApptRes.error);
+      if (todayApptRes.error) console.error('Error fetching today appointments count:', todayApptRes.error);
+      if (newClientsRes.error) console.error('Error fetching new clients count:', newClientsRes.error);
 
-      const data = appointmentsRes.data;
       setInsightsData({
-        booked:
-          data?.filter((a) => a.status === 'pending' || a.status === 'confirmed').length || 0,
-        completed: data?.filter((a) => a.status === 'completed').length || 0,
-        cancelled:
-          data?.filter((a) => a.status === 'cancelled' || a.status === 'no_show').length || 0,
+        appointmentsThisMonth: monthApptRes.error ? 0 : monthApptRes.count ?? 0,
+        appointmentsToday: todayApptRes.error ? 0 : todayApptRes.count ?? 0,
         newClientsThisMonth: newClientsRes.error ? 0 : newClientsRes.count ?? 0,
       });
     } catch (error) {
@@ -832,51 +840,75 @@ export default function HomeScreen() {
           />
         </View>
 
-        <PendingClientApprovalsCard colors={colors} openSheetNonce={pendingApprovalsOpenNonce} />
+        {/* hidden card — renders only the bottom-sheet modal; trigger via ref */}
+        <PendingClientApprovalsCard
+          ref={pendingCardRef}
+          colors={colors}
+          openSheetNonce={pendingApprovalsOpenNonce}
+          hideBanner
+          onCountChange={setPendingClientsCount}
+        />
 
+        {/* ── 3 QUICK TILES ── */}
         {isAdmin && (
-          <View style={styles.adminNotificationsSection}>
-            <Text style={styles.adminNotificationsSectionLabel}>
-              {t('notifications.title', 'Notifications')}
-            </Text>
+          <View style={styles.quickTilesRow}>
+            {/* לקוחות חדשים */}
             <TouchableOpacity
-              style={[
-                styles.adminNotificationsCard,
-                unreadCount > 0 && {
-                  borderColor: `${colors.primary}50`,
-                  backgroundColor: `${colors.primary}0D`,
-                },
-              ]}
-              activeOpacity={0.88}
+              style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
+              activeOpacity={0.82}
+              onPress={() => pendingCardRef.current?.open()}
+              accessibilityRole="button"
+            >
+              <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
+                <Ionicons name="person-add-outline" size={24} color={colors.primary} />
+                {pendingClientsCount > 0 ? (
+                  <View style={[styles.quickTileBadge, { backgroundColor: colors.primary }]}>
+                    <Text style={styles.quickTileBadgeText}>
+                      {pendingClientsCount > 99 ? '99+' : pendingClientsCount}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
+                {t('admin.pendingClients.bannerTitle')}
+              </Text>
+            </TouchableOpacity>
+
+            {/* התראות */}
+            <TouchableOpacity
+              style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
+              activeOpacity={0.82}
               onPress={() => router.push('/(tabs)/notifications')}
               accessibilityRole="button"
-              accessibilityLabel={t('notifications.title', 'Notifications')}
             >
-              <View style={styles.adminNotificationsRow}>
-                <View style={[styles.adminNotificationsIconRing, { borderColor: `${colors.primary}38` }]}>
-                  <View style={[styles.adminNotificationsIconInner, { backgroundColor: `${colors.primary}1A` }]}>
-                    <Ionicons name="notifications-outline" size={26} color={colors.primary} />
-                  </View>
-                </View>
-                <View style={styles.adminNotificationsCardText}>
-                  <Text style={[styles.adminNotificationsCardTitle, { color: colors.text }]}>
-                    {t('admin.home.notificationsCardTitle', 'Your notifications')}
-                  </Text>
-                  <Text style={styles.adminNotificationsCardSub}>
-                    {unreadCount > 0
-                      ? t('admin.home.notificationsUnreadLine', { count: unreadCount })
-                      : t('admin.home.notificationsAllClear')}
-                  </Text>
-                </View>
+              <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
+                <Ionicons name="notifications-outline" size={24} color={colors.primary} />
                 {unreadCount > 0 ? (
-                  <View style={[styles.adminNotificationsPillBadge, { backgroundColor: colors.primary }]}>
-                    <Text style={styles.adminNotificationsPillBadgeText}>
+                  <View style={[styles.quickTileBadge, { backgroundColor: colors.primary }]}>
+                    <Text style={styles.quickTileBadgeText}>
                       {unreadCount > 99 ? '99+' : unreadCount}
                     </Text>
                   </View>
                 ) : null}
-                <Ionicons name="chevron-back" size={20} color="#94A3B8" />
               </View>
+              <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
+                {t('notifications.title', 'התראות')}
+              </Text>
+            </TouchableOpacity>
+
+            {/* שלח הודעה */}
+            <TouchableOpacity
+              style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
+              activeOpacity={0.82}
+              onPress={() => setShowBroadcast(true)}
+              accessibilityRole="button"
+            >
+              <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
+                <Ionicons name="megaphone-outline" size={24} color={colors.primary} />
+              </View>
+              <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
+                {t('admin.home.broadcastTile')}
+              </Text>
             </TouchableOpacity>
           </View>
         )}
@@ -884,9 +916,8 @@ export default function HomeScreen() {
         {/* ── MONTHLY INSIGHTS CHART ── */}
         {isAdmin && (
           <MonthlyInsightsCard
-            booked={insightsData.booked}
-            completed={insightsData.completed}
-            cancelled={insightsData.cancelled}
+            appointmentsThisMonth={insightsData.appointmentsThisMonth}
+            appointmentsToday={insightsData.appointmentsToday}
             newClientsThisMonth={insightsData.newClientsThisMonth}
             loading={loadingInsights}
             colors={colors}
@@ -896,38 +927,6 @@ export default function HomeScreen() {
         {/* ── QUICK ACTIONS ── */}
         {isAdmin && (
           <View style={styles.quickActionsSection}>
-            <TouchableOpacity
-              style={styles.broadcastBannerWrap}
-              activeOpacity={0.92}
-              onPress={() => setShowBroadcast(true)}
-              accessibilityRole="button"
-              accessibilityLabel={t('admin.notificationsComposer.sendToAllTitle', 'Send message to all clients')}
-            >
-              <LinearGradient
-                colors={[colors.primary, colors.secondary]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.broadcastBannerGradient}
-              >
-                <View style={styles.broadcastBannerShine} pointerEvents="none" />
-                <View style={styles.broadcastBannerRow}>
-                  <View style={styles.broadcastBannerIconWrap}>
-                    <Ionicons name="megaphone-outline" size={26} color="#FFFFFF" />
-                  </View>
-                  <View style={styles.broadcastBannerTextCol}>
-                    <Text style={styles.broadcastBannerTitle}>
-                      {t('admin.notificationsComposer.sendToAllTitle', 'Send message to all clients')}
-                    </Text>
-                    <Text style={styles.broadcastBannerSub}>
-                      {t('admin.notificationsComposer.sendToAllSubtitle', 'Send a custom message to all clients')}
-                    </Text>
-                  </View>
-                  <View style={styles.broadcastBannerChevronWrap}>
-                    <Ionicons name="chevron-back" size={22} color="rgba(255,255,255,0.9)" />
-                  </View>
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
 
             <Text style={styles.quickActionsTitle}>{t('admin.home.quickActions', 'Quick Actions')}</Text>
             <View style={styles.quickActionsStack}>
@@ -1308,88 +1307,61 @@ const createStyles = (colors: any) => StyleSheet.create({
   broadcastBannerChevronWrap: {
     opacity: 0.95,
   },
-  /* ─── Admin home: notifications (in sheet) ─── */
-  adminNotificationsSection: {
-    marginTop: 20,
-    marginBottom: 2,
+  /* ─── 3 Quick Tiles ─── */
+  quickTilesRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+    marginBottom: 6,
   },
-  adminNotificationsSectionLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 10,
-    textAlign: 'left',
-    width: '100%',
-  },
-  adminNotificationsCard: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#E8EDF5',
-    backgroundColor: '#FFFFFF',
-    overflow: 'hidden',
+  quickTile: {
+    flex: 1,
+    borderRadius: 20,
+    paddingVertical: 18,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    gap: 10,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.07,
-        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
       },
-      android: { elevation: 3 },
+      android: { elevation: 2 },
     }),
   },
-  adminNotificationsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    gap: 14,
-  },
-  adminNotificationsIconRing: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 1.5,
+  quickTileIconWrap: {
+    width: 50,
+    height: 50,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
   },
-  adminNotificationsIconInner: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  adminNotificationsCardText: {
-    flex: 1,
-    alignItems: 'flex-start',
-    minWidth: 0,
-  },
-  adminNotificationsCardTitle: {
-    fontSize: 16,
+  quickTileLabel: {
+    fontSize: 12,
     fontWeight: '700',
-    textAlign: 'right',
-    letterSpacing: -0.2,
+    textAlign: 'center',
+    lineHeight: 17,
+    letterSpacing: -0.1,
   },
-  adminNotificationsCardSub: {
-    fontSize: 13,
-    color: '#64748B',
-    marginTop: 4,
-    textAlign: 'right',
-    lineHeight: 18,
-  },
-  adminNotificationsPillBadge: {
-    minWidth: 26,
-    height: 26,
-    borderRadius: 13,
-    paddingHorizontal: 8,
+  quickTileBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 5,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
-  adminNotificationsPillBadgeText: {
+  quickTileBadgeText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 10,
     fontWeight: '800',
   },
   /* ─── Quick Actions ─── */

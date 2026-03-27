@@ -881,11 +881,13 @@
     },
     "calendarAdd": {
       "choiceTitle": "מה תרצה להוסיף?",
-      "choiceSubtitle": "בחרו תור ללקוח או תזכורת פנימית ליום הנבחר",
+      "choiceSubtitle": "בחרו תור ללקוח, תזכורת פנימית, או אילוץ שחוסם משבצות",
       "optionAppointment": "תור",
       "optionAppointmentHint": "קביעת תור ללקוח לפי שירות ושעה",
       "optionReminder": "תזכורת ביומן",
       "optionReminderHint": "תזכורת לעצמך — לא חוסמת משבצות",
+      "optionConstraints": "אילוצים",
+      "optionConstraintsHint": "חסימת זמן בלוח — לקוחות לא יוכלו לקבוע תור בחלון זה",
       "backToChoice": "חזרה לבחירה",
       "fabAccessibility": "הוספה ליומן"
     },

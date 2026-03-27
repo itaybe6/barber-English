@@ -880,11 +880,13 @@
     },
     "calendarAdd": {
       "choiceTitle": "What would you like to add?",
-      "choiceSubtitle": "Choose a client appointment or a personal calendar note for the selected day",
+      "choiceSubtitle": "Choose a client appointment, a reminder, or a constraint that blocks booking",
       "optionAppointment": "Appointment",
       "optionAppointmentHint": "Book a client by service and time",
       "optionReminder": "Calendar reminder",
       "optionReminderHint": "A note for you — does not block slots",
+      "optionConstraints": "Constraints",
+      "optionConstraintsHint": "Block time on the schedule — clients cannot book in that window",
       "backToChoice": "Back to options",
       "fabAccessibility": "Add to calendar"
     },

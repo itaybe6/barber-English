@@ -220,6 +220,7 @@ export default function SettingsScreen() {
   
   // Delete account modal state
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [isLanguageOpen, setIsLanguageOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   
   // Title dropdown states (removed)
@@ -2211,6 +2212,13 @@ export default function SettingsScreen() {
             </View>
             
             <View style={styles.cardNew}>
+              {renderSettingItem(
+                <Ionicons name="globe-outline" size={20} color={businessColors.primary} />,
+                t('profile.language.title', 'Language'),
+                i18n.language?.startsWith('he') ? t('profile.language.hebrew', 'Hebrew') : t('profile.language.english', 'English'),
+                undefined,
+                () => setIsLanguageOpen(true)
+              )}
               {renderSettingItem(
                 <Trash2 size={20} color="#FF3B30" />,
                 t('profile.delete.title','Delete Account'),
@@ -4223,6 +4231,61 @@ export default function SettingsScreen() {
         onSuccess={() => {
         }}
       />
+
+      {/* Language picker (same flow as client profile) */}
+      <Modal visible={isLanguageOpen} transparent animationType="slide" onRequestClose={() => setIsLanguageOpen(false)}>
+        <View style={styles.languagePickerOverlay}>
+          <View style={styles.languagePickerSheet}>
+            <View style={styles.languagePickerHandle} />
+            <View style={styles.languagePickerHeader}>
+              <View style={{ width: 44 }} />
+              <Text style={styles.languagePickerTitle}>{t('profile.language.title', 'Language')}</Text>
+              <TouchableOpacity onPress={() => setIsLanguageOpen(false)} style={styles.languagePickerCloseBtn}>
+                <Ionicons name="close" size={22} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+            <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+              <TouchableOpacity
+                style={styles.languagePickerOption}
+                onPress={async () => {
+                  try {
+                    await i18n.changeLanguage('en');
+                    if (user?.id) {
+                      const updated = await usersApi.updateUser(user.id, { language: 'en' } as any);
+                      if (updated) updateUserProfile({ language: 'en' } as any);
+                    }
+                  } finally {
+                    setIsLanguageOpen(false);
+                  }
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.languagePickerOptionText}>{t('profile.language.english', 'English')}</Text>
+                {i18n.language?.startsWith('en') && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.languagePickerOption}
+                onPress={async () => {
+                  try {
+                    await i18n.changeLanguage('he');
+                    if (user?.id) {
+                      const updated = await usersApi.updateUser(user.id, { language: 'he' } as any);
+                      if (updated) updateUserProfile({ language: 'he' } as any);
+                    }
+                  } finally {
+                    setIsLanguageOpen(false);
+                  }
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.languagePickerOptionText}>{t('profile.language.hebrew', 'Hebrew')}</Text>
+                {i18n.language?.startsWith('he') && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
+              </TouchableOpacity>
+              <Text style={styles.languagePickerNote}>{t('profile.language.restartNote', 'Direction changes may require app restart')}</Text>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
     </SafeAreaView>
   );
@@ -6261,5 +6324,67 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  languagePickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  languagePickerSheet: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '85%',
+    overflow: 'hidden',
+  },
+  languagePickerHandle: {
+    alignSelf: 'center',
+    width: 44,
+    height: 5,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 3,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  languagePickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  languagePickerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  languagePickerCloseBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  languagePickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  languagePickerOptionText: {
+    fontSize: 16,
+    color: Colors.text,
+    fontWeight: '600',
+  },
+  languagePickerNote: {
+    marginTop: 6,
+    fontSize: 12,
+    color: Colors.subtext,
+    textAlign: 'left',
   },
 });

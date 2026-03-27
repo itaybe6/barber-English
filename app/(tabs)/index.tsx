@@ -1017,13 +1017,13 @@ export default function HomeScreen() {
                 <Ionicons name="chevron-back" size={16} color="#CBD5E1" />
               </TouchableOpacity>
 
-              <TouchableOpacity style={[styles.quickActionCard, { borderBottomWidth: 0 }]} activeOpacity={0.8} onPress={() => router.push('/(tabs)/edit-products')}>
+              <TouchableOpacity style={[styles.quickActionCard, { borderBottomWidth: 0 }]} activeOpacity={0.8} onPress={() => router.push('/(tabs)/waitlist')}>
                 <View style={[styles.quickActionCardIcon, { backgroundColor: `${colors.primary}15` }]}>
-                  <Ionicons name="bag-handle-outline" size={22} color={colors.primary} />
+                  <Ionicons name="hourglass-outline" size={22} color={colors.primary} />
                 </View>
                 <View style={styles.quickActionCardText}>
-                  <Text style={[styles.quickActionCardTitle, { color: colors.text }]}>{t('admin.products.edit', 'Products')}</Text>
-                  <Text style={styles.quickActionCardSub}>{t('admin.products.subtitle', 'Manage your products')}</Text>
+                  <Text style={[styles.quickActionCardTitle, { color: colors.text }]}>{t('admin.waitlist.title', 'Waitlist')}</Text>
+                  <Text style={styles.quickActionCardSub}>{t('admin.waitlist.quickActionSubtitle', 'View and manage waiting clients')}</Text>
                 </View>
                 <Ionicons name="chevron-back" size={16} color="#CBD5E1" />
               </TouchableOpacity>

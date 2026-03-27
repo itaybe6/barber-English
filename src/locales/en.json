@@ -152,6 +152,7 @@
   "admin.hero.edit": "Main Media",
   "admin.hero.subtitle": "Manage the animation images at the top",
   "admin.gallery.subtitle": "View and manage your salon design photos",
+  "admin.tab.store": "Store",
   "admin.products.subtitle": "Manage your product list and pricing",
   "tomorrow": "Tomorrow",
   "appointments.completed": "Completed",
@@ -975,6 +976,7 @@
     },
     "waitlist": {
       "title": "Waitlist",
+      "quickActionSubtitle": "View and manage waiting clients",
       "thisWeek": "This week",
       "loadFailed": "An error occurred while loading the weekly waitlist",
       "contact": "Contact",

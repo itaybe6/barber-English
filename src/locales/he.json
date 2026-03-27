@@ -154,6 +154,7 @@
   "admin.hero.edit": "מדיה ראשית",
   "admin.hero.subtitle": "ניהול המדיה הראשית בראש הדף",
   "admin.gallery.subtitle": "הצג ונהל את תמונות העיצויים של הסלון",
+  "admin.tab.store": "חנות",
   "admin.products.subtitle": "נהל את רשימת המוצרים והמחירים שלך",
   "tomorrow": "מחר",
   "appointments.completed": "הושלם",
@@ -976,6 +977,7 @@
     },
     "waitlist": {
       "title": "רשימת המתנה",
+      "quickActionSubtitle": "צפייה וניהול לקוחות ברשימת ההמתנה",
       "thisWeek": "השבוע",
       "loadFailed": "אירעה שגיאה בטעינת רשימת ההמתנה השבועית",
       "contact": "צור קשר",

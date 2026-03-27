@@ -9,7 +9,7 @@ import {
   Home,
   Plus,
   Settings,
-  Users,
+  Store,
   Wallet,
 } from "lucide-react-native";
 import { TabButton } from "./tab-button";
@@ -178,11 +178,13 @@ export const AdminFloatingTabBar: React.FC = () => {
           style={[styles.pill, styles.center, styles.border, styles.shadow]}
         >
           <TabButton
-            focused={isActive("waitlist")}
+            focused={isActive("edit-products")}
             activeColor={primary}
-            onPress={() => router.push("/(tabs)/waitlist")}
+            onPress={() => router.push("/(tabs)/edit-products")}
+            accessibilityLabel={t("admin.tab.store", "Store")}
+            accessibilityRole="button"
           >
-            <Users size={22} color={iconColor("waitlist")} />
+            <Store size={22} color={iconColor("edit-products")} />
           </TabButton>
 
           <TabButton

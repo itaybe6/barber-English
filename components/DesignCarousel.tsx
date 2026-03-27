@@ -20,7 +20,6 @@ import { Design } from '@/lib/supabase';
 import { supabase } from '@/lib/supabase';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { useTranslation } from 'react-i18next';
-import { GalleryDesignSlide } from '@/components/GalleryDesignSlide';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH * 0.38; // Increased from 0.32 to 0.38 for larger cards
@@ -240,7 +239,11 @@ export default function DesignCarousel({
           {/* Main Design Image with Admin Profile Overlay */}
           <View style={styles.designImageContainer}>
             <View style={styles.designImageWrapper}>
-              <GalleryDesignSlide uri={imageUrl} style={styles.designImage} resizeMode="cover" />
+              <Image 
+                source={{ uri: imageUrl }} 
+                style={styles.designImage}
+                resizeMode="cover"
+              />
               
               {/* Premium Crown */}
               {isPremium && (
@@ -319,15 +322,14 @@ export default function DesignCarousel({
             {/* Design Image */}
             {selectedDesign && (
               <View style={styles.modalContent}>
-                <GalleryDesignSlide
-                  uri={
-                    selectedDesign.image_urls && selectedDesign.image_urls.length > 0
-                      ? selectedDesign.image_urls[0]
-                      : selectedDesign.image_url
-                  }
+                <Image
+                  source={{ 
+                    uri: selectedDesign.image_urls && selectedDesign.image_urls.length > 0 
+                      ? selectedDesign.image_urls[0] 
+                      : selectedDesign.image_url 
+                  }}
                   style={styles.modalImage}
                   resizeMode="contain"
-                  videoInteractive
                 />
                 
                 {/* Design Info */}

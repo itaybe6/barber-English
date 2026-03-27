@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
+  Image,
   TextInput,
   Alert,
   Platform,
@@ -16,8 +17,6 @@ import {
   useWindowDimensions,
   BackHandler,
   Keyboard,
-  type ImageStyle,
-  type StyleProp,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
@@ -28,11 +27,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
 import { usersApi } from '@/lib/api/users';
-import {
-  processGalleryPickerAssets,
-  type GalleryPickAsset,
-} from '@/lib/utils/designGalleryMedia';
-import { GalleryDesignSlide } from '@/components/GalleryDesignSlide';
+import { compressImages } from '@/lib/utils/imageCompression';
 import { useTranslation } from 'react-i18next';
 import { Search, ImagePlus, LayoutGrid, X } from 'lucide-react-native';
 import { useColors, type ThemeColors } from '@/src/theme/ThemeProvider';
@@ -62,7 +57,7 @@ export default function EditGalleryScreen() {
   const { designs, fetchDesigns, createDesign, deleteDesign, updateDesign, isLoading } = useDesignsStore();
 
   const [name, setName] = useState('');
-  const [pickedAssets, setPickedAssets] = useState<GalleryPickAsset[]>([]);
+  const [pickedAssets, setPickedAssets] = useState<Array<{ uri: string; base64?: string | null; mimeType?: string | null; fileName?: string | null }>>([]);
   const [search, setSearch] = useState('');
   const [createVisible, setCreateVisible] = useState(false);
   const [adminUsers, setAdminUsers] = useState<User[]>([]);
@@ -72,7 +67,8 @@ export default function EditGalleryScreen() {
   const [selectedDesign, setSelectedDesign] = useState<Design | null>(null);
   const [editName, setEditName] = useState('');
   const [editSelectedUserId, setEditSelectedUserId] = useState<string>('');
-  type EditImage = { kind: 'remote'; url: string } | { kind: 'local'; asset: GalleryPickAsset };
+  type LocalAsset = { uri: string; base64?: string | null; mimeType?: string | null; fileName?: string | null };
+  type EditImage = { kind: 'remote'; url: string } | { kind: 'local'; asset: LocalAsset };
   const [editImages, setEditImages] = useState<EditImage[]>([]);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -116,10 +112,6 @@ export default function EditGalleryScreen() {
     if (ext === 'png') return 'image/png';
     if (ext === 'heic' || ext === 'heif') return 'image/heic';
     if (ext === 'webp') return 'image/webp';
-    if (ext === 'mp4') return 'video/mp4';
-    if (ext === 'mov') return 'video/quicktime';
-    if (ext === 'webm') return 'video/webm';
-    if (ext === 'm4v') return 'video/x-m4v';
     return 'image/jpeg';
   };
 
@@ -146,12 +138,7 @@ export default function EditGalleryScreen() {
     return bytes;
   };
 
-  const uploadImage = async (asset: {
-    uri: string;
-    base64?: string | null;
-    mimeType?: string | null;
-    fileName?: string | null;
-  }): Promise<string | null> => {
+  const uploadImage = async (asset: { uri: string; base64?: string | null; mimeType?: string | null; fileName?: string | null }): Promise<string | null> => {
     try {
       let contentType = asset.mimeType || guessMimeFromUri(asset.fileName || asset.uri);
       let fileBody: Blob | Uint8Array;
@@ -193,28 +180,39 @@ export default function EditGalleryScreen() {
     }
   };
 
-  const galleryPickerOptions: NonNullable<Parameters<typeof ImagePicker.launchImageLibraryAsync>[0]> = {
-    mediaTypes: ['images', 'videos'],
-    allowsMultipleSelection: true,
-    quality: 1.0,
-    selectionLimit: 10,
-    base64: false,
-    videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
-  };
-
   const pickImages = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert(t('permission.required', 'Permission Required'), t('admin.gallery.permissionGallery', 'Please allow access to gallery to select images'));
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync(galleryPickerOptions);
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      allowsMultipleSelection: true,
+      quality: 1.0,
+      selectionLimit: 10,
+      base64: false,
+    });
     if (!result.canceled) {
       try {
-        const processed = await processGalleryPickerAssets(result.assets);
-        setPickedAssets(processed);
+        const imageUris = result.assets.map((a) => a.uri);
+        const compressedImages = await compressImages(imageUris, {
+          quality: 0.7,
+          maxWidth: 1200,
+          maxHeight: 1200,
+          format: 'jpeg',
+        });
+
+        setPickedAssets(
+          compressedImages.map((compressed, index) => ({
+            uri: compressed.uri,
+            base64: null,
+            mimeType: 'image/jpeg',
+            fileName: `compressed_${Date.now()}_${index}.jpg`,
+          }))
+        );
       } catch (error) {
-        console.error('Error processing gallery media:', error);
+        console.error('Error compressing images:', error);
         Alert.alert(t('error.generic', 'Error'), t('admin.gallery.processFailed', 'Failed to process selected images'));
       }
     }
@@ -244,14 +242,35 @@ export default function EditGalleryScreen() {
       Alert.alert(t('permission.required', 'Permission Required'), t('admin.gallery.permissionGallery', 'Please allow access to gallery to select images'));
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync(galleryPickerOptions);
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      allowsMultipleSelection: true,
+      selectionLimit: 10,
+      quality: 1.0,
+      base64: false,
+    });
     if (!result.canceled && result.assets.length > 0) {
       try {
-        const processed = await processGalleryPickerAssets(result.assets);
-        const newItems: EditImage[] = processed.map((asset) => ({ kind: 'local', asset }));
+        const imageUris = result.assets.map((a) => a.uri);
+        const compressedImages = await compressImages(imageUris, {
+          quality: 0.7,
+          maxWidth: 1200,
+          maxHeight: 1200,
+          format: 'jpeg',
+        });
+
+        const newItems: EditImage[] = compressedImages.map((compressed, index) => ({
+          kind: 'local',
+          asset: {
+            uri: compressed.uri,
+            base64: null,
+            mimeType: 'image/jpeg',
+            fileName: `compressed_${Date.now()}_${index}.jpg`,
+          },
+        }));
         setEditImages((prev) => [...prev, ...newItems]);
       } catch (error) {
-        console.error('Error processing gallery media:', error);
+        console.error('Error compressing images:', error);
         Alert.alert(t('error.generic', 'Error'), t('admin.gallery.processFailed', 'Failed to process selected images'));
       }
     }
@@ -270,47 +289,13 @@ export default function EditGalleryScreen() {
         if (item.kind === 'remote') {
           if (item.url) finalUrls.push(item.url);
         } else {
-          const a = item.asset;
-          if (a.mediaKind === 'video') {
-            if (a.posterUri) {
-              const posterUrl = await uploadImage({
-                uri: a.posterUri,
-                mimeType: 'image/jpeg',
-                fileName: `poster_${Date.now()}.jpg`,
-              });
-              const videoUrl = await uploadImage({
-                uri: a.uri,
-                mimeType: a.mimeType || undefined,
-                fileName: a.fileName || undefined,
-              });
-              if (!posterUrl || !videoUrl) {
-                Alert.alert(t('error.generic', 'Error'), t('admin.gallery.uploadOneFailed', 'Failed to upload one of the images'));
-                setIsSavingEdit(false);
-                return;
-              }
-              finalUrls.push(posterUrl, videoUrl);
-            } else {
-              const videoUrl = await uploadImage({
-                uri: a.uri,
-                mimeType: a.mimeType || undefined,
-                fileName: a.fileName || undefined,
-              });
-              if (!videoUrl) {
-                Alert.alert(t('error.generic', 'Error'), t('admin.gallery.uploadOneFailed', 'Failed to upload one of the images'));
-                setIsSavingEdit(false);
-                return;
-              }
-              finalUrls.push(videoUrl);
-            }
-          } else {
-            const uploaded = await uploadImage(a);
-            if (!uploaded) {
-              Alert.alert(t('error.generic', 'Error'), t('admin.gallery.uploadOneFailed', 'Failed to upload one of the images'));
-              setIsSavingEdit(false);
-              return;
-            }
-            finalUrls.push(uploaded);
+          const uploaded = await uploadImage(item.asset);
+          if (!uploaded) {
+            Alert.alert(t('error.generic', 'Error'), t('admin.gallery.uploadOneFailed', 'Failed to upload one of the images'));
+            setIsSavingEdit(false);
+            return;
           }
+          finalUrls.push(uploaded);
         }
       }
       if (finalUrls.length === 0) {
@@ -380,46 +365,13 @@ export default function EditGalleryScreen() {
 
       for (let i = 0; i < pickedAssets.length; i++) {
         const asset = pickedAssets[i];
-        if (asset.mediaKind === 'video') {
-          if (asset.posterUri) {
-            const posterUrl = await uploadImage({
-              uri: asset.posterUri,
-              mimeType: 'image/jpeg',
-              fileName: `poster_${Date.now()}_${i}.jpg`,
-            });
-            const videoUrl = await uploadImage({
-              uri: asset.uri,
-              mimeType: asset.mimeType || undefined,
-              fileName: asset.fileName || undefined,
-            });
-            if (!posterUrl || !videoUrl) {
-              Alert.alert(t('error.generic', 'Error'), t('admin.gallery.uploadIndexFailed', 'Failed to upload image {{num}}', { num: i + 1 }));
-              setIsCreating(false);
-              return;
-            }
-            urls.push(posterUrl, videoUrl);
-          } else {
-            const videoUrl = await uploadImage({
-              uri: asset.uri,
-              mimeType: asset.mimeType || undefined,
-              fileName: asset.fileName || undefined,
-            });
-            if (!videoUrl) {
-              Alert.alert(t('error.generic', 'Error'), t('admin.gallery.uploadIndexFailed', 'Failed to upload image {{num}}', { num: i + 1 }));
-              setIsCreating(false);
-              return;
-            }
-            urls.push(videoUrl);
-          }
+        const url = await uploadImage(asset);
+        if (url) {
+          urls.push(url);
         } else {
-          const url = await uploadImage(asset);
-          if (url) {
-            urls.push(url);
-          } else {
-            Alert.alert(t('error.generic', 'Error'), t('admin.gallery.uploadIndexFailed', 'Failed to upload image {{num}}', { num: i + 1 }));
-            setIsCreating(false);
-            return;
-          }
+          Alert.alert(t('error.generic', 'Error'), t('admin.gallery.uploadIndexFailed', 'Failed to upload image {{num}}', { num: i + 1 }));
+          setIsCreating(false);
+          return;
         }
       }
 
@@ -536,11 +488,7 @@ export default function EditGalleryScreen() {
                   ]}
                 >
                   <TouchableOpacity activeOpacity={0.88} onPress={() => openEdit(item)} style={styles.tileInner} accessibilityRole="button" accessibilityLabel={item.name}>
-                    <GalleryDesignSlide
-                      uri={item.image_url}
-                      style={styles.tileImage as StyleProp<ImageStyle>}
-                      resizeMode="cover"
-                    />
+                    <Image source={{ uri: item.image_url }} style={styles.tileImage} resizeMode="cover" />
                     <LinearGradient colors={['transparent', 'rgba(0,0,0,0.72)']} style={styles.tileGradient}>
                       <Text style={styles.tileName} numberOfLines={2}>
                         {item.name}
@@ -589,10 +537,7 @@ export default function EditGalleryScreen() {
         <View style={styles.fabSheetHeader}>
           <Text style={[styles.fabSheetTitle, { color: colors.text }]}>{t('admin.gallery.addDesign', 'הוספת עיצוב')}</Text>
           <Text style={[styles.fabSheetSubtitle, { color: colors.textSecondary }]}>
-            {t(
-              'admin.gallery.helper',
-              'ניתן לבחור תמונות או סרטונים (עד 10). סרטונים נדחסים ל־720p; נוצרת תמונת שער לטעינה מהירה. הפריט הראשון הוא השער.'
-            )}
+            {t('admin.gallery.helper', 'ניתן לבחור מספר תמונות. הראשונה תשמש כתמונת שער.')}
           </Text>
         </View>
 
@@ -634,11 +579,9 @@ export default function EditGalleryScreen() {
             disabled={isCreating}
           >
             <View style={styles.pickTextCol}>
-              <Text style={[styles.pickTitle, styles.fabTextRight, { color: colors.text }]}>
-                {t('admin.gallery.selectMedia', 'בחר/י תמונות או סרטון')}
-              </Text>
+              <Text style={[styles.pickTitle, styles.fabTextRight, { color: colors.text }]}>{t('admin.gallery.selectImages', 'בחר/י תמונות')}</Text>
               <Text style={[styles.pickSub, styles.fabTextRight, { color: colors.textSecondary }]}>
-                {t('admin.gallery.mediaDropHint', 'עד 10 קבצים · דחיסת תמונה וסרטון (720p) · פוסטר אוטומטי לסרטון')}
+                {t('admin.gallery.photoDropHint', 'עד 10 תמונות · דחיסה אוטומטית')}
               </Text>
             </View>
             <View style={styles.pickCardTrailing}>
@@ -662,11 +605,7 @@ export default function EditGalleryScreen() {
               contentContainerStyle={{ paddingVertical: 12, gap: 10 }}
               renderItem={({ item, index }) => (
                 <View style={styles.previewSlot}>
-                  <GalleryDesignSlide
-                    uri={item.mediaKind === 'video' ? item.posterUri || item.uri : item.uri}
-                    style={styles.previewImg as StyleProp<ImageStyle>}
-                    resizeMode="cover"
-                  />
+                  <Image source={{ uri: item.uri }} style={styles.previewImg} />
                   <TouchableOpacity
                     onPress={() => setPickedAssets((prev) => prev.filter((_, i) => i !== index))}
                     style={[styles.previewX, { backgroundColor: colors.error }]}
@@ -703,9 +642,7 @@ export default function EditGalleryScreen() {
             {isCreating ? (
               <View style={styles.rowCenter}>
                 <ActivityIndicator color="#fff" size="small" />
-                <Text style={[styles.primaryBtnText, { marginStart: 10 }]}>
-                  {t('admin.gallery.uploadingMedia', 'מעלה מדיה...')}
-                </Text>
+                <Text style={[styles.primaryBtnText, { marginStart: 10 }]}>{t('admin.gallery.uploadingImages', 'מעלה תמונות...')}</Text>
               </View>
             ) : (
               <Text style={styles.primaryBtnText}>{isLoading ? t('common.loading', 'טוען...') : t('admin.gallery.publish', 'פרסום')}</Text>
@@ -743,15 +680,16 @@ export default function EditGalleryScreen() {
 
             <KeyboardAwareScreenScroll keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 28 }}>
               <TouchableOpacity onPress={addImagesToEdit} activeOpacity={0.92} style={styles.coverTouch} disabled={isSavingEdit}>
-                <GalleryDesignSlide
-                  uri={(() => {
-                    const first = editImages[0];
-                    if (first == null) return selectedDesign?.image_url ?? '';
-                    if (first.kind === 'remote') return first.url;
-                    const a = first.asset;
-                    return a.mediaKind === 'video' && a.posterUri ? a.posterUri : a.uri;
-                  })()}
-                  style={[styles.coverImage, { backgroundColor: colors.surface }] as StyleProp<ImageStyle>}
+                <Image
+                  source={{
+                    uri:
+                      editImages[0] == null
+                        ? selectedDesign?.image_url ?? ''
+                        : editImages[0].kind === 'local'
+                          ? editImages[0].asset.uri
+                          : editImages[0].url,
+                  }}
+                  style={[styles.coverImage, { backgroundColor: colors.surface }]}
                   resizeMode="cover"
                 />
                 <LinearGradient colors={['transparent', 'rgba(0,0,0,0.55)']} style={styles.coverGradient} />
@@ -798,14 +736,10 @@ export default function EditGalleryScreen() {
               )}
 
               <View style={styles.thumbsHeader}>
-                <Text style={[styles.fieldLabel, { color: colors.text, marginBottom: 0 }]}>
-                  {t('admin.gallery.designMedia', 'Photos & videos')}
-                </Text>
+                <Text style={[styles.fieldLabel, { color: colors.text, marginBottom: 0 }]}>{t('admin.gallery.designImages', 'Design Images')}</Text>
                 <TouchableOpacity onPress={addImagesToEdit} style={[styles.miniBtn, { backgroundColor: colors.primary + '14', borderColor: colors.primary + '33' }]} disabled={isSavingEdit}>
                   <Ionicons name="images-outline" size={16} color={colors.primary} />
-                  <Text style={[styles.miniBtnText, { color: colors.primary }]}>
-                    {t('admin.gallery.addMedia', 'Add photos / video')}
-                  </Text>
+                  <Text style={[styles.miniBtnText, { color: colors.primary }]}>{t('admin.gallery.addImages', 'Add Images')}</Text>
                 </TouchableOpacity>
               </View>
               <FlatList
@@ -828,17 +762,7 @@ export default function EditGalleryScreen() {
                       activeOpacity={0.9}
                       disabled={isSavingEdit}
                     >
-                      <GalleryDesignSlide
-                        uri={
-                          item.kind === 'remote'
-                            ? item.url
-                            : item.asset.mediaKind === 'video' && item.asset.posterUri
-                              ? item.asset.posterUri
-                              : item.asset.uri
-                        }
-                        style={[styles.thumb, { backgroundColor: colors.surface }] as StyleProp<ImageStyle>}
-                        resizeMode="cover"
-                      />
+                      <Image source={{ uri: item.kind === 'local' ? item.asset.uri : item.url }} style={[styles.thumb, { backgroundColor: colors.surface }]} />
                       {index === 0 && (
                         <View style={[styles.coverPill, { backgroundColor: colors.primary }]}>
                           <Text style={styles.coverPillText}>{t('admin.gallery.cover', 'Cover')}</Text>

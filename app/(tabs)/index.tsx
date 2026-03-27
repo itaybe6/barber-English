@@ -186,6 +186,21 @@ export default function HomeScreen() {
     () => (heroImages && heroImages.length > 0 ? heroImages : manicureImages),
     [heroImages]
   );
+
+  useEffect(() => {
+    if (user?.phone) {
+      void fetchUnread(user.phone);
+    }
+  }, [user?.phone, fetchUnread]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (user?.phone) {
+        void fetchUnread(user.phone);
+      }
+    }, [user?.phone, fetchUnread])
+  );
+
   // Ensure light status bar when this screen is focused
   useFocusEffect(
     React.useCallback(() => {
@@ -212,11 +227,6 @@ export default function HomeScreen() {
   const [loadingNextAppointment, setLoadingNextAppointment] = useState(true);
   const [todayAppointmentsCount, setTodayAppointmentsCount] = useState(0);
   const [loadingTodayCount, setLoadingTodayCount] = useState(true);
-  const [monthlyStats, setMonthlyStats] = useState({
-    totalClients: 0,
-    completedAppointments: 0
-  });
-  const [loadingStats, setLoadingStats] = useState(true);
   const [showClientsModal, setShowClientsModal] = useState(false);
   const [clients, setClients] = useState<any[]>([]);
   const [filteredClients, setFilteredClients] = useState<any[]>([]);
@@ -329,21 +339,6 @@ export default function HomeScreen() {
     return `${startTime} — ${endTime}`;
   };
   
-  // Fetch unread notifications count for current admin user
-  useEffect(() => {
-    if (user?.phone) {
-      fetchUnread(user.phone);
-    }
-  }, [user?.phone, fetchUnread]);
-
-  useFocusEffect(
-    React.useCallback(() => {
-      if (user?.phone) {
-        fetchUnread(user.phone);
-      }
-    }, [user?.phone, fetchUnread])
-  );
-
   // Fetch next appointment from database
   const fetchNextAppointment = async () => {
     if (isSuperAdmin) { setLoadingNextAppointment(false); return; }
@@ -422,63 +417,6 @@ export default function HomeScreen() {
       setTodayAppointmentsCount(0);
     } finally {
       setLoadingTodayCount(false);
-    }
-  };
-
-  // Fetch monthly statistics
-  const fetchMonthlyStats = async () => {
-    if (isSuperAdmin) { setLoadingStats(false); return; }
-    try {
-      setLoadingStats(true);
-      const now = new Date();
-      const { getBusinessId } = await import('@/lib/supabase');
-      const businessId = getBusinessId();
-      
-      // Get all clients from users table
-      const { data: clientsData, error: clientsError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('user_type', 'client')
-        .eq('business_id', businessId)
-        .eq('client_approved', true);
-
-      if (clientsError) {
-        console.error('Error fetching clients:', clientsError);
-        return;
-      }
-
-      // Get all booked appointments for this month (past and upcoming within current month)
-      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-      const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-      
-      let appointmentsQuery = supabase
-        .from('appointments')
-        .select('id, status')
-        .eq('business_id', businessId)
-        .eq('is_available', false)
-        .gte('slot_date', firstDayOfMonth)
-        .lte('slot_date', lastDayOfMonth)
-        .in('status', ['pending', 'confirmed', 'completed']);
-
-      if (user?.id) {
-        appointmentsQuery = appointmentsQuery.eq('barber_id', user.id);
-      }
-
-      const { data: appointmentsData, error: appointmentsError } = await appointmentsQuery;
-
-      if (appointmentsError) {
-        console.error('Error fetching monthly booked appointments:', appointmentsError);
-        return;
-      }
-
-      setMonthlyStats({
-        totalClients: clientsData?.length || 0,
-        completedAppointments: appointmentsData?.length || 0,
-      });
-    } catch (error) {
-      console.error('Error in fetchMonthlyStats:', error);
-    } finally {
-      setLoadingStats(false);
     }
   };
 
@@ -755,7 +693,6 @@ export default function HomeScreen() {
   useEffect(() => {
     fetchNextAppointment();
     fetchTodayAppointmentsCount();
-    fetchMonthlyStats();
     fetchInsightsData();
     fetchDesigns();
     fetchProducts();
@@ -767,7 +704,6 @@ export default function HomeScreen() {
       await Promise.all([
         fetchNextAppointment(),
         fetchTodayAppointmentsCount(),
-        fetchMonthlyStats(),
         fetchInsightsData(),
         (async () => { try { await fetchDesigns(); } catch {} })(),
         (async () => { try { await fetchProducts(); } catch {} })(),
@@ -896,53 +832,54 @@ export default function HomeScreen() {
           />
         </View>
 
-        {/* ── STAT CARDS (3 in a row) ── */}
-        <View style={styles.statCardsRow}>
-          {/* Clients */}
-          <TouchableOpacity
-            style={styles.statCard}
-            activeOpacity={0.82}
-            onPress={() => { setShowClientsModal(true); fetchClients(); }}
-          >
-            <View style={[styles.statCardInner, { backgroundColor: `${colors.primary}12` }]}>
-              <View style={[styles.statCardIconWrap, { backgroundColor: `${colors.primary}22` }]}>
-                <Ionicons name="people-outline" size={16} color={colors.primary} />
-              </View>
-              {loadingStats
-                ? <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 3 }} />
-                : <Text style={[styles.statCardNumber, { color: colors.primary }]}>{monthlyStats.totalClients}</Text>}
-              <Text style={[styles.statCardLabel, { color: `${colors.primary}BB` }]}>{t('admin.home.clients', 'Clients')}</Text>
-            </View>
-          </TouchableOpacity>
-
-          {/* Today */}
-          <View style={styles.statCard}>
-            <View style={[styles.statCardInner, { backgroundColor: `${colors.primary}12` }]}>
-              <View style={[styles.statCardIconWrap, { backgroundColor: `${colors.primary}22` }]}>
-                <Ionicons name="calendar-outline" size={16} color={colors.primary} />
-              </View>
-              {loadingTodayCount
-                ? <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 3 }} />
-                : <Text style={[styles.statCardNumber, { color: colors.primary }]}>{todayAppointmentsCount}</Text>}
-              <Text style={[styles.statCardLabel, { color: `${colors.primary}BB` }]}>{t('today', 'Today')}</Text>
-            </View>
-          </View>
-
-          {/* Completed */}
-          <View style={styles.statCard}>
-            <View style={[styles.statCardInner, { backgroundColor: `${colors.primary}12` }]}>
-              <View style={[styles.statCardIconWrap, { backgroundColor: `${colors.primary}22` }]}>
-                <Ionicons name="checkmark-done-outline" size={16} color={colors.primary} />
-              </View>
-              {loadingStats
-                ? <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 3 }} />
-                : <Text style={[styles.statCardNumber, { color: colors.primary }]}>{monthlyStats.completedAppointments}</Text>}
-              <Text style={[styles.statCardLabel, { color: `${colors.primary}BB` }]}>{t('admin.home.thisMonth', 'Month')}</Text>
-            </View>
-          </View>
-        </View>
-
         <PendingClientApprovalsCard colors={colors} openSheetNonce={pendingApprovalsOpenNonce} />
+
+        {isAdmin && (
+          <View style={styles.adminNotificationsSection}>
+            <Text style={styles.adminNotificationsSectionLabel}>
+              {t('notifications.title', 'Notifications')}
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.adminNotificationsCard,
+                unreadCount > 0 && {
+                  borderColor: `${colors.primary}50`,
+                  backgroundColor: `${colors.primary}0D`,
+                },
+              ]}
+              activeOpacity={0.88}
+              onPress={() => router.push('/(tabs)/notifications')}
+              accessibilityRole="button"
+              accessibilityLabel={t('notifications.title', 'Notifications')}
+            >
+              <View style={styles.adminNotificationsRow}>
+                <View style={[styles.adminNotificationsIconRing, { borderColor: `${colors.primary}38` }]}>
+                  <View style={[styles.adminNotificationsIconInner, { backgroundColor: `${colors.primary}1A` }]}>
+                    <Ionicons name="notifications-outline" size={26} color={colors.primary} />
+                  </View>
+                </View>
+                <View style={styles.adminNotificationsCardText}>
+                  <Text style={[styles.adminNotificationsCardTitle, { color: colors.text }]}>
+                    {t('admin.home.notificationsCardTitle', 'Your notifications')}
+                  </Text>
+                  <Text style={styles.adminNotificationsCardSub}>
+                    {unreadCount > 0
+                      ? t('admin.home.notificationsUnreadLine', { count: unreadCount })
+                      : t('admin.home.notificationsAllClear')}
+                  </Text>
+                </View>
+                {unreadCount > 0 ? (
+                  <View style={[styles.adminNotificationsPillBadge, { backgroundColor: colors.primary }]}>
+                    <Text style={styles.adminNotificationsPillBadgeText}>
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </Text>
+                  </View>
+                ) : null}
+                <Ionicons name="chevron-back" size={20} color="#94A3B8" />
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* ── MONTHLY INSIGHTS CHART ── */}
         {isAdmin && (
@@ -1061,24 +998,7 @@ export default function HomeScreen() {
           <View style={styles.headerSide} />
           {/* Center placeholder */}
           <View style={styles.headerCenter} />
-          {/* Right: Notifications */}
-          <View style={styles.headerSide}>
-            <TouchableOpacity
-              style={[styles.overlayButton, { backgroundColor: colors.primary }]}
-              onPress={() => { router.push('/(tabs)/notifications'); }}
-              activeOpacity={0.85}
-              accessibilityLabel={t('notifications.title', 'Notifications')}
-            >
-              <Ionicons name="notifications-outline" size={24} color="#fff" />
-              {unreadCount > 0 && (
-                <View style={[styles.overlayNotificationBadge, { backgroundColor: colors.primary }]}>
-                  <Text style={styles.notificationBadgeText}>
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
+          <View style={styles.headerSide} />
         </View>
       </SafeAreaView>
 
@@ -1318,49 +1238,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     right: 0,
     height: 20,
   },
-  /* ─── Stat Cards ─── */
-  statCardsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-    marginBottom: 4,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: 18,
-    overflow: 'hidden',
-  },
-  statCardInner: {
-    paddingVertical: 14,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    gap: 3,
-    borderRadius: 18,
-  },
-  statCardGradient: {
-    paddingVertical: 18,
-    paddingHorizontal: 16,
-    alignItems: 'flex-start',
-    gap: 4,
-  },
-  statCardIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  statCardNumber: {
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-  },
-  statCardLabel: {
-    fontSize: 11,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
   /* ─── Daily Schedule ─── */
   dailyScheduleWrap: {
     marginTop: 12,
@@ -1430,6 +1307,90 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   broadcastBannerChevronWrap: {
     opacity: 0.95,
+  },
+  /* ─── Admin home: notifications (in sheet) ─── */
+  adminNotificationsSection: {
+    marginTop: 20,
+    marginBottom: 2,
+  },
+  adminNotificationsSectionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 10,
+    textAlign: 'left',
+    width: '100%',
+  },
+  adminNotificationsCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E8EDF5',
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.07,
+        shadowRadius: 10,
+      },
+      android: { elevation: 3 },
+    }),
+  },
+  adminNotificationsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    gap: 14,
+  },
+  adminNotificationsIconRing: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  adminNotificationsIconInner: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  adminNotificationsCardText: {
+    flex: 1,
+    alignItems: 'flex-start',
+    minWidth: 0,
+  },
+  adminNotificationsCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'right',
+    letterSpacing: -0.2,
+  },
+  adminNotificationsCardSub: {
+    fontSize: 13,
+    color: '#64748B',
+    marginTop: 4,
+    textAlign: 'right',
+    lineHeight: 18,
+  },
+  adminNotificationsPillBadge: {
+    minWidth: 26,
+    height: 26,
+    borderRadius: 13,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  adminNotificationsPillBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
   },
   /* ─── Quick Actions ─── */
   quickActionsSection: {
@@ -1583,22 +1544,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 8,
   },
-  overlayButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    shadowColor: 'rgba(0, 0, 0, 0.3)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
   overlayLogo: {
     width: '100%',
     height: '100%',
@@ -1617,20 +1562,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     height: 70,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  overlayNotificationBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: '#000000',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
   },
   fullScreenHeroContent: {
     position: 'absolute',
@@ -1936,25 +1867,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  notificationBadge: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    minWidth: 22,
-    height: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  notificationBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
   },
   dot: {
     position: 'absolute',

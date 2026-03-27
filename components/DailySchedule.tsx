@@ -1,5 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, I18nManager } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  ActivityIndicator,
+  I18nManager,
+  Platform,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { AvailableTimeSlot, supabase } from '@/lib/supabase';
@@ -7,6 +16,7 @@ import { useRouter } from 'expo-router';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/src/config/i18n';
+import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -24,6 +34,16 @@ interface DailyScheduleProps {
   variant?: 'card' | 'frosted';
 }
 
+/** Parse formatted time into { hm, suffix }.
+ *  Hebrew 24hr: "16:00" → { hm: "16:00", suffix: "" }
+ *  English 12hr: "4:00 PM" → { hm: "4:00", suffix: "PM" }
+ */
+function parseFormattedTime(formatted: string): { hm: string; suffix: string } {
+  const trimmed = formatted.trim();
+  const m = trimmed.match(/^(\d{1,2}:\d{2})\s*(.*)$/);
+  return { hm: m?.[1] ?? trimmed, suffix: m?.[2] ?? '' };
+}
+
 export default function DailySchedule({
   nextAppointment,
   loading,
@@ -38,19 +58,10 @@ export default function DailySchedule({
   const styles = createStyles(colors);
   const { t } = useTranslation();
 
-  const formatTimeToHoursMinutes = (time?: string | null): string => {
-    if (!time) return '';
-    const parts = time.split(':');
-    if (parts.length >= 2) {
-      const hour24 = parseInt(parts[0], 10);
-      const minutes = parts[1].padStart(2, '0');
-      const period = hour24 >= 12 ? 'PM' : 'AM';
-      const hour12 = ((hour24 % 12) || 12).toString();
-      return `${hour12}:${minutes} ${period}`;
-    }
-    return time;
-  };
+  const isRTL = I18nManager.isRTL;
+  const dateLocale = i18n.language === 'he' ? 'he-IL' : 'en-US';
 
+  // Fetch client image
   useEffect(() => {
     let isMounted = true;
     setClientImageUrl(undefined);
@@ -80,10 +91,7 @@ export default function DailySchedule({
     return () => { isMounted = false; };
   }, [nextAppointment?.client_phone]);
 
-  const isRTL = I18nManager.isRTL;
-  const dateLocale = i18n.language === 'he' ? 'he-IL' : 'en-US';
-
-  // Decorative circle animations
+  // Decorative circle animations for today banner
   const circle1X = useSharedValue(0);
   const circle1Y = useSharedValue(0);
   const circle2X = useSharedValue(0);
@@ -109,11 +117,13 @@ export default function DailySchedule({
     transform: [{ translateX: circle2X.value }, { translateY: circle2Y.value }],
   }));
 
-  const timeFormatted = formatTimeToHoursMinutes(nextAppointment?.slot_time);
-  const timeParts = timeFormatted.split(' ');
+  // Time formatted with the correct locale (24hr for Hebrew, 12hr otherwise)
+  const formattedTime = formatTime12Hour(nextAppointment?.slot_time ?? '');
+  const { hm: timeHM, suffix: timeSuffix } = parseFormattedTime(formattedTime);
 
   return (
     <View style={styles.wrapper}>
+
       {/* ── TODAY BANNER ── */}
       <TouchableOpacity activeOpacity={0.85} onPress={() => router.push('/appointments')}>
         <LinearGradient
@@ -122,7 +132,6 @@ export default function DailySchedule({
           end={{ x: 1, y: 1 }}
           style={[styles.todayBanner, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}
         >
-          {/* Date side — always on the "start" side */}
           <View style={[styles.todayLeft, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
             <Text style={[styles.todayWeekday, { textAlign: isRTL ? 'right' : 'left' }]}>
               {new Date().toLocaleDateString(dateLocale, { weekday: 'long' })}
@@ -132,85 +141,130 @@ export default function DailySchedule({
             </Text>
           </View>
 
-          {/* Count side — always on the "end" side */}
           <View style={[styles.todayRight, { alignItems: isRTL ? 'flex-start' : 'flex-end' }]}>
             {loadingTodayCount ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
               <>
-                <Text style={[styles.todayCount, { textAlign: isRTL ? 'left' : 'right' }]}>{todayAppointmentsCount}</Text>
-                <Text style={[styles.todayCountLabel, { textAlign: isRTL ? 'left' : 'right' }]}>{t('appointments.title', 'Appointments')}</Text>
+                <Text style={[styles.todayCount, { textAlign: isRTL ? 'left' : 'right' }]}>
+                  {todayAppointmentsCount}
+                </Text>
+                <Text style={[styles.todayCountLabel, { textAlign: isRTL ? 'left' : 'right' }]}>
+                  {t('appointments.title', 'Appointments')}
+                </Text>
               </>
             )}
           </View>
 
-          {/* Animated decorative circles */}
           <Animated.View style={[styles.todayDecorCircle, circle1Style]} />
           <Animated.View style={[styles.todayDecorCircle2, circle2Style]} />
         </LinearGradient>
       </TouchableOpacity>
 
       {/* ── NEXT APPOINTMENT ── */}
-      <TouchableOpacity activeOpacity={0.85} onPress={onRefresh} style={styles.nextCard}>
-        {/* Header row */}
+      <TouchableOpacity
+        activeOpacity={0.88}
+        onPress={onRefresh}
+        style={[
+          styles.nextCard,
+          nextAppointment && { borderColor: `${colors.primary}30` },
+        ]}
+      >
+        {/* Header */}
         <View style={[styles.nextHeader, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-          <View style={[styles.nextHeaderIcon, { backgroundColor: `${colors.primary}15` }]}>
-            <Ionicons name="time-outline" size={16} color={colors.primary} />
+          <View style={[styles.nextHeaderIcon, { backgroundColor: `${colors.primary}18` }]}>
+            <Ionicons name="time-outline" size={15} color={colors.primary} />
           </View>
-          <Text style={[styles.nextHeaderTitle, { textAlign: isRTL ? 'right' : 'left' }]}>
+          <Text style={[styles.nextHeaderTitle, { color: '#64748B' }]}>
             {t('appointments.next', 'Next appointment')}
           </Text>
           <Ionicons
             name={isRTL ? 'chevron-forward' : 'chevron-back'}
-            size={16}
+            size={15}
             color="#CBD5E1"
             style={{ marginRight: isRTL ? undefined : 'auto', marginLeft: isRTL ? 'auto' : undefined }}
           />
         </View>
 
-        {/* Content */}
+        {/* Divider */}
+        <View style={styles.headerDivider} />
+
+        {/* Body */}
         {loading ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator size="small" color={colors.primary} />
             <Text style={styles.loadingText}>{t('common.loading', 'Loading...')}</Text>
           </View>
         ) : nextAppointment ? (
-          <View style={[styles.nextContent, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-            {/* Client */}
-            <View style={[styles.clientBlock, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-              <View style={styles.clientAvatar}>
-                {clientImageUrl ? (
-                  <Image source={{ uri: clientImageUrl }} style={styles.avatarImg} />
-                ) : (
-                  <Image source={require('@/assets/images/user.png')} style={styles.avatarImg} />
-                )}
+          /* ── Appointment body ── */
+          <View style={[styles.apptBody, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+
+            {/* Client info (first in DOM → right in RTL) */}
+            <View style={[styles.clientSection, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+              {/* Avatar */}
+              <View style={[styles.avatarRing, { borderColor: `${colors.primary}35` }]}>
+                <View style={styles.avatarInner}>
+                  {clientImageUrl ? (
+                    <Image source={{ uri: clientImageUrl }} style={styles.avatarImg} />
+                  ) : (
+                    <View style={[styles.avatarFallback, { backgroundColor: `${colors.primary}15` }]}>
+                      <Ionicons name="person" size={24} color={`${colors.primary}80`} />
+                    </View>
+                  )}
+                </View>
+                {/* Online dot */}
+                <View style={[styles.avatarDot, { backgroundColor: '#22C55E' }]} />
               </View>
+
+              {/* Name + Service + Duration */}
               <View style={[styles.clientInfo, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
-                <Text style={[styles.clientName, { textAlign: isRTL ? 'right' : 'left' }]} numberOfLines={1}>
+                <Text
+                  style={[styles.clientName, { textAlign: isRTL ? 'right' : 'left' }]}
+                  numberOfLines={1}
+                >
                   {nextAppointment.client_name || t('booking.unknown', 'Unknown')}
                 </Text>
-                {nextAppointment.service_name && (
-                  <View style={[styles.servicePill, { backgroundColor: `${colors.primary}12` }]}>
-                    <Text style={[styles.serviceText, { color: colors.primary }]}>
-                      {nextAppointment.service_name}
-                    </Text>
-                  </View>
-                )}
+
+                <View style={styles.pillsRow}>
+                  {nextAppointment.service_name && (
+                    <View style={[styles.servicePill, { backgroundColor: `${colors.primary}14` }]}>
+                      <Text style={[styles.serviceText, { color: colors.primary }]}>
+                        {nextAppointment.service_name}
+                      </Text>
+                    </View>
+                  )}
+                  {nextAppointment.duration_minutes > 0 && (
+                    <View style={styles.durationPill}>
+                      <Ionicons name="timer-outline" size={11} color="#94A3B8" />
+                      <Text style={styles.durationText}>
+                        {nextAppointment.duration_minutes} {t('min', 'min')}
+                      </Text>
+                    </View>
+                  )}
+                </View>
               </View>
             </View>
 
-            {/* Time */}
-            <View style={[styles.timeBadge, { backgroundColor: `${colors.primary}10`, borderColor: `${colors.primary}25` }]}>
-              <Text style={[styles.timeBadgeHour, { color: colors.primary }]}>{timeParts[0]}</Text>
-              {timeParts[1] && (
-                <Text style={[styles.timeBadgePeriod, { color: `${colors.primary}99` }]}>{timeParts[1]}</Text>
-              )}
-            </View>
+            {/* Time block (second in DOM → left in RTL) */}
+            <LinearGradient
+              colors={[colors.primary, `${colors.primary}BB`]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.timeBlock}
+            >
+              <Text style={styles.timeHM}>{timeHM}</Text>
+              {timeSuffix ? (
+                <Text style={styles.timeSuffix}>{timeSuffix}</Text>
+              ) : null}
+            </LinearGradient>
           </View>
         ) : (
+          /* ── Empty state ── */
           <View style={styles.emptyRow}>
-            <Text style={styles.emptyText}>{t('appointments.empty.today', 'No upcoming appointments today')}</Text>
-            <Ionicons name="calendar-outline" size={18} color="#CBD5E1" />
+            <Ionicons name="calendar-outline" size={20} color="#CBD5E1" />
+            <Text style={styles.emptyText}>
+              {t('appointments.empty.today', 'No upcoming appointments today')}
+            </Text>
           </View>
         )}
       </TouchableOpacity>
@@ -228,7 +282,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderRadius: 20,
     paddingVertical: 18,
     paddingHorizontal: 20,
-    flexDirection: 'row',
     alignItems: 'center',
     overflow: 'hidden',
   },
@@ -250,7 +303,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     marginTop: 2,
   },
   todayRight: {
-    alignItems: 'center',
     zIndex: 1,
   },
   todayCount: {
@@ -289,52 +341,73 @@ const createStyles = (colors: any) => StyleSheet.create({
   /* ── Next Appointment Card ── */
   nextCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderWidth: 1,
+    borderRadius: 20,
+    borderWidth: 1.5,
     borderColor: '#F1F5F9',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOpacity: 0.07,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 4 },
+      },
+      android: { elevation: 3 },
+    }),
   },
   nextHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 13,
+    paddingBottom: 11,
   },
   nextHeaderIcon: {
-    width: 28,
-    height: 28,
+    width: 26,
+    height: 26,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
   },
   nextHeaderTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#64748B',
-    letterSpacing: 0.1,
+    letterSpacing: 0.2,
+    flex: 1,
+    textAlign: 'right',
   },
-  nextContent: {
-    flexDirection: 'row',
+  headerDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginHorizontal: 0,
+  },
+
+  /* ── Appointment Body ── */
+  apptBody: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 14,
+  },
+  clientSection: {
+    flex: 1,
+    alignItems: 'center',
     gap: 12,
   },
-  clientBlock: {
-    flex: 1,
-    flexDirection: 'row',
+  avatarRing: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 2,
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'center',
+    position: 'relative',
   },
-  clientAvatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+  avatarInner: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     overflow: 'hidden',
     backgroundColor: '#F1F5F9',
   },
@@ -342,43 +415,98 @@ const createStyles = (colors: any) => StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  avatarFallback: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarDot: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
   clientInfo: {
     flex: 1,
-    gap: 4,
+    gap: 6,
+    minWidth: 0,
   },
   clientName: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: '#1E293B',
+    letterSpacing: -0.3,
   },
-  servicePill: {
-    alignSelf: 'flex-start',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  serviceText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  timeBadge: {
-    borderRadius: 14,
-    borderWidth: 1.5,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  pillsRow: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 6,
     alignItems: 'center',
   },
-  timeBadgeHour: {
-    fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: -0.5,
+  servicePill: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
-  timeBadgePeriod: {
-    fontSize: 10,
+  serviceText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+  },
+  durationPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  durationText: {
+    fontSize: 11,
     fontWeight: '600',
+    color: '#94A3B8',
+  },
+
+  /* ── Time Block ── */
+  timeBlock: {
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 82,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.primary,
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 4 },
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  timeHM: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
+    includeFontPadding: false,
+  },
+  timeSuffix: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.82)',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginTop: 1,
+    letterSpacing: 0.8,
+    marginTop: 2,
   },
 
   /* ── States ── */
@@ -386,7 +514,8 @@ const createStyles = (colors: any) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 6,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
   },
   loadingText: {
     fontSize: 13,
@@ -395,10 +524,10 @@ const createStyles = (colors: any) => StyleSheet.create({
   emptyRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
     gap: 8,
-    paddingVertical: 4,
-    width: '100%',
+    paddingVertical: 18,
+    paddingHorizontal: 16,
   },
   emptyText: {
     fontSize: 13,

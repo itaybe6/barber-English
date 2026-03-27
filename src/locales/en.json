@@ -743,7 +743,11 @@
       "welcome": "Welcome",
       "subtitle": {"line1":"Manage your day with confidence","line2":"This app keeps your schedule sharp"},
       "clients": "Clients",
-      "thisMonth": "This month"
+      "thisMonth": "This month",
+      "notificationsCardTitle": "Your notifications",
+      "notificationsUnreadLine_one": "You have 1 unread notification",
+      "notificationsUnreadLine_other": "You have {{count}} unread notifications",
+      "notificationsAllClear": "No unread notifications"
     },
     "gallery": {
       "title": "Gallery",

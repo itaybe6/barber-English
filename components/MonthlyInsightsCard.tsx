@@ -128,15 +128,12 @@ export default function MonthlyInsightsCard({
           <View style={styles.legend}>
             {segmentDefs.map((item) => (
               <View key={item.key} style={styles.legendRow}>
-                {/* נקודה + מספר משמאל לטקסט; direction:ltr כדי שלא יתהפך ב-RTL */}
-                <View style={[styles.dot, { backgroundColor: item.color }]} />
-                <Text style={[styles.legendValue, { color: colors.text }]}>{item.value}</Text>
-                <Text
-                  style={[styles.legendLabel, { color: colors.text }]}
-                  numberOfLines={2}
-                >
+                {/* כמו צילום 1: טקסט משמאל, מספר + נקודה מימין (direction:ltr = קבוע) */}
+                <Text style={[styles.legendLabel, { color: colors.text }]} numberOfLines={2}>
                   {item.label}
                 </Text>
+                <Text style={[styles.legendValue, { color: colors.text }]}>{item.value}</Text>
+                <View style={[styles.dot, { backgroundColor: item.color }]} />
               </View>
             ))}
           </View>
@@ -262,7 +259,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     ...({ direction: 'ltr' } as const),
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'flex-end',
+    gap: 6,
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 999,
@@ -278,7 +276,6 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   legendLabel: {
-    flex: 1,
     flexShrink: 1,
     fontSize: 15,
     fontWeight: '700',

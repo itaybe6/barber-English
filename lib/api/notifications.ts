@@ -65,7 +65,12 @@ export const notificationsApi = {
   },
 
   // Create a notification to all admins (studio managers)
-  async createAdminNotification(title: string, content: string, type: Notification['type'] = 'system'): Promise<boolean> {
+  async createAdminNotification(
+    title: string,
+    content: string,
+    type: Notification['type'] = 'system',
+    appointmentId?: string | null
+  ): Promise<boolean> {
     try {
       const businessId = getBusinessId();
       
@@ -93,6 +98,7 @@ export const notificationsApi = {
         recipient_name: admin.name || 'מנהל',
         recipient_phone: (admin.phone || '').trim(),
         business_id: businessId,
+        ...(appointmentId ? { appointment_id: appointmentId } : {}),
       }));
 
       const { error: insertError } = await supabase
@@ -112,7 +118,13 @@ export const notificationsApi = {
   },
 
   // Create a notification for a specific admin by userId (targeted manager notification)
-  async createAdminNotificationForUserId(userId: string, title: string, content: string, type: Notification['type'] = 'system'): Promise<boolean> {
+  async createAdminNotificationForUserId(
+    userId: string,
+    title: string,
+    content: string,
+    type: Notification['type'] = 'system',
+    appointmentId?: string | null
+  ): Promise<boolean> {
     try {
       if (!userId) return false;
       const businessId = getBusinessId();
@@ -148,6 +160,7 @@ export const notificationsApi = {
             business_id: businessId,
             // Store target admin for traceability if the column exists
             user_id: (admin as any).id || userId,
+            ...(appointmentId ? { appointment_id: appointmentId } : {}),
           } as any,
         ]);
 

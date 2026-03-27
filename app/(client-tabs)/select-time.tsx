@@ -483,10 +483,13 @@ export default function SelectTimeScreen() {
           const title = t('selectTime.adminNotifyTitle', 'New appointment booked');
           const content = t('selectTime.adminNotifyContent', '{{name}} ({{phone}}) booked an appointment for "{{service}}" on {{date}} at {{time}}', { name: user?.name || 'Client', phone: user?.phone || '', service: serviceName, date: selectedDate, time: formatTime12Hour(selectedTime) });
           const assignedAdminId = params.barberId as string | undefined;
+          const newAptId = success?.id ? String(success.id) : null;
           if (assignedAdminId) {
-            notificationsApi.createAdminNotificationForUserId(assignedAdminId, title, content, 'system').catch(() => {});
+            notificationsApi
+              .createAdminNotificationForUserId(assignedAdminId, title, content, 'system', newAptId)
+              .catch(() => {});
           } else {
-            notificationsApi.createAdminNotification(title, content, 'system').catch(() => {});
+            notificationsApi.createAdminNotification(title, content, 'system', newAptId).catch(() => {});
           }
         } catch {}
         // Navigate safely without relying on multiple back actions

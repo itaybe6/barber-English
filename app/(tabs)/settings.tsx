@@ -36,6 +36,7 @@ import {
   User,
   Repeat,
   Plus,
+  Bell,
 } from 'lucide-react-native';
 import { Users } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -244,12 +245,11 @@ export default function SettingsScreen() {
   const [isSavingAdmin, setIsSavingAdmin] = useState(false);
   const [isUploadingAdminAvatar, setIsUploadingAdminAvatar] = useState(false);
 
-  // Per-admin scheduling preferences: reminder before appointment
-  const [reminderMinutes, setReminderMinutes] = useState<number | null>(null);
-  const [reminderEnabled, setReminderEnabled] = useState(false);
-  const [reminderMinutesDraft, setReminderMinutesDraft] = useState('30');
-  const [showEditReminderModal, setShowEditReminderModal] = useState(false);
-  const [showReminderDropdown, setShowReminderDropdown] = useState(false);
+  // Per-admin: reminder for you (optional) vs reminder for clients (optional)
+  const [adminReminderMinutes, setAdminReminderMinutes] = useState<number | null>(null);
+  const [adminReminderEnabled, setAdminReminderEnabled] = useState(false);
+  const [clientReminderMinutes, setClientReminderMinutes] = useState<number | null>(null);
+  const [clientReminderEnabled, setClientReminderEnabled] = useState(false);
 
   // Animated bottom-sheet controls
   const sheetAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
@@ -299,16 +299,16 @@ export default function SettingsScreen() {
     }, [])
   );
 
-  // Load per-user preferences (reminder)
   useEffect(() => {
     (async () => {
       try {
         if (!user?.id) return;
-        // Reminder
-        const rem = await businessProfileApi.getReminderMinutesForUser(user.id);
-        setReminderMinutes(rem);
-        setReminderEnabled(rem !== null && Number(rem) > 0);
-        setReminderMinutesDraft(String(rem ?? 30));
+        const adminRem = await businessProfileApi.getReminderMinutesForUser(user.id);
+        setAdminReminderMinutes(adminRem);
+        setAdminReminderEnabled(adminRem !== null && Number(adminRem) > 0);
+        const clientRem = await businessProfileApi.getClientReminderMinutesForUser(user.id);
+        setClientReminderMinutes(clientRem);
+        setClientReminderEnabled(clientRem !== null && Number(clientRem) > 0);
       } catch (e) {
         // silent
       }
@@ -603,19 +603,56 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleSaveReminderInline = async (next: string) => {
+  const reminderMinutesValidate = (v: string) => {
+    const s = (v || '').trim();
+    if (s.length === 0) return true;
+    const n = parseInt(s, 10);
+    return Number.isFinite(n) && n >= 1 && n <= 1440;
+  };
+
+  const handleSaveAdminReminderInline = async (next: string) => {
     if (!user?.id) return;
     const trimmed = (next || '').trim();
-    const mins = parseInt(trimmed, 10);
-    if (!Number.isFinite(mins) || mins < 1 || mins > 1440) {
-      Alert.alert(t('error.generic','Error'), t('settings.profile.reminderInvalid','Enter a valid number between 1 and 1440 minutes'));
-      return;
-    }
     try {
       setIsSavingProfile(true);
+      if (!trimmed) {
+        await businessProfileApi.setReminderMinutesForUser(user.id, null);
+        setAdminReminderMinutes(null);
+        setAdminReminderEnabled(false);
+        return;
+      }
+      const mins = parseInt(trimmed, 10);
+      if (!Number.isFinite(mins) || mins < 1 || mins > 1440) {
+        Alert.alert(t('error.generic','Error'), t('settings.profile.reminderInvalid','Enter a valid number between 1 and 1440 minutes'));
+        return;
+      }
       await businessProfileApi.setReminderMinutesForUser(user.id, mins);
-      setReminderMinutes(mins);
-      setReminderEnabled(true);
+      setAdminReminderMinutes(mins);
+      setAdminReminderEnabled(true);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleSaveClientReminderInline = async (next: string) => {
+    if (!user?.id) return;
+    const trimmed = (next || '').trim();
+    try {
+      setIsSavingProfile(true);
+      if (!trimmed) {
+        await businessProfileApi.setClientReminderMinutesForUser(user.id, null);
+        setClientReminderMinutes(null);
+        setClientReminderEnabled(false);
+        return;
+      }
+      const mins = parseInt(trimmed, 10);
+      if (!Number.isFinite(mins) || mins < 1 || mins > 1440) {
+        Alert.alert(t('error.generic','Error'), t('settings.profile.reminderInvalid','Enter a valid number between 1 and 1440 minutes'));
+        return;
+      }
+      await businessProfileApi.setClientReminderMinutesForUser(user.id, mins);
+      setClientReminderMinutes(mins);
+      setClientReminderEnabled(true);
     } finally {
       setIsSavingProfile(false);
     }
@@ -1953,23 +1990,40 @@ export default function SettingsScreen() {
         
         <View style={styles.cardNew}>
           <View style={styles.settingItemLTR}>
+            <View style={styles.settingIconLTR}><Bell size={20} color={businessColors.primary} /></View>
+            <View style={{ flex: 1 }}>
+              <InlineEditableRow
+                title={t('settings.reminder.clientTitleWithMinutes', 'Client reminder (minutes before)')}
+                value={clientReminderEnabled && Number(clientReminderMinutes) > 0 ? String(clientReminderMinutes) : ''}
+                placeholder={t('settings.reminder.leaveEmptyOff', 'Leave empty to turn off')}
+                keyboardType="default"
+                onSave={handleSaveClientReminderInline}
+                chevronColor={businessColors.primary}
+                validate={reminderMinutesValidate}
+              />
+              <Text style={[styles.settingSubtitleLTR, { marginTop: 6, paddingHorizontal: 4 }]}>
+                {t('settings.reminder.clientAutomatedHint')}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.settingDivider} />
+          <View style={styles.settingItemLTR}>
             <View style={styles.settingIconLTR}><Clock size={20} color={businessColors.primary} /></View>
             <View style={{ flex: 1 }}>
               <InlineEditableRow
-                title={t('settings.reminder.titleWithMinutes','Reminder before appointment (minutes)')}
-                value={reminderEnabled && Number(reminderMinutes) > 0 ? String(reminderMinutes) : ''}
-                placeholder={`${t('common.eg','e.g.')} 30`}
+                title={t('settings.reminder.adminTitleWithMinutes', 'Your reminder before appointment (minutes)')}
+                value={adminReminderEnabled && Number(adminReminderMinutes) > 0 ? String(adminReminderMinutes) : ''}
+                placeholder={t('settings.reminder.leaveEmptyOff', 'Leave empty to turn off')}
                 keyboardType="default"
-                onSave={handleSaveReminderInline}
+                onSave={handleSaveAdminReminderInline}
                 chevronColor={businessColors.primary}
-                validate={(v) => {
-                  const n = parseInt((v || '').trim(), 10);
-                  return Number.isFinite(n) && n >= 1 && n <= 1440;
-                }}
+                validate={reminderMinutesValidate}
               />
+              <Text style={[styles.settingSubtitleLTR, { marginTop: 6, paddingHorizontal: 4 }]}>
+                {t('settings.reminder.adminAutomatedHint')}
+              </Text>
             </View>
           </View>
-
         </View>
         
         <View onLayout={onSettingsSectionLayout('services')}>
@@ -2498,62 +2552,6 @@ export default function SettingsScreen() {
                   onChangeText={setDisplayNameDraft}
                   placeholder={t('settings.profile.businessNamePlaceholder','For example: The Studio of Hadas')}
                   placeholderTextColor={Colors.subtext}
-                  textAlign="left"
-                />
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Edit Reminder Minutes Modal */}
-      <Modal
-        visible={showEditReminderModal}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setShowEditReminderModal(false)}
-      >
-        <View style={styles.smallModalOverlay}>
-          <View style={styles.smallModalCard}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowEditReminderModal(false)}>
-                <Text style={styles.modalCloseText}>{t('cancel','Cancel')}</Text>
-              </TouchableOpacity>
-              <Text style={styles.modalTitleLTR}>{t('settings.reminder.title','Reminder before appointment')}</Text>
-              <TouchableOpacity
-                style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]}
-                onPress={async () => {
-                  if (!user?.id) { setShowEditReminderModal(false); return; }
-                  const mins = parseInt(reminderMinutesDraft);
-                  if (!Number.isFinite(mins) || mins < 1 || mins > 1440) {
-                    Alert.alert(t('error.generic','Error'), t('settings.profile.reminderInvalid','Enter a valid number between 1 and 1440 minutes'));
-                    return;
-                  }
-                  try {
-                    setIsSavingProfile(true);
-                    await businessProfileApi.setReminderMinutesForUser(user.id, mins);
-                    setReminderMinutes(mins);
-                    setReminderEnabled(true);
-                    setShowEditReminderModal(false);
-                  } finally {
-                    setIsSavingProfile(false);
-                  }
-                }}
-                disabled={isSavingProfile}
-              >
-                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? t('settings.common.saving','Saving...') : t('save','Save')}</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabelLTR}>{t('settings.reminder.minutesBefore','Minutes before')}</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={reminderMinutesDraft}
-                  onChangeText={setReminderMinutesDraft}
-                  placeholder={`${t('common.eg','e.g.')} 30`}
-                  placeholderTextColor={Colors.subtext}
-                  keyboardType="numeric"
                   textAlign="left"
                 />
               </View>

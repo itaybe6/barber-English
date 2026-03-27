@@ -10,6 +10,9 @@ enabled = true
 [functions.send-monthly-report]
 verify_jwt = true
 
+[functions.appointment-reminders]
+verify_jwt = true
+
 # Login/register SMS OTP — called before user session exists
 [functions.auth-phone-otp]
 verify_jwt = false

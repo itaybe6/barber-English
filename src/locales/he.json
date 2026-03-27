@@ -144,9 +144,17 @@
   "admin.pendingClients.notificationBody": "{{name}} ({{phone}}) נרשם/ה וממתין/ה לאישורך באפליקציה.",
   "login.pendingApprovalTitle": "ממתין לאישור",
   "login.pendingApprovalMessage": "החשבון ממתין לאישור העסק. תוכל/י להתחבר לאחר האישור.",
+<<<<<<< HEAD
+  "login.awaitingAdminToEnterApp": "עליך לחכות לאישור המנהל לפני שניתן להיכנס לאפליקציה.\n\nלאחר האישור תוכל/י להתחבר שוב עם מספר הטלפון.\n\nטלפון: {{phone}}",
+  "register.pendingApprovalTitle": "נרשמת בהצלחה",
+  "register.success.pendingApproval": "החשבון נוצר. המנהל יאשר אותך בקרוב.\n\nלאחר האישור תוכל/י להתחבר עם מספר הטלפון ולקבוע תורים.\n\nטלפון: {{phone}}",
+  "admin.insights.title": "תובנות חודשיות",
+  "admin.insights.noData": "אין נתוני תורים החודש",
+=======
   "register.success.pendingApproval": "החשבון נוצר. העסק יאשר אותו בקרוב.\n\nתוכל/י להתחבר עם הטלפון והסיסמה אחרי האישור.\n\nטלפון: {{phone}}",
   "admin.insights.title": "מצב תורים חודשי",
   "admin.insights.noData": "אין עדיין נתונים להצגה",
+>>>>>>> 98ff99eb6849f25b938c2b0ea89c6b9c459af70c
   "admin.insights.booked": "מוזמנו",
   "admin.insights.completed": "הושלמו",
   "admin.insights.cancelled": "בוטלו",
@@ -286,6 +294,8 @@
   "notifications.filter.waitlist": "רשימת המתנה",
   "notifications.empty": "אין התראות",
   "notifications.emptySubtitle": "כאשר תהיה התראה חדשה, היא תופיע כאן",
+  "notifications.type.clientReminder": "תזכורת לתור",
+  "notifications.type.adminReminder": "תזכורת לתור (בשבילך)",
   "profile.permissionRequired": "נדרש אישור",
   "profile.permissionGallery": "אנא אשר/י גישה לגלריה לבחירת תמונת פרופיל",
   "profile.uploadFailed": "נכשל בהעלאת התמונה",
@@ -674,7 +684,12 @@
     "reminder": {
       "title": "תזכורת לפני התור",
       "titleWithMinutes": "תזכורת לפני התור (בדקות)",
-      "minutesBefore": "דקות לפני"
+      "minutesBefore": "דקות לפני",
+      "clientTitleWithMinutes": "תזכורת ללקוח (דקות לפני התור)",
+      "adminTitleWithMinutes": "תזכורת בשבילך לפני תור (בדקות)",
+      "leaveEmptyOff": "השאר ריק לכיבוי",
+      "clientAutomatedHint": "הלקוחות יקבלו תזכורת באפליקציה / SMS כל כך דקות לפני התור. השליחה רק בין 8:00 ל־21:00 (שעון ישראל); אם הזמן המדויק יוצא מהחלון — נשלח מוקדם יותר.",
+      "adminAutomatedHint": "תקבל/י התראה כל כך דקות לפני כל תור תפוס. השאר ריק אם לא רוצה תזכורת."
     },
     "recurring": {
       "empty": "אין תורים מחזוריים",
@@ -889,6 +904,7 @@
     "calendarAdd": {
       "choiceTitle": "מה תרצה להוסיף?",
       "choiceSubtitle": "בחרו תור ללקוח, תזכורת פנימית, או אילוץ שחוסם משבצות",
+      "choiceSubtitleNoSticky": "בחרו תור ללקוח או אילוץ שחוסם משבצות. תזכורות לך וללקוחות מוגדרות בהגדרות.",
       "optionAppointment": "תור",
       "optionAppointmentHint": "קביעת תור ללקוח לפי שירות ושעה",
       "optionReminder": "תזכורת ביומן",

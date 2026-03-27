@@ -34,6 +34,9 @@ import {
 } from '@/lib/login/loginPhoneFailure';
 import { otpErrorMessage } from '@/lib/login/otpErrorMessage';
 import { isValidUserType } from '@/constants/auth';
+import { businessProfileApi, isClientApprovalRequired } from '@/lib/api/businessProfile';
+import { PendingApprovalAnimatedModal } from '@/components/login/PendingApprovalAnimatedModal';
+import { shouldDenyClientSession } from '@/lib/utils/clientApproval';
 import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
 import { LoginEntranceSection } from '@/components/login/LoginEntranceSection';
 import {
@@ -104,6 +107,11 @@ export default function LoginOtpScreen() {
   const [loginFailureCount, setLoginFailureCount] = useState(0);
   /** Increment on each successful resend so the same animation runs every time (matches login toast behavior). */
   const [resendToastTick, setResendToastTick] = useState(0);
+  const [pendingApprovalUi, setPendingApprovalUi] = useState<{
+    visible: boolean;
+    phone: string;
+    key: number;
+  }>({ visible: false, phone: '', key: 0 });
   const verifyInFlight = useRef(false);
 
   const shakeX = useSharedValue(0);
@@ -248,6 +256,16 @@ export default function LoginOtpScreen() {
           return;
         }
         await writeLoginFailures(key, 0);
+        const profile = await businessProfileApi.getProfile();
+        if (shouldDenyClientSession(isClientApprovalRequired(profile), authUser)) {
+          setPasscode([]);
+          setPendingApprovalUi((s) => ({
+            visible: true,
+            phone: authUser.phone ?? '',
+            key: s.key + 1,
+          }));
+          return;
+        }
         const appUser = {
           id: authUser.id,
           phone: authUser.phone,
@@ -454,6 +472,18 @@ export default function LoginOtpScreen() {
           </View>
         </View>
       </Animated.View>
+
+      <PendingApprovalAnimatedModal
+        visible={pendingApprovalUi.visible}
+        replayKey={pendingApprovalUi.key}
+        variant="login"
+        phone={pendingApprovalUi.phone}
+        accentColor={primary}
+        onDismiss={() => {
+          setPendingApprovalUi((s) => ({ ...s, visible: false }));
+          router.replace('/login');
+        }}
+      />
     </View>
   );
 }

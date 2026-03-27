@@ -1400,10 +1400,13 @@ export default function BookAppointment() {
           const title = 'נקבע תור חדש';
           const dateFmt = selectedDate ? toLocalDateStr(selectedDate) : '';
           const content = `${user?.name || 'לקוח'} (${user?.phone || ''}) קבע/ה תור ל"${allNames}" בתאריך ${dateFmt} בשעה ${selectedTime}`;
+          const adminAptId = firstBookedAppointmentId ? String(firstBookedAppointmentId) : null;
           if (selectedBarber?.id) {
-            notificationsApi.createAdminNotificationForUserId(selectedBarber.id, title, content, 'system').catch(() => {});
+            notificationsApi
+              .createAdminNotificationForUserId(selectedBarber.id, title, content, 'system', adminAptId)
+              .catch(() => {});
           } else {
-            notificationsApi.createAdminNotification(title, content, 'system').catch(() => {});
+            notificationsApi.createAdminNotification(title, content, 'system', adminAptId).catch(() => {});
           }
         } catch {}
 

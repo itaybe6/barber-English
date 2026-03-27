@@ -130,25 +130,14 @@ export interface Appointment {
   status: 'confirmed' | 'pending' | 'cancelled' | 'completed' | 'no_show';
   created_at: string;
   updated_at: string;
+  /** Set when automated client reminder notification was created (server cron). */
+  client_reminder_sent_at?: string | null;
+  /** Set when automated barber/admin reminder notification was created (server cron). */
+  admin_reminder_sent_at?: string | null;
 }
 
 // Alias for backward compatibility
 export type AvailableTimeSlot = Appointment;
-
-/** Admin calendar-only reminders (do not block booking slots; shown on appointments calendar). */
-export interface CalendarReminder {
-  id: string;
-  business_id: string;
-  barber_id: string;
-  event_date: string;
-  start_time: string;
-  duration_minutes: number;
-  title: string;
-  notes: string | null;
-  color_key: string | null;
-  created_at: string;
-  updated_at: string;
-}
 
 // Business Hours interface
 export interface BusinessHours {
@@ -205,7 +194,7 @@ export interface Notification {
   id: string;
   title: string;
   content: string;
-  type: 'appointment_reminder' | 'promotion' | 'general' | 'system';
+  type: 'appointment_reminder' | 'client_reminder' | 'admin_reminder' | 'promotion' | 'general' | 'system';
   recipient_name: string;
   recipient_phone: string;
   // Target user for admin/manager notifications (optional)
@@ -262,8 +251,10 @@ export interface BusinessProfile {
   break?: number;
   // New per-barber break minutes map: { [userId: string]: number }
   break_by_user?: Record<string, number>;
-  // New per-barber reminder minutes map: { [userId: string]: number | null }
+  // Per barber: minutes before a booking to notify this admin (optional; null = off)
   reminder_minutes_by_user?: Record<string, number | null>;
+  // Per barber: minutes before a booking to notify the client (optional; null = off)
+  client_reminder_minutes_by_user?: Record<string, number | null>;
   min_cancellation_hours?: number;
   /** When false, clients cannot use appointment swap with other clients. Defaults to true if unset. */
   client_swap_enabled?: boolean;

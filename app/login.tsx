@@ -33,6 +33,9 @@ import { findUserByCredentials, isValidUserType, UserType } from '@/constants/au
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { superAdminApi } from '@/lib/api/superAdmin';
 import { authPhoneOtpApi } from '@/lib/api/authPhoneOtp';
+import { businessProfileApi, isClientApprovalRequired } from '@/lib/api/businessProfile';
+import { PendingApprovalAnimatedModal } from '@/components/login/PendingApprovalAnimatedModal';
+import { shouldDenyClientSession } from '@/lib/utils/clientApproval';
 import { useTranslation } from 'react-i18next';
 import { readableOnHex } from '@/lib/utils/readableOnHex';
 import {
@@ -116,6 +119,11 @@ export default function LoginScreen() {
   const [loginFailureCount, setLoginFailureCount] = useState(0);
   /** Top toast for SMS login (empty phone / not registered). */
   const [loginSmsToast, setLoginSmsToast] = useState<LoginSmsToastKind | null>(null);
+  const [pendingApprovalUi, setPendingApprovalUi] = useState<{
+    visible: boolean;
+    phone: string;
+    key: number;
+  }>({ visible: false, phone: '', key: 0 });
 
   const login = useAuthStore((state) => state.login);
   const { colors: businessColors } = useBusinessColors();
@@ -319,6 +327,15 @@ export default function LoginScreen() {
           return;
         }
         await writeLoginFailures(key, 0);
+        const profile = await businessProfileApi.getProfile();
+        if (shouldDenyClientSession(isClientApprovalRequired(profile), authUser as any)) {
+          setPendingApprovalUi((s) => ({
+            visible: true,
+            phone: authUser.phone ?? '',
+            key: s.key + 1,
+          }));
+          return;
+        }
         const appUser = {
           id: authUser.id, phone: authUser.phone,
           type: authUser.user_type, name: authUser.name,
@@ -817,6 +834,15 @@ export default function LoginScreen() {
           </View>
         </View>
       )}
+
+      <PendingApprovalAnimatedModal
+        visible={pendingApprovalUi.visible}
+        replayKey={pendingApprovalUi.key}
+        variant="login"
+        phone={pendingApprovalUi.phone}
+        accentColor={primary}
+        onDismiss={() => setPendingApprovalUi((s) => ({ ...s, visible: false }))}
+      />
     </View>
   );
 }

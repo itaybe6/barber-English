@@ -33,6 +33,19 @@ const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Notification>
 
 const SCROLL_ROW_OFFSET = 0;
 
+/** First valid YYYY-MM-DD in title/content (e.g. admin "new appointment" body). */
+function extractYyyyMmDdFromNotification(n: Pick<Notification, 'title' | 'content'>): string | null {
+  const blob = `${n.title || ''}\n${n.content || ''}`;
+  const m = blob.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (!m) return null;
+  const y = parseInt(m[1], 10);
+  const mo = parseInt(m[2], 10);
+  const d = parseInt(m[3], 10);
+  const dt = new Date(y, mo - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
+  return `${m[1]}-${m[2]}-${m[3]}`;
+}
+
 function parseNotificationContentStatic(title: string, content: string) {
   try {
     let text = content || '';
@@ -94,6 +107,7 @@ interface NotificationListRowProps {
   scrollY: SharedValue<number>;
   itemY?: SharedValue<number>;
   itemHeight?: SharedValue<number>;
+  pressable: boolean;
   onPress: (n: Notification) => void;
   isAdminReminder: (n: Notification) => boolean;
   getTitleStatusIcon: (title: string) => React.ReactNode;
@@ -115,6 +129,7 @@ const NotificationListRow = memo(function NotificationListRow({
   scrollY,
   itemY,
   itemHeight,
+  pressable,
   onPress,
   isAdminReminder,
   getTitleStatusIcon,
@@ -155,61 +170,69 @@ const NotificationListRow = memo(function NotificationListRow({
 
   const parsed: ParsedNotification = parseNotificationContentStatic(notification.title, notification.content);
 
+  const cardStyles = [
+    styles.notificationCard,
+    styles.notificationCardNoMargin,
+    !notification.is_read && styles.unreadCard,
+  ];
+
+  const cardBody = (
+    <>
+      <View style={styles.titleRow}>
+        <View style={styles.titleWithIcon}>
+          {getTitleStatusIcon(notification.title)}
+          <Text style={styles.notificationTitle}>{notification.title}</Text>
+        </View>
+        {isAdminReminder(notification) ? <Clock size={18} color={Colors.primary} /> : null}
+      </View>
+      <View>
+        {parsed.primary ? <Text style={styles.notificationContent}>{parsed.primary}</Text> : null}
+        <View style={styles.detailsContainer}>
+          {parsed.name ? (
+            <View style={styles.detailRow}>
+              <View style={styles.detailIcon}>
+                <User size={14} color="#8E8E93" />
+              </View>
+              <Text style={styles.detailText}>{parsed.name}</Text>
+            </View>
+          ) : null}
+          {parsed.datePretty ? (
+            <View style={styles.detailRow}>
+              <View style={styles.detailIcon}>
+                <Calendar size={14} color="#8E8E93" />
+              </View>
+              <Text style={styles.detailText}>{parsed.datePretty}</Text>
+            </View>
+          ) : null}
+          {parsed.timePretty ? (
+            <View style={styles.detailRow}>
+              <View style={styles.detailIcon}>
+                <Clock size={14} color="#8E8E93" />
+              </View>
+              <Text style={styles.detailText}>{parsed.timePretty}</Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+
+      {(notification as { push_sent?: boolean }).push_sent && (
+        <View style={styles.pushStatus}>
+          <CheckCircle size={14} color={ios.success} />
+          <Text style={styles.pushStatusText}>נשלח בהצלחה</Text>
+        </View>
+      )}
+    </>
+  );
+
   return (
     <Animated.View style={[styles.notificationRowWrap, stylez]}>
-      <TouchableOpacity
-        style={[
-          styles.notificationCard,
-          styles.notificationCardNoMargin,
-          !notification.is_read && styles.unreadCard,
-        ]}
-        onPress={() => onPress(notification)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.titleRow}>
-          <View style={styles.titleWithIcon}>
-            {getTitleStatusIcon(notification.title)}
-            <Text style={styles.notificationTitle}>{notification.title}</Text>
-          </View>
-          {isAdminReminder(notification) ? <Clock size={18} color={Colors.primary} /> : null}
-        </View>
-        <View>
-          {parsed.primary ? <Text style={styles.notificationContent}>{parsed.primary}</Text> : null}
-          <View style={styles.detailsContainer}>
-            {parsed.name ? (
-              <View style={styles.detailRow}>
-                <View style={styles.detailIcon}>
-                  <User size={14} color="#8E8E93" />
-                </View>
-                <Text style={styles.detailText}>{parsed.name}</Text>
-              </View>
-            ) : null}
-            {parsed.datePretty ? (
-              <View style={styles.detailRow}>
-                <View style={styles.detailIcon}>
-                  <Calendar size={14} color="#8E8E93" />
-                </View>
-                <Text style={styles.detailText}>{parsed.datePretty}</Text>
-              </View>
-            ) : null}
-            {parsed.timePretty ? (
-              <View style={styles.detailRow}>
-                <View style={styles.detailIcon}>
-                  <Clock size={14} color="#8E8E93" />
-                </View>
-                <Text style={styles.detailText}>{parsed.timePretty}</Text>
-              </View>
-            ) : null}
-          </View>
-        </View>
-
-        {(notification as { push_sent?: boolean }).push_sent && (
-          <View style={styles.pushStatus}>
-            <CheckCircle size={14} color={ios.success} />
-            <Text style={styles.pushStatusText}>נשלח בהצלחה</Text>
-          </View>
-        )}
-      </TouchableOpacity>
+      {pressable ? (
+        <TouchableOpacity style={cardStyles} onPress={() => onPress(notification)} activeOpacity={0.7}>
+          {cardBody}
+        </TouchableOpacity>
+      ) : (
+        <View style={cardStyles}>{cardBody}</View>
+      )}
     </Animated.View>
   );
 });
@@ -361,14 +384,98 @@ export default function ClientNotificationsScreen() {
     return false;
   };
 
+  const isNewAppointmentNotification = (n: Notification): boolean => {
+    const title = (n.title || '').toLowerCase();
+    const content = (n.content || '').toLowerCase();
+    return (
+      /new appointment|appointment scheduled|appointment confirmed/.test(title) ||
+      /new appointment|appointment scheduled|appointment confirmed/.test(content) ||
+      /booked successfully|your appointment was/.test(title) ||
+      /booked successfully|your appointment was/.test(content) ||
+      /נקבע תור חדש|התור שלך נקבע|נקבע לך תור/.test(n.title || '') ||
+      /נקבע תור חדש|התור שלך נקבע|נקבע לך תור/.test(n.content || '')
+    );
+  };
+
+  const isCancellationNotification = (n: Notification): boolean => {
+    const title = (n.title || '').toLowerCase();
+    const content = (n.content || '').toLowerCase();
+    return (
+      /cancel|cancellation/.test(title) ||
+      /cancel|cancellation/.test(content) ||
+      /בוטל|ביטול/.test(n.title || '') ||
+      /בוטל|ביטול/.test(n.content || '')
+    );
+  };
+
+  const isWaitlistNotification = (n: Notification): boolean => {
+    const title = (n.title || '').toLowerCase();
+    const content = (n.content || '').toLowerCase();
+    return (
+      /waitlist/.test(title) ||
+      /waitlist/.test(content) ||
+      /spot opened/.test(title) ||
+      /spot opened/.test(content) ||
+      /רשימת\s*המתנה/.test(n.title || '') ||
+      /רשימת\s*המתנה/.test(n.content || '')
+    );
+  };
+
+  const isSwapNotification = (n: Notification): boolean => {
+    const blob = `${n.title || ''} ${n.content || ''}`.toLowerCase();
+    return /appointment swapped|swapped to|החלפ/.test(blob);
+  };
+
+  const isAdminReminder = (n: Notification): boolean => {
+    if (!n) return false;
+    if (n.type === 'admin_reminder') return true;
+    return n.type === 'system' && typeof n.content === 'string' && /\bReminder:\b/i.test(n.content);
+  };
+
+  const resolveNotificationRoute = (n: Notification): string | null => {
+    if (isCancellationNotification(n)) return null;
+    if (isAdmin) {
+      if (isPendingClientApprovalNotification(n)) return '/(tabs)?openPendingClients=1';
+      if (isWaitlistNotification(n)) return '/(tabs)/waitlist';
+      if (isNewAppointmentNotification(n)) {
+        const focusDate = extractYyyyMmDdFromNotification(n);
+        const qs: string[] = [];
+        if (focusDate) qs.push(`focusDate=${encodeURIComponent(focusDate)}`);
+        if (n.appointment_id) qs.push(`focusAppointmentId=${encodeURIComponent(n.appointment_id)}`);
+        if (qs.length > 0) return `/(tabs)/appointments?${qs.join('&')}`;
+        return '/(tabs)/appointments';
+      }
+      if (
+        isAdminReminder(n) ||
+        n.type === 'admin_reminder' ||
+        /תזכורת לתור קרוב/i.test(n.title || '')
+      ) {
+        return '/(tabs)/appointments';
+      }
+      if (isSwapNotification(n)) return '/(tabs)/appointments';
+      return '/(tabs)/';
+    }
+    if (isWaitlistNotification(n)) return '/(client-tabs)/book-appointment';
+    if (isSwapNotification(n)) return '/(client-tabs)/appointments';
+    if (
+      n.type === 'client_reminder' ||
+      n.type === 'appointment_reminder' ||
+      isNewAppointmentNotification(n)
+    ) {
+      return '/(client-tabs)/appointments';
+    }
+    return '/(client-tabs)/';
+  };
+
   const handleNotificationPress = async (notification: Notification) => {
+    if (isCancellationNotification(notification)) return;
+
     if (!notification.is_read) {
       try {
         await notificationsApi.markAsRead(notification.id);
-        // Update local state
-        setNotifications(prev => 
-          prev.map(n => 
-            n.id === notification.id 
+        setNotifications(prev =>
+          prev.map(n =>
+            n.id === notification.id
               ? { ...n, is_read: true, read_at: new Date().toISOString() }
               : n
           )
@@ -378,14 +485,18 @@ export default function ClientNotificationsScreen() {
         console.error('Error marking notification as read:', error);
       }
     }
-    if (isAdmin && isPendingClientApprovalNotification(notification)) {
-      router.push('/(tabs)?openPendingClients=1');
+
+    const route = resolveNotificationRoute(notification);
+    if (route) {
+      router.push(route as any);
     }
   };
 
   const getNotificationIcon = (type: Notification['type']) => {
     switch (type) {
       case 'appointment_reminder':
+      case 'client_reminder':
+      case 'admin_reminder':
         return <Clock size={20} color={Colors.primary} />;
       case 'promotion':
         return <AlertCircle size={20} color={Colors.warning} />;
@@ -396,17 +507,14 @@ export default function ClientNotificationsScreen() {
     }
   };
 
-  // Detect admin reminder (our per-user pre-appointment reminder inserted as type 'system')
-  const isAdminReminder = (n: Notification): boolean => {
-    if (!n) return false;
-    // Our SQL builds content starting with "Reminder:" in English
-    return n.type === 'system' && typeof n.content === 'string' && /\bReminder:\b/i.test(n.content);
-  };
-
   const getNotificationTypeText = (type: Notification['type']) => {
     switch (type) {
       case 'appointment_reminder':
         return 'Appointment Reminder';
+      case 'client_reminder':
+        return t('notifications.type.clientReminder', 'Upcoming appointment');
+      case 'admin_reminder':
+        return t('notifications.type.adminReminder', 'Upcoming appointment (staff)');
       case 'promotion':
         return 'Promotion';
       case 'system':
@@ -441,42 +549,6 @@ export default function ClientNotificationsScreen() {
     if (/cancel/.test(t)) return <XCircle size={18} color="#FF3B30" />;
     if (/confirmed|approved|new/.test(t)) return <CheckCircle size={18} color="#34C759" />;
     return null;
-  };
-
-  // Filtering helpers
-  const isNewAppointmentNotification = (n: Notification): boolean => {
-    const title = (n.title || '').toLowerCase();
-    const content = (n.content || '').toLowerCase();
-    return (
-      /new appointment|appointment scheduled|appointment confirmed/.test(title) ||
-      /new appointment|appointment scheduled|appointment confirmed/.test(content) ||
-      /נקבע תור חדש|התור שלך נקבע/.test(n.title || '') ||
-      /נקבע תור חדש|התור שלך נקבע/.test(n.content || '')
-    );
-  };
-
-  const isCancellationNotification = (n: Notification): boolean => {
-    const title = (n.title || '').toLowerCase();
-    const content = (n.content || '').toLowerCase();
-    return (
-      /cancel|cancellation/.test(title) ||
-      /cancel|cancellation/.test(content) ||
-      /בוטל|ביטול/.test(n.title || '') ||
-      /בוטל|ביטול/.test(n.content || '')
-    );
-  };
-
-  const isWaitlistNotification = (n: Notification): boolean => {
-    const title = (n.title || '').toLowerCase();
-    const content = (n.content || '').toLowerCase();
-    return (
-      /waitlist/.test(title) ||
-      /waitlist/.test(content) ||
-      /spot opened/.test(title) ||
-      /spot opened/.test(content) ||
-      /רשימת\s*המתנה/.test(n.title || '') ||
-      /רשימת\s*המתנה/.test(n.content || '')
-    );
   };
 
   const filteredNotifications = notifications.filter((n) => {
@@ -566,6 +638,7 @@ export default function ClientNotificationsScreen() {
                 notification={item}
                 index={index}
                 scrollY={scrollY}
+                pressable={!isCancellationNotification(item)}
                 onPress={handleNotificationPress}
                 isAdminReminder={isAdminReminder}
                 getTitleStatusIcon={getTitleStatusIcon}

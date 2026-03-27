@@ -44,6 +44,9 @@ import { LoginEntranceSection } from '@/components/login/LoginEntranceSection';
 import { OtpPasscodeKeypad, type OtpKeyId } from '@/components/login/OtpPasscodeKeypad';
 import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
 import { parseIsraeliMobileNational10 } from '@/lib/login/israeliMobilePhone';
+import { businessProfileApi, isClientApprovalRequired } from '@/lib/api/businessProfile';
+import { PendingApprovalAnimatedModal } from '@/components/login/PendingApprovalAnimatedModal';
+import { shouldDenyClientSession } from '@/lib/utils/clientApproval';
 
 const { height: SH } = Dimensions.get('window');
 
@@ -160,6 +163,11 @@ export default function RegisterScreen() {
   const [phoneFocused, setPhoneFocused] = useState(false);
   const [nameFocused, setNameFocused] = useState(false);
   const [registerPhoneToast, setRegisterPhoneToast] = useState<RegisterPhoneToastKind | null>(null);
+  const [pendingApprovalUi, setPendingApprovalUi] = useState<{
+    visible: boolean;
+    phone: string;
+    key: number;
+  }>({ visible: false, phone: '', key: 0 });
   const router = useRouter();
   const login = useAuthStore((s) => s.login);
   const isRtl = i18n.language?.startsWith('he') ?? true;
@@ -558,6 +566,16 @@ export default function RegisterScreen() {
         return;
       }
 
+      const profile = await businessProfileApi.getProfile();
+      if (shouldDenyClientSession(isClientApprovalRequired(profile), authUser)) {
+        setPendingApprovalUi((s) => ({
+          visible: true,
+          phone: authUser.phone ?? '',
+          key: s.key + 1,
+        }));
+        return;
+      }
+
       const birthIsoForStore = hasBirthDate && birthDate ? toISODate(birthDate) : null;
       const appUser = {
         id: authUser.id,
@@ -573,7 +591,7 @@ export default function RegisterScreen() {
       } as any;
 
       login(appUser);
-      router.replace('/(client-tabs)');
+      router.replace('/(client-tabs)/index' as any);
     } catch (e) {
       console.error('completeRegisterProfile', e);
       Alert.alert(t('error.generic', 'שגיאה'), t('common.tryAgain', 'נסו שוב.'));
@@ -1254,6 +1272,18 @@ export default function RegisterScreen() {
           }}
         />
       ) : null}
+
+      <PendingApprovalAnimatedModal
+        visible={pendingApprovalUi.visible}
+        replayKey={pendingApprovalUi.key}
+        variant="register"
+        phone={pendingApprovalUi.phone}
+        accentColor={primary}
+        onDismiss={() => {
+          setPendingApprovalUi((s) => ({ ...s, visible: false }));
+          router.replace('/login');
+        }}
+      />
     </View>
   );
 }

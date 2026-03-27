@@ -1,4 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
@@ -16,25 +17,12 @@ import {
   Alert,
   BackHandler,
   Platform,
-  TextInput,
   Pressable,
 } from 'react-native';
-import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import Colors from '@/constants/colors';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import DaySelector from '@/components/DaySelector';
-import { AvailableTimeSlot, supabase, getBusinessId, type CalendarReminder } from '@/lib/supabase';
-import {
-  listCalendarRemindersForDate,
-  listCalendarRemindersForRange,
-  createCalendarReminder,
-  updateCalendarReminder,
-  deleteCalendarReminder,
-  listCalendarReminderDatesInMonth,
-  CALENDAR_REMINDER_COLOR_KEYS,
-  type CalendarReminderColorKey,
-} from '@/lib/api/calendarReminders';
+import { AvailableTimeSlot, supabase, getBusinessId } from '@/lib/supabase';
 import { businessHoursApi } from '@/lib/api/businessHours';
 import { checkWaitlistAndNotify, notifyServiceWaitlistClients } from '@/lib/api/waitlistNotifications';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
@@ -53,7 +41,7 @@ import {
   useAdminCalendarPlusAnchorWindow,
   useAdminCalendarReminderFabRegistration,
 } from '@/contexts/AdminCalendarReminderFabContext';
-import { Ban, Calendar, ChevronLeft, ChevronRight, CheckCircle, StickyNote } from 'lucide-react-native';
+import { Ban, Calendar, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react-native';
 import AddAppointmentModal from '@/components/AddAppointmentModal';
 import BusinessConstraintsModal from '@/components/BusinessConstraintsModal';
 import { useAuthStore } from '@/stores/authStore';
@@ -183,34 +171,6 @@ const _hourBlocks = [...Array(25).keys()].map((hour) => _startOfDay.add(hour, 'h
 Animated.addWhitelistedNativeProps?.({
   contentOffset: true,
 });
-
-const REMINDER_PALETTE: Record<string, { bar: string; bg: string }> = {
-  blue: { bar: '#1A73E8', bg: '#E8F0FE' },
-  coral: { bar: '#E67C73', bg: '#FCE8E6' },
-  yellow: { bar: '#F9AB00', bg: '#FEF7E0' },
-  green: { bar: '#0F9D58', bg: '#E6F4EA' },
-  purple: { bar: '#A142F4', bg: '#F3E8FD' },
-  gray: { bar: '#5F6368', bg: '#F1F3F4' },
-};
-
-function reminderPalette(key: string | null | undefined) {
-  return REMINDER_PALETTE[key || 'blue'] || REMINDER_PALETTE.blue;
-}
-
-function dateToHHMM(d: Date): string {
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  return `${hh}:${mm}`;
-}
-
-function timeOnDate(timeStr: string, day: Date): Date {
-  const parts = String(timeStr || '09:00').split(':');
-  const h = parseInt(parts[0] || '9', 10);
-  const m = parseInt(parts[1] || '0', 10);
-  const out = new Date(day);
-  out.setHours(h, m, 0, 0);
-  return out;
-}
 
 const AnimatedFlashList = Animated.createAnimatedComponent<FlashListProps<DayBlock>>(FlashList);
 
@@ -495,23 +455,19 @@ const WeekDayColumn = memo(
     day,
     index,
     appts,
-    reminders,
     columnWidth,
     hourRowHeight,
     primaryColor,
     onOpenAppointment,
-    onPressReminder,
     minutesFromMidnight,
   }: {
     day: DayBlock;
     index: number;
     appts: AvailableTimeSlot[];
-    reminders: CalendarReminder[];
     columnWidth: number;
     hourRowHeight: number;
     primaryColor: string;
     onOpenAppointment: (apt: AvailableTimeSlot, anchor?: AnchorRect) => void;
-    onPressReminder: (r: CalendarReminder) => void;
     minutesFromMidnight: (time?: string | null) => number;
   }) => {
     return (
@@ -547,40 +503,6 @@ const WeekDayColumn = memo(
             );
           })}
 
-          {reminders.map((r) => {
-            const startM = minutesFromMidnight(r.start_time);
-            const durationMinutes = r.duration_minutes || 30;
-            const top = (startM / 60) * hourRowHeight;
-            const height = (durationMinutes / 60) * hourRowHeight;
-            const pal = reminderPalette(r.color_key);
-            return (
-              <PressableScale
-                key={`wk-rm-${r.id}`}
-                onPress={() => onPressReminder(r)}
-                style={[
-                  weekStyles.weekReminderCard,
-                  {
-                    top: Math.max(0, top + 2),
-                    height: Math.max(36, height - 4),
-                    left: 4,
-                    right: 4,
-                    zIndex: 1,
-                    elevation: 1,
-                    backgroundColor: pal.bg,
-                    borderLeftColor: pal.bar,
-                  },
-                ]}
-              >
-                <View style={weekStyles.weekReminderRow}>
-                  <StickyNote size={11} color={pal.bar} />
-                  <Text numberOfLines={2} style={[weekStyles.weekReminderTitle, { color: '#1C1C1E' }]}>
-                    {r.title}
-                  </Text>
-                </View>
-              </PressableScale>
-            );
-          })}
-
           {appts.map((apt) => {
             const aptMinutes = minutesFromMidnight(apt.slot_time);
             const durationMinutes = apt.duration_minutes || 30;
@@ -611,6 +533,11 @@ const WeekDayColumn = memo(
 );
 
 export default function AdminAppointmentsScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{
+    focusDate?: string | string[];
+    focusAppointmentId?: string | string[];
+  }>();
   const { t, i18n } = useTranslation();
   /** Hebrew UI for admin cancel/delete flows (per product requirement) */
   const tHe = useCallback(
@@ -623,7 +550,7 @@ export default function AdminAppointmentsScreen() {
     I18nManager.isRTL || (typeof i18n.language === 'string' && i18n.language.startsWith('he'));
   const user = useAuthStore((state) => state.user);
   const { colors: businessColors } = useBusinessColors();
-  const { calendarView } = useAdminCalendarView();
+  const { calendarView, setCalendarView } = useAdminCalendarView();
   const insets = useSafeAreaInsets();
   const setReminderFabRegistration = useAdminCalendarReminderFabRegistration();
   const plusAnchorWindow = useAdminCalendarPlusAnchorWindow();
@@ -654,6 +581,67 @@ export default function AdminAppointmentsScreen() {
     d.setHours(0, 0, 0, 0);
     return d;
   });
+
+  const pendingFocusAppointmentIdRef = useRef<string | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      const rawD = params.focusDate;
+      const s =
+        typeof rawD === 'string'
+          ? rawD.trim()
+          : Array.isArray(rawD) && rawD[0]
+            ? String(rawD[0]).trim()
+            : '';
+      const rawA = params.focusAppointmentId;
+      const aid =
+        typeof rawA === 'string'
+          ? rawA.trim()
+          : Array.isArray(rawA) && rawA[0]
+            ? String(rawA[0]).trim()
+            : '';
+      if (!s && !aid) return;
+
+      const applyYmd = (ymd: string) => {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return;
+        const y = parseInt(ymd.slice(0, 4), 10);
+        const mo = parseInt(ymd.slice(5, 7), 10);
+        const d = parseInt(ymd.slice(8, 10), 10);
+        const next = new Date(y, mo - 1, d);
+        next.setHours(0, 0, 0, 0);
+        if (next.getFullYear() !== y || next.getMonth() !== mo - 1 || next.getDate() !== d) return;
+        setCalendarView('day');
+        setSelectedDate(next);
+      };
+
+      if (s) applyYmd(s);
+      else if (aid) setCalendarView('day');
+
+      if (aid) pendingFocusAppointmentIdRef.current = aid;
+
+      if (!s && aid) {
+        void (async () => {
+          try {
+            const bid = getBusinessId();
+            const { data } = await supabase
+              .from('appointments')
+              .select('slot_date')
+              .eq('id', aid)
+              .eq('business_id', bid)
+              .maybeSingle();
+            const sd = data?.slot_date;
+            const ymd = typeof sd === 'string' && sd.length >= 10 ? sd.slice(0, 10) : '';
+            if (ymd) applyYmd(ymd);
+          } catch {
+            /* keep day view + current date */
+          }
+        })();
+      }
+
+      router.setParams({ focusDate: undefined, focusAppointmentId: undefined });
+    }, [params.focusDate, params.focusAppointmentId, router, setCalendarView])
+  );
+
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [appointments, setAppointments] = useState<AvailableTimeSlot[]>([]);
@@ -681,38 +669,17 @@ export default function AdminAppointmentsScreen() {
     else dayAptRefMap.current.delete(id);
   }, []);
   const [rangeAppointments, setRangeAppointments] = useState<Map<string, AvailableTimeSlot[]>>(new Map());
-  const [calendarReminders, setCalendarReminders] = useState<CalendarReminder[]>([]);
-  const [rangeReminders, setRangeReminders] = useState<Map<string, CalendarReminder[]>>(new Map());
 
   const [showCalendarFabSheet, setShowCalendarFabSheet] = useState(false);
-  const [calendarFabStep, setCalendarFabStep] = useState<'choice' | 'reminder'>('choice');
   const [showAddAppointmentModal, setShowAddAppointmentModal] = useState(false);
   const [showConstraintsModal, setShowConstraintsModal] = useState(false);
 
   const reminderFabPanelStyle = useMemo(() => {
-    const win = Dimensions.get('window');
-    const openedPanelWidth = win.width * 0.88;
-    /** גובה משוער לפאנל פתוח — ליישור אנכי קרוב למרכז */
-    const EST_OPEN_HEIGHT = win.height * 0.52;
-
     if (!reminderOverlayWin) {
       return {
         left: 16,
         right: undefined,
         bottom: insets.bottom + 12,
-      };
-    }
-
-    if (showCalendarFabSheet) {
-      const centeredLeft = (reminderOverlayWin.width - openedPanelWidth) / 2;
-      const topAligned = Math.max(
-        12,
-        (reminderOverlayWin.height - EST_OPEN_HEIGHT) / 2 - 60
-      );
-      return {
-        left: Math.max(8, centeredLeft),
-        right: undefined,
-        top: topAligned,
       };
     }
 
@@ -734,12 +701,7 @@ export default function AdminAppointmentsScreen() {
       right: undefined,
       bottom: insets.bottom + 12,
     };
-  }, [
-    showCalendarFabSheet,
-    plusAnchorWindow,
-    reminderOverlayWin,
-    insets.bottom,
-  ]);
+  }, [plusAnchorWindow, reminderOverlayWin, insets.bottom]);
 
   const reminderExternalAnchorSize = useMemo(
     () =>
@@ -748,16 +710,6 @@ export default function AdminAppointmentsScreen() {
         : null,
     [plusAnchorWindow]
   );
-
-  const [editingReminder, setEditingReminder] = useState<CalendarReminder | null>(null);
-  const [reminderTitle, setReminderTitle] = useState('');
-  const [reminderNotes, setReminderNotes] = useState('');
-  const [reminderTimeDate, setReminderTimeDate] = useState<Date>(() => new Date());
-  const [reminderDuration, setReminderDuration] = useState(30);
-  const [reminderColorKey, setReminderColorKey] = useState<CalendarReminderColorKey>('blue');
-  const [showReminderAndroidTime, setShowReminderAndroidTime] = useState(false);
-  const [savingReminder, setSavingReminder] = useState(false);
-  const [deletingReminder, setDeletingReminder] = useState(false);
 
   const scrollRef = useRef<ScrollView | null>(null);
 
@@ -804,16 +756,9 @@ export default function AdminAppointmentsScreen() {
         setAppointments((data as unknown as AvailableTimeSlot[]) || []);
       }
 
-      if (user?.id) {
-        const rem = await listCalendarRemindersForDate(dateString, user.id);
-        setCalendarReminders(rem);
-      } else {
-        setCalendarReminders([]);
-      }
     } catch (e) {
       console.error('Error in loadAppointmentsForDate:', e);
       setAppointments([]);
-      setCalendarReminders([]);
     } finally {
       if (isRefresh) {
         setRefreshing(false);
@@ -830,7 +775,6 @@ export default function AdminAppointmentsScreen() {
       try {
         if (!user?.id) {
           setRangeAppointments(new Map());
-          setRangeReminders(new Map());
           return;
         }
         const { data, error } = await supabase
@@ -846,7 +790,6 @@ export default function AdminAppointmentsScreen() {
         if (error) {
           console.error('Error loading range appointments:', error);
           setRangeAppointments(new Map());
-          setRangeReminders(new Map());
         } else {
           const map = new Map<string, AvailableTimeSlot[]>();
           ((data as unknown as AvailableTimeSlot[]) || []).forEach((apt) => {
@@ -858,21 +801,9 @@ export default function AdminAppointmentsScreen() {
           });
           setRangeAppointments(map);
         }
-
-        const remList = await listCalendarRemindersForRange(startDateStr, endDateStr, user.id);
-        const rmap = new Map<string, CalendarReminder[]>();
-        remList.forEach((r) => {
-          const key = r.event_date;
-          if (!key) return;
-          const arr = rmap.get(key) ?? [];
-          arr.push(r);
-          rmap.set(key, arr);
-        });
-        setRangeReminders(rmap);
       } catch (e) {
         console.error('Error in loadAppointmentsForRange:', e);
         setRangeAppointments(new Map());
-        setRangeReminders(new Map());
       }
     },
     [user?.id]
@@ -974,8 +905,6 @@ export default function AdminAppointmentsScreen() {
       setAppointmentCountsByDate(counts);
 
       const unique = new Set<string>(Object.keys(counts));
-      const reminderDates = await listCalendarReminderDatesInMonth(year, month, user.id);
-      reminderDates.forEach((d) => unique.add(d));
       setMarkedDates(unique);
     } catch (e) {
       console.error('Error in reloadMonthMarks:', e);
@@ -1123,23 +1052,29 @@ export default function AdminAppointmentsScreen() {
     scrollX.value = e.contentOffset.x;
   });
 
-  const scrollWeekGridToInitialOffset = useCallback(() => {
+  /** ממקם את עמודת היום הנבחר באזור הגלילה (במקום קצה RTL/LTR קבוע). */
+  const scrollWeekGridToSelectedColumn = useCallback(() => {
     if (calendarView !== 'week' || gridDays.length === 0) return;
+    const idx = gridDays.findIndex((d) => d.formatted === selectedDateStr);
+    if (idx < 0) return;
     const sw = Dimensions.get('window').width;
-    const totalWidth = gridDays.length * gridDims.daySize;
     const visibleWidth = sw - gridDims.timeCol;
-    const targetOffset = weekGridReverseDays ? Math.max(0, totalWidth - visibleWidth) : 0;
-    scrollX.value = targetOffset;
+    const colW = gridDims.daySize;
+    const totalWidth = gridDays.length * colW;
+    const maxOffset = Math.max(0, totalWidth - visibleWidth);
+    const targetCenter = idx * colW + colW / 2;
+    let offset = targetCenter - visibleWidth / 2;
+    offset = Math.max(0, Math.min(maxOffset, offset));
+    scrollX.value = offset;
     requestAnimationFrame(() => {
-      flashListRef.current?.scrollToOffset({ offset: targetOffset, animated: false });
+      flashListRef.current?.scrollToOffset({ offset, animated: false });
     });
-  }, [calendarView, gridDays.length, gridDims.daySize, gridDims.timeCol, weekGridReverseDays]);
+  }, [calendarView, gridDays, selectedDateStr, gridDims.daySize, gridDims.timeCol]);
 
-  // RTL: גלול לסוף כדי שא׳ יופיע ליד עמודת השעות; LTR: התחלה (א׳ משמאל). ב-web לפעמים צריך אחרי layout.
   useEffect(() => {
-    const timer = setTimeout(scrollWeekGridToInitialOffset, 0);
+    const timer = setTimeout(() => scrollWeekGridToSelectedColumn(), 0);
     return () => clearTimeout(timer);
-  }, [scrollWeekGridToInitialOffset]);
+  }, [scrollWeekGridToSelectedColumn]);
   const headerStylez = useAnimatedStyle(() => {
     return {
       transform: [{ translateX: -scrollX.value }],
@@ -1216,6 +1151,19 @@ export default function AdminAppointmentsScreen() {
     },
     [openActionsMenu]
   );
+
+  useEffect(() => {
+    const id = pendingFocusAppointmentIdRef.current;
+    if (!id || calendarView !== 'day') return;
+    if (isLoading) return;
+    const apt = appointments.find((a) => a.id === id);
+    if (apt) {
+      pendingFocusAppointmentIdRef.current = null;
+      requestAnimationFrame(() => openActionsMenu(apt));
+      return;
+    }
+    pendingFocusAppointmentIdRef.current = null;
+  }, [appointments, isLoading, calendarView, openActionsMenu]);
 
   const requestCloseActionsModal = useCallback(() => {
     setActionsModal((prev) => (prev.appointment && prev.open ? { ...prev, open: false } : prev));
@@ -1318,66 +1266,17 @@ export default function AdminAppointmentsScreen() {
     }
   }, [appointmentToDelete, removeBookedFromRangeMap, requestCloseActionsModal, reloadMonthMarks, monthDayModalDate]);
 
-  const refreshCalendarRemindersOnly = useCallback(async () => {
-    if (!user?.id) return;
-    const rem = await listCalendarRemindersForDate(selectedDateStr, user.id);
-    setCalendarReminders(rem);
-    if (calendarView === 'week' && weekRangeChronoBounds) {
-      const list = await listCalendarRemindersForRange(
-        weekRangeChronoBounds.start,
-        weekRangeChronoBounds.end,
-        user.id
-      );
-      const rmap = new Map<string, CalendarReminder[]>();
-      list.forEach((r) => {
-        const key = r.event_date;
-        if (!key) return;
-        const arr = rmap.get(key) ?? [];
-        arr.push(r);
-        rmap.set(key, arr);
-      });
-      setRangeReminders(rmap);
-    }
-    const y = selectedDate.getFullYear();
-    const m = selectedDate.getMonth();
-    const reminderDates = await listCalendarReminderDatesInMonth(y, m, user.id);
-    setMarkedDates((prev) => {
-      const n = new Set(prev);
-      reminderDates.forEach((d) => n.add(d));
-      return n;
-    });
-  }, [user?.id, selectedDateStr, calendarView, weekRangeChronoBounds, selectedDate]);
-
   const closeReminderModal = useCallback(() => {
     setShowCalendarFabSheet(false);
-    setCalendarFabStep('choice');
-    setEditingReminder(null);
-    setShowReminderAndroidTime(false);
   }, []);
-
-  const initNewReminderFields = useCallback(() => {
-    setEditingReminder(null);
-    setReminderTitle('');
-    setReminderNotes('');
-    setReminderTimeDate(timeOnDate('09:00', selectedDate));
-    setReminderDuration(30);
-    setReminderColorKey('blue');
-  }, [selectedDate]);
-
-  const onCalendarFabPickReminder = useCallback(() => {
-    initNewReminderFields();
-    setCalendarFabStep('reminder');
-  }, [initNewReminderFields]);
 
   const onCalendarFabPickAppointment = useCallback(() => {
     setShowCalendarFabSheet(false);
-    setCalendarFabStep('choice');
     setShowAddAppointmentModal(true);
   }, []);
 
   const onCalendarFabPickConstraints = useCallback(() => {
     setShowCalendarFabSheet(false);
-    setCalendarFabStep('choice');
     setShowConstraintsModal(true);
   }, []);
 
@@ -1419,7 +1318,6 @@ export default function AdminAppointmentsScreen() {
       closeReminderModal();
       setShowAddAppointmentModal(false);
     } else {
-      setCalendarFabStep('choice');
       setShowCalendarFabSheet(true);
     }
   }, [showCalendarFabSheet, showAddAppointmentModal, showConstraintsModal, closeReminderModal]);
@@ -1437,115 +1335,6 @@ export default function AdminAppointmentsScreen() {
     reminderFabTabPress,
     setReminderFabRegistration,
   ]);
-
-  const openEditReminderModal = useCallback(
-    (r: CalendarReminder) => {
-      const day =
-        r.event_date && r.event_date.length >= 10
-          ? new Date(
-              parseInt(r.event_date.slice(0, 4), 10),
-              parseInt(r.event_date.slice(5, 7), 10) - 1,
-              parseInt(r.event_date.slice(8, 10), 10)
-            )
-          : selectedDate;
-      day.setHours(0, 0, 0, 0);
-      setEditingReminder(r);
-      setReminderTitle(r.title);
-      setReminderNotes(r.notes || '');
-      setReminderTimeDate(timeOnDate(r.start_time, day));
-      setReminderDuration(r.duration_minutes || 30);
-      setReminderColorKey((r.color_key as CalendarReminderColorKey) || 'blue');
-      setCalendarFabStep('reminder');
-      setShowCalendarFabSheet(true);
-    },
-    [selectedDate]
-  );
-
-  const saveReminder = useCallback(async () => {
-    const title = reminderTitle.trim();
-    if (!title || !user?.id) {
-      Alert.alert(tHe('admin.calendarReminder.validationTitle', 'נא להזין כותרת'));
-      return;
-    }
-    setSavingReminder(true);
-    try {
-      const timeStr = dateToHHMM(reminderTimeDate);
-      if (editingReminder) {
-        const ok = await updateCalendarReminder(editingReminder.id, {
-          start_time: timeStr,
-          duration_minutes: reminderDuration,
-          title,
-          notes: reminderNotes.trim() || null,
-          color_key: reminderColorKey,
-        });
-        if (!ok) {
-          Alert.alert(tHe('error.generic', 'שגיאה'), tHe('admin.calendarReminder.saveFailed', 'לא ניתן לשמור'));
-        } else {
-          closeReminderModal();
-          await refreshCalendarRemindersOnly();
-        }
-      } else {
-        const row = await createCalendarReminder({
-          barberId: user.id,
-          eventDate: selectedDateStr,
-          startTime: timeStr,
-          durationMinutes: reminderDuration,
-          title,
-          notes: reminderNotes.trim() || null,
-          colorKey: reminderColorKey,
-        });
-        if (!row) {
-          Alert.alert(tHe('error.generic', 'שגיאה'), tHe('admin.calendarReminder.saveFailed', 'לא ניתן לשמור'));
-        } else {
-          closeReminderModal();
-          await refreshCalendarRemindersOnly();
-        }
-      }
-    } finally {
-      setSavingReminder(false);
-    }
-  }, [
-    reminderTitle,
-    user?.id,
-    reminderTimeDate,
-    editingReminder,
-    reminderDuration,
-    reminderNotes,
-    reminderColorKey,
-    selectedDateStr,
-    tHe,
-    closeReminderModal,
-    refreshCalendarRemindersOnly,
-  ]);
-
-  const confirmDeleteReminder = useCallback(() => {
-    if (!editingReminder) return;
-    Alert.alert(
-      tHe('admin.calendarReminder.deleteTitle', 'מחיקת תזכורת'),
-      tHe('admin.calendarReminder.deleteMessage', 'האם למחוק את התזכורת מהיומן?'),
-      [
-        { text: tHe('cancel', 'ביטול'), style: 'cancel' },
-        {
-          text: tHe('delete', 'מחק'),
-          style: 'destructive',
-          onPress: async () => {
-            setDeletingReminder(true);
-            try {
-              const ok = await deleteCalendarReminder(editingReminder.id);
-              if (!ok) {
-                Alert.alert(tHe('error.generic', 'שגיאה'), tHe('admin.calendarReminder.deleteFailed', 'המחיקה נכשלה'));
-              } else {
-                closeReminderModal();
-                await refreshCalendarRemindersOnly();
-              }
-            } finally {
-              setDeletingReminder(false);
-            }
-          },
-        },
-      ]
-    );
-  }, [editingReminder, tHe, closeReminderModal, refreshCalendarRemindersOnly]);
 
   const calendarPrimary = businessColors.primary || GC_BLUE;
   const calendarRipple = `${calendarPrimary}2A`;
@@ -1748,9 +1537,7 @@ export default function AdminAppointmentsScreen() {
                           hourRowHeight={gridDims.hourSize}
                           primaryColor={calendarPrimary}
                           appts={rangeAppointments.get(item.formatted) ?? []}
-                          reminders={rangeReminders.get(item.formatted) ?? []}
                           onOpenAppointment={openActionsMenu}
-                          onPressReminder={openEditReminderModal}
                           minutesFromMidnight={minutesFromMidnight}
                         />
                       )}
@@ -1789,54 +1576,7 @@ export default function AdminAppointmentsScreen() {
                   </View>
                 ))}
 
-                {/* Reminders + appointments overlay (reminders sit under bookings) */}
                 <View pointerEvents="box-none" style={[styles.overlayContainer, { height: halfHourLabels.length * HALF_HOUR_BLOCK_HEIGHT }]}>
-                  {calendarReminders.map((r) => {
-                    const aptMinutes = minutesFromMidnight(r.start_time);
-                    const dayStartMinutes = minutesFromMidnight(dayStart);
-                    const offsetMinutes = aptMinutes - dayStartMinutes;
-                    const top = (offsetMinutes / 30) * HALF_HOUR_BLOCK_HEIGHT + HALF_HOUR_BLOCK_HEIGHT / 2;
-                    const durationMinutes = r.duration_minutes || 30;
-                    const height = (durationMinutes / 30) * HALF_HOUR_BLOCK_HEIGHT;
-                    const pal = reminderPalette(r.color_key);
-                    const startTime = formatTime(r.start_time);
-                    const endTime = formatTime(addMinutes(r.start_time, durationMinutes));
-                    return (
-                      <PressableScale
-                        key={`rm-${r.id}`}
-                        onPress={() => openEditReminderModal(r)}
-                        accessibilityLabel={tHe('admin.calendarReminder.openEdit', 'עריכת תזכורת')}
-                        style={[
-                          styles.reminderCard,
-                          {
-                            top,
-                            height: Math.max(height, 44),
-                            left: LABELS_WIDTH + 8,
-                            right: 8,
-                            zIndex: 1,
-                            elevation: 1,
-                            backgroundColor: pal.bg,
-                            borderLeftColor: pal.bar,
-                          },
-                        ]}
-                      >
-                        <View style={styles.reminderInner}>
-                          <View style={styles.reminderTitleRow}>
-                            <StickyNote size={16} color={pal.bar} />
-                            <Text numberOfLines={2} style={[styles.reminderTitleText, { color: '#1C1C1E' }]}>
-                              {r.title}
-                            </Text>
-                          </View>
-                          <View style={styles.reminderTimePill}>
-                            <Text numberOfLines={1} style={styles.reminderTimeText}>
-                              {`${startTime} – ${endTime}`}
-                            </Text>
-                            <Ionicons name="notifications-outline" size={14} color={pal.bar} />
-                          </View>
-                        </View>
-                      </PressableScale>
-                    );
-                  })}
                   {appointments.map((apt) => {
                     // Calculate exact position using minutes from midnight
                     const aptMinutes = minutesFromMidnight(apt.slot_time);
@@ -1937,7 +1677,7 @@ export default function AdminAppointmentsScreen() {
                 </View>
               </View>
 
-              {appointments.length === 0 && calendarReminders.length === 0 && (
+              {appointments.length === 0 && (
                 <View style={styles.emptyState}>
                   <Text style={styles.emptyTitle}>{tHe('admin.appointments.emptyTitle', 'אין תורים ליום זה')}</Text>
                   <Text style={styles.emptySubtitle}>{tHe('admin.appointments.emptySubtitle', 'בחר/י יום אחר מהסרגל העליון')}</Text>
@@ -2251,24 +1991,11 @@ export default function AdminAppointmentsScreen() {
         <CalendarReminderFabPanel
           isOpen={showCalendarFabSheet}
           onFabPress={reminderFabTabPress}
-          title={
-            calendarFabStep === 'choice'
-              ? tHe('admin.calendarAdd.choiceTitle', 'מה תרצה להוסיף?')
-              : editingReminder
-                ? tHe('admin.calendarReminder.editTitle', 'עריכת תזכורת')
-                : tHe('admin.calendarReminder.newTitle', 'תזכורת ביומן')
-          }
-          subtitle={
-            calendarFabStep === 'choice'
-              ? tHe(
-                  'admin.calendarAdd.choiceSubtitle',
-                  'בחרו תור ללקוח, תזכורת פנימית, או אילוץ שחוסם משבצות'
-                )
-              : tHe(
-                  'admin.calendarReminder.hint',
-                  'לא חוסם תורים — מוצג לצד התורים לעזרה לארגון היום'
-                )
-          }
+          title={tHe('admin.calendarAdd.choiceTitle', 'מה תרצה להוסיף?')}
+          subtitle={tHe(
+            'admin.calendarAdd.choiceSubtitleNoSticky',
+            'בחרו תור ללקוח או אילוץ שחוסם משבצות. תזכורות (לך וללקוח) מוגדרות בהגדרות.'
+          )}
           backgroundColor={calendarPrimary}
           isRtl={isRtl}
           fabAccessibilityLabel={tHe('admin.calendarAdd.fabAccessibility', 'הוספה ליומן')}
@@ -2276,234 +2003,56 @@ export default function AdminAppointmentsScreen() {
           externalAnchorSize={reminderExternalAnchorSize}
           panelStyle={reminderFabPanelStyle}
         >
-          {calendarFabStep === 'choice' ? (
-            <View style={styles.calendarFabChoiceWrap}>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.calendarFabChoiceCard,
-                  pressed && styles.calendarFabChoiceCardPressed,
-                ]}
-                onPress={onCalendarFabPickAppointment}
-                accessibilityRole="button"
-                accessibilityLabel={tHe('admin.calendarAdd.optionAppointment', 'תור')}
-              >
-                <View style={[styles.calendarFabChoiceIconWrap, { backgroundColor: `${calendarPrimary}18` }]}>
-                  <Calendar size={26} color={calendarPrimary} />
-                </View>
-                <View style={styles.calendarFabChoiceTextCol}>
-                  <Text style={styles.calendarFabChoiceTitle}>
-                    {tHe('admin.calendarAdd.optionAppointment', 'תור')}
-                  </Text>
-                  <Text style={styles.calendarFabChoiceHint}>
-                    {tHe('admin.calendarAdd.optionAppointmentHint', 'קביעת תור ללקוח לפי שירות ושעה')}
-                  </Text>
-                </View>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.calendarFabChoiceCard,
-                  pressed && styles.calendarFabChoiceCardPressed,
-                ]}
-                onPress={onCalendarFabPickReminder}
-                accessibilityRole="button"
-                accessibilityLabel={tHe('admin.calendarAdd.optionReminder', 'תזכורת ביומן')}
-              >
-                <View style={[styles.calendarFabChoiceIconWrap, { backgroundColor: '#E8EAED' }]}>
-                  <StickyNote size={26} color="#5F6368" />
-                </View>
-                <View style={styles.calendarFabChoiceTextCol}>
-                  <Text style={styles.calendarFabChoiceTitle}>
-                    {tHe('admin.calendarAdd.optionReminder', 'תזכורת ביומן')}
-                  </Text>
-                  <Text style={styles.calendarFabChoiceHint}>
-                    {tHe('admin.calendarAdd.optionReminderHint', 'תזכורת לעצמך — לא חוסמת משבצות')}
-                  </Text>
-                </View>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.calendarFabChoiceCard,
-                  pressed && styles.calendarFabChoiceCardPressed,
-                ]}
-                onPress={onCalendarFabPickConstraints}
-                accessibilityRole="button"
-                accessibilityLabel={tHe('admin.calendarAdd.optionConstraints', 'אילוצים')}
-              >
-                <View style={[styles.calendarFabChoiceIconWrap, { backgroundColor: `${calendarPrimary}12` }]}>
-                  <Ban size={26} color={calendarPrimary} />
-                </View>
-                <View style={styles.calendarFabChoiceTextCol}>
-                  <Text style={styles.calendarFabChoiceTitle}>
-                    {tHe('admin.calendarAdd.optionConstraints', 'אילוצים')}
-                  </Text>
-                  <Text style={styles.calendarFabChoiceHint}>
-                    {tHe(
-                      'admin.calendarAdd.optionConstraintsHint',
-                      'חסימת זמן בלוח — לקוחות לא יוכלו לקבוע תור בחלון זה'
-                    )}
-                  </Text>
-                </View>
-              </Pressable>
-            </View>
-          ) : (
-          <KeyboardAwareScreenScroll
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            style={{ maxHeight: Dimensions.get('window').height * 0.58 }}
-            contentContainerStyle={styles.reminderFabScrollContent}
-          >
-            {!editingReminder ? (
-              <TouchableOpacity
-                style={styles.calendarFabBackRow}
-                onPress={() => setCalendarFabStep('choice')}
-                accessibilityRole="button"
-                accessibilityLabel={tHe('admin.calendarAdd.backToChoice', 'חזרה לבחירה')}
-              >
-                <ChevronRight size={22} color={calendarPrimary} />
-                <Text style={[styles.calendarFabBackText, { color: calendarPrimary }]}>
-                  {tHe('admin.calendarAdd.backToChoice', 'חזרה לבחירה')}
-                </Text>
-              </TouchableOpacity>
-            ) : null}
-            <Text style={styles.reminderFieldLabel}>{tHe('admin.calendarReminder.fieldTitle', 'כותרת')}</Text>
-            <TextInput
-              value={reminderTitle}
-              onChangeText={setReminderTitle}
-              placeholder={tHe('admin.calendarReminder.titlePlaceholder', 'למשל: טכנאי מגיע')}
-              placeholderTextColor="#AEAEB2"
-              style={styles.reminderInput}
-            />
-
-            <Text style={styles.reminderFieldLabel}>{tHe('admin.calendarReminder.fieldTime', 'שעה')}</Text>
-            {Platform.OS === 'android' ? (
-              <TouchableOpacity
-                style={styles.reminderTimeButton}
-                onPress={() => setShowReminderAndroidTime(true)}
-                activeOpacity={0.75}
-              >
-                <Text style={styles.reminderTimeButtonText}>{_formatHebrewTimeLabel(reminderTimeDate)}</Text>
-                <Ionicons name="time-outline" size={20} color="#636366" />
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.reminderTimeButton}>
-                <Text style={styles.reminderTimeButtonText}>{_formatHebrewTimeLabel(reminderTimeDate)}</Text>
-                <Ionicons name="time-outline" size={20} color="#636366" />
-              </View>
-            )}
-            {Platform.OS === 'ios' && (
-              <View style={styles.reminderIosPickerWrap}>
-                <DateTimePicker
-                  value={reminderTimeDate}
-                  mode="time"
-                  display="spinner"
-                  themeVariant="light"
-                  textColor={Colors.text}
-                  style={styles.reminderIosPicker}
-                  onChange={(_, d) => {
-                    if (d) setReminderTimeDate(d);
-                  }}
-                  locale="he-IL"
-                />
-              </View>
-            )}
-
-            <Text style={styles.reminderFieldLabel}>{tHe('admin.calendarReminder.fieldDuration', 'משך')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.reminderDurationRow}>
-              {[15, 30, 45, 60, 90, 120].map((m) => (
-                <TouchableOpacity
-                  key={m}
-                  onPress={() => setReminderDuration(m)}
-                  style={[
-                    styles.reminderDurationChip,
-                    reminderDuration === m && {
-                      backgroundColor: calendarPrimary,
-                      borderColor: calendarPrimary,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.reminderDurationChipText,
-                      reminderDuration === m && styles.reminderDurationChipTextActive,
-                    ]}
-                  >
-                    {`${m} ${tHe('admin.calendarReminder.minShort', 'דק׳')}`}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <Text style={styles.reminderFieldLabel}>{tHe('admin.calendarReminder.fieldColor', 'צבע')}</Text>
-            <View style={styles.reminderColorRow}>
-              {CALENDAR_REMINDER_COLOR_KEYS.map((k) => {
-                const pal = reminderPalette(k);
-                const on = reminderColorKey === k;
-                return (
-                  <TouchableOpacity
-                    key={k}
-                    onPress={() => setReminderColorKey(k)}
-                    style={[
-                      styles.reminderColorDot,
-                      { backgroundColor: pal.bar },
-                      on && styles.reminderColorDotSelected,
-                    ]}
-                  />
-                );
-              })}
-            </View>
-
-            <Text style={styles.reminderFieldLabel}>{tHe('admin.calendarReminder.fieldNotes', 'הערות (אופציונלי)')}</Text>
-            <TextInput
-              value={reminderNotes}
-              onChangeText={setReminderNotes}
-              placeholder={tHe('admin.calendarReminder.notesPlaceholder', 'פרטים נוספים…')}
-              placeholderTextColor="#AEAEB2"
-              style={[styles.reminderInput, styles.reminderNotesInput]}
-              multiline
-            />
-
-            <TouchableOpacity
-              style={[styles.reminderSaveBtn, { backgroundColor: calendarPrimary }]}
-              onPress={saveReminder}
-              disabled={savingReminder}
+          <View style={styles.calendarFabChoiceWrap}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.calendarFabChoiceCard,
+                pressed && styles.calendarFabChoiceCardPressed,
+              ]}
+              onPress={onCalendarFabPickAppointment}
+              accessibilityRole="button"
+              accessibilityLabel={tHe('admin.calendarAdd.optionAppointment', 'תור')}
             >
-              {savingReminder ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.reminderSaveBtnText}>{tHe('save', 'שמירה')}</Text>
-              )}
-            </TouchableOpacity>
-
-            {editingReminder ? (
-              <TouchableOpacity style={styles.reminderDeleteBtn} onPress={confirmDeleteReminder} disabled={deletingReminder}>
-                {deletingReminder ? (
-                  <ActivityIndicator color="#FF3B30" />
-                ) : (
-                  <Text style={styles.reminderDeleteBtnText}>{tHe('admin.calendarReminder.delete', 'מחיקת תזכורת')}</Text>
-                )}
-              </TouchableOpacity>
-            ) : null}
-
-            <TouchableOpacity style={styles.reminderCancelTextBtn} onPress={closeReminderModal}>
-              <Text style={[styles.reminderCancelText, { color: calendarPrimary }]}>{tHe('cancel', 'ביטול')}</Text>
-            </TouchableOpacity>
-          </KeyboardAwareScreenScroll>
-          )}
+              <View style={[styles.calendarFabChoiceIconWrap, { backgroundColor: `${calendarPrimary}18` }]}>
+                <Calendar size={26} color={calendarPrimary} />
+              </View>
+              <View style={styles.calendarFabChoiceTextCol}>
+                <Text style={styles.calendarFabChoiceTitle}>
+                  {tHe('admin.calendarAdd.optionAppointment', 'תור')}
+                </Text>
+                <Text style={styles.calendarFabChoiceHint}>
+                  {tHe('admin.calendarAdd.optionAppointmentHint', 'קביעת תור ללקוח לפי שירות ושעה')}
+                </Text>
+              </View>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [
+                styles.calendarFabChoiceCard,
+                pressed && styles.calendarFabChoiceCardPressed,
+              ]}
+              onPress={onCalendarFabPickConstraints}
+              accessibilityRole="button"
+              accessibilityLabel={tHe('admin.calendarAdd.optionConstraints', 'אילוצים')}
+            >
+              <View style={[styles.calendarFabChoiceIconWrap, { backgroundColor: `${calendarPrimary}12` }]}>
+                <Ban size={26} color={calendarPrimary} />
+              </View>
+              <View style={styles.calendarFabChoiceTextCol}>
+                <Text style={styles.calendarFabChoiceTitle}>
+                  {tHe('admin.calendarAdd.optionConstraints', 'אילוצים')}
+                </Text>
+                <Text style={styles.calendarFabChoiceHint}>
+                  {tHe(
+                    'admin.calendarAdd.optionConstraintsHint',
+                    'חסימת זמן בלוח — לקוחות לא יוכלו לקבוע תור בחלון זה'
+                  )}
+                </Text>
+              </View>
+            </Pressable>
+          </View>
         </CalendarReminderFabPanel>
         </View>
       )}
-
-      {Platform.OS === 'android' && showReminderAndroidTime ? (
-        <DateTimePicker
-          value={reminderTimeDate}
-          mode="time"
-          display="default"
-          onChange={(ev, date) => {
-            setShowReminderAndroidTime(false);
-            if (ev.type === 'set' && date) setReminderTimeDate(date);
-          }}
-        />
-      ) : null}
 
       <AddAppointmentModal
         visible={showAddAppointmentModal}

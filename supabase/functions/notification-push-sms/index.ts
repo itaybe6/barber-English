@@ -329,62 +329,88 @@ serve(async (req) => {
     return json({ ok: false, error: "users_fetch_failed" }, 500);
   }
 
+  const targetUserId =
+    record.user_id != null && String(record.user_id).trim() !== ""
+      ? String(record.user_id).trim()
+      : "";
+
+  const runPushThenSms = async (match: {
+    push_token?: string | null;
+  }): Promise<{ pushOk: boolean; smsOk: boolean; smsSkip?: string; smsErr?: string }> => {
+    let pushOk = false;
+    const token = (match.push_token || "").trim();
+    if (token) {
+      pushOk = await sendExpoPush({
+        pushToken: token,
+        title: title || "התראה",
+        body: content || "",
+        notificationId: id || "unknown",
+        nType,
+      });
+      if (pushOk && id) {
+        const { error: updErr } = await admin
+          .from("notifications")
+          .update({ push_sent: true })
+          .eq("id", id)
+          .eq("business_id", businessId);
+        if (updErr) {
+          console.error("[notification-push-sms] push_sent update", updErr);
+        }
+      }
+    }
+
+    const creds = await loadPulseemCredentials(admin, businessId);
+    if ("error" in creds) {
+      console.warn("[notification-push-sms] SMS skipped:", creds.error, "business", businessId);
+      return { pushOk, smsOk: false, smsSkip: creds.error };
+    }
+
+    try {
+      await sendPulseemSingleSms({
+        userId: creds.userId,
+        password: creds.password,
+        fromNumber: creds.fromNumber,
+        toNumber: recipientPhone,
+        text: buildSmsText(title, content),
+        apiKey: creds.apiKey || undefined,
+      });
+      return { pushOk, smsOk: true };
+    } catch (e) {
+      console.error("[notification-push-sms] SMS failed", e);
+      return {
+        pushOk,
+        smsOk: false,
+        smsErr: String((e as Error)?.message ?? e),
+      };
+    }
+  };
+
+  if (nType === "admin_reminder" && targetUserId) {
+    const adminRow = usersRows.find((u) => u.id === targetUserId);
+    if (!adminRow || adminRow.user_type !== "admin") {
+      return json({ ok: true, skipped: "admin_reminder_not_admin" });
+    }
+    const out = await runPushThenSms(adminRow);
+    return json({
+      ok: true,
+      push: out.pushOk,
+      sms: out.smsOk,
+      sms_skip: out.smsSkip,
+      sms_error: out.smsErr,
+    });
+  }
+
   const match = findUserByPhoneFlexible(usersRows, recipientPhone);
   if (!match || match.user_type !== "client") {
     return json({ ok: true, skipped: "not_client_or_unknown_phone" });
   }
 
-  let pushOk = false;
-  const token = (match.push_token || "").trim();
-  if (token) {
-    pushOk = await sendExpoPush({
-      pushToken: token,
-      title: title || "התראה",
-      body: content || "",
-      notificationId: id || "unknown",
-      nType,
-    });
-    if (pushOk && id) {
-      const { error: updErr } = await admin
-        .from("notifications")
-        .update({ push_sent: true })
-        .eq("id", id)
-        .eq("business_id", businessId);
-      if (updErr) {
-        console.error("[notification-push-sms] push_sent update", updErr);
-      }
-    }
-  }
-
-  const creds = await loadPulseemCredentials(admin, businessId);
-  if ("error" in creds) {
-    console.warn("[notification-push-sms] SMS skipped:", creds.error, "business", businessId);
-    return json({
-      ok: true,
-      push: pushOk,
-      sms: false,
-      sms_skip: creds.error,
-    });
-  }
-
-  try {
-    await sendPulseemSingleSms({
-      userId: creds.userId,
-      password: creds.password,
-      fromNumber: creds.fromNumber,
-      toNumber: recipientPhone,
-      text: buildSmsText(title, content),
-      apiKey: creds.apiKey || undefined,
-    });
-  } catch (e) {
-    console.error("[notification-push-sms] SMS failed", e);
-    return json({
-      ok: true,
-      push: pushOk,
-      sms: false,
-      sms_error: String((e as Error)?.message ?? e),
-    });
-  }
-
-  return json({ ok: true, push: pushOk, sms: true });
+  const out = await runPushThenSms(match);
+  return json({
+    ok: true,
+    push: out.pushOk,
+    sms: out.smsOk,
+    sms_skip: out.smsSkip,
+    sms_error: out.smsErr,
+  });
 });

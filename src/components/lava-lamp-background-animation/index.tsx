@@ -59,6 +59,9 @@ export interface BrandLavaLampBackgroundProps {
   count?: number;
   duration?: number;
   blurIntensity?: number;
+  /** When both set (>0), blob positions/sizes use this box instead of the full window (e.g. admin banner). */
+  layoutWidth?: number;
+  layoutHeight?: number;
 }
 
 type Circle = {
@@ -136,21 +139,30 @@ export function BrandLavaLampBackground({
   count = 4,
   duration = 14000,
   blurIntensity = 52,
+  layoutWidth,
+  layoutHeight,
 }: BrandLavaLampBackgroundProps) {
-  const { width, height } = useWindowDimensions();
+  const { width: winW, height: winH } = useWindowDimensions();
 
   const circles = useMemo<Circle[]>(() => {
     const cols = buildBrandPalette(primaryColor, count);
-    const w = Math.max(width, 1);
-    const h = Math.max(height, 1);
+    const useBox =
+      typeof layoutWidth === 'number' &&
+      typeof layoutHeight === 'number' &&
+      layoutWidth > 0 &&
+      layoutHeight > 0;
+    const w = Math.max(useBox ? layoutWidth : winW, 1);
+    const h = Math.max(useBox ? layoutHeight : winH, 1);
+    /** באנר רחב ונמוך — מקטינים מעט את המחלק כדי שהבלובים ייחסו לגובה */
+    const radiusDiv = h < 100 ? 1.75 : 2.2;
     return cols.map((color, index) => {
       const rand = randomNumber(5, 11) / 10;
-      const radius = (Math.min(w, h) * rand) / 2.2;
+      const radius = (Math.min(w, h) * rand) / radiusDiv;
       const x = Math.random() * Math.max(8, w - radius * 1.2);
       const y = Math.random() * Math.max(8, h - radius * 1.2);
       return { x, y, radius, index, color };
     });
-  }, [primaryColor, count, width, height]);
+  }, [primaryColor, count, winW, winH, layoutWidth, layoutHeight]);
 
   if (Platform.OS === 'web') {
     return null;

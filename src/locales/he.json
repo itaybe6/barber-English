@@ -660,8 +660,6 @@
     
     "profile": {
       "businessAddressTitle": "כתובת העסק",
-      "businessAddressSheetSubtitle": "הלקוחות רואים את הכתובת בפרופיל ובקביעת תור. אפשר לבחור מההשלמות של גוגל או להקליד ידנית.",
-      "businessAddressSearchPlaceholder": "הקלידו רחוב, עיר…",
       "addressLabel": "כתובת",
       "bookingWindowPlaceholder": "7",
       "businessAddressPlaceholder": "כתובת העסק",
@@ -696,7 +694,28 @@
       "tiktok": "טיקטוק",
       "businessName": "שם העסק",
       "businessNamePlaceholder": "לדוגמה: הסטודיו של הדס",
-      "bookingWindowDaysTitle": "חלון הזמנות (ימים)"
+      "bookingWindowDaysTitle": "חלון הזמנות (ימים)",
+      "homeHeroSubtitle": "התמונות האלה מופיעות בקרוסלה בראש מסך הבית של הלקוחות.",
+      "heroTipOrder": "התמונה הראשונה ברשימה מוצגת ראשונה באנימציה.",
+      "heroTipTap": "הקשה על תמונה כדי להעביר אותה לראש הרשימה.",
+      "heroTipDefault": "אם לא תעלו כאן תמונות — יוצגו תמונות ברירת המחדל של האפליקציה.",
+      "heroPreviewLabel": "תצוגה מקדימה — השקופית הראשונה",
+      "heroAddPhotos": "בחירת תמונות מהגלריה",
+      "heroAddMore": "הוספת תמונות",
+      "heroYourImages": "התמונות שלכם",
+      "heroImagesCount": "{{count}} תמונות",
+      "heroEmptyCtaTitle": "עדיין אין תמונות",
+      "heroEmptyCtaSubtitle": "לחצו על הכפתור למטה או על + למעלה כדי לבחור תמונות. אפשר לבחור כמה בבת אחת.",
+      "heroDeleteTitle": "הסרת תמונה",
+      "heroDeleteConfirm": "להסיר את התמונה מהקרוסלה בדף הבית?",
+      "resetToDefault": "איפוס לברירת מחדל",
+      "resetHeroConfirm": "לאפס את תמונות הראש ולהחזיר את ברירת המחדל?",
+      "heroResetAlertTitle": "איפוס",
+      "homeHeroTitle": "תמונות ראש דף הבית",
+      "heroEmptyTitle": "אין תמונות ראש",
+      "heroEmptySubtitle": "הוסיפו תמונות כדי שיוצגו באנימציה בראש הדף. אם תשאירו ריק — יוצגו תמונות ברירת מחדל.",
+      "heroHint": "טיפ: הקשה על תמונה כדי להעביר אותה למקום הראשון.",
+      "first": "ראשונה"
     },
     "sections": {
       "notifications": "התראות",

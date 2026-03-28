@@ -20,7 +20,6 @@ import {
   Pressable,
 } from 'react-native';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import Colors from '@/constants/colors';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import DaySelector from '@/components/DaySelector';
@@ -29,12 +28,7 @@ import { businessConstraintsApi, mergeConstraintsForDisplay } from '@/lib/api/bu
 import {
   listCalendarRemindersForDate,
   listCalendarRemindersForRange,
-  createCalendarReminder,
-  updateCalendarReminder,
-  deleteCalendarReminder,
   listCalendarReminderDatesInMonth,
-  CALENDAR_REMINDER_COLOR_KEYS,
-  type CalendarReminderColorKey,
 } from '@/lib/api/calendarReminders';
 import { businessHoursApi } from '@/lib/api/businessHours';
 import { checkWaitlistAndNotify, notifyServiceWaitlistClients } from '@/lib/api/waitlistNotifications';
@@ -57,6 +51,7 @@ import {
 import { Ban, Calendar, ChevronLeft, ChevronRight, CheckCircle, StickyNote } from 'lucide-react-native';
 import AddAppointmentModal from '@/components/AddAppointmentModal';
 import BusinessConstraintsModal from '@/components/BusinessConstraintsModal';
+import CalendarReminderEditorModal from '@/components/CalendarReminderEditorModal';
 import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
@@ -196,21 +191,6 @@ const REMINDER_PALETTE: Record<string, { bar: string; bg: string }> = {
 
 function reminderPalette(key: string | null | undefined) {
   return REMINDER_PALETTE[key || 'blue'] || REMINDER_PALETTE.blue;
-}
-
-function dateToHHMM(d: Date): string {
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  return `${hh}:${mm}`;
-}
-
-function timeOnDate(timeStr: string, day: Date): Date {
-  const parts = String(timeStr || '09:00').split(':');
-  const h = parseInt(parts[0] || '9', 10);
-  const m = parseInt(parts[1] || '0', 10);
-  const out = new Date(day);
-  out.setHours(h, m, 0, 0);
-  return out;
 }
 
 /** Admin calendar: blocked-time styling (amber) */
@@ -790,7 +770,7 @@ export default function AdminAppointmentsScreen() {
   const [monthConstraintDates, setMonthConstraintDates] = useState<Set<string>>(new Set());
 
   const [showCalendarFabSheet, setShowCalendarFabSheet] = useState(false);
-  const [calendarFabStep, setCalendarFabStep] = useState<'choice' | 'reminder'>('choice');
+  const [showReminderEditor, setShowReminderEditor] = useState(false);
   const [showAddAppointmentModal, setShowAddAppointmentModal] = useState(false);
   const [showConstraintsModal, setShowConstraintsModal] = useState(false);
 
@@ -854,15 +834,7 @@ export default function AdminAppointmentsScreen() {
     [plusAnchorWindow]
   );
 
-  const [editingReminder, setEditingReminder] = useState<CalendarReminder | null>(null);
-  const [reminderTitle, setReminderTitle] = useState('');
-  const [reminderNotes, setReminderNotes] = useState('');
-  const [reminderTimeDate, setReminderTimeDate] = useState<Date>(() => new Date());
-  const [reminderDuration, setReminderDuration] = useState(30);
-  const [reminderColorKey, setReminderColorKey] = useState<CalendarReminderColorKey>('blue');
-  const [showReminderAndroidTime, setShowReminderAndroidTime] = useState(false);
-  const [savingReminder, setSavingReminder] = useState(false);
-  const [deletingReminder, setDeletingReminder] = useState(false);
+  const [reminderEditorEditing, setReminderEditorEditing] = useState<CalendarReminder | null>(null);
 
   const scrollRef = useRef<ScrollView | null>(null);
 
@@ -1537,34 +1509,26 @@ export default function AdminAppointmentsScreen() {
 
   const closeReminderModal = useCallback(() => {
     setShowCalendarFabSheet(false);
-    setCalendarFabStep('choice');
-    setEditingReminder(null);
-    setShowReminderAndroidTime(false);
   }, []);
 
-  const initNewReminderFields = useCallback(() => {
-    setEditingReminder(null);
-    setReminderTitle('');
-    setReminderNotes('');
-    setReminderTimeDate(timeOnDate('09:00', selectedDate));
-    setReminderDuration(30);
-    setReminderColorKey('blue');
-  }, [selectedDate]);
+  const closeReminderEditor = useCallback(() => {
+    setShowReminderEditor(false);
+    setReminderEditorEditing(null);
+  }, []);
 
   const onCalendarFabPickReminder = useCallback(() => {
-    initNewReminderFields();
-    setCalendarFabStep('reminder');
-  }, [initNewReminderFields]);
+    setReminderEditorEditing(null);
+    setShowCalendarFabSheet(false);
+    setShowReminderEditor(true);
+  }, []);
 
   const onCalendarFabPickAppointment = useCallback(() => {
     setShowCalendarFabSheet(false);
-    setCalendarFabStep('choice');
     setShowAddAppointmentModal(true);
   }, []);
 
   const onCalendarFabPickConstraints = useCallback(() => {
     setShowCalendarFabSheet(false);
-    setCalendarFabStep('choice');
     setShowConstraintsModal(true);
   }, []);
 
@@ -1605,34 +1569,62 @@ export default function AdminAppointmentsScreen() {
   ]);
 
   useEffect(() => {
-    if ((!showCalendarFabSheet && !showAddAppointmentModal && !showConstraintsModal) || Platform.OS !== 'android')
+    if (
+      (!showCalendarFabSheet &&
+        !showAddAppointmentModal &&
+        !showConstraintsModal &&
+        !showReminderEditor) ||
+      Platform.OS !== 'android'
+    )
       return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (showReminderEditor) {
+        closeReminderEditor();
+        return true;
+      }
       closeReminderModal();
       setShowAddAppointmentModal(false);
       setShowConstraintsModal(false);
       return true;
     });
     return () => sub.remove();
-  }, [showCalendarFabSheet, showAddAppointmentModal, showConstraintsModal, closeReminderModal]);
+  }, [
+    showCalendarFabSheet,
+    showAddAppointmentModal,
+    showConstraintsModal,
+    showReminderEditor,
+    closeReminderModal,
+    closeReminderEditor,
+  ]);
 
   const reminderFabTabPress = useCallback(() => {
     if (showConstraintsModal) {
       setShowConstraintsModal(false);
       return;
     }
+    if (showReminderEditor) {
+      closeReminderEditor();
+      return;
+    }
     if (showCalendarFabSheet || showAddAppointmentModal) {
       closeReminderModal();
       setShowAddAppointmentModal(false);
     } else {
-      setCalendarFabStep('choice');
       setShowCalendarFabSheet(true);
     }
-  }, [showCalendarFabSheet, showAddAppointmentModal, showConstraintsModal, closeReminderModal]);
+  }, [
+    showCalendarFabSheet,
+    showAddAppointmentModal,
+    showConstraintsModal,
+    showReminderEditor,
+    closeReminderModal,
+    closeReminderEditor,
+  ]);
 
   useEffect(() => {
     setReminderFabRegistration({
-      isOpen: showCalendarFabSheet || showAddAppointmentModal || showConstraintsModal,
+      isOpen:
+        showCalendarFabSheet || showAddAppointmentModal || showConstraintsModal || showReminderEditor,
       onPress: reminderFabTabPress,
     });
     return () => setReminderFabRegistration(null);
@@ -1640,118 +1632,16 @@ export default function AdminAppointmentsScreen() {
     showCalendarFabSheet,
     showAddAppointmentModal,
     showConstraintsModal,
+    showReminderEditor,
     reminderFabTabPress,
     setReminderFabRegistration,
   ]);
 
-  const openEditReminderModal = useCallback(
-    (r: CalendarReminder) => {
-      const day =
-        r.event_date && r.event_date.length >= 10
-          ? new Date(
-              parseInt(r.event_date.slice(0, 4), 10),
-              parseInt(r.event_date.slice(5, 7), 10) - 1,
-              parseInt(r.event_date.slice(8, 10), 10)
-            )
-          : selectedDate;
-      day.setHours(0, 0, 0, 0);
-      setEditingReminder(r);
-      setReminderTitle(r.title);
-      setReminderNotes(r.notes || '');
-      setReminderTimeDate(timeOnDate(r.start_time, day));
-      setReminderDuration(r.duration_minutes || 30);
-      setReminderColorKey((r.color_key as CalendarReminderColorKey) || 'blue');
-      setCalendarFabStep('reminder');
-      setShowCalendarFabSheet(true);
-    },
-    [selectedDate]
-  );
-
-  const saveReminder = useCallback(async () => {
-    const title = reminderTitle.trim();
-    if (!title || !user?.id) {
-      Alert.alert(tHe('admin.calendarReminder.validationTitle', 'נא להזין כותרת'));
-      return;
-    }
-    setSavingReminder(true);
-    try {
-      const timeStr = dateToHHMM(reminderTimeDate);
-      if (editingReminder) {
-        const ok = await updateCalendarReminder(editingReminder.id, {
-          start_time: timeStr,
-          duration_minutes: reminderDuration,
-          title,
-          notes: reminderNotes.trim() || null,
-          color_key: reminderColorKey,
-        });
-        if (!ok) {
-          Alert.alert(tHe('error.generic', 'שגיאה'), tHe('admin.calendarReminder.saveFailed', 'לא ניתן לשמור'));
-        } else {
-          closeReminderModal();
-          await refreshCalendarRemindersOnly();
-        }
-      } else {
-        const row = await createCalendarReminder({
-          barberId: user.id,
-          eventDate: selectedDateStr,
-          startTime: timeStr,
-          durationMinutes: reminderDuration,
-          title,
-          notes: reminderNotes.trim() || null,
-          colorKey: reminderColorKey,
-        });
-        if (!row) {
-          Alert.alert(tHe('error.generic', 'שגיאה'), tHe('admin.calendarReminder.saveFailed', 'לא ניתן לשמור'));
-        } else {
-          closeReminderModal();
-          await refreshCalendarRemindersOnly();
-        }
-      }
-    } finally {
-      setSavingReminder(false);
-    }
-  }, [
-    reminderTitle,
-    user?.id,
-    reminderTimeDate,
-    editingReminder,
-    reminderDuration,
-    reminderNotes,
-    reminderColorKey,
-    selectedDateStr,
-    tHe,
-    closeReminderModal,
-    refreshCalendarRemindersOnly,
-  ]);
-
-  const confirmDeleteReminder = useCallback(() => {
-    if (!editingReminder) return;
-    Alert.alert(
-      tHe('admin.calendarReminder.deleteTitle', 'מחיקת תזכורת'),
-      tHe('admin.calendarReminder.deleteMessage', 'האם למחוק את התזכורת מהיומן?'),
-      [
-        { text: tHe('cancel', 'ביטול'), style: 'cancel' },
-        {
-          text: tHe('delete', 'מחק'),
-          style: 'destructive',
-          onPress: async () => {
-            setDeletingReminder(true);
-            try {
-              const ok = await deleteCalendarReminder(editingReminder.id);
-              if (!ok) {
-                Alert.alert(tHe('error.generic', 'שגיאה'), tHe('admin.calendarReminder.deleteFailed', 'המחיקה נכשלה'));
-              } else {
-                closeReminderModal();
-                await refreshCalendarRemindersOnly();
-              }
-            } finally {
-              setDeletingReminder(false);
-            }
-          },
-        },
-      ]
-    );
-  }, [editingReminder, tHe, closeReminderModal, refreshCalendarRemindersOnly]);
+  const openEditReminderModal = useCallback((r: CalendarReminder) => {
+    setReminderEditorEditing(r);
+    setShowCalendarFabSheet(false);
+    setShowReminderEditor(true);
+  }, []);
 
   const calendarPrimary = businessColors.primary || GC_BLUE;
   const calendarRipple = `${calendarPrimary}2A`;
@@ -2534,24 +2424,11 @@ export default function AdminAppointmentsScreen() {
         <CalendarReminderFabPanel
           isOpen={showCalendarFabSheet}
           onFabPress={reminderFabTabPress}
-          title={
-            calendarFabStep === 'choice'
-              ? tHe('admin.calendarAdd.choiceTitle', 'מה תרצה להוסיף?')
-              : editingReminder
-                ? tHe('admin.calendarReminder.editTitle', 'עריכת תזכורת')
-                : tHe('admin.calendarReminder.newTitle', 'תזכורת ביומן')
-          }
-          subtitle={
-            calendarFabStep === 'choice'
-              ? tHe(
-                  'admin.calendarAdd.choiceSubtitle',
-                  'בחרו תור ללקוח, תזכורת פנימית, או אילוץ שחוסם משבצות'
-                )
-              : tHe(
-                  'admin.calendarReminder.hint',
-                  'לא חוסם תורים — מוצג לצד התורים לעזרה לארגון היום'
-                )
-          }
+          title={tHe('admin.calendarAdd.choiceTitle', 'מה תרצה להוסיף?')}
+          subtitle={tHe(
+            'admin.calendarAdd.choiceSubtitle',
+            'בחרו תור ללקוח, תזכורת פנימית, או אילוץ שחוסם משבצות'
+          )}
           backgroundColor={calendarPrimary}
           isRtl={isRtl}
           fabAccessibilityLabel={tHe('admin.calendarAdd.fabAccessibility', 'הוספה ליומן')}
@@ -2559,7 +2436,6 @@ export default function AdminAppointmentsScreen() {
           externalAnchorSize={reminderExternalAnchorSize}
           panelStyle={reminderFabPanelStyle}
         >
-          {calendarFabStep === 'choice' ? (
             <View style={styles.calendarFabChoiceWrap}>
               <Pressable
                 style={({ pressed }) => [
@@ -2628,165 +2504,17 @@ export default function AdminAppointmentsScreen() {
                 </View>
               </Pressable>
             </View>
-          ) : (
-          <KeyboardAwareScreenScroll
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            style={{ maxHeight: Dimensions.get('window').height * 0.58 }}
-            contentContainerStyle={styles.reminderFabScrollContent}
-          >
-            {!editingReminder ? (
-              <TouchableOpacity
-                style={styles.calendarFabBackRow}
-                onPress={() => setCalendarFabStep('choice')}
-                accessibilityRole="button"
-                accessibilityLabel={tHe('admin.calendarAdd.backToChoice', 'חזרה לבחירה')}
-              >
-                <ChevronRight size={22} color={calendarPrimary} />
-                <Text style={[styles.calendarFabBackText, { color: calendarPrimary }]}>
-                  {tHe('admin.calendarAdd.backToChoice', 'חזרה לבחירה')}
-                </Text>
-              </TouchableOpacity>
-            ) : null}
-            <Text style={styles.reminderFieldLabel}>{tHe('admin.calendarReminder.fieldTitle', 'כותרת')}</Text>
-            <TextInput
-              value={reminderTitle}
-              onChangeText={setReminderTitle}
-              placeholder={tHe('admin.calendarReminder.titlePlaceholder', 'למשל: טכנאי מגיע')}
-              placeholderTextColor="#AEAEB2"
-              style={styles.reminderInput}
-            />
-
-            <Text style={styles.reminderFieldLabel}>{tHe('admin.calendarReminder.fieldTime', 'שעה')}</Text>
-            {Platform.OS === 'android' ? (
-              <TouchableOpacity
-                style={styles.reminderTimeButton}
-                onPress={() => setShowReminderAndroidTime(true)}
-                activeOpacity={0.75}
-              >
-                <Text style={styles.reminderTimeButtonText}>{_formatHebrewTimeLabel(reminderTimeDate)}</Text>
-                <Ionicons name="time-outline" size={20} color="#636366" />
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.reminderTimeButton}>
-                <Text style={styles.reminderTimeButtonText}>{_formatHebrewTimeLabel(reminderTimeDate)}</Text>
-                <Ionicons name="time-outline" size={20} color="#636366" />
-              </View>
-            )}
-            {Platform.OS === 'ios' && (
-              <View style={styles.reminderIosPickerWrap}>
-                <DateTimePicker
-                  value={reminderTimeDate}
-                  mode="time"
-                  display="spinner"
-                  themeVariant="light"
-                  textColor={Colors.text}
-                  style={styles.reminderIosPicker}
-                  onChange={(_, d) => {
-                    if (d) setReminderTimeDate(d);
-                  }}
-                  locale="he-IL"
-                />
-              </View>
-            )}
-
-            <Text style={styles.reminderFieldLabel}>{tHe('admin.calendarReminder.fieldDuration', 'משך')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.reminderDurationRow}>
-              {[15, 30, 45, 60, 90, 120].map((m) => (
-                <TouchableOpacity
-                  key={m}
-                  onPress={() => setReminderDuration(m)}
-                  style={[
-                    styles.reminderDurationChip,
-                    reminderDuration === m && {
-                      backgroundColor: calendarPrimary,
-                      borderColor: calendarPrimary,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.reminderDurationChipText,
-                      reminderDuration === m && styles.reminderDurationChipTextActive,
-                    ]}
-                  >
-                    {`${m} ${tHe('admin.calendarReminder.minShort', 'דק׳')}`}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <Text style={styles.reminderFieldLabel}>{tHe('admin.calendarReminder.fieldColor', 'צבע')}</Text>
-            <View style={styles.reminderColorRow}>
-              {CALENDAR_REMINDER_COLOR_KEYS.map((k) => {
-                const pal = reminderPalette(k);
-                const on = reminderColorKey === k;
-                return (
-                  <TouchableOpacity
-                    key={k}
-                    onPress={() => setReminderColorKey(k)}
-                    style={[
-                      styles.reminderColorDot,
-                      { backgroundColor: pal.bar },
-                      on && styles.reminderColorDotSelected,
-                    ]}
-                  />
-                );
-              })}
-            </View>
-
-            <Text style={styles.reminderFieldLabel}>{tHe('admin.calendarReminder.fieldNotes', 'הערות (אופציונלי)')}</Text>
-            <TextInput
-              value={reminderNotes}
-              onChangeText={setReminderNotes}
-              placeholder={tHe('admin.calendarReminder.notesPlaceholder', 'פרטים נוספים…')}
-              placeholderTextColor="#AEAEB2"
-              style={[styles.reminderInput, styles.reminderNotesInput]}
-              multiline
-            />
-
-            <TouchableOpacity
-              style={[styles.reminderSaveBtn, { backgroundColor: calendarPrimary }]}
-              onPress={saveReminder}
-              disabled={savingReminder}
-            >
-              {savingReminder ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.reminderSaveBtnText}>{tHe('save', 'שמירה')}</Text>
-              )}
-            </TouchableOpacity>
-
-            {editingReminder ? (
-              <TouchableOpacity style={styles.reminderDeleteBtn} onPress={confirmDeleteReminder} disabled={deletingReminder}>
-                {deletingReminder ? (
-                  <ActivityIndicator color="#FF3B30" />
-                ) : (
-                  <Text style={styles.reminderDeleteBtnText}>{tHe('admin.calendarReminder.delete', 'מחיקת תזכורת')}</Text>
-                )}
-              </TouchableOpacity>
-            ) : null}
-
-            <TouchableOpacity style={styles.reminderCancelTextBtn} onPress={closeReminderModal}>
-              <Text style={[styles.reminderCancelText, { color: calendarPrimary }]}>{tHe('cancel', 'ביטול')}</Text>
-            </TouchableOpacity>
-          </KeyboardAwareScreenScroll>
-          )}
         </CalendarReminderFabPanel>
         </View>
       )}
 
-      {Platform.OS === 'android' && showReminderAndroidTime ? (
-        <DateTimePicker
-          value={reminderTimeDate}
-          mode="time"
-          display="default"
-          onChange={(ev, date) => {
-            setShowReminderAndroidTime(false);
-            if (ev.type === 'set' && date) setReminderTimeDate(date);
-          }}
-        />
-      ) : null}
+      <CalendarReminderEditorModal
+        visible={showReminderEditor}
+        onClose={closeReminderEditor}
+        onSaved={refreshCalendarRemindersOnly}
+        editingReminder={reminderEditorEditing}
+        defaultDate={selectedDate}
+      />
 
       <AddAppointmentModal
         visible={showAddAppointmentModal}
@@ -3666,11 +3394,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
     zIndex: 55,
   },
-  reminderFabScrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 22,
-  },
   calendarFabChoiceWrap: {
     paddingHorizontal: 14,
     paddingTop: 8,
@@ -3715,19 +3438,6 @@ const styles = StyleSheet.create({
     color: '#636366',
     textAlign: 'right',
     lineHeight: 16,
-    writingDirection: 'rtl',
-  },
-  calendarFabBackRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 4,
-    marginBottom: 4,
-    paddingVertical: 6,
-  },
-  calendarFabBackText: {
-    fontSize: 15,
-    fontWeight: '700',
     writingDirection: 'rtl',
   },
   constraintCard: {
@@ -3812,122 +3522,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#3C3C43',
     writingDirection: 'rtl',
-  },
-  reminderFieldLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#636366',
-    marginBottom: 6,
-    marginTop: 10,
-    writingDirection: 'rtl',
-  },
-  reminderInput: {
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: Colors.text,
-    backgroundColor: '#FAFAFA',
-    writingDirection: 'rtl',
-    textAlign: 'right',
-  },
-  reminderTimeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    backgroundColor: '#FAFAFA',
-  },
-  reminderTimeButtonText: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: Colors.text,
-    writingDirection: 'rtl',
-  },
-  reminderIosPickerWrap: {
-    alignItems: 'center',
-    marginTop: 4,
-    marginBottom: 4,
-  },
-  reminderIosPicker: {
-    width: '100%',
-    height: 180,
-  },
-  reminderDurationRow: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingVertical: 4,
-  },
-  reminderDurationChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    backgroundColor: '#F2F2F7',
-  },
-  reminderDurationChipText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1C1C1E',
-  },
-  reminderDurationChipTextActive: {
-    color: '#FFFFFF',
-  },
-  reminderColorRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginTop: 4,
-  },
-  reminderColorDot: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  reminderColorDotSelected: {
-    borderWidth: 3,
-    borderColor: '#1C1C1E',
-  },
-  reminderNotesInput: {
-    minHeight: 72,
-    textAlignVertical: 'top',
-  },
-  reminderSaveBtn: {
-    marginTop: 20,
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  reminderSaveBtnText: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  reminderDeleteBtn: {
-    marginTop: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  reminderDeleteBtnText: {
-    color: '#FF3B30',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  reminderCancelTextBtn: {
-    marginTop: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  reminderCancelText: {
-    fontSize: 16,
-    fontWeight: '600',
   },
 });
 

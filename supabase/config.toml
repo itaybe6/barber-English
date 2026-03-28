@@ -10,6 +10,10 @@ enabled = true
 [functions.send-monthly-report]
 verify_jwt = true
 
+# Cron: daily ~12:00 Asia/Jerusalem — birthday in-app notifications (+ push/SMS via notifications trigger)
+[functions.birthday-notifications]
+verify_jwt = true
+
 # Login/register SMS OTP — called before user session exists
 [functions.auth-phone-otp]
 verify_jwt = false

@@ -637,8 +637,6 @@
     
     "profile": {
       "businessAddressTitle": "Business address",
-      "businessAddressSheetSubtitle": "Clients see this on your profile and when booking. Pick a Google suggestion or type freely.",
-      "businessAddressSearchPlaceholder": "Street, city, or area…",
       "addressLabel": "Address",
       "bookingWindowPlaceholder": "7",
       "businessAddressPlaceholder": "Business address",
@@ -673,7 +671,28 @@
       "tiktok": "TikTok",
       "businessName": "Business name",
       "businessNamePlaceholder": "For example: The Studio of Hadas",
-      "bookingWindowDaysTitle": "Booking window (days)"
+      "bookingWindowDaysTitle": "Booking window (days)",
+      "homeHeroSubtitle": "These images appear in the carousel at the top of the client home screen.",
+      "heroTipOrder": "The first image is shown first in the animation.",
+      "heroTipTap": "Tap an image to move it to the front.",
+      "heroTipDefault": "If you add nothing here, the app’s default images are used.",
+      "heroPreviewLabel": "First slide preview",
+      "heroAddPhotos": "Choose photos from gallery",
+      "heroAddMore": "Add more photos",
+      "heroYourImages": "Your photos",
+      "heroImagesCount": "{{count}} photos",
+      "heroEmptyCtaTitle": "No photos yet",
+      "heroEmptyCtaSubtitle": "Tap the button below or + above to pick images. You can select several at once.",
+      "heroDeleteTitle": "Remove image",
+      "heroDeleteConfirm": "Remove this image from the home carousel?",
+      "resetToDefault": "Reset to default",
+      "resetHeroConfirm": "Reset hero images to the default ones?",
+      "heroResetAlertTitle": "Reset",
+      "homeHeroTitle": "Home hero images",
+      "heroEmptyTitle": "No hero images",
+      "heroEmptySubtitle": "Add images to show them in the top animation. If you keep this empty, the default images will be shown.",
+      "heroHint": "Tip: tap an image to move it to the first position.",
+      "first": "First"
     },
     "sections": {
       "notifications": "Notifications",

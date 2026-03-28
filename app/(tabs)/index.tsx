@@ -13,7 +13,7 @@ import { clients } from '@/constants/clients';
 import { supabase } from '@/lib/supabase';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import Card from '@/components/Card';
-import { Calendar, Clock, ChevronLeft, ChevronRight, Star } from 'lucide-react-native';
+import { Calendar, Clock, ChevronLeft, ChevronRight, Star, Images, Store } from 'lucide-react-native';
 import DaySelector from '@/components/DaySelector';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -105,7 +105,7 @@ const ManicureMarqueeHero = React.memo(({ images }: { images: string[] }) => {
         style={{
           flex: 1,
           gap: HERO_SPACING,
-          transform: [{ rotate: '-4deg' }, { translateY: HERO_MARQUEE_TRANSLATE_Y }],
+          transform: [{ translateY: HERO_MARQUEE_TRANSLATE_Y }],
         }}
         pointerEvents="auto"
       >
@@ -894,12 +894,27 @@ export default function HomeScreen() {
           onCountChange={setPendingClientsCount}
         />
 
-        {/* ── Quick: broadcast + waitlist ── */}
+        {/* ── Quick: gallery · broadcast · products + waitlist ── */}
         {isAdmin && (
           <View style={styles.quickTilesGrid}>
             <View style={styles.quickTilesRow}>
               <TouchableOpacity
-                style={[styles.quickTile, { flex: 1, backgroundColor: `${colors.primary}0F` }]}
+                style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
+                activeOpacity={0.82}
+                onPress={() => router.push('/(tabs)/edit-gallery')}
+                accessibilityRole="button"
+                accessibilityLabel={t('admin.gallery.edit', 'עריכת גלריה')}
+              >
+                <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
+                  <Images size={22} color={colors.primary} strokeWidth={2.35} />
+                </View>
+                <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
+                  {t('admin.gallery.edit', 'עריכת גלריה')}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
                 activeOpacity={0.82}
                 onPress={() => setShowBroadcast(true)}
                 accessibilityRole="button"
@@ -909,6 +924,21 @@ export default function HomeScreen() {
                 </View>
                 <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
                   {t('admin.home.broadcastTile')}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
+                activeOpacity={0.82}
+                onPress={() => router.push('/(tabs)/edit-products')}
+                accessibilityRole="button"
+                accessibilityLabel={t('admin.products.homeEdit', 'עריכת מוצרים')}
+              >
+                <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
+                  <Store size={22} color={colors.primary} strokeWidth={2.35} />
+                </View>
+                <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
+                  {t('admin.products.homeEdit', 'עריכת מוצרים')}
                 </Text>
               </TouchableOpacity>
             </View>

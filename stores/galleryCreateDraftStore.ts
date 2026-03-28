@@ -12,15 +12,20 @@ type PickedUpdate = GalleryPickedAsset[] | ((prev: GalleryPickedAsset[]) => Gall
 
 interface GalleryCreateDraftState {
   pickedAssets: GalleryPickedAsset[];
+  /** Optional single short video (in addition to up to 9 images). */
+  pickedVideo: GalleryPickedAsset | null;
   setPickedAssets: (update: PickedUpdate) => void;
+  setPickedVideo: (video: GalleryPickedAsset | null) => void;
   clearPickedAssets: () => void;
 }
 
 export const useGalleryCreateDraftStore = create<GalleryCreateDraftState>((set) => ({
   pickedAssets: [],
+  pickedVideo: null,
   setPickedAssets: (update) =>
     set((state) => ({
       pickedAssets: typeof update === 'function' ? (update as (p: GalleryPickedAsset[]) => GalleryPickedAsset[])(state.pickedAssets) : update,
     })),
-  clearPickedAssets: () => set({ pickedAssets: [] }),
+  setPickedVideo: (video) => set({ pickedVideo: video }),
+  clearPickedAssets: () => set({ pickedAssets: [], pickedVideo: null }),
 }));

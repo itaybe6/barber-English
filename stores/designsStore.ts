@@ -1,6 +1,6 @@
 import { create } from 'zustand/react';
 import { Design } from '@/lib/supabase';
-import { designsApi } from '@/lib/api/designs';
+import { designsApi, sortDesignsByDisplayOrder } from '@/lib/api/designs';
 
 interface DesignsState {
   designs: Design[];
@@ -34,8 +34,10 @@ interface DesignsState {
     price_modifier?: number;
     is_featured?: boolean;
     user_id?: string;
+    display_order?: number;
   }) => Promise<Design | null>;
   deleteDesign: (id: string) => Promise<boolean>;
+  applyDesignDisplayOrder: (orderedIds: string[]) => Promise<boolean>;
 }
 
 export const useDesignsStore = create<DesignsState>((set, get) => ({
@@ -83,7 +85,10 @@ export const useDesignsStore = create<DesignsState>((set, get) => ({
     try {
       const created = await designsApi.createDesign(payload);
       if (created) {
-        set((state) => ({ designs: [created, ...state.designs], isLoading: false }));
+        set((state) => ({
+          designs: sortDesignsByDisplayOrder([...state.designs, created]),
+          isLoading: false,
+        }));
       } else {
         set({ isLoading: false });
       }
@@ -130,5 +135,30 @@ export const useDesignsStore = create<DesignsState>((set, get) => ({
       console.error('Error deleting design:', error);
       return false;
     }
-  }
+  },
+
+  applyDesignDisplayOrder: async (orderedIds: string[]) => {
+    try {
+      const ok = await designsApi.applyDesignDisplayOrder(orderedIds);
+      if (ok) {
+        set((state) => {
+          const map = new Map(state.designs.map((d) => [d.id, d]));
+          const next: Design[] = [];
+          for (let i = 0; i < orderedIds.length; i++) {
+            const id = orderedIds[i];
+            const d = map.get(id);
+            if (d) next.push({ ...d, display_order: i });
+          }
+          return { designs: next };
+        });
+      } else {
+        set({ error: 'שגיאה בשמירת סדר התצוגה' });
+      }
+      return ok;
+    } catch (error) {
+      set({ error: 'שגיאה בשמירת סדר התצוגה' });
+      console.error('applyDesignDisplayOrder:', error);
+      return false;
+    }
+  },
 }));

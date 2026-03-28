@@ -12,7 +12,7 @@ import { clients } from '@/constants/clients';
 import { supabase } from '@/lib/supabase';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import Card from '@/components/Card';
-import { Calendar, Clock, ChevronLeft, ChevronRight, Star } from 'lucide-react-native';
+import { Calendar, Clock, ChevronLeft, ChevronRight, Star, Images } from 'lucide-react-native';
 import DaySelector from '@/components/DaySelector';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -36,8 +36,8 @@ import { useProductsStore } from '@/stores/productsStore';
 import { StatusBar, setStatusBarStyle, setStatusBarBackgroundColor } from 'expo-status-bar';
 import { useTranslation } from 'react-i18next';
 import { Marquee } from '@animatereactnative/marquee';
-import Reanimated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { manicureImages } from '@/src/constants/manicureImages';
+import { ManicureMarqueeTile } from '@/components/ManicureMarqueeTile';
 import MonthlyInsightsCard from '@/components/MonthlyInsightsCard';
 import { PendingClientApprovalsCard, PendingClientApprovalsCardHandle } from '@/components/admin/PendingClientApprovalsCard';
 import { clientAppointmentStatsApi } from '@/lib/api/clientAppointmentStats';
@@ -46,8 +46,6 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_ITEM_SIZE = Platform.OS === 'web' ? SCREEN_WIDTH * 0.24 : SCREEN_WIDTH * 0.45;
 const HERO_SPACING = Platform.OS === 'web' ? 12 : 8;
 const HERO_BG = '#FFFFFF';
-const HERO_INITIAL_DELAY = 200;
-const HERO_DURATION = 500;
 const HERO_HEIGHT = Math.round(SCREEN_HEIGHT * 0.68);
 const HERO_OVERLAP = 100; // how far the white sheet overlaps the hero
 
@@ -96,23 +94,13 @@ const ManicureMarqueeHero = React.memo(({ images }: { images: string[] }) => {
           >
             <View style={{ flexDirection: 'row', gap: HERO_SPACING }}>
               {column.map((image, index) => (
-                <Reanimated.Image
-                  key={`manicure-image-admin-${columnIndex}-${index}`}
-                  source={{ uri: image }}
-                  entering={
-                    columnIndex % 2 === 0
-                      ? FadeInRight.duration(HERO_DURATION).delay(
-                          HERO_INITIAL_DELAY * (columnIndex + 1) + Math.random() * 100
-                        )
-                      : FadeInLeft.duration(HERO_DURATION).delay(
-                          HERO_INITIAL_DELAY * (columnIndex + 1) + Math.random() * 100
-                        )
-                  }
-                  style={{
-                    width: HERO_ITEM_SIZE,
-                    aspectRatio: 1,
-                    borderRadius: HERO_SPACING,
-                  }}
+                <ManicureMarqueeTile
+                  key={`manicure-image-admin-${columnIndex}-${index}-${image}`}
+                  uri={image}
+                  itemSize={HERO_ITEM_SIZE}
+                  borderRadius={HERO_SPACING}
+                  columnIndex={columnIndex}
+                  index={index}
                 />
               ))}
             </View>
@@ -182,10 +170,13 @@ export default function HomeScreen() {
     }, [params.openPendingClients, router])
   );
 
-  const heroImagesResolved = useMemo(
-    () => (heroImages && heroImages.length > 0 ? heroImages : manicureImages),
-    [heroImages]
-  );
+  const heroImagesResolved = useMemo(() => {
+    const raw = heroImages ?? [];
+    const web = raw.filter((u) => typeof u === 'string' && /^https?:\/\//i.test(u.trim()));
+    const stock = [...manicureImages];
+    if (web.length === 0) return stock;
+    return [...web, ...stock];
+  }, [heroImages]);
 
   useEffect(() => {
     if (user?.phone) {
@@ -992,8 +983,12 @@ export default function HomeScreen() {
                   style={[styles.galleryEditBtn, { backgroundColor: `${colors.primary}14` }]}
                   activeOpacity={0.8}
                   onPress={() => router.push('/(tabs)/edit-gallery')}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('admin.gallery.edit', 'עריכת גלריה')}
                 >
-                  <Ionicons name="pencil-outline" size={15} color={colors.primary} />
+                  <View style={styles.galleryEditIconWrap}>
+                    <Images size={17} color={colors.primary} strokeWidth={2.35} />
+                  </View>
                   <Text style={[styles.galleryEditBtnText, { color: colors.primary }]}>
                     {t('admin.gallery.edit', 'עריכה')}
                   </Text>
@@ -1519,10 +1514,18 @@ const createStyles = (colors: any) => StyleSheet.create({
   galleryEditBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 20,
+  },
+  galleryEditIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   galleryEditBtnText: {
     fontSize: 13,

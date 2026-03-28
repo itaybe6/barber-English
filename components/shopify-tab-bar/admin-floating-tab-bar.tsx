@@ -7,8 +7,10 @@ import {
   CalendarDays,
   Clock,
   Home,
-  Pencil,
   Plus,
+  ArrowDownUp,
+  Check,
+  Trash2,
   Settings,
   Store,
   Wallet,
@@ -34,7 +36,7 @@ import {
   useAdminCalendarReminderFab,
   useAdminCalendarSetPlusAnchorWindow,
 } from "@/contexts/AdminCalendarReminderFabContext";
-import { useEditGalleryTabBarGet } from "@/contexts/EditGalleryTabBarContext";
+import { useEditGalleryTabBar } from "@/contexts/EditGalleryTabBarContext";
 
 const INACTIVE = "#8a8a8a";
 const ICON_ACTIVE = "#ffffff";
@@ -53,7 +55,7 @@ export const AdminFloatingTabBar: React.FC = () => {
   const setPlusAnchorWindow = useAdminCalendarSetPlusAnchorWindow();
   const plusPillRef = useRef<View>(null);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const getEditGalleryActions = useEditGalleryTabBarGet();
+  const editGalleryTabBar = useEditGalleryTabBar();
 
   const currentTab = segments[1] as string | undefined;
   const isActive = (tab: string) =>
@@ -161,6 +163,10 @@ export const AdminFloatingTabBar: React.FC = () => {
     );
   }
 
+  if (currentTab === "edit-gallery" && editGalleryTabBar.floatingBarHidden) {
+    return null;
+  }
+
   if (currentTab === "edit-gallery") {
     return (
       <View
@@ -176,7 +182,7 @@ export const AdminFloatingTabBar: React.FC = () => {
             <TabButton
               focused={false}
               activeColor={primary}
-              onPress={() => getEditGalleryActions()?.openCreate()}
+              onPress={() => editGalleryTabBar.get()?.openCreate()}
               accessibilityLabel={t(
                 "admin.gallery.tabAddDesign",
                 "Add design"
@@ -186,16 +192,58 @@ export const AdminFloatingTabBar: React.FC = () => {
               <Plus size={22} color={INACTIVE} />
             </TabButton>
             <TabButton
-              focused={false}
+              focused={editGalleryTabBar.reorderMode}
               activeColor={primary}
-              onPress={() => getEditGalleryActions()?.openEditPicker()}
+              onPress={() => {
+                if (
+                  editGalleryTabBar.reorderMode &&
+                  editGalleryTabBar.reorderDirty
+                ) {
+                  void editGalleryTabBar.get()?.commitReorder?.();
+                  return;
+                }
+                editGalleryTabBar.toggleReorderMode();
+              }}
+              accessibilityLabel={
+                editGalleryTabBar.reorderMode &&
+                editGalleryTabBar.reorderDirty
+                  ? t(
+                      "admin.gallery.tabSaveReorder",
+                      "Save gallery order"
+                    )
+                  : t(
+                      "admin.gallery.tabReorderMode",
+                      "Reorder gallery"
+                    )
+              }
+              accessibilityRole="button"
+            >
+              {editGalleryTabBar.reorderMode &&
+              editGalleryTabBar.reorderDirty ? (
+                <Check size={22} color={ICON_ACTIVE} strokeWidth={2.5} />
+              ) : (
+                <ArrowDownUp
+                  size={22}
+                  color={
+                    editGalleryTabBar.reorderMode ? ICON_ACTIVE : INACTIVE
+                  }
+                />
+              )}
+            </TabButton>
+            <TabButton
+              focused={editGalleryTabBar.deleteMode}
+              activeColor={primary}
+              onPress={() => editGalleryTabBar.toggleDeleteMode()}
               accessibilityLabel={t(
-                "admin.gallery.tabEditDesign",
-                "Edit design"
+                "admin.gallery.tabDeleteMode",
+                "Show delete on designs"
               )}
               accessibilityRole="button"
             >
-              <Pencil size={22} color={INACTIVE} />
+              <Trash2
+                size={22}
+                color={editGalleryTabBar.deleteMode ? ICON_ACTIVE : INACTIVE}
+              />
             </TabButton>
           </View>
 

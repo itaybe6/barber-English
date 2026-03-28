@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
-  Image,
   StyleSheet,
   Dimensions,
   Animated,
@@ -19,6 +18,9 @@ import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/authStore';
 import { Design } from '@/lib/supabase';
+import { ResizeMode } from 'expo-av';
+import { isVideoUrl } from '@/lib/utils/mediaUrl';
+import { GalleryLoopVideo } from '@/components/GalleryLoopVideo';
 import { supabase, getBusinessId } from '@/lib/supabase';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { useTranslation } from 'react-i18next';
@@ -29,6 +31,58 @@ const CARD_HEIGHT = 240; // Increased from 200 to 240 for taller cards
 const CARD_SPACING = 16; // Increased spacing between cards
 
 const AVATAR_PLACEHOLDER = require('@/assets/images/user.png');
+
+function DesignCoverImage({ uri, style }: { uri: string; style: object }) {
+  const [failed, setFailed] = useState(false);
+  const trimmed = uri.trim();
+  useEffect(() => {
+    setFailed(false);
+  }, [trimmed]);
+  const show = trimmed.length > 0 && !failed;
+  const onError = useCallback(() => setFailed(true), []);
+  if (!show) {
+    return <View style={[style, styles.designImagePlaceholder]} />;
+  }
+  if (isVideoUrl(trimmed)) {
+    return <GalleryLoopVideo uri={trimmed} style={style} />;
+  }
+  return (
+    <ExpoImage
+      source={{ uri: trimmed }}
+      style={style}
+      contentFit="cover"
+      cachePolicy="memory-disk"
+      transition={150}
+      onError={onError}
+    />
+  );
+}
+
+function DesignModalImage({ uri, style }: { uri: string; style: object }) {
+  const [failed, setFailed] = useState(false);
+  const trimmed = uri.trim();
+  useEffect(() => {
+    setFailed(false);
+  }, [trimmed]);
+  const show = trimmed.length > 0 && !failed;
+  const onError = useCallback(() => setFailed(true), []);
+  if (!show) {
+    return <View style={[style, styles.designImagePlaceholder]} />;
+  }
+  if (isVideoUrl(trimmed)) {
+    return <GalleryLoopVideo uri={trimmed} style={style} resizeMode={ResizeMode.CONTAIN} />;
+  }
+  return (
+    <ExpoImage
+      source={{ uri: trimmed }}
+      style={style}
+      contentFit="contain"
+      cachePolicy="memory-disk"
+      transition={150}
+      onError={onError}
+    />
+  );
+}
 
 /** Remote avatar with local fallback; expo-image handles Supabase public URLs more reliably than RN Image. */
 function UploaderAvatar({
@@ -276,11 +330,11 @@ export default function DesignCarousel({
   };
 
   const renderDesignCard = (design: Design, index: number) => {
-    const imageUrl = design.image_urls && design.image_urls.length > 0 
-      ? design.image_urls[0] 
-      : design.image_url;
+    const list = (design.image_urls && design.image_urls.length > 0 ? design.image_urls : [design.image_url]).filter(Boolean) as string[];
+    const imageUrl = (list.find((u) => !isVideoUrl(u)) ?? list[0] ?? '') || '';
     const isPremium = design.is_premium || false;
     const userProfile = design.user_id ? userProfiles[design.user_id] : null;
+    const designUri = imageUrl?.trim() ?? '';
 
     return (
       <View key={design.id} style={styles.storyContainer}>
@@ -292,11 +346,7 @@ export default function DesignCarousel({
           {/* Main Design Image with Admin Profile Overlay */}
           <View style={styles.designImageContainer}>
             <View style={styles.designImageWrapper}>
-              <Image 
-                source={{ uri: imageUrl }} 
-                style={styles.designImage}
-                resizeMode="cover"
-              />
+              <DesignCoverImage uri={designUri} style={styles.designImage} />
               
               {/* Premium Crown */}
               {isPremium && (
@@ -372,14 +422,14 @@ export default function DesignCarousel({
             {/* Design Image */}
             {selectedDesign && (
               <View style={styles.modalContent}>
-                <Image
-                  source={{ 
-                    uri: selectedDesign.image_urls && selectedDesign.image_urls.length > 0 
-                      ? selectedDesign.image_urls[0] 
-                      : selectedDesign.image_url 
-                  }}
+                <DesignModalImage
+                  key={selectedDesign.id}
+                  uri={
+                    (selectedDesign.image_urls && selectedDesign.image_urls.length > 0
+                      ? selectedDesign.image_urls[0]
+                      : selectedDesign.image_url) ?? ''
+                  }
                   style={styles.modalImage}
-                  resizeMode="contain"
                 />
                 
                 {/* Design Info */}
@@ -480,6 +530,9 @@ const styles = StyleSheet.create({
   designImage: {
     width: '100%',
     height: '100%',
+  },
+  designImagePlaceholder: {
+    backgroundColor: '#E8E8ED',
   },
   adminProfileOverlay: {
     position: 'absolute',

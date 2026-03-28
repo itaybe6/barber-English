@@ -27,17 +27,14 @@ import { useColors } from '@/src/theme/ThemeProvider';
 import { StatusBar, setStatusBarStyle, setStatusBarBackgroundColor } from 'expo-status-bar';
 import { useTranslation } from 'react-i18next';
 import { Marquee } from '@animatereactnative/marquee';
-import Reanimated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { manicureImages } from '@/src/constants/manicureImages';
-import { Image as ExpoImage } from 'expo-image';
+import { ManicureMarqueeTile } from '@/components/ManicureMarqueeTile';
 import SwapOpportunities from '@/components/SwapOpportunities';
 import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_SPACING = Platform.OS === 'web' ? 12 : 8;
 const HERO_BG = '#FFFFFF';
-const HERO_INITIAL_DELAY = 200;
-const HERO_DURATION = 500;
 const HERO_HEIGHT_FALLBACK = Math.round(SCREEN_HEIGHT * 0.68);
 
 function sanitizeUrlArray(value: unknown): string[] {
@@ -47,11 +44,13 @@ function sanitizeUrlArray(value: unknown): string[] {
     .filter((x) => x.length > 0);
 }
 
-/** Only http(s) URLs load in the client hero; invalid DB values fall back to bundled defaults. */
+/** Only http(s) from DB; always append stock manicure URLs so failed custom URLs still leave visible tiles. */
 function resolveHeroImageUrls(profile: BusinessProfile | null): string[] {
   const list = sanitizeUrlArray((profile as any)?.home_hero_images);
   const web = list.filter((u) => /^https?:\/\//i.test(u));
-  return web.length > 0 ? web : [...manicureImages];
+  const stock = [...manicureImages];
+  if (web.length === 0) return stock;
+  return [...web, ...stock];
 }
 
 function chunkArray<T>(array: T[], size: number): T[][] {
@@ -94,32 +93,14 @@ function ManicureMarqueeHero({ images }: { images: string[] }) {
           >
             <View style={{ flexDirection: 'row', gap: HERO_SPACING }}>
               {column.map((image, index) => (
-                <Reanimated.View
-                  key={`manicure-image-${columnIndex}-${index}`}
-                  entering={
-                    columnIndex % 2 === 0
-                      ? FadeInRight.duration(HERO_DURATION).delay(
-                          HERO_INITIAL_DELAY * (columnIndex + 1) + Math.random() * 100
-                        )
-                      : FadeInLeft.duration(HERO_DURATION).delay(
-                          HERO_INITIAL_DELAY * (columnIndex + 1) + Math.random() * 100
-                        )
-                  }
-                  style={{
-                    width: itemSize,
-                    aspectRatio: 1,
-                    borderRadius: HERO_SPACING,
-                    overflow: 'hidden',
-                  }}
-                >
-                  <ExpoImage
-                    source={{ uri: image }}
-                    style={{ width: '100%', height: '100%' }}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    transition={120}
-                  />
-                </Reanimated.View>
+                <ManicureMarqueeTile
+                  key={`manicure-image-${columnIndex}-${index}-${image}`}
+                  uri={image}
+                  itemSize={itemSize}
+                  borderRadius={HERO_SPACING}
+                  columnIndex={columnIndex}
+                  index={index}
+                />
               ))}
             </View>
           </Marquee>

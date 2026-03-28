@@ -1,4 +1,4 @@
-import React, { FC, ReactNode, useEffect } from "react";
+import React, { FC, ReactNode, useEffect, useRef } from "react";
 import { Pressable, StyleSheet } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
@@ -29,6 +29,11 @@ export const TabButton: FC<TabButtonProps> = ({
 }) => {
   const scale = useSharedValue(1);
   const bg = useSharedValue(focused ? activeColor : "#ffffff");
+  /** onPressOut must not read stale `focused` after parent toggles state in onPress — sync after layout. */
+  const focusedRef = useRef(focused);
+  const activeColorRef = useRef(activeColor);
+  focusedRef.current = focused;
+  activeColorRef.current = activeColor;
 
   const rStyle = useAnimatedStyle(() => ({
     transform: [{ scale: withTiming(scale.get(), { duration: SCALE_DURATION }) }],
@@ -36,10 +41,17 @@ export const TabButton: FC<TabButtonProps> = ({
   }));
 
   useEffect(() => {
-    setTimeout(() => {
+    const t = setTimeout(() => {
       bg.set(focused ? activeColor : "#ffffff");
     }, BG_DELAY);
+    return () => clearTimeout(t);
   }, [focused, bg, activeColor]);
+
+  const syncBgToFocused = () => {
+    const f = focusedRef.current;
+    const c = activeColorRef.current;
+    bg.set(f ? c : "#ffffff");
+  };
 
   return (
     <Pressable
@@ -51,11 +63,16 @@ export const TabButton: FC<TabButtonProps> = ({
       }}
       onPressIn={() => {
         scale.set(SCALE_PRESSED);
-        if (!focused) bg.set("#FAFAFA");
+        if (!focusedRef.current) bg.set("#FAFAFA");
       }}
       onPressOut={() => {
         scale.set(1);
-        bg.set(focused ? activeColor : "#ffffff");
+        // After parent onPress (e.g. toggle) React may commit on the next frame — avoid stale `focused` in bg.
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            syncBgToFocused();
+          });
+        });
       }}
     >
       <Animated.View style={[styles.button, { padding: buttonPadding }, rStyle]}>

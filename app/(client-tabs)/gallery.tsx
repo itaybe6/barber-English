@@ -12,6 +12,9 @@ import { ScrollView } from 'react-native';
 import { supabase, getBusinessId } from '@/lib/supabase';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { Product } from '@/lib/api/products';
+import { isVideoUrl } from '@/lib/utils/mediaUrl';
+import { GalleryLoopVideo } from '@/components/GalleryLoopVideo';
+import { Video, ResizeMode } from 'expo-av';
 
 const { width } = Dimensions.get('window');
 const numColumns = 2;
@@ -87,12 +90,16 @@ const DesignTile = memo(({ item, onOpen, uploaderUser, businessColors, isProduct
           >
             {urls.map((url, idx) => (
               <View key={`${item.id}-img-${idx}`} style={{ width: slideSize, height: slideSize }}>
-                <Animated.Image
-                  source={{ uri: url }}
-                  style={[styles.image, { opacity: imageOpacity }]}
-                  resizeMode="cover"
-                  onLoad={onLoad}
-                />
+                {isVideoUrl(url) ? (
+                  <GalleryLoopVideo uri={url} style={styles.image} />
+                ) : (
+                  <Animated.Image
+                    source={{ uri: url }}
+                    style={[styles.image, { opacity: imageOpacity }]}
+                    resizeMode="cover"
+                    onLoad={onLoad}
+                  />
+                )}
               </View>
             ))}
           </ScrollView>
@@ -415,7 +422,19 @@ export default function GalleryScreen() {
               >
                 {viewerImages.map((url, idx) => (
                   <View key={`viewer-${idx}`} style={{ width, height: '80%', justifyContent: 'center', alignItems: 'center' }}>
-                    <Image source={{ uri: url }} style={{ width: width, height: '100%' }} resizeMode="contain" />
+                    {isVideoUrl(url) ? (
+                      <Video
+                        source={{ uri: url }}
+                        style={{ width: width, height: '100%' }}
+                        resizeMode={ResizeMode.CONTAIN}
+                        isLooping
+                        shouldPlay
+                        isMuted
+                        useNativeControls={false}
+                      />
+                    ) : (
+                      <Image source={{ uri: url }} style={{ width: width, height: '100%' }} resizeMode="contain" />
+                    )}
                   </View>
                 ))}
               </ScrollView>

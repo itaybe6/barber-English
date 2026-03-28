@@ -12,8 +12,9 @@ import {
   Check,
   Trash2,
   Settings,
-  Store,
   Wallet,
+  Palette,
+  LayoutGrid,
 } from "lucide-react-native";
 import { TabButton } from "./tab-button";
 import { useColors } from "@/src/theme/ThemeProvider";
@@ -37,6 +38,8 @@ import {
   useAdminCalendarSetPlusAnchorWindow,
 } from "@/contexts/AdminCalendarReminderFabContext";
 import { useEditGalleryTabBar } from "@/contexts/EditGalleryTabBarContext";
+import { useEditProductsTabBar } from "@/contexts/EditProductsTabBarContext";
+import { usePickPrimaryColorTabBar } from "@/contexts/PickPrimaryColorTabBarContext";
 
 const INACTIVE = "#8a8a8a";
 const ICON_ACTIVE = "#ffffff";
@@ -56,6 +59,8 @@ export const AdminFloatingTabBar: React.FC = () => {
   const plusPillRef = useRef<View>(null);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const editGalleryTabBar = useEditGalleryTabBar();
+  const editProductsTabBar = useEditProductsTabBar();
+  const pickPrimaryTabBar = usePickPrimaryColorTabBar();
 
   const currentTab = segments[1] as string | undefined;
   const isActive = (tab: string) =>
@@ -167,6 +172,91 @@ export const AdminFloatingTabBar: React.FC = () => {
     return null;
   }
 
+  if (currentTab === "edit-products" && editProductsTabBar.floatingBarHidden) {
+    return null;
+  }
+
+  if (currentTab === "edit-products") {
+    return (
+      <View
+        style={[styles.root, { bottom: insets.bottom + 12 }]}
+        pointerEvents="box-none"
+      >
+        <View
+          style={[styles.inner, styles.innerCalendarBar, styles.editGalleryRow]}
+        >
+          <View style={[styles.pill, styles.border, styles.shadow]}>
+            <TabButton
+              focused={false}
+              activeColor={primary}
+              onPress={() => editProductsTabBar.get()?.openCreate()}
+              accessibilityLabel={t("admin.store.tabAddProduct", "הוספת מוצר")}
+              accessibilityRole="button"
+            >
+              <Plus size={22} color={INACTIVE} />
+            </TabButton>
+          </View>
+
+          <View
+            style={[styles.pill, styles.center, styles.border, styles.shadow]}
+          >
+            <TabButton
+              focused={editProductsTabBar.reorderMode}
+              activeColor={primary}
+              onPress={() => {
+                if (
+                  editProductsTabBar.reorderMode &&
+                  editProductsTabBar.reorderDirty
+                ) {
+                  void editProductsTabBar.get()?.commitReorder?.();
+                  return;
+                }
+                editProductsTabBar.toggleReorderMode();
+              }}
+              accessibilityLabel={
+                editProductsTabBar.reorderMode && editProductsTabBar.reorderDirty
+                  ? t("admin.store.tabSaveReorder", "שמירת סדר")
+                  : t("admin.store.tabReorderMode", "סידור מוצרים")
+              }
+              accessibilityRole="button"
+            >
+              {editProductsTabBar.reorderMode && editProductsTabBar.reorderDirty ? (
+                <Check size={22} color={ICON_ACTIVE} strokeWidth={2.5} />
+              ) : (
+                <ArrowDownUp
+                  size={22}
+                  color={editProductsTabBar.reorderMode ? ICON_ACTIVE : INACTIVE}
+                />
+              )}
+            </TabButton>
+            <TabButton
+              focused={editProductsTabBar.deleteMode}
+              activeColor={primary}
+              onPress={() => editProductsTabBar.toggleDeleteMode()}
+              accessibilityLabel={t("admin.store.tabDeleteMode", "מחיקת מוצרים")}
+              accessibilityRole="button"
+            >
+              <Trash2
+                size={22}
+                color={editProductsTabBar.deleteMode ? ICON_ACTIVE : INACTIVE}
+              />
+            </TabButton>
+          </View>
+
+          <View style={[styles.pill, styles.border, styles.shadow]}>
+            <TabButton
+              focused={isActive("index")}
+              activeColor={primary}
+              onPress={() => router.push("/(tabs)")}
+            >
+              <Home size={22} color={iconColor("index")} />
+            </TabButton>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   if (currentTab === "edit-gallery") {
     return (
       <View
@@ -176,9 +266,8 @@ export const AdminFloatingTabBar: React.FC = () => {
         <View
           style={[styles.inner, styles.innerCalendarBar, styles.editGalleryRow]}
         >
-          <View
-            style={[styles.pill, styles.center, styles.border, styles.shadow]}
-          >
+          {/* direction: ltr — פלוס משמאל, סדר+מחיקה, בית מימין */}
+          <View style={[styles.pill, styles.border, styles.shadow]}>
             <TabButton
               focused={false}
               activeColor={primary}
@@ -191,6 +280,11 @@ export const AdminFloatingTabBar: React.FC = () => {
             >
               <Plus size={22} color={INACTIVE} />
             </TabButton>
+          </View>
+
+          <View
+            style={[styles.pill, styles.center, styles.border, styles.shadow]}
+          >
             <TabButton
               focused={editGalleryTabBar.reorderMode}
               activeColor={primary}
@@ -261,6 +355,67 @@ export const AdminFloatingTabBar: React.FC = () => {
     );
   }
 
+  if (currentTab === "pick-primary-color") {
+    return (
+      <View
+        style={[styles.root, { bottom: insets.bottom + 12 }]}
+        pointerEvents="box-none"
+      >
+        <View
+          style={[
+            styles.inner,
+            styles.innerCalendarBar,
+            styles.editGalleryRow,
+          ]}
+        >
+          <View
+            style={[styles.pill, styles.center, styles.border, styles.shadow]}
+          >
+            <TabButton
+              focused={false}
+              activeColor={primary}
+              onPress={() => pickPrimaryTabBar.get()?.openCustomPicker()}
+              accessibilityLabel={t(
+                "color.pickTabCustom",
+                "בחירת צבע מותאם אישית"
+              )}
+              accessibilityRole="button"
+            >
+              <Palette size={22} color={INACTIVE} />
+            </TabButton>
+            <TabButton
+              focused={false}
+              activeColor={primary}
+              onPress={() => pickPrimaryTabBar.get()?.openPaletteGrid()}
+              accessibilityLabel={t(
+                "color.pickTabPalette",
+                "לוח צבעים"
+              )}
+              accessibilityRole="button"
+            >
+              <LayoutGrid size={22} color={INACTIVE} />
+            </TabButton>
+          </View>
+
+          <View style={[styles.pill, styles.border, styles.shadow]}>
+            <TabButton
+              focused={false}
+              activeColor={primary}
+              onPress={() => router.replace("/(tabs)/settings")}
+              accessibilityLabel={t(
+                "color.pickTabSettings",
+                "הגדרות"
+              )}
+              accessibilityRole="button"
+            >
+              <Settings size={22} color={INACTIVE} />
+            </TabButton>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View
       style={[styles.root, { bottom: insets.bottom + 12 }]}
@@ -280,16 +435,6 @@ export const AdminFloatingTabBar: React.FC = () => {
         <View
           style={[styles.pill, styles.center, styles.border, styles.shadow]}
         >
-          <TabButton
-            focused={isActive("edit-products")}
-            activeColor={primary}
-            onPress={() => router.push("/(tabs)/edit-products")}
-            accessibilityLabel={t("admin.tab.store", "Store")}
-            accessibilityRole="button"
-          >
-            <Store size={22} color={iconColor("edit-products")} />
-          </TabButton>
-
           <TabButton
             focused={isActive("appointments")}
             activeColor={primary}

@@ -382,7 +382,19 @@ export const notificationsApi = {
 
       return token.data;
     } catch (error) {
-      console.error('Error requesting notification permissions:', error);
+      const msg = error instanceof Error ? error.message : String(error);
+      const isExpoTransient =
+        msg.includes('503') ||
+        msg.includes('SERVICE_UNAVAILABLE') ||
+        msg.includes('temporarily unavailable');
+      if (isExpoTransient) {
+        console.warn(
+          'Expo push API is temporarily unavailable (high load). Push token not saved — try again later.',
+          error
+        );
+      } else {
+        console.error('Error requesting notification permissions:', error);
+      }
       return null;
     }
   },

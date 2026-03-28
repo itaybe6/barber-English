@@ -12,7 +12,7 @@ type PickedUpdate = GalleryPickedAsset[] | ((prev: GalleryPickedAsset[]) => Gall
 
 interface GalleryCreateDraftState {
   pickedAssets: GalleryPickedAsset[];
-  /** Optional single short video (in addition to up to 9 images). */
+  /** Optional single short video — mutually exclusive with images in the create flow. */
   pickedVideo: GalleryPickedAsset | null;
   setPickedAssets: (update: PickedUpdate) => void;
   setPickedVideo: (video: GalleryPickedAsset | null) => void;

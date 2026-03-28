@@ -12,7 +12,7 @@ import { clients } from '@/constants/clients';
 import { supabase } from '@/lib/supabase';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import Card from '@/components/Card';
-import { Calendar, Clock, ChevronLeft, ChevronRight, Star, Images } from 'lucide-react-native';
+import { Calendar, Clock, ChevronLeft, ChevronRight, Star, Images, Store } from 'lucide-react-native';
 import DaySelector from '@/components/DaySelector';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -48,6 +48,11 @@ const HERO_SPACING = Platform.OS === 'web' ? 12 : 8;
 const HERO_BG = '#FFFFFF';
 const HERO_HEIGHT = Math.round(SCREEN_HEIGHT * 0.68);
 const HERO_OVERLAP = 100; // how far the white sheet overlaps the hero
+/** Overlay logo + full-width header scrim (keep in sync with `overlayLogoWrapper` top + `overlayLogoInner` height) */
+const ADMIN_HOME_LOGO_TOP_OFFSET = -15;
+const ADMIN_HOME_LOGO_HEIGHT = 78;
+const ADMIN_HOME_LOGO_WIDTH = 200;
+const ADMIN_HOME_HEADER_SCRIM_TAIL = 56; // fade continues below logo
 
 function chunkArray<T>(array: T[], size: number): T[][] {
   const chunked: T[][] = [];
@@ -703,8 +708,11 @@ export default function HomeScreen() {
     fetchTodayAppointmentsCount();
     fetchInsightsData();
     fetchDesigns();
-    fetchProducts();
   }, []);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
 
   const onRefresh = React.useCallback(async () => {
     try {
@@ -719,9 +727,9 @@ export default function HomeScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [isAdmin]);
 
-  // Products Section Component
+  // Products Section Component (rendered only for !isAdmin — admin uses edit-products)
   const ProductsSection = () => {
     if (isLoadingProducts) {
       return (
@@ -1025,18 +1033,141 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ── PRODUCTS SECTION ── */}
+        {/* ── PRODUCTS SECTION (admin) ── */}
         {isAdmin && (
-          <View style={styles.contentSection}>
-            <ProductsSection />
+          <View style={styles.galleryCard}>
+            {(productsFromStore?.length ?? 0) > 0 ? (
+              <View style={styles.galleryCardHeader}>
+                <Text style={[styles.galleryCardTitle, { color: colors.text }]}>
+                  {t('admin.products.homeTitle', 'מוצרים')}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.galleryEditBtn, { backgroundColor: `${colors.primary}14` }]}
+                  activeOpacity={0.8}
+                  onPress={() => router.push('/(tabs)/edit-products')}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('admin.products.homeEdit', 'עריכת מוצרים')}
+                >
+                  <View style={styles.galleryEditIconWrap}>
+                    <Store size={17} color={colors.primary} strokeWidth={2.35} />
+                  </View>
+                  <Text style={[styles.galleryEditBtnText, { color: colors.primary }]}>
+                    {t('admin.products.homeEdit', 'עריכת מוצרים')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+            {isLoadingProducts ? (
+              <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 12 }} />
+            ) : (productsFromStore?.length ?? 0) === 0 ? (
+              <View style={styles.galleryEmpty}>
+                <View style={[styles.galleryEmptyIconWrap, { backgroundColor: `${colors.primary}14` }]}>
+                  <Ionicons name="bag-outline" size={34} color={colors.primary} />
+                </View>
+                <Text style={[styles.galleryEmptyTitle, { color: colors.text }]}>
+                  {t('admin.products.homeEmptyTitle', 'עדיין אין מוצרים בחנות')}
+                </Text>
+                <Text style={[styles.galleryEmptySubtitle, { color: colors.textSecondary }]}>
+                  {t('admin.products.homeEmptySubtitle', 'הוסיפו מוצרים כדי שהלקוחות יראו את המבצעים שלכם.')}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.galleryEmptyCta, { backgroundColor: colors.primary }]}
+                  activeOpacity={0.88}
+                  onPress={() => router.push('/(tabs)/edit-products')}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('admin.products.homeEmptyCta', 'הוספת מוצר')}
+                >
+                  <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.galleryEmptyCtaText}>{t('admin.products.homeEmptyCta', 'הוספת מוצר')}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.productAdminCarousel}
+                contentContainerStyle={styles.productAdminCarouselContent}
+              >
+                {productsFromStore.map((product) => {
+                  const priceStr = product.price % 1 === 0
+                    ? `₪${product.price.toFixed(0)}`
+                    : `₪${product.price.toFixed(2)}`;
+                  return (
+                    <TouchableOpacity
+                      key={product.id}
+                      onPress={() => router.push('/(tabs)/edit-products')}
+                      activeOpacity={0.88}
+                      style={styles.productAdminTile}
+                    >
+                      <View style={styles.productAdminImageWrap}>
+                        {product.image_url ? (
+                          <Image
+                            source={{ uri: product.image_url }}
+                            style={styles.productAdminImage}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <View style={styles.productAdminPlaceholder}>
+                            <Ionicons name="bag-outline" size={40} color="#8E8E93" />
+                          </View>
+                        )}
+                        <LinearGradient
+                          pointerEvents="none"
+                          colors={['rgba(0,0,0,0.5)', 'transparent']}
+                          locations={[0, 0.65]}
+                          style={styles.productAdminOverlayGradientTop}
+                        />
+                        <LinearGradient
+                          pointerEvents="none"
+                          colors={['transparent', 'rgba(0,0,0,0.45)', 'rgba(0,0,0,0.88)']}
+                          locations={[0.15, 0.55, 1]}
+                          style={styles.productAdminOverlayGradient}
+                        />
+                        <View style={styles.productAdminPricePillWrap} pointerEvents="none">
+                          <View style={[styles.productAdminPricePill, { backgroundColor: colors.primary }]}>
+                            <Text style={styles.productAdminPrice}>{priceStr}</Text>
+                          </View>
+                        </View>
+                        <View style={styles.productAdminNameWrap} pointerEvents="none">
+                          <Text style={styles.productAdminNameOverlay} numberOfLines={2}>
+                            {product.name}
+                          </Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
           </View>
         )}
 
+        {/* ── PRODUCTS SECTION (non-admin only) ── */}
         {!isAdmin && <ProductsSection />}
             </View>
           </ScrollView>
         </View>
       </ScrollView>
+
+      {/* Full-bleed top scrim: status bar + safe area → logo zone (readable clock/icons + white logo) */}
+      <View
+        pointerEvents="none"
+        style={[
+          styles.headerScrim,
+          {
+            height:
+              insets.top + ADMIN_HOME_LOGO_TOP_OFFSET + ADMIN_HOME_LOGO_HEIGHT + ADMIN_HOME_HEADER_SCRIM_TAIL,
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={['rgba(0,0,0,0.82)', 'rgba(0,0,0,0.58)', 'rgba(0,0,0,0.32)', 'rgba(0,0,0,0)']}
+          locations={[0, 0.36, 0.68, 1]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+      </View>
 
       {/* Overlay Header - always on top of scroll */}
       <SafeAreaView edges={['top']} style={styles.overlayHeader} pointerEvents="box-none">
@@ -1049,8 +1180,11 @@ export default function HomeScreen() {
         </View>
       </SafeAreaView>
 
-      {/* Logo overlay */}
-      <View pointerEvents="none" style={[styles.overlayLogoWrapper, { top: insets.top - 15 }]}>
+      {/* Logo overlay (contrast from `headerScrim` above) */}
+      <View
+        pointerEvents="none"
+        style={[styles.overlayLogoWrapper, { top: insets.top + ADMIN_HOME_LOGO_TOP_OFFSET }]}
+      >
         <View style={styles.overlayLogoInner}>
           <Image source={getCurrentClientLogo()} style={styles.overlayLogo} resizeMode="contain" />
         </View>
@@ -1573,6 +1707,98 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+  /* ─── Admin Products Carousel ─── */
+  /** Same horizontal inset as `DesignCarousel` (paddingLeft/Right 24) — not flush to card edges */
+  productAdminCarousel: {
+    paddingLeft: 24,
+  },
+  productAdminCarouselContent: {
+    paddingRight: 24,
+    gap: 14,
+    paddingVertical: 6,
+    paddingBottom: 8,
+  },
+  productAdminTile: {
+    width: 160,
+    height: 160,
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: '#ECECEF',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 12,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  productAdminImageWrap: {
+    width: '100%' as const,
+    height: '100%' as const,
+    position: 'relative' as const,
+  },
+  productAdminImage: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  productAdminPlaceholder: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: '#ECECEF',
+  },
+  productAdminOverlayGradientTop: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '42%' as const,
+  },
+  /** Taller band so 2-line product names stay on a dark enough backdrop to read */
+  productAdminOverlayGradient: {
+    position: 'absolute' as const,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '72%' as const,
+  },
+  productAdminPricePillWrap: {
+    position: 'absolute' as const,
+    top: 8,
+    right: 8,
+    zIndex: 2,
+  },
+  productAdminNameWrap: {
+    position: 'absolute' as const,
+    bottom: 8,
+    left: 8,
+    right: 52,
+    zIndex: 2,
+    alignItems: 'flex-start' as const,
+  },
+  productAdminNameOverlay: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600' as const,
+    letterSpacing: -0.15,
+    lineHeight: 17,
+    textAlign: 'left' as const,
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  productAdminPricePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  productAdminPrice: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700' as const,
+    letterSpacing: -0.25,
+  },
   /* ─── Content Sections (kept for products) ─── */
   contentSection: {
     marginTop: 24,
@@ -1623,6 +1849,13 @@ const createStyles = (colors: any) => StyleSheet.create({
     bottom: 0,
     zIndex: 0,
   },
+  headerScrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1,
+  },
   overlayHeader: {
     position: 'absolute',
     top: 0,
@@ -1651,8 +1884,8 @@ const createStyles = (colors: any) => StyleSheet.create({
     justifyContent: 'flex-start',
   },
   overlayLogoInner: {
-    width: 180,
-    height: 70,
+    width: ADMIN_HOME_LOGO_WIDTH,
+    height: ADMIN_HOME_LOGO_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
   },

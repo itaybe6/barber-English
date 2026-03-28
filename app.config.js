@@ -156,6 +156,33 @@ try {
 } catch {}
 
 // -------------------------------------------------------------
+// 7b. expo-media-library — בורר וידאו מסונן לפי אורך (גלריית אדמין)
+// -------------------------------------------------------------
+try {
+  const plugins = appConfig.expo.plugins || [];
+  const pluginId = (p) => (Array.isArray(p) ? p[0] : p);
+  if (!plugins.some((p) => pluginId(p) === 'expo-media-library')) {
+    const iosPlist = appConfig.expo.ios?.infoPlist || {};
+    appConfig.expo.plugins = [
+      ...plugins,
+      [
+        'expo-media-library',
+        {
+          photosPermission:
+            iosPlist.NSPhotoLibraryUsageDescription ||
+            'Allow access to your photos and videos to upload gallery items.',
+          savePhotosPermission:
+            iosPlist.NSPhotoLibraryAddUsageDescription ||
+            'The app may save photos to your library when needed.',
+        },
+      ],
+    ];
+  }
+} catch (e) {
+  console.warn('expo-media-library plugin merge failed:', e?.message);
+}
+
+// -------------------------------------------------------------
 // 8. כותב current.json עם קונפיג מלא (debug/runtime)
 // -------------------------------------------------------------
 const currentConfigPath = path.join(__dirname, 'branding', 'current.json');

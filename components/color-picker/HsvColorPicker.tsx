@@ -7,7 +7,7 @@
  *    on first touch, then uses pageX/pageY for all subsequent move events
  *    so the thumb tracks the finger accurately regardless of nesting.
  */
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,6 @@ import {
   PanResponder,
   LayoutChangeEvent,
   Platform,
-  I18nManager,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -81,6 +80,34 @@ interface Props {
   onCancel: () => void;
   confirmLabel?: string;
   cancelLabel?: string;
+  /** When true, only SV plane + hue strip (no preview row / action buttons). For RTL-safe embedding. */
+  embedded?: boolean;
+  /** Sync picker when parent changes color (manual HEX/RGB). Compared to current HSV to avoid fighting drags. */
+  valueHex?: string;
+  /** Fired whenever the color changes from the SV or hue controls (embedded). */
+  onSurfaceHexChange?: (hex: string) => void;
+  /** Override SV square height (e.g. embedded layout). */
+  svBoxHeight?: number;
+  /** Override hue strip height. */
+  hueStripHeight?: number;
+  svBorderRadius?: number;
+}
+
+function normalizeHexString(x: string): string {
+  const t = x.trim().toUpperCase();
+  return t.startsWith('#') ? t : `#${t}`;
+}
+
+/** השוואת RGB כדי למנוע לoop כשהקס מההמרה HSV נבדל בעיגול */
+function hexesSameRgb(a: string, b: string): boolean {
+  const pa = a.replace('#', '').toUpperCase();
+  const pb = b.replace('#', '').toUpperCase();
+  if (pa.length !== 6 || pb.length !== 6) return false;
+  for (let i = 0; i < 3; i++) {
+    const o = i * 2;
+    if (parseInt(pa.slice(o, o + 2), 16) !== parseInt(pb.slice(o, o + 2), 16)) return false;
+  }
+  return true;
 }
 
 export default function HsvColorPicker({
@@ -89,19 +116,54 @@ export default function HsvColorPicker({
   onCancel,
   confirmLabel = 'Save color',
   cancelLabel = 'Cancel',
+  embedded = false,
+  valueHex,
+  onSurfaceHexChange,
+  svBoxHeight,
+  hueStripHeight,
+  svBorderRadius,
 }: Props) {
-  const [ih, is_, iv] = hexToHsv(initialHex);
+  const seedHex = valueHex ?? initialHex;
+  const [ih, is_, iv] = hexToHsv(seedHex);
   const [h, setH] = useState(ih);
   const [s, setS] = useState(is_);
-  const [v, setV] = useState(Math.max(iv, 0.15));
+  /** V אמיתי מההקס — בלי רצפה מלאכותית, כדי שהעיגולים יתאימו לצבע הנוכחי */
+  const [v, setV] = useState(iv);
 
-  const [hexInput, setHexInput] = useState(initialHex.toUpperCase());
+  const [hexInput, setHexInput] = useState(seedHex.toUpperCase());
   const [hexError, setHexError] = useState(false);
 
-  // Dimensions (set via onLayout — reliable even on first render)
-  const svW  = useRef(0);
-  const svH  = useRef(0);
+  useEffect(() => {
+    if (!embedded || valueHex == null || valueHex === '') return;
+    const next = normalizeHexString(valueHex);
+    const curHex = hsvToHex(h, s, v);
+    if (hexesSameRgb(next, curHex)) return;
+    const [nh, ns, nv] = hexToHsv(next);
+    setH(nh);
+    setS(ns);
+    setV(nv);
+    setHexInput(next);
+    setHexError(false);
+  }, [embedded, valueHex]);
+
+  /** סנכרון מלא כשלא embedded — למשל פתיחה מחדש עם initialHex אחר */
+  useEffect(() => {
+    if (embedded) return;
+    const hex = normalizeHexString(initialHex);
+    const [nh, ns, nv] = hexToHsv(hex);
+    setH(nh);
+    setS(ns);
+    setV(nv);
+    setHexInput(hex.toUpperCase());
+    setHexError(false);
+  }, [embedded, initialHex]);
+
+  // Dimensions — refs ל־PanResponder; state לרינדור מיקום העיגולים אחרי onLayout
+  const svW = useRef(0);
+  const svH = useRef(0);
   const hueW = useRef(0);
+  const [svLayout, setSvLayout] = useState({ w: 0, h: 0 });
+  const [hueLayoutW, setHueLayoutW] = useState(0);
 
   // Keep latest h/s/v in refs so PanResponder callbacks always have fresh values
   const hRef = useRef(h);
@@ -112,17 +174,19 @@ export default function HsvColorPicker({
   vRef.current = v;
 
   // ── SV plane ────────────────────────────────────────────────────────────
-  // locationX/locationY are relative to the responder view's physical left edge —
-  // no async measure() needed, no stale-event issues.
+  // Subtree uses direction:'ltr' so gradient + locationX always match (global RTL
+  // would otherwise mirror one but not the other → tap lands on opposite saturation).
   const updateSV = useCallback((locX: number, locY: number) => {
-    const relX = I18nManager.isRTL ? (svW.current || 1) - locX : locX;
+    const relX = locX;
     const newS = Math.min(1, Math.max(0, relX / (svW.current  || 1)));
     const newV = Math.min(1, Math.max(0, 1 - locY / (svH.current || 1)));
     setS(newS);
     setV(newV);
-    setHexInput(hsvToHex(hRef.current, newS, newV).toUpperCase());
+    const nextHex = hsvToHex(hRef.current, newS, newV);
+    setHexInput(nextHex.toUpperCase());
     setHexError(false);
-  }, []);
+    if (embedded) onSurfaceHexChange?.(nextHex);
+  }, [embedded, onSurfaceHexChange]);
 
   const svPan = useRef(
     PanResponder.create({
@@ -141,12 +205,14 @@ export default function HsvColorPicker({
 
   // ── Hue slider ──────────────────────────────────────────────────────────
   const updateH = useCallback((locX: number) => {
-    const relX = I18nManager.isRTL ? (hueW.current || 1) - locX : locX;
+    const relX = locX;
     const newH = Math.min(360, Math.max(0, (relX / (hueW.current || 1)) * 360));
     setH(newH);
-    setHexInput(hsvToHex(newH, sRef.current, vRef.current).toUpperCase());
+    const nextHex = hsvToHex(newH, sRef.current, vRef.current);
+    setHexInput(nextHex.toUpperCase());
     setHexError(false);
-  }, []);
+    if (embedded) onSurfaceHexChange?.(nextHex);
+  }, [embedded, onSurfaceHexChange]);
 
   const huePan = useRef(
     PanResponder.create({
@@ -164,7 +230,7 @@ export default function HsvColorPicker({
   ).current;
 
   // ── Hex input ────────────────────────────────────────────────────────────
-  const onHexChange = (text: string) => {
+  const onHexTextChange = (text: string) => {
     const clean = text.startsWith('#') ? text : '#' + text;
     setHexInput(clean.toUpperCase());
     if (/^#([0-9A-Fa-f]{6})$/.test(clean)) {
@@ -179,98 +245,121 @@ export default function HsvColorPicker({
   const currentHex = hsvToHex(h, s, v);
   const pureHue = rgbToHex(...hsvToRgb(h, 1, 1));
 
-  const isRTL = I18nManager.isRTL;
-  const svThumbX  = isRTL ? (1 - s) * svW.current : s * svW.current;
-  const svThumbY  = (1 - v) * svH.current;
-  const hueThumbX = isRTL ? (1 - h / 360) * hueW.current : (h / 360) * hueW.current;
+  const { w: svLw, h: svLh } = svLayout;
+  const hueWDraw = hueLayoutW;
+  const svThumbX = svLw > 0 ? s * svLw : 0;
+  const svThumbY = svLh > 0 ? (1 - v) * svLh : 0;
+  const hueThumbX = hueWDraw > 0 ? (h / 360) * hueWDraw : 0;
+  const thumbsReady = svLw > 0 && svLh > 0 && hueWDraw > 0;
+
+  const hStrip = hueStripHeight ?? 28;
+  const hueThumbTop = (hStrip - HUE_THUMB_R * 2) / 2;
 
   return (
-    <View style={styles.root}>
-      {/* ── SV Plane ── */}
-      <View
-        style={styles.svBox}
-        onLayout={(e: LayoutChangeEvent) => {
-          svW.current = e.nativeEvent.layout.width;
-          svH.current = e.nativeEvent.layout.height;
-        }}
-        {...svPan.panHandlers}
-      >
-        <LinearGradient
-          colors={isRTL ? [pureHue, '#FFFFFF'] : ['#FFFFFF', pureHue]}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={StyleSheet.absoluteFillObject}
-        />
-        <LinearGradient
-          colors={['transparent', '#000000']}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFillObject}
-        />
+    <View style={[styles.root, embedded && styles.rootEmbedded]}>
+      <View style={styles.pickerLtr}>
+        {/* ── SV Plane ── */}
         <View
-          pointerEvents="none"
           style={[
-            styles.svThumb,
-            {
-              left: svThumbX - THUMB_R,
-              top:  svThumbY - THUMB_R,
-              borderColor: v > 0.55 ? '#000' : '#fff',
-            },
+            styles.svBox,
+            svBoxHeight != null && { height: svBoxHeight },
+            svBorderRadius != null && { borderRadius: svBorderRadius },
           ]}
-        />
-      </View>
-
-      {/* ── Hue slider ── */}
-      <View
-        style={styles.hueStrip}
-        onLayout={(e: LayoutChangeEvent) => {
-          hueW.current = e.nativeEvent.layout.width;
-        }}
-        {...huePan.panHandlers}
-      >
-        <LinearGradient
-          colors={isRTL ? [...HUE_STOPS].reverse() : HUE_STOPS}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={StyleSheet.absoluteFillObject}
-        />
-        <View
-          pointerEvents="none"
-          style={[styles.hueThumb, { left: hueThumbX - HUE_THUMB_R }]}
-        />
-      </View>
-
-      {/* ── Preview + Hex input ── */}
-      <View style={styles.inputRow}>
-        <View style={[styles.previewDot, { backgroundColor: currentHex }]} />
-        <TextInput
-          style={[styles.hexInput, hexError && styles.hexInputError]}
-          value={hexInput}
-          onChangeText={onHexChange}
-          placeholder="#000000"
-          placeholderTextColor="#aaa"
-          maxLength={7}
-          autoCapitalize="characters"
-          autoCorrect={false}
-          spellCheck={false}
-          returnKeyType="done"
-        />
-      </View>
-
-      {/* ── Buttons ── */}
-      <View style={styles.btnRow}>
-        <TouchableOpacity style={styles.cancelBtn} onPress={onCancel} activeOpacity={0.7}>
-          <Text style={styles.cancelBtnText}>{cancelLabel}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.saveBtn, { backgroundColor: hexError ? '#ccc' : currentHex }]}
-          onPress={() => !hexError && onConfirm(currentHex)}
-          activeOpacity={0.85}
-          disabled={hexError}
+          onLayout={(e: LayoutChangeEvent) => {
+            const { width, height } = e.nativeEvent.layout;
+            svW.current = width;
+            svH.current = height;
+            setSvLayout({ w: width, h: height });
+          }}
+          {...svPan.panHandlers}
         >
-          <Text style={styles.saveBtnText}>{confirmLabel}</Text>
-        </TouchableOpacity>
+          <LinearGradient
+            colors={['#FFFFFF', pureHue]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+          <LinearGradient
+            colors={['transparent', '#000000']}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+          <View
+            pointerEvents="none"
+            style={[
+              styles.svThumb,
+              {
+                left: svThumbX - THUMB_R,
+                top: svThumbY - THUMB_R,
+                borderColor: v > 0.55 ? '#000' : '#fff',
+                opacity: thumbsReady ? 1 : 0,
+              },
+            ]}
+          />
+        </View>
+
+        {/* ── Hue slider ── */}
+        <View
+          style={[styles.hueStrip, hStrip !== 28 && { height: hStrip }]}
+          onLayout={(e: LayoutChangeEvent) => {
+            const w = e.nativeEvent.layout.width;
+            hueW.current = w;
+            setHueLayoutW(w);
+          }}
+          {...huePan.panHandlers}
+        >
+          <LinearGradient
+            colors={HUE_STOPS}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+          <View
+            pointerEvents="none"
+            style={[
+              styles.hueThumb,
+              { left: hueThumbX - HUE_THUMB_R, top: hueThumbTop, opacity: thumbsReady ? 1 : 0 },
+            ]}
+          />
+        </View>
       </View>
+
+      {!embedded && (
+        <>
+          {/* ── Preview + Hex input ── */}
+          <View style={styles.inputRow}>
+            <View style={[styles.previewDot, { backgroundColor: currentHex }]} />
+            <TextInput
+              style={[styles.hexInput, hexError && styles.hexInputError]}
+              value={hexInput}
+              onChangeText={onHexTextChange}
+              placeholder="#000000"
+              placeholderTextColor="#aaa"
+              maxLength={7}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              spellCheck={false}
+              returnKeyType="done"
+            />
+          </View>
+
+          {/* ── Buttons ── */}
+          <View style={styles.btnRow}>
+            <TouchableOpacity style={styles.cancelBtn} onPress={onCancel} activeOpacity={0.7}>
+              <Text style={styles.cancelBtnText}>{cancelLabel}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.saveBtn, { backgroundColor: hexError ? '#ccc' : currentHex }]}
+              onPress={() => !hexError && onConfirm(currentHex)}
+              activeOpacity={0.85}
+              disabled={hexError}
+            >
+              <Text style={styles.saveBtnText}>{confirmLabel}</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
     </View>
   );
 }
@@ -282,6 +371,16 @@ const styles = StyleSheet.create({
   root: {
     padding: 16,
     gap: 18,
+  },
+  rootEmbedded: {
+    padding: 0,
+    gap: 14,
+  },
+  /** Isolate picker from app RTL so touch X and drawn gradient stay aligned. */
+  pickerLtr: {
+    width: '100%',
+    direction: 'ltr',
+    gap: 14,
   },
   svBox: {
     width: '100%',

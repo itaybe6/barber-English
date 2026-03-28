@@ -10,13 +10,13 @@ import {
   Alert,
   Platform,
   ActivityIndicator,
-  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
   useWindowDimensions,
   BackHandler,
   Keyboard,
+  type KeyboardEvent,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -25,6 +25,7 @@ import { useDesignsStore } from '@/stores/designsStore';
 import type { Design, User } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import type { ImagePickerAsset } from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
 import { usersApi } from '@/lib/api/users';
 import { compressImages } from '@/lib/utils/imageCompression';
@@ -34,6 +35,7 @@ import DraggableFlatList, { ScaleDecorator, type DragEndParams } from 'react-nat
 import { sortDesignsByDisplayOrder } from '@/lib/api/designs';
 import { useColors, type ThemeColors } from '@/src/theme/ThemeProvider';
 import { FabButton } from '@/components/FabButton';
+import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { useAuthStore } from '@/stores/authStore';
 import { useGalleryCreateDraftStore } from '@/stores/galleryCreateDraftStore';
 import { useEditGalleryTabBar, useEditGalleryTabBarRegistration } from '@/contexts/EditGalleryTabBarContext';
@@ -43,13 +45,16 @@ import {
   resolveGalleryVideoDurationMs,
   isVideoDurationOverGalleryLimit,
 } from '@/lib/utils/galleryVideoPick';
+import { copyGalleryVideoToCacheForPlayback } from '@/lib/utils/galleryVideoLocalUri';
 import { GalleryLoopVideo } from '@/components/GalleryLoopVideo';
+import { GalleryPickedVideoPreview } from '@/components/GalleryPickedVideoPreview';
+import { ShortGalleryVideoPickerModal } from '@/components/ShortGalleryVideoPickerModal';
 import { ResizeMode, Video } from 'expo-av';
 
 const numColumns = 2;
 
 /** Max images per design in gallery create/edit flows. */
-const GALLERY_MAX_IMAGES = 9;
+const GALLERY_MAX_IMAGES = 6;
 const FAB_H_INSET = 20;
 const FAB_OPEN_PADDING_H = 18;
 
@@ -94,10 +99,18 @@ export default function EditGalleryScreen() {
   const colors = useColors();
 
   useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', (e) => setKeyboardH(e.endCoordinates.height));
-    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardH(0));
-    return () => { show.remove(); hide.remove(); };
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvent, (e: KeyboardEvent) => {
+      setKeyboardH(e.endCoordinates?.height ?? 0);
+    });
+    const hide = Keyboard.addListener(hideEvent, () => setKeyboardH(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
   }, []);
+
   const styles = useMemo(() => createStyles(colors, windowWidth, windowHeight), [colors, windowWidth, windowHeight]);
 
   const { designs, fetchDesigns, createDesign, deleteDesign, updateDesign, applyDesignDisplayOrder, isLoading } =
@@ -146,11 +159,19 @@ export default function EditGalleryScreen() {
   /** Hidden player to read duration when expo-image-picker omits `asset.duration` (some Android paths). */
   const videoDurationProbeRef = useRef<Video | null>(null);
   const [isPreparingGalleryVideo, setIsPreparingGalleryVideo] = useState(false);
+  const shortVideoPickerRoleRef = useRef<'create' | 'edit'>('create');
+  const [shortVideoPickerOpen, setShortVideoPickerOpen] = useState(false);
 
   useEffect(() => {
-    setFloatingBarHidden(viewerVisible);
-    return () => setFloatingBarHidden(false);
-  }, [viewerVisible, setFloatingBarHidden]);
+    setFloatingBarHidden(viewerVisible || createVisible || editVisible);
+  }, [viewerVisible, createVisible, editVisible, setFloatingBarHidden]);
+
+  useEffect(
+    () => () => {
+      setFloatingBarHidden(false);
+    },
+    [setFloatingBarHidden]
+  );
 
   useEffect(() => {
     fetchDesigns();
@@ -302,6 +323,67 @@ export default function EditGalleryScreen() {
     return bytes;
   };
 
+  const commitPickedGalleryVideo = useCallback(
+    async (a: ImagePickerAsset, role: 'create' | 'edit') => {
+      setIsPreparingGalleryVideo(true);
+      try {
+        const durationMs = await resolveGalleryVideoDurationMs(a, videoDurationProbeRef);
+        if (isVideoDurationOverGalleryLimit(durationMs)) {
+          Alert.alert(
+            t('error.generic', 'Error'),
+            t('admin.gallery.videoTooLong', 'Videos can be at most {{maxSeconds}} seconds.', { maxSeconds: 15 })
+          );
+          return;
+        }
+        if (durationMs === null) {
+          Alert.alert(
+            t('error.generic', 'Error'),
+            t(
+              'admin.gallery.videoDurationUnknown',
+              'Could not read the video length. Try choosing the file again from Photos or Gallery.'
+            )
+          );
+          return;
+        }
+
+        let playbackUri = a.uri;
+        try {
+          playbackUri = await copyGalleryVideoToCacheForPlayback(a.uri, a.fileName);
+        } catch (e) {
+          console.warn('[edit-gallery] copyGalleryVideoToCacheForPlayback failed, using source uri', e);
+        }
+
+        if (role === 'create') {
+          setPickedVideo({
+            uri: playbackUri,
+            base64: null,
+            mimeType: a.mimeType || guessMediaMimeFromUri(a.fileName || a.uri),
+            fileName: a.fileName ?? `video_${Date.now()}.mp4`,
+          });
+        } else {
+          const asset: LocalAsset = {
+            uri: playbackUri,
+            base64: null,
+            mimeType: a.mimeType || guessMediaMimeFromUri(a.fileName || a.uri),
+            fileName: a.fileName ?? `video_${Date.now()}.mp4`,
+          };
+          setEditImages((prev) => [...prev, { kind: 'local', asset, mediaType: 'video' }]);
+        }
+      } finally {
+        setIsPreparingGalleryVideo(false);
+      }
+    },
+    [t, setPickedVideo, setEditImages]
+  );
+
+  const onShortVideoResolvedFromModal = useCallback(
+    (a: ImagePickerAsset) => {
+      setShortVideoPickerOpen(false);
+      void commitPickedGalleryVideo(a, shortVideoPickerRoleRef.current);
+    },
+    [commitPickedGalleryVideo]
+  );
+
   const uploadImage = async (asset: { uri: string; base64?: string | null; mimeType?: string | null; fileName?: string | null }): Promise<string | null> => {
     try {
       let contentType = asset.mimeType || guessMediaMimeFromUri(asset.fileName || asset.uri);
@@ -345,6 +427,7 @@ export default function EditGalleryScreen() {
   };
 
   const pickImages = async () => {
+    if (useGalleryCreateDraftStore.getState().pickedVideo) return;
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert(t('permission.required', 'Permission Required'), t('admin.gallery.permissionGallery', 'Please allow access to gallery to select images'));
@@ -391,44 +474,25 @@ export default function EditGalleryScreen() {
   };
 
   const pickVideoForCreate = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert(t('permission.required', 'Permission Required'), t('admin.gallery.permissionGallery', 'Please allow access to gallery to select images'));
+    if (useGalleryCreateDraftStore.getState().pickedAssets.length > 0) return;
+
+    if (Platform.OS === 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          t('permission.required', 'Permission Required'),
+          t('admin.gallery.permissionGallery', 'Please allow access to gallery to select images')
+        );
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync(getGalleryVideoPickerOptions());
+      if (result.canceled || !result.assets[0]) return;
+      await commitPickedGalleryVideo(result.assets[0], 'create');
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync(getGalleryVideoPickerOptions());
-    if (result.canceled || !result.assets[0]) return;
 
-    const a = result.assets[0];
-    setIsPreparingGalleryVideo(true);
-    try {
-      const durationMs = await resolveGalleryVideoDurationMs(a, videoDurationProbeRef);
-      if (isVideoDurationOverGalleryLimit(durationMs)) {
-        Alert.alert(
-          t('error.generic', 'Error'),
-          t('admin.gallery.videoTooLong', 'Videos can be at most {{maxSeconds}} seconds.', { maxSeconds: 15 })
-        );
-        return;
-      }
-      if (durationMs === null) {
-        Alert.alert(
-          t('error.generic', 'Error'),
-          t(
-            'admin.gallery.videoDurationUnknown',
-            'Could not read the video length. Try choosing the file again from Photos or Gallery.'
-          )
-        );
-        return;
-      }
-      setPickedVideo({
-        uri: a.uri,
-        base64: null,
-        mimeType: a.mimeType || guessMediaMimeFromUri(a.fileName || a.uri),
-        fileName: a.fileName ?? `video_${Date.now()}.mp4`,
-      });
-    } finally {
-      setIsPreparingGalleryVideo(false);
-    }
+    shortVideoPickerRoleRef.current = 'create';
+    setShortVideoPickerOpen(true);
   };
 
   const openEdit = (design: Design) => {
@@ -481,8 +545,9 @@ export default function EditGalleryScreen() {
   const editHasVideo = editImages.some((e) => e.mediaType === 'video');
 
   const addImagesToEdit = async () => {
+    if (editHasVideo) return;
     if (editImageCount >= GALLERY_MAX_IMAGES) {
-      Alert.alert(t('error.generic', 'Error'), t('admin.gallery.photoDropHint', 'עד 9 תמונות · דחיסה אוטומטית'));
+      Alert.alert(t('error.generic', 'Error'), t('admin.gallery.photoDropHint', 'עד 6 תמונות · דחיסה אוטומטית'));
       return;
     }
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -543,49 +608,29 @@ export default function EditGalleryScreen() {
   };
 
   const addVideoToEdit = async () => {
+    if (editImageCount > 0) return;
     if (editHasVideo) {
       Alert.alert(t('error.generic', 'Error'), t('admin.gallery.oneVideoOnly', 'ניתן לצרף סרטון אחד בלבד לעיצוב'));
       return;
     }
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert(t('permission.required', 'Permission Required'), t('admin.gallery.permissionGallery', 'Please allow access to gallery to select images'));
+
+    if (Platform.OS === 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          t('permission.required', 'Permission Required'),
+          t('admin.gallery.permissionGallery', 'Please allow access to gallery to select images')
+        );
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync(getGalleryVideoPickerOptions());
+      if (result.canceled || !result.assets[0]) return;
+      await commitPickedGalleryVideo(result.assets[0], 'edit');
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync(getGalleryVideoPickerOptions());
-    if (result.canceled || !result.assets[0]) return;
 
-    const a = result.assets[0];
-    setIsPreparingGalleryVideo(true);
-    try {
-      const durationMs = await resolveGalleryVideoDurationMs(a, videoDurationProbeRef);
-      if (isVideoDurationOverGalleryLimit(durationMs)) {
-        Alert.alert(
-          t('error.generic', 'Error'),
-          t('admin.gallery.videoTooLong', 'Videos can be at most {{maxSeconds}} seconds.', { maxSeconds: 15 })
-        );
-        return;
-      }
-      if (durationMs === null) {
-        Alert.alert(
-          t('error.generic', 'Error'),
-          t(
-            'admin.gallery.videoDurationUnknown',
-            'Could not read the video length. Try choosing the file again from Photos or Gallery.'
-          )
-        );
-        return;
-      }
-      const asset: LocalAsset = {
-        uri: a.uri,
-        base64: null,
-        mimeType: a.mimeType || guessMediaMimeFromUri(a.fileName || a.uri),
-        fileName: a.fileName ?? `video_${Date.now()}.mp4`,
-      };
-      setEditImages((prev) => [...prev, { kind: 'local', asset, mediaType: 'video' }]);
-    } finally {
-      setIsPreparingGalleryVideo(false);
-    }
+    shortVideoPickerRoleRef.current = 'edit';
+    setShortVideoPickerOpen(true);
   };
 
   const saveEdit = async () => {
@@ -673,24 +718,34 @@ export default function EditGalleryScreen() {
       );
       return;
     }
+    if (pickedAssets.length > 0 && pickedVideo) {
+      Alert.alert(
+        t('error.generic', 'Error'),
+        t(
+          'admin.gallery.mediaExclusiveConflict',
+          'נא למחוק את הווידאו או את כל התמונות — לא ניתן לשלב בין השניים.'
+        )
+      );
+      return;
+    }
 
     try {
       setIsCreating(true);
       const urls: string[] = [];
 
-      for (let i = 0; i < pickedAssets.length; i++) {
-        const asset = pickedAssets[i];
-        const url = await uploadImage(asset);
-        if (url) {
-          urls.push(url);
-        } else {
-          Alert.alert(t('error.generic', 'Error'), t('admin.gallery.uploadIndexFailed', 'Failed to upload image {{num}}', { num: i + 1 }));
-          setIsCreating(false);
-          return;
+      if (pickedAssets.length > 0) {
+        for (let i = 0; i < pickedAssets.length; i++) {
+          const asset = pickedAssets[i];
+          const url = await uploadImage(asset);
+          if (url) {
+            urls.push(url);
+          } else {
+            Alert.alert(t('error.generic', 'Error'), t('admin.gallery.uploadIndexFailed', 'Failed to upload image {{num}}', { num: i + 1 }));
+            setIsCreating(false);
+            return;
+          }
         }
-      }
-
-      if (pickedVideo) {
+      } else if (pickedVideo) {
         const vUrl = await uploadImage(pickedVideo);
         if (!vUrl) {
           Alert.alert(t('error.generic', 'Error'), t('admin.gallery.uploadVideoFailed', 'שגיאה בהעלאת הווידאו'));
@@ -783,26 +838,32 @@ export default function EditGalleryScreen() {
   }, [colors.primary, designs.length, filtered.length, isLoading, search, styles, t]);
 
   /**
-   * FAB sits above the admin tab bar. On step 2, when the keyboard is open, lift the sheet by
-   * the keyboard height so the name field stays visible (same idea as KeyboardAware on login).
+   * Step 2: lift the whole FAB above the keyboard (bottom = keyboard height + gap).
+   * Inside the sheet we still use KeyboardAwareScrollView, but enableAutomaticScroll is off on step 2
+   * so the HOC does not add iOS contentInset for the full keyboard (would stack on top of the lift).
    */
   const fabHeaderH = 90;
   const fabPaddingV = 24;
-  /** Lift sheet above keyboard on step 2 only — do not combine with KeyboardAware inside absolute FAB (double offset hides the field). */
+  const isGalleryFabNameStep =
+    (createVisible && createStep === 2) || (editVisible && editStep === 2);
   const fabBottomOffset =
-    ((createVisible && createStep === 2) || (editVisible && editStep === 2)) && keyboardH > 0
-      ? keyboardH + 10
-      : insets.bottom + 88;
+    isGalleryFabNameStep && keyboardH > 0 ? keyboardH + 12 : insets.bottom + 88;
   const fabMaxScrollH = Math.max(
     200,
     windowHeight - fabBottomOffset - fabHeaderH - fabPaddingV - 20
   );
 
   const pageBg = colors.background;
+  /** FAB + dim backdrop must sit above list; block main tree touches so Android does not deliver them to FlatList under the sheet. */
+  const fabOverlayOpen = createVisible || editVisible;
 
   return (
     <View style={[styles.screen, { backgroundColor: pageBg }]}>
-      <SafeAreaView edges={['top']} style={{ backgroundColor: pageBg }}>
+      <SafeAreaView
+        edges={['top']}
+        style={{ backgroundColor: pageBg }}
+        pointerEvents={fabOverlayOpen ? 'none' : 'auto'}
+      >
         <View style={[styles.searchRowWrap, { backgroundColor: pageBg }]}>
           <View
             style={[
@@ -1129,6 +1190,7 @@ export default function EditGalleryScreen() {
         duration={480}
         grabberColor={colors.primary}
         hideCloseButton
+        enablePanelLayoutAnimation={false}
       >
         <View style={styles.fabSheetHeader}>
           <View style={styles.fabSheetHeaderSpacer} />
@@ -1140,10 +1202,7 @@ export default function EditGalleryScreen() {
             </Text>
             <Text style={[styles.fabSheetSubtitle, { color: colors.textSecondary }]}>
               {createStep === 1
-                ? t(
-                    'admin.gallery.createStep1SubtitleWithVideo',
-                    'עד 9 תמונות וסרטון אחד (אופציונלי). תמונת השער היא הראשונה; הווידאו מושתק ומתנגן אוטומטית בכרטיס.'
-                  )
+                ? t('admin.gallery.createStep1Tagline', 'העלאת תמונה או סרטון לגלריה שלך')
                 : t('admin.gallery.createStep2Subtitle', 'בחרו שם ברור שיופיע ללקוחות בגלריה.')}
             </Text>
           </View>
@@ -1159,13 +1218,14 @@ export default function EditGalleryScreen() {
           </TouchableOpacity>
         </View>
 
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
+        <KeyboardAwareScreenScroll
           nestedScrollEnabled
           style={{ maxHeight: fabMaxScrollH }}
           contentContainerStyle={{ paddingBottom: 24 }}
           showsVerticalScrollIndicator={false}
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          enableAutomaticScroll={!isGalleryFabNameStep}
+          keyboardOpeningTime={Platform.OS === 'ios' ? 0 : 250}
         >
           {createStep === 1 ? (
             <>
@@ -1198,14 +1258,21 @@ export default function EditGalleryScreen() {
 
               <TouchableOpacity
                 onPress={pickImages}
-                style={[styles.pickCard, { borderColor: colors.primary + '55', backgroundColor: colors.primary + '0C' }]}
+                style={[
+                  styles.pickCard,
+                  {
+                    borderColor: colors.primary + '55',
+                    backgroundColor: colors.primary + '0C',
+                    opacity: isCreating || pickedVideo ? 0.45 : 1,
+                  },
+                ]}
                 activeOpacity={0.88}
-                disabled={isCreating}
+                disabled={isCreating || !!pickedVideo}
               >
                 <View style={styles.pickTextCol}>
                   <Text style={[styles.pickTitle, styles.fabTextRight, { color: colors.text }]}>{t('admin.gallery.selectImages', 'בחר/י תמונות')}</Text>
                   <Text style={[styles.pickSub, styles.fabTextRight, { color: colors.textSecondary }]}>
-                    {t('admin.gallery.photoDropHint', 'עד 9 תמונות · דחיסה אוטומטית')}
+                    {t('admin.gallery.photoDropHint', 'עד 6 תמונות · דחיסה אוטומטית')}
                   </Text>
                 </View>
                 <View style={styles.pickCardTrailing}>
@@ -1222,16 +1289,24 @@ export default function EditGalleryScreen() {
 
               <TouchableOpacity
                 onPress={pickVideoForCreate}
-                style={[styles.pickCard, { borderColor: colors.border, backgroundColor: colors.surface, marginTop: 10 }]}
+                style={[
+                  styles.pickCard,
+                  {
+                    borderColor: colors.border,
+                    backgroundColor: colors.surface,
+                    marginTop: 10,
+                    opacity: isCreating || isPreparingGalleryVideo || pickedAssets.length > 0 ? 0.45 : 1,
+                  },
+                ]}
                 activeOpacity={0.88}
-                disabled={isCreating || isPreparingGalleryVideo}
+                disabled={isCreating || isPreparingGalleryVideo || pickedAssets.length > 0}
               >
                 <View style={styles.pickTextCol}>
                   <Text style={[styles.pickTitle, styles.fabTextRight, { color: colors.text }]}>
                     {t('admin.gallery.addVideo', 'הוספת וידאו (אחד)')}
                   </Text>
                   <Text style={[styles.pickSub, styles.fabTextRight, { color: colors.textSecondary }]}>
-                    {t('admin.gallery.videoMutedHint', 'מושתק בגלריה · ניגון אוטומטי בלולאה')}
+                    {t('admin.gallery.videoMutedHint', 'עד 15 שניות · עובד בלולאה')}
                   </Text>
                 </View>
                 <View style={styles.pickCardTrailing}>
@@ -1323,7 +1398,12 @@ export default function EditGalleryScreen() {
                             position: 'relative',
                           }}
                         >
-                          <GalleryLoopVideo uri={pickedVideo.uri} style={styles.previewImg} />
+                          <GalleryPickedVideoPreview
+                            uri={pickedVideo.uri}
+                            width={s}
+                            height={s}
+                            accentColor={colors.textSecondary}
+                          />
                           <TouchableOpacity
                             onPress={() => setPickedVideo(null)}
                             style={[
@@ -1418,9 +1498,15 @@ export default function EditGalleryScreen() {
                         backgroundColor: colors.surface,
                         borderWidth: StyleSheet.hairlineWidth * 2,
                         borderColor: colors.border,
+                        position: 'relative',
                       }}
                     >
-                      <GalleryLoopVideo uri={pickedVideo.uri} style={{ width: '100%', height: '100%' }} />
+                      <GalleryPickedVideoPreview
+                        uri={pickedVideo.uri}
+                        width={createStep2Grid.thumbSize}
+                        height={createStep2Grid.thumbSize}
+                        accentColor={colors.textSecondary}
+                      />
                     </View>
                   ) : null}
                 </View>
@@ -1478,7 +1564,7 @@ export default function EditGalleryScreen() {
               </View>
             </>
           )}
-        </ScrollView>
+        </KeyboardAwareScreenScroll>
       </FabButton>
       ) : null}
 
@@ -1504,6 +1590,7 @@ export default function EditGalleryScreen() {
           duration={480}
           grabberColor={colors.primary}
           hideCloseButton
+          enablePanelLayoutAnimation={false}
         >
           <View style={styles.fabSheetHeader}>
             <View style={styles.fabSheetHeaderSpacer} />
@@ -1515,10 +1602,7 @@ export default function EditGalleryScreen() {
               </Text>
               <Text style={[styles.fabSheetSubtitle, { color: colors.textSecondary }]}>
                 {editStep === 1
-                  ? t(
-                      'admin.gallery.createStep1SubtitleWithVideo',
-                      'עד 9 תמונות וסרטון אחד (אופציונלי). תמונת השער היא הראשונה; הווידאו מושתק ומתנגן אוטומטית בכרטיס.'
-                    )
+                  ? t('admin.gallery.createStep1Tagline', 'העלאת תמונה או סרטון לגלריה שלך')
                   : t('admin.gallery.createStep2Subtitle', 'בחרו שם ברור שיופיע ללקוחות בגלריה.')}
               </Text>
             </View>
@@ -1534,13 +1618,14 @@ export default function EditGalleryScreen() {
             </TouchableOpacity>
           </View>
 
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
+          <KeyboardAwareScreenScroll
             nestedScrollEnabled
             style={{ maxHeight: fabMaxScrollH }}
             contentContainerStyle={{ paddingBottom: 24 }}
             showsVerticalScrollIndicator={false}
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            enableAutomaticScroll={!isGalleryFabNameStep}
+            keyboardOpeningTime={Platform.OS === 'ios' ? 0 : 250}
           >
             {editStep === 1 ? (
               <>
@@ -1573,14 +1658,21 @@ export default function EditGalleryScreen() {
 
                 <TouchableOpacity
                   onPress={addImagesToEdit}
-                  style={[styles.pickCard, { borderColor: colors.primary + '55', backgroundColor: colors.primary + '0C' }]}
+                  style={[
+                    styles.pickCard,
+                    {
+                      borderColor: colors.primary + '55',
+                      backgroundColor: colors.primary + '0C',
+                      opacity: isSavingEdit || editHasVideo || editImageCount >= GALLERY_MAX_IMAGES ? 0.45 : 1,
+                    },
+                  ]}
                   activeOpacity={0.88}
-                  disabled={isSavingEdit || editImageCount >= GALLERY_MAX_IMAGES}
+                  disabled={isSavingEdit || editHasVideo || editImageCount >= GALLERY_MAX_IMAGES}
                 >
                   <View style={styles.pickTextCol}>
                     <Text style={[styles.pickTitle, styles.fabTextRight, { color: colors.text }]}>{t('admin.gallery.selectImages', 'בחר/י תמונות')}</Text>
                     <Text style={[styles.pickSub, styles.fabTextRight, { color: colors.textSecondary }]}>
-                      {t('admin.gallery.photoDropHint', 'עד 9 תמונות · דחיסה אוטומטית')}
+                      {t('admin.gallery.photoDropHint', 'עד 6 תמונות · דחיסה אוטומטית')}
                     </Text>
                   </View>
                   <View style={styles.pickCardTrailing}>
@@ -1597,16 +1689,25 @@ export default function EditGalleryScreen() {
 
                 <TouchableOpacity
                   onPress={addVideoToEdit}
-                  style={[styles.pickCard, { borderColor: colors.border, backgroundColor: colors.surface, marginTop: 10 }]}
+                  style={[
+                    styles.pickCard,
+                    {
+                      borderColor: colors.border,
+                      backgroundColor: colors.surface,
+                      marginTop: 10,
+                      opacity:
+                        isSavingEdit || isPreparingGalleryVideo || editHasVideo || editImageCount > 0 ? 0.45 : 1,
+                    },
+                  ]}
                   activeOpacity={0.88}
-                  disabled={isSavingEdit || editHasVideo || isPreparingGalleryVideo}
+                  disabled={isSavingEdit || isPreparingGalleryVideo || editHasVideo || editImageCount > 0}
                 >
                   <View style={styles.pickTextCol}>
                     <Text style={[styles.pickTitle, styles.fabTextRight, { color: colors.text }]}>
                       {t('admin.gallery.addVideo', 'הוספת וידאו (אחד)')}
                     </Text>
                     <Text style={[styles.pickSub, styles.fabTextRight, { color: colors.textSecondary }]}>
-                      {t('admin.gallery.videoMutedHint', 'מושתק בגלריה · ניגון אוטומטי בלולאה')}
+                      {t('admin.gallery.videoMutedHint', 'עד 15 שניות · עובד בלולאה')}
                     </Text>
                   </View>
                   <View style={styles.pickCardTrailing}>
@@ -1654,7 +1755,12 @@ export default function EditGalleryScreen() {
                           }}
                         >
                           {isVid ? (
-                            <GalleryLoopVideo uri={uri} style={styles.previewImg} />
+                            <GalleryPickedVideoPreview
+                              uri={uri}
+                              width={s}
+                              height={s}
+                              accentColor={colors.textSecondary}
+                            />
                           ) : (
                             <ExpoImage
                               source={{ uri }}
@@ -1736,10 +1842,16 @@ export default function EditGalleryScreen() {
                             backgroundColor: colors.surface,
                             borderWidth: StyleSheet.hairlineWidth * 2,
                             borderColor: colors.border,
+                            position: 'relative',
                           }}
                         >
                           {isVid ? (
-                            <GalleryLoopVideo uri={uri} style={{ width: '100%', height: '100%' }} />
+                            <GalleryPickedVideoPreview
+                              uri={uri}
+                              width={s}
+                              height={s}
+                              accentColor={colors.textSecondary}
+                            />
                           ) : (
                             <ExpoImage
                               source={{ uri }}
@@ -1802,7 +1914,7 @@ export default function EditGalleryScreen() {
                 </View>
               </>
             )}
-          </ScrollView>
+          </KeyboardAwareScreenScroll>
         </FabButton>
       ) : null}
 
@@ -1879,14 +1991,28 @@ export default function EditGalleryScreen() {
         </View>
           ) : null}
 
-      <Modal visible={isPreparingGalleryVideo} transparent animationType="fade" statusBarTranslucent>
+      <ShortGalleryVideoPickerModal
+        visible={shortVideoPickerOpen}
+        onClose={() => setShortVideoPickerOpen(false)}
+        onResolvedPick={onShortVideoResolvedFromModal}
+        t={t}
+      />
+
+      {/*
+        Avoid React Native <Modal> here — on Android, dismissing a Modal can permanently
+        break the touch responder system, leaving the whole screen unresponsive.
+        A plain absolute overlay has the same visual effect with none of the side-effects.
+      */}
+      {isPreparingGalleryVideo ? (
         <View
           style={{
-            flex: 1,
+            ...StyleSheet.absoluteFillObject,
             backgroundColor: 'rgba(0,0,0,0.4)',
             justifyContent: 'center',
             alignItems: 'center',
             padding: 24,
+            zIndex: 99999,
+            ...Platform.select({ android: { elevation: 99 } }),
           }}
         >
           <View
@@ -1895,26 +2021,28 @@ export default function EditGalleryScreen() {
               paddingVertical: 22,
               paddingHorizontal: 24,
               borderRadius: 16,
-              alignItems: 'center',
+              alignItems: 'center' as const,
               maxWidth: 300,
               borderWidth: StyleSheet.hairlineWidth,
               borderColor: colors.border,
             }}
           >
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={{ marginTop: 14, textAlign: 'center', color: colors.text, fontSize: 15, lineHeight: 22, fontWeight: '600' }}>
+            <Text style={{ marginTop: 14, textAlign: 'center' as const, color: colors.text, fontSize: 15, lineHeight: 22, fontWeight: '600' as const }}>
               {t('admin.gallery.preparingVideo', 'מכינים את הווידאו…')}
             </Text>
-            <Text style={{ marginTop: 8, textAlign: 'center', color: colors.textSecondary, fontSize: 13, lineHeight: 19 }}>
+            <Text style={{ marginTop: 8, textAlign: 'center' as const, color: colors.textSecondary, fontSize: 13, lineHeight: 19 }}>
               {t('admin.gallery.preparingVideoSub', 'בודקים אורך ומוסיפים לעיצוב')}
             </Text>
           </View>
         </View>
-      </Modal>
+      ) : null}
 
+      {/* Probe is off-screen so its native TextureView layer never overlaps visible UI */}
       <Video
         ref={videoDurationProbeRef}
-        style={{ position: 'absolute', width: 1, height: 1, opacity: 0, left: 0, top: 0 }}
+        pointerEvents="none"
+        style={{ position: 'absolute', width: 1, height: 1, opacity: 0, left: -9999, top: -9999 }}
         useNativeControls={false}
       />
     </View>
@@ -1958,6 +2086,10 @@ function createStyles(colors: ThemeColors, windowWidth: number, windowHeight: nu
       ...StyleSheet.absoluteFillObject,
       backgroundColor: 'rgba(0,0,0,0.38)',
       zIndex: 10000,
+      ...Platform.select({
+        ios: {},
+        android: { elevation: 12 },
+      }),
     },
     fabSheetHeader: {
       width: '100%',
@@ -1999,7 +2131,7 @@ function createStyles(colors: ThemeColors, windowWidth: number, windowHeight: nu
     },
     fabSheetSubtitle: {
       fontSize: 13,
-      marginTop: 8,
+      marginTop: 4,
       lineHeight: 19.5,
       width: '100%',
       textAlign: 'right',

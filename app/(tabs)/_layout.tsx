@@ -7,13 +7,17 @@ import { AdminFloatingTabBar } from "@/components/shopify-tab-bar/admin-floating
 import { AdminCalendarViewProvider } from "@/contexts/AdminCalendarViewContext";
 import { AdminCalendarReminderFabProvider } from "@/contexts/AdminCalendarReminderFabContext";
 import { EditGalleryTabBarProvider } from "@/contexts/EditGalleryTabBarContext";
+import { EditProductsTabBarProvider } from "@/contexts/EditProductsTabBarContext";
+import { PickPrimaryColorTabBarProvider } from "@/contexts/PickPrimaryColorTabBarContext";
 
 export default function TabsLayout() {
   return (
     <MenuProvider>
+      <PickPrimaryColorTabBarProvider>
       <AdminCalendarViewProvider>
         <AdminCalendarReminderFabProvider>
           <EditGalleryTabBarProvider>
+          <EditProductsTabBarProvider>
             <View style={{ flex: 1 }}>
               <AnimatedTabsContainer>
                 <Tabs
@@ -32,7 +36,7 @@ export default function TabsLayout() {
                   <Tabs.Screen name="client-notifications" options={{ title: "Notifications", href: null }} />
                   <Tabs.Screen name="notifications" options={{ title: "התראות", href: null }} />
                   <Tabs.Screen name="edit-gallery" options={{ title: "Edit Gallery", href: null }} />
-                  <Tabs.Screen name="edit-products" options={{ title: "Edit Products", href: null }} />
+                  <Tabs.Screen name="edit-products" options={{ title: "חנות", href: null }} />
                   <Tabs.Screen name="edit-home-hero" options={{ title: "Edit Home Hero", href: null }} />
                   <Tabs.Screen name="pick-primary-color" options={{ title: "Primary color", href: null }} />
                   <Tabs.Screen name="finance" options={{ title: "Finance" }} />
@@ -41,9 +45,11 @@ export default function TabsLayout() {
 
               <AdminFloatingTabBar />
             </View>
+          </EditProductsTabBarProvider>
           </EditGalleryTabBarProvider>
         </AdminCalendarReminderFabProvider>
       </AdminCalendarViewProvider>
+      </PickPrimaryColorTabBarProvider>
     </MenuProvider>
   );
 }

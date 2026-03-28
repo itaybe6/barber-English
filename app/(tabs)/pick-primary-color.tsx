@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,16 +11,19 @@ import {
   ActivityIndicator,
   Pressable,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
+import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { RotateCcw } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
 import Colors from '@/constants/colors';
-import { Flower, type GradientPair } from '@/components/color-picker/Flower';
-import HsvColorPicker from '@/components/color-picker/HsvColorPicker';
+import { Flower, type FlowerHandle, type GradientPair } from '@/components/color-picker/Flower';
+import AdminAnimatedCustomColorPicker from '@/components/color-picker/AdminAnimatedCustomColorPicker';
 import {
   PRIMARY_COLOR_PRESETS,
   EXTENDED_PRIMARY_COLOR_GRID,
@@ -30,6 +33,9 @@ import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
 import { readableOnHex } from '@/lib/utils/readableOnHex';
 import { useCustomColorsStore } from '@/stores/customColorsStore';
+import { usePickPrimaryColorTabBar } from '@/contexts/PickPrimaryColorTabBarContext';
+import { AnimatedSentence } from '@/components/book-appointment/AnimatedSentence';
+import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
 
 /** Darken a hex color by a ratio 0–1. */
 function darkenHex(hex: string, ratio: number): string {
@@ -58,23 +64,40 @@ function makePreset(hex: string): PrimaryColorPreset {
   return { hex: hex.toUpperCase(), gradient: { start: hex, end: lightenHex(hex, 0.38) } };
 }
 
+/** מרווח מעל הטאב הצף בלבד — ה־SafeAreaView כבר מטפל ב־insets.bottom */
+const FLOATING_TAB_BAR_CLEARANCE = 88;
+/** מרכוז אנכי מעט מעל אמצע המסך, כדי שלא יידבקו לבר התחתון (עלייה קלה = ערך גבוה יותר) */
+const VERTICAL_CENTER_BIAS_UP = 72;
+const WORD_STAGGER_HEADLINE = 58;
+const WORD_STAGGER_HINT = 48;
+const LINE_GAP_MS = 108;
+
 export default function PickPrimaryColorScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { colors, updatePrimaryColor } = useBusinessColors();
   const { triggerColorUpdate } = useColorUpdate();
   const { customColors, addCustomColor } = useCustomColorsStore();
+  const pickPrimaryTabBar = usePickPrimaryColorTabBar();
 
   const [showExtendedPalette, setShowExtendedPalette] = useState(false);
   const [showHsvPicker, setShowHsvPicker] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [colorFanOpen, setColorFanOpen] = useState(false);
+  const flowerRef = useRef<FlowerHandle | null>(null);
   const savingLock = useRef(false);
+  const isSavingRef = useRef(false);
+  isSavingRef.current = isSaving;
 
   const flowerSize = useMemo(() => {
     const w = Dimensions.get('window').width;
     return Math.min(300, Math.max(248, Math.floor(w * 0.72)));
   }, []);
+
+  const [previewHex, setPreviewHex] = useState<string>(
+    () => colors.primary || PRIMARY_COLOR_PRESETS[0]?.hex || '#1E3A8A'
+  );
 
   // Merge custom colors into the presets (newest custom first, replaces last N slots).
   const mergedPresets: PrimaryColorPreset[] = useMemo(() => {
@@ -90,22 +113,25 @@ export default function PickPrimaryColorScreen() {
     [mergedPresets]
   );
 
+  /** מרכז העיגול תמיד לפי הפריוויו — גם לצבע מלוח מורחב שלא ברשימת העלים */
+  const previewCenterGradient: GradientPair = useMemo(() => {
+    const hex = previewHex?.trim() || PRIMARY_COLOR_PRESETS[0]?.hex || '#1E3A8A';
+    return makePreset(hex).gradient;
+  }, [previewHex]);
+
   // Extended grid: custom colors prepended.
   const extendedGrid: string[] = useMemo(
     () => [...customColors, ...EXTENDED_PRIMARY_COLOR_GRID],
     [customColors]
   );
 
-  const initialActiveIndex = useMemo(() => {
-    const n = (colors.primary || '#000000').replace(/\s/g, '').toUpperCase();
-    const i = mergedPresets.findIndex((p) => p.hex.toUpperCase() === n);
+  /** אינדקס עלה שמציג את הפריוויו הנוכחי — חייב להתאים ל־previewHex (לא רק לצבע השמור בפרופיל). */
+  const previewActiveIndex = useMemo(() => {
+    const n = (previewHex || '#000000').replace(/\s/g, '').toUpperCase();
+    const withHash = n.startsWith('#') ? n : `#${n}`;
+    const i = mergedPresets.findIndex((p) => p.hex.toUpperCase() === withHash);
     return i >= 0 ? i : 0;
-  }, [colors.primary, mergedPresets]);
-
-  // Separate preview (tapping a petal) from the confirmed save.
-  const [previewHex, setPreviewHex] = useState<string>(
-    () => colors.primary || PRIMARY_COLOR_PRESETS[0]?.hex || '#1E3A8A'
-  );
+  }, [previewHex, mergedPresets]);
 
   const isNewColor =
     previewHex.replace('#', '').toUpperCase() !==
@@ -114,9 +140,48 @@ export default function PickPrimaryColorScreen() {
   const fg = readableOnHex(previewHex);
   const onDark = fg === '#FFFFFF';
 
-  const gradientColors = useMemo(
-    () => [darkenHex(previewHex, 0.28), previewHex] as [string, string],
+  /** כמו מסך סיכום תור אחרי קביעת תור — בהיר למעלה, כהה למטה */
+  const loginGradient = useMemo(
+    () => [lightenHex(previewHex, 0.1), darkenHex(previewHex, 0.42)] as const,
     [previewHex]
+  );
+  const gradientEnd = loginGradient[1];
+
+  const rtl = (i18n?.language || 'he').startsWith('he');
+  const writingDirection = rtl ? ('rtl' as const) : ('ltr' as const);
+
+  const headlineText = t('color.chooseYourApp', 'Choose Your App Color').trim();
+  const hintText = t('color.flowerHint', 'Tap the circle to pick a main color').trim();
+  const headlineWordCount = headlineText ? headlineText.split(/\s+/).filter(Boolean).length : 0;
+  const hintWordCount = hintText ? hintText.split(/\s+/).filter(Boolean).length : 0;
+  const subtitleBaseDelay = headlineWordCount * WORD_STAGGER_HEADLINE + LINE_GAP_MS;
+  const flowerEnterDelay = subtitleBaseDelay + hintWordCount * WORD_STAGGER_HINT + 160;
+  const dividerEnterDelay = Math.max(0, headlineWordCount * WORD_STAGGER_HEADLINE + 36);
+
+  const headlineStyle = useMemo(
+    () => [
+      styles.pickHeadline,
+      {
+        textAlign: 'left' as const,
+        writingDirection,
+        color: fg,
+      },
+      onDark ? styles.pickHeadlineShadowDark : styles.pickHeadlineShadowLight,
+      ...(Platform.OS === 'android' ? [styles.pickHeadlineAndroid] : []),
+    ],
+    [fg, onDark, writingDirection]
+  );
+
+  const hintStyle = useMemo(
+    () => [
+      styles.pickHint,
+      {
+        textAlign: 'center' as const,
+        writingDirection,
+        color: onDark ? 'rgba(255,255,255,0.86)' : 'rgba(0,0,0,0.58)',
+      },
+    ],
+    [onDark, writingDirection]
   );
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -137,6 +202,13 @@ export default function PickPrimaryColorScreen() {
     setPreviewHex(hex);
     setShowHsvPicker(false);
   }, [addCustomColor]);
+
+  /** מחזיר את הפריוויו לצבע השמור בפרופיל (התגית נעלמת כי isNewColor נהיה false). */
+  const resetPreviewToSaved = useCallback(() => {
+    const raw = colors.primary || PRIMARY_COLOR_PRESETS[0]?.hex || '#1E3A8A';
+    const n = raw.replace(/\s/g, '').toUpperCase();
+    setPreviewHex(n.startsWith('#') ? n : `#${n}`);
+  }, [colors.primary]);
 
   /** Hidden tab screen: `router.back()` often pops to the default tab (home), not settings. */
   const exitToSettings = useCallback(() => {
@@ -164,117 +236,194 @@ export default function PickPrimaryColorScreen() {
     }
   }, [exitToSettings, previewHex, t, triggerColorUpdate, updatePrimaryColor]);
 
+  useEffect(() => {
+    pickPrimaryTabBar.register({
+      openCustomPicker: () => {
+        if (isSavingRef.current) return;
+        setShowHsvPicker(true);
+      },
+      openPaletteGrid: () => {
+        if (isSavingRef.current) return;
+        setShowExtendedPalette(true);
+      },
+    });
+    return () => pickPrimaryTabBar.register(null);
+  }, [pickPrimaryTabBar]);
+
+  useEffect(() => {
+    setColorFanOpen(false);
+  }, [customColors]);
+
   return (
     <View style={styles.root}>
-      {/* Full-screen gradient background */}
+      {/* רקע כמו אחרי קביעת תור — גרדיאנט + lava */}
       <LinearGradient
-        colors={gradientColors}
+        colors={[...loginGradient]}
         style={StyleSheet.absoluteFillObject}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
       />
+      {Platform.OS !== 'web' ? (
+        <BrandLavaLampBackground
+          primaryColor={previewHex}
+          baseColor={gradientEnd}
+          count={4}
+          duration={16000}
+          blurIntensity={48}
+        />
+      ) : null}
 
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        {/* Header */}
-        <View style={[styles.header, { paddingTop: Math.max(8, insets.top > 0 ? 0 : 8) }]}>
-          <TouchableOpacity
-            onPress={exitToSettings}
-            hitSlop={12}
-            disabled={isSaving}
-            style={styles.backBtn}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="arrow-forward" size={24} color={fg} />
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: fg }]}>
-            {t('color.chooseYourApp', 'Choose Your App Color')}
-          </Text>
-          <View style={styles.headerSpacer} />
-        </View>
-
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              flexGrow: 1,
+              /* גובה “שימושי” קצר יותר מגובה המסך — המרכוז (justifyContent) עולה, לא נדבק לטאב */
+              minHeight: windowHeight - VERTICAL_CENTER_BIAS_UP,
+              justifyContent: 'center',
+              /* בלי insets.top: ה־SafeAreaView כבר דוחף את ה־ScrollView מתחת לסטטוס-בר */
+              paddingTop: 12,
+              paddingBottom: FLOATING_TAB_BAR_CLEARANCE + 20,
+              /* center גורם לילדים להתכווץ לרוחב התוכן — ב־RTL נראה כאילו הכול נדחף לצד */
+              alignItems: 'stretch',
+            },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={[styles.subtitle, { color: onDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.5)' }]}>
-            {t('color.flowerHint', 'Tap a petal to choose a main color')}
-          </Text>
+          {colorFanOpen ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('color.dismissColorFan', 'Close color fan')}
+              onPress={() => flowerRef.current?.collapse()}
+              style={[
+                styles.dismissFanOverlay,
+                { minHeight: windowHeight - VERTICAL_CENTER_BIAS_UP },
+              ]}
+            />
+          ) : null}
 
-          {/* Flower with merged presets */}
-          <View style={styles.flowerWrap}>
+          <View style={styles.copyBlock}>
+            <View style={styles.headlineBlock}>
+              <View style={styles.lineWrap}>
+                <AnimatedSentence
+                  rtl={rtl}
+                  fullWidth
+                  rowJustify="center"
+                  stagger={WORD_STAGGER_HEADLINE}
+                  baseDelay={0}
+                  style={headlineStyle}
+                  maxFontSizeMultiplier={1.08}
+                >
+                  {headlineText}
+                </AnimatedSentence>
+              </View>
+            </View>
+
+            <Animated.View
+              entering={FadeIn.duration(420).delay(dividerEnterDelay)}
+              style={[
+                styles.pickDivider,
+                {
+                  alignSelf: 'center',
+                  backgroundColor: onDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.22)',
+                },
+              ]}
+            />
+
+            <View style={styles.lineWrapDetail}>
+              <AnimatedSentence
+                rtl={rtl}
+                fullWidth
+                rowJustify="center"
+                stagger={WORD_STAGGER_HINT}
+                baseDelay={subtitleBaseDelay}
+                style={hintStyle}
+                maxFontSizeMultiplier={1.15}
+              >
+                {hintText}
+              </AnimatedSentence>
+            </View>
+          </View>
+
+          <Animated.View
+            entering={ZoomIn.delay(flowerEnterDelay).springify().damping(17).stiffness(200)}
+            style={styles.flowerWrap}
+          >
             <Flower
-              key={`flower-${initialActiveIndex}-${customColors.join(',')}`}
+              ref={flowerRef}
+              key={`flower-${customColors.join(',')}`}
               leafs={mergedPresets.length}
               size={flowerSize}
               gradients={mergedGradients}
-              initialActiveIndex={initialActiveIndex}
+              centerPreviewGradient={previewCenterGradient}
+              initialActiveIndex={previewActiveIndex}
               onPress={onPresetLeafPress}
+              onOpenChange={setColorFanOpen}
               duration={1000}
             />
-          </View>
+          </Animated.View>
 
-          {/* ── Custom color pickers row ── */}
-          <View style={styles.customRow}>
-            {/* Open HSV picker */}
-            <TouchableOpacity
-              style={[
-                styles.paletteBtn,
-                onDark ? { borderColor: 'rgba(255,255,255,0.35)' } : { borderColor: 'rgba(0,0,0,0.15)' },
-              ]}
-              onPress={() => setShowHsvPicker(true)}
-              activeOpacity={0.7}
-              disabled={isSaving}
-            >
-              <Ionicons
-                name="color-palette-outline"
-                size={16}
-                color={onDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.55)'}
-                style={styles.paletteBtnIcon}
-              />
-              <Text style={[styles.paletteBtnText, { color: onDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.6)' }]}>
-                {t('color.customPersonal', 'Custom personal color')}
-              </Text>
-            </TouchableOpacity>
-
-            {/* Open grid palette */}
-            <TouchableOpacity
-              style={[
-                styles.gridBtn,
-                onDark ? { borderColor: 'rgba(255,255,255,0.35)' } : { borderColor: 'rgba(0,0,0,0.15)' },
-              ]}
-              onPress={() => setShowExtendedPalette(true)}
-              activeOpacity={0.7}
-              disabled={isSaving}
-            >
-              <Ionicons
-                name="grid-outline"
-                size={16}
-                color={onDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.55)'}
-              />
-            </TouchableOpacity>
-          </View>
-
-          {/* Confirm button — inline, only if preview ≠ saved */}
-          {isNewColor && (
-            isSaving ? (
+          {isNewColor &&
+            (isSaving ? (
               <ActivityIndicator color={fg} style={styles.savingIndicator} />
             ) : (
-              <TouchableOpacity
-                style={[
-                  styles.confirmBtn,
-                  onDark ? { backgroundColor: 'rgba(255,255,255,0.95)' } : { backgroundColor: '#1C1C1E' },
-                  { marginBottom: 80 },
-                ]}
-                onPress={confirmAndSave}
-                activeOpacity={0.85}
-              >
-                <Text style={[styles.confirmBtnText, { color: onDark ? previewHex : '#FFFFFF' }]}>
-                  {t('color.confirm', 'Confirm color')}
-                </Text>
-              </TouchableOpacity>
-            )
-          )}
+              <View style={styles.confirmActionsBlock}>
+                <TouchableOpacity
+                  style={[
+                    styles.confirmBtnPill,
+                    onDark
+                      ? {
+                          borderColor: 'rgba(255,255,255,0.65)',
+                          backgroundColor: 'rgba(255,255,255,0.18)',
+                        }
+                      : {
+                          borderColor: 'rgba(0,0,0,0.18)',
+                          backgroundColor: 'rgba(255,255,255,0.92)',
+                        },
+                  ]}
+                  onPress={confirmAndSave}
+                  activeOpacity={0.88}
+                >
+                  <Text style={[styles.confirmBtnPillText, { color: onDark ? '#FFFFFF' : '#1C1C1E' }]}>
+                    {t('color.confirm', 'Confirm color')}
+                  </Text>
+                </TouchableOpacity>
+
+                <Pressable
+                  onPress={resetPreviewToSaved}
+                  style={({ pressed }) => [
+                    styles.resetChip,
+                    onDark
+                      ? {
+                          borderColor: 'rgba(255,255,255,0.42)',
+                          backgroundColor: pressed ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.08)',
+                        }
+                      : {
+                          borderColor: 'rgba(0,0,0,0.2)',
+                          backgroundColor: pressed ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.28)',
+                        },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('color.resetPreviewA11y', 'Reset to saved color')}
+                >
+                  <RotateCcw
+                    size={17}
+                    color={onDark ? 'rgba(255,255,255,0.92)' : 'rgba(0,0,0,0.65)'}
+                    strokeWidth={2.4}
+                  />
+                  <Text
+                    style={[
+                      styles.resetChipText,
+                      { color: onDark ? 'rgba(255,255,255,0.92)' : 'rgba(0,0,0,0.72)' },
+                    ]}
+                  >
+                    {t('color.resetPreview', 'Reset')}
+                  </Text>
+                </Pressable>
+              </View>
+            ))}
         </ScrollView>
       </SafeAreaView>
 
@@ -282,29 +431,14 @@ export default function PickPrimaryColorScreen() {
       <Modal
         visible={showHsvPicker}
         animationType="slide"
-        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : undefined}
+        presentationStyle={Platform.OS === 'ios' ? 'fullScreen' : undefined}
         onRequestClose={() => setShowHsvPicker(false)}
       >
-        <SafeAreaView style={styles.hsvModalSafe} edges={['top', 'bottom']}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>
-              {t('color.customPersonal', 'Custom personal color')}
-            </Text>
-            <Pressable onPress={() => setShowHsvPicker(false)} hitSlop={12} style={styles.modalClose}>
-              <Ionicons name="close" size={28} color={Colors.text} />
-            </Pressable>
-          </View>
-          {/* Plain View — no ScrollView — so PanResponder gestures are never stolen */}
-          <View style={styles.hsvContent}>
-            <HsvColorPicker
-              initialHex={previewHex}
-              onConfirm={onCustomColorConfirm}
-              onCancel={() => setShowHsvPicker(false)}
-              confirmLabel={t('color.saveCustom', 'Save & use')}
-              cancelLabel={t('cancel', 'Cancel')}
-            />
-          </View>
-        </SafeAreaView>
+        <AdminAnimatedCustomColorPicker
+          initialHex={previewHex}
+          onConfirm={onCustomColorConfirm}
+          onCancel={() => setShowHsvPicker(false)}
+        />
       </Modal>
 
       {/* ── Extended grid palette modal ── */}
@@ -347,68 +481,136 @@ const GAP = 10;
 const styles = StyleSheet.create({
   root: { flex: 1 },
   safe: { flex: 1, backgroundColor: 'transparent' },
-  header: {
-    flexDirection: 'row',
+  scrollContent: {
+    width: '100%',
+    paddingHorizontal: 22,
+  },
+  /** מאחורי הטקסט; מניפה ועיגול מעל (zIndex גבוה יותר) */
+  dismissFanOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 0,
+  },
+  copyBlock: {
+    width: '100%',
+    alignSelf: 'stretch',
+    marginBottom: 2,
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingBottom: 8,
+    zIndex: 1,
   },
-  backBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { flex: 1, fontSize: 17, fontWeight: '700', textAlign: 'center' },
-  headerSpacer: { width: 44 },
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 24, alignItems: 'center' },
-  subtitle: {
-    fontSize: 15,
-    textAlign: 'center',
-    marginBottom: 20,
-    paddingHorizontal: 8,
-    lineHeight: 22,
-  },
-  flowerWrap: { marginVertical: 12, alignItems: 'center', justifyContent: 'center' },
-
-  customRow: {
-    flexDirection: 'row',
+  headlineBlock: {
+    marginBottom: 18,
+    width: '100%',
+    alignSelf: 'stretch',
     alignItems: 'center',
-    gap: 8,
-    marginTop: 24,
-    alignSelf: 'center',
   },
-  paletteBtn: {
-    flexDirection: 'row',
+  lineWrap: {
+    width: '100%',
+    maxWidth: '100%',
+    alignSelf: 'stretch',
+    overflow: 'hidden',
+    marginBottom: 4,
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 999,
-    borderWidth: 1,
   },
-  paletteBtnIcon: { marginRight: 6 },
-  paletteBtnText: { fontSize: 13, fontWeight: '500', letterSpacing: 0.1 },
-  gridBtn: {
-    padding: 10,
-    borderRadius: 999,
-    borderWidth: 1,
+  pickHeadline: {
+    fontSize: 34,
+    fontWeight: '900',
+    letterSpacing: -0.9,
+    lineHeight: 40,
+  },
+  pickHeadlineShadowDark: {
+    textShadowColor: 'rgba(0,0,0,0.28)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 10,
+  },
+  pickHeadlineShadowLight: {
+    textShadowColor: 'rgba(255,255,255,0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+  },
+  pickHeadlineAndroid: { includeFontPadding: false },
+  pickDivider: {
+    height: 3,
+    width: 56,
+    borderRadius: 2,
+    marginBottom: 18,
+  },
+  lineWrapDetail: {
+    width: '100%',
+    maxWidth: '100%',
+    alignSelf: 'stretch',
+    overflow: 'hidden',
+    marginBottom: 4,
+    alignItems: 'center',
+  },
+  pickHint: {
+    fontSize: 18,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+    lineHeight: 26,
+  },
+  flowerWrap: {
+    marginTop: 22,
+    marginBottom: 10,
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 2,
   },
-  savingIndicator: { marginTop: 20, marginBottom: 80 },
-  confirmBtn: {
-    marginTop: 16,
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderRadius: 16,
+
+  savingIndicator: { marginTop: 24, alignSelf: 'center' },
+  confirmActionsBlock: {
+    marginTop: 22,
     width: '100%',
     maxWidth: 360,
-    alignItems: 'center',
     alignSelf: 'center',
+    alignItems: 'center',
+    gap: 14,
+    zIndex: 1,
+  },
+  confirmBtnPill: {
+    width: '100%',
+    minHeight: 56,
+    paddingVertical: 17,
+    paddingHorizontal: 28,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.14, shadowRadius: 10 },
-      android: { elevation: 4 },
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.22,
+        shadowRadius: 14,
+      },
+      android: { elevation: 5 },
     }),
   },
-  confirmBtnText: { fontSize: 16, fontWeight: '700', letterSpacing: 0.25 },
+  confirmBtnPillText: {
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  resetChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 20,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  resetChipText: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.15,
+  },
 
-  hsvModalSafe: { flex: 1, backgroundColor: '#FAFAFA' },
-  hsvContent: { paddingBottom: 24, flex: 1 },
   modalSafe: { flex: 1, backgroundColor: '#fff' },
   modalHeader: {
     flexDirection: 'row',

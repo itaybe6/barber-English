@@ -35,7 +35,7 @@ import { usersApi } from '@/lib/api/users';
 
 const { width } = Dimensions.get('window');
 const numColumns = 2;
-const GALLERY_MAX_IMAGES = 9;
+const GALLERY_MAX_IMAGES = 6;
 const horizontalPad = 12;
 const tileGap = 8;
 const tileSize = (width - horizontalPad * 2 - tileGap) / numColumns;

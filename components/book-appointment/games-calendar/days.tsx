@@ -7,6 +7,9 @@ type DaysProps = {
   rangeStart: Date;
   rangeEnd: Date;
   dayAvailability: Record<string, number>;
+  constraintDates?: Set<string>;
+  /** Short label for the constraint chip, e.g. "אילוץ" / "Block" */
+  constraintPillLabel?: string;
   selectedDate: Date | null;
   cellSize: number;
   primaryColor: string;
@@ -27,6 +30,9 @@ TODAY.setHours(0, 0, 0, 0);
 const IOS_TODAY_RED = '#FF3B30';
 const AVAIL_DAY_FILL = '#D8F3E1';
 const AVAIL_DAY_TEXT = '#0D4F2C';
+const CONSTRAINT_PILL_BG = '#FEF3C7';
+const CONSTRAINT_PILL_FG = '#B45309';
+const CONSTRAINT_PILL_BORDER = 'rgba(180,83,9,0.35)';
 
 function sameDate(a: Date, b: Date) {
   return (
@@ -45,6 +51,50 @@ function hexWithAlpha(hex: string, aa: string): string {
   const raw = String(hex || '').replace('#', '').trim();
   if (raw.length !== 6) return `${hex}30`;
   return `#${raw}${aa}`;
+}
+
+function AdminConstraintPill({
+  label,
+  onPrimaryCircle,
+  maxWidth,
+}: {
+  label: string;
+  onPrimaryCircle: boolean;
+  maxWidth: number;
+}) {
+  const bg = onPrimaryCircle ? 'rgba(255,255,255,0.35)' : CONSTRAINT_PILL_BG;
+  const fg = onPrimaryCircle ? '#FFFFFF' : CONSTRAINT_PILL_FG;
+  const border = onPrimaryCircle ? 'rgba(255,255,255,0.5)' : CONSTRAINT_PILL_BORDER;
+
+  return (
+    <View
+      style={{
+        maxWidth,
+        paddingHorizontal: 5,
+        paddingVertical: 3,
+        borderRadius: 8,
+        backgroundColor: bg,
+        borderWidth: StyleSheet.hairlineWidth * 2,
+        borderColor: border,
+      }}
+    >
+      <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+        style={{
+          fontSize: 8,
+          fontWeight: '800',
+          color: fg,
+          textAlign: 'center',
+          letterSpacing: -0.2,
+          includeFontPadding: false,
+        }}
+      >
+        {label}
+      </Text>
+    </View>
+  );
 }
 
 function AdminAppointmentPill({
@@ -111,11 +161,13 @@ type DayCellProps = {
   isToday: boolean;
   availCount: number;
   hasAvail: boolean;
+  hasConstraint: boolean;
   cellSize: number;
   primaryColor: string;
   displayMode: 'availability' | 'count';
   showHebrewDates: boolean;
   formatAppointmentBadge?: (count: number) => string;
+  constraintPillLabel?: string;
   onDayPress: (date: Date) => void;
 };
 
@@ -126,11 +178,13 @@ const DayCell = React.memo(function DayCell({
   isToday,
   availCount,
   hasAvail,
+  hasConstraint,
   cellSize,
   primaryColor,
   displayMode,
   showHebrewDates,
   formatAppointmentBadge,
+  constraintPillLabel,
   onDayPress,
 }: DayCellProps) {
   const circleSize = Math.min(cellSize - 4, 36);
@@ -159,6 +213,8 @@ const DayCell = React.memo(function DayCell({
 
   const fmtBadge = formatAppointmentBadge ?? ((c: number) => `${c} תורים`);
   const badgeLabel = displayMode === 'count' && hasAvail ? fmtBadge(availCount) : null;
+  const constraintLabel =
+    displayMode === 'count' && hasConstraint && constraintPillLabel ? constraintPillLabel : null;
 
   return (
     <Pressable
@@ -171,7 +227,11 @@ const DayCell = React.memo(function DayCell({
         opacity: pressed && inRange ? 0.6 : 1,
       })}
       accessibilityRole="button"
-      accessibilityLabel={badgeLabel ? `${date.getDate()}, ${badgeLabel}` : `${date.getDate()}`}
+      accessibilityLabel={
+        [badgeLabel, constraintLabel].filter(Boolean).length
+          ? `${date.getDate()}, ${[badgeLabel, constraintLabel].filter(Boolean).join(', ')}`
+          : `${date.getDate()}`
+      }
       accessibilityState={{ selected: isSel, disabled: !inRange }}
     >
       <View style={{ alignItems: 'center', justifyContent: 'center' }}>
@@ -237,17 +297,30 @@ const DayCell = React.memo(function DayCell({
 
       <View
         style={{
-          minHeight: displayMode === 'count' && badgeLabel ? 26 : showHebrewDates ? 10 : 8,
+          minHeight:
+            displayMode === 'count' && (badgeLabel || constraintLabel)
+              ? (badgeLabel && constraintLabel ? 48 : 26)
+              : showHebrewDates
+                ? 10
+                : 8,
           justifyContent: 'center',
           alignItems: 'center',
           marginTop: showHebrewDates ? 2 : 2,
           paddingHorizontal: 1,
+          gap: constraintLabel && badgeLabel ? 3 : 0,
         }}
       >
         {inRange && hasAvail && displayMode === 'count' && badgeLabel ? (
           <AdminAppointmentPill
             label={badgeLabel}
             primaryColor={primaryColor}
+            onPrimaryCircle={onCircle}
+            maxWidth={cellSize + 4}
+          />
+        ) : null}
+        {inRange && constraintLabel ? (
+          <AdminConstraintPill
+            label={constraintLabel}
             onPrimaryCircle={onCircle}
             maxWidth={cellSize + 4}
           />
@@ -274,6 +347,8 @@ export function Days({
   rangeStart,
   rangeEnd,
   dayAvailability,
+  constraintDates,
+  constraintPillLabel,
   selectedDate,
   cellSize,
   primaryColor,
@@ -294,7 +369,7 @@ export function Days({
     [rangeEnd]
   );
 
-  const countPillExtra = displayMode === 'count' ? 28 : 0;
+  const countPillExtra = displayMode === 'count' ? 50 : 0;
 
   return (
     <View style={{ width: '100%', paddingHorizontal: 16, paddingBottom: 10, direction: 'ltr' }}>
@@ -332,6 +407,7 @@ export function Days({
               const dsIso = toIso(date);
               const availCount = dayAvailability[dsIso] ?? 0;
               const hasAvail = availCount > 0;
+              const hasConstraint = !!(constraintDates && constraintDates.has(dsIso));
               const isSel = selectedDate ? sameDate(date, selectedDate) : false;
               const isToday = sameDate(date, TODAY);
 
@@ -344,11 +420,13 @@ export function Days({
                   isToday={isToday}
                   availCount={availCount}
                   hasAvail={hasAvail}
+                  hasConstraint={hasConstraint}
                   cellSize={cellSize}
                   primaryColor={primaryColor}
                   displayMode={displayMode}
                   showHebrewDates={showHebrewDates}
                   formatAppointmentBadge={formatAppointmentBadge}
+                  constraintPillLabel={constraintPillLabel}
                   onDayPress={onDayPress}
                 />
               );

@@ -24,7 +24,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import Colors from '@/constants/colors';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import DaySelector from '@/components/DaySelector';
-import { AvailableTimeSlot, supabase, getBusinessId, type CalendarReminder } from '@/lib/supabase';
+import { AvailableTimeSlot, supabase, getBusinessId, type CalendarReminder, type BusinessConstraint } from '@/lib/supabase';
+import { businessConstraintsApi, mergeConstraintsForDisplay } from '@/lib/api/businessConstraints';
 import {
   listCalendarRemindersForDate,
   listCalendarRemindersForRange,
@@ -210,6 +211,63 @@ function timeOnDate(timeStr: string, day: Date): Date {
   const out = new Date(day);
   out.setHours(h, m, 0, 0);
   return out;
+}
+
+/** Admin calendar: blocked-time styling (amber) */
+const CONSTRAINT_BAR = '#C2410C';
+const CONSTRAINT_BG = '#FFFBEB';
+
+function _isFullDayConstraint(c: BusinessConstraint, mf: (t?: string | null) => number): boolean {
+  const s = mf(c.start_time);
+  const e = mf(c.end_time);
+  return s <= 0 && e >= 23 * 60 + 45;
+}
+
+function layoutConstraintOnWeekColumn(
+  c: BusinessConstraint,
+  hourRowHeight: number,
+  mf: (t?: string | null) => number
+): { top: number; height: number } {
+  if (_isFullDayConstraint(c, mf)) {
+    return { top: 2, height: 24 * hourRowHeight - 4 };
+  }
+  const startM = mf(c.start_time);
+  let endM = mf(c.end_time);
+  if (endM <= startM) endM = startM + 30;
+  const top = (startM / 60) * hourRowHeight + 2;
+  const rawH = ((endM - startM) / 60) * hourRowHeight;
+  const height = Math.max(34, rawH - 4);
+  const maxTop = 24 * hourRowHeight - 6;
+  const clampedTop = Math.min(Math.max(0, top), maxTop);
+  const clampedH = Math.min(height, 24 * hourRowHeight - clampedTop - 2);
+  return { top: clampedTop, height: Math.max(32, clampedH) };
+}
+
+function layoutConstraintOnDayGrid(
+  c: BusinessConstraint,
+  dayStart: string,
+  halfHourLabelsLength: number,
+  blockHeight: number,
+  mf: (t?: string | null) => number
+): { top: number; height: number } | null {
+  const dayStartM = mf(dayStart);
+  const gridEndM = dayStartM + halfHourLabelsLength * 30;
+  let startM = mf(c.start_time);
+  let endM = mf(c.end_time);
+  if (_isFullDayConstraint(c, mf)) {
+    startM = dayStartM;
+    endM = gridEndM;
+  } else if (endM <= startM) {
+    endM = startM + 30;
+  }
+  const visStart = Math.max(startM, dayStartM);
+  const visEnd = Math.min(endM, gridEndM);
+  if (visEnd <= visStart) return null;
+  const offsetMin = visStart - dayStartM;
+  const durMin = visEnd - visStart;
+  const top = (offsetMin / 30) * blockHeight + blockHeight / 2;
+  const height = (durMin / 30) * blockHeight;
+  return { top, height: Math.max(height, 40) };
 }
 
 const AnimatedFlashList = Animated.createAnimatedComponent<FlashListProps<DayBlock>>(FlashList);
@@ -448,8 +506,8 @@ const WeekAppointmentCard = memo(
             height: cardHeight,
             left: 3,
             right: 3,
-            zIndex: 2,
-            elevation: 3,
+            zIndex: 3,
+            elevation: 4,
             opacity: pressed ? 0.92 : 1,
             backgroundColor: _primaryOnWhite(primaryColor, 0.085),
             borderColor: _primaryRgbA(primaryColor, 0.2),
@@ -495,6 +553,7 @@ const WeekDayColumn = memo(
     day,
     index,
     appts,
+    constraints,
     reminders,
     columnWidth,
     hourRowHeight,
@@ -506,6 +565,7 @@ const WeekDayColumn = memo(
     day: DayBlock;
     index: number;
     appts: AvailableTimeSlot[];
+    constraints: BusinessConstraint[];
     reminders: CalendarReminder[];
     columnWidth: number;
     hourRowHeight: number;
@@ -514,6 +574,7 @@ const WeekDayColumn = memo(
     onPressReminder: (r: CalendarReminder) => void;
     minutesFromMidnight: (time?: string | null) => number;
   }) => {
+    const { t } = useTranslation();
     return (
       <View
         style={[
@@ -547,6 +608,46 @@ const WeekDayColumn = memo(
             );
           })}
 
+          {constraints.map((c) => {
+            const { top, height } = layoutConstraintOnWeekColumn(c, hourRowHeight, minutesFromMidnight);
+            const startLbl = formatTime12Hour(String(c.start_time || '').slice(0, 5));
+            const endLbl = formatTime12Hour(String(c.end_time || '').slice(0, 5));
+            return (
+              <PressableScale
+                key={`wk-con-${c.id}`}
+                onPress={() => {
+                  const title = String(t('admin.calendar.constraintDetailsTitle', 'אילוץ'));
+                  const body = [c.reason?.trim(), `${startLbl} – ${endLbl}`].filter(Boolean).join('\n');
+                  Alert.alert(title, body || '—');
+                }}
+                style={[
+                  weekStyles.weekConstraintCard,
+                  {
+                    top,
+                    height,
+                    left: 4,
+                    right: 4,
+                    zIndex: 1,
+                    elevation: 1,
+                    backgroundColor: CONSTRAINT_BG,
+                    borderLeftColor: CONSTRAINT_BAR,
+                  },
+                ]}
+              >
+                <View style={weekStyles.weekConstraintRow}>
+                  <Ban size={11} color={CONSTRAINT_BAR} />
+                  <Text numberOfLines={2} style={weekStyles.weekConstraintTitle}>
+                    {c.reason?.trim() ||
+                      String(t('admin.calendar.constraintBlockTitle', 'זמן חסום'))}
+                  </Text>
+                </View>
+                <Text numberOfLines={1} style={weekStyles.weekConstraintTime}>
+                  {`${startLbl} – ${endLbl}`}
+                </Text>
+              </PressableScale>
+            );
+          })}
+
           {reminders.map((r) => {
             const startM = minutesFromMidnight(r.start_time);
             const durationMinutes = r.duration_minutes || 30;
@@ -564,8 +665,8 @@ const WeekDayColumn = memo(
                     height: Math.max(36, height - 4),
                     left: 4,
                     right: 4,
-                    zIndex: 1,
-                    elevation: 1,
+                    zIndex: 2,
+                    elevation: 2,
                     backgroundColor: pal.bg,
                     borderLeftColor: pal.bar,
                   },
@@ -667,6 +768,7 @@ export default function AdminAppointmentsScreen() {
   const [appointmentCountsByDate, setAppointmentCountsByDate] = useState<Record<string, number>>({});
   const [monthDayModalDate, setMonthDayModalDate] = useState<string | null>(null);
   const [modalDayAppointments, setModalDayAppointments] = useState<AvailableTimeSlot[]>([]);
+  const [modalDayConstraints, setModalDayConstraints] = useState<BusinessConstraint[]>([]);
   const [modalDayLoading, setModalDayLoading] = useState(false);
   const [actionsModal, setActionsModal] = useState<{
     open: boolean;
@@ -681,8 +783,11 @@ export default function AdminAppointmentsScreen() {
     else dayAptRefMap.current.delete(id);
   }, []);
   const [rangeAppointments, setRangeAppointments] = useState<Map<string, AvailableTimeSlot[]>>(new Map());
+  const [rangeConstraints, setRangeConstraints] = useState<Map<string, BusinessConstraint[]>>(new Map());
   const [calendarReminders, setCalendarReminders] = useState<CalendarReminder[]>([]);
   const [rangeReminders, setRangeReminders] = useState<Map<string, CalendarReminder[]>>(new Map());
+  const [dayConstraints, setDayConstraints] = useState<BusinessConstraint[]>([]);
+  const [monthConstraintDates, setMonthConstraintDates] = useState<Set<string>>(new Set());
 
   const [showCalendarFabSheet, setShowCalendarFabSheet] = useState(false);
   const [calendarFabStep, setCalendarFabStep] = useState<'choice' | 'reminder'>('choice');
@@ -807,13 +912,21 @@ export default function AdminAppointmentsScreen() {
       if (user?.id) {
         const rem = await listCalendarRemindersForDate(dateString, user.id);
         setCalendarReminders(rem);
+        try {
+          const cons = await businessConstraintsApi.getConstraintsForBarberInRange(dateString, dateString, user.id);
+          setDayConstraints(cons);
+        } catch {
+          setDayConstraints([]);
+        }
       } else {
         setCalendarReminders([]);
+        setDayConstraints([]);
       }
     } catch (e) {
       console.error('Error in loadAppointmentsForDate:', e);
       setAppointments([]);
       setCalendarReminders([]);
+      setDayConstraints([]);
     } finally {
       if (isRefresh) {
         setRefreshing(false);
@@ -831,6 +944,7 @@ export default function AdminAppointmentsScreen() {
         if (!user?.id) {
           setRangeAppointments(new Map());
           setRangeReminders(new Map());
+          setRangeConstraints(new Map());
           return;
         }
         const { data, error } = await supabase
@@ -847,6 +961,7 @@ export default function AdminAppointmentsScreen() {
           console.error('Error loading range appointments:', error);
           setRangeAppointments(new Map());
           setRangeReminders(new Map());
+          setRangeConstraints(new Map());
         } else {
           const map = new Map<string, AvailableTimeSlot[]>();
           ((data as unknown as AvailableTimeSlot[]) || []).forEach((apt) => {
@@ -869,10 +984,24 @@ export default function AdminAppointmentsScreen() {
           rmap.set(key, arr);
         });
         setRangeReminders(rmap);
+
+        try {
+          const cons = await businessConstraintsApi.getConstraintsForBarberInRange(startDateStr, endDateStr, user.id);
+          const cmap = new Map<string, BusinessConstraint[]>();
+          cons.forEach((c) => {
+            const arr = cmap.get(c.date) ?? [];
+            arr.push(c);
+            cmap.set(c.date, arr);
+          });
+          setRangeConstraints(cmap);
+        } catch {
+          setRangeConstraints(new Map());
+        }
       } catch (e) {
         console.error('Error in loadAppointmentsForRange:', e);
         setRangeAppointments(new Map());
         setRangeReminders(new Map());
+        setRangeConstraints(new Map());
       }
     },
     [user?.id]
@@ -933,6 +1062,7 @@ export default function AdminAppointmentsScreen() {
       if (!user?.id) {
         setMarkedDates(new Set());
         setAppointmentCountsByDate({});
+        setMonthConstraintDates(new Set());
         return;
       }
 
@@ -976,6 +1106,20 @@ export default function AdminAppointmentsScreen() {
       const unique = new Set<string>(Object.keys(counts));
       const reminderDates = await listCalendarReminderDatesInMonth(year, month, user.id);
       reminderDates.forEach((d) => unique.add(d));
+
+      const monthEnd = new Date(year, month + 1, 0);
+      monthEnd.setHours(0, 0, 0, 0);
+      try {
+        const constraintRows = await businessConstraintsApi.getConstraintsForBarberInRange(
+          fmt(firstOfMonth),
+          fmt(monthEnd),
+          user.id
+        );
+        constraintRows.forEach((r) => unique.add(r.date));
+      } catch {
+        /* ignore */
+      }
+
       setMarkedDates(unique);
     } catch (e) {
       console.error('Error in reloadMonthMarks:', e);
@@ -984,6 +1128,33 @@ export default function AdminAppointmentsScreen() {
     }
   }, [selectedDate, user?.id]);
 
+  const reloadWideConstraintDates = useCallback(async () => {
+    if (!user?.id) {
+      setMonthConstraintDates(new Set());
+      return;
+    }
+    try {
+      const now = new Date();
+      const start = new Date(now.getFullYear(), now.getMonth() - 12, 1);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(now.getFullYear(), now.getMonth() + 13, 0);
+      end.setHours(0, 0, 0, 0);
+      const rows = await businessConstraintsApi.getConstraintsForBarberInRange(
+        _formatLocalYyyyMmDd(start),
+        _formatLocalYyyyMmDd(end),
+        user.id
+      );
+      setMonthConstraintDates(new Set(rows.map((r) => r.date)));
+    } catch {
+      setMonthConstraintDates(new Set());
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (calendarView !== 'month') return;
+    void reloadWideConstraintDates();
+  }, [calendarView, reloadWideConstraintDates]);
+
   useEffect(() => {
     void reloadMonthMarks();
   }, [reloadMonthMarks]);
@@ -991,19 +1162,23 @@ export default function AdminAppointmentsScreen() {
   useEffect(() => {
     if (!monthDayModalDate || !user?.id) {
       setModalDayAppointments([]);
+      setModalDayConstraints([]);
       setModalDayLoading(false);
       return;
     }
     let alive = true;
     setModalDayLoading(true);
     (async () => {
-      const { data, error } = await supabase
-        .from('appointments')
-        .select('*')
-        .eq('slot_date', monthDayModalDate)
-        .eq('is_available', false)
-        .eq('barber_id', user.id)
-        .order('slot_time', { ascending: true });
+      const [{ data, error }, cons] = await Promise.all([
+        supabase
+          .from('appointments')
+          .select('*')
+          .eq('slot_date', monthDayModalDate)
+          .eq('is_available', false)
+          .eq('barber_id', user.id)
+          .order('slot_time', { ascending: true }),
+        businessConstraintsApi.getConstraintsForBarberInRange(monthDayModalDate, monthDayModalDate, user.id),
+      ]);
       if (!alive) return;
       if (error) {
         console.error('Error loading modal day appointments:', error);
@@ -1011,6 +1186,7 @@ export default function AdminAppointmentsScreen() {
       } else {
         setModalDayAppointments((data as unknown as AvailableTimeSlot[]) || []);
       }
+      setModalDayConstraints(cons);
       setModalDayLoading(false);
     })();
     return () => {
@@ -1030,8 +1206,9 @@ export default function AdminAppointmentsScreen() {
     void loadAppointmentsForDate(selectedDateStr, true, calendarView === 'month');
     if (calendarView === 'month') {
       void reloadMonthMarks();
+      void reloadWideConstraintDates();
     }
-  }, [loadAppointmentsForDate, selectedDateStr, calendarView, reloadMonthMarks]);
+  }, [loadAppointmentsForDate, selectedDateStr, calendarView, reloadMonthMarks, reloadWideConstraintDates]);
 
   // Helpers for the time grid
   const minutesFromMidnight = (time?: string | null): number => {
@@ -1066,6 +1243,16 @@ export default function AdminAppointmentsScreen() {
     }
     return labels;
   }, [dayStart, dayEnd]);
+
+  const displayDayConstraints = useMemo(
+    () => mergeConstraintsForDisplay(dayConstraints),
+    [dayConstraints]
+  );
+
+  const displayModalConstraints = useMemo(
+    () => mergeConstraintsForDisplay(modalDayConstraints),
+    [modalDayConstraints]
+  );
 
   const gridDays = useMemo((): DayBlock[] => {
     if (calendarView === 'week') {
@@ -1398,6 +1585,25 @@ export default function AdminAppointmentsScreen() {
     weekRangeChronoBounds,
   ]);
 
+  const onCalendarConstraintsChanged = useCallback(() => {
+    void loadAppointmentsForDate(selectedDateStr, false, calendarView === 'month');
+    if (calendarView === 'month') {
+      void reloadMonthMarks();
+      void reloadWideConstraintDates();
+    }
+    if (calendarView === 'week' && weekRangeChronoBounds) {
+      void loadAppointmentsForRange(weekRangeChronoBounds.start, weekRangeChronoBounds.end);
+    }
+  }, [
+    loadAppointmentsForDate,
+    selectedDateStr,
+    calendarView,
+    reloadMonthMarks,
+    reloadWideConstraintDates,
+    loadAppointmentsForRange,
+    weekRangeChronoBounds,
+  ]);
+
   useEffect(() => {
     if ((!showCalendarFabSheet && !showAddAppointmentModal && !showConstraintsModal) || Platform.OS !== 'android')
       return;
@@ -1715,7 +1921,10 @@ export default function AdminAppointmentsScreen() {
                         headerHeight={gridDims.hourSize}
                         isSelected={d.formatted === selectedDateStr}
                         isToday={d.formatted === _formatLocalYyyyMmDd(new Date())}
-                        hasBookings={(rangeAppointments.get(d.formatted)?.length ?? 0) > 0}
+                        hasBookings={
+                          (rangeAppointments.get(d.formatted)?.length ?? 0) > 0 ||
+                          (rangeConstraints.get(d.formatted)?.length ?? 0) > 0
+                        }
                         primaryColor={calendarPrimary}
                         onPress={() => setSelectedDate(d.date)}
                       />
@@ -1748,6 +1957,7 @@ export default function AdminAppointmentsScreen() {
                           hourRowHeight={gridDims.hourSize}
                           primaryColor={calendarPrimary}
                           appts={rangeAppointments.get(item.formatted) ?? []}
+                          constraints={mergeConstraintsForDisplay(rangeConstraints.get(item.formatted) ?? [])}
                           reminders={rangeReminders.get(item.formatted) ?? []}
                           onOpenAppointment={openActionsMenu}
                           onPressReminder={openEditReminderModal}
@@ -1791,6 +2001,57 @@ export default function AdminAppointmentsScreen() {
 
                 {/* Reminders + appointments overlay (reminders sit under bookings) */}
                 <View pointerEvents="box-none" style={[styles.overlayContainer, { height: halfHourLabels.length * HALF_HOUR_BLOCK_HEIGHT }]}>
+                  {displayDayConstraints.map((c) => {
+                    const layout = layoutConstraintOnDayGrid(
+                      c,
+                      dayStart,
+                      halfHourLabels.length,
+                      HALF_HOUR_BLOCK_HEIGHT,
+                      minutesFromMidnight
+                    );
+                    if (!layout) return null;
+                    const { top, height } = layout;
+                    const startT = formatTime(String(c.start_time || '').slice(0, 5));
+                    const endT = formatTime(String(c.end_time || '').slice(0, 5));
+                    return (
+                      <PressableScale
+                        key={`dc-${c.id}`}
+                        onPress={() => {
+                          const title = String(t('admin.calendar.constraintDetailsTitle', 'אילוץ'));
+                          const body = [c.reason?.trim(), `${startT} – ${endT}`].filter(Boolean).join('\n');
+                          Alert.alert(title, body || '—');
+                        }}
+                        accessibilityLabel={String(t('admin.calendar.constraintBlockTitle', 'זמן חסום'))}
+                        style={[
+                          styles.constraintCard,
+                          {
+                            top,
+                            height: Math.max(height, 44),
+                            left: LABELS_WIDTH + 8,
+                            right: 8,
+                            zIndex: 1,
+                            elevation: 1,
+                          },
+                        ]}
+                      >
+                        <View style={styles.constraintInner}>
+                          <View style={styles.constraintTitleRow}>
+                            <Ban size={15} color={CONSTRAINT_BAR} />
+                            <Text numberOfLines={2} style={styles.constraintTitleText}>
+                              {c.reason?.trim() ||
+                                String(t('admin.calendar.constraintBlockTitle', 'זמן חסום'))}
+                            </Text>
+                          </View>
+                          <View style={styles.constraintTimePill}>
+                            <Text numberOfLines={1} style={styles.constraintTimeText}>
+                              {`${startT} – ${endT}`}
+                            </Text>
+                            <Ionicons name="ban-outline" size={14} color={CONSTRAINT_BAR} />
+                          </View>
+                        </View>
+                      </PressableScale>
+                    );
+                  })}
                   {calendarReminders.map((r) => {
                     const aptMinutes = minutesFromMidnight(r.start_time);
                     const dayStartMinutes = minutesFromMidnight(dayStart);
@@ -1813,8 +2074,8 @@ export default function AdminAppointmentsScreen() {
                             height: Math.max(height, 44),
                             left: LABELS_WIDTH + 8,
                             right: 8,
-                            zIndex: 1,
-                            elevation: 1,
+                            zIndex: 2,
+                            elevation: 2,
                             backgroundColor: pal.bg,
                             borderLeftColor: pal.bar,
                           },
@@ -1868,8 +2129,8 @@ export default function AdminAppointmentsScreen() {
                             height,
                             left: LABELS_WIDTH + 8,
                             right: 8,
-                            zIndex: 2,
-                            elevation: 4,
+                            zIndex: 3,
+                            elevation: 5,
                             opacity: pressed ? 0.94 : 1,
                           },
                         ]}
@@ -1937,7 +2198,7 @@ export default function AdminAppointmentsScreen() {
                 </View>
               </View>
 
-              {appointments.length === 0 && calendarReminders.length === 0 && (
+              {appointments.length === 0 && calendarReminders.length === 0 && dayConstraints.length === 0 && (
                 <View style={styles.emptyState}>
                   <Text style={styles.emptyTitle}>{tHe('admin.appointments.emptyTitle', 'אין תורים ליום זה')}</Text>
                   <Text style={styles.emptySubtitle}>{tHe('admin.appointments.emptySubtitle', 'בחר/י יום אחר מהסרגל העליון')}</Text>
@@ -1948,6 +2209,7 @@ export default function AdminAppointmentsScreen() {
             <View style={styles.gcMonthFullBleed}>
               <AdminVerticalMonthCalendar
                 dayAvailability={appointmentCountsByDate}
+                constraintDates={monthConstraintDates}
                 selectedDate={selectedDate}
                 language={typeof i18n.language === 'string' && i18n.language.startsWith('he') ? 'he' : 'en'}
                 primaryColor={calendarPrimary}
@@ -2008,7 +2270,7 @@ export default function AdminAppointmentsScreen() {
               <View style={styles.monthModalLoading}>
                 <ActivityIndicator color={calendarPrimary} />
               </View>
-            ) : modalDayAppointments.length === 0 ? (
+            ) : modalDayAppointments.length === 0 && modalDayConstraints.length === 0 ? (
               <View style={styles.monthModalEmpty}>
                 <Ionicons name="calendar-outline" size={44} color="#DADCE0" />
                 <Text style={styles.monthModalEmptyTitle}>
@@ -2022,6 +2284,27 @@ export default function AdminAppointmentsScreen() {
                 keyboardShouldPersistTaps="always"
                 showsVerticalScrollIndicator={false}
               >
+                {displayModalConstraints.length > 0 ? (
+                  <View style={styles.monthModalSectionBlock}>
+                    <Text style={styles.monthModalSectionTitle}>
+                      {tHe('admin.calendar.constraintsSection', 'אילוצים')}
+                    </Text>
+                    {displayModalConstraints.map((c) => (
+                      <View key={`md-con-${c.id}`} style={styles.monthModalConstraintCard}>
+                        <View style={styles.monthModalConstraintBar} />
+                        <View style={styles.agendaCardBody}>
+                          <Text style={styles.agendaTime}>
+                            {formatTime(String(c.start_time).slice(0, 5))} –{' '}
+                            {formatTime(String(c.end_time).slice(0, 5))}
+                          </Text>
+                          <Text style={styles.agendaTitle} numberOfLines={3}>
+                            {c.reason?.trim() || tHe('admin.calendar.constraintBlockTitle', 'זמן חסום')}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
                 {modalDayAppointments.map((appt) => {
                   const dur = appt.duration_minutes || 30;
                   return (
@@ -2512,7 +2795,11 @@ export default function AdminAppointmentsScreen() {
         initialDate={selectedDate}
       />
 
-      <BusinessConstraintsModal visible={showConstraintsModal} onClose={() => setShowConstraintsModal(false)} />
+      <BusinessConstraintsModal
+        visible={showConstraintsModal}
+        onClose={() => setShowConstraintsModal(false)}
+        onConstraintsChanged={onCalendarConstraintsChanged}
+      />
     </View>
   );
 }
@@ -2763,6 +3050,32 @@ const styles = StyleSheet.create({
   },
   monthModalListContent: {
     paddingBottom: 8,
+  },
+  monthModalSectionBlock: {
+    marginBottom: 14,
+  },
+  monthModalSectionTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#9A3412',
+    writingDirection: 'rtl',
+    marginBottom: 8,
+    letterSpacing: -0.2,
+  },
+  monthModalConstraintCard: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: '#FFFBEB',
+    borderRadius: 14,
+    overflow: 'hidden',
+    marginBottom: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(194,65,12,0.18)',
+    minHeight: 56,
+  },
+  monthModalConstraintBar: {
+    width: 4,
+    backgroundColor: '#C2410C',
   },
   agendaSectionHeader: {
     marginBottom: 14,
@@ -3417,6 +3730,49 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     writingDirection: 'rtl',
   },
+  constraintCard: {
+    position: 'absolute',
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(194,65,12,0.14)',
+    backgroundColor: CONSTRAINT_BG,
+    borderLeftColor: CONSTRAINT_BAR,
+  },
+  constraintInner: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 4,
+  },
+  constraintTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  constraintTitleText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '800',
+    writingDirection: 'rtl',
+    color: '#7C2D12',
+  },
+  constraintTimePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  constraintTimeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#7C2D12',
+    writingDirection: 'rtl',
+  },
   reminderCard: {
     position: 'absolute',
     borderRadius: 12,
@@ -3744,6 +4100,36 @@ const weekStyles = StyleSheet.create({
     flex: 1,
     fontSize: 11,
     fontWeight: '800',
+  },
+  weekConstraintCard: {
+    position: 'absolute',
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 5,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(194,65,12,0.12)',
+  },
+  weekConstraintRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 4,
+    flex: 1,
+  },
+  weekConstraintTitle: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#7C2D12',
+    writingDirection: 'rtl',
+  },
+  weekConstraintTime: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#9A3412',
+    writingDirection: 'rtl',
   },
 });
 

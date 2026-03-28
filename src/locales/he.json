@@ -461,7 +461,7 @@
   "common.searchByNamePhone": "חפש לפי שם או טלפון...",
   "common.searchByNamePhoneEmail": "חפש לפי שם, טלפון או אימייל",
   "category": { "gel": "לק ג'ל", "feet": "לק ברגליים", "manicure": "מניקור" },
-  "admin2": { "hoursAdmin": { "title": "אילוצי עבודה", "segment": { "hours": "שעות", "singleDay": "יום אחד", "multiDays": "מספר ימים" }, "pickDateShort": "בחר/י תאריך", "closedHours": "שעות סגורות", "pickDateAllDay": "בחירת תאריך (סגור כל היום)", "pickDateRangeAllDay": "בחירת טווח תאריכים (סגור כל היום)", "selectedRange": ":טווח נבחר", "allDay": "כל היום", "chooseClosedHours": "בחר/י שעות סגורות", "start": "התחלה", "end": "סיום", "upcomingConstraints": "אילוצים קרובים", "noUpcomingConstraints": "אין אילוצים קרובים", "noReason": "ללא סיבה", "saveCTA": "שמור אילוצים" } },
+  "admin2": { "hoursAdmin": { "title": "אילוצי עבודה", "segment": { "hours": "שעות", "singleDay": "יום אחד", "multiDays": "מספר ימים" }, "pickDateShort": "בחר/י תאריך", "closedHours": "שעות סגורות", "pickDateAllDay": "בחירת תאריך (סגור כל היום)", "pickDateRangeAllDay": "בחירת טווח תאריכים (סגור כל היום)", "selectedRange": "טווח נבחר:", "allDay": "כל היום", "chooseClosedHours": "בחר/י שעות סגורות", "start": "התחלה", "end": "סיום", "upcomingConstraints": "אילוצים קרובים", "noUpcomingConstraints": "אין אילוצים קרובים", "noReason": "ללא סיבה", "saveCTA": "שמור אילוצים" } },
   "login": {
     "screenHeader": "התחברות",
     "form": {
@@ -660,6 +660,8 @@
     
     "profile": {
       "businessAddressTitle": "כתובת העסק",
+      "businessAddressSheetSubtitle": "הלקוחות רואים את הכתובת בפרופיל ובקביעת תור. אפשר לבחור מההשלמות של גוגל או להקליד ידנית.",
+      "businessAddressSearchPlaceholder": "הקלידו רחוב, עיר…",
       "addressLabel": "כתובת",
       "bookingWindowPlaceholder": "7",
       "businessAddressPlaceholder": "כתובת העסק",
@@ -721,7 +723,10 @@
     "reminder": {
       "title": "תזכורת לפני התור",
       "titleWithMinutes": "תזכורת לפני התור (בדקות)",
-      "minutesBefore": "דקות לפני"
+      "minutesBefore": "דקות לפני",
+      "enableLabel": "תזכורת לפני התור",
+      "enableSubtitle": "קבלו התראה לפני תחילת התור הבא שלכם",
+      "saveFailed": "לא ניתן לעדכן את הגדרת התזכורת"
     },
     "recurring": {
       "empty": "אין תורים מחזוריים",
@@ -927,11 +932,20 @@
       "week": "שבועי",
       "month": "חודשי"
     },
+    "financeTab": {
+      "incomeExpenses": "הכנסות והוצאות",
+      "accountant": "הגדרות רואה חשבון"
+    },
     "calendar": {
       "appointmentPill": "{{count}} תורים",
       "appointmentPillSingle": "תור אחד",
       "today": "היום",
-      "monthTapDayHint": "הקישו על יום כדי לראות את כל התורים"
+      "monthTapDayHint": "הקישו על יום כדי לראות את כל התורים",
+      "constraintPill": "אילוץ",
+      "constraintBlockTitle": "זמן חסום",
+      "constraintDetailsTitle": "אילוץ",
+      "constraintsSection": "אילוצים",
+      "monthModalOnlyConstraints": "אין תורים — יש אילוצים ביום זה"
     },
     "calendarAdd": {
       "choiceTitle": "מה תרצה להוסיף?",
@@ -975,14 +989,55 @@
       "selectDateAndService": "אנא בחר/י תאריך ושירות תחילה"
     },
     "hoursAdmin": {
-      "title": "שעות עבודה",
+      "title": "אילוצי עבודה",
       "subtitle": "הגדרת לוז שבועי והפסקות",
       "manageConstraints": "ניהול אילוצים (תאריכים/שעות סגירה)",
       "breakMinutes": "דקות הפסקה",
       "breakHint": "בחר/י מספר דקות בין תורים. 0 משאיר ללא הפסקה קבועה.",
       "min": "דק",
       "breakBetween": "הפסקה בין תורים",
-      "saveBreakFailed": "כשל בשמירת ההפסקה. אנא נסו שוב."
+      "saveBreakFailed": "כשל בשמירת ההפסקה. אנא נסו שוב.",
+      "segment": {
+        "hours": "שעות",
+        "singleDay": "יום אחד",
+        "multiDays": "מספר ימים"
+      },
+      "pickDateShort": "בחר/י תאריך",
+      "closedHours": "שעות סגורות",
+      "pickDateAllDay": "בחירת תאריך (סגור כל היום)",
+      "pickDateRangeAllDay": "בחירת טווח תאריכים (סגור כל היום)",
+      "selectedRange": "טווח נבחר:",
+      "allDay": "כל היום",
+      "chooseClosedHours": "בחר/י שעות סגורות",
+      "start": "התחלה",
+      "end": "סיום",
+      "upcomingConstraints": "אילוצים קרובים",
+      "noUpcomingConstraints": "אין אילוצים קרובים",
+      "noReason": "ללא סיבה",
+      "saveCTA": "שמור אילוצים",
+      "selectDate": "נא לבחור תאריך",
+      "endAfterStart": "שעת הסיום חייבת להיות אחרי שעת ההתחלה",
+      "selectDateRange": "נא לבחור טווח תאריכים",
+      "invalidDateRange": "טווח תאריכים לא תקין",
+      "saved": "האילוצים נשמרו בהצלחה",
+      "saveFailed": "שמירת האילוצים נכשלה",
+      "optionalReason": "סיבה (אופציונלי)",
+      "reasonExamples": "למשל: חופשה, סגירה זמנית",
+      "successAnimatedHeadline": "האילוץ נשמר בהצלחה",
+      "successDateRangeLine": "{{start}} — {{end}}",
+      "successDaysClosed": "{{count}} ימים סגורים (כל היום)",
+      "successReasonLine": "סיבה: {{reason}}",
+      "constraintsModalSubtitle": "חסימת תורים בזמנים שבהם אינך זמין/ה",
+      "whatToBlock": "מה לחסום?",
+      "modeHint": {
+        "hours": "חלון זמן ביום אחד",
+        "singleDay": "סגור כל היום — תאריך בודד",
+        "multiDays": "בחר/י התחלה וסוף — כל הימים ביניהם נסגרים"
+      },
+      "tapToEditHours": "לחצו לבחירת שעות",
+      "rangeHelp": "לחיצה ראשונה: תאריך התחלה. לחיצה שנייה: תאריך סיום.",
+      "reasonHelper": "לעצמך בלבד — עוזר לזכור למה נוצר החסום.",
+      "emptyListHint": "אילוצים שמורים יופיעו כאן כדי שתוכל/י למחוק אותם בכל עת."
     },
     "hours": {
       "title": "שעות עבודה",

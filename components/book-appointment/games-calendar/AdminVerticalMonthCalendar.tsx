@@ -24,6 +24,8 @@ import {
 
 export type AdminVerticalMonthCalendarProps = {
   dayAvailability: Record<string, number>;
+  /** Days (YYYY-MM-DD) with at least one barber-relevant constraint */
+  constraintDates?: Set<string>;
   selectedDate: Date | null;
   language: string;
   primaryColor: string;
@@ -74,6 +76,7 @@ function monthIndexForDate(data: MonthEntry[], d: Date): number {
  */
 export default function AdminVerticalMonthCalendar({
   dayAvailability,
+  constraintDates,
   selectedDate,
   language,
   primaryColor,
@@ -272,6 +275,7 @@ export default function AdminVerticalMonthCalendar({
                 rangeStart={rangeStart}
                 rangeEnd={rangeEnd}
                 dayAvailability={dayAvailability}
+                constraintDates={constraintDates}
                 selectedDate={selectedDate}
                 cellSize={cellSize}
                 primaryColor={primaryColor}
@@ -280,6 +284,7 @@ export default function AdminVerticalMonthCalendar({
                 showHebrewDates
                 showWeekSeparators
                 formatAppointmentBadge={formatAppointmentBadge}
+                constraintPillLabel={String(t('admin.calendar.constraintPill'))}
               />
             </View>
           </View>

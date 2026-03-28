@@ -27,8 +27,9 @@ type Props = {
   stagger?: number;
   lineGapMs?: number;
   onDismiss: () => void;
-  onAddToCalendar: () => void;
-  addToCalendarLabel: string;
+  /** When omitted, only the dismiss button is shown (e.g. constraint saved — no calendar action). */
+  onAddToCalendar?: () => void;
+  addToCalendarLabel?: string;
   gotItLabel: string;
 };
 
@@ -74,7 +75,7 @@ export default function BookingSuccessAnimatedOverlay({
   lineGapMs = 120,
   onDismiss,
   onAddToCalendar,
-  addToCalendarLabel,
+  addToCalendarLabel = '',
   gotItLabel,
 }: Props) {
   const insets = useSafeAreaInsets();
@@ -199,23 +200,36 @@ export default function BookingSuccessAnimatedOverlay({
         pointerEvents="box-none"
       >
         <View style={styles.footerInner}>
-          <TouchableOpacity
-            style={[styles.btnSecondary, { borderColor: 'rgba(255,255,255,0.55)' }]}
-            onPress={onAddToCalendar}
-            activeOpacity={0.82}
-          >
-            <Ionicons name="calendar-outline" size={21} color="#FFFFFF" />
-            <Text style={styles.btnSecondaryText}>{addToCalendarLabel}</Text>
-          </TouchableOpacity>
+          {typeof onAddToCalendar === 'function' ? (
+            <>
+              <TouchableOpacity
+                style={[styles.btnSecondary, { borderColor: 'rgba(255,255,255,0.55)' }]}
+                onPress={onAddToCalendar}
+                activeOpacity={0.82}
+              >
+                <Ionicons name="calendar-outline" size={21} color="#FFFFFF" />
+                <Text style={styles.btnSecondaryText}>{addToCalendarLabel}</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.btnSecondary, { borderColor: 'rgba(255,255,255,0.55)' }]}
-            onPress={onDismiss}
-            activeOpacity={0.82}
-            accessibilityRole="button"
-          >
-            <Text style={styles.btnSecondaryText}>{gotItLabel}</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.btnSecondary, { borderColor: 'rgba(255,255,255,0.55)' }]}
+                onPress={onDismiss}
+                activeOpacity={0.82}
+                accessibilityRole="button"
+              >
+                <Text style={styles.btnSecondaryText}>{gotItLabel}</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity
+              style={[styles.btnSecondary, { borderColor: 'rgba(255,255,255,0.55)' }]}
+              onPress={onDismiss}
+              activeOpacity={0.82}
+              accessibilityRole="button"
+            >
+              <Text style={styles.btnSecondaryText}>{gotItLabel}</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </View>

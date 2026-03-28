@@ -40,6 +40,7 @@ export default function TabsLayout() {
                   <Tabs.Screen name="edit-home-hero" options={{ title: "Edit Home Hero", href: null }} />
                   <Tabs.Screen name="pick-primary-color" options={{ title: "Primary color", href: null }} />
                   <Tabs.Screen name="finance" options={{ title: "Finance" }} />
+                  <Tabs.Screen name="finance-accountant" options={{ title: "Finance Accountant", href: null }} />
                 </Tabs>
               </AnimatedTabsContainer>
 

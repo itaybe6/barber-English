@@ -637,6 +637,8 @@
     
     "profile": {
       "businessAddressTitle": "Business address",
+      "businessAddressSheetSubtitle": "Clients see this on your profile and when booking. Pick a Google suggestion or type freely.",
+      "businessAddressSearchPlaceholder": "Street, city, or area…",
       "addressLabel": "Address",
       "bookingWindowPlaceholder": "7",
       "businessAddressPlaceholder": "Business address",
@@ -698,7 +700,10 @@
     "reminder": {
       "title": "Reminder before appointment",
       "titleWithMinutes": "Reminder before appointment (minutes)",
-      "minutesBefore": "Minutes before"
+      "minutesBefore": "Minutes before",
+      "enableLabel": "Reminder before appointment",
+      "enableSubtitle": "Get notified before your next appointment starts",
+      "saveFailed": "Could not update reminder setting"
     },
     "recurring": {
       "empty": "No recurring appointments",
@@ -926,11 +931,20 @@
       "week": "Week",
       "month": "Month"
     },
+    "financeTab": {
+      "incomeExpenses": "Income & expenses",
+      "accountant": "Accountant settings"
+    },
     "calendar": {
       "appointmentPill": "{{count}} appts",
       "appointmentPillSingle": "1 appt",
       "today": "Today",
-      "monthTapDayHint": "Tap a day to see all appointments"
+      "monthTapDayHint": "Tap a day to see all appointments",
+      "constraintPill": "Block",
+      "constraintBlockTitle": "Blocked time",
+      "constraintDetailsTitle": "Constraint",
+      "constraintsSection": "Constraints",
+      "monthModalOnlyConstraints": "No appointments — this day has blocked time"
     },
     "calendarAdd": {
       "choiceTitle": "What would you like to add?",
@@ -974,14 +988,55 @@
       "selectDateAndService": "Please select date and service first"
     },
     "hoursAdmin": {
-      "title": "Working hours",
+      "title": "Work constraints",
       "subtitle": "Set your weekly working schedule and breaks",
       "manageConstraints": "Manage constraints (closed dates/hours)",
       "breakMinutes": "Break minutes",
       "breakHint": "Choose the number of minutes to add between appointments. 0 keeps no fixed break.",
       "min": "min",
       "breakBetween": "Break between appointments",
-      "saveBreakFailed": "Failed to save break. Please try again."
+      "saveBreakFailed": "Failed to save break. Please try again.",
+      "segment": {
+        "hours": "Hours",
+        "singleDay": "Single day",
+        "multiDays": "Multiple days"
+      },
+      "pickDateShort": "Pick a date",
+      "closedHours": "Closed hours",
+      "pickDateAllDay": "Pick a date (closed all day)",
+      "pickDateRangeAllDay": "Pick a date range (closed all day)",
+      "selectedRange": "Selected range:",
+      "allDay": "All day",
+      "chooseClosedHours": "Choose closed hours",
+      "start": "Start",
+      "end": "End",
+      "upcomingConstraints": "Upcoming constraints",
+      "noUpcomingConstraints": "No upcoming constraints",
+      "noReason": "No reason",
+      "saveCTA": "Save constraints",
+      "selectDate": "Please select a date",
+      "endAfterStart": "End time must be after start time",
+      "selectDateRange": "Please select a date range",
+      "invalidDateRange": "Invalid date range",
+      "saved": "Constraints saved successfully",
+      "saveFailed": "Failed to save constraints",
+      "optionalReason": "Reason (optional)",
+      "reasonExamples": "e.g., vacation, errands, temporary closure",
+      "successAnimatedHeadline": "Constraint saved",
+      "successDateRangeLine": "{{start}} — {{end}}",
+      "successDaysClosed": "{{count}} days closed (all day)",
+      "successReasonLine": "Reason: {{reason}}",
+      "constraintsModalSubtitle": "Block booking slots when you are unavailable",
+      "whatToBlock": "What do you want to block?",
+      "modeHint": {
+        "hours": "Block a time window on one day",
+        "singleDay": "Closed all day — pick one date",
+        "multiDays": "Pick start and end — every day in between is closed"
+      },
+      "tapToEditHours": "Tap to set hours",
+      "rangeHelp": "First tap: start date. Second tap: end date.",
+      "reasonHelper": "For your reference only — helps you remember why this block exists.",
+      "emptyListHint": "Saved blocks appear here so you can remove them anytime."
     },
     "hours": {
       "title": "Working hours",

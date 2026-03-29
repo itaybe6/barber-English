@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCallback, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import Animated, {
   Easing,
@@ -39,7 +39,19 @@ export interface FlowerProps {
   duration?: number;
   initialActiveIndex?: number;
   gradients?: GradientPair[];
+  /**
+   * גרדיאנט למרכז העיגול (עלה דמה). כשמועבר — דורס את הגרדיאנט לפי activeIndex,
+   * כדי שצבע מלוח חיצוני / פריוויו יוצג גם כשאין התאמה לרשימת העלים.
+   */
+  centerPreviewGradient?: GradientPair;
   onPress?: (index: number) => void;
+  /** נקרא כשהמניפה נפתחת/נסגרת (לאחר לחיצה על העיגול / עלה / collapse מבחוץ). */
+  onOpenChange?: (open: boolean) => void;
+}
+
+export interface FlowerHandle {
+  /** סוגר את המניפה לעיגול (אם היא פתוחה). */
+  collapse: () => void;
 }
 
 interface LeafProps {
@@ -132,16 +144,26 @@ function Leaf({
 
 const _spacing = 30;
 
-export function Flower({
-  leafs,
-  size,
-  gradients = defaultGradients,
-  onPress,
-  initialActiveIndex = 0,
-  duration = 1000,
-}: FlowerProps) {
+export const Flower = forwardRef<FlowerHandle, FlowerProps>(function Flower(
+  {
+    leafs,
+    size,
+    gradients = defaultGradients,
+    onPress,
+    onOpenChange,
+    centerPreviewGradient,
+    initialActiveIndex = 0,
+    duration = 1000,
+  },
+  ref
+) {
   const progress = useSharedValue(0);
+  const fanOpenRef = useRef(false);
   const [activeIndex, setActiveIndex] = useState(initialActiveIndex);
+
+  useEffect(() => {
+    setActiveIndex(initialActiveIndex);
+  }, [initialActiveIndex]);
 
   const stylez = useAnimatedStyle(() => ({
     width: interpolate(progress.value, [0, 1], [size * 0.25 + _spacing, size]),
@@ -149,13 +171,34 @@ export function Flower({
   }));
 
   const animate = useCallback(() => {
-    progress.value = withTiming(progress.value === 0 ? 1 : 0, {
+    const opening = !fanOpenRef.current;
+    fanOpenRef.current = opening;
+    onOpenChange?.(opening);
+    progress.value = withTiming(opening ? 1 : 0, {
       duration,
       easing: Easing.elastic(0.9),
     });
-  }, [duration, progress]);
+  }, [duration, onOpenChange, progress]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      collapse: () => {
+        if (!fanOpenRef.current) return;
+        fanOpenRef.current = false;
+        onOpenChange?.(false);
+        progress.value = withTiming(0, {
+          duration,
+          easing: Easing.elastic(0.9),
+        });
+      },
+    }),
+    [duration, onOpenChange, progress]
+  );
 
   const safeGradients = gradients.length >= leafs ? gradients : defaultGradients;
+  const dummyGradient =
+    centerPreviewGradient ?? safeGradients[activeIndex % safeGradients.length];
 
   return (
     <Animated.View
@@ -197,9 +240,11 @@ export function Flower({
         size={size}
         leafs={leafs}
         dummyLeaf
-        gradient={safeGradients[activeIndex % safeGradients.length]}
+        gradient={dummyGradient}
         onLeafPress={animate}
       />
     </Animated.View>
   );
-}
+});
+
+Flower.displayName = 'Flower';

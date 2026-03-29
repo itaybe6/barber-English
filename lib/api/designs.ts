@@ -1,5 +1,17 @@
 import { supabase, Design, getBusinessId } from '../supabase';
 
+/** Stable order for client + admin: explicit index first, then newest. */
+export function sortDesignsByDisplayOrder(designs: Design[]): Design[] {
+  return [...designs].sort((a, b) => {
+    const ao = a.display_order;
+    const bo = b.display_order;
+    if (ao != null && bo != null && ao !== bo) return ao - bo;
+    if (ao != null && bo == null) return -1;
+    if (ao == null && bo != null) return 1;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+}
+
 export const designsApi = {
   // Get all designs
   async getAllDesigns(userId?: string): Promise<Design[]> {
@@ -15,14 +27,14 @@ export const designsApi = {
         query = query.eq('user_id', userId);
       }
 
-      const { data, error } = await query.order('popularity', { ascending: false });
+      const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) {
         console.error('Error fetching designs:', error);
         return [];
       }
 
-      return data || [];
+      return sortDesignsByDisplayOrder(data || []);
     } catch (error) {
       console.error('Error fetching designs:', error);
       return [];
@@ -57,6 +69,24 @@ export const designsApi = {
   },
 
   // Create a new design
+  async getNextDisplayOrder(): Promise<number> {
+    const businessId = getBusinessId();
+    const { data, error } = await supabase
+      .from('designs')
+      .select('display_order')
+      .eq('business_id', businessId);
+    if (error) {
+      console.error('Error reading display_order:', error);
+      return 0;
+    }
+    let max = -1;
+    for (const row of data ?? []) {
+      const v = row.display_order;
+      if (typeof v === 'number' && v > max) max = v;
+    }
+    return max + 1;
+  },
+
   async createDesign(input: {
     name: string;
     image_url: string;
@@ -70,7 +100,8 @@ export const designsApi = {
   }): Promise<Design | null> {
     try {
       const businessId = getBusinessId();
-      
+      const display_order = await this.getNextDisplayOrder();
+
       const payload = {
         name: input.name,
         image_url: input.image_url,
@@ -82,6 +113,7 @@ export const designsApi = {
         is_featured: input.is_featured ?? false,
         user_id: input.user_id ?? null,
         business_id: businessId, // Add business_id to the payload
+        display_order,
       } as const;
 
       const { data, error } = await supabase
@@ -112,14 +144,14 @@ export const designsApi = {
         .select('*')
         .eq('business_id', businessId) // Filter by current business
         .contains('categories', [category])
-        .order('popularity', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.error('Error fetching designs:', error);
         return [];
       }
 
-      return data || [];
+      return sortDesignsByDisplayOrder(data || []);
     } catch (error) {
       console.error('Error fetching designs:', error);
       return [];
@@ -136,14 +168,14 @@ export const designsApi = {
         .select('*')
         .eq('business_id', businessId) // Filter by current business
         .eq('is_featured', true)
-        .order('popularity', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.error('Error fetching featured designs:', error);
         return [];
       }
 
-      return data || [];
+      return sortDesignsByDisplayOrder(data || []);
     } catch (error) {
       console.error('Error fetching featured designs:', error);
       return [];
@@ -185,6 +217,7 @@ export const designsApi = {
     price_modifier?: number;
     is_featured?: boolean;
     user_id?: string;
+    display_order?: number;
   }): Promise<Design | null> {
     try {
       const businessId = getBusinessId();
@@ -219,17 +252,39 @@ export const designsApi = {
         .select('*')
         .eq('business_id', businessId) // Filter by current business
         .ilike('name', `%${query}%`)
-        .order('popularity', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.error('Error searching designs:', error);
         return [];
       }
 
-      return data || [];
+      return sortDesignsByDisplayOrder(data || []);
     } catch (error) {
       console.error('Error searching designs:', error);
       return [];
     }
-  }
+  },
+
+  /** Persist order for the whole gallery (indices 0..n-1). */
+  async applyDesignDisplayOrder(orderedIds: string[]): Promise<boolean> {
+    try {
+      const businessId = getBusinessId();
+      for (let i = 0; i < orderedIds.length; i++) {
+        const { error } = await supabase
+          .from('designs')
+          .update({ display_order: i })
+          .eq('id', orderedIds[i])
+          .eq('business_id', businessId);
+        if (error) {
+          console.error('Error updating display_order:', error);
+          return false;
+        }
+      }
+      return true;
+    } catch (e) {
+      console.error('applyDesignDisplayOrder:', e);
+      return false;
+    }
+  },
 };

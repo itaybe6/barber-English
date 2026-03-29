@@ -35,6 +35,7 @@ import { usersApi } from '@/lib/api/users';
 
 const { width } = Dimensions.get('window');
 const numColumns = 2;
+const GALLERY_MAX_IMAGES = 6;
 const horizontalPad = 12;
 const tileGap = 8;
 const tileSize = (width - horizontalPad * 2 - tileGap) / numColumns;
@@ -207,25 +208,29 @@ export default function GalleryScreen() {
       mediaTypes: 'images',
       allowsMultipleSelection: true,
       quality: 1.0,
-      selectionLimit: 10,
+      selectionLimit: GALLERY_MAX_IMAGES,
       base64: false,
     });
     if (!result.canceled) {
       try {
-        const imageUris = result.assets.map((a) => a.uri);
-        const compressedImages = await compressImages(imageUris, {
-          quality: 0.7,
-          maxWidth: 1200,
-          maxHeight: 1200,
-          format: 'jpeg',
-        });
+        const compressedImages = await compressImages(
+          result.assets.map((a) => ({ uri: a.uri, width: a.width, height: a.height })),
+          {
+            quality: 0.7,
+            maxWidth: 1200,
+            maxHeight: 1200,
+            format: 'jpeg',
+          }
+        );
         setPickedAssets(
-          compressedImages.map((compressed, index) => ({
-            uri: compressed.uri,
-            base64: null,
-            mimeType: 'image/jpeg',
-            fileName: `compressed_${Date.now()}_${index}.jpg`,
-          }))
+          compressedImages
+            .slice(0, GALLERY_MAX_IMAGES)
+            .map((compressed, index) => ({
+              uri: compressed.uri,
+              base64: null,
+              mimeType: 'image/jpeg',
+              fileName: `compressed_${Date.now()}_${index}.jpg`,
+            }))
         );
       } catch (error) {
         console.error(error);

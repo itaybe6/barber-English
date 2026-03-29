@@ -72,7 +72,14 @@
         ],
         "expo-web-browser",
         "expo-font",
-        "expo-localization"
+        "expo-localization",
+        [
+          "expo-media-library",
+          {
+            "photosPermission": "The app needs access to photos to select and upload images to the gallery or profile.",
+            "savePhotosPermission": "The app may save photos you've taken to your photo library."
+          }
+        ]
       ],
       "experiments": {
         "typedRoutes": true
@@ -156,6 +163,7 @@
     }
   },
 <<<<<<< HEAD
+<<<<<<< HEAD
   "timestamp": "2026-03-27T12:39:11.218Z"
 =======
 <<<<<<< HEAD
@@ -168,4 +176,7 @@
 >>>>>>> 98ff99eb6849f25b938c2b0ea89c6b9c459af70c
 >>>>>>> e584a9ff0eb914a6ca58f9a14a5cd5f50a80509d
 >>>>>>> fc66845b341b68a634dc3401ba55e8db0f1ff00e
+=======
+  "timestamp": "2026-03-29T12:16:18.963Z"
+>>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
 }

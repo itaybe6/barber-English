@@ -1,11 +1,14 @@
 import { supabase, getBusinessId } from '@/lib/supabase';
 import type { Message } from '@/lib/supabase';
 
+/** Fixed lifetime for home broadcast banners (no per-send UI). Matches former max (30 days). */
+const DEFAULT_BROADCAST_TTL_HOURS = 720;
+
 export const messagesApi = {
   async createMessage(params: { title: string; content: string; ttlHours?: number; userId?: string | null; publishedAt?: string | null }): Promise<Message | null> {
     try {
       const businessId = getBusinessId();
-      const { title, content, ttlHours = 24, userId = null, publishedAt = null } = params;
+      const { title, content, ttlHours = DEFAULT_BROADCAST_TTL_HOURS, userId = null, publishedAt = null } = params;
       const insert = {
         title,
         content,

@@ -257,32 +257,46 @@ export const usersApi = {
     }
   },
 
-  // Create new user with password
-  async createUserWithPassword(userData: Omit<User, 'id' | 'created_at' | 'updated_at'>, password: string): Promise<User | null> {
+  /**
+   * Creates an admin (or other) user with a chosen password.
+   * Returns structured result so callers can show DB/RLS errors instead of failing silently.
+   */
+  async createUserWithPassword(
+    userData: Omit<User, 'id' | 'created_at' | 'updated_at'>,
+    password: string
+  ): Promise<{ ok: true; user: User } | { ok: false; error: string; code?: string }> {
     try {
       const businessId = getBusinessId();
-      
+
       const userWithPassword = {
         ...userData,
-        business_id: businessId, // הוספת business_id אוטומטית
-        password_hash: this.hashPassword(password)
+        business_id: businessId,
+        password_hash: this.hashPassword(password),
       };
 
-      const { data, error } = await supabase
-        .from('users')
-        .insert([userWithPassword])
-        .select()
-        .single();
+      const { data, error } = await supabase.from('users').insert([userWithPassword]).select().single();
 
       if (error) {
         console.error('Error creating user with password:', error);
-        return null;
+        const code = (error as { code?: string }).code;
+        return {
+          ok: false,
+          error: error.message || 'insert_failed',
+          code,
+        };
       }
 
-      return data;
+      if (!data) {
+        return { ok: false, error: 'no_row_returned' };
+      }
+
+      return { ok: true, user: data as User };
     } catch (error) {
       console.error('Error creating user with password:', error);
-      return null;
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'unknown_error',
+      };
     }
   }
   ,
@@ -322,19 +336,38 @@ export const usersApi = {
   async getPendingClients(): Promise<User[]> {
     try {
       const businessId = getBusinessId();
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('user_type', 'client')
-        .eq('business_id', businessId)
-        .eq('client_approved', false)
-        .order('created_at', { ascending: false });
+      const [{ data, error }, bookedRes] = await Promise.all([
+        supabase
+          .from('users')
+          .select('*')
+          .eq('user_type', 'client')
+          .eq('business_id', businessId)
+          .eq('client_approved', false)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('appointments')
+          .select('user_id')
+          .eq('business_id', businessId)
+          .eq('is_available', false)
+          .not('user_id', 'is', null),
+      ]);
 
       if (error) {
         console.error('Error fetching pending clients:', error);
         return [];
       }
-      return data || [];
+      if (bookedRes.error) {
+        console.error('Error fetching booked client ids for pending filter:', bookedRes.error);
+      }
+
+      const bookedIds = new Set<string>();
+      for (const row of bookedRes.data || []) {
+        const uid = (row as { user_id?: string | null }).user_id;
+        if (uid) bookedIds.add(uid);
+      }
+
+      // Anyone with a booked appointment linked to their user id is an active client, not "registration pending"
+      return (data || []).filter((u) => u.id && !bookedIds.has(u.id));
     } catch (e) {
       console.error('Error fetching pending clients:', e);
       return [];
@@ -343,6 +376,29 @@ export const usersApi = {
 
   async approveClient(id: string): Promise<User | null> {
     return this.updateUser(id, { client_approved: true });
+  },
+
+  /**
+   * After a successful booking with a logged-in client, ensure `client_approved` is true.
+   * Heals inconsistent rows (e.g. approved in practice but still `false` in DB) so they do not
+   * reappear under "pending new clients" for admins.
+   */
+  async ensureClientApprovedAfterBooking(clientUserId: string | null | undefined): Promise<void> {
+    if (!clientUserId || typeof clientUserId !== 'string') return;
+    try {
+      const businessId = getBusinessId();
+      const { error } = await supabase
+        .from('users')
+        .update({ client_approved: true })
+        .eq('id', clientUserId)
+        .eq('business_id', businessId)
+        .eq('user_type', 'client');
+      if (error) {
+        console.error('ensureClientApprovedAfterBooking:', error);
+      }
+    } catch (e) {
+      console.error('ensureClientApprovedAfterBooking:', e);
+    }
   },
 
   // Get all admin users (barbers)

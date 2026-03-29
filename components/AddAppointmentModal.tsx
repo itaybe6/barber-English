@@ -16,7 +16,7 @@ import * as Haptics from 'expo-haptics';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
-import { Calendar, Search, User, Clock, CalendarDays, X, Check } from 'lucide-react-native';
+import { Calendar, Search, User, Clock, CalendarDays, X, Check, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { Calendar as RNCalendar, LocaleConfig } from 'react-native-calendars';
 import Animated, {
   useSharedValue,
@@ -219,12 +219,10 @@ export default function AddAppointmentModal({
   );
 
   const dateLocale = i18n.language?.startsWith('he') ? 'he-IL' : 'en-US';
-
-  useEffect(() => {
-    if (visible) {
-      LocaleConfig.defaultLocale = i18n.language?.startsWith('he') ? 'he' : 'en';
-    }
-  }, [visible, i18n.language]);
+  const calendarLocale = i18n.language?.startsWith('he') ? 'he' : 'en';
+  if (visible) {
+    LocaleConfig.defaultLocale = calendarLocale;
+  }
 
   useEffect(() => {
     if (!visible) return;
@@ -462,12 +460,18 @@ export default function AddAppointmentModal({
           .map((apt: any) => String(apt.slot_time).slice(0, 5))
       );
 
-      const { data: constraintsRows } = await supabase
+      let constraintsQuery = supabase
         .from('business_constraints')
         .select('start_time, end_time')
         .eq('business_id', businessId)
         .eq('date', dateString)
         .order('start_time');
+      if (user?.id) {
+        constraintsQuery = constraintsQuery.or(`user_id.is.null,user_id.eq.${user.id}`);
+      } else {
+        constraintsQuery = constraintsQuery.is('user_id', null);
+      }
+      const { data: constraintsRows } = await constraintsQuery;
       const withinConstraint = (slot: string) => {
         return (constraintsRows || []).some((c: any) => {
           const s = String(c.start_time).slice(0, 5);
@@ -616,6 +620,25 @@ export default function AddAppointmentModal({
     [primary]
   );
 
+  const calendarRenderArrow = useCallback(
+    (direction: string) => {
+      const size = 22;
+      if (calendarLocale === 'he') {
+        return direction === 'left' ? (
+          <ChevronRight size={size} color={primary} strokeWidth={2.5} />
+        ) : (
+          <ChevronLeft size={size} color={primary} strokeWidth={2.5} />
+        );
+      }
+      return direction === 'left' ? (
+        <ChevronLeft size={size} color={primary} strokeWidth={2.5} />
+      ) : (
+        <ChevronRight size={size} color={primary} strokeWidth={2.5} />
+      );
+    },
+    [primary, calendarLocale]
+  );
+
   const renderDatePicker = () => {
     const today = new Date();
     const minDate = today.toISOString().slice(0, 10);
@@ -632,6 +655,7 @@ export default function AddAppointmentModal({
         <Text style={styles.sectionSubtitle}>{t('admin.appointmentsAdmin.pickDate', 'Select the date for this appointment')}</Text>
         <View style={[styles.calendarContainer, { borderColor: primary + '28' }]}>
           <RNCalendar
+            key={`add-appt-cal-${calendarLocale}`}
             current={selected || undefined}
             minDate={minDate}
             onDayPress={(day: any) => {
@@ -642,8 +666,9 @@ export default function AddAppointmentModal({
             enableSwipeMonths
             hideDayNames={false}
             firstDay={0}
+            renderArrow={calendarRenderArrow}
             style={{
-              direction: 'ltr',
+              direction: calendarLocale === 'he' ? 'rtl' : 'ltr',
               width: '100%',
             }}
             theme={calendarTheme as any}

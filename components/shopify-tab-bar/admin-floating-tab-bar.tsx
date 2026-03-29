@@ -8,9 +8,14 @@ import {
   Clock,
   Home,
   Plus,
+  ArrowDownUp,
+  Check,
+  Trash2,
   Settings,
-  Store,
   Wallet,
+  Palette,
+  LayoutGrid,
+  FileText,
 } from "lucide-react-native";
 import { TabButton } from "./tab-button";
 import { useColors } from "@/src/theme/ThemeProvider";
@@ -33,6 +38,9 @@ import {
   useAdminCalendarReminderFab,
   useAdminCalendarSetPlusAnchorWindow,
 } from "@/contexts/AdminCalendarReminderFabContext";
+import { useEditGalleryTabBar } from "@/contexts/EditGalleryTabBarContext";
+import { useEditProductsTabBar } from "@/contexts/EditProductsTabBarContext";
+import { usePickPrimaryColorTabBar } from "@/contexts/PickPrimaryColorTabBarContext";
 
 const INACTIVE = "#8a8a8a";
 const ICON_ACTIVE = "#ffffff";
@@ -51,6 +59,9 @@ export const AdminFloatingTabBar: React.FC = () => {
   const setPlusAnchorWindow = useAdminCalendarSetPlusAnchorWindow();
   const plusPillRef = useRef<View>(null);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const editGalleryTabBar = useEditGalleryTabBar();
+  const editProductsTabBar = useEditProductsTabBar();
+  const pickPrimaryTabBar = usePickPrimaryColorTabBar();
 
   const currentTab = segments[1] as string | undefined;
   const isActive = (tab: string) =>
@@ -158,6 +169,348 @@ export const AdminFloatingTabBar: React.FC = () => {
     );
   }
 
+  if (currentTab === "edit-gallery" && editGalleryTabBar.floatingBarHidden) {
+    return null;
+  }
+
+  if (currentTab === "edit-products" && editProductsTabBar.floatingBarHidden) {
+    return null;
+  }
+
+  if (currentTab === "edit-products") {
+    return (
+      <View
+        style={[styles.root, { bottom: insets.bottom + 12 }]}
+        pointerEvents="box-none"
+      >
+        <View
+          style={[styles.inner, styles.innerCalendarBar, styles.editGalleryRow]}
+        >
+          <View style={[styles.pill, styles.border, styles.shadow]}>
+            <TabButton
+              focused={false}
+              activeColor={primary}
+              onPress={() => editProductsTabBar.get()?.openCreate()}
+              accessibilityLabel={t("admin.store.tabAddProduct", "הוספת מוצר")}
+              accessibilityRole="button"
+            >
+              <Plus size={22} color={INACTIVE} />
+            </TabButton>
+          </View>
+
+          <View
+            style={[styles.pill, styles.center, styles.border, styles.shadow]}
+          >
+            <TabButton
+              focused={editProductsTabBar.reorderMode}
+              activeColor={primary}
+              onPress={() => {
+                if (
+                  editProductsTabBar.reorderMode &&
+                  editProductsTabBar.reorderDirty
+                ) {
+                  void editProductsTabBar.get()?.commitReorder?.();
+                  return;
+                }
+                editProductsTabBar.toggleReorderMode();
+              }}
+              accessibilityLabel={
+                editProductsTabBar.reorderMode && editProductsTabBar.reorderDirty
+                  ? t("admin.store.tabSaveReorder", "שמירת סדר")
+                  : t("admin.store.tabReorderMode", "סידור מוצרים")
+              }
+              accessibilityRole="button"
+            >
+              {editProductsTabBar.reorderMode && editProductsTabBar.reorderDirty ? (
+                <Check size={22} color={ICON_ACTIVE} strokeWidth={2.5} />
+              ) : (
+                <ArrowDownUp
+                  size={22}
+                  color={editProductsTabBar.reorderMode ? ICON_ACTIVE : INACTIVE}
+                />
+              )}
+            </TabButton>
+            <TabButton
+              focused={editProductsTabBar.deleteMode}
+              activeColor={primary}
+              onPress={() => editProductsTabBar.toggleDeleteMode()}
+              accessibilityLabel={t("admin.store.tabDeleteMode", "מחיקת מוצרים")}
+              accessibilityRole="button"
+            >
+              <Trash2
+                size={22}
+                color={editProductsTabBar.deleteMode ? ICON_ACTIVE : INACTIVE}
+              />
+            </TabButton>
+          </View>
+
+          <View style={[styles.pill, styles.border, styles.shadow]}>
+            <TabButton
+              focused={isActive("index")}
+              activeColor={primary}
+              onPress={() => router.push("/(tabs)")}
+            >
+              <Home size={22} color={iconColor("index")} />
+            </TabButton>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  if (currentTab === "edit-gallery") {
+    return (
+      <View
+        style={[styles.root, { bottom: insets.bottom + 12 }]}
+        pointerEvents="box-none"
+      >
+        <View
+          style={[styles.inner, styles.innerCalendarBar, styles.editGalleryRow]}
+        >
+          {/* direction: ltr — פלוס משמאל, סדר+מחיקה, בית מימין */}
+          <View style={[styles.pill, styles.border, styles.shadow]}>
+            <TabButton
+              focused={false}
+              activeColor={primary}
+              onPress={() => editGalleryTabBar.get()?.openCreate()}
+              accessibilityLabel={t(
+                "admin.gallery.tabAddDesign",
+                "Add design"
+              )}
+              accessibilityRole="button"
+            >
+              <Plus size={22} color={INACTIVE} />
+            </TabButton>
+          </View>
+
+          <View
+            style={[styles.pill, styles.center, styles.border, styles.shadow]}
+          >
+            <TabButton
+              focused={editGalleryTabBar.reorderMode}
+              activeColor={primary}
+              onPress={() => {
+                if (
+                  editGalleryTabBar.reorderMode &&
+                  editGalleryTabBar.reorderDirty
+                ) {
+                  void editGalleryTabBar.get()?.commitReorder?.();
+                  return;
+                }
+                editGalleryTabBar.toggleReorderMode();
+              }}
+              accessibilityLabel={
+                editGalleryTabBar.reorderMode &&
+                editGalleryTabBar.reorderDirty
+                  ? t(
+                      "admin.gallery.tabSaveReorder",
+                      "Save gallery order"
+                    )
+                  : t(
+                      "admin.gallery.tabReorderMode",
+                      "Reorder gallery"
+                    )
+              }
+              accessibilityRole="button"
+            >
+              {editGalleryTabBar.reorderMode &&
+              editGalleryTabBar.reorderDirty ? (
+                <Check size={22} color={ICON_ACTIVE} strokeWidth={2.5} />
+              ) : (
+                <ArrowDownUp
+                  size={22}
+                  color={
+                    editGalleryTabBar.reorderMode ? ICON_ACTIVE : INACTIVE
+                  }
+                />
+              )}
+            </TabButton>
+            <TabButton
+              focused={editGalleryTabBar.deleteMode}
+              activeColor={primary}
+              onPress={() => editGalleryTabBar.toggleDeleteMode()}
+              accessibilityLabel={t(
+                "admin.gallery.tabDeleteMode",
+                "Show delete on designs"
+              )}
+              accessibilityRole="button"
+            >
+              <Trash2
+                size={22}
+                color={editGalleryTabBar.deleteMode ? ICON_ACTIVE : INACTIVE}
+              />
+            </TabButton>
+          </View>
+
+          <View style={[styles.pill, styles.border, styles.shadow]}>
+            <TabButton
+              focused={isActive("index")}
+              activeColor={primary}
+              onPress={() => router.push("/(tabs)")}
+            >
+              <Home size={22} color={iconColor("index")} />
+            </TabButton>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  if (currentTab === "finance" || currentTab === "finance-accountant") {
+    const lng = typeof i18n.language === "string" ? i18n.language : "";
+    const labelIncome = t(
+      "admin.financeTab.incomeExpenses",
+      "הכנסות והוצאות"
+    );
+    const labelAccountant = t(
+      "admin.financeTab.accountant",
+      "הגדרות רואה חשבון"
+    );
+    const financeMain = currentTab === "finance";
+    const financeAcct = currentTab === "finance-accountant";
+    return (
+      <View
+        style={[styles.root, { bottom: insets.bottom + 12 }]}
+        pointerEvents="box-none"
+      >
+        <View
+          style={[styles.inner, styles.innerCalendarBar, styles.editGalleryRow]}
+        >
+          {/* ltr row: פיננסים משמאל, בית מימין */}
+          <View
+            style={[styles.pill, styles.center, styles.border, styles.shadow]}
+          >
+            <TabButton
+              focused={financeMain}
+              activeColor={primary}
+              onPress={() => router.push("/(tabs)/finance")}
+              buttonPadding={6}
+              accessibilityLabel={labelIncome}
+              accessibilityRole="button"
+            >
+              <View style={styles.financeTabCell}>
+                <Wallet
+                  size={20}
+                  color={financeMain ? ICON_ACTIVE : INACTIVE}
+                />
+                <Text
+                  numberOfLines={2}
+                  style={[
+                    styles.financeTabLabel,
+                    { color: financeMain ? ICON_ACTIVE : INACTIVE },
+                    lng.startsWith("he")
+                      ? { writingDirection: "rtl" as const }
+                      : null,
+                  ]}
+                >
+                  {labelIncome}
+                </Text>
+              </View>
+            </TabButton>
+            <TabButton
+              focused={financeAcct}
+              activeColor={primary}
+              onPress={() => router.push("/(tabs)/finance-accountant")}
+              buttonPadding={6}
+              accessibilityLabel={labelAccountant}
+              accessibilityRole="button"
+            >
+              <View style={styles.financeTabCell}>
+                <FileText
+                  size={20}
+                  color={financeAcct ? ICON_ACTIVE : INACTIVE}
+                />
+                <Text
+                  numberOfLines={2}
+                  style={[
+                    styles.financeTabLabel,
+                    { color: financeAcct ? ICON_ACTIVE : INACTIVE },
+                    lng.startsWith("he")
+                      ? { writingDirection: "rtl" as const }
+                      : null,
+                  ]}
+                >
+                  {labelAccountant}
+                </Text>
+              </View>
+            </TabButton>
+          </View>
+
+          <View style={[styles.pill, styles.border, styles.shadow]}>
+            <TabButton
+              focused={isActive("index")}
+              activeColor={primary}
+              onPress={() => router.push("/(tabs)")}
+            >
+              <Home size={22} color={iconColor("index")} />
+            </TabButton>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  if (currentTab === "pick-primary-color") {
+    return (
+      <View
+        style={[styles.root, { bottom: insets.bottom + 12 }]}
+        pointerEvents="box-none"
+      >
+        <View
+          style={[
+            styles.inner,
+            styles.innerCalendarBar,
+            styles.editGalleryRow,
+          ]}
+        >
+          <View
+            style={[styles.pill, styles.center, styles.border, styles.shadow]}
+          >
+            <TabButton
+              focused={false}
+              activeColor={primary}
+              onPress={() => pickPrimaryTabBar.get()?.openCustomPicker()}
+              accessibilityLabel={t(
+                "color.pickTabCustom",
+                "בחירת צבע מותאם אישית"
+              )}
+              accessibilityRole="button"
+            >
+              <Palette size={22} color={INACTIVE} />
+            </TabButton>
+            <TabButton
+              focused={false}
+              activeColor={primary}
+              onPress={() => pickPrimaryTabBar.get()?.openPaletteGrid()}
+              accessibilityLabel={t(
+                "color.pickTabPalette",
+                "לוח צבעים"
+              )}
+              accessibilityRole="button"
+            >
+              <LayoutGrid size={22} color={INACTIVE} />
+            </TabButton>
+          </View>
+
+          <View style={[styles.pill, styles.border, styles.shadow]}>
+            <TabButton
+              focused={false}
+              activeColor={primary}
+              onPress={() => router.replace("/(tabs)/settings")}
+              accessibilityLabel={t(
+                "color.pickTabSettings",
+                "הגדרות"
+              )}
+              accessibilityRole="button"
+            >
+              <Settings size={22} color={INACTIVE} />
+            </TabButton>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View
       style={[styles.root, { bottom: insets.bottom + 12 }]}
@@ -178,16 +531,6 @@ export const AdminFloatingTabBar: React.FC = () => {
           style={[styles.pill, styles.center, styles.border, styles.shadow]}
         >
           <TabButton
-            focused={isActive("edit-products")}
-            activeColor={primary}
-            onPress={() => router.push("/(tabs)/edit-products")}
-            accessibilityLabel={t("admin.tab.store", "Store")}
-            accessibilityRole="button"
-          >
-            <Store size={22} color={iconColor("edit-products")} />
-          </TabButton>
-
-          <TabButton
             focused={isActive("appointments")}
             activeColor={primary}
             onPress={() => router.push("/(tabs)/appointments")}
@@ -204,11 +547,20 @@ export const AdminFloatingTabBar: React.FC = () => {
           </TabButton>
 
           <TabButton
-            focused={isActive("finance")}
+            focused={
+              isActive("finance") || currentTab === "finance-accountant"
+            }
             activeColor={primary}
             onPress={() => router.push("/(tabs)/finance")}
           >
-            <Wallet size={22} color={iconColor("finance")} />
+            <Wallet
+              size={22}
+              color={
+                isActive("finance") || currentTab === "finance-accountant"
+                  ? ICON_ACTIVE
+                  : INACTIVE
+              }
+            />
           </TabButton>
         </View>
 
@@ -241,6 +593,13 @@ const styles = StyleSheet.create({
   innerCalendarBar: {
     direction: "ltr",
   },
+  /** Plus+edit pill and home pill grouped and centered — not stretched to screen edges */
+  editGalleryRow: {
+    alignSelf: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+  },
   pill: {
     backgroundColor: "#ffffff",
     borderRadius: 999,
@@ -261,6 +620,20 @@ const styles = StyleSheet.create({
   },
   calendarModeLabel: {
     fontSize: 11,
+    fontWeight: "800",
+    textAlign: "center",
+    letterSpacing: -0.15,
+  },
+  financeTabCell: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 3,
+    minWidth: 56,
+    maxWidth: 100,
+  },
+  financeTabLabel: {
+    fontSize: 10,
     fontWeight: "800",
     textAlign: "center",
     letterSpacing: -0.15,

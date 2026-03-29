@@ -13,6 +13,8 @@ export type AnimatedSentenceProps = TextProps & {
   rtl?: boolean;
   /** When false, row shrink-wraps so the block can align to one screen edge (e.g. left). */
   fullWidth?: boolean;
+  /** With fullWidth, packs each wrapped line (e.g. center the sentence block). */
+  rowJustify?: 'flex-start' | 'center' | 'flex-end';
 };
 
 export const AnimatedSentence = memo(
@@ -24,6 +26,7 @@ export const AnimatedSentence = memo(
     baseDelay = 0,
     rtl = false,
     fullWidth = true,
+    rowJustify = 'flex-start',
     ...rest
   }: AnimatedSentenceProps) => {
     if (typeof children !== 'string') {
@@ -46,7 +49,9 @@ export const AnimatedSentence = memo(
           flexDirection: 'row',
           flexWrap: 'wrap',
           gap: 4,
-          ...(fullWidth ? { width: '100%' as const } : { alignSelf: 'flex-start' as const }),
+          justifyContent: rowJustify,
+          ...(rowJustify === 'center' ? { alignContent: 'center' as const } : null),
+          ...(fullWidth ? { width: '100%' as const, alignSelf: 'stretch' as const } : { alignSelf: 'flex-start' as const }),
           ...(rtl ? { direction: 'rtl' as const } : null),
         }}
         key={trimmed}

@@ -7,6 +7,7 @@ export interface Product {
   price: number;
   image_url?: string;
   is_active: boolean;
+  display_order?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -24,6 +25,17 @@ export interface UpdateProductData {
   price?: number;
   image_url?: string;
   is_active?: boolean;
+  display_order?: number;
+}
+
+/** Client-side sort when `display_order` exists; otherwise falls back to `created_at`. */
+export function sortProductsByDisplayOrder(products: Product[]): Product[] {
+  return [...products].sort((a, b) => {
+    const ao = a.display_order ?? 999999;
+    const bo = b.display_order ?? 999999;
+    if (ao !== bo) return ao - bo;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
 }
 
 export const productsApi = {
@@ -120,6 +132,26 @@ export const productsApi = {
       console.error('Error deleting product:', error);
       throw error;
     }
+  },
+
+  // Apply display order to a list of products (ordered IDs → position index). Requires `display_order` column (see migration).
+  async applyProductDisplayOrder(orderedIds: string[]): Promise<boolean> {
+    const businessId = getBusinessId();
+    const results = await Promise.all(
+      orderedIds.map((id, index) =>
+        supabase
+          .from('products')
+          .update({ display_order: index })
+          .eq('id', id)
+          .eq('business_id', businessId)
+      )
+    );
+    const firstErr = results.find((r) => r.error)?.error;
+    if (firstErr) {
+      console.error('Error applying product display order:', firstErr);
+      return false;
+    }
+    return true;
   },
 
   // Upload product image

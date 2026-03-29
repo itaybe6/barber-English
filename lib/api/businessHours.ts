@@ -358,12 +358,19 @@ export const businessHoursApi = {
         return result.filter(w => w.start < w.end);
       };
 
-      // Load date-specific constraints and subtract them too
-      const { data: constraintsRows } = await supabase
+      // Load date-specific constraints (business-wide + this barber only) — matches client booking
+      let constraintsQuery = supabase
         .from('business_constraints')
         .select('start_time, end_time')
+        .eq('business_id', businessId)
         .eq('date', date)
         .order('start_time');
+      if (userId) {
+        constraintsQuery = constraintsQuery.or(`user_id.is.null,user_id.eq.${userId}`);
+      } else {
+        constraintsQuery = constraintsQuery.is('user_id', null);
+      }
+      const { data: constraintsRows } = await constraintsQuery;
 
       const finalWindowsPreConstraints = subtractBreaks(windows, allBreaks);
 

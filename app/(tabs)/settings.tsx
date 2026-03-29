@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking, Dimensions, Switch, type LayoutChangeEvent } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking, Dimensions, Switch, I18nManager, type LayoutChangeEvent } from 'react-native';
 import Constants from 'expo-constants';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import * as ImagePicker from 'expo-image-picker';
@@ -217,7 +217,6 @@ export default function SettingsScreen() {
   const [profileBookingOpenDays, setProfileBookingOpenDays] = useState(7);
   const [clientSwapEnabled, setClientSwapEnabled] = useState(true);
   const [requireClientApproval, setRequireClientApproval] = useState(true);
-  const [showEditDisplayNameModal, setShowEditDisplayNameModal] = useState(false);
   const [showEditAddressModal, setShowEditAddressModal] = useState(false);
   const [showAddressSheet, setShowAddressSheet] = useState(false);
   const [showEditInstagramModal, setShowEditInstagramModal] = useState(false);
@@ -232,7 +231,6 @@ export default function SettingsScreen() {
   const addressSheetTranslateY = addressSheetAnim.interpolate({ inputRange: [0, 1], outputRange: [600, 0] });
   const addressDragY = useRef(new Animated.Value(0)).current;
   const addressCombinedTranslateY = Animated.add(addressSheetTranslateY as any, addressDragY as any);
-  const [displayNameDraft, setDisplayNameDraft] = useState('');
   const [addressDraft, setAddressDraft] = useState('');
   const [instagramDraft, setInstagramDraft] = useState('');
   const [facebookDraft, setFacebookDraft] = useState('');
@@ -245,11 +243,18 @@ export default function SettingsScreen() {
   const [isSavingAdmin, setIsSavingAdmin] = useState(false);
   const [isUploadingAdminAvatar, setIsUploadingAdminAvatar] = useState(false);
 
+<<<<<<< HEAD
   // Per-admin: reminder for you (optional) vs reminder for clients (optional)
   const [adminReminderMinutes, setAdminReminderMinutes] = useState<number | null>(null);
   const [adminReminderEnabled, setAdminReminderEnabled] = useState(false);
   const [clientReminderMinutes, setClientReminderMinutes] = useState<number | null>(null);
   const [clientReminderEnabled, setClientReminderEnabled] = useState(false);
+=======
+  // Per-admin scheduling preferences: reminder before appointment
+  const [reminderMinutes, setReminderMinutes] = useState<number | null>(null);
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderMinutesDraft, setReminderMinutesDraft] = useState('30');
+>>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
 
   // Animated bottom-sheet controls
   const sheetAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
@@ -355,13 +360,6 @@ export default function SettingsScreen() {
     }
   }, [showEditCancellationModal]);
 
-  // Keep business name draft in sync when modal opens
-  useEffect(() => {
-    if (showEditDisplayNameModal) {
-      setDisplayNameDraft(profileDisplayName || '');
-    }
-  }, [showEditDisplayNameModal, profileDisplayName]);
-
   const handleSaveBusinessProfile = async () => {
     setIsSavingProfile(true);
     try {
@@ -411,27 +409,6 @@ export default function SettingsScreen() {
   const openEditTiktok = () => {
     setTiktokDraft(profileTiktok || '');
     setShowEditTiktokModal(true);
-  };
-
-  const handleSaveDisplayNameInline = async (next: string) => {
-    setIsSavingProfile(true);
-    try {
-      const updated = await businessProfileApi.upsertProfile({
-        display_name: (next || '').trim() || null as any,
-        address: (profileAddress || '').trim() || null as any,
-        instagram_url: (profileInstagram || '').trim() || null as any,
-        facebook_url: (profileFacebook || '').trim() || null as any,
-        tiktok_url: (profileTiktok || '').trim() || null as any,
-      });
-      if (!updated) {
-        Alert.alert(t('error.generic','Error'), t('settings.profile.nameSaveFailed','Failed to save business name'));
-        return;
-      }
-      setProfile(updated);
-      setProfileDisplayName(updated.display_name || '');
-    } finally {
-      setIsSavingProfile(false);
-    }
   };
 
   // Inline save handlers for social links (used by InlineEditableRow)
@@ -603,6 +580,7 @@ export default function SettingsScreen() {
     }
   };
 
+<<<<<<< HEAD
   const reminderMinutesValidate = (v: string) => {
     const s = (v || '').trim();
     if (s.length === 0) return true;
@@ -612,6 +590,10 @@ export default function SettingsScreen() {
 
   const handleSaveAdminReminderInline = async (next: string) => {
     if (!user?.id) return;
+=======
+  const handleSaveReminderInline = async (next: string) => {
+    if (!user?.id || !reminderEnabled) return;
+>>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
     const trimmed = (next || '').trim();
     try {
       setIsSavingProfile(true);
@@ -627,13 +609,19 @@ export default function SettingsScreen() {
         return;
       }
       await businessProfileApi.setReminderMinutesForUser(user.id, mins);
+<<<<<<< HEAD
       setAdminReminderMinutes(mins);
       setAdminReminderEnabled(true);
+=======
+      setReminderMinutes(mins);
+      setReminderMinutesDraft(String(mins));
+>>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
     } finally {
       setIsSavingProfile(false);
     }
   };
 
+<<<<<<< HEAD
   const handleSaveClientReminderInline = async (next: string) => {
     if (!user?.id) return;
     const trimmed = (next || '').trim();
@@ -653,6 +641,47 @@ export default function SettingsScreen() {
       await businessProfileApi.setClientReminderMinutesForUser(user.id, mins);
       setClientReminderMinutes(mins);
       setClientReminderEnabled(true);
+=======
+  const handleReminderToggle = async (next: boolean) => {
+    if (!user?.id) return;
+    const prevEnabled = reminderEnabled;
+    const prevMinutes = reminderMinutes;
+    if (!next) {
+      setReminderEnabled(false);
+      setIsSavingProfile(true);
+      try {
+        await businessProfileApi.setReminderMinutesForUser(user.id, null);
+        setReminderMinutes(null);
+      } catch {
+        setReminderEnabled(prevEnabled);
+        Alert.alert(
+          t('error.generic', 'Error'),
+          t('settings.reminder.saveFailed', 'Could not update reminder setting'),
+        );
+      } finally {
+        setIsSavingProfile(false);
+      }
+      return;
+    }
+    const fromDraft = parseInt((reminderMinutesDraft || '').trim(), 10);
+    const defaultMins =
+      prevMinutes !== null && Number(prevMinutes) > 0 ? Math.floor(Number(prevMinutes)) : 30;
+    const toSave =
+      Number.isFinite(fromDraft) && fromDraft >= 1 && fromDraft <= 1440 ? fromDraft : defaultMins;
+    setReminderEnabled(true);
+    setIsSavingProfile(true);
+    try {
+      await businessProfileApi.setReminderMinutesForUser(user.id, toSave);
+      setReminderMinutes(toSave);
+      setReminderMinutesDraft(String(toSave));
+    } catch {
+      setReminderEnabled(prevEnabled);
+      setReminderMinutes(prevMinutes);
+      Alert.alert(
+        t('error.generic', 'Error'),
+        t('settings.reminder.saveFailed', 'Could not update reminder setting'),
+      );
+>>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
     } finally {
       setIsSavingProfile(false);
     }
@@ -769,6 +798,8 @@ export default function SettingsScreen() {
   const businessAddressDisplay = useMemo(() => {
     const source = (profileAddress || '').trim();
     if (!source) return '';
+    // Keep Hebrew/RTL text as stored — old helper stripped \u0590-\u05FF and looked like "not saved"
+    if (/[\u0590-\u05FF]/.test(source)) return source;
     return toEnglishShortAddress(source);
   }, [profileAddress]);
 
@@ -1990,6 +2021,7 @@ export default function SettingsScreen() {
         
         <View style={styles.cardNew}>
           <View style={styles.settingItemLTR}>
+<<<<<<< HEAD
             <View style={styles.settingIconLTR}><Bell size={20} color={businessColors.primary} /></View>
             <View style={{ flex: 1 }}>
               <InlineEditableRow
@@ -2022,8 +2054,61 @@ export default function SettingsScreen() {
               <Text style={[styles.settingSubtitleLTR, { marginTop: 6, paddingHorizontal: 4 }]}>
                 {t('settings.reminder.adminAutomatedHint')}
               </Text>
+=======
+            <View style={styles.settingIconLTR}>
+              <Clock size={20} color={businessColors.primary} />
+>>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
             </View>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text style={styles.settingTitleLTR}>
+                {t('settings.reminder.enableLabel', 'Reminder before appointment')}
+              </Text>
+              <Text style={styles.settingSubtitleLTR}>
+                {t(
+                  'settings.reminder.enableSubtitle',
+                  'Get notified before your next appointment starts',
+                )}
+              </Text>
+            </View>
+            <Switch
+              value={reminderEnabled}
+              onValueChange={handleReminderToggle}
+              disabled={isSavingProfile}
+              trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+              thumbColor={
+                reminderEnabled
+                  ? businessColors.primary
+                  : Platform.OS === 'android'
+                    ? '#f4f3f4'
+                    : undefined
+              }
+              ios_backgroundColor="#E5E5EA"
+            />
           </View>
+<<<<<<< HEAD
+=======
+          {reminderEnabled && (
+            <View style={styles.settingItemLTR}>
+              <View style={styles.settingIconLTR}>
+                <Clock size={20} color={businessColors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <InlineEditableRow
+                  title={t('settings.reminder.titleWithMinutes', 'Reminder before appointment (minutes)')}
+                  value={Number(reminderMinutes) > 0 ? String(reminderMinutes) : ''}
+                  placeholder={`${t('common.eg', 'e.g.')} 30`}
+                  keyboardType="default"
+                  onSave={handleSaveReminderInline}
+                  chevronColor={businessColors.primary}
+                  validate={(v) => {
+                    const n = parseInt((v || '').trim(), 10);
+                    return Number.isFinite(n) && n >= 1 && n <= 1440;
+                  }}
+                />
+              </View>
+            </View>
+          )}
+>>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
         </View>
         
         <View onLayout={onSettingsSectionLayout('services')}>
@@ -2049,20 +2134,6 @@ export default function SettingsScreen() {
               </View>
             </View>
             <View style={styles.cardNew}>
-              <View style={styles.settingItemLTR}>
-                <View style={styles.settingIconLTR}><Pencil size={20} color={businessColors.primary} /></View>
-                <View style={{ flex: 1 }}>
-                  <InlineEditableRow
-                    title={t('settings.profile.businessName','Business name')}
-                    value={profileDisplayName || ''}
-                    placeholder={t('settings.profile.businessNamePlaceholder','Business name')}
-                    keyboardType="default"
-                    onSave={handleSaveDisplayNameInline}
-                    chevronColor={businessColors.primary}
-                    validate={(v) => v.trim().length > 0}
-                  />
-                </View>
-              </View>
               <View style={styles.settingItemLTR}>
                 <View style={styles.settingIconLTR}><Calendar size={20} color={businessColors.primary} /></View>
                 <View style={{ flex: 1 }}>
@@ -2148,8 +2219,8 @@ export default function SettingsScreen() {
               
               {renderSettingItemLTR(
                 <Ionicons name="images-outline" size={20} color={businessColors.primary} />,
-                'Home animation images',
-                'Edit the images in the top home animation',
+                t('settings.profile.homeAnimationRowTitle', 'Home animation images'),
+                t('settings.profile.homeAnimationRowSubtitle', 'Edit the images in the top home animation'),
                 undefined,
                 () => router.push('/(tabs)/edit-home-hero'),
                 false,
@@ -2412,17 +2483,24 @@ export default function SettingsScreen() {
                         style={styles.adminAvatarRing}
                       >
                         <View style={styles.adminAvatar}>
-                          <Image
-                            source={
-                              user?.image_url ? { uri: (user as any).image_url } : require('@/assets/images/logo-03.png')
-                            }
-                            style={styles.adminAvatarImage}
-                            resizeMode="cover"
-                          />
+                          {user?.image_url ? (
+                            <Image
+                              source={{ uri: (user as any).image_url }}
+                              style={styles.adminAvatarImage}
+                              resizeMode="cover"
+                            />
+                          ) : (
+                            <User size={42} color={Colors.subtext} strokeWidth={1.75} />
+                          )}
                         </View>
                       </LinearGradient>
                     </View>
                     <View style={styles.adminProfileInfo}>
+                      {!!(profileDisplayName || '').trim() && (
+                        <Text style={styles.adminBusinessDisplayName} numberOfLines={2}>
+                          {profileDisplayName}
+                        </Text>
+                      )}
                       <Text style={styles.adminName} numberOfLines={1}>
                         {user?.name || 'Manager'}
                       </Text>
@@ -2506,6 +2584,7 @@ export default function SettingsScreen() {
         </SafeAreaView>
       </Modal>
 
+<<<<<<< HEAD
       {/* Edit Display Name Modal */}
       <Modal
         visible={showEditDisplayNameModal}
@@ -2560,6 +2639,8 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
+=======
+>>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
       {/* Edit Admin (name & phone) Modal */}
       <Modal
         visible={showEditAdminModal}
@@ -2624,7 +2705,11 @@ export default function SettingsScreen() {
                   style={styles.modalAvatarRing}
                 >
                   <TouchableOpacity style={styles.modalAvatar} onPress={handlePickAdminAvatar} activeOpacity={0.9} accessibilityRole="button" accessibilityLabel={t('settings.profile.changeProfilePicture','Change profile picture')}>
-                    <Image source={user?.image_url ? { uri: (user as any).image_url } : require('@/assets/images/logo-03.png')} style={styles.modalAvatarImage} resizeMode="cover" />
+                    {user?.image_url ? (
+                      <Image source={{ uri: (user as any).image_url }} style={styles.modalAvatarImage} resizeMode="cover" />
+                    ) : (
+                      <User size={36} color={Colors.subtext} strokeWidth={1.75} />
+                    )}
                     {isUploadingAdminAvatar && (
                       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 36 }}>
                         <ActivityIndicator size="small" color={businessColors.primary} />
@@ -2681,6 +2766,12 @@ export default function SettingsScreen() {
           <Animated.View style={[styles.sheetOverlay, { opacity: addressOverlayOpacity }]} />
         </TouchableWithoutFeedback>
         <Animated.View style={[styles.addressSheetContainer, { transform: [{ translateY: addressCombinedTranslateY }] }]}>
+          <LinearGradient
+            colors={['#F8FAFF', '#FFFFFF', '#FFFFFF']}
+            locations={[0, 0.35, 1]}
+            style={StyleSheet.absoluteFillObject}
+            pointerEvents="none"
+          />
           <View style={styles.dragHandleArea}>
             <View style={styles.sheetGrabberWrapper} {...(PanResponder.create({
               onStartShouldSetPanResponder: () => true,
@@ -2704,121 +2795,195 @@ export default function SettingsScreen() {
               },
             }).panHandlers)}><View style={styles.sheetGrabber} /></View>
           </View>
-          {(() => { const canSave = ((placesFormattedAddress || addressDraft || '').trim().length > 0); return (
-          <View style={styles.modalHeader}>
-            <TouchableOpacity 
-              style={styles.cancellationModalCloseButton}
-              onPress={() => {
-                Animated.timing(addressSheetAnim, { toValue: 0, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => {
-                  addressDragY.setValue(0);
-                  setShowAddressSheet(false);
-                });
-              }}
-            >
-              <X size={20} color={Colors.text} />
-            </TouchableOpacity>
-            <Text style={[styles.modalTitle, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>{t('settings.profile.businessAddressTitle','Business address')}</Text>
-            <TouchableOpacity
-              style={[styles.modalSendButton, { backgroundColor: businessColors.primary }, !canSave ? { opacity: 0.6 } : null]}
-              disabled={!canSave}
-              onPress={async () => {
-                const selected = (placesFormattedAddress || addressDraft || '').trim();
-                if (!selected) { return; }
-                setAddressDraft(selected);
-                await saveAddress();
-                Animated.timing(addressSheetAnim, { toValue: 0, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => setShowAddressSheet(false));
-              }}
-            >
-              <Text style={[styles.modalSendText, { color: Colors.white }]}>{t('save','Save')}</Text>
-            </TouchableOpacity>
-          </View>
-          ); })()}
-          <KeyboardAvoidingView behavior={Platform.select({ ios: 'padding', android: undefined })} style={styles.addressSheetBody}>
-            <View style={{ flex: 1, padding: 16, paddingBottom: insets.bottom + 16 }}>
-              <View style={styles.addressInfoCard}>
-                <Text style={styles.inputLabelLTR}>{t('settings.profile.addressLabel','Address')}</Text>
-                <GooglePlacesAutocomplete
-                  keyboardShouldPersistTaps="handled"
-                  placeholder={t('settings.profile.businessAddressPlaceholder','Business address')}
-                  fetchDetails
-                  debounce={200}
-                  enablePoweredByContainer={false}
-                  minLength={2}
-                  predefinedPlaces={[]}
-                  nearbyPlacesAPI={undefined as any}
-                  query={{
-                    key: (Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_PLACES_KEY || process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY,
-                    language: 'en',
-                    types: 'geocode',
-                  }}
-                  ref={placesInputRef}
-                  onPress={(data: any, details: any) => {
-                    const formatted = details?.formatted_address || data?.description || '';
-                    const placeId = data?.place_id || details?.place_id || '';
-                    const lat = details?.geometry?.location?.lat ?? null;
-                    const lng = details?.geometry?.location?.lng ?? null;
-                    const shortAddress = formatShortAddress(details, data?.description || formatted);
-                    setPlacesFormattedAddress(shortAddress);
-                    setPlacesPlaceId(placeId);
-                    setPlacesLat(lat);
-                    setPlacesLng(lng);
-                    setAddressDraft(shortAddress);
-                    justSelectedPlaceRef.current = true;
-                  }}
-                  textInputProps={{
-                    value: addressDraft,
-                    onChangeText: (t: string) => {
-                      if (justSelectedPlaceRef.current) {
-                        // Ignore the immediate programmatic change triggered by selection
-                        justSelectedPlaceRef.current = false;
-                        setAddressDraft(t);
-                        return;
-                      }
-                      setAddressDraft(t);
-                      if (placesPlaceId) {
-                        setPlacesPlaceId('');
-                        setPlacesFormattedAddress('');
-                        setPlacesLat(null);
-                        setPlacesLng(null);
-                      }
-                    },
-                    placeholderTextColor: Colors.subtext,
-                    autoCorrect: false,
-                    autoCapitalize: 'none',
-                  }}
-                  styles={{
-                    container: { flex: 0 },
-                    textInputContainer: { padding: 0, borderWidth: 0 },
-                    textInput: [styles.addressInputBox as any],
-                    listView: {
-                      position: 'absolute',
-                      top: 48,
-                      left: 0,
-                      right: 0,
-                      zIndex: 9999,
-                      elevation: 12,
-                      backgroundColor: '#FFFFFF',
-                      borderRadius: 12,
-                      marginTop: 6,
-                      borderWidth: 1,
-                      borderColor: '#E5E5EA',
-                      maxHeight: 260,
-                    },
-                  }}
-                />
-              </View>
-              {!!placesPlaceId && (
-                <View style={{ marginTop: 12 }}>
-                  <Image
-                    source={{ uri: `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent((placesFormattedAddress || addressDraft) as string)}&zoom=15&size=600x300&markers=color:red|${encodeURIComponent((placesFormattedAddress || addressDraft) as string)}&key=${(Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_PLACES_KEY || process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY}` }}
-                    style={{ width: '100%', height: 160, borderRadius: 12 }}
-                    resizeMode="cover"
-                  />
+          {(() => {
+            const hasAddressText = ((placesFormattedAddress || addressDraft || '').trim().length > 0);
+            const pinTint =
+              (businessColors.primary || '#6366F1').length === 7
+                ? `${businessColors.primary}1A`
+                : 'rgba(99, 102, 241, 0.1)';
+            return (
+              <>
+                <View style={styles.addressSheetHeaderBlock}>
+                  <View style={styles.addressSheetTopRow}>
+                    <TouchableOpacity
+                      style={styles.addressSheetCloseOrb}
+                      onPress={() => {
+                        Animated.timing(addressSheetAnim, { toValue: 0, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => {
+                          addressDragY.setValue(0);
+                          setShowAddressSheet(false);
+                        });
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('cancel', 'Cancel')}
+                    >
+                      <X size={18} color={Colors.text} strokeWidth={2.2} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.addressSheetSavePill,
+                        { backgroundColor: businessColors.primary },
+                        !hasAddressText && styles.addressSheetSavePillDisabled,
+                      ]}
+                      disabled={!hasAddressText || isSavingProfile}
+                      onPress={async () => {
+                        const selected = (placesFormattedAddress || addressDraft || '').trim();
+                        if (!selected || isSavingProfile) return;
+                        setAddressDraft(selected);
+                        await saveAddress();
+                        Animated.timing(addressSheetAnim, { toValue: 0, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() =>
+                          setShowAddressSheet(false),
+                        );
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('save', 'Save')}
+                    >
+                      {isSavingProfile ? (
+                        <ActivityIndicator size="small" color={Colors.white} />
+                      ) : (
+                        <Text style={styles.addressSheetSavePillText}>{t('save', 'Save')}</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.addressSheetTitleBlock}>
+                    <View style={[styles.addressSheetTitleIconRing, { borderColor: `${businessColors.primary}33` }]}>
+                      <MapPin size={22} color={businessColors.primary} strokeWidth={2.2} />
+                    </View>
+                    <Text style={styles.addressSheetHeroTitle}>{t('settings.profile.businessAddressTitle', 'Business address')}</Text>
+                    <Text style={styles.addressSheetHeroSubtitle}>
+                      {t('settings.profile.businessAddressSheetSubtitle', 'Clients see this when booking. Pick a suggestion or type freely.')}
+                    </Text>
+                  </View>
                 </View>
-              )}
-              {/* Save action moved to header; bottom save row removed */}
-            </View>
-          </KeyboardAvoidingView>
+
+                <KeyboardAvoidingView
+                  behavior={Platform.select({ ios: 'padding', android: undefined })}
+                  style={styles.addressSheetBody}
+                  keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+                >
+                  <View style={[styles.addressSheetContentPad, { paddingBottom: insets.bottom + 20 }]}>
+                    <Text
+                      style={[
+                        styles.addressFieldSectionLabel,
+                        { textAlign: I18nManager.isRTL ? 'right' : 'left' },
+                      ]}
+                    >
+                      {t('settings.profile.addressLabel', 'Address')}
+                    </Text>
+                    <View style={[styles.addressSearchShell, { borderColor: `${businessColors.primary}22` }]}>
+                      <View style={[styles.addressSearchPin, { backgroundColor: pinTint }]}>
+                        <MapPin size={20} color={businessColors.primary} strokeWidth={2.2} />
+                      </View>
+                      <View style={styles.addressAutocompleteFlex}>
+                        <GooglePlacesAutocomplete
+                          keyboardShouldPersistTaps="handled"
+                          placeholder={t('settings.profile.businessAddressSearchPlaceholder', 'Street, city…')}
+                          fetchDetails
+                          debounce={220}
+                          enablePoweredByContainer={false}
+                          minLength={2}
+                          predefinedPlaces={[]}
+                          nearbyPlacesAPI={undefined as any}
+                          query={{
+                            key: (Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_PLACES_KEY || process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY,
+                            language: (i18n.language || '').toLowerCase().startsWith('he') ? 'he' : 'en',
+                            types: 'geocode',
+                          }}
+                          ref={placesInputRef}
+                          onPress={(data: any, details: any) => {
+                            const formatted = details?.formatted_address || data?.description || '';
+                            const placeId = data?.place_id || details?.place_id || '';
+                            const lat = details?.geometry?.location?.lat ?? null;
+                            const lng = details?.geometry?.location?.lng ?? null;
+                            const shortAddress =
+                              formatShortAddress(details, data?.description || formatted) ||
+                              String(formatted || data?.description || '').trim();
+                            setPlacesFormattedAddress(shortAddress);
+                            setPlacesPlaceId(placeId);
+                            setPlacesLat(lat);
+                            setPlacesLng(lng);
+                            setAddressDraft(shortAddress);
+                            justSelectedPlaceRef.current = true;
+                          }}
+                          textInputProps={{
+                            value: addressDraft,
+                            onChangeText: (tx: string) => {
+                              if (justSelectedPlaceRef.current) {
+                                justSelectedPlaceRef.current = false;
+                                setAddressDraft(tx);
+                                return;
+                              }
+                              setAddressDraft(tx);
+                              if (placesPlaceId) {
+                                setPlacesPlaceId('');
+                                setPlacesFormattedAddress('');
+                                setPlacesLat(null);
+                                setPlacesLng(null);
+                              }
+                            },
+                            placeholderTextColor: '#9CA3AF',
+                            autoCorrect: false,
+                            autoCapitalize: 'none',
+                            textAlign: (i18n.language || '').toLowerCase().startsWith('he') ? 'right' : 'left',
+                          }}
+                          styles={{
+                            container: { flex: 0 },
+                            textInputContainer: { padding: 0, borderWidth: 0, backgroundColor: 'transparent' },
+                            textInput: [styles.addressSearchInput as any],
+                            listView: {
+                              position: 'absolute',
+                              top: 54,
+                              left: 0,
+                              right: 0,
+                              zIndex: 9999,
+                              elevation: 16,
+                              backgroundColor: '#FFFFFF',
+                              borderRadius: 16,
+                              marginTop: 8,
+                              borderWidth: StyleSheet.hairlineWidth,
+                              borderColor: '#E8EAEF',
+                              maxHeight: 280,
+                              ...Platform.select({
+                                ios: {
+                                  shadowColor: '#1a1f36',
+                                  shadowOffset: { width: 0, height: 10 },
+                                  shadowOpacity: 0.12,
+                                  shadowRadius: 24,
+                                },
+                                android: { elevation: 12 },
+                              }),
+                            },
+                          }}
+                        />
+                      </View>
+                    </View>
+
+                    {!!placesPlaceId && (
+                      <View style={styles.addressMapSection}>
+                        <View style={styles.addressMapSectionHeader}>
+                          <MapPin size={15} color={businessColors.primary} strokeWidth={2.2} />
+                          <Text style={styles.addressMapSectionLabel}>{t('map.preview', 'Map preview')}</Text>
+                        </View>
+                        <View style={[styles.addressMapFrame, { borderColor: `${businessColors.primary}28` }]}>
+                          <Image
+                            source={{
+                              uri: `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent((placesFormattedAddress || addressDraft) as string)}&zoom=15&size=800x400&scale=2&markers=color:red|${encodeURIComponent((placesFormattedAddress || addressDraft) as string)}&key=${(Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_PLACES_KEY || process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY}`,
+                            }}
+                            style={styles.addressMapImage}
+                            resizeMode="cover"
+                          />
+                          <LinearGradient
+                            colors={['transparent', 'rgba(0,0,0,0.06)']}
+                            style={styles.addressMapGradient}
+                            pointerEvents="none"
+                          />
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                </KeyboardAvoidingView>
+              </>
+            );
+          })()}
         </Animated.View>
       </Modal>
 
@@ -3288,7 +3453,13 @@ export default function SettingsScreen() {
                                 onPress={() => setExpandedEmployeeId(isExpanded ? null : adm.id)}
                                 activeOpacity={0.7}
                               >
-                                <Image source={adm.image_url ? { uri: adm.image_url } : require('@/assets/images/logo-03.png')} style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12 }} />
+                                {adm.image_url ? (
+                                  <Image source={{ uri: adm.image_url }} style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12 }} resizeMode="cover" />
+                                ) : (
+                                  <View style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12, backgroundColor: '#F2F2F7', alignItems: 'center', justifyContent: 'center' }}>
+                                    <User size={22} color={Colors.subtext} strokeWidth={1.75} />
+                                  </View>
+                                )}
                                 <View style={{ alignItems: 'flex-start', flex: 1 }}>
                                   <Text style={styles.previewNotificationTitle}>{adm.name || 'Admin'}</Text>
                                   {!!adm.phone && <Text style={styles.previewNotificationContent}>{adm.phone}</Text>}
@@ -4497,6 +4668,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 14,
   },
+  adminBusinessDisplayName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.95)',
+    textAlign: 'center',
+    marginBottom: 6,
+    paddingHorizontal: 12,
+  },
   adminAvatarWrap: {
     position: 'relative',
     alignItems: 'center',
@@ -4616,20 +4795,186 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: Colors.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     height: '75%',
     width: '100%',
     zIndex: 2,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#1a2744',
+        shadowOffset: { width: 0, height: -12 },
+        shadowOpacity: 0.18,
+        shadowRadius: 28,
+      },
+      android: { elevation: 16 },
+    }),
+  },
+  addressSheetHeaderBlock: {
+    paddingHorizontal: 18,
+    paddingBottom: 8,
+  },
+  addressSheetTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 2,
+  },
+  addressSheetCloseOrb: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#EEF0F4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addressSheetSavePill: {
+    minWidth: 92,
+    paddingVertical: 11,
+    paddingHorizontal: 22,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: -8 },
-        shadowOpacity: 0.15,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  addressSheetSavePillDisabled: {
+    opacity: 0.45,
+  },
+  addressSheetSavePillText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  addressSheetTitleBlock: {
+    alignItems: 'center',
+    marginTop: 10,
+    paddingHorizontal: 8,
+  },
+  addressSheetTitleIconRing: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    marginBottom: 12,
+  },
+  addressSheetHeroTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#111827',
+    textAlign: 'center',
+    letterSpacing: -0.3,
+  },
+  addressSheetHeroSubtitle: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#6B7280',
+    textAlign: 'center',
+    maxWidth: 340,
+  },
+  addressSheetContentPad: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 4,
+  },
+  addressFieldSectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9CA3AF',
+    letterSpacing: 0.4,
+    marginBottom: 10,
+    textAlign: 'left',
+  },
+  addressSearchShell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 56,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    backgroundColor: '#FFFFFF',
+    paddingLeft: 6,
+    paddingRight: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#1a2744',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.08,
+        shadowRadius: 16,
+      },
+      android: { elevation: 3 },
+    }),
+  },
+  addressSearchPin: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addressAutocompleteFlex: {
+    flex: 1,
+    minHeight: 52,
+    justifyContent: 'center',
+  },
+  addressSearchInput: {
+    minHeight: 52,
+    fontSize: 17,
+    color: '#111827',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+    margin: 0,
+  },
+  addressMapSection: {
+    marginTop: 22,
+  },
+  addressMapSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  addressMapSectionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  addressMapFrame: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    backgroundColor: '#E5E7EB',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.1,
         shadowRadius: 20,
       },
-      android: { elevation: 14 },
+      android: { elevation: 5 },
     }),
+  },
+  addressMapImage: {
+    width: '100%',
+    height: 176,
+    backgroundColor: '#E5E7EB',
+  },
+  addressMapGradient: {
+    ...StyleSheet.absoluteFillObject,
   },
   addressHeaderRow: {
     paddingHorizontal: 16,
@@ -4658,9 +5003,10 @@ const styles = StyleSheet.create({
   },
   addressSheetBody: {
     flex: 1,
-    backgroundColor: '#F7F8FA',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: 'transparent',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    marginTop: 4,
   },
   addressInfoCard: {
     backgroundColor: Colors.white,

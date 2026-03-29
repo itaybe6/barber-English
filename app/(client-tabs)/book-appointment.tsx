@@ -1396,6 +1396,8 @@ export default function BookAppointment() {
         setSuccessAnimKey((k) => k + 1);
         setShowSuccessModal(true);
 
+        void usersApi.ensureClientApprovedAfterBooking(user?.id);
+
         try {
           const title = 'נקבע תור חדש';
           const dateFmt = selectedDate ? toLocalDateStr(selectedDate) : '';

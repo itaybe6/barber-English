@@ -1,35 +1,63 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Alert, Pressable, TextInput } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Modal,
+  Alert,
+  Pressable,
+  TextInput,
+  ActivityIndicator,
+  Platform,
+  I18nManager,
+  StatusBar,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import Colors from '@/constants/colors';
 import { businessConstraintsApi } from '@/lib/api/businessConstraints';
 import { useAuthStore } from '@/stores/authStore';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { Calendar as RNCalendar, LocaleConfig } from 'react-native-calendars';
+import BookingSuccessAnimatedOverlay, {
+  type SuccessLine,
+} from '@/components/book-appointment/BookingSuccessAnimatedOverlay';
 
-// English locale + LTR for react-native-calendars
 LocaleConfig.locales['en'] = {
-  monthNames: ['January','February','March','April','May','June','July','August','September','October','November','December'],
-  monthNamesShort: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
-  dayNames: ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
-  dayNamesShort: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
-  today: 'Today'
+  monthNames: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+  monthNamesShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+  dayNames: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+  dayNamesShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+  today: 'Today',
+  direction: 'ltr',
 };
+
+LocaleConfig.locales['he'] = {
+  monthNames: ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'],
+  monthNamesShort: ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יוני', 'יולי', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'],
+  dayNames: ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'],
+  dayNamesShort: ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'],
+  today: 'היום',
+  direction: 'rtl',
+};
+
 LocaleConfig.defaultLocale = 'en';
 
 type ConstraintDraft = {
-  date: string; // YYYY-MM-DD
-  start_time: string; // HH:MM
-  end_time: string;   // HH:MM
+  date: string;
+  start_time: string;
+  end_time: string;
   reason?: string | null;
 };
 
 interface BusinessConstraintsModalProps {
   visible: boolean;
   onClose: () => void;
+  onConstraintsChanged?: () => void;
 }
 
 const toISODate = (d: Date) => d.toISOString().slice(0, 10);
@@ -49,17 +77,157 @@ const formatISOToMMDDYYYY = (iso: string) => {
   }
 };
 
-export default function BusinessConstraintsModal({ visible, onClose }: BusinessConstraintsModalProps) {
+const UI = {
+  bg: '#F2F4F8',
+  surface: '#FFFFFF',
+  text: '#1C1C1E',
+  textSecondary: '#636366',
+  textTertiary: '#8E8E93',
+  border: 'rgba(60, 60, 67, 0.12)',
+  danger: '#FF3B30',
+};
+
+function WheelPicker({
+  options,
+  value,
+  onChange,
+  primaryColor,
+}: {
+  options: string[];
+  value: string;
+  onChange: (v: string) => void;
+  primaryColor: string;
+}) {
+  const listRef = useRef<ScrollView | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState(() => Math.max(0, options.findIndex((o) => o === value)));
+  useEffect(() => {
+    const idx = Math.max(0, options.findIndex((o) => o === value));
+    setSelectedIndex(idx);
+    requestAnimationFrame(() => listRef.current?.scrollTo({ y: idx * 44, animated: false }));
+  }, [value, options]);
+  const handleMomentumEnd = (e: any) => {
+    const offsetY = e.nativeEvent.contentOffset.y as number;
+    const idx = Math.round(offsetY / 44);
+    const clamped = Math.min(options.length - 1, Math.max(0, idx));
+    setSelectedIndex(clamped);
+    onChange(options[clamped]);
+    requestAnimationFrame(() => listRef.current?.scrollTo({ y: clamped * 44, animated: true }));
+  };
+  const rowH = 44;
+  const h = 220;
+  const pad = h / 2 - rowH / 2;
+  return (
+    <View style={wheelStyles.container}>
+      <View
+        pointerEvents="none"
+        style={[
+          wheelStyles.highlight,
+          {
+            top: pad,
+            height: rowH,
+            borderColor: primaryColor,
+            backgroundColor: `${primaryColor}12`,
+          },
+        ]}
+      />
+      <ScrollView
+        ref={(ref) => {
+          (listRef as React.MutableRefObject<ScrollView | null>).current = ref;
+        }}
+        showsVerticalScrollIndicator={false}
+        snapToInterval={rowH}
+        decelerationRate="fast"
+        onMomentumScrollEnd={handleMomentumEnd}
+      >
+        <View style={{ height: pad }} />
+        {options.map((opt, i) => {
+          const active = i === selectedIndex;
+          return (
+            <View key={`${opt}-${i}`} style={wheelStyles.item}>
+              <Text style={[wheelStyles.text, active && { color: primaryColor, fontWeight: '800' }]}>{opt}</Text>
+            </View>
+          );
+        })}
+        <View style={{ height: pad }} />
+      </ScrollView>
+    </View>
+  );
+}
+
+const wheelStyles = StyleSheet.create({
+  container: { height: 220, overflow: 'hidden', paddingHorizontal: 8 },
+  highlight: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+  },
+  item: { height: 44, alignItems: 'center', justifyContent: 'center' },
+  text: { fontSize: 19, fontWeight: '600', color: UI.text },
+});
+
+function buildCalendarTheme(primary: string) {
+  return {
+    backgroundColor: UI.surface,
+    calendarBackground: UI.surface,
+    textSectionTitleColor: UI.text,
+    textDayHeaderFontWeight: '700',
+    textDayFontWeight: '600',
+    textMonthFontWeight: '800',
+    textDayFontSize: 15,
+    textMonthFontSize: 17,
+    arrowColor: primary,
+    selectedDayBackgroundColor: primary,
+    todayTextColor: primary,
+    dayTextColor: UI.text,
+    textDisabledColor: UI.textTertiary,
+    monthTextColor: UI.text,
+    'stylesheet.calendar.header': {
+      week: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 4 },
+      dayHeader: { textAlign: 'center', color: UI.textSecondary, fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
+    },
+    'stylesheet.day.basic': {
+      base: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+    },
+    'stylesheet.calendar.main': {
+      week: { marginTop: 6, marginBottom: 6, flexDirection: 'row', justifyContent: 'space-around' },
+    },
+  } as const;
+}
+
+export default function BusinessConstraintsModal({ visible, onClose, onConstraintsChanged }: BusinessConstraintsModalProps) {
   const insets = useSafeAreaInsets();
   const { colors: businessColors } = useBusinessColors();
   const { user } = useAuthStore();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const rawLang = (i18n.resolvedLanguage || i18n.language || '').toLowerCase();
+  const isHebrew = rawLang.startsWith('he') || rawLang.startsWith('iw');
+  const use24hTime = isHebrew;
+  const calendarLocale = isHebrew ? 'he' : 'en';
+  const dateLocale = isHebrew ? 'he-IL' : 'en-US';
+  /** Layout + text flow: Hebrew UI or system RTL (e.g. device locale). */
+  const rtl = isHebrew || I18nManager.isRTL;
+
+  if (visible) {
+    LocaleConfig.defaultLocale = calendarLocale;
+  }
+
+  const primary = businessColors.primary;
+  const calendarTheme = useMemo(() => buildCalendarTheme(primary), [primary]);
+
+  /** Nested Modal often gets 0 from SafeAreaView; combine insets + Android status bar + minimum gap. */
+  const listModalTopInset = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0,
+    16
+  );
+
   const today = useMemo(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     return d;
   }, []);
-  const [selectedDates, setSelectedDates] = useState<string[]>([toISODate(today)]);
   const [mode, setMode] = useState<'hours' | 'single-day' | 'multi-days'>('hours');
   const [singleDateISO, setSingleDateISO] = useState<string>(toISODate(today));
   const [rangeStartISO, setRangeStartISO] = useState<string | null>(null);
@@ -73,25 +241,28 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
   const [tempStartHour, setTempStartHour] = useState<string>(startTime);
   const [tempEndHour, setTempEndHour] = useState<string>(endTime);
   const [isExistingModalOpen, setIsExistingModalOpen] = useState<boolean>(false);
-  const [isReasonModalOpen, setIsReasonModalOpen] = useState<boolean>(false);
-  const [tempReason, setTempReason] = useState<string>('');
+  const [showConstraintSuccess, setShowConstraintSuccess] = useState(false);
+  const [constraintSuccessLines, setConstraintSuccessLines] = useState<SuccessLine[]>([]);
+  const [constraintSuccessAnimKey, setConstraintSuccessAnimKey] = useState(0);
 
-  const dayLabel = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'long', month: '2-digit', day: '2-digit' });
-  const next14 = useMemo(() => Array.from({ length: 14 }).map((_, i) => addDays(today, i)), [today]);
   const formatDatePretty = (iso: string) => {
     try {
-      const dt = new Date(iso);
-      const weekday = dt.toLocaleDateString('en-US', { weekday: 'long' });
+      const dt = new Date(`${iso}T12:00:00`);
+      const weekday = dt.toLocaleDateString(dateLocale, { weekday: 'long' });
       const day = String(dt.getDate()).padStart(2, '0');
       const month = String(dt.getMonth() + 1).padStart(2, '0');
       const year = dt.getFullYear();
-      return `${weekday}, ${month}/${day}/${year}`;
-    } catch { return iso; }
+      return `${weekday}, ${day}/${month}/${year}`;
+    } catch {
+      return iso;
+    }
   };
 
   const formatTime12Hour = (time24: string) => {
     try {
-      const [hours, minutes] = time24.split(':').map(Number);
+      const [hRaw, mRaw] = time24.split(':');
+      const hours = Number(hRaw);
+      const minutes = Number(mRaw);
       const period = hours >= 12 ? 'PM' : 'AM';
       const hours12 = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
       return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
@@ -100,9 +271,17 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
     }
   };
 
-  const formatTime24Hour = (time12: string) => {
+  const formatTime24Hour = (timeInput: string) => {
+    const trimmed = timeInput.trim();
+    if (/^\d{1,2}:\d{2}$/.test(trimmed)) {
+      const [h, m] = trimmed.split(':').map(Number);
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
     try {
-      const [time, period] = time12.split(' ');
+      const parts = trimmed.split(' ');
+      if (parts.length < 2) return trimmed;
+      const period = parts[parts.length - 1];
+      const time = parts.slice(0, -1).join(' ');
       const [hours, minutes] = time.split(':').map(Number);
       let hours24 = hours;
       if (period === 'AM' && hours === 12) {
@@ -110,11 +289,29 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
       } else if (period === 'PM' && hours !== 12) {
         hours24 = hours + 12;
       }
-      return `${String(hours24).padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+      return `${String(hours24).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
     } catch {
-      return time12;
+      return timeInput;
     }
   };
+
+  const displayTimeLabel = (stored: string) =>
+    use24hTime && /^\d{1,2}:\d{2}$/.test(stored.trim()) ? formatTime24Hour(stored) : stored;
+
+  useEffect(() => {
+    if (use24hTime) {
+      setStartTime((s) => formatTime24Hour(s));
+      setEndTime((e) => formatTime24Hour(e));
+    } else {
+      const to12 = (s: string) => {
+        if (/\b(AM|PM)\b/i.test(s)) return s;
+        if (/^\d{1,2}:\d{2}$/.test(s.trim())) return formatTime12Hour(s.trim());
+        return s;
+      };
+      setStartTime((s) => to12(s));
+      setEndTime((e) => to12(e));
+    }
+  }, [use24hTime]);
 
   useEffect(() => {
     if (!visible) return;
@@ -122,16 +319,14 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
       try {
         const start = toISODate(today);
         const end = toISODate(addDays(today, 365));
-        const rows = await businessConstraintsApi.getConstraintsInRange(start, end);
+        const rows = (user as any)?.id
+          ? await businessConstraintsApi.getPersonalConstraintsForBarberInRange(start, end, (user as any).id)
+          : [];
         setExisting((rows || []).filter((r: any) => (r.date as string) >= start) as any);
       } catch {}
     };
     load();
-  }, [visible, today]);
-
-  const toggleDate = (iso: string) => {
-    setSelectedDates((prev) => prev.includes(iso) ? prev.filter(x => x !== iso) : [...prev, iso]);
-  };
+  }, [visible, today, (user as any)?.id]);
 
   const save = async () => {
     try {
@@ -143,7 +338,7 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
           Alert.alert(t('error.generic', 'Error'), t('admin.hoursAdmin.selectDate', 'Please select a date'));
           return;
         }
-        if (startTime >= endTime) {
+        if (formatTime24Hour(startTime) >= formatTime24Hour(endTime)) {
           Alert.alert(t('error.generic', 'Error'), t('admin.hoursAdmin.endAfterStart', 'End time must be after start time'));
           return;
         }
@@ -155,7 +350,6 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
         }
         entries = [{ date: singleDateISO, start_time: '00:00', end_time: '23:59', reason: normReason }];
       } else {
-        // multi-days via date range
         if (!rangeStartISO || !rangeEndISO) {
           Alert.alert(t('error.generic', 'Error'), t('admin.hoursAdmin.selectDateRange', 'Please select a date range'));
           return;
@@ -179,10 +373,53 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
       await businessConstraintsApi.createConstraints(entries as any, (user as any)?.id || null);
       const start = toISODate(today);
       const end = toISODate(addDays(today, 365));
-      const rows = await businessConstraintsApi.getConstraintsInRange(start, end);
+      const rows = (user as any)?.id
+        ? await businessConstraintsApi.getPersonalConstraintsForBarberInRange(start, end, (user as any).id)
+        : [];
       setExisting((rows || []).filter((r: any) => (r.date as string) >= start) as any);
-      Alert.alert(t('success.generic', 'Success'), t('admin.hoursAdmin.saved', 'Constraints saved successfully'));
-    } catch (e) {
+      onConstraintsChanged?.();
+
+      const successLines: SuccessLine[] = [
+        { variant: 'headline', text: t('admin.hoursAdmin.successAnimatedHeadline', 'Constraint saved') },
+      ];
+      if (mode === 'hours') {
+        successLines.push(
+          { variant: 'accent', text: `${t('booking.field.date', 'Date')}: ${formatDatePretty(singleDateISO)}` },
+          {
+            variant: 'body',
+            text: `${t('admin.hoursAdmin.closedHours', 'Closed hours')}: ${displayTimeLabel(startTime)} – ${displayTimeLabel(endTime)}`,
+          }
+        );
+      } else if (mode === 'single-day') {
+        successLines.push(
+          { variant: 'accent', text: `${t('booking.field.date', 'Date')}: ${formatDatePretty(singleDateISO)}` },
+          { variant: 'body', text: t('admin.hoursAdmin.allDay', 'All day') }
+        );
+      } else {
+        successLines.push(
+          {
+            variant: 'accent',
+            text: t('admin.hoursAdmin.successDateRangeLine', '{{start}} — {{end}}', {
+              start: formatDatePretty(rangeStartISO!),
+              end: formatDatePretty(rangeEndISO!),
+            }),
+          },
+          {
+            variant: 'body',
+            text: t('admin.hoursAdmin.successDaysClosed', '{{count}} days closed (all day)', { count: entries.length }),
+          }
+        );
+      }
+      if (normReason) {
+        successLines.push({
+          variant: 'body',
+          text: t('admin.hoursAdmin.successReasonLine', 'Reason: {{reason}}', { reason: normReason }),
+        });
+      }
+      setConstraintSuccessLines(successLines);
+      setConstraintSuccessAnimKey((k) => k + 1);
+      setShowConstraintSuccess(true);
+    } catch {
       Alert.alert(t('error.generic', 'Error'), t('admin.hoursAdmin.saveFailed', 'Failed to save constraints'));
     } finally {
       setIsSaving(false);
@@ -193,531 +430,767 @@ export default function BusinessConstraintsModal({ visible, onClose }: BusinessC
     try {
       const ok = await businessConstraintsApi.deleteConstraint(id);
       if (ok) {
-        setExisting((prev) => prev.filter(x => x.id !== id));
+        setExisting((prev) => prev.filter((x) => x.id !== id));
+        onConstraintsChanged?.();
       }
     } catch {}
   };
 
-  // time options (hourly) in 12-hour format
-  const timeOptions = Array.from({ length: 24 }, (_, h) => {
-    const period = h >= 12 ? 'PM' : 'AM';
-    const hours12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-    return `${hours12}:00 ${period}`;
-  });
+  const timeOptions = useMemo(() => {
+    if (use24hTime) {
+      return Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`);
+    }
+    return Array.from({ length: 24 }, (_, h) => {
+      const period = h >= 12 ? 'PM' : 'AM';
+      const hours12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      return `${hours12}:00 ${period}`;
+    });
+  }, [use24hTime]);
 
-  const WheelPicker: React.FC<{ options: string[]; value: string; onChange: (v: string) => void; primaryColor?: string }> = ({ options, value, onChange, primaryColor = businessColors.primary }) => {
-    const listRef = useRef<ScrollView | null>(null);
-    const [selectedIndex, setSelectedIndex] = useState(() => Math.max(0, options.findIndex(o => o === value)));
-    useEffect(() => {
-      const idx = Math.max(0, options.findIndex(o => o === value));
-      setSelectedIndex(idx);
-      requestAnimationFrame(() => listRef.current?.scrollTo({ y: idx * 44, animated: false }));
-    }, [value, options]);
-    const handleMomentumEnd = (e: any) => {
-      const offsetY = e.nativeEvent.contentOffset.y as number;
-      const idx = Math.round(offsetY / 44);
-      const clamped = Math.min(options.length - 1, Math.max(0, idx));
-      setSelectedIndex(clamped);
-      onChange(options[clamped]);
-      requestAnimationFrame(() => listRef.current?.scrollTo({ y: clamped * 44, animated: true }));
-    };
+  const calendarRenderArrow = useCallback(
+    (direction: string) => {
+      const size = 22;
+      if (rtl) {
+        return direction === 'left' ? (
+          <Ionicons name="chevron-forward" size={size} color={primary} />
+        ) : (
+          <Ionicons name="chevron-back" size={size} color={primary} />
+        );
+      }
+      return direction === 'left' ? (
+        <Ionicons name="chevron-back" size={size} color={primary} />
+      ) : (
+        <Ionicons name="chevron-forward" size={size} color={primary} />
+      );
+    },
+    [primary, rtl]
+  );
+
+  const modeOptions = useMemo(
+    () =>
+      [
+        {
+          key: 'hours' as const,
+          icon: 'time' as const,
+          label: t('admin.hoursAdmin.segment.hours', 'Hours'),
+          hint: t('admin.hoursAdmin.modeHint.hours'),
+        },
+        {
+          key: 'single-day' as const,
+          icon: 'calendar' as const,
+          label: t('admin.hoursAdmin.segment.singleDay', 'Single day'),
+          hint: t('admin.hoursAdmin.modeHint.singleDay'),
+        },
+        {
+          key: 'multi-days' as const,
+          icon: 'calendar-outline' as const,
+          label: t('admin.hoursAdmin.segment.multiDays', 'Multiple days'),
+          hint: t('admin.hoursAdmin.modeHint.multiDays'),
+        },
+      ] as const,
+    [t]
+  );
+
+  const renderCalendar = (variant: 'hours' | 'single' | 'range') => {
+    if (variant === 'range') {
+      return (
+        <RNCalendar
+          key={`constraints-range-${calendarLocale}`}
+          current={rangeStartISO || toISODate(today)}
+          minDate={toISODate(today)}
+          markingType="period"
+          markedDates={(() => {
+            const marks: Record<string, any> = {};
+            if (rangeStartISO) {
+              marks[rangeStartISO] = { startingDay: true, color: primary, textColor: '#FFFFFF' };
+            }
+            if (rangeStartISO && rangeEndISO) {
+              const s = new Date(rangeStartISO);
+              const e = new Date(rangeEndISO);
+              const cur = new Date(s);
+              while (cur <= e) {
+                const iso = toISODate(cur);
+                marks[iso] = marks[iso] || { color: `${primary}35`, textColor: UI.text };
+                cur.setDate(cur.getDate() + 1);
+              }
+              marks[rangeStartISO] = { startingDay: true, color: primary, textColor: '#FFFFFF' };
+              marks[rangeEndISO] = { endingDay: true, color: primary, textColor: '#FFFFFF' };
+            }
+            return marks;
+          })()}
+          onDayPress={(d: any) => {
+            const sel = d.dateString as string;
+            if (!rangeStartISO || (rangeStartISO && rangeEndISO)) {
+              setRangeStartISO(sel);
+              setRangeEndISO(null);
+            } else if (!rangeEndISO) {
+              if (sel >= rangeStartISO) setRangeEndISO(sel);
+              else {
+                setRangeStartISO(sel);
+                setRangeEndISO(null);
+              }
+            }
+          }}
+          enableSwipeMonths
+          hideDayNames={false}
+          firstDay={0}
+          renderArrow={calendarRenderArrow}
+          style={{ direction: rtl ? 'rtl' : 'ltr' }}
+          theme={calendarTheme as any}
+        />
+      );
+    }
     return (
-      <View style={styles.wheelContainer}>
-        <View style={{ position: 'absolute', left: 16, right: 16, top: (220/2 - 22), height: 44, borderRadius: 12, borderWidth: 1, borderColor: primaryColor, backgroundColor: 'rgba(0,0,0,0.03)' }} />
-        <ScrollView
-          ref={(ref) => { (listRef as any).current = ref; }}
-          showsVerticalScrollIndicator={false}
-          snapToInterval={44}
-          decelerationRate="fast"
-          onMomentumScrollEnd={handleMomentumEnd}
-        >
-          <View style={{ height: (220/2 - 22) }} />
-          {options.map((opt, i) => {
-            const active = i === selectedIndex;
-            return (
-            <View key={opt} style={styles.wheelItem}>
-              <Text style={[styles.wheelText, active && { color: primaryColor }]}>{opt}</Text>
-            </View>
-            );
-          })}
-          <View style={{ height: (220/2 - 22) }} />
-        </ScrollView>
-      </View>
+      <RNCalendar
+        key={`constraints-${variant}-${calendarLocale}`}
+        current={singleDateISO}
+        minDate={toISODate(today)}
+        onDayPress={(d: any) => setSingleDateISO(d.dateString)}
+        markedDates={{ [singleDateISO]: { selected: true, selectedColor: primary } }}
+        enableSwipeMonths
+        hideDayNames={false}
+        firstDay={0}
+        renderArrow={calendarRenderArrow}
+        style={{ direction: rtl ? 'rtl' : 'ltr' }}
+        theme={calendarTheme as any}
+      />
     );
   };
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={styles.container} edges={['left','right']}>
-        <View style={[styles.header, { paddingTop: Math.max(16, insets.top + 8) }]}>
-          <TouchableOpacity onPress={onClose} style={styles.headerBtn}><Ionicons name="close" size={20} color={'#000'} /></TouchableOpacity>
-          <Text style={styles.headerTitle}>{t('admin.hoursAdmin.title', 'Work constraints')}</Text>
-          <TouchableOpacity onPress={() => setIsExistingModalOpen(true)} style={[styles.headerAction, { backgroundColor: businessColors.primary, borderWidth: 0 }]} activeOpacity={0.9}>
-            <View style={styles.headerActionInner}>
-              <Ionicons name="create-outline" size={20} color={'#FFFFFF'} />
+      <View style={[styles.root, rtl && styles.rtlRoot]}>
+        <SafeAreaView style={[styles.safeTop, rtl && styles.rtlRoot]} edges={['top', 'left', 'right']}>
+          <LinearGradient
+            colors={[`${primary}18`, `${primary}06`, 'transparent']}
+            locations={[0, 0.45, 1]}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          <View style={styles.headerRow}>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.headerIconBtn}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel={t('close')}
+            >
+              <View style={[styles.iconCircle, { backgroundColor: UI.surface }]}>
+                <Ionicons name="close" size={22} color={UI.text} />
+              </View>
+            </TouchableOpacity>
+            <View style={[styles.headerTitles, isHebrew && styles.headerTitlesHebrew]}>
+              <Text style={[styles.headerTitle, isHebrew && styles.hebrewText]} numberOfLines={1}>
+                {t('admin.hoursAdmin.title', 'Work constraints')}
+              </Text>
+              <Text style={[styles.headerSubtitle, isHebrew && styles.hebrewText]} numberOfLines={2}>
+                {t('admin.hoursAdmin.constraintsModalSubtitle')}
+              </Text>
             </View>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              onPress={() => setIsExistingModalOpen(true)}
+              style={[styles.headerIconBtn, styles.constraintsFab]}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+              accessibilityLabel={t('admin.hoursAdmin.upcomingConstraints', 'Upcoming constraints')}
+            >
+              <LinearGradient colors={[primary, `${primary}CC`]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.fabGradient}>
+                <Ionicons name="list-outline" size={22} color="#FFFFFF" />
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
 
         <KeyboardAwareScreenScroll
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: 24 + 16 }}
+          style={[styles.scrollFlex, rtl && styles.rtlRoot]}
+          contentContainerStyle={{ paddingBottom: 120 }}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Mode selector */}
-          <View style={styles.segmentedCard}>
-            <View style={styles.segmented}>
-              <TouchableOpacity onPress={() => setMode('hours')} style={[styles.segment, mode === 'hours' && { backgroundColor: `${businessColors.primary}15`, borderColor: `${businessColors.primary}30` }]} activeOpacity={0.9}>
-                <Text style={[styles.segmentText, mode === 'hours' && { color: businessColors.primary }]}>{t('admin.hoursAdmin.segment.hours', 'Hours')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setMode('single-day')} style={[styles.segment, mode === 'single-day' && { backgroundColor: `${businessColors.primary}15`, borderColor: `${businessColors.primary}30` }]} activeOpacity={0.9}>
-                <Text style={[styles.segmentText, mode === 'single-day' && { color: businessColors.primary }]}>{t('admin.hoursAdmin.segment.singleDay', 'Single day')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setMode('multi-days')} style={[styles.segment, mode === 'multi-days' && { backgroundColor: `${businessColors.primary}15`, borderColor: `${businessColors.primary}30` }]} activeOpacity={0.9}>
-                <Text style={[styles.segmentText, mode === 'multi-days' && { color: businessColors.primary }]}>{t('admin.hoursAdmin.segment.multiDays', 'Multiple days')}</Text>
-              </TouchableOpacity>
+          <View style={styles.sectionPad}>
+            <Text style={[styles.sectionLabel, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.whatToBlock')}</Text>
+            <View style={styles.modeList}>
+              {modeOptions.map((opt) => {
+                const active = mode === opt.key;
+                return (
+                  <TouchableOpacity
+                    key={opt.key}
+                    onPress={() => setMode(opt.key)}
+                    activeOpacity={0.85}
+                    style={[styles.modeCard, active && { borderColor: primary, backgroundColor: `${primary}0F`, shadowColor: primary }]}
+                  >
+                    <View style={[styles.modeIconWrap, active && { backgroundColor: `${primary}22` }]}>
+                      <Ionicons name={opt.icon} size={22} color={active ? primary : UI.textSecondary} />
+                    </View>
+                    <View style={[styles.modeTextCol, isHebrew && styles.modeTextColHebrew]}>
+                      <Text style={[styles.modeTitle, active && { color: primary }, isHebrew && styles.hebrewText]}>{opt.label}</Text>
+                      <Text style={[styles.modeHint, isHebrew && styles.hebrewText]}>{opt.hint}</Text>
+                    </View>
+                    <Ionicons
+                      name={active ? 'checkmark-circle' : 'ellipse-outline'}
+                      size={24}
+                      color={active ? primary : UI.textTertiary}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
 
-          {/* Hours mode: pick single date + time range */}
           {mode === 'hours' && (
             <>
               <View style={styles.card}>
-                <Text style={styles.sectionTitle}>{t('admin.hoursAdmin.pickDateShort', 'Pick a date')}</Text>
-                <View style={styles.calendarCard}>
-                                  <RNCalendar
-                  current={singleDateISO}
-                  minDate={toISODate(today)}
-                  onDayPress={(d: any) => setSingleDateISO(d.dateString)}
-                  markedDates={{ [singleDateISO]: { selected: true, selectedColor: businessColors.primary } }}
-                  enableSwipeMonths
-                  hideDayNames={false}
-                  firstDay={0}
-                  style={{ direction: 'ltr' }}
-                  theme={{
-                    textDayFontSize: 14,
-                    textMonthFontSize: 16,
-                    arrowColor: businessColors.primary,
-                    selectedDayBackgroundColor: businessColors.primary,
-                    todayTextColor: businessColors.primary,
-                    'stylesheet.calendar.header': {
-                      week: {
-                        flexDirection: 'row',
-                        justifyContent: 'space-around'
-                      },
-                      dayHeader: {
-                        textAlign: 'center',
-                        color: '#6B7280',
-                        fontSize: 12,
-                        fontWeight: '600'
-                      }
-                    },
-                    'stylesheet.day.basic': {
-                      base: {
-                        width: 32,
-                        height: 32,
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }
-                    },
-                    'stylesheet.calendar.main': {
-                      week: {
-                        marginTop: 7,
-                        marginBottom: 7,
-                        flexDirection: 'row',
-                        justifyContent: 'space-around'
-                      }
-                    }
-                  } as any}
-                />
+                <View style={styles.cardHeader}>
+                  <Ionicons name="calendar-outline" size={20} color={primary} />
+                  <Text style={[styles.cardTitle, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.pickDateShort', 'Pick a date')}</Text>
                 </View>
+                <View style={styles.calendarShell}>{renderCalendar('hours')}</View>
               </View>
               <View style={styles.card}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Text style={styles.sectionTitle}>{t('admin.hoursAdmin.closedHours', 'Closed hours')}</Text>
-                  <TouchableOpacity onPress={() => { setTempStartHour(startTime); setTempEndHour(endTime); setIsHoursModalOpen(true); }} style={[styles.smallIconBtn, { backgroundColor: businessColors.primary }]} activeOpacity={0.9}>
-                    <Ionicons name="add" size={18} color={'#FFFFFF'} />
-                  </TouchableOpacity>
+                <View style={styles.cardHeader}>
+                  <Ionicons name="hourglass-outline" size={20} color={primary} />
+                  <Text style={[styles.cardTitle, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.closedHours', 'Closed hours')}</Text>
                 </View>
-                <View style={{ marginTop: 8, alignItems: 'flex-start' }}>
-                  <View style={styles.timeChip}>
-                    <Ionicons name="time-outline" size={14} color={'#1C1C1E'} />
-                    <Text style={styles.timeChipText}>{startTime}–{endTime}</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setTempStartHour(startTime);
+                    setTempEndHour(endTime);
+                    setIsHoursModalOpen(true);
+                  }}
+                  activeOpacity={0.88}
+                  style={[styles.timeRow, { borderColor: UI.border }]}
+                >
+                  <View style={styles.timeRowInner}>
+                    <View style={[styles.timeBadge, { backgroundColor: `${primary}14` }]}>
+                      <Ionicons name="time" size={18} color={primary} />
+                    </View>
+                    <View style={[styles.timeRowTextCol, isHebrew && styles.timeRowTextColHebrew]}>
+                      <Text style={[styles.timeRowLabel, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.tapToEditHours')}</Text>
+                      <Text style={[styles.timeRowValue, { writingDirection: 'ltr', textAlign: isHebrew ? 'right' : 'left' }]}>
+                        {displayTimeLabel(startTime)} — {displayTimeLabel(endTime)}
+                      </Text>
+                    </View>
+                    <Ionicons name={rtl ? 'chevron-back' : 'chevron-forward'} size={20} color={UI.textTertiary} />
                   </View>
-                </View>
+                </TouchableOpacity>
               </View>
             </>
           )}
 
-          {/* Single full day: pick one date */}
           {mode === 'single-day' && (
             <View style={styles.card}>
-              <Text style={styles.sectionTitle}>{t('admin.hoursAdmin.pickDateAllDay', 'Pick a date (closed all day)')}</Text>
-              <View style={styles.calendarCard}>
-                <RNCalendar
-                  current={singleDateISO}
-                  minDate={toISODate(today)}
-                  onDayPress={(d: any) => setSingleDateISO(d.dateString)}
-                  markedDates={{ [singleDateISO]: { selected: true, selectedColor: businessColors.primary } }}
-                  enableSwipeMonths
-                  hideDayNames={false}
-                  firstDay={0}
-                  style={{ direction: 'ltr' }}
-                  theme={{
-                    textDayFontSize: 14,
-                    textMonthFontSize: 16,
-                    arrowColor: businessColors.primary,
-                    selectedDayBackgroundColor: businessColors.primary,
-                    todayTextColor: businessColors.primary,
-                    'stylesheet.calendar.header': {
-                      week: {
-                        flexDirection: 'row',
-                        justifyContent: 'space-around'
-                      },
-                      dayHeader: {
-                        textAlign: 'center',
-                        color: '#6B7280',
-                        fontSize: 12,
-                        fontWeight: '600'
-                      }
-                    },
-                    'stylesheet.day.basic': {
-                      base: {
-                        width: 32,
-                        height: 32,
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }
-                    },
-                    'stylesheet.calendar.main': {
-                      week: {
-                        marginTop: 7,
-                        marginBottom: 7,
-                        flexDirection: 'row',
-                        justifyContent: 'space-around'
-                      }
-                    }
-                  } as any}
-                />
+              <View style={styles.cardHeader}>
+                <Ionicons name="sunny-outline" size={20} color={primary} />
+                <Text style={[styles.cardTitle, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.pickDateAllDay', 'Pick a date (closed all day)')}</Text>
               </View>
+              <View style={styles.calendarShell}>{renderCalendar('single')}</View>
             </View>
           )}
 
-          {/* Multi-days: date range selection */}
           {mode === 'multi-days' && (
             <View style={styles.card}>
-              <Text style={styles.sectionTitle}>{t('admin.hoursAdmin.pickDateRangeAllDay', 'Pick a date range (closed all day)')}</Text>
-              <View style={styles.calendarCard}>
-                <RNCalendar
-                  current={rangeStartISO || toISODate(today)}
-                  minDate={toISODate(today)}
-                  markingType={'period'}
-                  markedDates={((): any => {
-                    const marks: any = {};
-                    if (rangeStartISO) {
-                      marks[rangeStartISO] = { startingDay: true, color: businessColors.primary, textColor: '#FFFFFF' };
-                    }
-                    if (rangeStartISO && rangeEndISO) {
-                      // Build all days between
-                      const s = new Date(rangeStartISO);
-                      const e = new Date(rangeEndISO);
-                      const cur = new Date(s);
-                      while (cur <= e) {
-                        const iso = toISODate(cur);
-                        marks[iso] = marks[iso] || { color: 'rgba(0,0,0,0.25)', textColor: '#1C1C1E' };
-                        cur.setDate(cur.getDate() + 1);
-                      }
-                      marks[rangeStartISO] = { startingDay: true, color: businessColors.primary, textColor: '#FFFFFF' };
-                      marks[rangeEndISO] = { endingDay: true, color: businessColors.primary, textColor: '#FFFFFF' };
-                    }
-                    return marks;
-                  })()}
-                  onDayPress={(d: any) => {
-                    const sel = d.dateString as string;
-                    if (!rangeStartISO || (rangeStartISO && rangeEndISO)) {
-                      setRangeStartISO(sel);
-                      setRangeEndISO(null);
-                    } else if (!rangeEndISO) {
-                      if (sel >= rangeStartISO) setRangeEndISO(sel); else { setRangeStartISO(sel); setRangeEndISO(null); }
-                    }
-                  }}
-                  enableSwipeMonths
-                  hideDayNames={false}
-                  firstDay={0}
-                  style={{ direction: 'ltr' }}
-                  theme={{
-                    textDayFontSize: 14,
-                    textMonthFontSize: 16,
-                    arrowColor: businessColors.primary,
-                    selectedDayBackgroundColor: businessColors.primary,
-                    todayTextColor: businessColors.primary,
-                    'stylesheet.calendar.header': {
-                      week: {
-                        flexDirection: 'row',
-                        justifyContent: 'space-around'
-                      },
-                      dayHeader: {
-                        textAlign: 'center',
-                        color: '#6B7280',
-                        fontSize: 12,
-                        fontWeight: '600'
-                      }
-                    },
-                    'stylesheet.day.basic': {
-                      base: {
-                        width: 32,
-                        height: 32,
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }
-                    },
-                    'stylesheet.calendar.main': {
-                      week: {
-                        marginTop: 7,
-                        marginBottom: 7,
-                        flexDirection: 'row',
-                        justifyContent: 'space-around'
-                      }
-                    }
-                  } as any}
-                />
+              <View style={styles.cardHeader}>
+                <Ionicons name="git-merge-outline" size={20} color={primary} />
+                <Text style={[styles.cardTitle, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.pickDateRangeAllDay', 'Pick a date range (closed all day)')}</Text>
               </View>
+              <Text style={[styles.rangeHelp, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.rangeHelp')}</Text>
+              <View style={styles.calendarShell}>{renderCalendar('range')}</View>
               {rangeStartISO && rangeEndISO && (
-                <View style={{ marginTop: 12, alignItems: 'flex-start' }}>
-                  <Text style={{ color: '#6B7280', fontWeight: '600' }}>
-                    {t('admin2.hoursAdmin.selectedRange','Selected range:')} <Text style={{ writingDirection: 'ltr' }}>{formatISOToMMDDYYYY(rangeStartISO)} — {formatISOToMMDDYYYY(rangeEndISO)}</Text>
+                <LinearGradient colors={[`${primary}20`, `${primary}08`]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.rangePill}>
+                  <Ionicons name="checkmark-done" size={18} color={primary} />
+                  <Text style={[styles.rangePillText, isHebrew && styles.hebrewText]}>
+                    {formatISOToMMDDYYYY(rangeStartISO)} — {formatISOToMMDDYYYY(rangeEndISO)}
                   </Text>
-                </View>
+                </LinearGradient>
               )}
             </View>
           )}
 
           <View style={styles.card}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>{t('admin.hours.optionalReason','Reason (optional)')}</Text>
-              <TouchableOpacity
-                onPress={() => { setTempReason(reason); setIsReasonModalOpen(true); }}
-                style={[styles.smallIconBtn, { backgroundColor: businessColors.primary }]}
-                activeOpacity={0.9}
-              >
-                <Ionicons name="add" size={18} color={'#FFFFFF'} />
-              </TouchableOpacity>
+            <View style={styles.cardHeader}>
+              <Ionicons name="chatbubble-ellipses-outline" size={20} color={primary} />
+              <Text style={[styles.cardTitle, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.optionalReason', 'Reason (optional)')}</Text>
             </View>
-            {!!reason && (
-              <View style={{ marginTop: 8, alignItems: 'flex-start' }}>
-                <View style={[styles.reasonChip, { backgroundColor: `${businessColors.primary}15`, borderColor: `${businessColors.primary}30` }]}>
-                  <Text style={[styles.reasonChipText, { color: businessColors.primary }]}>{reason}</Text>
-                </View>
-              </View>
-            )}
+            <Text style={[styles.reasonHelper, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.reasonHelper')}</Text>
+            <View style={[styles.reasonInputShell, { borderColor: reason.trim() ? `${primary}40` : UI.border }]}>
+              <TextInput
+                value={reason}
+                onChangeText={setReason}
+                placeholder={t('admin.hoursAdmin.reasonExamples', 'e.g., vacation, errands, temporary closure')}
+                placeholderTextColor={UI.textTertiary}
+                style={[
+                  styles.reasonInput,
+                  rtl
+                    ? { textAlign: 'right', writingDirection: 'rtl', paddingEnd: 36, paddingStart: 4 }
+                    : { textAlign: 'left', writingDirection: 'ltr', paddingEnd: 36, paddingStart: 4 },
+                ]}
+                multiline
+                textAlignVertical="top"
+                accessibilityLabel={t('admin.hoursAdmin.optionalReason', 'Reason (optional)')}
+              />
+              {!!reason.trim() && (
+                <TouchableOpacity
+                  onPress={() => setReason('')}
+                  style={styles.clearReasonBtn}
+                  hitSlop={12}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('common.clear')}
+                >
+                  <Ionicons name="close-circle" size={22} color={UI.textTertiary} />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
-
-          <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: insets.bottom + 8 }}>
-            <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: businessColors.primary, shadowColor: businessColors.primary }, isSaving && { opacity: 0.6 }]} onPress={save} disabled={isSaving}>
-              <Text style={styles.primaryBtnText}>{isSaving ? t('settings.common.saving','Saving...') : t('admin2.hoursAdmin.saveCTA','Save constraints')}</Text>
-            </TouchableOpacity>
-          </View>
-
-          
         </KeyboardAwareScreenScroll>
-      </SafeAreaView>
 
-      {/* Existing constraints popup */}
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+          <LinearGradient colors={[UI.bg, UI.bg]} style={StyleSheet.absoluteFill} />
+          <TouchableOpacity
+            style={[styles.saveBtn, { backgroundColor: primary, shadowColor: primary }, isSaving && styles.saveBtnDisabled]}
+            onPress={save}
+            disabled={isSaving}
+            activeOpacity={0.9}
+          >
+            {isSaving ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <>
+                <Ionicons name="shield-checkmark-outline" size={22} color="#FFFFFF" style={{ marginEnd: 8 }} />
+                <Text style={[styles.saveBtnText, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.saveCTA', 'Save constraints')}</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <Modal visible={isExistingModalOpen} animationType="slide" onRequestClose={() => setIsExistingModalOpen(false)}>
-        <SafeAreaView style={styles.container} edges={['left','right']}>
-          <View style={[styles.header, { paddingTop: Math.max(16, insets.top + 8) }]}>
-            <TouchableOpacity onPress={() => setIsExistingModalOpen(false)} style={styles.headerBtn}><Ionicons name="close" size={20} color={'#000'} /></TouchableOpacity>
-            <Text style={styles.headerTitle}>{t('admin2.hoursAdmin.upcomingConstraints','Upcoming constraints')}</Text>
-            <View style={styles.headerBtn} />
+        <View
+          style={[
+            styles.root,
+            rtl && styles.rtlRoot,
+            {
+              paddingTop: listModalTopInset,
+              paddingBottom: Math.max(insets.bottom, 12),
+              paddingLeft: Math.max(insets.left, 0),
+              paddingRight: Math.max(insets.right, 0),
+            },
+          ]}
+        >
+          <View style={[styles.listModalHeader, { borderBottomColor: UI.border }]}>
+            <TouchableOpacity
+              onPress={() => setIsExistingModalOpen(false)}
+              style={styles.headerIconBtn}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+              accessibilityRole="button"
+              accessibilityLabel={t('close')}
+            >
+              <View style={[styles.iconCircle, { backgroundColor: UI.surface }]}>
+                <Ionicons name="arrow-back" size={22} color={UI.text} style={rtl ? { transform: [{ scaleX: -1 }] } : undefined} />
+              </View>
+            </TouchableOpacity>
+            <Text style={[styles.listModalTitle, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.upcomingConstraints', 'Upcoming constraints')}</Text>
+            <View style={{ width: 44 }} />
           </View>
-          <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
-            <View style={styles.card}>
-              <Text style={styles.sectionTitle}>{t('admin2.hoursAdmin.upcomingConstraints','Upcoming constraints')}</Text>
-              <View style={styles.sectionUnderline} />
-              <View style={{ gap: 14 }}>
-                {existing.length === 0 ? (
-                  <Text style={styles.emptyText}>{t('admin2.hoursAdmin.noUpcomingConstraints','No upcoming constraints')}</Text>
-                ) : (
-                  (() => {
-                    const groups = (existing || []).reduce((m: Record<string, any[]>, c: any) => {
-                      const key = (c.reason || '').trim() || t('admin2.hoursAdmin.noReason','No reason');
-                      (m[key] = m[key] || []).push(c);
-                      return m;
-                    }, {} as Record<string, any[]>);
-                    return Object.entries(groups).map(([reasonKey, rows]) => {
-                      const dates = Array.from(new Set(rows.map((r: any) => r.date as string))).sort();
-                      const first = dates[0];
-                      const last = dates[dates.length - 1];
-                      return (
-                        <View key={reasonKey} style={{ gap: 8 }}>
-                          {/* Group header: reason and dates */}
-                          <View style={{ alignItems: 'flex-start' }}>
-                            <Text style={styles.sectionValueText}>{reasonKey}</Text>
-                            {dates.length > 1 ? (
-                              <Text style={[styles.sectionValueText, { marginTop: 6 }]}>
-                                <Text style={{ writingDirection: 'ltr' }}>{formatISOToMMDDYYYY(first)} — {formatISOToMMDDYYYY(last)}</Text>
-                              </Text>
-                            ) : (
-                              <Text style={[styles.sectionValueText, { marginTop: 6 }]}>{formatDatePretty(first)}</Text>
-                            )}
-                          </View>
-                          {/* Group items */}
-                          <View style={{ gap: 8 }}>
-                            {rows
-                              .sort((a: any, b: any) => (a.date as string).localeCompare(b.date as string) || String(a.start_time).localeCompare(String(b.start_time)))
-                              .map((c: any) => {
-                                const start = String(c.start_time).slice(0,5);
-                                const end = String(c.end_time).slice(0,5);
-                                const isFullDay = start === '00:00' && end === '23:59';
-                                return (
-                                  <View key={c.id} style={styles.constraintCard}>
-                                    <View style={{ alignItems: 'flex-start' }}>
-                                      <Text style={styles.sectionMiniTitle}>{formatDatePretty(c.date)}</Text>
-                                      <View style={{ marginTop: 8 }}>
-                                        <View style={styles.timeChip}>
-                                          <Ionicons name="time-outline" size={14} color={'#1C1C1E'} />
-                                          <Text style={styles.timeChipText}>{isFullDay ? t('admin2.hoursAdmin.allDay','All day') : `${formatTime12Hour(start)}–${formatTime12Hour(end)}`}</Text>
-                                        </View>
-                                      </View>
-                                    </View>
-                                    <TouchableOpacity onPress={() => remove(c.id)} style={[styles.deleteBtn, { alignSelf: 'flex-start' }]}>
-                                      <Ionicons name="trash" size={16} color={'#FFFFFF'} />
-                                    </TouchableOpacity>
-                                  </View>
-                                );
-                              })}
+          <ScrollView
+            style={styles.listModalScroll}
+            contentContainerStyle={{ paddingBottom: 32 }}
+            showsVerticalScrollIndicator={false}
+          >
+            {existing.length === 0 ? (
+              <View style={[styles.emptyWrap, isHebrew && styles.emptyWrapHebrew]}>
+                <LinearGradient
+                  colors={[`${primary}22`, `${primary}08`]}
+                  style={[styles.emptyOrb, isHebrew && styles.emptyOrbCentered]}
+                >
+                  <Ionicons name="calendar-clear-outline" size={48} color={primary} />
+                </LinearGradient>
+                <Text style={[styles.emptyTitle, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.noUpcomingConstraints', 'No upcoming constraints')}</Text>
+                <Text style={[styles.emptySub, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.emptyListHint')}</Text>
+              </View>
+            ) : (
+              <View style={styles.listBody}>
+                {(() => {
+                  const groups = (existing || []).reduce((m: Record<string, any[]>, c: any) => {
+                    const key = (c.reason || '').trim() || t('admin.hoursAdmin.noReason', 'No reason');
+                    (m[key] = m[key] || []).push(c);
+                    return m;
+                  }, {} as Record<string, any[]>);
+                  return Object.entries(groups).map(([reasonKey, rows]) => {
+                    const dates = Array.from(new Set(rows.map((r: any) => r.date as string))).sort();
+                    const first = dates[0];
+                    const last = dates[dates.length - 1];
+                    return (
+                      <View key={reasonKey} style={styles.groupBlock}>
+                        <View style={styles.groupHeader}>
+                          <View style={[styles.groupAccent, { backgroundColor: primary }]} />
+                          <View style={[styles.groupTextCol, isHebrew && styles.groupTextColHebrew]}>
+                            <Text style={[styles.groupReason, isHebrew && styles.hebrewText]} numberOfLines={2}>
+                              {reasonKey}
+                            </Text>
+                            <Text style={[styles.groupDates, isHebrew && styles.hebrewText]}>
+                              {dates.length > 1 ? (
+                                <Text style={{ writingDirection: 'ltr' }}>
+                                  {formatISOToMMDDYYYY(first)} — {formatISOToMMDDYYYY(last)}
+                                </Text>
+                              ) : (
+                                formatDatePretty(first)
+                              )}
+                            </Text>
                           </View>
                         </View>
-                      );
-                    });
-                  })()
-                )}
+                        <View style={styles.groupItems}>
+                          {rows
+                            .sort(
+                              (a: any, b: any) =>
+                                (a.date as string).localeCompare(b.date as string) || String(a.start_time).localeCompare(String(b.start_time))
+                            )
+                            .map((c: any) => {
+                              const start = String(c.start_time).slice(0, 5);
+                              const end = String(c.end_time).slice(0, 5);
+                              const isFullDay = start === '00:00' && end === '23:59';
+                              return (
+                                <View key={c.id} style={[styles.constraintItem, { borderColor: UI.border }]}>
+                                  <View style={[styles.constraintTextBlock, isHebrew && styles.constraintTextBlockHebrew]}>
+                                    <Text style={[styles.constraintDate, isHebrew && styles.hebrewText]}>{formatDatePretty(c.date)}</Text>
+                                    <View style={[styles.timeChipInline, isHebrew && styles.timeChipInlineHebrew]}>
+                                      <Ionicons name="time-outline" size={15} color={UI.textSecondary} />
+                                      <Text
+                                        style={[
+                                          styles.timeChipInlineText,
+                                          use24hTime && { writingDirection: 'ltr' },
+                                          isHebrew && styles.hebrewText,
+                                        ]}
+                                      >
+                                        {isFullDay
+                                          ? t('admin.hoursAdmin.allDay', 'All day')
+                                          : use24hTime
+                                            ? `${formatTime24Hour(start)}–${formatTime24Hour(end)}`
+                                            : `${formatTime12Hour(start)}–${formatTime12Hour(end)}`}
+                                      </Text>
+                                    </View>
+                                  </View>
+                                  <TouchableOpacity
+                                    onPress={() => remove(c.id)}
+                                    style={styles.deleteIconBtn}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={t('delete')}
+                                  >
+                                    <Ionicons name="trash-outline" size={20} color={UI.danger} />
+                                  </TouchableOpacity>
+                                </View>
+                              );
+                            })}
+                        </View>
+                      </View>
+                    );
+                  });
+                })()}
               </View>
-            </View>
+            )}
           </ScrollView>
-        </SafeAreaView>
-      </Modal>
-
-      {/* Hours modal */}
-      <Modal visible={isHoursModalOpen} transparent animationType="fade" onRequestClose={() => setIsHoursModalOpen(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setIsHoursModalOpen(false)} />
-        <View style={styles.centerModal}>
-          <View style={styles.centerSheet}>
-            <View style={styles.sheetHeaderRow}>
-              <Text style={styles.sheetTitle}>{t('admin2.hoursAdmin.chooseClosedHours','Choose closed hours')}</Text>
-              <TouchableOpacity onPress={() => { setStartTime(tempStartHour); setEndTime(tempEndHour); setIsHoursModalOpen(false); }} style={[styles.confirmBtn, { backgroundColor: businessColors.primary }]}>
-                <Ionicons name="checkmark" size={18} color={'#FFFFFF'} />
-              </TouchableOpacity>
-            </View>
-            <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-              <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>{t('admin.hoursAdmin.start','Start')}</Text>
-              <WheelPicker options={timeOptions} value={tempStartHour} onChange={setTempStartHour} primaryColor={businessColors.primary} />
-              <View style={{ height: 12 }} />
-              <Text style={[styles.sectionTitle, { marginBottom: 8 }]}>{t('admin.hoursAdmin.end','End')}</Text>
-              <WheelPicker options={timeOptions} value={tempEndHour} onChange={setTempEndHour} primaryColor={businessColors.primary} />
-            </View>
-          </View>
         </View>
       </Modal>
 
-      {/* Reason modal */}
-      <Modal visible={isReasonModalOpen} transparent animationType="fade" onRequestClose={() => setIsReasonModalOpen(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setIsReasonModalOpen(false)} />
-        <View style={styles.centerModal}>
-          <View style={styles.centerSheet}>
-            <View style={styles.sheetHeaderRow}>
-              <TouchableOpacity onPress={() => { setReason(tempReason.trim()); setIsReasonModalOpen(false); }} style={[styles.confirmBtn, { backgroundColor: businessColors.primary }]}>
-                <Ionicons name="checkmark" size={18} color={'#FFFFFF'} />
-              </TouchableOpacity>
-        <Text style={styles.sheetTitle}>{t('admin.hours.enterReason', 'Enter reason')}</Text>
-            </View>
-            <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12 }}>
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  value={tempReason}
-                  onChangeText={setTempReason}
-                  placeholder={t('admin.hours.reasonExamples','e.g., vacation, errands, temporary closure')}
-                  placeholderTextColor={'#8E8E93'}
-                  style={styles.input}
-                  textAlign="left"
-                  multiline
-                />
+      <Modal visible={isHoursModalOpen} transparent animationType="fade" onRequestClose={() => setIsHoursModalOpen(false)}>
+        <View style={styles.sheetBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsHoursModalOpen(false)} accessibilityRole="button" accessibilityLabel={t('close')} />
+          <View style={[styles.bottomSheet, rtl && styles.rtlRoot, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+            <View style={styles.sheetGrabber} />
+            <Text style={[styles.sheetTitle, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.chooseClosedHours', 'Choose closed hours')}</Text>
+            <View style={styles.wheelRow}>
+              <View style={styles.wheelCol}>
+                <Text style={[styles.wheelLabel, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.start', 'Start')}</Text>
+                <WheelPicker options={timeOptions} value={tempStartHour} onChange={setTempStartHour} primaryColor={primary} />
+              </View>
+              <View style={{ width: 12 }} />
+              <View style={styles.wheelCol}>
+                <Text style={[styles.wheelLabel, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.end', 'End')}</Text>
+                <WheelPicker options={timeOptions} value={tempEndHour} onChange={setTempEndHour} primaryColor={primary} />
               </View>
             </View>
+            <TouchableOpacity
+              onPress={() => {
+                setStartTime(tempStartHour);
+                setEndTime(tempEndHour);
+                setIsHoursModalOpen(false);
+              }}
+              style={[styles.sheetPrimaryBtn, { backgroundColor: primary }]}
+              activeOpacity={0.9}
+            >
+              <Text style={[styles.sheetPrimaryBtnText, isHebrew && styles.hebrewText]}>{t('save', 'Save')}</Text>
+            </TouchableOpacity>
           </View>
         </View>
+      </Modal>
+
+      <Modal
+        visible={showConstraintSuccess}
+        animationType="fade"
+        transparent
+        statusBarTranslucent
+        onRequestClose={() => setShowConstraintSuccess(false)}
+      >
+        <BookingSuccessAnimatedOverlay
+          key={constraintSuccessAnimKey}
+          lines={constraintSuccessLines}
+          rtl={isHebrew}
+          accentColor={primary}
+          onDismiss={() => setShowConstraintSuccess(false)}
+          gotItLabel={t('booking.gotIt', 'Got it')}
+        />
       </Modal>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F2F2F7' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#FFFFFF', borderBottomWidth: 0.5, borderBottomColor: '#E5E5EA' },
-  headerBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  headerIconCircle: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
-  headerAction: { paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: '#000000', borderRadius: 999, backgroundColor: '#FFFFFF' },
-  headerActionInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  headerActionText: { color: '#000000', fontWeight: '800' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#000' },
-  sectionTitle: { fontSize: 16, fontWeight: '700', textAlign: 'left', marginBottom: 12, color: '#1C1C1E' },
-  sectionUnderline: { alignSelf: 'flex-start', width: '35%', height: 1, backgroundColor: '#E5E5EA', marginTop: -6, marginBottom: 10 },
-  card: { marginHorizontal: 16, marginTop: 16, backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 4, padding: 16 },
-  calendarCard: { borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#E5E5EA' },
-  daysGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  dayChip: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#F2F2F7', borderWidth: 1, borderColor: '#E5E5EA' },
-  dayChipActive: { backgroundColor: 'rgba(0,122,255,0.12)', borderColor: 'rgba(0,122,255,0.35)' },
-  dayChipText: { fontWeight: '700', color: '#1C1C1E' },
-  dayChipTextActive: { color: '#007AFF' },
-  timeRow: { flexDirection: 'row', gap: 12 },
-  dropdownBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 12, backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1.5, borderColor: '#E5E5EA' },
-  dropdownBtnText: { fontWeight: '700', color: '#1C1C1E' },
-  dropdownValue: { fontWeight: '800', color: '#007AFF' },
-  inputWrapper: { backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E5E5EA', paddingHorizontal: 12, paddingVertical: 10 },
-  input: { fontSize: 15, color: '#000' },
-  primaryBtn: { paddingVertical: 14, borderRadius: 16, alignItems: 'center', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 16, elevation: 8 },
-  primaryBtnText: { color: '#FFFFFF', fontWeight: '800' },
-  emptyText: { color: '#8E8E93', textAlign: 'left' },
-  constraintRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#E5E5EA', borderRadius: 16, padding: 12, backgroundColor: '#FFFFFF' },
-  constraintCard: { borderWidth: 1, borderColor: '#E5E5EA', borderRadius: 16, padding: 12, backgroundColor: '#FFFFFF', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  constraintText: { color: '#1C1C1E', fontWeight: '700' },
-  constraintSub: { color: '#6B7280', fontWeight: '600', marginTop: 2 },
-  sectionMiniTitle: { fontSize: 13, fontWeight: '800', color: '#6B7280' },
-  sectionValueText: { fontSize: 14, fontWeight: '700', color: '#1C1C1E' },
-  deleteBtn: { backgroundColor: '#FF3B30', borderRadius: 12, padding: 8 },
-  secondaryBtn: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: 'rgba(0,0,0,0.08)', borderWidth: 1, borderColor: 'rgba(0,0,0,0.25)', paddingVertical: 10, borderRadius: 12 },
-  secondaryBtnText: { color: '#000000', fontWeight: '800' },
-  // Bottom sheet + wheel
-  modalOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.25)' },
-  bottomSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#F2F2F7', borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingTop: 8, paddingBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: -6 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 24 },
-  sheetHeaderRow: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 0.5, borderBottomColor: 'rgba(60,60,67,0.2)' },
-  sheetTitle: { fontSize: 16, fontWeight: '700', color: '#1C1C1E' },
-  confirmBtn: { borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8 },
-  wheelContainer: { height: 220, overflow: 'hidden', paddingHorizontal: 16 },
-  wheelItem: { height: 44, alignItems: 'center', justifyContent: 'center' },
-  wheelText: { fontSize: 20, fontWeight: '600', color: '#1C1C1E' },
-  wheelTextActive: { color: '#007AFF' },
-  // Segmented control
-  segmented: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 4, flexDirection: 'row', borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 },
-  segmentedCard: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
-  segment: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
-  segmentActive: { backgroundColor: '#F2F2F7', borderWidth: 1, borderColor: '#E5E5EA', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
-  segmentText: { fontWeight: '700', color: '#6B7280' },
-  segmentTextActive: { color: '#1C1C1E' },
-  // Pretty constraint list
-  constraintIconWrap: { marginLeft: 8 },
-  iconCircle: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.08)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(0,0,0,0.25)' },
-  constraintContent: { flex: 1, alignItems: 'flex-start' },
-  constraintTitle: { fontSize: 15, fontWeight: '800', color: '#1C1C1E' },
-  constraintMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
-  constraintMetaCol: { alignItems: 'flex-start', gap: 8, marginTop: 6 },
-  timeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F2F2F7', borderWidth: 1, borderColor: '#E5E5EA', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
-  timeChipText: { color: '#1C1C1E', fontWeight: '700' },
-  reasonChip: { backgroundColor: 'rgba(0,122,255,0.06)', borderWidth: 1, borderColor: 'rgba(0,122,255,0.2)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
-  reasonChipText: { color: '#007AFF', fontWeight: '800' },
-  smallIconBtn: { borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8 },
-  centerModal: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
-  centerSheet: { width: '90%', backgroundColor: '#F2F2F7', borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 10 },
+  root: { flex: 1, backgroundColor: UI.bg },
+  /** Mirrors flex rows + inline layout so Hebrew matches natural RTL (start = right). */
+  rtlRoot: { direction: 'rtl' },
+  safeTop: { zIndex: 2 },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    gap: 12,
+  },
+  headerIconBtn: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  iconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: UI.border,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
+      android: { elevation: 2 },
+    }),
+  },
+  constraintsFab: {},
+  fabGradient: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 8 },
+      android: { elevation: 5 },
+    }),
+  },
+  scrollFlex: { flex: 1 },
+  headerTitles: { flex: 1, justifyContent: 'center', alignItems: 'flex-start' },
+  /** Full-width stack so `textAlign: 'right'` anchors to the physical right edge in Hebrew. */
+  headerTitlesHebrew: { alignSelf: 'stretch', width: '100%', alignItems: 'stretch' },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: UI.text, letterSpacing: -0.3 },
+  headerSubtitle: { fontSize: 13, fontWeight: '600', color: UI.textSecondary, marginTop: 4, lineHeight: 18 },
+  /** Hebrew / RTL copy: flush right (explicit — do not rely on `direction` alone). */
+  hebrewText: { textAlign: 'right', writingDirection: 'rtl' },
+  sectionPad: { paddingHorizontal: 16, paddingTop: 4 },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: UI.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 10,
+    alignSelf: 'stretch',
+  },
+  modeList: { gap: 10 },
+  modeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: UI.surface,
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderWidth: 1.5,
+    borderColor: UI.border,
+    gap: 12,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8 },
+      android: { elevation: 2 },
+    }),
+  },
+  modeIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(60,60,67,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modeTextCol: { flex: 1 },
+  modeTextColHebrew: { alignItems: 'stretch', minWidth: 0 },
+  modeTitle: { fontSize: 16, fontWeight: '800', color: UI.text },
+  modeHint: { fontSize: 12, fontWeight: '600', color: UI.textSecondary, marginTop: 3, lineHeight: 16 },
+  card: {
+    marginHorizontal: 16,
+    marginTop: 14,
+    backgroundColor: UI.surface,
+    borderRadius: 22,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: UI.border,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.07, shadowRadius: 16 },
+      android: { elevation: 3 },
+    }),
+  },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  cardTitle: { fontSize: 16, fontWeight: '800', color: UI.text, flex: 1 },
+  calendarShell: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: UI.border,
+    backgroundColor: UI.surface,
+  },
+  rangeHelp: { fontSize: 13, fontWeight: '600', color: UI.textSecondary, marginBottom: 10, lineHeight: 18 },
+  rangePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    alignSelf: 'stretch',
+  },
+  rangePillText: { fontSize: 14, fontWeight: '800', color: UI.text, flex: 1 },
+  timeRow: {
+    borderRadius: 16,
+    borderWidth: 1.5,
+    backgroundColor: 'rgba(60,60,67,0.04)',
+    overflow: 'hidden',
+  },
+  timeRowInner: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
+  timeRowTextCol: { flex: 1, minWidth: 0 },
+  timeRowTextColHebrew: { alignItems: 'flex-end' },
+  timeBadge: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  timeRowLabel: { fontSize: 12, fontWeight: '700', color: UI.textSecondary, marginBottom: 2 },
+  timeRowValue: { fontSize: 17, fontWeight: '800', color: UI.text },
+  reasonHelper: { fontSize: 12, fontWeight: '600', color: UI.textSecondary, marginBottom: 10, lineHeight: 17 },
+  reasonInputShell: {
+    borderRadius: 16,
+    borderWidth: 1.5,
+    backgroundColor: 'rgba(60,60,67,0.03)',
+    minHeight: 100,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 10,
+  },
+  reasonInput: { fontSize: 16, fontWeight: '600', color: UI.text, minHeight: 88 },
+  clearReasonBtn: { position: 'absolute', top: 8, end: 8 },
+  footer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: UI.border,
+    backgroundColor: UI.bg,
+  },
+  saveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 18,
+    ...Platform.select({
+      ios: { shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.28, shadowRadius: 18 },
+      android: { elevation: 8 },
+    }),
+  },
+  saveBtnDisabled: { opacity: 0.65 },
+  saveBtnText: { color: '#FFFFFF', fontSize: 17, fontWeight: '800', textAlign: 'center' },
+  listModalScroll: { flex: 1 },
+  listModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 52,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    backgroundColor: UI.surface,
+  },
+  listModalTitle: { fontSize: 17, fontWeight: '800', color: UI.text, flex: 1, textAlign: 'center' },
+  listBody: { paddingHorizontal: 16, paddingTop: 16 },
+  groupBlock: { marginBottom: 20 },
+  groupHeader: { flexDirection: 'row', gap: 12, marginBottom: 10, alignItems: 'flex-start' },
+  groupAccent: { width: 4, borderRadius: 2, minHeight: 40 },
+  groupTextCol: { flex: 1, minWidth: 0 },
+  groupTextColHebrew: { alignItems: 'flex-end' },
+  groupReason: { fontSize: 15, fontWeight: '800', color: UI.text },
+  groupDates: { fontSize: 13, fontWeight: '600', color: UI.textSecondary, marginTop: 4 },
+  groupItems: { gap: 8 },
+  constraintItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: UI.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 10,
+  },
+  constraintTextBlock: { flex: 1, minWidth: 0 },
+  constraintTextBlockHebrew: { alignItems: 'flex-end' },
+  constraintDate: { fontSize: 14, fontWeight: '800', color: UI.textSecondary },
+  timeChipInline: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+  timeChipInlineHebrew: { flexDirection: 'row-reverse', alignSelf: 'flex-end' },
+  timeChipInlineText: { fontSize: 15, fontWeight: '700', color: UI.text },
+  deleteIconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyWrap: { paddingHorizontal: 32, paddingTop: 48, alignItems: 'center' },
+  emptyWrapHebrew: { alignItems: 'stretch', alignSelf: 'stretch' },
+  emptyOrb: {
+    width: 112,
+    height: 112,
+    borderRadius: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  emptyOrbCentered: { alignSelf: 'center' },
+  emptyTitle: { fontSize: 18, fontWeight: '800', color: UI.text, textAlign: 'center' },
+  emptySub: { fontSize: 14, fontWeight: '600', color: UI.textSecondary, textAlign: 'center', marginTop: 8, lineHeight: 20 },
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  bottomSheet: {
+    backgroundColor: UI.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+  },
+  sheetGrabber: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(60,60,67,0.25)',
+    marginBottom: 12,
+  },
+  sheetTitle: { fontSize: 18, fontWeight: '800', color: UI.text, marginBottom: 8, textAlign: 'center' },
+  wheelRow: { flexDirection: 'row', marginTop: 4 },
+  wheelCol: { flex: 1, minWidth: 0 },
+  wheelLabel: { fontSize: 12, fontWeight: '800', color: UI.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
+  sheetPrimaryBtn: {
+    marginTop: 8,
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  sheetPrimaryBtnText: { color: '#FFFFFF', fontSize: 17, fontWeight: '800', textAlign: 'center' },
 });
-
-

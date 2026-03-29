@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   I18nManager,
   Platform,
@@ -9,7 +9,13 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Entypo } from '@expo/vector-icons';
-import Animated, { FadeInDown, FadeOutDown, LinearTransition } from 'react-native-reanimated';
+import Animated, {
+  FadeInDown,
+  FadeOutDown,
+  LinearTransition,
+  useSharedValue,
+  useAnimatedStyle,
+} from 'react-native-reanimated';
 import { useColors } from '@/src/theme/ThemeProvider';
 
 const DEFAULT_DURATION = 500;
@@ -25,6 +31,13 @@ export interface FabButtonProps {
   bottom?: number;
   horizontalInset?: number;
   grabberColor?: string;
+  /** When true, no floating X — put close in your own header to avoid extra top padding. */
+  hideCloseButton?: boolean;
+  /**
+   * When false, skips Reanimated layout transition on the panel. Use when `bottom` is driven by
+   * the keyboard — otherwise `bottom` animates slowly and the sheet stays under the keyboard.
+   */
+  enablePanelLayoutAnimation?: boolean;
 }
 
 export function FabButton({
@@ -38,6 +51,8 @@ export function FabButton({
   bottom = 80,
   horizontalInset = 16,
   grabberColor,
+  hideCloseButton = false,
+  enablePanelLayoutAnimation = true,
 }: FabButtonProps) {
   const colors = useColors();
   const { width: screenW } = useWindowDimensions();
@@ -52,6 +67,17 @@ export function FabButton({
   const iconOnOpen = colors.text;
 
   const openWidth = Math.min(openedSize, screenW - horizontalInset * 2);
+
+  /**
+   * Drive `bottom` via a SharedValue so Reanimated 4 propagates the change to the UI thread
+   * synchronously — plain { bottom } in a style array is picked up only on the next React commit
+   * and arrives too late when the keyboard fires keyboardWillShow.
+   */
+  const bottomSV = useSharedValue(bottom);
+  useEffect(() => {
+    bottomSV.value = bottom;
+  }, [bottom, bottomSV]);
+  const panelBottomStyle = useAnimatedStyle(() => ({ bottom: bottomSV.value }));
   /** סגור: פינה; פתוח: ממורכז אופקית כדי שלא תהיה סטייה */
   const horizontalStyle = isOpen
     ? { left: Math.max(horizontalInset, (screenW - openWidth) / 2) }
@@ -75,15 +101,16 @@ export function FabButton({
   const closeBtnTop = 20;
   const grabberFlowEnd = 4 + 4 + 10;
   const closeBottom = closeBtnTop + closeBtnOuterH;
-  const rtlContentPaddingTop = Math.max(2, closeBottom - grabberFlowEnd + 10);
+  const rtlContentPaddingTop = hideCloseButton
+    ? 4
+    : Math.max(2, closeBottom - grabberFlowEnd + 10);
 
   return (
     <Animated.View
-      layout={LinearTransition.duration(duration)}
+      layout={enablePanelLayoutAnimation ? LinearTransition.duration(duration) : undefined}
       style={[
         styles.panel,
         horizontalStyle,
-        { bottom },
         {
           width: isOpen ? openWidth : closedSize,
           minHeight: isOpen ? undefined : closedSize,
@@ -99,10 +126,12 @@ export function FabButton({
               shadowOpacity: isOpen ? 0.12 : 0.25,
               shadowRadius: isOpen ? 20 : 12,
             },
-            android: { elevation: isOpen ? 10 : 8 },
+            /* Above fab dim backdrop (edit-gallery) + admin tab bar; avoids Android eating touches on the sheet. */
+            android: { elevation: isOpen ? 28 : 8 },
           }),
         },
         panelStyle,
+        panelBottomStyle,
       ]}
     >
       {!isOpen ? (
@@ -123,16 +152,24 @@ export function FabButton({
           exiting={FadeOutDown.duration(duration)}
           style={styles.openInner}
         >
-          <View style={[styles.grabber, { backgroundColor: grabberColor ?? colors.primary }]} />
-          <Pressable
-            onPress={onPress}
-            hitSlop={12}
-            style={[styles.closeBtn, { top: closeBtnTop, right: closeBtnEndInset }]}
-            accessibilityRole="button"
-            accessibilityLabel="סגירה"
-          >
-            <Entypo name="cross" size={closeIconSize} color={iconOnOpen} />
-          </Pressable>
+          <View
+            style={[
+              styles.grabber,
+              { backgroundColor: grabberColor ?? colors.primary },
+              hideCloseButton ? { marginBottom: 6 } : null,
+            ]}
+          />
+          {!hideCloseButton ? (
+            <Pressable
+              onPress={onPress}
+              hitSlop={12}
+              style={[styles.closeBtn, { top: closeBtnTop, right: closeBtnEndInset }]}
+              accessibilityRole="button"
+              accessibilityLabel="סגירה"
+            >
+              <Entypo name="cross" size={closeIconSize} color={iconOnOpen} />
+            </Pressable>
+          ) : null}
           <View
             style={[
               styles.rtlContent,

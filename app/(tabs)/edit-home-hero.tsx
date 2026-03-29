@@ -1,20 +1,40 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Alert, ActivityIndicator, Platform, ScrollView } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  FlatList,
+  Alert,
+  ActivityIndicator,
+  Pressable,
+  Modal,
+} from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useTranslation } from 'react-i18next';
 
-import Colors from '@/constants/colors';
+import BookingSuccessAnimatedOverlay, {
+  type SuccessLine,
+} from '@/components/book-appointment/BookingSuccessAnimatedOverlay';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { supabase } from '@/lib/supabase';
 import { compressImages } from '@/lib/utils/imageCompression';
 import { useAuthStore } from '@/stores/authStore';
+import { useColors, type ThemeColors } from '@/src/theme/ThemeProvider';
 
 type HeroImage = { url: string };
 
 const BUCKET = 'app_design';
+
+/**
+ * `0` = expo-image-picker uses the platform maximum per gallery session (iOS/Android/Web).
+ * There is no app cap on total images stored — the marquee uses the full list from the profile.
+ */
+const HERO_IMAGE_SELECTION_LIMIT = 0;
 
 function sanitizeUrlArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -59,18 +79,312 @@ async function uploadImageToStorage(params: { uri: string; contentType?: string 
   }
 }
 
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 20,
+      paddingTop: 12,
+      paddingBottom: 14,
+      backgroundColor: colors.background,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border,
+    },
+    headerTitle: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: colors.text,
+      letterSpacing: -0.3,
+    },
+    headerAddHit: {
+      width: 44,
+      height: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    contentSurface: {
+      flex: 1,
+      backgroundColor: colors.surface,
+    },
+    loadingCard: {
+      marginHorizontal: 20,
+      marginTop: 24,
+      paddingVertical: 48,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.background,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    loadingText: {
+      marginTop: 12,
+      fontSize: 15,
+      color: colors.textSecondary,
+    },
+    listContentPad: {
+      paddingHorizontal: 16,
+      paddingTop: 16,
+    },
+    listContentEmpty: {
+      flexGrow: 1,
+    },
+    intro: {
+      fontSize: 15,
+      lineHeight: 22,
+      color: colors.textSecondary,
+      marginBottom: 16,
+      textAlign: 'center',
+    },
+    tipsCard: {
+      backgroundColor: colors.background,
+      borderRadius: 16,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      marginBottom: 20,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    heroUploadHintSingle: {
+      fontSize: 15,
+      lineHeight: 22,
+      color: colors.text,
+      textAlign: 'center',
+    },
+    statusRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      marginBottom: 16,
+      minHeight: 28,
+    },
+    statusPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      backgroundColor: colors.background,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    statusPillText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    previewCard: {
+      borderRadius: 16,
+      overflow: 'hidden',
+      marginBottom: 18,
+      backgroundColor: colors.border,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    previewImage: {
+      width: '100%',
+      aspectRatio: 16 / 9,
+    },
+    previewLabel: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+    },
+    previewLabelText: {
+      color: '#fff',
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    primaryCta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      backgroundColor: colors.primary,
+      borderRadius: 16,
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      minHeight: 54,
+    },
+    primaryCtaText: {
+      color: colors.background,
+      fontSize: 16,
+      fontWeight: '700',
+    },
+    primaryCtaDisabled: {
+      opacity: 0.45,
+    },
+    resetPressable: {
+      alignSelf: 'center',
+      marginTop: 14,
+      marginBottom: 8,
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+    },
+    resetText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: colors.error,
+    },
+    sectionLabelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 22,
+      marginBottom: 10,
+      paddingHorizontal: 2,
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: colors.text,
+    },
+    sectionCount: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    emptyIllustration: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 28,
+      paddingHorizontal: 20,
+      marginBottom: 8,
+    },
+    emptyIconWrap: {
+      width: 88,
+      height: 88,
+      borderRadius: 44,
+      backgroundColor: colors.background,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    emptyTitle: {
+      marginTop: 18,
+      fontSize: 18,
+      fontWeight: '800',
+      color: colors.text,
+      textAlign: 'center',
+    },
+    emptySubtitle: {
+      marginTop: 8,
+      fontSize: 14,
+      lineHeight: 21,
+      color: colors.textSecondary,
+      textAlign: 'center',
+      maxWidth: 300,
+    },
+    tile: {
+      flex: 1,
+      padding: 5,
+      maxWidth: '33.33%',
+    },
+    imageContainer: {
+      borderRadius: 14,
+      overflow: 'hidden',
+      backgroundColor: colors.border,
+      aspectRatio: 1,
+      position: 'relative',
+    },
+    image: {
+      width: '100%',
+      height: '100%',
+    },
+    deletePill: {
+      position: 'absolute',
+      top: 8,
+      end: 8,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      borderRadius: 14,
+      paddingVertical: 6,
+      paddingHorizontal: 8,
+    },
+    firstBadge: {
+      position: 'absolute',
+      bottom: 8,
+      start: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      borderRadius: 12,
+      paddingVertical: 5,
+      paddingHorizontal: 8,
+    },
+    firstBadgeText: {
+      color: '#fff',
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    footerHint: {
+      paddingHorizontal: 8,
+      paddingTop: 16,
+      paddingBottom: 8,
+    },
+    hint: {
+      color: colors.textSecondary,
+      fontSize: 13,
+      lineHeight: 19,
+      textAlign: 'center',
+    },
+  });
+}
+
 export default function EditHomeHeroScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const isAdmin = useAuthStore((s) => s.isAdmin);
 
   const [images, setImages] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [showUploadSuccessModal, setShowUploadSuccessModal] = useState(false);
+  const [uploadSuccessAnimKey, setUploadSuccessAnimKey] = useState(0);
 
   const items: HeroImage[] = useMemo(() => images.map((url) => ({ url })), [images]);
+  const busy = isUploading || isSaving;
+  const isHebrew = (i18n?.language || 'he').startsWith('he');
+
+  const heroUploadSuccessLines = useMemo((): SuccessLine[] => {
+    if (!showUploadSuccessModal) return [];
+    return [
+      {
+        variant: 'headline',
+        text: t('settings.profile.heroUploadAnimatedHeadline', 'Images saved successfully'),
+      },
+      {
+        variant: 'body',
+        text: t('settings.profile.heroUploadSuccessMessage'),
+      },
+    ];
+  }, [showUploadSuccessModal, t]);
+
+  const goHomeAfterHeroUpload = useCallback(() => {
+    setShowUploadSuccessModal(false);
+    try {
+      router.replace('/(tabs)');
+    } catch {
+      router.back();
+    }
+  }, [router]);
 
   const load = useCallback(async () => {
     try {
@@ -108,7 +422,6 @@ export default function EditHomeHeroScreen() {
 
   useEffect(() => {
     if (!isAdmin) {
-      // Soft-gate: show a message and navigate back
       Alert.alert(t('error.generic', 'Error'), t('auth.adminOnly', 'Admins only'));
       router.back();
       return;
@@ -117,17 +430,20 @@ export default function EditHomeHeroScreen() {
   }, [isAdmin, load, router, t]);
 
   const pickAndUpload = useCallback(async () => {
-    if (isUploading || isSaving) return;
+    if (busy) return;
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(t('permission.required', 'Permission Required'), t('admin.gallery.permissionGallery', 'Please allow access to gallery to select images'));
+        Alert.alert(
+          t('permission.required', 'Permission Required'),
+          t('admin.gallery.permissionGallery', 'Please allow access to gallery to select images')
+        );
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: 'images',
         allowsMultipleSelection: true,
-        selectionLimit: 20,
+        selectionLimit: HERO_IMAGE_SELECTION_LIMIT,
         quality: 1.0,
         base64: false,
       });
@@ -135,8 +451,12 @@ export default function EditHomeHeroScreen() {
 
       setIsUploading(true);
 
-      const originalUris = result.assets.map((a: any) => a.uri).filter(Boolean);
-      const compressed = await compressImages(originalUris, {
+      const sources = result.assets.map((a) => ({
+        uri: a.uri,
+        width: a.width,
+        height: a.height,
+      }));
+      const compressed = await compressImages(sources, {
         quality: 0.7,
         maxWidth: 1200,
         maxHeight: 1200,
@@ -149,7 +469,10 @@ export default function EditHomeHeroScreen() {
         if (!uri) continue;
         const url = await uploadImageToStorage({ uri, contentType: 'image/jpeg' });
         if (!url) {
-          Alert.alert(t('error.generic', 'Error'), t('admin.gallery.uploadIndexFailed', 'Failed to upload image {{num}}', { num: i + 1 }));
+          Alert.alert(
+            t('error.generic', 'Error'),
+            t('admin.gallery.uploadIndexFailed', 'Failed to upload image {{num}}', { num: i + 1 })
+          );
           return;
         }
         uploadedUrls.push(url);
@@ -159,7 +482,8 @@ export default function EditHomeHeroScreen() {
       const next = [...images, ...uploadedUrls];
       const ok = await save(next);
       if (ok) {
-        Alert.alert(t('success.generic', 'Success'), t('settings.profile.imageSaveSuccess', 'Image saved successfully'));
+        setUploadSuccessAnimKey((k) => k + 1);
+        setShowUploadSuccessModal(true);
       }
     } catch (e) {
       console.error('pickAndUpload home hero failed', e);
@@ -167,14 +491,23 @@ export default function EditHomeHeroScreen() {
     } finally {
       setIsUploading(false);
     }
-  }, [images, isSaving, isUploading, save, t]);
+  }, [busy, images, router, save, t]);
 
   const removeAt = useCallback(
-    async (index: number) => {
-      const next = images.filter((_, i) => i !== index);
-      await save(next);
+    (index: number) => {
+      Alert.alert(t('settings.profile.heroDeleteTitle', 'Remove image'), t('settings.profile.heroDeleteConfirm'), [
+        { text: t('cancel', 'Cancel'), style: 'cancel' },
+        {
+          text: t('delete', 'Delete'),
+          style: 'destructive',
+          onPress: async () => {
+            const next = images.filter((_, i) => i !== index);
+            await save(next);
+          },
+        },
+      ]);
     },
-    [images, save]
+    [images, save, t]
   );
 
   const moveToFront = useCallback(
@@ -189,279 +522,224 @@ export default function EditHomeHeroScreen() {
   );
 
   const resetToDefault = useCallback(async () => {
-    if (isSaving || isUploading) return;
-    Alert.alert(
-      t('settings.reset', 'Reset'),
-      t('settings.profile.resetHeroConfirm', 'Reset hero images to the default ones?'),
-      [
-        { text: t('cancel', 'Cancel'), style: 'cancel' },
-        {
-          text: t('confirm', 'Confirm'),
-          style: 'destructive',
-          onPress: async () => {
-            await save([]);
-          },
+    if (busy) return;
+    Alert.alert(t('settings.profile.heroResetAlertTitle', 'Reset'), t('settings.profile.resetHeroConfirm'), [
+      { text: t('cancel', 'Cancel'), style: 'cancel' },
+      {
+        text: t('confirm', 'Confirm'),
+        style: 'destructive',
+        onPress: async () => {
+          await save([]);
         },
-      ]
-    );
-  }, [isSaving, isUploading, save, t]);
+      },
+    ]);
+  }, [busy, save, t]);
+
+  const listHeader = useMemo(
+    () => (
+      <View>
+        <Text style={styles.intro}>{t('settings.profile.homeHeroSubtitle')}</Text>
+
+        <View style={styles.tipsCard}>
+          <Text style={styles.heroUploadHintSingle}>
+            {t(
+              'settings.profile.heroAnimationUploadHint',
+              'The animation needs at least one image. Select up to your device’s maximum each time, and add more in further uploads if you want.'
+            )}
+          </Text>
+        </View>
+
+        <View style={styles.statusRow}>
+          {isUploading ? (
+            <View style={styles.statusPill}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.statusPillText}>{t('settings.common.uploading', 'Uploading...')}</Text>
+            </View>
+          ) : isSaving ? (
+            <View style={styles.statusPill}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.statusPillText}>{t('settings.common.saving', 'Saving...')}</Text>
+            </View>
+          ) : images.length > 0 ? (
+            <View style={styles.statusPill}>
+              <Ionicons name="images-outline" size={18} color={colors.textSecondary} />
+              <Text style={styles.statusPillText}>
+                {t('settings.profile.heroImagesCount', { count: images.length })}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
+        {images.length > 0 && (
+          <View style={styles.previewCard}>
+            <Image source={{ uri: images[0] }} style={styles.previewImage} contentFit="cover" />
+            <View style={styles.previewLabel}>
+              <Text style={styles.previewLabelText}>{t('settings.profile.heroPreviewLabel')}</Text>
+            </View>
+          </View>
+        )}
+
+        <Pressable
+          onPress={pickAndUpload}
+          disabled={busy}
+          style={({ pressed }) => [
+            styles.primaryCta,
+            busy && styles.primaryCtaDisabled,
+            pressed && !busy && { opacity: 0.92 },
+          ]}
+        >
+          <Ionicons name="images" size={22} color={colors.background} />
+          <Text style={styles.primaryCtaText}>
+            {images.length > 0 ? t('settings.profile.heroAddMore') : t('settings.profile.heroAddPhotos')}
+          </Text>
+        </Pressable>
+
+        {images.length > 0 && (
+          <Pressable onPress={resetToDefault} disabled={busy} style={styles.resetPressable}>
+            <Text style={[styles.resetText, busy && { opacity: 0.45 }]}>{t('settings.profile.resetToDefault')}</Text>
+          </Pressable>
+        )}
+
+        {images.length > 0 && (
+          <View style={styles.sectionLabelRow}>
+            <Text style={styles.sectionTitle}>{t('settings.profile.heroYourImages')}</Text>
+            <Text style={styles.sectionCount}>{t('settings.profile.heroImagesCount', { count: images.length })}</Text>
+          </View>
+        )}
+      </View>
+    ),
+    [
+      busy,
+      colors.background,
+      colors.primary,
+      colors.textSecondary,
+      images,
+      isSaving,
+      isUploading,
+      styles,
+      t,
+      pickAndUpload,
+      resetToDefault,
+    ]
+  );
+
+  const listEmpty = useMemo(
+    () => (
+      <View style={[styles.emptyIllustration, { flex: 1, justifyContent: 'center' }]}>
+        <View style={styles.emptyIconWrap}>
+          <Ionicons name="images-outline" size={38} color={colors.textSecondary} />
+        </View>
+        <Text style={styles.emptyTitle}>{t('settings.profile.heroEmptyCtaTitle')}</Text>
+        <Text style={styles.emptySubtitle}>{t('settings.profile.heroEmptyCtaSubtitle')}</Text>
+      </View>
+    ),
+    [colors.textSecondary, styles, t]
+  );
+
+  const footerHint = useMemo(
+    () => (
+      <View style={styles.footerHint}>
+        <Text style={styles.hint}>{t('settings.profile.heroHint')}</Text>
+      </View>
+    ),
+    [styles.footerHint, styles.hint, t]
+  );
 
   return (
     <View style={styles.container}>
-      <SafeAreaView edges={['top']} style={{ backgroundColor: '#FFFFFF' }}>
+      <SafeAreaView edges={['top']} style={{ backgroundColor: colors.background }}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} activeOpacity={0.8}>
-            <Ionicons name="arrow-forward" size={24} color={Colors.text} />
+          <TouchableOpacity onPress={() => router.back()} activeOpacity={0.8} style={styles.headerAddHit}>
+            <Ionicons name="arrow-forward" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t('settings.profile.homeHeroTitle', 'Home hero images')}</Text>
-          <TouchableOpacity onPress={pickAndUpload} activeOpacity={0.8} disabled={isUploading || isSaving}>
+          <Text style={styles.headerTitle}>{t('settings.profile.homeHeroTitle')}</Text>
+          <TouchableOpacity
+            onPress={pickAndUpload}
+            activeOpacity={0.8}
+            disabled={busy}
+            style={styles.headerAddHit}
+            accessibilityRole="button"
+            accessibilityLabel={t('settings.profile.heroAddPhotos')}
+          >
             {isUploading ? (
-              <ActivityIndicator size="small" color={Colors.text} />
+              <ActivityIndicator size="small" color={colors.primary} />
             ) : (
-              <Ionicons name="add" size={26} color={Colors.text} />
+              <Ionicons name="add" size={28} color={busy ? colors.textSecondary : colors.text} />
             )}
           </TouchableOpacity>
         </View>
       </SafeAreaView>
 
-      <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1 }}>
-        <View style={styles.contentWrapper}>
-          <View style={[styles.actionsRow, { paddingBottom: 8 }]}>
-            <TouchableOpacity
-              onPress={pickAndUpload}
-              activeOpacity={0.85}
-              disabled={isUploading || isSaving}
-              style={[styles.actionButton, (isUploading || isSaving) && { opacity: 0.5 }]}
-            >
-              <Ionicons name="images-outline" size={18} color="#1d1d1f" />
-              <Text style={styles.actionButtonText}>{t('admin.gallery.selectImages', 'Select Images')}</Text>
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{images.length}</Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={resetToDefault}
-              activeOpacity={0.85}
-              disabled={isUploading || isSaving}
-              style={[styles.resetButton, (isUploading || isSaving) && { opacity: 0.5 }]}
-            >
-              <Ionicons name="refresh" size={18} color="#EF4444" />
-              <Text style={styles.resetText}>{t('settings.profile.resetToDefault', 'Reset to default')}</Text>
-            </TouchableOpacity>
+      <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.contentSurface}>
+        {isLoading ? (
+          <View style={styles.loadingCard}>
+            <ActivityIndicator color={colors.primary} size="large" />
+            <Text style={styles.loadingText}>{t('loading', 'Loading...')}</Text>
           </View>
-
-          {isLoading ? (
-            <View style={styles.loading}>
-              <ActivityIndicator color={Colors.primary} />
-              <Text style={styles.loadingText}>{t('loading', 'Loading...')}</Text>
-            </View>
-          ) : images.length === 0 ? (
-            <View style={styles.empty}>
-              <Ionicons name="image-outline" size={48} color="#9CA3AF" />
-              <Text style={styles.emptyTitle}>{t('settings.profile.heroEmptyTitle', 'No hero images')}</Text>
-              <Text style={styles.emptySubtitle}>
-                {t('settings.profile.heroEmptySubtitle', 'Add images to show them in the top animation. If you keep this empty, the default images will be shown.')}
-              </Text>
-            </View>
-          ) : (
-            <FlatList
-              data={items}
-              keyExtractor={(item, idx) => `${item.url}-${idx}`}
-              numColumns={3}
-              contentContainerStyle={{ paddingBottom: insets.bottom + 24, paddingHorizontal: 12, paddingTop: 10 }}
-              renderItem={({ item, index }) => (
-                <View style={styles.tile}>
+        ) : (
+          <FlatList
+            data={items}
+            keyExtractor={(item, idx) => `${item.url}-${idx}`}
+            numColumns={3}
+            ListHeaderComponent={listHeader}
+            ListEmptyComponent={listEmpty}
+            ListFooterComponent={images.length > 0 ? footerHint : null}
+            contentContainerStyle={[
+              styles.listContentPad,
+              { paddingBottom: insets.bottom + 28 },
+              items.length === 0 && styles.listContentEmpty,
+            ]}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item, index }) => (
+              <View style={styles.tile}>
+                <TouchableOpacity
+                  activeOpacity={0.92}
+                  onPress={() => moveToFront(index)}
+                  style={styles.imageContainer}
+                  disabled={busy}
+                  accessibilityRole="imagebutton"
+                  accessibilityLabel={t('settings.profile.heroHint')}
+                >
+                  <Image source={{ uri: item.url }} style={styles.image} contentFit="cover" transition={120} />
+                  {index === 0 && (
+                    <View style={styles.firstBadge}>
+                      <Ionicons name="star" size={12} color="#fff" />
+                      <Text style={styles.firstBadgeText}>{t('settings.profile.first')}</Text>
+                    </View>
+                  )}
                   <TouchableOpacity
-                    activeOpacity={0.9}
-                    onPress={() => moveToFront(index)}
-                    style={styles.imageContainer}
-                    disabled={isSaving || isUploading}
+                    onPress={() => removeAt(index)}
+                    style={styles.deletePill}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    disabled={busy}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('delete', 'Delete')}
                   >
-                    <Image source={{ uri: item.url }} style={styles.image} resizeMode="cover" />
-                    {index === 0 && (
-                      <View style={styles.firstBadge}>
-                        <Ionicons name="star" size={12} color="#fff" />
-                        <Text style={styles.firstBadgeText}>{t('settings.profile.first', 'First')}</Text>
-                      </View>
-                    )}
-                    <TouchableOpacity
-                      onPress={() => removeAt(index)}
-                      style={styles.deletePill}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                      disabled={isSaving || isUploading}
-                    >
-                      <Ionicons name="trash-outline" size={16} color="#fff" />
-                    </TouchableOpacity>
+                    <Ionicons name="trash-outline" size={16} color="#fff" />
                   </TouchableOpacity>
-                </View>
-              )}
-              ListFooterComponent={() => (
-                <View style={{ paddingHorizontal: 12, paddingTop: 10 }}>
-                  <Text style={styles.hint}>
-                    {t('settings.profile.heroHint', 'Tip: tap an image to move it to the first position.')}
-                  </Text>
-                </View>
-              )}
-            />
-          )}
-        </View>
+                </TouchableOpacity>
+              </View>
+            )}
+          />
+        )}
       </SafeAreaView>
+
+      <Modal
+        visible={showUploadSuccessModal}
+        animationType="fade"
+        transparent
+        statusBarTranslucent
+        onRequestClose={goHomeAfterHeroUpload}
+      >
+        <BookingSuccessAnimatedOverlay
+          key={uploadSuccessAnimKey}
+          lines={heroUploadSuccessLines}
+          rtl={isHebrew}
+          accentColor={colors.primary}
+          onDismiss={goHomeAfterHeroUpload}
+          gotItLabel={t('settings.profile.heroUploadHomeButton', 'Home')}
+        />
+      </Modal>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.text,
-  },
-  contentWrapper: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    marginTop: 12,
-    paddingTop: 12,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    gap: 10,
-  },
-  actionButton: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  actionButtonText: {
-    fontWeight: '700',
-    color: '#1d1d1f',
-    flexShrink: 1,
-  },
-  badge: {
-    marginLeft: 'auto',
-    backgroundColor: '#111827',
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  resetButton: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: '#FEE2E2',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  resetText: {
-    color: '#EF4444',
-    fontWeight: '700',
-  },
-  loading: {
-    paddingVertical: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingText: {
-    marginTop: 8,
-    color: '#6B7280',
-  },
-  empty: {
-    paddingHorizontal: 24,
-    paddingTop: 40,
-    alignItems: 'center',
-  },
-  emptyTitle: {
-    marginTop: 12,
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#111827',
-    textAlign: 'center',
-  },
-  emptySubtitle: {
-    marginTop: 8,
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  tile: {
-    flex: 1,
-    padding: 6,
-    maxWidth: '33.33%',
-  },
-  imageContainer: {
-    borderRadius: 14,
-    overflow: 'hidden',
-    backgroundColor: '#E5E7EB',
-    aspectRatio: 1,
-    position: 'relative',
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-  },
-  deletePill: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    borderRadius: 14,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-  },
-  firstBadge: {
-    position: 'absolute',
-    bottom: 8,
-    left: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    borderRadius: 12,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-  },
-  firstBadgeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  hint: {
-    color: '#6B7280',
-    fontSize: 12,
-    textAlign: 'center',
-  },
-});
-

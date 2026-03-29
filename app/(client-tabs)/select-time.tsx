@@ -12,6 +12,7 @@ import { supabase, getBusinessId } from '@/lib/supabase';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { useAuthStore } from '@/stores/authStore';
 import { notificationsApi } from '@/lib/api/notifications';
+import { usersApi } from '@/lib/api/users';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
 
@@ -479,6 +480,7 @@ export default function SelectTimeScreen() {
         const header = t('selectTime.successHeader', 'Your appointment for\n"{{service}}"', { service: serviceName });
         setSuccessMessage(header);
         setShowSuccessModal(true);
+        void usersApi.ensureClientApprovedAfterBooking(user?.id);
         try {
           const title = t('selectTime.adminNotifyTitle', 'New appointment booked');
           const content = t('selectTime.adminNotifyContent', '{{name}} ({{phone}}) booked an appointment for "{{service}}" on {{date}} at {{time}}', { name: user?.name || 'Client', phone: user?.phone || '', service: serviceName, date: selectedDate, time: formatTime12Hour(selectedTime) });

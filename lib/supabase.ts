@@ -76,6 +76,8 @@ export interface User {
   /** false = pending admin approval; login blocked for clients */
   client_approved?: boolean;
   block?: boolean;
+  /** YYYY-MM-DD in Asia/Jerusalem — last automated birthday notification (Edge) */
+  birthday_notification_sent_date?: string | null;
 }
 
 
@@ -109,6 +111,8 @@ export interface Design {
   // New: user (barber) association - using existing users table
   user_id?: string | null;
   business_id: string;
+  /** Lower = earlier on client home / gallery. */
+  display_order?: number | null;
   created_at: string;
   updated_at: string;
 }

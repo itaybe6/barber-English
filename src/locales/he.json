@@ -609,7 +609,8 @@
       "clientSwapSaveFailed": "לא ניתן לעדכן את הגדרת ההחלפה",
       "requireClientApprovalTitle": "אישור לקוחות חדשים",
       "requireClientApprovalSubtitle": "כשמופעל — נרשמים חדשים ממתינים לאישורך לפני קביעת תורים",
-      "requireClientApprovalSaveFailed": "לא ניתן לעדכן את הגדרת אישור הלקוחות"
+      "requireClientApprovalSaveFailed": "לא ניתן לעדכן את הגדרת אישור הלקוחות",
+      "ownerOnlyEditHint": "רק בעל העסק (החשבון המקושר לטלפון העסק) יכול לשנות את ההגדרות האלה."
     },
     "notifications": { "subtitle": "קבל/י התראות על תורים ועדכונים" },
     "services": {
@@ -1266,7 +1267,43 @@
   },
   "finance": {
     "title": "פיננסים",
-    "subtitle": "מעקב אחר הכנסות, הוצאות ושליחת דוחות"
+    "subtitle": "מעקב אחר הכנסות, הוצאות ושליחת דוחות",
+    "greenInvoice": {
+      "connectButton": "חיבור לחשבון מורנינג",
+      "modalTitle": "חשבונית ירוקה (מורנינג)",
+      "connected": "מחובר",
+      "notConnected": "לא מחובר",
+      "helpHint": "התחברות עם המייל והסיסמה של מורנינג בתוך האפליקציה, יצירת מפתח API במסך אחד, והדבקה אחת — בלי להיכנס ידנית לדפדפן חיצוני.",
+      "oauthLimitNote": "מורנינג לא מאפשרים כרגע «התחבר עם סיסמה» ישירות ל־API של האפליקציה; אחרי הכניסה למערכת שלהם צריך ליצור מפתח API (מנוי Best+). אם יוסיפו OAuth, נעדכן את החיבור.",
+      "reloadWeb": "רענן דף",
+      "openApiKeysPage": "מפתחות API",
+      "expandBrowser": "הגדל חלון",
+      "shrinkBrowser": "הקטן חלון",
+      "tryReadFromPage": "נסה לקרוא מהדף",
+      "pasteBlockLabel": "הדבקת פרטי המפתח",
+      "pastePlaceholder": "שורה 1: מזהה המפתח (UUID)\nשורה 2: המפתח הסודי",
+      "pasteInvalid": "לא זוהו שני ערכים. הדבק שורת מזהה ואז שורת סוד, או שני ערכים מופרדים בטאב.",
+      "finishConnect": "סיים וחבר לאפליקציה",
+      "openHelp": "מדריך יצירת מפתח API",
+      "keyIdLabel": "מזהה מפתח (API Key ID)",
+      "secretLabel": "מפתח סודי (Secret)",
+      "secretPlaceholder": "הדבק את המפתח הסודי",
+      "save": "שמור והתחבר",
+      "disconnect": "נתק",
+      "disconnectConfirmTitle": "ניתוק חשבונית ירוקה",
+      "disconnectConfirmMessage": "לנתק את החיבור? תוכל להתחבר שוב עם מפתח חדש.",
+      "saved": "החיבור נשמר בהצלחה",
+      "saveFailed": "שמירת החיבור נכשלה",
+      "comingSoon": "המשך מתוכנן: הפקת קבלות ללקוחות דרך האפליקציה.",
+      "errors": {
+        "invoke_network": "אין חיבור לשרת. נסה שוב.",
+        "invalid_session": "יש להתחבר מחדש.",
+        "forbidden_not_admin": "רק מנהל העסק יכול לחבר את חשבונית ירוקה.",
+        "greeninvoice_auth_failed": "המפתחות נדחו על ידי חשבונית ירוקה. בדוק את המזהה והסוד.",
+        "missing_credentials": "חסר מזהה מפתח או מפתח סודי.",
+        "unknown": "אירעה שגיאה. נסה שוב."
+      }
+    }
   }
 }
 

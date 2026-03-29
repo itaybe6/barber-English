@@ -586,7 +586,8 @@
       "clientSwapSaveFailed": "Could not update swap setting",
       "requireClientApprovalTitle": "Approve new clients",
       "requireClientApprovalSubtitle": "When on, new sign-ups wait for your approval before booking",
-      "requireClientApprovalSaveFailed": "Could not update client approval setting"
+      "requireClientApprovalSaveFailed": "Could not update client approval setting",
+      "ownerOnlyEditHint": "Only the business owner (account linked to the business phone) can change these policies."
     },
     "notifications": { "subtitle": "Receive notifications about appointments and updates" },
     "services": {
@@ -1303,6 +1304,42 @@
       "equipment": "Equipment",
       "marketing": "Marketing",
       "other": "Other"
+    },
+    "greenInvoice": {
+      "connectButton": "Connect Morning account",
+      "modalTitle": "Green Invoice (Morning)",
+      "connected": "Connected",
+      "notConnected": "Not connected",
+      "helpHint": "Sign in with your Morning email and password inside the app, create an API key on their site, then paste once — no external browser required.",
+      "oauthLimitNote": "Morning does not offer app OAuth yet; after you sign in on their site you still need to create an API key (Best plan or higher). If they add OAuth, we will update this flow.",
+      "reloadWeb": "Reload page",
+      "openApiKeysPage": "API keys",
+      "expandBrowser": "Expand window",
+      "shrinkBrowser": "Shrink window",
+      "tryReadFromPage": "Try read from page",
+      "pasteBlockLabel": "Paste key details",
+      "pastePlaceholder": "Line 1: key ID (UUID)\nLine 2: secret key",
+      "pasteInvalid": "Could not parse two values. Paste ID on the first line and secret on the second, or two tab-separated values.",
+      "finishConnect": "Finish and connect",
+      "openHelp": "How to create an API key",
+      "keyIdLabel": "API key ID",
+      "secretLabel": "Secret key",
+      "secretPlaceholder": "Paste your secret key",
+      "save": "Save and connect",
+      "disconnect": "Disconnect",
+      "disconnectConfirmTitle": "Disconnect Green Invoice",
+      "disconnectConfirmMessage": "Remove this connection? You can connect again with a new key.",
+      "saved": "Connected successfully",
+      "saveFailed": "Could not save connection",
+      "comingSoon": "Next: issue client receipts from the app.",
+      "errors": {
+        "invoke_network": "Could not reach the server. Try again.",
+        "invalid_session": "Please sign in again.",
+        "forbidden_not_admin": "Only the business admin can connect Green Invoice.",
+        "greeninvoice_auth_failed": "Green Invoice rejected these credentials.",
+        "missing_credentials": "API key ID and secret are required.",
+        "unknown": "Something went wrong. Try again."
+      }
     }
   }
 }

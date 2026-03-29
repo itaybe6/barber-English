@@ -247,6 +247,13 @@ export default function SettingsScreen() {
   const [isSavingAdmin, setIsSavingAdmin] = useState(false);
   const [isUploadingAdminAvatar, setIsUploadingAdminAvatar] = useState(false);
 
+  /** Primary business owner (profile phone matches user phone); used for owner-only settings. */
+  const canSeeAddEmployee = React.useMemo(() => {
+    const userPhone = String(user?.phone || '').trim();
+    const businessPhone = String((profile as any)?.phone || '').trim();
+    return userPhone !== '' && businessPhone !== '' && userPhone === businessPhone;
+  }, [user?.phone, (profile as any)?.phone]);
+
   // Per-admin: reminder for you (optional) vs reminder for clients (optional)
   const [adminReminderMinutes, setAdminReminderMinutes] = useState<number | null>(null);
   const [adminReminderEnabled, setAdminReminderEnabled] = useState(false);
@@ -485,6 +492,7 @@ export default function SettingsScreen() {
   };
 
   const handleSaveCancellationInline = async (next: string) => {
+    if (!canSeeAddEmployee) return;
     const trimmed = (next || '').trim();
     const hours = parseInt(trimmed, 10);
     if (isNaN(hours) || hours < 0 || hours > 168) {
@@ -513,6 +521,7 @@ export default function SettingsScreen() {
   };
 
   const handleClientSwapToggle = async (next: boolean) => {
+    if (!canSeeAddEmployee) return;
     const prev = clientSwapEnabled;
     setClientSwapEnabled(next);
     setIsSavingProfile(true);
@@ -540,6 +549,7 @@ export default function SettingsScreen() {
   };
 
   const handleRequireClientApprovalToggle = async (next: boolean) => {
+    if (!canSeeAddEmployee) return;
     const prev = requireClientApproval;
     setRequireClientApproval(next);
     setIsSavingProfile(true);
@@ -851,6 +861,7 @@ export default function SettingsScreen() {
   };
 
   const saveCancellationHours = async () => {
+    if (!canSeeAddEmployee) return;
     const hours = parseInt(cancellationHoursDraft);
     if (isNaN(hours) || hours < 0 || hours > 168) {
       Alert.alert(t('error.generic','Error'), t('settings.profile.cancellationInvalid','Please enter a valid number between 0 and 168 hours'));
@@ -1318,12 +1329,6 @@ export default function SettingsScreen() {
   
   // Recurring appointment modal state
   const isAdmin = useAuthStore((s) => s.isAdmin);
-  // Show Add employee button only if current user's phone equals business profile phone
-  const canSeeAddEmployee = React.useMemo(() => {
-    const userPhone = String(user?.phone || '').trim();
-    const businessPhone = String((profile as any)?.phone || '').trim();
-    return userPhone !== '' && businessPhone !== '' && userPhone === businessPhone;
-  }, [user?.phone, (profile as any)?.phone]);
 
   const settingsStickySections = useMemo(() => {
     const items: { id: string; title: string }[] = [];
@@ -2148,6 +2153,14 @@ export default function SettingsScreen() {
           </View>
         </View>
         <View style={styles.cardNew}>
+          {!canSeeAddEmployee ? (
+            <Text style={[styles.settingSubtitleLTR, { paddingHorizontal: 16, paddingBottom: 8 }]}>
+              {t(
+                'settings.policies.ownerOnlyEditHint',
+                'Only the business owner (account linked to the business phone) can change these policies.',
+              )}
+            </Text>
+          ) : null}
           <View style={styles.settingItemLTR}>
             <View style={styles.settingIconLTR}><Clock size={20} color={businessColors.primary} /></View>
             <View style={{ flex: 1 }}>
@@ -2158,6 +2171,7 @@ export default function SettingsScreen() {
                 keyboardType="default"
                 onSave={handleSaveCancellationInline}
                 chevronColor={businessColors.primary}
+                editable={canSeeAddEmployee}
                 validate={(v) => {
                   const n = parseInt((v || '').trim(), 10);
                   return !isNaN(n) && n >= 0 && n <= 168;
@@ -2180,7 +2194,7 @@ export default function SettingsScreen() {
             <Switch
               value={clientSwapEnabled}
               onValueChange={handleClientSwapToggle}
-              disabled={isSavingProfile}
+              disabled={!canSeeAddEmployee || isSavingProfile}
               trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
               thumbColor={
                 clientSwapEnabled
@@ -2210,7 +2224,7 @@ export default function SettingsScreen() {
             <Switch
               value={requireClientApproval}
               onValueChange={handleRequireClientApprovalToggle}
-              disabled={isSavingProfile}
+              disabled={!canSeeAddEmployee || isSavingProfile}
               trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
               thumbColor={
                 requireClientApproval

@@ -15,6 +15,8 @@ interface InlineEditableRowProps {
   onSave: (next: string) => Promise<void> | void;
   validate?: (v: string) => boolean;
   chevronColor?: string;
+  /** When false, shows value only (no expand / save). */
+  editable?: boolean;
 }
 
 export default function InlineEditableRow({
@@ -25,6 +27,7 @@ export default function InlineEditableRow({
   onSave,
   validate,
   chevronColor,
+  editable = true,
 }: InlineEditableRowProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -128,6 +131,21 @@ export default function InlineEditableRow({
   const rowDirection = I18nManager.isRTL ? 'row-reverse' : 'row';
   const maxHeight = progressAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 160] });
 
+  if (!editable) {
+    const display = (value || '').trim() || placeholder || '—';
+    return (
+      <View>
+        <View style={[styles.row, { flexDirection: rowDirection }]}>
+          <View style={styles.rowContent}>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.readOnlyValue}>{display}</Text>
+          </View>
+        </View>
+        <View style={styles.divider} />
+      </View>
+    );
+  }
+
   return (
     <View>
       <TouchableOpacity style={[styles.row, { flexDirection: rowDirection }]} onPress={onRowPress} activeOpacity={0.8}>
@@ -191,6 +209,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     color: Colors.text,
+    textAlign: 'left',
+  },
+  readOnlyValue: {
+    fontSize: 15,
+    color: Colors.subtext,
+    marginTop: 4,
     textAlign: 'left',
   },
   chevronWrap: {

@@ -26,6 +26,14 @@ verify_jwt = false
 [functions.pulseem-admin-credentials]
 verify_jwt = false
 
+# Pulseem: create sub-account + encrypted credentials for existing business (service role Bearer)
+[functions.pulseem-provision-subaccount]
+verify_jwt = false
+
+# Green Invoice (חשבונית ירוקה): admin JWT — save encrypted API secret on business_profile
+[functions.greeninvoice-connect]
+verify_jwt = true
+
 # Database Webhook on notifications INSERT — Authorization: Bearer <SERVICE_ROLE_KEY>
 [functions.notification-push-sms]
 verify_jwt = true

@@ -25,30 +25,60 @@ function getPulseemMainApiKey(): string {
   return raw;
 }
 
-const serviceRoleKey = process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || '';
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-const adminSupabase = serviceRoleKey && supabaseUrl
-  ? createClient(supabaseUrl, serviceRoleKey)
-  : null;
+function normalizeSupabaseEnv(v: string | undefined): string {
+  return String(v ?? '')
+    .replace(/^\uFEFF/, '')
+    .trim();
+}
+
+/**
+ * אותו סדר כמו lib/supabase.ts: process.env (באנדל) ואז expo.extra מ-app.config.
+ * בלי זה, במכשיר/בילד URL ו-anon יגיעו מ-extra אבל service_role נשאר ריק או ישן — ואז 401 מול Edge.
+ */
+function getAdminSupabaseEnv(): { url: string; anon: string; serviceRole: string } {
+  const extra = getExpoExtra() as Record<string, unknown>;
+  const url = normalizeSupabaseEnv(
+    process.env.EXPO_PUBLIC_SUPABASE_URL || String(extra.EXPO_PUBLIC_SUPABASE_URL ?? ''),
+  );
+  const anon = normalizeSupabaseEnv(
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || String(extra.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? ''),
+  );
+  const serviceRole = normalizeSupabaseEnv(
+    process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ||
+      String(extra.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ?? ''),
+  );
+  return { url, anon, serviceRole };
+}
+
+function getAdminSupabaseClient(): SupabaseClient | null {
+  const { url, serviceRole } = getAdminSupabaseEnv();
+  if (!url || !serviceRole) return null;
+  return createClient(url.replace(/\/$/, ''), serviceRole);
+}
+
+const MSG_PULSEEM_401 =
+  'הרשאה נדחתה (401): הוסף ל־branding/<CLIENT>/.env את EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY (העתק מ־Supabase → Settings → API → service_role, אותו פרויקט כמו ה־URL). אל תדביק את ה־anon. אחרי שינוי — הפעל מחדש Metro (npx expo start -c).';
 
 /** Encrypts Pulseem secrets server-side (AES-GCM); DB never stores plaintext for new writes. */
 async function invokePulseemCredentialsAdmin<T extends Record<string, unknown>>(
   body: Record<string, unknown>,
-): Promise<T | null> {
-  if (!serviceRoleKey || !supabaseUrl || !supabaseAnonKey) {
+): Promise<{ data: T | null; status: number }> {
+  const { url: supabaseUrl, serviceRole: serviceRoleKey } = getAdminSupabaseEnv();
+  if (!serviceRoleKey || !supabaseUrl) {
     console.error(
-      '[pulseem-admin] Missing EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY, EXPO_PUBLIC_SUPABASE_URL, or EXPO_PUBLIC_SUPABASE_ANON_KEY',
+      '[pulseem-admin] Missing EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY (או ב-.env או ב-expo.extra) או URL',
     );
-    return null;
+    return { data: null, status: 0 };
   }
   const base = supabaseUrl.replace(/\/$/, '');
+  // חייב להתאים ל-fetchWithAuth של @supabase/supabase-js: apikey ו-Authorization עם אותו JWT של service_role.
+  // עם apikey של anon לעיתים ה-Gateway מעביר בקשה שלא מגיעה ל-Edge עם אותו Bearer — ומתקבל 401 מ-pulseem-admin-credentials.
   const res = await fetch(`${base}/functions/v1/pulseem-admin-credentials`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${serviceRoleKey}`,
-      apikey: supabaseAnonKey,
+      apikey: serviceRoleKey,
     },
     body: JSON.stringify(body),
   });
@@ -57,13 +87,48 @@ async function invokePulseemCredentialsAdmin<T extends Record<string, unknown>>(
     | { error?: string }
     | null;
   if (!res.ok) {
-    console.error('[pulseem-admin] HTTP', res.status, data);
-    return null;
+    console.error('[pulseem-admin] HTTP', res.status, JSON.stringify(data));
+    console.error('[pulseem-admin] sent key len=', serviceRoleKey.length, 'first20=', serviceRoleKey.slice(0, 20), 'last10=', serviceRoleKey.slice(-10));
+    return { data: null, status: res.status };
   }
   if (data && typeof data === 'object' && (data as { error?: string }).error === 'unauthorized') {
-    return null;
+    return { data: null, status: 401 };
   }
-  return data as T;
+  return { data: data as T, status: res.status };
+}
+
+async function invokePulseemProvisionSubaccount<T extends Record<string, unknown>>(
+  body: Record<string, unknown>,
+): Promise<{ data: T | null; status: number }> {
+  const { url: supabaseUrl, serviceRole: serviceRoleKey } = getAdminSupabaseEnv();
+  if (!serviceRoleKey || !supabaseUrl) {
+    console.error(
+      '[pulseem-provision] Missing EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY (או ב-.env או ב-expo.extra) או URL',
+    );
+    return { data: null, status: 0 };
+  }
+  const base = supabaseUrl.replace(/\/$/, '');
+  const res = await fetch(`${base}/functions/v1/pulseem-provision-subaccount`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: serviceRoleKey,
+    },
+    body: JSON.stringify(body),
+  });
+  const data = (await res.json().catch(() => null)) as
+    | (T & { error?: string })
+    | { error?: string }
+    | null;
+  if (!res.ok) {
+    console.error('[pulseem-provision] HTTP', res.status, data);
+    return { data: null, status: res.status };
+  }
+  if (data && typeof data === 'object' && (data as { error?: string }).error === 'unauthorized') {
+    return { data: null, status: 401 };
+  }
+  return { data: data as T, status: res.status };
 }
 
 export interface BusinessOverview {
@@ -418,7 +483,7 @@ export const superAdminApi = {
   },
 
   async uploadBrandingFile(clientName: string, fileName: string, body: string, contentType: string, isBase64 = false): Promise<string | null> {
-    const client = adminSupabase || supabase;
+    const client = getAdminSupabaseClient() ?? supabase;
     try {
       const storagePath = `branding/${clientName}/${fileName}`;
 
@@ -448,7 +513,7 @@ export const superAdminApi = {
   },
 
   async downloadBrandingFileText(clientName: string, fileName: string): Promise<string | null> {
-    const client = adminSupabase || supabase;
+    const client = getAdminSupabaseClient() ?? supabase;
     try {
       const storagePath = `branding/${clientName}/${fileName}`;
       const { data, error } = await client.storage.from('app_design').download(storagePath);
@@ -465,7 +530,7 @@ export const superAdminApi = {
   async resolveBrandingClientName(businessId: string, hint: string | null): Promise<string | null> {
     const h = hint?.trim();
     if (h) return h;
-    const st = adminSupabase || supabase;
+    const st = getAdminSupabaseClient() ?? supabase;
     const { data: folders, error } = await st.storage.from('app_design').list('branding');
     if (error || !folders?.length) return null;
     for (const folder of folders) {
@@ -496,6 +561,49 @@ export const superAdminApi = {
     };
   },
 
+  /** Merges Pulseem keys into branding `client/.env` in Storage (when folder exists or after scaffold). */
+  async syncPulseemEnvToBrandingStorage(
+    businessId: string,
+    envPlaintext: Record<string, string>,
+  ): Promise<boolean> {
+    const { data: hintRow } = await supabase
+      .from('business_profile')
+      .select('branding_client_name')
+      .eq('id', businessId)
+      .maybeSingle();
+    const clientName = await this.resolveBrandingClientName(
+      businessId,
+      ((hintRow as any)?.branding_client_name as string | undefined) ?? null,
+    );
+
+    if (clientName) {
+      const db = getAdminSupabaseClient() ?? supabase;
+      await db
+        .from('business_profile')
+        .update({ branding_client_name: clientName })
+        .eq('id', businessId);
+    }
+
+    if (!clientName) return false;
+
+    let envText = await this.downloadBrandingFileText(clientName, '.env');
+    if (!envText) {
+      envText = [
+        `# Synced from Super Admin — ${clientName}`,
+        `EXPO_PUBLIC_SUPABASE_URL=${process.env.EXPO_PUBLIC_SUPABASE_URL || ''}`,
+        `EXPO_PUBLIC_SUPABASE_ANON_KEY=${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ''}`,
+        `EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY=${process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || ''}`,
+        `BUSINESS_ID=${businessId}`,
+        `CLIENT_NAME=${clientName}`,
+        '',
+      ].join('\n');
+    }
+
+    const merged = mergeEnvKeyValues(envText, envPlaintext);
+    const uploaded = await this.uploadBrandingFile(clientName, '.env', merged, 'text/plain');
+    return !!uploaded;
+  },
+
   async testPulseemForBusiness(
     businessId: string,
     userId: string,
@@ -504,7 +612,7 @@ export const superAdminApi = {
     | { readonly ok: true; readonly credits: string }
     | { readonly ok: false; readonly message: string }
   > {
-    const result = await invokePulseemCredentialsAdmin<{
+    const { data: result, status } = await invokePulseemCredentialsAdmin<{
       ok: boolean;
       credits?: string;
       message?: string;
@@ -515,10 +623,13 @@ export const superAdminApi = {
       password: passwordOverride.trim(),
     });
     if (!result) {
+      if (status === 401) {
+        return { ok: false, message: MSG_PULSEEM_401 };
+      }
       return {
         ok: false,
         message:
-          'בדיקה נכשלה — ודא פריסת pulseem-admin-credentials, מפתח הצפנה ב-Edge, ומפתח שירות באפליקציה',
+          'בדיקה נכשלה — ודא פריסת pulseem-admin-credentials, מפתח הצפנה ב-Edge (PULSEEM_FIELD_ENCRYPTION_KEY), ומפתחות URL/Anon/Service באפליקציה',
       };
     }
     if (result.ok && typeof result.credits === 'string') {
@@ -540,7 +651,7 @@ export const superAdminApi = {
       return { ok: false, errorMessage: 'חסר מספר שולח (מאיזה מספר נשלח ה-SMS)', envSynced: false };
     }
 
-    const edge = await invokePulseemCredentialsAdmin<{
+    const { data: edge, status: saveStatus } = await invokePulseemCredentialsAdmin<{
       ok?: boolean;
       errorMessage?: string;
       envPlaintext?: Record<string, string>;
@@ -556,7 +667,9 @@ export const superAdminApi = {
       return {
         ok: false,
         errorMessage:
-          'שמירה נכשלה — ודא פריסת pulseem-admin-credentials, PULSEEM_FIELD_ENCRYPTION_KEY ב-Supabase Secrets, ומפתחות URL/Anon/Service באפליקציה',
+          saveStatus === 401
+            ? MSG_PULSEEM_401
+            : 'שמירה נכשלה — ודא פריסת pulseem-admin-credentials, PULSEEM_FIELD_ENCRYPTION_KEY ב-Supabase Secrets, ומפתחות URL/Anon/Service באפליקציה',
         envSynced: false,
       };
     }
@@ -564,44 +677,69 @@ export const superAdminApi = {
       return { ok: false, errorMessage: edge.errorMessage || 'שמירה נכשלה', envSynced: false };
     }
 
-    const { data: hintRow } = await supabase
-      .from('business_profile')
-      .select('branding_client_name')
-      .eq('id', businessId)
-      .maybeSingle();
-    const clientName = await this.resolveBrandingClientName(
-      businessId,
-      ((hintRow as any)?.branding_client_name as string | undefined) ?? null,
-    );
-
-    if (clientName) {
-      const db = adminSupabase || supabase;
-      await db
-        .from('business_profile')
-        .update({ branding_client_name: clientName })
-        .eq('id', businessId);
-    }
-
-    if (!clientName || !edge.envPlaintext) {
+    if (!edge.envPlaintext) {
       return { ok: true, envSynced: false };
     }
 
-    let envText = await this.downloadBrandingFileText(clientName, '.env');
-    if (!envText) {
-      envText = [
-        `# Synced from Super Admin — ${clientName}`,
-        `EXPO_PUBLIC_SUPABASE_URL=${process.env.EXPO_PUBLIC_SUPABASE_URL || ''}`,
-        `EXPO_PUBLIC_SUPABASE_ANON_KEY=${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ''}`,
-        `EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY=${process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || ''}`,
-        `BUSINESS_ID=${businessId}`,
-        `CLIENT_NAME=${clientName}`,
-        '',
-      ].join('\n');
+    const envSynced = await this.syncPulseemEnvToBrandingStorage(businessId, edge.envPlaintext);
+    return { ok: true, envSynced };
+  },
+
+  async provisionPulseemSubAccountForBusiness(
+    businessId: string,
+    options?: {
+      subPassword?: string;
+      fromNumber?: string;
+      directSmsCredits?: number;
+      replaceExisting?: boolean;
+    },
+  ): Promise<{
+    ok: boolean;
+    errorMessage?: string;
+    envSynced?: boolean;
+    loginUserName?: string;
+    directSmsCredits?: number;
+  }> {
+    const { data: edge, status: provStatus } = await invokePulseemProvisionSubaccount<{
+      ok?: boolean;
+      errorMessage?: string;
+      loginUserName?: string;
+      directSmsCredits?: number;
+      envPlaintext?: Record<string, string>;
+    }>({
+      businessId,
+      ...(options?.subPassword?.trim() ? { subPassword: options.subPassword.trim() } : {}),
+      ...(options?.fromNumber?.trim() ? { fromNumber: options.fromNumber.trim() } : {}),
+      ...(typeof options?.directSmsCredits === 'number'
+        ? { directSmsCredits: options.directSmsCredits }
+        : {}),
+      ...(options?.replaceExisting ? { replaceExisting: true } : {}),
+    });
+
+    if (!edge) {
+      return {
+        ok: false,
+        errorMessage:
+          provStatus === 401
+            ? MSG_PULSEEM_401
+            : 'יצירת תת-חשבון בשרת נכשלה — פרוס pulseem-provision-subaccount והגדר ב-Supabase Secrets: PULSEEM_MAIN_API_KEY, PULSEEM_FIELD_ENCRYPTION_KEY',
+      };
+    }
+    if (!edge.ok) {
+      return { ok: false, errorMessage: edge.errorMessage || 'יצירת תת-חשבון נכשלה' };
     }
 
-    const merged = mergeEnvKeyValues(envText, edge.envPlaintext);
-    const uploaded = await this.uploadBrandingFile(clientName, '.env', merged, 'text/plain');
-    return { ok: true, envSynced: !!uploaded };
+    const envPlaintext = edge.envPlaintext;
+    const envSynced = envPlaintext
+      ? await this.syncPulseemEnvToBrandingStorage(businessId, envPlaintext)
+      : false;
+
+    return {
+      ok: true,
+      envSynced,
+      loginUserName: edge.loginUserName,
+      directSmsCredits: edge.directSmsCredits,
+    };
   },
 
   async createBusiness(params: {
@@ -675,7 +813,7 @@ export const superAdminApi = {
       let insertPulseApiKey = pulseApiKey;
       let insertPulsePass = pulseWsPass;
       if (pulseApiKey || pulseWsPass) {
-        const enc = await invokePulseemCredentialsAdmin<{
+        const { data: enc, status: encStatus } = await invokePulseemCredentialsAdmin<{
           pulseem_api_key?: string;
           pulseem_password?: string;
         }>({
@@ -684,9 +822,13 @@ export const superAdminApi = {
           ...(pulseWsPass ? { pulseem_password: pulseWsPass } : {}),
         });
         if (!enc) {
-          console.error(
-            '[createBusiness] encrypt_for_insert failed — deploy pulseem-admin-credentials and set PULSEEM_FIELD_ENCRYPTION_KEY (same value on auth-phone-otp)',
-          );
+          if (encStatus === 401) {
+            console.error('[createBusiness] encrypt_for_insert 401 —', MSG_PULSEEM_401);
+          } else {
+            console.error(
+              '[createBusiness] encrypt_for_insert failed — deploy pulseem-admin-credentials and set PULSEEM_FIELD_ENCRYPTION_KEY (same value on auth-phone-otp)',
+            );
+          }
           return null;
         }
         if (pulseApiKey) {
@@ -925,7 +1067,7 @@ export const superAdminApi = {
   },
 
   async deleteBusiness(businessId: string): Promise<boolean> {
-    const client = adminSupabase || supabase;
+    const client = getAdminSupabaseClient() ?? supabase;
     try {
       const { data: profilePeek } = await client
         .from('business_profile')

@@ -300,6 +300,11 @@ export interface BusinessProfile {
   pulseem_has_password?: boolean;
   pulseem_api_key?: string | null;
   pulseem_has_api_key?: boolean;
+  /** Green Invoice API — מזהה מפתח מכלי המפתחים */
+  greeninvoice_api_key_id?: string | null;
+  /** Encrypted API secret (enc:v1:...) — same encryption as Pulseem fields */
+  greeninvoice_api_secret?: string | null;
+  greeninvoice_has_credentials?: boolean;
   created_at: string;
   updated_at: string;
 }

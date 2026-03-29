@@ -3,6 +3,11 @@
  * Super-admin only: encrypt/decrypt Pulseem secrets for business_profile.
  * Auth: Authorization Bearer must equal SUPABASE_SERVICE_ROLE_KEY (same as app EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY).
  * Secret: PULSEEM_FIELD_ENCRYPTION_KEY — Base64 of 32 bytes (openssl rand -base64 32).
+ *
+ * verify_jwt is disabled at the Gateway level because this function implements
+ * its own authorizeServiceRole() check (strict string match against service_role key).
+ * With verify_jwt:true the Gateway can strip/rewrite the Authorization header,
+ * causing the in-function check to fail with 401.
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";

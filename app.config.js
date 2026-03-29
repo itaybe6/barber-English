@@ -91,6 +91,11 @@ appConfig.expo.extra = {
     process.env.EXPO_PUBLIC_SUPABASE_URL || appConfig.expo.extra?.EXPO_PUBLIC_SUPABASE_URL,
   EXPO_PUBLIC_SUPABASE_ANON_KEY:
     process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || appConfig.expo.extra?.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+  /** סופר-אדמין + קריאות Edge (pulseem-admin-credentials) — חייב להתאים ל-service_role באותו פרויקט כמו ה-URL */
+  EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY:
+    process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ||
+    appConfig.expo.extra?.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ||
+    '',
   EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY:
     process.env.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY || process.env.GOOGLE_STATIC_MAPS_KEY,
   EXPO_PUBLIC_GOOGLE_PLACES_KEY: process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY,

@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { superAdminApi, type BusinessOverview } from '@/lib/api/superAdmin';
+import { getExpoExtra } from '@/lib/getExtra';
 
 const ACCENT = '#6C5CE7';
 const TEXT_PRIMARY = '#1A1A2E';
@@ -36,12 +37,18 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [provisioning, setProvisioning] = useState(false);
+  const [autoSubPassword, setAutoSubPassword] = useState('');
+
+  const extra = getExpoExtra();
+  const hasPulseemMainKeyInApp = !!String(extra.PULSEEM_MAIN_API_KEY ?? '').replace(/^\uFEFF/, '').trim();
 
   const resetFields = useCallback(() => {
     setUserId('');
     setPassword('');
     setFromNumber('');
     setHadPassword(false);
+    setAutoSubPassword('');
   }, []);
 
   useEffect(() => {
@@ -79,6 +86,48 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
     } else if ('message' in result) {
       Alert.alert('בדיקה נכשלה', result.message);
     }
+  };
+
+  const handleProvisionSubAccount = () => {
+    if (!business) return;
+    if (business.pulseemHasApiKey) return;
+    Alert.alert(
+      'יצירת תת-חשבון Pulseem',
+      'ייווצר תת-חשבון עם DirectSmsCredits (כמו ב«הוספת עסק חדש»), והפרטים יישמרו במסד מוצפן. ודא שב-Supabase Secrets מוגדר PULSEEM_MAIN_API_KEY לפונקציה pulseem-provision-subaccount.',
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'צור',
+          onPress: async () => {
+            setProvisioning(true);
+            const result = await superAdminApi.provisionPulseemSubAccountForBusiness(business.id, {
+              subPassword: autoSubPassword.trim() || undefined,
+              fromNumber: fromNumber.trim() || undefined,
+            });
+            setProvisioning(false);
+            if (!result.ok) {
+              Alert.alert('נכשל', result.errorMessage || 'נסה שוב');
+              return;
+            }
+            const envNote = result.envSynced
+              ? '\n\nקובץ .env ב-Storage עודכן.'
+              : '\n\nלא נמצאה תיקיית ברנדינג ב-Storage — נשמר במסד בלבד.';
+            Alert.alert(
+              'נוצר',
+              `מזהה WS: ${result.loginUserName ?? '—'}\nיתרה/קרדיטים: ${result.directSmsCredits ?? '—'}${envNote}`,
+            );
+            const state = await superAdminApi.getPulseemEditorState(business.id);
+            if (state) {
+              setUserId(state.userId);
+              setFromNumber(state.fromNumber);
+              setHadPassword(state.hasPassword);
+            }
+            setPassword('');
+            onSaved();
+          },
+        },
+      ],
+    );
   };
 
   const handleSave = async () => {
@@ -121,9 +170,9 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
             {business?.display_name || 'עסק'}
           </Text>
 
-          {loading ? (
+          {loading || !business ? (
             <View style={styles.centerPad}>
-              <ActivityIndicator size="large" color={ACCENT} />
+              {loading ? <ActivityIndicator size="large" color={ACCENT} /> : null}
             </View>
           ) : (
             <ScrollView
@@ -134,6 +183,43 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
               <Text style={styles.hint}>
                 מפתח ה-API החדש (מ«הגדרות API») מוזן ביצירת עסק חדש ונשמר ב-.env. כאן: ממשק ה-Web Service הישן (מזהה משתמש + סיסמה). כפתור «בדיקת חיבור» בודק רק את הישן; אם השתמשת רק במפתח API — התעלם מהבדיקה או השלם כאן פרטי WS אם יש לך.
               </Text>
+
+              {!business.pulseemHasApiKey ? (
+                <View style={styles.autoBox}>
+                  <Text style={styles.autoTitle}>תת-חשבון אוטומטי (Edge)</Text>
+                  <Text style={styles.autoHint}>
+                    פונקציית pulseem-provision-subaccount יוצרת חשבון משנה בפולסים ומעדכנת את המסד — כמו ביצירת אפליקציה חדשה. נדרש סוד{' '}
+                    <Text style={{ fontWeight: '700' }}>PULSEEM_MAIN_API_KEY</Text> ב-Supabase (לא בהכרח אותו דבר כמו PULSEEM_MAIN_API_KEY_B64 באפליקציה).
+                    {!hasPulseemMainKeyInApp ? '\n\nבאפליקציה אין מפתח ראשי ב-extra — זה תקין אם ההקמה רק מהשרת.' : ''}
+                  </Text>
+                  <Text style={styles.label}>סיסמה לתת-חשבון (אופציונלי)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={autoSubPassword}
+                    onChangeText={setAutoSubPassword}
+                    placeholder="ריק = אקראי"
+                    placeholderTextColor={TEXT_MUTED}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    textAlign="right"
+                  />
+                  <TouchableOpacity
+                    style={[styles.accentOutlineBtn, provisioning && { opacity: 0.6 }]}
+                    onPress={handleProvisionSubAccount}
+                    disabled={provisioning}
+                  >
+                    {provisioning ? (
+                      <ActivityIndicator color={ACCENT} />
+                    ) : (
+                      <>
+                        <Text style={styles.accentOutlineBtnText}>צור תת-חשבון Pulseem</Text>
+                        <Ionicons name="sparkles-outline" size={18} color={ACCENT} />
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              ) : null}
 
               <Text style={styles.label}>מזהה משתמש (User ID)</Text>
               <TextInput
@@ -260,6 +346,29 @@ const styles = StyleSheet.create({
     borderColor: ACCENT,
   },
   secondaryBtnText: { fontSize: 15, fontWeight: '700', color: ACCENT },
+  autoBox: {
+    backgroundColor: 'rgba(108,92,231,0.06)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(108,92,231,0.2)',
+    padding: 14,
+    marginBottom: 16,
+  },
+  autoTitle: { fontSize: 14, fontWeight: '800', color: ACCENT, textAlign: 'right', marginBottom: 8 },
+  autoHint: { fontSize: 11, color: TEXT_SECONDARY, textAlign: 'right', lineHeight: 16, marginBottom: 8 },
+  accentOutlineBtn: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: ACCENT,
+    backgroundColor: '#FFFFFF',
+  },
+  accentOutlineBtnText: { fontSize: 14, fontWeight: '700', color: ACCENT },
   primaryBtn: {
     marginTop: 12,
     flexDirection: 'row',

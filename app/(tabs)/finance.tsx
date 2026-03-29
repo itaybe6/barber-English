@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -19,7 +19,11 @@ import { useRouter } from 'expo-router';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import Colors from '@/constants/colors';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
+import { useTranslation } from 'react-i18next';
 import { expensesApi } from '@/lib/api/expenses';
+import { businessProfileApi } from '@/lib/api/businessProfile';
+import { greenInvoiceConnectApi } from '@/lib/api/greenInvoiceConnect';
+import { GreenInvoiceConnectModal } from '@/components/GreenInvoiceConnectModal';
 import type { BusinessExpense, ExpenseCategory } from '@/lib/supabase';
 import { useAdminFinanceMonthReport } from '@/hooks/useAdminFinanceMonthReport';
 import {
@@ -33,6 +37,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   FileImage,
+  Receipt,
 } from 'lucide-react-native';
 
 const CATEGORIES: ExpenseCategory[] = ['rent', 'supplies', 'equipment', 'marketing', 'other'];
@@ -51,9 +56,11 @@ const MONTH_NAMES_HE = [
 ];
 
 export default function FinanceScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors: theme } = useBusinessColors();
   const primaryColor = theme.primary || '#000000';
+  const greenInvoiceAccent = '#16A34A';
 
   const {
     year,
@@ -74,6 +81,86 @@ export default function FinanceScreen() {
   const [newExpenseCategory, setNewExpenseCategory] = useState<ExpenseCategory>('other');
   const [newExpenseReceipt, setNewExpenseReceipt] = useState<{ uri: string; base64?: string } | null>(null);
   const [savingExpense, setSavingExpense] = useState(false);
+
+  const [showGreenInvoiceModal, setShowGreenInvoiceModal] = useState(false);
+  const [giConnected, setGiConnected] = useState(false);
+  const [giKeyIdStored, setGiKeyIdStored] = useState<string | null>(null);
+  const [giSaving, setGiSaving] = useState(false);
+
+  const refreshGreenInvoiceStatus = useCallback(async () => {
+    const p = await businessProfileApi.getProfile();
+    setGiConnected(!!p?.greeninvoice_has_credentials);
+    setGiKeyIdStored(p?.greeninvoice_api_key_id?.trim() || null);
+  }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    let cancelled = false;
+    (async () => {
+      const p = await businessProfileApi.getProfile();
+      if (cancelled) return;
+      setGiConnected(!!p?.greeninvoice_has_credentials);
+      setGiKeyIdStored(p?.greeninvoice_api_key_id?.trim() || null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loading]);
+
+  const openGreenInvoiceModal = () => {
+    setShowGreenInvoiceModal(true);
+  };
+
+  const giErrorMessage = (code: string, serverMessage?: string) => {
+    if (serverMessage && code === 'greeninvoice_auth_failed') return serverMessage;
+    const key = `finance.greenInvoice.errors.${code}` as const;
+    const translated = t(key);
+    return translated !== key ? translated : t('finance.greenInvoice.errors.unknown');
+  };
+
+  const handleGreenInvoiceSubmitCredentials = async (apiKeyId: string, apiSecret: string) => {
+    setGiSaving(true);
+    try {
+      const res = await greenInvoiceConnectApi.connect({ apiKeyId, apiSecret });
+      if (res.ok) {
+        await refreshGreenInvoiceStatus();
+        setShowGreenInvoiceModal(false);
+        Alert.alert('', t('finance.greenInvoice.saved'));
+      } else {
+        Alert.alert(
+          t('finance.greenInvoice.saveFailed'),
+          giErrorMessage(res.error, res.message),
+        );
+      }
+    } finally {
+      setGiSaving(false);
+    }
+  };
+
+  const handleGreenInvoiceDisconnect = () => {
+    Alert.alert(t('finance.greenInvoice.disconnectConfirmTitle'), t('finance.greenInvoice.disconnectConfirmMessage'), [
+      { text: t('cancel', 'ביטול'), style: 'cancel' },
+      {
+        text: t('finance.greenInvoice.disconnect'),
+        style: 'destructive',
+        onPress: async () => {
+          setGiSaving(true);
+          try {
+            const res = await greenInvoiceConnectApi.disconnect();
+            if (res.ok) {
+              setGiConnected(false);
+              setGiKeyIdStored(null);
+              setShowGreenInvoiceModal(false);
+            } else {
+              Alert.alert(t('finance.greenInvoice.saveFailed'), giErrorMessage(res.error));
+            }
+          } finally {
+            setGiSaving(false);
+          }
+        },
+      },
+    ]);
+  };
 
   const netProfit = totalIncome - totalExpenses;
 
@@ -279,6 +366,45 @@ export default function FinanceScreen() {
                 </View>
               ) : null}
             </LinearGradient>
+          </View>
+
+          {/* ── Green Invoice (חשבונית ירוקה) ── */}
+          <View
+            style={[
+              styles.greenInvoiceCard,
+              {
+                backgroundColor: theme.surface,
+                borderColor: `${greenInvoiceAccent}33`,
+              },
+            ]}
+          >
+            <View style={styles.greenInvoiceCardTop}>
+              <View style={[styles.greenInvoiceIconWrap, { backgroundColor: `${greenInvoiceAccent}18` }]}>
+                <Receipt size={22} color={greenInvoiceAccent} />
+              </View>
+              <View style={styles.greenInvoiceTextBlock}>
+                <Text style={[styles.greenInvoiceTitle, { color: theme.text }]}>
+                  {t('finance.greenInvoice.modalTitle')}
+                </Text>
+                <Text style={[styles.greenInvoiceStatus, { color: giConnected ? greenInvoiceAccent : theme.textSecondary }]}>
+                  {giConnected ? t('finance.greenInvoice.connected') : t('finance.greenInvoice.notConnected')}
+                </Text>
+              </View>
+            </View>
+            <Text style={[styles.greenInvoiceHint, { color: theme.textSecondary }]}>
+              {t('finance.greenInvoice.helpHint')}
+            </Text>
+            <TouchableOpacity
+              style={[styles.greenInvoiceBtn, { backgroundColor: greenInvoiceAccent }]}
+              onPress={openGreenInvoiceModal}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={t('finance.greenInvoice.connectButton')}
+            >
+              <Text style={styles.greenInvoiceBtnText}>
+                {giConnected ? t('finance.greenInvoice.modalTitle') : t('finance.greenInvoice.connectButton')}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {/* ── Income Breakdown ── */}
@@ -527,6 +653,24 @@ export default function FinanceScreen() {
           </KeyboardAwareScreenScroll>
         </View>
       </Modal>
+
+      <GreenInvoiceConnectModal
+        visible={showGreenInvoiceModal}
+        onClose={() => setShowGreenInvoiceModal(false)}
+        connected={giConnected}
+        storedKeyId={giKeyIdStored}
+        accentColor={greenInvoiceAccent}
+        theme={{
+          surface: theme.surface,
+          text: theme.text,
+          textSecondary: theme.textSecondary,
+          border: theme.border,
+          error: theme.error,
+        }}
+        saving={giSaving}
+        onSubmitCredentials={handleGreenInvoiceSubmitCredentials}
+        onDisconnect={handleGreenInvoiceDisconnect}
+      />
     </View>
   );
 }
@@ -778,7 +922,61 @@ const styles = StyleSheet.create({
   },
 
   cardAfterHero: {
-    marginTop: 20,
+    marginTop: 12,
+  },
+
+  greenInvoiceCard: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 4,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    padding: 18,
+    direction: 'rtl',
+    ...cardShadow,
+  },
+  greenInvoiceCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 10,
+  },
+  greenInvoiceIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  greenInvoiceTextBlock: {
+    flex: 1,
+  },
+  greenInvoiceTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  greenInvoiceStatus: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 2,
+    textAlign: 'right',
+  },
+  greenInvoiceHint: {
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'right',
+    marginBottom: 14,
+  },
+  greenInvoiceBtn: {
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  greenInvoiceBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
   },
   expensesToolbar: {
     flexDirection: 'row',

@@ -149,8 +149,8 @@ export interface BusinessHours {
   day_of_week: number; // 0=Sunday, 1=Monday, ..., 6=Saturday
   start_time: string; // HH:MM format
   end_time: string; // HH:MM format
-  break_start_time?: string; // HH:MM format, optional
-  break_end_time?: string; // HH:MM format, optional
+  break_start_time?: string | null; // HH:MM format, optional (null = no lunch break)
+  break_end_time?: string | null; // HH:MM format, optional
   is_active: boolean;
   // New: optional per-day slot duration in minutes (e.g., 15, 20, 30, 45, 60). If not set, defaults to 60
   slot_duration_minutes?: number;

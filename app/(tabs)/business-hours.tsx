@@ -268,8 +268,6 @@ export default function BusinessHoursScreen() {
   const [editingDay, setEditingDay] = useState<number | null>(null);
   const [tempStartTime, setTempStartTime] = useState('09:00');
   const [tempEndTime, setTempEndTime] = useState('17:00');
-  const [tempBreakStartTime, setTempBreakStartTime] = useState('12:00');
-  const [tempBreakEndTime, setTempBreakEndTime] = useState('13:00');
   const [tempSlotDuration, setTempSlotDuration] = useState<string>('60');
   const [useBreaks, setUseBreaks] = useState<boolean>(false);
   const [tempBreaks, setTempBreaks] = useState<BreakWindow[]>([]);
@@ -338,16 +336,24 @@ export default function BusinessHoursScreen() {
     if (dayHours) {
       setTempStartTime(formatHHMM(dayHours.start_time));
       setTempEndTime(formatHHMM(dayHours.end_time));
-      setTempBreakStartTime(formatHHMM(dayHours.break_start_time) || '12:00');
-      setTempBreakEndTime(formatHHMM(dayHours.break_end_time) || '13:00');
       setTempSlotDuration(String(dayHours.slot_duration_minutes || 60));
       const loadedBreaksRaw = ((dayHours as any).breaks || []) as Array<{ start_time: string; end_time: string }>;
-      const loadedBreaks = loadedBreaksRaw.map((b, i) => {
+      let loadedBreaks = loadedBreaksRaw.map((b, i) => {
         const s = formatHHMM(b.start_time);
         const e = formatHHMM(b.end_time);
         return makeBreakWindow(s, e, `${s}-${e}-${i}`);
       });
-      setUseBreaks(loadedBreaks.length > 0 || (!!dayHours.break_start_time && !!dayHours.break_end_time));
+      // Old rows may only have legacy columns; fold into tempBreaks so edit UI matches DB
+      if (
+        loadedBreaks.length === 0 &&
+        dayHours.break_start_time &&
+        dayHours.break_end_time
+      ) {
+        const s = formatHHMM(dayHours.break_start_time);
+        const e = formatHHMM(dayHours.break_end_time);
+        loadedBreaks = [makeBreakWindow(s, e, `legacy-${s}-${e}`)];
+      }
+      setUseBreaks(loadedBreaks.length > 0);
       setTempBreaks(loadedBreaks);
       setEditingDay(dayOfWeek);
     }
@@ -360,8 +366,8 @@ export default function BusinessHoursScreen() {
           Alert.alert(t('error.generic'), t('admin.hours.endAfterStart'));
           return;
         }
-        // validate multiple breaks (only if useBreaks is on)
-        const allBreaks = useBreaks ? tempBreaks.slice() : [];
+        // validate breaks only when at least one break window exists
+        const allBreaks = useBreaks && tempBreaks.length > 0 ? tempBreaks.slice() : [];
         for (const b of allBreaks) {
           if (!(tempStartTime < b.start_time && b.start_time < b.end_time && b.end_time <= tempEndTime)) {
             Alert.alert(t('error.generic'), t('admin.hours.breaksInvalid'));
@@ -378,21 +384,26 @@ export default function BusinessHoursScreen() {
       }
 
       try {
+        // Breaks only when toggle on and user added ≥1 window; always clear legacy DB columns
+        const breaksPayload =
+          useBreaks && tempBreaks.length > 0
+            ? tempBreaks.map(({ start_time, end_time }) => ({ start_time, end_time }))
+            : [];
+        const legacyCleared = { break_start_time: null, break_end_time: null };
+
         await businessHoursApi.updateBusinessHours(editingDay, {
           start_time: tempStartTime,
           end_time: tempEndTime,
-          break_start_time: useBreaks ? tempBreakStartTime : undefined,
-          break_end_time: useBreaks ? tempBreakEndTime : undefined,
-          breaks: useBreaks ? tempBreaks.map(({ start_time, end_time }) => ({ start_time, end_time })) : [],
+          ...legacyCleared,
+          breaks: breaksPayload,
         }, user?.user_type === 'admin' ? user?.id : undefined);
         setBusinessHours(prev => prev.map(h => 
           h.day_of_week === editingDay ? { 
             ...h, 
             start_time: tempStartTime, 
             end_time: tempEndTime, 
-            break_start_time: useBreaks ? tempBreakStartTime : undefined, 
-            break_end_time: useBreaks ? tempBreakEndTime : undefined,
-            breaks: useBreaks ? tempBreaks.map(({ start_time, end_time }) => ({ start_time, end_time })) : [],
+            ...legacyCleared,
+            breaks: breaksPayload,
           } : h
         ));
         // Notify waitlist clients that match the updated working windows for this day
@@ -400,7 +411,7 @@ export default function BusinessHoursScreen() {
           await notifyWaitlistOnBusinessHoursUpdate(editingDay, {
             start_time: tempStartTime,
             end_time: tempEndTime,
-            breaks: useBreaks ? tempBreaks.map(({ start_time, end_time }) => ({ start_time, end_time })) : [],
+            breaks: breaksPayload,
             is_active: true,
           });
         } catch {}
@@ -642,26 +653,18 @@ export default function BusinessHoursScreen() {
               </View>
               <View style={styles.summaryContent}>
                 <Text style={styles.summaryText}>{t('admin.hours.workPrefix')}: <Text style={styles.ltrText}>{formatRangeLtrDisplay(tempStartTime, tempEndTime, useAmPm)}</Text></Text>
-                {useBreaks ? (
-                  tempBreaks.length > 0 ? (
-                    <View style={{ gap: 4 }}>
-                      {tempBreaks.map((b, i) => (
-                        <Text key={b.id} style={styles.summaryBreak}>
-                          {tempBreaks.length > 1
-                            ? t('admin.hours.summaryBreakNumbered', { num: i + 1 })
-                            : t('admin.hours.summaryBreakSingle')}
-                          <Text style={styles.ltrText}>{formatRangeLtrDisplay(b.start_time, b.end_time, useAmPm)}</Text>
-                        </Text>
-                      ))}
-                    </View>
-                  ) : null
-                ) : (
-                  tempBreakStartTime && tempBreakEndTime ? (
-                    <Text style={styles.summaryBreak}>
-                      {t('admin.hours.breakPrefix')}: <Text style={styles.ltrText}>{formatRangeLtrDisplay(tempBreakStartTime, tempBreakEndTime, useAmPm)}</Text>
-                    </Text>
-                  ) : null
-                )}
+                {useBreaks && tempBreaks.length > 0 ? (
+                  <View style={{ gap: 4 }}>
+                    {tempBreaks.map((b, i) => (
+                      <Text key={b.id} style={styles.summaryBreak}>
+                        {tempBreaks.length > 1
+                          ? t('admin.hours.summaryBreakNumbered', { num: i + 1 })
+                          : t('admin.hours.summaryBreakSingle')}
+                        <Text style={styles.ltrText}>{formatRangeLtrDisplay(b.start_time, b.end_time, useAmPm)}</Text>
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
               </View>
             </Animated.View>
 

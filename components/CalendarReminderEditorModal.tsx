@@ -1,10 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Modal,
   Platform,
+  Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -14,9 +16,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { useTranslation } from 'react-i18next';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { Calendar as RNCalendar, LocaleConfig } from 'react-native-calendars';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useAuthStore } from '@/stores/authStore';
@@ -94,6 +95,56 @@ function timeOnDate(timeStr: string, day: Date): Date {
   return out;
 }
 
+function addMinutesToDate(d: Date, minutes: number): Date {
+  return new Date(d.getTime() + minutes * 60_000);
+}
+
+function minutesBetweenStartEnd(start: Date, end: Date): number {
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60_000));
+}
+
+/** 15 דק׳ — מספיק לרוב הלוחות; ערכים שאינם על הרשת נשמרים ברשימה */
+const TIME_SLOT_STEP_MINUTES = 15;
+
+function buildTimeSlots(stepMinutes: number): string[] {
+  const out: string[] = [];
+  for (let h = 0; h < 24; h++) {
+    for (let m = 0; m < 60; m += stepMinutes) {
+      out.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+    }
+  }
+  return out;
+}
+
+function mergeHHMMIntoSortedSlots(slots: string[], hhmm: string): string[] {
+  const t = hhmm.slice(0, 5);
+  if (slots.includes(t)) return slots;
+  return [...slots, t].sort((a, b) => a.localeCompare(b));
+}
+
+function calendarReminderSaveErrorHint(raw: string, tHe: (key: string, fb: string) => string): string {
+  const s = raw.toLowerCase();
+  if (s.includes('does not exist') || s.includes('schema cache') || s.includes('could not find the table')) {
+    return tHe(
+      'admin.calendarReminder.errTableMissing',
+      'טבלת התזכורות לא קיימת או לא מסונכרנת בשרת. יש להריץ מיגרציות Supabase (כולל יצירת calendar_reminders והרשאות).'
+    );
+  }
+  if (s.includes('permission denied') || s.includes('42501')) {
+    return tHe(
+      'admin.calendarReminder.errPermission',
+      'אין הרשאה לכתוב לטבלת התזכורות. בדקו הרשאות anon/authenticated על calendar_reminders ב-Supabase.'
+    );
+  }
+  if (s.includes('foreign key') || s.includes('23503') || s.includes('violates foreign key')) {
+    return tHe(
+      'admin.calendarReminder.errFkUser',
+      'המזהה של המשתמש לא תואם לרשומה בטבלת users — נסו להתנתק ולהתחבר מחדש.'
+    );
+  }
+  return raw;
+}
+
 function parseISODateToLocalDay(iso: string): Date {
   if (!iso || iso.length < 10) return new Date();
   const y = parseInt(iso.slice(0, 4), 10);
@@ -115,28 +166,26 @@ function CardSectionHeader({
   layoutRtl: boolean;
   primary: string;
 }) {
-  const labelEl = (
-    <Text style={[styles.cardTitle, layoutRtl ? styles.hebrewText : styles.cardTitleFlex]}>{label}</Text>
-  );
-  const iconEl = <Ionicons name={icon} size={20} color={primary} />;
+  if (layoutRtl) {
+    return (
+      <View style={styles.cardHeaderRtlExplicit}>
+        <Text style={styles.cardTitleRtlExplicit} numberOfLines={3}>
+          {label}
+        </Text>
+        <Ionicons name={icon} size={20} color={primary} />
+      </View>
+    );
+  }
   return (
-    <View style={[styles.cardHeader, layoutRtl && styles.cardHeaderRtl]}>
-      {layoutRtl ? (
-        <>
-          {labelEl}
-          {iconEl}
-        </>
-      ) : (
-        <>
-          {iconEl}
-          {labelEl}
-        </>
-      )}
+    <View style={styles.cardHeader}>
+      <Ionicons name={icon} size={20} color={primary} />
+      <Text style={[styles.cardTitle, styles.cardTitleFlex]}>{label}</Text>
     </View>
   );
 }
 
-function buildCalendarTheme(primary: string) {
+function buildCalendarTheme(primary: string, layoutRtl: boolean) {
+  const weekDir = layoutRtl ? ('row-reverse' as const) : ('row' as const);
   return {
     backgroundColor: UI.surface,
     calendarBackground: UI.surface,
@@ -153,16 +202,105 @@ function buildCalendarTheme(primary: string) {
     textDisabledColor: UI.textTertiary,
     monthTextColor: UI.text,
     'stylesheet.calendar.header': {
-      week: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 4 },
+      ...(layoutRtl
+        ? {
+            header: {
+              flexDirection: 'row-reverse',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              paddingLeft: 10,
+              paddingRight: 10,
+              marginTop: 6,
+            },
+            monthText: {
+              textAlign: 'right',
+              writingDirection: 'rtl',
+            },
+          }
+        : {}),
+      week: { flexDirection: weekDir, justifyContent: 'space-around', paddingVertical: 4 },
       dayHeader: { textAlign: 'center', color: UI.textSecondary, fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
     },
     'stylesheet.day.basic': {
       base: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
     },
     'stylesheet.calendar.main': {
-      week: { marginTop: 6, marginBottom: 6, flexDirection: 'row', justifyContent: 'space-around' },
+      week: { marginTop: 6, marginBottom: 6, flexDirection: weekDir, justifyContent: 'space-around' },
     },
   } as const;
+}
+
+function TimeSlotPickerSheet({
+  visible,
+  title,
+  options,
+  selectedHHMM,
+  primary,
+  layoutRtl,
+  formatOptionLabel,
+  onSelect,
+  onClose,
+  insetBottom,
+}: {
+  visible: boolean;
+  title: string;
+  options: string[];
+  selectedHHMM: string;
+  primary: string;
+  layoutRtl: boolean;
+  formatOptionLabel: (hhmm: string) => string;
+  onSelect: (hhmm: string) => void;
+  onClose: () => void;
+  insetBottom: number;
+}) {
+  if (!visible) return null;
+  return (
+    <View style={styles.timeSheetHost} pointerEvents="box-none">
+      <Pressable
+        style={styles.timeSheetBackdrop}
+        onPress={onClose}
+        accessibilityRole="button"
+        accessibilityLabel={layoutRtl ? 'סגור' : 'Close'}
+      />
+      <View style={[styles.timeSheetCard, { paddingBottom: Math.max(insetBottom, 16) }]}>
+        <Text style={[styles.timeSheetTitle, layoutRtl && styles.hebrewTextBlock]} numberOfLines={1}>
+          {title}
+        </Text>
+        <ScrollView
+          style={styles.timeSheetList}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator
+          bounces={false}
+        >
+          {options.map((item) => {
+            const on = item === selectedHHMM.slice(0, 5);
+            return (
+              <TouchableOpacity
+                key={item}
+                style={[styles.timeSheetRow, layoutRtl && styles.timeSheetRowRtl, on && { backgroundColor: `${primary}18` }]}
+                onPress={() => {
+                  onSelect(item);
+                  onClose();
+                }}
+                activeOpacity={0.72}
+              >
+                <Text
+                  style={[
+                    styles.timeSheetRowText,
+                    { writingDirection: 'ltr' },
+                    on && { color: primary, fontWeight: '800' },
+                  ]}
+                >
+                  {formatOptionLabel(item)}
+                </Text>
+                {on ? <Ionicons name="checkmark-circle" size={22} color={primary} /> : <View style={{ width: 22 }} />}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+    </View>
+  );
 }
 
 export interface CalendarReminderEditorModalProps {
@@ -173,7 +311,7 @@ export interface CalendarReminderEditorModalProps {
   defaultDate: Date;
 }
 
-export default function CalendarReminderEditorModal({
+function CalendarReminderEditorModalInner({
   visible,
   onClose,
   onSaved,
@@ -181,6 +319,14 @@ export default function CalendarReminderEditorModal({
   defaultDate,
 }: CalendarReminderEditorModalProps) {
   const insets = useSafeAreaInsets();
+  const statusBarFallback = Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0;
+  const mergedTop = Math.max(insets.top, statusBarFallback);
+  /** מודאל לפעמים מחזיר insets=0 לפריים ראשון — מינימום סטטוס־בר */
+  const safeTop = mergedTop > 0 ? mergedTop : Platform.OS === 'ios' ? 20 : statusBarFallback;
+  const gutterHorizontal = useMemo(
+    () => ({ marginLeft: 16 + insets.left, marginRight: 16 + insets.right }),
+    [insets.left, insets.right]
+  );
   const { colors: businessColors } = useBusinessColors();
   const { user } = useAuthStore();
   const { i18n } = useTranslation();
@@ -192,28 +338,25 @@ export default function CalendarReminderEditorModal({
   const rawLang = (i18n.resolvedLanguage || i18n.language || '').toLowerCase();
   const isHebrew = rawLang.startsWith('he') || rawLang.startsWith('iw');
   const calendarLocale = isHebrew ? 'he' : 'en';
-  /**
-   * פריסה RTL פיזית: ב־app/index מופעל forceRTL(false), ובנייה באנגלית משאירה i18n.language=en
-   * בזמן שכל המסך משתמש ב־tHe (עברית) — לכן אי אפשר להסתמך על isHebrew/I18nManager לכותרות.
-   */
-  const layoutRtl = true;
+  /** פריסה שמאלית (LTR): טקסט עברי עם יישור וסדר אלמנטים כמו באנגלית — לפי העדפת מוצר */
+  const layoutRtl = false;
 
   if (visible) {
     LocaleConfig.defaultLocale = calendarLocale;
   }
 
   const primary = businessColors.primary || '#1A73E8';
-  const calendarTheme = useMemo(() => buildCalendarTheme(primary), [primary]);
+  const calendarTheme = useMemo(() => buildCalendarTheme(primary, layoutRtl), [primary, layoutRtl]);
 
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
   const [eventDateISO, setEventDateISO] = useState(() => toLocalISODate(defaultDate));
-  const [timeDate, setTimeDate] = useState(() => timeOnDate('09:00', defaultDate));
-  const [duration, setDuration] = useState(30);
+  const [startTimeDate, setStartTimeDate] = useState(() => timeOnDate('09:00', defaultDate));
+  const [endTimeDate, setEndTimeDate] = useState(() => timeOnDate('09:30', defaultDate));
   const [colorKey, setColorKey] = useState<CalendarReminderColorKey>('blue');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [showAndroidTime, setShowAndroidTime] = useState(false);
+  const [timePickerWhich, setTimePickerWhich] = useState<'start' | 'end' | null>(null);
 
   const resetFromProps = useCallback(() => {
     if (editingReminder) {
@@ -221,8 +364,10 @@ export default function CalendarReminderEditorModal({
       setTitle(editingReminder.title || '');
       setNotes(editingReminder.notes || '');
       setEventDateISO(toLocalISODate(day));
-      setTimeDate(timeOnDate(editingReminder.start_time || '09:00', day));
-      setDuration(editingReminder.duration_minutes || 30);
+      const start = timeOnDate(editingReminder.start_time || '09:00', day);
+      const dur = editingReminder.duration_minutes || 30;
+      setStartTimeDate(start);
+      setEndTimeDate(addMinutesToDate(start, dur));
       setColorKey((editingReminder.color_key as CalendarReminderColorKey) || 'blue');
     } else {
       const d = new Date(defaultDate);
@@ -230,8 +375,9 @@ export default function CalendarReminderEditorModal({
       setTitle('');
       setNotes('');
       setEventDateISO(toLocalISODate(d));
-      setTimeDate(timeOnDate('09:00', d));
-      setDuration(30);
+      const s = timeOnDate('09:00', d);
+      setStartTimeDate(s);
+      setEndTimeDate(addMinutesToDate(s, 30));
       setColorKey('blue');
     }
   }, [editingReminder, defaultDate]);
@@ -239,7 +385,7 @@ export default function CalendarReminderEditorModal({
   useEffect(() => {
     if (visible) {
       resetFromProps();
-      setShowAndroidTime(false);
+      setTimePickerWhich(null);
     }
   }, [visible, resetFromProps]);
 
@@ -255,6 +401,43 @@ export default function CalendarReminderEditorModal({
       return dateToHHMM(d);
     }
   }, [isHebrew]);
+
+  const reminderDay = useMemo(() => parseISODateToLocalDay(eventDateISO), [eventDateISO]);
+
+  const timeSlotOptions = useMemo(() => {
+    const base = buildTimeSlots(TIME_SLOT_STEP_MINUTES);
+    const withStart = mergeHHMMIntoSortedSlots(base, dateToHHMM(startTimeDate));
+    return mergeHHMMIntoSortedSlots(withStart, dateToHHMM(endTimeDate));
+  }, [startTimeDate, endTimeDate]);
+
+  const formatSlotLabel = useCallback(
+    (hhmm: string) => formatTimeLabel(timeOnDate(hhmm, reminderDay)),
+    [formatTimeLabel, reminderDay]
+  );
+
+  const rangeDurationMinutes = useMemo(
+    () => minutesBetweenStartEnd(startTimeDate, endTimeDate),
+    [startTimeDate, endTimeDate]
+  );
+
+  const startTimeRef = useRef(startTimeDate);
+  useEffect(() => {
+    startTimeRef.current = startTimeDate;
+  }, [startTimeDate]);
+
+  const onStartTimeChange = useCallback((d: Date) => {
+    setStartTimeDate(d);
+    setEndTimeDate((prev) => (prev.getTime() <= d.getTime() ? addMinutesToDate(d, 30) : prev));
+  }, []);
+
+  const onEndTimeChange = useCallback((d: Date) => {
+    const s = startTimeRef.current;
+    if (d.getTime() <= s.getTime()) {
+      setEndTimeDate(addMinutesToDate(s, 30));
+    } else {
+      setEndTimeDate(d);
+    }
+  }, []);
 
   const calendarRenderArrow = useCallback(
     (direction: string) => {
@@ -278,7 +461,8 @@ export default function CalendarReminderEditorModal({
   const onDayPicked = useCallback((dateString: string) => {
     setEventDateISO(dateString);
     const day = parseISODateToLocalDay(dateString);
-    setTimeDate((prev) => timeOnDate(dateToHHMM(prev), day));
+    setStartTimeDate((prev) => timeOnDate(dateToHHMM(prev), day));
+    setEndTimeDate((prev) => timeOnDate(dateToHHMM(prev), day));
   }, []);
 
   const save = async () => {
@@ -287,11 +471,41 @@ export default function CalendarReminderEditorModal({
       Alert.alert(tHe('admin.calendarReminder.validationTitle', 'נא להזין כותרת'));
       return;
     }
-    const timeStr = dateToHHMM(timeDate);
+    const uuidRe =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRe.test(String(user.id))) {
+      Alert.alert(
+        tHe('error.generic', 'שגיאה'),
+        tHe(
+          'admin.calendarReminder.errNeedBarberUser',
+          'תזכורות היומן נשמרות למשתמש מנהל רגיל. התחברו כמנהל העסק (לא Super Admin).'
+        )
+      );
+      return;
+    }
+    if (endTimeDate.getTime() <= startTimeDate.getTime()) {
+      Alert.alert(
+        tHe('admin.calendarReminder.validationTimeRange', 'טווח שעות לא תקין'),
+        tHe(
+          'admin.calendarReminder.validationTimeRangeHint',
+          'שעת הסיום חייבת להיות אחרי שעת ההתחלה.'
+        )
+      );
+      return;
+    }
+    const duration = minutesBetweenStartEnd(startTimeDate, endTimeDate);
+    if (duration < 1) {
+      Alert.alert(
+        tHe('admin.calendarReminder.validationTimeRange', 'טווח שעות לא תקין'),
+        tHe('admin.calendarReminder.validationDurationMin', 'בחרו לפחות דקה אחת בין ההתחלה לסיום.')
+      );
+      return;
+    }
+    const timeStr = dateToHHMM(startTimeDate);
     setSaving(true);
     try {
       if (editingReminder) {
-        const ok = await updateCalendarReminder(editingReminder.id, {
+        const result = await updateCalendarReminder(editingReminder.id, {
           event_date: eventDateISO,
           start_time: timeStr,
           duration_minutes: duration,
@@ -299,14 +513,17 @@ export default function CalendarReminderEditorModal({
           notes: notes.trim() || null,
           color_key: colorKey,
         });
-        if (!ok) {
-          Alert.alert(tHe('error.generic', 'שגיאה'), tHe('admin.calendarReminder.saveFailed', 'לא ניתן לשמור'));
+        if (!result.ok) {
+          Alert.alert(
+            tHe('error.generic', 'שגיאה'),
+            calendarReminderSaveErrorHint(result.message, tHe)
+          );
         } else {
           await onSaved();
           onClose();
         }
       } else {
-        const row = await createCalendarReminder({
+        const result = await createCalendarReminder({
           barberId: user.id,
           eventDate: eventDateISO,
           startTime: timeStr,
@@ -315,8 +532,11 @@ export default function CalendarReminderEditorModal({
           notes: notes.trim() || null,
           colorKey,
         });
-        if (!row) {
-          Alert.alert(tHe('error.generic', 'שגיאה'), tHe('admin.calendarReminder.saveFailed', 'לא ניתן לשמור'));
+        if (!result.ok) {
+          Alert.alert(
+            tHe('error.generic', 'שגיאה'),
+            calendarReminderSaveErrorHint(result.message, tHe)
+          );
         } else {
           await onSaved();
           onClose();
@@ -357,50 +577,55 @@ export default function CalendarReminderEditorModal({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={[styles.root, layoutRtl && styles.rtlRoot]}>
-        <SafeAreaView style={[styles.safeTop, layoutRtl && styles.rtlRoot]} edges={['top', 'left', 'right']}>
-          <LinearGradient
-            colors={[`${primary}18`, `${primary}06`, 'transparent']}
-            locations={[0, 0.45, 1]}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-          <View style={styles.headerRow}>
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.headerIconBtn}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              accessibilityRole="button"
-              accessibilityLabel={tHe('close', 'סגור')}
-            >
-              <View style={[styles.iconCircle, { backgroundColor: UI.surface }]}>
-                <Ionicons name="close" size={22} color={UI.text} />
-              </View>
-            </TouchableOpacity>
-            <View style={[styles.headerTitles, layoutRtl && styles.headerTitlesRtl]}>
-              <Text style={[styles.headerTitle, layoutRtl && styles.hebrewText]} numberOfLines={1}>
-                {editingReminder
-                  ? tHe('admin.calendarReminder.editTitle', 'עריכת תזכורת')
-                  : tHe('admin.calendarReminder.newTitle', 'תזכורת ביומן')}
-              </Text>
-              <Text style={[styles.headerSubtitle, layoutRtl && styles.hebrewText]} numberOfLines={2}>
-                {tHe(
-                  'admin.calendarReminder.hint',
-                  'לא חוסם תורים — מוצג לצד התורים לעזרה לארגון היום'
-                )}
-              </Text>
-            </View>
-            <View style={{ width: 44 }} />
-          </View>
-        </SafeAreaView>
-
-        <KeyboardAwareScreenScroll
-          style={[styles.scrollFlex, layoutRtl && styles.rtlRoot]}
-          contentContainerStyle={{ paddingBottom: 120 }}
-          keyboardShouldPersistTaps="handled"
+    <View style={[styles.root, { paddingTop: safeTop }]}>
+      <View style={styles.headerSafeWrap}>
+        <LinearGradient
+          colors={[`${primary}18`, `${primary}06`, 'transparent']}
+          locations={[0, 0.45, 1]}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+        <View
+          style={[
+            styles.headerRow,
+            layoutRtl && styles.headerRowRtl,
+            { paddingLeft: 16 + insets.left, paddingRight: 16 + insets.right },
+          ]}
         >
-          <View style={[styles.card, layoutRtl && styles.rtlRoot]}>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.headerIconBtn}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel={tHe('close', 'סגור')}
+          >
+            <View style={[styles.iconCircle, { backgroundColor: UI.surface }]}>
+              <Ionicons name="close" size={22} color={UI.text} />
+            </View>
+          </TouchableOpacity>
+          <View style={[styles.headerTitles, layoutRtl && styles.headerTitlesRtl]}>
+            <Text style={[styles.headerTitle, layoutRtl && styles.hebrewTextBlock]} numberOfLines={1}>
+              {editingReminder
+                ? tHe('admin.calendarReminder.editTitle', 'עריכת תזכורת')
+                : tHe('admin.calendarReminder.newTitle', 'תזכורת ביומן')}
+            </Text>
+            <Text style={[styles.headerSubtitle, layoutRtl && styles.hebrewTextBlock]} numberOfLines={2}>
+              {tHe(
+                'admin.calendarReminder.hint',
+                'לא חוסם תורים — מוצג לצד התורים לעזרה לארגון היום'
+              )}
+            </Text>
+          </View>
+          <View style={{ width: 44 }} />
+        </View>
+      </View>
+
+      <KeyboardAwareScreenScroll
+        style={styles.scrollFlex}
+        contentContainerStyle={[styles.scrollContent, layoutRtl && styles.scrollContentRtl]}
+        keyboardShouldPersistTaps="handled"
+      >
+          <View style={[styles.card, layoutRtl && styles.cardRtl, gutterHorizontal]}>
             <CardSectionHeader
               icon="create-outline"
               layoutRtl={layoutRtl}
@@ -412,18 +637,18 @@ export default function CalendarReminderEditorModal({
               onChangeText={setTitle}
               placeholder={tHe('admin.calendarReminder.titlePlaceholder', 'למשל: טכנאי מגיע')}
               placeholderTextColor={UI.textTertiary}
-              style={[styles.titleInput, layoutRtl && styles.hebrewText]}
+              style={[styles.titleInput, layoutRtl && styles.hebrewText, layoutRtl && styles.fieldRtl]}
             />
           </View>
 
-          <View style={[styles.card, layoutRtl && styles.rtlRoot]}>
+          <View style={[styles.card, layoutRtl && styles.cardRtl, gutterHorizontal]}>
             <CardSectionHeader
               icon="calendar-outline"
               layoutRtl={layoutRtl}
               primary={primary}
               label={tHe('admin.hoursAdmin.pickDateShort', 'בחירת תאריך')}
             />
-            <View style={styles.calendarShell}>
+            <View style={[styles.calendarShell, layoutRtl && styles.calendarShellRtl]}>
               <RNCalendar
                 key={`reminder-cal-${calendarLocale}`}
                 current={eventDateISO}
@@ -433,101 +658,75 @@ export default function CalendarReminderEditorModal({
                 hideDayNames={false}
                 firstDay={0}
                 renderArrow={calendarRenderArrow}
-                style={{ direction: layoutRtl ? 'rtl' : 'ltr' }}
+                style={layoutRtl ? styles.calendarRtl : undefined}
                 theme={calendarTheme as object}
               />
             </View>
           </View>
 
-          <View style={[styles.card, layoutRtl && styles.rtlRoot]}>
+          <View style={[styles.card, layoutRtl && styles.cardRtl, gutterHorizontal]}>
             <CardSectionHeader
               icon="time-outline"
               layoutRtl={layoutRtl}
               primary={primary}
-              label={tHe('admin.calendarReminder.fieldTime', 'שעה')}
+              label={tHe('admin.calendarReminder.fieldTimeRange', 'טווח שעות')}
             />
-            {Platform.OS === 'android' ? (
-              <TouchableOpacity
-                style={styles.timeRow}
-                onPress={() => setShowAndroidTime(true)}
-                activeOpacity={0.88}
-              >
-                <View style={[styles.timeRowInner, layoutRtl && styles.timeRowInnerRtl]}>
-                  <View style={[styles.timeBadge, { backgroundColor: `${primary}14` }]}>
-                    <Ionicons name="time" size={18} color={primary} />
-                  </View>
-                  <Text style={[styles.timeRowValue, { writingDirection: 'ltr', textAlign: layoutRtl ? 'right' : 'left' }]}>
-                    {formatTimeLabel(timeDate)}
-                  </Text>
-                  <Ionicons name={layoutRtl ? 'chevron-back' : 'chevron-forward'} size={20} color={UI.textTertiary} />
-                </View>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.timeRow}>
-                <View style={[styles.timeRowInner, layoutRtl && styles.timeRowInnerRtl]}>
-                  <View style={[styles.timeBadge, { backgroundColor: `${primary}14` }]}>
-                    <Ionicons name="time" size={18} color={primary} />
-                  </View>
-                  <Text style={[styles.timeRowValue, { writingDirection: 'ltr', textAlign: layoutRtl ? 'right' : 'left' }]}>
-                    {formatTimeLabel(timeDate)}
-                  </Text>
-                </View>
-              </View>
-            )}
-            {Platform.OS === 'ios' && (
-              <View style={styles.iosPickerWrap}>
-                <DateTimePicker
-                  value={timeDate}
-                  mode="time"
-                  display="spinner"
-                  themeVariant="light"
-                  style={styles.iosPicker}
-                  onChange={(_, d) => {
-                    if (d) setTimeDate(d);
-                  }}
-                  locale={isHebrew ? 'he-IL' : 'en-US'}
-                />
-              </View>
-            )}
-          </View>
-
-          <View style={[styles.card, layoutRtl && styles.rtlRoot]}>
-            <CardSectionHeader
-              icon="hourglass-outline"
-              layoutRtl={layoutRtl}
-              primary={primary}
-              label={tHe('admin.calendarReminder.fieldDuration', 'משך')}
-            />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={layoutRtl ? { direction: 'rtl' } : undefined}
-              contentContainerStyle={styles.durationRow}
+            <Text
+              style={[
+                styles.rangeHint,
+                layoutRtl && styles.hebrewTextBlock,
+                { color: rangeDurationMinutes > 0 ? UI.textSecondary : UI.danger },
+              ]}
             >
-              {[15, 30, 45, 60, 90, 120].map((m) => (
-                <TouchableOpacity
-                  key={m}
-                  onPress={() => setDuration(m)}
-                  style={[
-                    styles.durationChip,
-                    duration === m && { backgroundColor: primary, borderColor: primary },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.durationChipText,
-                      layoutRtl && styles.hebrewText,
-                      duration === m && styles.durationChipTextActive,
-                    ]}
-                  >
-                    {`${m} ${tHe('admin.calendarReminder.minShort', 'דק׳')}`}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+              {rangeDurationMinutes > 0
+                ? `${formatTimeLabel(startTimeDate)} – ${formatTimeLabel(endTimeDate)} · ${rangeDurationMinutes} ${tHe('admin.calendarReminder.minShort', 'דק׳')}`
+                : tHe('admin.calendarReminder.rangeInvalidHint', 'שעת הסיום אחרי שעת ההתחלה')}
+            </Text>
+
+            <Text style={[styles.timeSubLabel, layoutRtl && styles.hebrewTextBlock]}>
+              {tHe('admin.calendarReminder.rangeStart', 'התחלה')}
+            </Text>
+            <TouchableOpacity
+              style={styles.timeRow}
+              onPress={() => setTimePickerWhich('start')}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+              accessibilityLabel={tHe('admin.calendarReminder.rangeStart', 'התחלה')}
+            >
+              <View style={[styles.timeRowInner, layoutRtl && styles.timeRowInnerRtl]}>
+                <View style={[styles.timeBadge, { backgroundColor: `${primary}14` }]}>
+                  <Ionicons name="play-outline" size={18} color={primary} />
+                </View>
+                <Text style={[styles.timeRowValue, { writingDirection: 'ltr', textAlign: layoutRtl ? 'right' : 'left' }]}>
+                  {formatTimeLabel(startTimeDate)}
+                </Text>
+                <Ionicons name="chevron-down" size={20} color={UI.textTertiary} />
+              </View>
+            </TouchableOpacity>
+
+            <Text style={[styles.timeSubLabel, styles.timeSubLabelSpaced, layoutRtl && styles.hebrewTextBlock]}>
+              {tHe('admin.calendarReminder.rangeEnd', 'סיום')}
+            </Text>
+            <TouchableOpacity
+              style={styles.timeRow}
+              onPress={() => setTimePickerWhich('end')}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+              accessibilityLabel={tHe('admin.calendarReminder.rangeEnd', 'סיום')}
+            >
+              <View style={[styles.timeRowInner, layoutRtl && styles.timeRowInnerRtl]}>
+                <View style={[styles.timeBadge, { backgroundColor: `${primary}14` }]}>
+                  <Ionicons name="stop-outline" size={18} color={primary} />
+                </View>
+                <Text style={[styles.timeRowValue, { writingDirection: 'ltr', textAlign: layoutRtl ? 'right' : 'left' }]}>
+                  {formatTimeLabel(endTimeDate)}
+                </Text>
+                <Ionicons name="chevron-down" size={20} color={UI.textTertiary} />
+              </View>
+            </TouchableOpacity>
           </View>
 
-          <View style={[styles.card, layoutRtl && styles.rtlRoot]}>
+          <View style={[styles.card, layoutRtl && styles.cardRtl, gutterHorizontal]}>
             <CardSectionHeader
               icon="color-palette-outline"
               layoutRtl={layoutRtl}
@@ -551,7 +750,7 @@ export default function CalendarReminderEditorModal({
             </View>
           </View>
 
-          <View style={[styles.card, layoutRtl && styles.rtlRoot]}>
+          <View style={[styles.card, layoutRtl && styles.cardRtl, gutterHorizontal]}>
             <CardSectionHeader
               icon="chatbubble-ellipses-outline"
               layoutRtl={layoutRtl}
@@ -575,12 +774,26 @@ export default function CalendarReminderEditorModal({
               />
             </View>
           </View>
-        </KeyboardAwareScreenScroll>
+      </KeyboardAwareScreenScroll>
 
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <View
+          style={[
+            styles.footer,
+            {
+              paddingBottom: Math.max(insets.bottom, 12),
+              paddingLeft: 16 + insets.left,
+              paddingRight: 16 + insets.right,
+            },
+          ]}
+        >
           <LinearGradient colors={[UI.bg, UI.bg]} style={StyleSheet.absoluteFill} />
           <TouchableOpacity
-            style={[styles.saveBtn, { backgroundColor: primary, shadowColor: primary }, saving && styles.saveBtnDisabled]}
+            style={[
+              styles.saveBtn,
+              layoutRtl && styles.saveBtnRtl,
+              { backgroundColor: primary, shadowColor: primary },
+              saving && styles.saveBtnDisabled,
+            ]}
             onPress={save}
             disabled={saving}
             activeOpacity={0.9}
@@ -589,8 +802,13 @@ export default function CalendarReminderEditorModal({
               <ActivityIndicator color="#FFFFFF" />
             ) : (
               <>
-                <Ionicons name="checkmark-circle-outline" size={22} color="#FFFFFF" style={{ marginEnd: 8 }} />
-                <Text style={[styles.saveBtnText, layoutRtl && styles.hebrewText]}>{tHe('save', 'שמירה')}</Text>
+                <Ionicons
+                  name="checkmark-circle-outline"
+                  size={22}
+                  color="#FFFFFF"
+                  style={layoutRtl ? { marginStart: 8 } : { marginEnd: 8 }}
+                />
+                <Text style={styles.saveBtnText}>{tHe('save', 'שמירה')}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -608,34 +826,52 @@ export default function CalendarReminderEditorModal({
             </TouchableOpacity>
           ) : null}
         </View>
-      </View>
 
-      {Platform.OS === 'android' && showAndroidTime ? (
-        <DateTimePicker
-          value={timeDate}
-          mode="time"
-          display="default"
-          onChange={(ev, date) => {
-            setShowAndroidTime(false);
-            if (ev.type === 'set' && date) setTimeDate(date);
+        <TimeSlotPickerSheet
+          visible={timePickerWhich !== null}
+          title={
+            timePickerWhich === 'end'
+              ? tHe('admin.calendarReminder.pickEndTime', 'בחירת שעת סיום')
+              : tHe('admin.calendarReminder.pickStartTime', 'בחירת שעת התחלה')
+          }
+          options={timeSlotOptions}
+          selectedHHMM={timePickerWhich === 'end' ? dateToHHMM(endTimeDate) : dateToHHMM(startTimeDate)}
+          primary={primary}
+          layoutRtl={layoutRtl}
+          formatOptionLabel={formatSlotLabel}
+          onSelect={(hhmm) => {
+            const d = timeOnDate(hhmm, reminderDay);
+            if (timePickerWhich === 'start') onStartTimeChange(d);
+            else onEndTimeChange(d);
           }}
+          onClose={() => setTimePickerWhich(null)}
+          insetBottom={insets.bottom}
         />
-      ) : null}
+    </View>
+  );
+}
+
+export default function CalendarReminderEditorModal(props: CalendarReminderEditorModalProps) {
+  return (
+    <Modal visible={props.visible} animationType="slide" onRequestClose={props.onClose}>
+      <SafeAreaProvider>
+        <CalendarReminderEditorModalInner {...props} />
+      </SafeAreaProvider>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: UI.bg },
-  rtlRoot: { direction: 'rtl' },
-  safeTop: { zIndex: 2 },
+  headerSafeWrap: { zIndex: 2 },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
     paddingBottom: 14,
     gap: 12,
   },
+  /** Physical mirror: כפתור סגירה מימין, כותרות במרכז-שמאל */
+  headerRowRtl: { flexDirection: 'row-reverse' },
   headerIconBtn: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   iconCircle: {
     width: 44,
@@ -651,14 +887,22 @@ const styles = StyleSheet.create({
     }),
   },
   scrollFlex: { flex: 1 },
+  scrollContent: { paddingBottom: 120 },
+  scrollContentRtl: { flexGrow: 1, width: '100%', alignItems: 'stretch' },
   headerTitles: { flex: 1, justifyContent: 'center', alignItems: 'flex-start' },
   /** RTL/Hebrew: stretch so `textAlign: 'right'` anchors to the physical right edge */
   headerTitlesRtl: { alignSelf: 'stretch', width: '100%', alignItems: 'stretch' },
   headerTitle: { fontSize: 20, fontWeight: '800', color: UI.text, letterSpacing: -0.3 },
   headerSubtitle: { fontSize: 13, fontWeight: '600', color: UI.textSecondary, marginTop: 4, lineHeight: 18 },
   hebrewText: { textAlign: 'right', writingDirection: 'rtl' },
+  /** טקסט בלוק מלא — בלי זה `textAlign: 'right'` נשאר צמוד לשמאל ברוחב תוכן */
+  hebrewTextBlock: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    alignSelf: 'stretch',
+    width: '100%',
+  },
   card: {
-    marginHorizontal: 16,
     marginTop: 14,
     backgroundColor: UI.surface,
     borderRadius: 22,
@@ -670,6 +914,7 @@ const styles = StyleSheet.create({
       android: { elevation: 3 },
     }),
   },
+  cardRtl: { alignItems: 'stretch' },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -677,9 +922,23 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     width: '100%',
   },
-  cardHeaderRtl: { justifyContent: 'flex-end' },
+  cardHeaderRtlExplicit: {
+    width: '100%',
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
   cardTitle: { fontSize: 16, fontWeight: '800', color: UI.text },
   cardTitleFlex: { flex: 1 },
+  cardTitleRtlExplicit: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '800',
+    color: UI.text,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
   calendarShell: {
     borderRadius: 16,
     overflow: 'hidden',
@@ -687,6 +946,8 @@ const styles = StyleSheet.create({
     borderColor: UI.border,
     backgroundColor: UI.surface,
   },
+  calendarShellRtl: { alignSelf: 'stretch' },
+  calendarRtl: { width: '100%', alignSelf: 'stretch' },
   timeRow: {
     borderRadius: 16,
     borderWidth: 1.5,
@@ -698,21 +959,58 @@ const styles = StyleSheet.create({
   timeRowInnerRtl: { flexDirection: 'row-reverse' },
   timeBadge: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   timeRowValue: { flex: 1, fontSize: 17, fontWeight: '800', color: UI.text },
-  iosPickerWrap: { marginTop: 8, alignItems: 'center' },
-  iosPicker: { height: 180, width: '100%' },
-  durationRow: { flexDirection: 'row', gap: 8, paddingVertical: 2 },
-  durationChip: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: UI.border,
-    backgroundColor: 'rgba(60,60,67,0.04)',
+  rangeHint: { fontSize: 14, fontWeight: '600', marginBottom: 14, lineHeight: 20 },
+  timeSubLabel: { fontSize: 13, fontWeight: '700', color: UI.textSecondary, marginBottom: 8 },
+  timeSubLabelSpaced: { marginTop: 4 },
+  timeSheetHost: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 200,
   },
-  durationChipText: { fontSize: 14, fontWeight: '700', color: UI.text },
-  durationChipTextActive: { color: '#FFFFFF' },
-  colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'flex-start' },
-  colorRowRtl: { justifyContent: 'flex-end' },
+  timeSheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  timeSheetCard: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: UI.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '58%',
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: UI.border,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.12, shadowRadius: 12 },
+      android: { elevation: 16 },
+    }),
+  },
+  timeSheetTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: UI.text,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: UI.border,
+  },
+  timeSheetList: { maxHeight: 320 },
+  timeSheetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: UI.border,
+  },
+  timeSheetRowRtl: { flexDirection: 'row-reverse' },
+  timeSheetRowText: { fontSize: 17, fontWeight: '600', color: UI.text },
+  colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'flex-start', width: '100%' },
+  /** row-reverse + flex-start = התחלה מימין (בלי לסמוך על direction:rtl באנדרואיד) */
+  colorRowRtl: { flexDirection: 'row-reverse', justifyContent: 'flex-start' },
   colorDot: {
     width: 40,
     height: 40,
@@ -740,12 +1038,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: UI.text,
   },
+  fieldRtl: { alignSelf: 'stretch', width: '100%' },
   footer: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: 16,
     paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: UI.border,
@@ -762,6 +1060,7 @@ const styles = StyleSheet.create({
       android: { elevation: 8 },
     }),
   },
+  saveBtnRtl: { flexDirection: 'row-reverse' },
   saveBtnDisabled: { opacity: 0.65 },
   saveBtnText: { color: '#FFFFFF', fontSize: 17, fontWeight: '800', textAlign: 'center' },
   deleteTextBtn: { marginTop: 12, alignItems: 'center', paddingVertical: 8 },

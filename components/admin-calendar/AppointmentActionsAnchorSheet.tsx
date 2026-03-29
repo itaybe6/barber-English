@@ -151,8 +151,8 @@ export function AppointmentActionsAnchorSheet({
     );
   }, [open, duration, progress, scheduleDismissed]);
 
-  /** Tall enough for hero + actions; scroll lives in parent content */
-  const finalH = Math.min(Math.max(winH * 0.74, 440), 640);
+  /** Shorter than full sheet; ScrollView scrolls if content exceeds (e.g. small phone + large text) */
+  const finalH = Math.min(Math.max(winH * 0.58, 340), 500);
 
   const backdropStyle = useAnimatedStyle(() => ({
     opacity: interpolate(progress.value, [0, 1], [0, 1], Extrapolation.CLAMP),
@@ -166,7 +166,7 @@ export function AppointmentActionsAnchorSheet({
   const panelStyle = useAnimatedStyle(() => {
     const finalW = Math.min(winW * 0.88, 420);
     const targetCX = winW / 2 + openedCenterOffsetX.value;
-    const targetCY = winH * 0.42;
+    const targetCY = winH * 0.40;
     const p = progress.value;
     const cx = interpolate(p, [0, 1], [cx0.value, targetCX], Extrapolation.CLAMP);
     const cy = interpolate(p, [0, 1], [cy0.value, targetCY], Extrapolation.CLAMP);

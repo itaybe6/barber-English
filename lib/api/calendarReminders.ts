@@ -104,6 +104,17 @@ export async function listCalendarReminderDatesInMonth(
   return [...out];
 }
 
+export type CalendarReminderSaveResult =
+  | { ok: true; reminder: CalendarReminder }
+  | { ok: false; message: string };
+
+function formatSupabaseError(prefix: string, error: { message?: string; code?: string; details?: string }): string {
+  const parts = [error.message, error.details].filter(Boolean).join(' — ');
+  const msg = parts || 'Unknown error';
+  console.warn(`[calendarReminders] ${prefix}:`, msg, error.code ? `(code ${error.code})` : '');
+  return msg;
+}
+
 export async function createCalendarReminder(input: {
   barberId: string;
   eventDate: string;
@@ -112,7 +123,7 @@ export async function createCalendarReminder(input: {
   title: string;
   notes: string | null;
   colorKey: CalendarReminderColorKey;
-}): Promise<CalendarReminder | null> {
+}): Promise<CalendarReminderSaveResult> {
   const businessId = getBusinessId();
   const time =
     input.startTime.length === 5 ? `${input.startTime}:00` : input.startTime;
@@ -130,13 +141,15 @@ export async function createCalendarReminder(input: {
       color_key: input.colorKey,
     })
     .select('*')
-    .maybeSingle();
+    .single();
 
   if (error) {
-    console.warn('[calendarReminders] createCalendarReminder:', error.message);
-    return null;
+    return { ok: false, message: formatSupabaseError('createCalendarReminder', error) };
   }
-  return data ? normalizeRow(data as Record<string, unknown>) : null;
+  if (!data) {
+    return { ok: false, message: 'No row returned after insert' };
+  }
+  return { ok: true, reminder: normalizeRow(data as Record<string, unknown>) };
 }
 
 export async function updateCalendarReminder(
@@ -149,11 +162,11 @@ export async function updateCalendarReminder(
     notes: string | null;
     color_key: CalendarReminderColorKey;
   }
-): Promise<boolean> {
+): Promise<CalendarReminderSaveResult> {
   const businessId = getBusinessId();
   const start =
     patch.start_time.length === 5 ? `${patch.start_time}:00` : patch.start_time;
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from(TABLE)
     .update({
       event_date: patch.event_date,
@@ -165,13 +178,17 @@ export async function updateCalendarReminder(
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
-    .eq('business_id', businessId);
+    .eq('business_id', businessId)
+    .select('*')
+    .maybeSingle();
 
   if (error) {
-    console.warn('[calendarReminders] updateCalendarReminder:', error.message);
-    return false;
+    return { ok: false, message: formatSupabaseError('updateCalendarReminder', error) };
   }
-  return true;
+  if (!data) {
+    return { ok: false, message: 'No matching row updated (wrong id or business?)' };
+  }
+  return { ok: true, reminder: normalizeRow(data as Record<string, unknown>) };
 }
 
 export async function deleteCalendarReminder(id: string): Promise<boolean> {

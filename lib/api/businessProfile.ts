@@ -40,6 +40,18 @@ export const businessProfileApi = {
     }
   },
 
+  /**
+   * True when `userPhone` matches `business_profile.phone` for the current tenant.
+   * Same rule as "Add employee" in settings — identifies the business owner account.
+   */
+  async isUserPhoneMatchingBusinessOwner(userPhone: string | null | undefined): Promise<boolean> {
+    const normalizedUser = String(userPhone ?? '').trim();
+    if (!normalizedUser) return false;
+    const profile = await this.getProfile();
+    const businessPhone = String(profile?.phone ?? '').trim();
+    return businessPhone !== '' && normalizedUser === businessPhone;
+  },
+
   async createDefaultProfile(businessId: string): Promise<BusinessProfile | null> {
     try {
       const defaultData = {
@@ -297,6 +309,30 @@ export const businessProfileApi = {
     }
   },
   
+  /**
+   * Widest booking horizon among all per-barber overrides and the legacy global default.
+   * Use for client home / appointment lists that aggregate across barbers.
+   */
+  async getMaxBookingOpenDaysAcrossBusiness(): Promise<number> {
+    try {
+      const profile = await this.getProfile();
+      if (!profile) return 7;
+      const globalDefault = Math.max(
+        1,
+        Math.min(60, Number((profile as any).booking_open_days ?? 7)),
+      );
+      const byUser = ((profile as any).booking_open_days_by_user ?? {}) as Record<string, number>;
+      const values = Object.values(byUser).map((v) =>
+        Math.max(1, Math.min(60, Number(v))),
+      );
+      if (values.length === 0) return globalDefault;
+      return Math.max(globalDefault, ...values);
+    } catch (e) {
+      console.error('Error in getMaxBookingOpenDaysAcrossBusiness:', e);
+      return 7;
+    }
+  },
+
   async getBookingOpenDaysForUser(userId?: string | null): Promise<number> {
     try {
       const businessId = getBusinessId();

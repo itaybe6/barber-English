@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Linking, Alert, Animated, Easing, InteractionManager, AppState, Dimensions, RefreshControl, Modal, Platform, useWindowDimensions } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Linking, Alert, Animated, Easing, InteractionManager, AppState, Dimensions, RefreshControl, Platform, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -14,7 +14,6 @@ import { BlurView } from 'expo-blur';
 import LoginRequiredModal from '@/components/LoginRequiredModal';
 import { Appointment as AvailableTimeSlot } from '@/lib/supabase';
 import { notificationsApi } from '@/lib/api/notifications';
-import { messagesApi } from '@/lib/api/messages';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import type { BusinessProfile } from '@/lib/supabase';
 import DesignCarousel from '@/components/DesignCarousel';
@@ -262,8 +261,6 @@ export default function ClientHomeScreen() {
   const [isLoadingWaitlist, setIsLoadingWaitlist] = useState(false);
   const [isRemovingFromWaitlist, setIsRemovingFromWaitlist] = useState(false);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
-  const [activeMessage, setActiveMessage] = useState<any | null>(null);
-  const [showMessageModal, setShowMessageModal] = useState(false);
   const [cardWidth, setCardWidth] = useState(0);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const heroImages = useMemo(() => resolveHeroImageUrls(businessProfile), [businessProfile]);
@@ -274,16 +271,12 @@ export default function ClientHomeScreen() {
   const [mapCoords, setMapCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [osmFailed, setOsmFailed] = useState(false);
   const [googleFailed, setGoogleFailed] = useState(false);
-  const GOOGLE_KEY_EXTRA = (Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY;
-  const GOOGLE_KEY_JSON = (() => {
-    try {
-      const cur = require('../../branding/current.json');
-      return cur?.config?.expo?.extra?.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY;
-    } catch { return undefined; }
-  })();
-  const GOOGLE_KEY_ENV = (process.env as any)?.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY;
-  const GOOGLE_KEY_FALLBACK = '';
-  const GOOGLE_STATIC_MAPS_KEY = GOOGLE_KEY_EXTRA || GOOGLE_KEY_JSON || GOOGLE_KEY_ENV || GOOGLE_KEY_FALLBACK;
+  // Do not require branding/current.json — Metro reads it during bundling while app.config.js
+  // may be rewriting it; on Windows (OneDrive) that causes EBUSY. Keys are already in expo.extra.
+  const GOOGLE_STATIC_MAPS_KEY =
+    (Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY ||
+    (process.env as any)?.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY ||
+    '';
 
   
 
@@ -436,8 +429,8 @@ export default function ClientHomeScreen() {
     const today = new Date();
     const dates: string[] = [];
     
-    // Fetch appointments for the next N days based on booking window
-    const horizonDays = Math.max(1, Number((businessProfile as any)?.booking_open_days ?? 7));
+    // Fetch appointments for the next N days — max horizon across barbers (per-employee windows)
+    const horizonDays = await businessProfileApi.getMaxBookingOpenDaysAcrossBusiness();
     for (let i = 0; i <= horizonDays; i++) {
       const date = new Date(today);
       date.setDate(today.getDate() + i);
@@ -550,23 +543,6 @@ export default function ClientHomeScreen() {
   useEffect(() => {
     fetchUnreadNotificationsCount();
   }, [fetchUnreadNotificationsCount]);
-
-  // Fetch active broadcast message on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const msg = await messagesApi.getActiveMessageWithSender();
-        if (msg) {
-          setActiveMessage(msg);
-          setShowMessageModal(true);
-        } else {
-          setActiveMessage(null);
-          setShowMessageModal(false);
-        }
-      } catch {}
-    })();
-  }, []);
-
 
   // Fetch designs on mount
   useEffect(() => {
@@ -1285,67 +1261,6 @@ export default function ClientHomeScreen() {
           </View>
         </LinearGradient>
       </View>
-
-        {/* Active Broadcast Message Modal */}
-        <Modal
-          visible={showMessageModal && !!activeMessage}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setShowMessageModal(false)}
-        >
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-            <BlurView intensity={60} tint="light" style={{ width: '92%', maxWidth: 520, borderRadius: 24, overflow: 'hidden' }}>
-              <LinearGradient
-                colors={[colors.primary, colors.primary]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={{ paddingHorizontal: 16, paddingTop: 18, paddingBottom: 16, alignItems: 'center', justifyContent: 'center' }}
-              >
-                <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800', textAlign: 'center' }}>
-                  {(activeMessage?.sender_name && activeMessage?.sender_name.trim().length > 0) ? activeMessage.sender_name : 'Studio'}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => setShowMessageModal(false)}
-                  activeOpacity={0.85}
-                  style={{ position: 'absolute', top: 10, right: 10, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.2)' }}
-                >
-                  <Ionicons name="close" size={18} color="#fff" />
-                </TouchableOpacity>
-              </LinearGradient>
-
-              <View style={{ backgroundColor: '#FBFBFD', padding: 16 }}>
-                <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#E5E5EA' }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-                    <View style={{ width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: `${colors.primary}20`, marginRight: 10 }}>
-                      <Ionicons name="pricetag-outline" size={16} color={colors.primary} />
-                    </View>
-                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#1C1C1E', textAlign: 'left', flex: 1 }} numberOfLines={2}>
-                      {activeMessage?.title || 'Message'}
-                    </Text>
-                  </View>
-                  <Text style={{ fontSize: 14, color: '#6B7280', lineHeight: 20, textAlign: 'left' }}>
-                    {activeMessage?.content || ''}
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  onPress={() => setShowMessageModal(false)}
-                  activeOpacity={0.85}
-                  style={{ marginTop: 14, borderRadius: 16, overflow: 'hidden' }}
-                >
-                  <LinearGradient
-                    colors={[colors.primary, colors.primary]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={{ paddingVertical: 12, alignItems: 'center', justifyContent: 'center' }}
-                  >
-                    <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>{t('ok')}</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              </View>
-            </BlurView>
-          </View>
-        </Modal>
 
         {/* Login required modal */}
         <LoginRequiredModal

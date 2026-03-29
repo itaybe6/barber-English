@@ -166,6 +166,10 @@ function _primaryRgbA(primary: string, alpha: number): string {
 }
 
 const { width: _screenWidth } = Dimensions.get('window');
+/** Horizontal margin on `timelineContainer` (each side) — must match `styles.timelineContainer`. */
+const DAY_TIMELINE_MARGIN_H = 12;
+/** Left column width for day-view time labels (must match `styles.timeLabel` / overlay padding). */
+const LABELS_WIDTH = 64;
 const _daysInWeekToDisplay = 7;
 // +1 is for the hours column
 const _baseDaySize = _screenWidth / (_daysInWeekToDisplay + 1);
@@ -194,9 +198,37 @@ function reminderPalette(key: string | null | undefined) {
   return REMINDER_PALETTE[key || 'blue'] || REMINDER_PALETTE.blue;
 }
 
+function _calendarRangeEndMinutes(startMinutes: number, durationMinutes: number): number {
+  return startMinutes + Math.max(1, durationMinutes || 30);
+}
+
+/** True when two [start, start+duration) minute ranges intersect. */
+function _calendarRangesOverlapMinutes(
+  aStart: number,
+  aDuration: number,
+  bStart: number,
+  bDuration: number
+): boolean {
+  const aEnd = _calendarRangeEndMinutes(aStart, aDuration);
+  const bEnd = _calendarRangeEndMinutes(bStart, bDuration);
+  return aStart < bEnd && bStart < aEnd;
+}
+
 /** Admin calendar: blocked-time styling (amber) */
 const CONSTRAINT_BAR = '#C2410C';
 const CONSTRAINT_BG = '#FFFBEB';
+
+/** YYYY-MM-DD lexicographic order matches chronological */
+function mergeCalendarRefreshRange(
+  week: { start: string; end: string },
+  payload?: { dateMin: string; dateMax: string }
+): { start: string; end: string } {
+  if (!payload?.dateMin || !payload?.dateMax) return week;
+  return {
+    start: week.start <= payload.dateMin ? week.start : payload.dateMin,
+    end: week.end >= payload.dateMax ? week.end : payload.dateMax,
+  };
+}
 
 function _isFullDayConstraint(c: BusinessConstraint, mf: (t?: string | null) => number): boolean {
   const s = mf(c.start_time);
@@ -504,6 +536,8 @@ const WeekAppointmentCard = memo(
     hasPhone,
     primaryColor,
     onOpenAppointment,
+    weekLane,
+    weekLaneMetrics,
   }: {
     apt: AvailableTimeSlot;
     top: number;
@@ -513,6 +547,9 @@ const WeekAppointmentCard = memo(
     hasPhone: boolean;
     primaryColor: string;
     onOpenAppointment: (apt: AvailableTimeSlot, anchor?: AnchorRect) => void;
+    /** When a calendar reminder overlaps this slot, draw the card in the trailing half-column. */
+    weekLane?: 'full' | 'trailing';
+    weekLaneMetrics?: { edge: number; midGap: number; halfW: number };
   }) => {
     const cardRef = useRef<View>(null);
 
@@ -535,6 +572,7 @@ const WeekAppointmentCard = memo(
       onOpenAppointment(apt);
     }, [apt, onOpenAppointment]);
 
+    const useTrailing = weekLane === 'trailing' && weekLaneMetrics;
     return (
       <Pressable
         key={`wk-${apt.id}-${apt.slot_date}-${apt.slot_time}`}
@@ -544,8 +582,12 @@ const WeekAppointmentCard = memo(
           {
             top,
             height: cardHeight,
-            left: 3,
-            right: 3,
+            ...(useTrailing
+              ? {
+                  left: weekLaneMetrics!.edge + weekLaneMetrics!.halfW + weekLaneMetrics!.midGap,
+                  width: weekLaneMetrics!.halfW,
+                }
+              : { left: 3, right: 3 }),
             zIndex: 3,
             elevation: 4,
             opacity: pressed ? 0.92 : 1,
@@ -617,6 +659,46 @@ const WeekDayColumn = memo(
     minutesFromMidnight: (time?: string | null) => number;
   }) => {
     const { t } = useTranslation();
+    const WK_EDGE = 4;
+    const WK_MID = 2;
+    const weekInner = columnWidth - WK_EDGE * 2;
+    const weekHalfW = Math.max(34, (weekInner - WK_MID) / 2);
+    const weekLaneMetrics = useMemo(
+      () => ({ edge: WK_EDGE, midGap: WK_MID, halfW: weekHalfW }),
+      [weekHalfW]
+    );
+
+    const reminderIdsOverlappingAppt = useMemo(() => {
+      const ids = new Set<string>();
+      for (const r of reminders) {
+        const rs = minutesFromMidnight(r.start_time);
+        const rd = r.duration_minutes || 30;
+        const overlaps = appts.some((apt) =>
+          _calendarRangesOverlapMinutes(rs, rd, minutesFromMidnight(apt.slot_time), apt.duration_minutes || 30)
+        );
+        if (overlaps) ids.add(r.id);
+      }
+      return ids;
+    }, [reminders, appts, minutesFromMidnight]);
+
+    const aptIdsOverlappingReminder = useMemo(() => {
+      const ids = new Set<string>();
+      for (const apt of appts) {
+        const aStart = minutesFromMidnight(apt.slot_time);
+        const aDur = apt.duration_minutes || 30;
+        const overlaps = reminders.some((r) =>
+          _calendarRangesOverlapMinutes(
+            minutesFromMidnight(r.start_time),
+            r.duration_minutes || 30,
+            aStart,
+            aDur
+          )
+        );
+        if (overlaps) ids.add(String(apt.id));
+      }
+      return ids;
+    }, [reminders, appts, minutesFromMidnight]);
+
     return (
       <View
         style={[
@@ -692,6 +774,7 @@ const WeekDayColumn = memo(
             const top = (startM / 60) * hourRowHeight;
             const height = (durationMinutes / 60) * hourRowHeight;
             const pal = reminderPalette(r.color_key);
+            const splitWithAppt = reminderIdsOverlappingAppt.has(r.id);
             return (
               <PressableScale
                 key={`wk-rm-${r.id}`}
@@ -701,10 +784,11 @@ const WeekDayColumn = memo(
                   {
                     top: Math.max(0, top + 2),
                     height: Math.max(36, height - 4),
-                    left: 4,
-                    right: 4,
-                    zIndex: 2,
-                    elevation: 2,
+                    ...(splitWithAppt
+                      ? { left: WK_EDGE, width: weekHalfW }
+                      : { left: 4, right: 4 }),
+                    zIndex: splitWithAppt ? 4 : 2,
+                    elevation: splitWithAppt ? 3 : 2,
                     backgroundColor: pal.bg,
                     borderLeftColor: pal.bar,
                   },
@@ -729,6 +813,7 @@ const WeekDayColumn = memo(
             const serviceName = apt.service_name || 'שירות';
             const hasPhone = !!apt.client_phone;
             const cardHeight = Math.max(40, height - 4);
+            const splitWithReminder = aptIdsOverlappingReminder.has(String(apt.id));
             return (
               <WeekAppointmentCard
                 key={`wk-${apt.id}-${apt.slot_date}-${apt.slot_time}`}
@@ -740,6 +825,8 @@ const WeekDayColumn = memo(
                 hasPhone={hasPhone}
                 primaryColor={primaryColor}
                 onOpenAppointment={onOpenAppointment}
+                weekLane={splitWithReminder ? 'trailing' : 'full'}
+                weekLaneMetrics={splitWithReminder ? weekLaneMetrics : undefined}
               />
             );
           })}
@@ -1328,6 +1415,44 @@ export default function AdminAppointmentsScreen() {
     [dayConstraints]
   );
 
+  const dayViewLaneMetrics = useMemo(() => {
+    const mid = 2;
+    const stripW = _screenWidth - DAY_TIMELINE_MARGIN_H * 2 - LABELS_WIDTH - 16;
+    const halfW = Math.max(52, (stripW - mid) / 2);
+    return { mid, halfW, leftBase: LABELS_WIDTH + 8 };
+  }, []);
+
+  const dayReminderOverlapsAppointment = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of calendarReminders) {
+      const rs = minutesFromMidnight(r.start_time);
+      const rd = r.duration_minutes || 30;
+      const hit = appointments.some((apt) =>
+        _calendarRangesOverlapMinutes(rs, rd, minutesFromMidnight(apt.slot_time), apt.duration_minutes || 30)
+      );
+      if (hit) ids.add(r.id);
+    }
+    return ids;
+  }, [calendarReminders, appointments, minutesFromMidnight]);
+
+  const dayAppointmentOverlapsReminder = useMemo(() => {
+    const ids = new Set<string>();
+    for (const apt of appointments) {
+      const aStart = minutesFromMidnight(apt.slot_time);
+      const aDur = apt.duration_minutes || 30;
+      const hit = calendarReminders.some((r) =>
+        _calendarRangesOverlapMinutes(
+          minutesFromMidnight(r.start_time),
+          r.duration_minutes || 30,
+          aStart,
+          aDur
+        )
+      );
+      if (hit) ids.add(String(apt.id));
+    }
+    return ids;
+  }, [calendarReminders, appointments, minutesFromMidnight]);
+
   const displayModalConstraints = useMemo(
     () => mergeConstraintsForDisplay(modalDayConstraints),
     [modalDayConstraints]
@@ -1349,6 +1474,14 @@ export default function AdminAppointmentsScreen() {
     const sorted = [...gridDays].sort((a, b) => a.formatted.localeCompare(b.formatted));
     return { start: sorted[0]!.formatted, end: sorted[sorted.length - 1]!.formatted };
   }, [gridDays]);
+
+  /** Week that contains selectedDate — used to refresh week-range data even when calendar is on month/day */
+  const selectedWeekChronoRange = useMemo(() => {
+    const wkStart = _getStartOfWeek(selectedDate);
+    const days = _buildDays(wkStart, 7);
+    const sorted = [...days].sort((a, b) => a.formatted.localeCompare(b.formatted));
+    return { start: sorted[0]!.formatted, end: sorted[sorted.length - 1]!.formatted };
+  }, [selectedDateStr, selectedDate]);
 
   const gridDims = useMemo(() => {
     const sw = Dimensions.get('window').width;
@@ -1633,8 +1766,8 @@ export default function AdminAppointmentsScreen() {
     if (calendarView === 'month') {
       void reloadMonthMarks();
     }
-    if (calendarView === 'week' && weekRangeChronoBounds) {
-      void loadAppointmentsForRange(weekRangeChronoBounds.start, weekRangeChronoBounds.end);
+    if (user?.id) {
+      void loadAppointmentsForRange(selectedWeekChronoRange.start, selectedWeekChronoRange.end);
     }
   }, [
     loadAppointmentsForDate,
@@ -1642,27 +1775,32 @@ export default function AdminAppointmentsScreen() {
     calendarView,
     reloadMonthMarks,
     loadAppointmentsForRange,
-    weekRangeChronoBounds,
+    selectedWeekChronoRange,
+    user?.id,
   ]);
 
-  const onCalendarConstraintsChanged = useCallback(() => {
-    void loadAppointmentsForDate(selectedDateStr, false, calendarView === 'month');
-    if (calendarView === 'month') {
-      void reloadMonthMarks();
-      void reloadWideConstraintDates();
-    }
-    if (calendarView === 'week' && weekRangeChronoBounds) {
-      void loadAppointmentsForRange(weekRangeChronoBounds.start, weekRangeChronoBounds.end);
-    }
-  }, [
-    loadAppointmentsForDate,
-    selectedDateStr,
-    calendarView,
-    reloadMonthMarks,
-    reloadWideConstraintDates,
-    loadAppointmentsForRange,
-    weekRangeChronoBounds,
-  ]);
+  const onCalendarConstraintsChanged = useCallback(
+    (payload?: { dateMin: string; dateMax: string }) => {
+      void loadAppointmentsForDate(selectedDateStr, false, calendarView === 'month');
+      if (calendarView === 'month') {
+        void reloadMonthMarks();
+        void reloadWideConstraintDates();
+      }
+      if (!user?.id) return;
+      const merged = mergeCalendarRefreshRange(selectedWeekChronoRange, payload);
+      void loadAppointmentsForRange(merged.start, merged.end);
+    },
+    [
+      loadAppointmentsForDate,
+      selectedDateStr,
+      calendarView,
+      reloadMonthMarks,
+      reloadWideConstraintDates,
+      loadAppointmentsForRange,
+      user?.id,
+      selectedWeekChronoRange,
+    ]
+  );
 
   const openConstraintEditor = useCallback((c: BusinessConstraint) => {
     setConstraintToEdit(c);
@@ -1766,14 +1904,12 @@ export default function AdminAppointmentsScreen() {
     if (calendarView === 'month') {
       void reloadMonthMarks();
     }
-    if (calendarView === 'week' && weekRangeChronoBounds) {
-      void loadAppointmentsForRange(weekRangeChronoBounds.start, weekRangeChronoBounds.end);
-    }
+    void loadAppointmentsForRange(selectedWeekChronoRange.start, selectedWeekChronoRange.end);
   }, [
     user?.id,
     selectedDateStr,
     calendarView,
-    weekRangeChronoBounds,
+    selectedWeekChronoRange,
     reloadMonthMarks,
     loadAppointmentsForRange,
   ]);
@@ -2084,6 +2220,7 @@ export default function AdminAppointmentsScreen() {
                     const pal = reminderPalette(r.color_key);
                     const startTime = formatTime(r.start_time);
                     const endTime = formatTime(addMinutes(r.start_time, durationMinutes));
+                    const splitDay = dayReminderOverlapsAppointment.has(r.id);
                     return (
                       <PressableScale
                         key={`rm-${r.id}`}
@@ -2094,10 +2231,14 @@ export default function AdminAppointmentsScreen() {
                           {
                             top,
                             height: Math.max(height, 44),
-                            left: LABELS_WIDTH + 8,
-                            right: 8,
-                            zIndex: 2,
-                            elevation: 2,
+                            ...(splitDay
+                              ? {
+                                  left: dayViewLaneMetrics.leftBase,
+                                  width: dayViewLaneMetrics.halfW,
+                                }
+                              : { left: LABELS_WIDTH + 8, right: 8 }),
+                            zIndex: splitDay ? 4 : 2,
+                            elevation: splitDay ? 3 : 2,
                             backgroundColor: pal.bg,
                             borderLeftColor: pal.bar,
                           },
@@ -2138,6 +2279,7 @@ export default function AdminAppointmentsScreen() {
 
                     const startTime = formatTime(apt.slot_time);
                     const endTime = formatTime(addMinutes(apt.slot_time, durationMinutes));
+                    const splitDayApt = dayAppointmentOverlapsReminder.has(String(apt.id));
 
                     return (
                       <Pressable
@@ -2149,8 +2291,15 @@ export default function AdminAppointmentsScreen() {
                           {
                             top,
                             height,
-                            left: LABELS_WIDTH + 8,
-                            right: 8,
+                            ...(splitDayApt
+                              ? {
+                                  left:
+                                    dayViewLaneMetrics.leftBase +
+                                    dayViewLaneMetrics.halfW +
+                                    dayViewLaneMetrics.mid,
+                                  width: dayViewLaneMetrics.halfW,
+                                }
+                              : { left: LABELS_WIDTH + 8, right: 8 }),
                             zIndex: 3,
                             elevation: 5,
                             opacity: pressed ? 0.94 : 1,
@@ -2402,7 +2551,7 @@ export default function AdminAppointmentsScreen() {
                     key={chipKey}
                     style={[styles.actionsHeroChip, { flexDirection: chipRowDir }]}
                   >
-                    <Ionicons name={icon} size={15} color="rgba(255,255,255,0.95)" />
+                    <Ionicons name={icon} size={13} color="rgba(255,255,255,0.95)" />
                     <Text style={styles.actionsHeroChipText} numberOfLines={1}>
                       {text}
                     </Text>
@@ -2430,7 +2579,7 @@ export default function AdminAppointmentsScreen() {
                           accessibilityLabel={tHe('close', 'סגור')}
                         >
                           <View style={styles.actionsHeroCloseInner}>
-                            <Entypo name="cross" size={18} color="rgba(255,255,255,0.95)" />
+                            <Entypo name="cross" size={16} color="rgba(255,255,255,0.95)" />
                           </View>
                         </Pressable>
                         <View style={styles.actionsHeroContent}>
@@ -2483,7 +2632,7 @@ export default function AdminAppointmentsScreen() {
                     {phoneLine ? (
                       <View style={styles.actionsPhoneCard}>
                         <View style={[styles.actionsPhoneIconWrap, { backgroundColor: _primaryOnWhite(calendarPrimary, 0.14) }]}>
-                          <Ionicons name="call-outline" size={22} color={calendarPrimary} />
+                          <Ionicons name="call-outline" size={20} color={calendarPrimary} />
                         </View>
                         <View style={styles.actionsPhoneTextCol}>
                           <Text style={[styles.actionsPhoneLabel, isRtl ? { textAlign: 'right' } : { textAlign: 'left' }]}>
@@ -2521,7 +2670,7 @@ export default function AdminAppointmentsScreen() {
                           end={{ x: 1, y: 0 }}
                           style={styles.actionsPrimaryBtnGradient}
                         >
-                          <Ionicons name="call" size={20} color="#FFFFFF" />
+                          <Ionicons name="call" size={18} color="#FFFFFF" />
                           <Text style={styles.actionsPrimaryBtnText}>{tHe('admin.appointments.callClient', 'חייג ללקוח')}</Text>
                         </LinearGradient>
                       </PressableScale>
@@ -2537,7 +2686,7 @@ export default function AdminAppointmentsScreen() {
                       }}
                     >
                       <View style={styles.actionsSecondaryIconWarn}>
-                        <Ionicons name="close-circle-outline" size={20} color="#EA580C" />
+                        <Ionicons name="close-circle-outline" size={18} color="#EA580C" />
                       </View>
                       <Text style={styles.actionsSecondaryTitleWarn}>{tHe('admin.appointments.cancelAndFree', 'ביטול ושחרור משבצת')}</Text>
                     </PressableScale>
@@ -2552,7 +2701,7 @@ export default function AdminAppointmentsScreen() {
                       }}
                     >
                       <View style={styles.actionsSecondaryIconDanger}>
-                        <Ionicons name="trash-outline" size={20} color={Colors.error} />
+                        <Ionicons name="trash-outline" size={18} color={Colors.error} />
                       </View>
                       <Text style={styles.actionsSecondaryTitleDanger}>{tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}</Text>
                     </PressableScale>
@@ -2804,7 +2953,6 @@ export default function AdminAppointmentsScreen() {
 // Layout constants for the time grid
 const HOUR_BLOCK_HEIGHT = 180; // Further increase spacing per hour for larger proportions
 const HALF_HOUR_BLOCK_HEIGHT = HOUR_BLOCK_HEIGHT / 2; // 30-min rows
-const LABELS_WIDTH = 64; // left column width for time labels
 
 // Labels are built dynamically from business hours per selected day
 
@@ -3547,13 +3695,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   actionsSheetScrollContent: {
-    paddingBottom: 20,
+    paddingBottom: 12,
     flexGrow: 1,
   },
   actionsSheetHandleWrap: {
     alignItems: 'center',
-    paddingTop: 10,
-    paddingBottom: 6,
+    paddingTop: 6,
+    paddingBottom: 4,
   },
   actionsSheetHandle: {
     width: 40,
@@ -3562,8 +3710,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(148,163,184,0.45)',
   },
   actionsHeroOuter: {
-    marginHorizontal: 12,
-    borderRadius: 20,
+    marginHorizontal: 10,
+    borderRadius: 16,
     overflow: 'hidden',
     ...Platform.select({
       ios: {
@@ -3577,20 +3725,20 @@ const styles = StyleSheet.create({
     }),
   },
   actionsHeroGradient: {
-    borderRadius: 20,
-    paddingTop: 22,
-    paddingBottom: 20,
-    paddingHorizontal: 18,
+    borderRadius: 16,
+    paddingTop: 14,
+    paddingBottom: 12,
+    paddingHorizontal: 14,
   },
   actionsHeroCloseBtn: {
     position: 'absolute',
-    top: 10,
+    top: 6,
     zIndex: 2,
   },
   actionsHeroCloseInner: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.22)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -3598,88 +3746,88 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.35)',
   },
   actionsHeroContent: {
-    paddingTop: 4,
+    paddingTop: 0,
   },
   actionsHeroTopRow: {
     alignItems: 'center',
-    gap: 14,
+    gap: 10,
   },
   actionsHeroAvatarRing: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.45)',
   },
   actionsHeroAvatarText: {
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   actionsHeroTitles: {
     flex: 1,
     minWidth: 0,
-    gap: 4,
+    gap: 2,
   },
   actionsHeroClientName: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: -0.3,
-    lineHeight: 28,
+    letterSpacing: -0.2,
+    lineHeight: 23,
   },
   actionsHeroService: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     color: 'rgba(255,255,255,0.9)',
-    lineHeight: 20,
+    lineHeight: 18,
   },
   actionsHeroChips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 16,
+    gap: 6,
+    marginTop: 10,
     alignItems: 'center',
   },
   actionsHeroChip: {
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+    gap: 5,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.2)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.32)',
     maxWidth: '100%',
   },
   actionsHeroChipText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: 'rgba(255,255,255,0.98)',
     flexShrink: 1,
   },
   actionsHeroStatusPill: {
-    marginTop: 14,
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-    borderRadius: 20,
+    marginTop: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 11,
+    borderRadius: 16,
   },
   actionsHeroStatusText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
-    letterSpacing: 0.2,
+    letterSpacing: 0.15,
   },
   actionsPhoneCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    marginTop: 16,
-    marginHorizontal: 16,
-    padding: 16,
-    borderRadius: 18,
+    gap: 10,
+    marginTop: 10,
+    marginHorizontal: 14,
+    padding: 11,
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: 'rgba(15,23,42,0.06)',
@@ -3695,9 +3843,9 @@ const styles = StyleSheet.create({
     }),
   },
   actionsPhoneIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3713,23 +3861,23 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   actionsPhoneValue: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '800',
     color: Colors.text,
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   actionsSectionLabel: {
-    marginTop: 22,
-    marginBottom: 10,
-    marginHorizontal: 18,
+    marginTop: 12,
+    marginBottom: 6,
+    marginHorizontal: 16,
     fontSize: 12,
     fontWeight: '800',
     color: Colors.subtext,
     letterSpacing: 0.8,
   },
   actionsPrimaryBtnWrap: {
-    marginHorizontal: 16,
-    borderRadius: 16,
+    marginHorizontal: 14,
+    borderRadius: 14,
     overflow: 'hidden',
     ...Platform.select({
       ios: {
@@ -3746,68 +3894,68 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
   },
   actionsPrimaryBtnText: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: 0.2,
+    letterSpacing: 0.15,
   },
   actionsSecondaryCard: {
-    marginHorizontal: 16,
-    marginTop: 10,
+    marginHorizontal: 14,
+    marginTop: 6,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderRadius: 16,
+    gap: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: 'rgba(15,23,42,0.07)',
   },
   actionsSecondaryIconWarn: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     backgroundColor: '#FFF7ED',
     alignItems: 'center',
     justifyContent: 'center',
   },
   actionsSecondaryIconDanger: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     backgroundColor: '#FEF2F2',
     alignItems: 'center',
     justifyContent: 'center',
   },
   actionsSecondaryTitleWarn: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#C2410C',
   },
   actionsSecondaryTitleDanger: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: Colors.error,
   },
   actionsDismissBtn: {
-    marginTop: 16,
-    marginHorizontal: 16,
-    paddingVertical: 14,
+    marginTop: 8,
+    marginHorizontal: 14,
+    paddingVertical: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 14,
+    borderRadius: 12,
     backgroundColor: 'rgba(15,23,42,0.04)',
   },
   actionsDismissBtnText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
   },
   moreButton: {

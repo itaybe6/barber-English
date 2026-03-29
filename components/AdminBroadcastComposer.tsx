@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/authStore';
+import BroadcastOwnerOnlyModal from '@/components/BroadcastOwnerOnlyModal';
 
 type AdminBroadcastComposerProps = {
   variant?: 'floating' | 'icon';
@@ -30,6 +31,8 @@ type AdminBroadcastComposerProps = {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   renderTrigger?: boolean;
+  /** When set, opening the sheet and sending require this to resolve true (business owner / super-admin gate). */
+  ensureCanBroadcast?: () => Promise<boolean>;
 };
 
 export default function AdminBroadcastComposer({
@@ -39,6 +42,7 @@ export default function AdminBroadcastComposer({
   open,
   onOpenChange,
   renderTrigger = true,
+  ensureCanBroadcast,
 }: AdminBroadcastComposerProps) {
   const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
@@ -58,6 +62,8 @@ export default function AdminBroadcastComposer({
   const [title, setTitle] = useState('');
   const [notificationContent, setNotificationContent] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [ownerOnlyModalOpen, setOwnerOnlyModalOpen] = useState(false);
+  const closeOwnerOnlyModal = useCallback(() => setOwnerOnlyModalOpen(false), []);
 
   const currentTitle = title.trim();
   const canSend = currentTitle.length > 0 && notificationContent.trim().length > 0 && !isSending;
@@ -103,6 +109,19 @@ export default function AdminBroadcastComposer({
       return;
     }
 
+    if (ensureCanBroadcast) {
+      try {
+        const allowed = await ensureCanBroadcast();
+        if (!allowed) {
+          setOwnerOnlyModalOpen(true);
+          return;
+        }
+      } catch {
+        Alert.alert(strings.error, strings.failMsg);
+        return;
+      }
+    }
+
     setIsSending(true);
     try {
       const created = await messagesApi.createMessage({
@@ -145,8 +164,25 @@ export default function AdminBroadcastComposer({
   const labelAlign = isRTL ? 'right' : 'left';
   const iconSendMargin = isRTL ? { marginRight: 8 } : { marginLeft: 8 };
 
+  const openSheetIfAllowed = async () => {
+    if (ensureCanBroadcast) {
+      try {
+        const allowed = await ensureCanBroadcast();
+        if (!allowed) {
+          setOwnerOnlyModalOpen(true);
+          return;
+        }
+      } catch {
+        Alert.alert(strings.error, strings.failMsg);
+        return;
+      }
+    }
+    setOpen(true);
+  };
+
   return (
     <>
+      <BroadcastOwnerOnlyModal visible={ownerOnlyModalOpen} onClose={closeOwnerOnlyModal} />
       {renderTrigger &&
         (variant === 'floating' ? (
           <View
@@ -161,7 +197,7 @@ export default function AdminBroadcastComposer({
           >
             <TouchableOpacity
               activeOpacity={0.9}
-              onPress={() => setOpen(true)}
+              onPress={() => void openSheetIfAllowed()}
               accessibilityRole="button"
               accessibilityLabel={strings.accessibilitySend}
               style={styles.fabWrapper}
@@ -182,7 +218,7 @@ export default function AdminBroadcastComposer({
         ) : (
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={() => setOpen(true)}
+            onPress={() => void openSheetIfAllowed()}
             accessibilityRole="button"
             accessibilityLabel={strings.accessibilitySend}
             style={[styles.iconButton, iconContainerStyle]}

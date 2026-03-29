@@ -20,6 +20,7 @@ import { useTranslation } from 'react-i18next';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { businessConstraintsApi } from '@/lib/api/businessConstraints';
+import { findBookedAppointmentsOverlappingConstraintWindows } from '@/lib/api/constraintAppointmentConflicts';
 import { useAuthStore } from '@/stores/authStore';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { Calendar as RNCalendar, LocaleConfig } from 'react-native-calendars';
@@ -54,10 +55,13 @@ type ConstraintDraft = {
   reason?: string | null;
 };
 
+export type ConstraintsCalendarChangedPayload = { dateMin: string; dateMax: string };
+
 interface BusinessConstraintsModalProps {
   visible: boolean;
   onClose: () => void;
-  onConstraintsChanged?: () => void;
+  /** Pass saved date range so the parent can refetch a wide enough window immediately */
+  onConstraintsChanged?: (payload?: ConstraintsCalendarChangedPayload) => void;
 }
 
 const toISODate = (d: Date) => d.toISOString().slice(0, 10);
@@ -370,6 +374,27 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
       }
 
       if (entries.length === 0) return;
+
+      const barberId = (user as any)?.id as string | undefined;
+      if (barberId) {
+        const windows = entries.map((e) => ({
+          date: e.date,
+          start_time: e.start_time,
+          end_time: e.end_time,
+        }));
+        const conflicts = await findBookedAppointmentsOverlappingConstraintWindows(barberId, windows);
+        if (conflicts.length > 0) {
+          Alert.alert(
+            t('error.generic', 'Error'),
+            t(
+              'admin.hoursAdmin.constraintConflictsWithAppointments',
+              'There are already client appointments in this time range. Cancel or move those appointments first, then you can add this block.'
+            )
+          );
+          return;
+        }
+      }
+
       await businessConstraintsApi.createConstraints(entries as any, (user as any)?.id || null);
       const start = toISODate(today);
       const end = toISODate(addDays(today, 365));
@@ -377,7 +402,11 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
         ? await businessConstraintsApi.getPersonalConstraintsForBarberInRange(start, end, (user as any).id)
         : [];
       setExisting((rows || []).filter((r: any) => (r.date as string) >= start) as any);
-      onConstraintsChanged?.();
+      const sortedDates = entries.map((e) => e.date).sort();
+      onConstraintsChanged?.({
+        dateMin: sortedDates[0]!,
+        dateMax: sortedDates[sortedDates.length - 1]!,
+      });
 
       const successLines: SuccessLine[] = [
         { variant: 'headline', text: t('admin.hoursAdmin.successAnimatedHeadline', 'Constraint saved') },

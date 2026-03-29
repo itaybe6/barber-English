@@ -223,6 +223,8 @@ export default function SettingsScreen() {
   const [showEditFacebookModal, setShowEditFacebookModal] = useState(false);
   const [showEditTiktokModal, setShowEditTiktokModal] = useState(false);
   const [showEditCancellationModal, setShowEditCancellationModal] = useState(false);
+  const [showBookingWindowModal, setShowBookingWindowModal] = useState(false);
+  const [bookingWindowDraft, setBookingWindowDraft] = useState('7');
   const [showCancellationDropdown, setShowCancellationDropdown] = useState(false);
   const [cancellationDropdownDirection, setCancellationDropdownDirection] = useState<'up' | 'down'>('down');
   // Address bottom sheet animation
@@ -235,6 +237,8 @@ export default function SettingsScreen() {
   const [instagramDraft, setInstagramDraft] = useState('');
   const [facebookDraft, setFacebookDraft] = useState('');
   const [tiktokDraft, setTiktokDraft] = useState('');
+  const [showEditDisplayNameModal, setShowEditDisplayNameModal] = useState(false);
+  const [displayNameDraft, setDisplayNameDraft] = useState('');
   const [cancellationHoursDraft, setCancellationHoursDraft] = useState('24');
   // Admin name/phone edit
   const [showEditAdminModal, setShowEditAdminModal] = useState(false);
@@ -267,7 +271,7 @@ export default function SettingsScreen() {
   };
 
   // Load business profile function
-  const loadBusinessProfile = async () => {
+  const loadBusinessProfile = useCallback(async () => {
     setIsLoadingProfile(true);
     try {
       const p = await businessProfileApi.getProfile();
@@ -279,7 +283,16 @@ export default function SettingsScreen() {
         setProfileFacebook(p?.facebook_url || '');
         setProfileTiktok((p as any)?.tiktok_url || '');
         setProfileMinCancellationHours(p?.min_cancellation_hours || 24);
-        setProfileBookingOpenDays(Number(((p as any)?.booking_open_days ?? 7)));
+        if (user?.id) {
+          try {
+            const myDays = await businessProfileApi.getBookingOpenDaysForUser(user.id);
+            setProfileBookingOpenDays(myDays);
+          } catch {
+            setProfileBookingOpenDays(Number(((p as any)?.booking_open_days ?? 7)));
+          }
+        } else {
+          setProfileBookingOpenDays(Number(((p as any)?.booking_open_days ?? 7)));
+        }
         setClientSwapEnabled(isClientSwapEnabled(p));
         setRequireClientApproval(isClientApprovalRequired(p));
       }
@@ -289,12 +302,12 @@ export default function SettingsScreen() {
     } finally {
       setIsLoadingProfile(false);
     }
-  };
+  }, [user?.id]);
 
   useFocusEffect(
     useCallback(() => {
       loadBusinessProfile();
-    }, [])
+    }, [loadBusinessProfile])
   );
 
   useEffect(() => {
@@ -352,6 +365,12 @@ export default function SettingsScreen() {
       setShowCancellationDropdown(false);
     }
   }, [showEditCancellationModal]);
+
+  useEffect(() => {
+    if (showBookingWindowModal) {
+      setBookingWindowDraft(String(profileBookingOpenDays || 7));
+    }
+  }, [showBookingWindowModal, profileBookingOpenDays]);
 
   const handleSaveBusinessProfile = async () => {
     setIsSavingProfile(true);
@@ -505,7 +524,6 @@ export default function SettingsScreen() {
         facebook_url: (profileFacebook || '').trim() || null as any,
         tiktok_url: (profileTiktok || '').trim() || null as any,
         min_cancellation_hours: profileMinCancellationHours,
-        booking_open_days: profileBookingOpenDays as any,
         client_swap_enabled: next,
         require_client_approval: requireClientApproval,
       });
@@ -533,7 +551,6 @@ export default function SettingsScreen() {
         facebook_url: (profileFacebook || '').trim() || null as any,
         tiktok_url: (profileTiktok || '').trim() || null as any,
         min_cancellation_hours: profileMinCancellationHours,
-        booking_open_days: profileBookingOpenDays as any,
         client_swap_enabled: clientSwapEnabled,
         require_client_approval: next,
       });
@@ -552,24 +569,42 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleSaveBookingOpenDaysInline = async (next: string) => {
+  const persistBookingOpenDays = async (next: string): Promise<boolean> => {
+    if (!user?.id) {
+      Alert.alert(t('error.generic', 'Error'), t('settings.profile.bookingWindowNeedUser', 'Sign in to save your booking window.'));
+      return false;
+    }
+    const trimmed = (next || '').trim();
+    const n = parseInt(trimmed, 10);
+    if (!Number.isFinite(n) || n < 1 || n > 60) {
+      Alert.alert(t('error.generic', 'Error'), t('settings.profile.bookingWindowInvalid', 'Enter a number between 1 and 60.'));
+      return false;
+    }
+    const parsed = Math.max(1, Math.min(60, Math.floor(n)));
     setIsSavingProfile(true);
     try {
-      const parsed = Math.max(1, Math.min(60, Math.floor(Number((next || '').trim()) || 7)));
-      const updated = await businessProfileApi.upsertProfile({
-        booking_open_days: parsed as any,
-      });
-      if (!updated) {
-        Alert.alert(t('error.generic','Error'), t('settings.profile.bookingWindowSaveFailed','Failed to save booking window'));
-        return;
-      }
-      setProfile(updated);
-      setProfileBookingOpenDays(Number(((updated as any)?.booking_open_days ?? 7)));
+      await businessProfileApi.setBookingOpenDaysForUser(user.id, parsed);
+      const updated = await businessProfileApi.getProfile();
+      if (updated) setProfile(updated);
+      setProfileBookingOpenDays(await businessProfileApi.getBookingOpenDaysForUser(user.id));
       try {
         await supabase.rpc('generate_time_slots_for_open_window');
       } catch {}
+      return true;
+    } catch (e) {
+      console.error('persistBookingOpenDays', e);
+      Alert.alert(t('error.generic', 'Error'), t('settings.profile.bookingWindowSaveFailed', 'Failed to save booking window'));
+      return false;
     } finally {
       setIsSavingProfile(false);
+    }
+  };
+
+  const confirmBookingWindowModal = async () => {
+    const ok = await persistBookingOpenDays(bookingWindowDraft);
+    if (ok) {
+      Alert.alert(t('success.generic', 'Success'), t('settings.profile.bookingWindowSaved', 'Booking window updated successfully'));
+      setShowBookingWindowModal(false);
     }
   };
 
@@ -2021,23 +2056,13 @@ export default function SettingsScreen() {
               </View>
             </View>
             <View style={styles.cardNew}>
-              <View style={styles.settingItemLTR}>
-                <View style={styles.settingIconLTR}><Calendar size={20} color={businessColors.primary} /></View>
-                <View style={{ flex: 1 }}>
-                  <InlineEditableRow
-                    title={t('settings.profile.bookingWindowDaysTitle','Booking window (days)')}
-                    value={String(profileBookingOpenDays || 7)}
-                    placeholder={t('settings.profile.bookingWindowPlaceholder','7')}
-                    keyboardType="default"
-                    onSave={handleSaveBookingOpenDaysInline}
-                    chevronColor={businessColors.primary}
-                    validate={(v) => {
-                      const n = parseInt((v || '').trim(), 10);
-                      return Number.isFinite(n) && n >= 1 && n <= 60;
-                    }}
-                  />
-                </View>
-              </View>
+              {renderSettingItemLTR(
+                <Calendar size={20} color={businessColors.primary} />,
+                t('settings.profile.bookingWindowRowTitle', 'How far ahead clients can book you'),
+                t('settings.profile.bookingWindowRowSubtitle', { count: profileBookingOpenDays || 7 }),
+                undefined,
+                () => setShowBookingWindowModal(true)
+              )}
               {renderSettingItemLTR(
                 <MapPin size={20} color="#FF3B30" />, 
                 t('settings.profile.businessAddressTitle','Business address'),
@@ -2383,11 +2408,23 @@ export default function SettingsScreen() {
                       </LinearGradient>
                     </View>
                     <View style={styles.adminProfileInfo}>
-                      {!!(profileDisplayName || '').trim() && (
-                        <Text style={styles.adminBusinessDisplayName} numberOfLines={2}>
-                          {profileDisplayName}
-                        </Text>
-                      )}
+                      <TouchableOpacity
+                        activeOpacity={0.88}
+                        onPress={() => {
+                          setDisplayNameDraft(profileDisplayName || '');
+                          setShowEditDisplayNameModal(true);
+                        }}
+                      >
+                        {(profileDisplayName || '').trim() ? (
+                          <Text style={styles.adminBusinessDisplayName} numberOfLines={2}>
+                            {profileDisplayName}
+                          </Text>
+                        ) : (
+                          <Text style={[styles.adminBusinessDisplayName, { opacity: 0.72 }]} numberOfLines={2}>
+                            {t('settings.profile.addBusinessName', 'Add business name')}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
                       <Text style={styles.adminName} numberOfLines={1}>
                         {user?.name || 'Manager'}
                       </Text>
@@ -3146,6 +3183,88 @@ export default function SettingsScreen() {
             </TouchableWithoutFeedback>
           </View>
         </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* Booking horizon (per staff) — sheet with explainer + days input */}
+      <Modal
+        visible={showBookingWindowModal}
+        animationType="slide"
+        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
+        onRequestClose={() => setShowBookingWindowModal(false)}
+      >
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#F2F2F7' }]}>
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+          >
+            <View style={styles.modalHeader}>
+              <TouchableOpacity
+                style={styles.cancellationModalCloseButton}
+                onPress={() => setShowBookingWindowModal(false)}
+                accessibilityRole="button"
+                accessibilityLabel={t('cancel', 'Cancel')}
+              >
+                <X size={20} color={Colors.text} />
+              </TouchableOpacity>
+              <Text style={[styles.modalTitle, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>
+                {t('settings.profile.bookingWindowModalTitle', 'Your booking range')}
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.modalSendButton,
+                  { backgroundColor: businessColors.primary },
+                  isSavingProfile && styles.modalSendButtonDisabled,
+                ]}
+                onPress={confirmBookingWindowModal}
+                disabled={isSavingProfile}
+              >
+                <Text style={[styles.modalSendText, { color: Colors.white }, isSavingProfile && styles.modalSendTextDisabled]}>
+                  {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: insets.bottom + 28 }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <LinearGradient
+                colors={[`${businessColors.primary}22`, `${businessColors.primary}0D`]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{
+                  borderRadius: 16,
+                  padding: 18,
+                  marginBottom: 24,
+                  borderWidth: StyleSheet.hairlineWidth,
+                  borderColor: `${businessColors.primary}40`,
+                }}
+              >
+                <Text style={[styles.previewNotificationContent, { lineHeight: 22, color: Colors.text }]}>
+                  {t('settings.profile.bookingWindowModalBody')}
+                </Text>
+              </LinearGradient>
+              <View style={[styles.groupCard, { marginBottom: 0 }]}>
+                <Text style={styles.inputLabelLTR}>{t('settings.profile.bookingWindowModalDaysLabel', 'Days open for booking')}</Text>
+                <TextInput
+                  style={[styles.textInput, { marginTop: 10, fontSize: 28, fontWeight: '700', textAlign: 'center', letterSpacing: 1 }]}
+                  value={bookingWindowDraft}
+                  onChangeText={setBookingWindowDraft}
+                  placeholder={t('settings.profile.bookingWindowPlaceholder', '7')}
+                  placeholderTextColor={Colors.subtext}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  selectTextOnFocus
+                />
+                <Text style={{ marginTop: 12, fontSize: 13, color: Colors.subtext, textAlign: 'center' }}>
+                  {t('settings.profile.bookingWindowModalRange', 'From 1 to 60 days')}
+                </Text>
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
       </Modal>
 
       {/* Time selection now uses inline dropdown below the field (no nested modal) */}

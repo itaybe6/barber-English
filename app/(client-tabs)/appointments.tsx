@@ -289,8 +289,7 @@ export default function ClientAppointmentsScreen() {
     // Load past 7 days and next N days according to booking window
     let horizonDays = 14;
     try {
-      const profile = await businessProfileApi.getProfile();
-      horizonDays = Math.max(1, Number((profile as any)?.booking_open_days ?? 14));
+      horizonDays = await businessProfileApi.getMaxBookingOpenDaysAcrossBusiness();
     } catch {}
     for (let i = -7; i <= horizonDays; i++) {
       const date = new Date(today);

@@ -20,6 +20,7 @@ import { BlurView } from 'expo-blur';
 import { ScrollView as RNScrollView } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import AdminBroadcastComposer from '@/components/AdminBroadcastComposer';
+import BroadcastOwnerOnlyModal from '@/components/BroadcastOwnerOnlyModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatTimeFromDate } from '@/lib/utils/timeFormat';
 
@@ -158,6 +159,21 @@ export default function HomeScreen() {
   const isAdmin = useAuthStore((state) => state.isAdmin);
   const isSuperAdmin = useAuthStore((state) => state.isSuperAdmin);
   const user = useAuthStore((state) => state.user);
+
+  const ensureCanBroadcast = useCallback(async () => {
+    return businessProfileApi.isUserPhoneMatchingBusinessOwner(user?.phone);
+  }, [user?.phone]);
+
+  const [broadcastOwnerOnlyOpen, setBroadcastOwnerOnlyOpen] = useState(false);
+
+  const onPressBroadcastTile = useCallback(async () => {
+    const ok = await ensureCanBroadcast();
+    if (!ok) {
+      setBroadcastOwnerOnlyOpen(true);
+      return;
+    }
+    setShowBroadcast(true);
+  }, [ensureCanBroadcast]);
   const unreadCount = useNotificationsStore((state) => state.unreadCount);
   const fetchUnread = useNotificationsStore((state) => state.fetchUnreadCount);
   const colors = useColors();
@@ -916,7 +932,7 @@ export default function HomeScreen() {
               <TouchableOpacity
                 style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
                 activeOpacity={0.82}
-                onPress={() => setShowBroadcast(true)}
+                onPress={() => void onPressBroadcastTile()}
                 accessibilityRole="button"
               >
                 <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
@@ -1442,8 +1458,13 @@ export default function HomeScreen() {
           open={showBroadcast}
           onOpenChange={setShowBroadcast}
           renderTrigger={false}
+          ensureCanBroadcast={ensureCanBroadcast}
         />
       )}
+      <BroadcastOwnerOnlyModal
+        visible={broadcastOwnerOnlyOpen}
+        onClose={() => setBroadcastOwnerOnlyOpen(false)}
+      />
     </View>
   );
  }

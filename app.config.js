@@ -193,14 +193,26 @@ const currentConfig = {
   timestamp: new Date().toISOString()
 };
 
+let currentJsonTmpPath;
 try {
   const brandingDir = path.dirname(currentConfigPath);
   if (!fs.existsSync(brandingDir)) {
     fs.mkdirSync(brandingDir, { recursive: true });
   }
-  fs.writeFileSync(currentConfigPath, JSON.stringify(currentConfig, null, 2));
+  const payload = JSON.stringify(currentConfig, null, 2);
+  currentJsonTmpPath = path.join(brandingDir, `.current-${process.pid}.tmp.json`);
+  fs.writeFileSync(currentJsonTmpPath, payload, 'utf8');
+  fs.renameSync(currentJsonTmpPath, currentConfigPath);
+  currentJsonTmpPath = undefined;
   console.log(`✅ Written current config to: ${currentConfigPath}`);
 } catch (error) {
+  if (currentJsonTmpPath) {
+    try {
+      fs.unlinkSync(currentJsonTmpPath);
+    } catch {
+      /* ignore */
+    }
+  }
   console.error(`❌ Error writing current config: ${error.message}`);
 }
 

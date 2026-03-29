@@ -16,6 +16,14 @@ function minutesToHHMM(total: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
+/** DB columns are often `time` — HH:MM:SS for PostgREST */
+function normalizeConstraintTime(t: string): string {
+  const s = String(t || '').trim().slice(0, 8);
+  if (/^\d{2}:\d{2}$/.test(s)) return `${s}:00`;
+  if (/^\d{2}:\d{2}:\d{2}$/.test(s)) return s;
+  return s.length >= 5 ? `${s.slice(0, 5)}:00` : '09:00:00';
+}
+
 /**
  * One card per logical block: merges overlapping or back-to-back windows that share the same reason.
  * Handles duplicate DB rows and pairs like business-wide + barber rows for the same slot.
@@ -165,7 +173,13 @@ export const businessConstraintsApi = {
     if (!entries || entries.length === 0) return 0;
     const businessId = getBusinessId();
     
-    const entriesWithBusinessId = entries.map(entry => ({ ...entry, business_id: businessId, user_id: userId || null }));
+    const entriesWithBusinessId = entries.map((entry) => ({
+      ...entry,
+      business_id: businessId,
+      user_id: userId || null,
+      start_time: normalizeConstraintTime(entry.start_time),
+      end_time: normalizeConstraintTime(entry.end_time),
+    }));
     
     const { data, error } = await supabase
       .from('business_constraints')
@@ -186,23 +200,37 @@ export const businessConstraintsApi = {
     return !error;
   },
 
+  /**
+   * Returns whether the row was updated. PostgREST may return no error when 0 rows match — we treat that as failure.
+   */
   async updateConstraint(
     id: string,
     patch: { date?: string; start_time?: string; end_time?: string; reason?: string | null }
-  ): Promise<boolean> {
+  ): Promise<{ ok: true } | { ok: false; message: string }> {
     const businessId = getBusinessId();
     const updates: Record<string, string | null> = {};
     if (patch.date !== undefined) updates.date = patch.date;
-    if (patch.start_time !== undefined) updates.start_time = patch.start_time;
-    if (patch.end_time !== undefined) updates.end_time = patch.end_time;
+    if (patch.start_time !== undefined) {
+      updates.start_time = normalizeConstraintTime(patch.start_time);
+    }
+    if (patch.end_time !== undefined) {
+      updates.end_time = normalizeConstraintTime(patch.end_time);
+    }
     if (patch.reason !== undefined) updates.reason = patch.reason;
-    if (Object.keys(updates).length === 0) return true;
-    const { error } = await supabase
+    if (Object.keys(updates).length === 0) return { ok: true };
+    const { data, error } = await supabase
       .from('business_constraints')
       .update(updates)
       .eq('id', id)
-      .eq('business_id', businessId);
-    return !error;
+      .eq('business_id', businessId)
+      .select('id');
+    if (error) {
+      return { ok: false, message: error.message || 'Update failed' };
+    }
+    if (!data?.length) {
+      return { ok: false, message: 'No row updated (invalid id or permissions)' };
+    }
+    return { ok: true };
   },
 };
 

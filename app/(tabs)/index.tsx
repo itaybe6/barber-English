@@ -45,12 +45,6 @@ import { clientAppointmentStatsApi } from '@/lib/api/clientAppointmentStats';
 import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-/** Top band above marquee — matches `DailySchedule` today banner tone (+ room for glass action chips) */
-const HERO_TOP_SCHEDULE_BAND_HEIGHT = 105;
-/** Push marquee tiles down so they sit clearer under the schedule-tone band */
-const HERO_MARQUEE_TRANSLATE_Y = 89;
-/** Bottom corner radius of the hero schedule band (matches DailySchedule banner feel) */
-const HERO_TOP_SCHEDULE_BAND_BOTTOM_RADIUS = 24;
 
 function darkenHex(hex: string, ratio: number): string {
   const h = hex.replace('#', '');
@@ -62,10 +56,15 @@ function darkenHex(hex: string, ratio: number): string {
   const to = (n: number) => Math.round(Math.max(0, Math.min(255, n * f))).toString(16).padStart(2, '0');
   return `#${to(r)}${to(g)}${to(b)}`;
 }
+/** Transparent hit area for corner glass chips (logo sits in the middle; tiles start below). */
+const HERO_TOP_SCHEDULE_BAND_HEIGHT = 105;
+/** Bottom corner radius kept for optional future scrim; band is transparent. */
+const HERO_TOP_SCHEDULE_BAND_BOTTOM_RADIUS = 24;
 /** Tile size: balance ~3 visible marquee rows vs. sheet overlap */
-const HERO_ITEM_SIZE = Platform.OS === 'web' ? SCREEN_WIDTH * 0.26 : SCREEN_WIDTH * 0.36;
+/** Slightly smaller tiles so ~3 marquee rows stay above the sheet overlap. */
+const HERO_ITEM_SIZE = Platform.OS === 'web' ? SCREEN_WIDTH * 0.21 : SCREEN_WIDTH * 0.31
+;
 const HERO_SPACING = Platform.OS === 'web' ? 12 : 6;
-const HERO_BG = '#FFFFFF';
 const HERO_HEIGHT = Math.round(SCREEN_HEIGHT * 0.68);
 const HERO_OVERLAP = 100; // how far the white sheet overlaps the hero
 /** Logo overlay (align with `overlayLogoWrapper` top + `overlayLogoInner` height) */
@@ -93,47 +92,50 @@ const manicureHeroRootStyle = {
   overflow: 'hidden' as const,
 };
 
-const ManicureMarqueeHero = React.memo(({ images }: { images: string[] }) => {
-  const columns = useMemo(() => {
-    const perColumn = Math.ceil(images.length / 3);
-    return chunkArray(images, perColumn);
-  }, [images]);
+const ManicureMarqueeHero = React.memo(
+  ({ images, marqueeTopOffset }: { images: string[]; marqueeTopOffset: number }) => {
+    const columns = useMemo(() => {
+      const perColumn = Math.ceil(images.length / 3);
+      return chunkArray(images, perColumn);
+    }, [images]);
 
-  return (
-    <View style={manicureHeroRootStyle} pointerEvents="box-none">
-      <View
-        style={{
-          flex: 1,
-          gap: HERO_SPACING,
-          transform: [{ translateY: HERO_MARQUEE_TRANSLATE_Y }],
-        }}
-        pointerEvents="auto"
-      >
-        {columns.map((column, columnIndex) => (
-          <Marquee
-            key={`manicure-marquee-admin-${columnIndex}`}
-            speed={Platform.OS === 'web' ? 1 : 0.25}
-            spacing={HERO_SPACING}
-            reverse={columnIndex % 2 !== 0}
-          >
-            <View style={{ flexDirection: 'row', gap: HERO_SPACING }}>
-              {column.map((image, index) => (
-                <ManicureMarqueeTile
-                  key={`manicure-image-admin-${columnIndex}-${index}-${image}`}
-                  uri={image}
-                  itemSize={HERO_ITEM_SIZE}
-                  borderRadius={HERO_SPACING}
-                  columnIndex={columnIndex}
-                  index={index}
-                />
-              ))}
-            </View>
-          </Marquee>
-        ))}
+    return (
+      <View style={manicureHeroRootStyle} pointerEvents="box-none">
+        <View
+          style={{
+            flex: 1,
+            gap: HERO_SPACING,
+            transform: [{ translateY: marqueeTopOffset }],
+          }}
+          pointerEvents="auto"
+        >
+          {columns.map((column, columnIndex) => (
+            <Marquee
+              key={`manicure-marquee-admin-${columnIndex}`}
+              speed={Platform.OS === 'web' ? 1 : 0.25}
+              spacing={HERO_SPACING}
+              reverse={columnIndex % 2 !== 0}
+            >
+              <View style={{ flexDirection: 'row', gap: HERO_SPACING }}>
+                {column.map((image, index) => (
+                  <ManicureMarqueeTile
+                    key={`manicure-image-admin-${columnIndex}-${index}-${image}`}
+                    uri={image}
+                    itemSize={HERO_ITEM_SIZE}
+                    borderRadius={HERO_SPACING}
+                    columnIndex={columnIndex}
+                    index={index}
+                    glassFrame
+                  />
+                ))}
+              </View>
+            </Marquee>
+          ))}
+        </View>
       </View>
-    </View>
-  );
-});
+    );
+  }
+);
 
 function sanitizeUrlArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -273,6 +275,10 @@ export default function HomeScreen() {
   const [pendingClientsCount, setPendingClientsCount] = useState(0);
   const pendingCardRef = React.useRef<PendingClientApprovalsCardHandle>(null);
   const [waitlistWaitingCount, setWaitlistWaitingCount] = useState(0);
+
+  /** Clears logo + glass chips + a little air under the header before marquee tiles. */
+  /** Lower value = tiles sit higher (less empty band under header). */
+  const adminMarqueeTopOffset = insets.top + 56;
 
   /** Keeps the hero marquee visually fixed while it lives inside the outer ScrollView (enables pan gestures). */
   const outerScrollY = useSharedValue(0);
@@ -809,15 +815,27 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <StatusBar style="light" translucent backgroundColor="transparent" />
-      {/* Hero - fixed behind scroll */}
-      <View style={styles.fullScreenHero}>
-        <LinearGradient
-          colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0)', 'rgba(255,255,255,0)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={styles.fullScreenHeroOverlay}
-          pointerEvents="none"
-        />
+      {/* Top hero only: same treatment as DailySchedule "today" banner — not full screen. */}
+      <View style={styles.fullScreenHero} pointerEvents="none">
+        <View style={styles.heroMarqueeBackdrop}>
+          <LinearGradient
+            colors={[colors.primary, `${colors.primary}CC`]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+          {Platform.OS !== 'web' ? (
+            <BrandLavaLampBackground
+              primaryColor={colors.primary}
+              baseColor={darkenHex(colors.primary, 0.22)}
+              layoutWidth={SCREEN_WIDTH}
+              layoutHeight={HERO_HEIGHT}
+              count={4}
+              duration={10500}
+              blurIntensity={28}
+            />
+          ) : null}
+        </View>
       </View>
 
       {/* Content ScrollView — marquee is first child + translateY(scroll) so it stays fixed and pan gestures work */}
@@ -850,10 +868,22 @@ export default function HomeScreen() {
           pointerEvents="box-none"
           collapsable={false}
         >
-          <ManicureMarqueeHero images={heroImagesResolved} />
+          <ManicureMarqueeHero images={heroImagesResolved} marqueeTopOffset={adminMarqueeTopOffset} />
         </Animated.View>
         {/* Content wrapper — fixed height so outer scroll stops below header */}
         <View style={[styles.contentWrapper, { height: SCREEN_HEIGHT - insets.top - 60 }]}>
+          {Platform.OS !== 'web' ? (
+            <BlurView intensity={Platform.OS === 'ios' ? 52 : 36} tint="light" style={styles.contentWrapperBlur} />
+          ) : (
+            <View style={[styles.contentWrapperBlur, styles.contentWrapperWebFill]} />
+          )}
+          <LinearGradient
+            colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 0.35 }}
+            style={styles.contentWrapperTint}
+            pointerEvents="none"
+          />
           {/* Drag handle indicator */}
           <View style={styles.dragHandle} />
           {/* Subtle top-edge shadow line for separation */}
@@ -869,6 +899,7 @@ export default function HomeScreen() {
             nestedScrollEnabled
             scrollEnabled={innerScrollEnabled}
             showsVerticalScrollIndicator={false}
+            style={styles.contentInnerScroll}
             contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
           >
             <View style={styles.scrollContent}>
@@ -899,7 +930,7 @@ export default function HomeScreen() {
           <View style={styles.quickTilesGrid}>
             <View style={styles.quickTilesRow}>
               <TouchableOpacity
-                style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
+                style={styles.quickTile}
                 activeOpacity={0.82}
                 onPress={() => router.push('/(tabs)/edit-gallery')}
                 accessibilityRole="button"
@@ -914,7 +945,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
+                style={styles.quickTile}
                 activeOpacity={0.82}
                 onPress={() => setShowBroadcast(true)}
                 accessibilityRole="button"
@@ -928,7 +959,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
+                style={styles.quickTile}
                 activeOpacity={0.82}
                 onPress={() => router.push('/(tabs)/edit-products')}
                 accessibilityRole="button"
@@ -945,7 +976,7 @@ export default function HomeScreen() {
 
             {/* שורה שנייה: רשימת המתנה — מלבן רחב */}
             <TouchableOpacity
-              style={[styles.waitlistTile, { backgroundColor: `${colors.primary}0F` }]}
+              style={styles.waitlistTile}
               activeOpacity={0.82}
               onPress={() => router.push('/(tabs)/waitlist')}
               accessibilityRole="button"
@@ -1154,26 +1185,6 @@ export default function HomeScreen() {
           },
         ]}
       >
-        <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
-          <LinearGradient
-            colors={[colors.primary, `${colors.primary}CC`]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFillObject}
-          />
-          {Platform.OS !== 'web' ? (
-            <BrandLavaLampBackground
-              primaryColor={colors.primary}
-              baseColor={darkenHex(colors.primary, 0.22)}
-              layoutWidth={SCREEN_WIDTH}
-              layoutHeight={HERO_TOP_SCHEDULE_BAND_HEIGHT}
-              count={4}
-              duration={10500}
-              blurIntensity={28}
-            />
-          ) : null}
-        </View>
-
         {isAdmin ? (
           <View style={styles.heroBandGlassRow} pointerEvents="box-none">
             <TouchableOpacity
@@ -1456,7 +1467,8 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   contentWrapper: {
     zIndex: 3,
-    backgroundColor: '#FFFFFF',
+    position: 'relative',
+    backgroundColor: 'transparent',
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     overflow: 'hidden',
@@ -1466,13 +1478,29 @@ const createStyles = (colors: any) => StyleSheet.create({
     shadowRadius: 24,
     elevation: 18,
   },
+  contentWrapperBlur: {
+    ...StyleSheet.absoluteFillObject,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+  },
+  contentWrapperWebFill: {
+    backgroundColor: 'rgba(255,255,255,0.86)',
+  },
+  contentWrapperTint: {
+    ...StyleSheet.absoluteFillObject,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+  },
+  contentInnerScroll: {
+    backgroundColor: 'transparent',
+  },
   /** Marquee inside outer ScrollView; translateY offsets scroll so tiles stay pinned under the status area */
   adminHeroMarqueeHost: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: HERO_HEIGHT,
+    height: SCREEN_HEIGHT,
     zIndex: 2,
     overflow: 'hidden',
   },
@@ -1580,6 +1608,9 @@ const createStyles = (colors: any) => StyleSheet.create({
     ...({ direction: 'ltr' } as const),
     alignItems: 'center',
     gap: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E5EA',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -1646,6 +1677,9 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingHorizontal: 8,
     alignItems: 'center',
     gap: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E5EA',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -1906,21 +1940,22 @@ const createStyles = (colors: any) => StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: HERO_HEIGHT,
+    height: SCREEN_HEIGHT,
     zIndex: 0,
-    backgroundColor: HERO_BG,
+    backgroundColor: 'transparent',
   },
-  fullScreenHeroImage: {
-    width: '100%',
-    height: '100%',
-  },
-  fullScreenHeroOverlay: {
+  /** Matches `DailySchedule` today banner — only behind the upper marquee, not the sheet area. */
+  heroMarqueeBackdrop: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
-    zIndex: 0,
+    height: HERO_HEIGHT,
+    overflow: 'hidden',
+  },
+  fullScreenHeroImage: {
+    width: '100%',
+    height: '100%',
   },
   heroTopScheduleBand: {
     position: 'absolute',
@@ -1930,6 +1965,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     zIndex: 3,
     overflow: 'hidden',
     borderCurve: 'continuous',
+    backgroundColor: 'transparent',
   },
   /** LTR: physical left = notifications, physical right = pending clients */
   heroBandGlassRow: {

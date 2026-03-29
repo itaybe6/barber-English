@@ -163,62 +163,58 @@ export const notificationsApi = {
     }
   },
 
-  // Send notification to all clients
-  async sendNotificationToAllClients(title: string, content: string, type: Notification['type'] = 'general'): Promise<boolean> {
+  /**
+   * Insert one notification row per client (with phone). DB trigger may invoke push/SMS edge function.
+   * @returns ok=false only on fetch/insert errors; recipientCount=0 means no eligible clients (not an error).
+   */
+  async sendNotificationToAllClients(
+    title: string,
+    content: string,
+    type: Notification['type'] = 'general'
+  ): Promise<{ ok: boolean; recipientCount: number }> {
     try {
       const businessId = getBusinessId();
-      
-      // Get all clients with valid phone numbers
+
       const { data: clients, error: clientsError } = await supabase
         .from('users')
         .select('name, phone')
-        .eq('business_id', businessId) // Filter by current business
+        .eq('business_id', businessId)
         .eq('user_type', 'client')
         .not('phone', 'is', null)
         .neq('phone', '');
 
       if (clientsError) {
         console.error('Error fetching clients:', clientsError);
-        return false;
+        return { ok: false, recipientCount: 0 };
       }
 
-      if (!clients || clients.length === 0) {
-        return false;
-      }
-
-      // Filter out clients with null or empty phone numbers
-      const validClients = clients.filter(client => 
-        client.phone && 
-        client.phone.trim() !== '' && 
-        client.phone !== null
+      const validClients = (clients || []).filter(
+        (client) => client.phone && String(client.phone).trim() !== ''
       );
 
       if (validClients.length === 0) {
-        return false;
+        return { ok: true, recipientCount: 0 };
       }
 
-      // Create notifications for all clients with valid phone numbers
-      const notifications = validClients.map(client => ({
+      const notifications = validClients.map((client) => ({
         title,
         content,
         type,
         recipient_name: client.name || 'לקוח',
-        recipient_phone: client.phone.trim(),
+        recipient_phone: String(client.phone).trim(),
         business_id: businessId,
       }));
 
-      const { error: insertError } = await supabase
-        .from('notifications')
-        .insert(notifications);
+      const { error: insertError } = await supabase.from('notifications').insert(notifications);
 
       if (insertError) {
         console.error('Error inserting notifications:', insertError);
-        return false;
+        return { ok: false, recipientCount: 0 };
       }
-      return true;
+      return { ok: true, recipientCount: validClients.length };
     } catch (error) {
       console.error('Error in sendNotificationToAllClients:', error);
-      return false;
+      return { ok: false, recipientCount: 0 };
     }
   },
 

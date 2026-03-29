@@ -67,17 +67,19 @@ export default function ClientNotificationsScreen() {
       const key = keyIndex >= 0 ? TITLE_KEYS[keyIndex] : 'general';
       const notificationType = KEY_TO_TYPE[key];
       
-      const success = await notificationsApi.sendNotificationToAllClients(
+      const result = await notificationsApi.sendNotificationToAllClients(
         title,
         message.trim(),
         notificationType
       );
 
-      if (success) {
+      if (result.ok && result.recipientCount > 0) {
         setSent(true);
         setToast(t('admin.notificationsComposer.sentToast','Notification sent to all clients with push enabled!'));
         setMessage('');
         setTitle('');
+      } else if (result.ok && result.recipientCount === 0) {
+        setError(t('admin.notificationsComposer.error.noRecipients'));
       } else {
         setError(t('admin.notificationsComposer.error.sendFailed','Failed to send notification. Please try again.'));
       }

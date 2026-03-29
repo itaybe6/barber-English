@@ -11,8 +11,9 @@ enabled = true
 verify_jwt = true
 
 # Cron: daily ~12:00 Asia/Jerusalem — birthday in-app notifications (+ push/SMS via notifications trigger)
+# verify_jwt false: auth is checked in code (vault/pg_net often sends apikey; avoids gateway 401 mismatches).
 [functions.birthday-notifications]
-verify_jwt = true
+verify_jwt = false
 
 # Login/register SMS OTP — called before user session exists
 [functions.auth-phone-otp]

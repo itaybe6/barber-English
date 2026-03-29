@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   Pressable,
+  Modal,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -16,6 +17,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useTranslation } from 'react-i18next';
 
+import BookingSuccessAnimatedOverlay, {
+  type SuccessLine,
+} from '@/components/book-appointment/BookingSuccessAnimatedOverlay';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { supabase } from '@/lib/supabase';
 import { compressImages } from '@/lib/utils/imageCompression';
@@ -25,6 +29,12 @@ import { useColors, type ThemeColors } from '@/src/theme/ThemeProvider';
 type HeroImage = { url: string };
 
 const BUCKET = 'app_design';
+
+/**
+ * `0` = expo-image-picker uses the platform maximum per gallery session (iOS/Android/Web).
+ * There is no app cap on total images stored — the marquee uses the full list from the profile.
+ */
+const HERO_IMAGE_SELECTION_LIMIT = 0;
 
 function sanitizeUrlArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -141,17 +151,11 @@ function createStyles(colors: ThemeColors) {
       borderWidth: 1,
       borderColor: colors.border,
     },
-    tipRow: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      gap: 12,
-      paddingVertical: 8,
-    },
-    tipText: {
-      flex: 1,
-      fontSize: 14,
-      lineHeight: 20,
+    heroUploadHintSingle: {
+      fontSize: 15,
+      lineHeight: 22,
       color: colors.text,
+      textAlign: 'center',
     },
     statusRow: {
       flexDirection: 'row',
@@ -341,7 +345,7 @@ function createStyles(colors: ThemeColors) {
 }
 
 export default function EditHomeHeroScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colors = useColors();
@@ -352,9 +356,35 @@ export default function EditHomeHeroScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [showUploadSuccessModal, setShowUploadSuccessModal] = useState(false);
+  const [uploadSuccessAnimKey, setUploadSuccessAnimKey] = useState(0);
 
   const items: HeroImage[] = useMemo(() => images.map((url) => ({ url })), [images]);
   const busy = isUploading || isSaving;
+  const isHebrew = (i18n?.language || 'he').startsWith('he');
+
+  const heroUploadSuccessLines = useMemo((): SuccessLine[] => {
+    if (!showUploadSuccessModal) return [];
+    return [
+      {
+        variant: 'headline',
+        text: t('settings.profile.heroUploadAnimatedHeadline', 'Images saved successfully'),
+      },
+      {
+        variant: 'body',
+        text: t('settings.profile.heroUploadSuccessMessage'),
+      },
+    ];
+  }, [showUploadSuccessModal, t]);
+
+  const goHomeAfterHeroUpload = useCallback(() => {
+    setShowUploadSuccessModal(false);
+    try {
+      router.replace('/(tabs)');
+    } catch {
+      router.back();
+    }
+  }, [router]);
 
   const load = useCallback(async () => {
     try {
@@ -413,7 +443,7 @@ export default function EditHomeHeroScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: 'images',
         allowsMultipleSelection: true,
-        selectionLimit: 20,
+        selectionLimit: HERO_IMAGE_SELECTION_LIMIT,
         quality: 1.0,
         base64: false,
       });
@@ -450,14 +480,18 @@ export default function EditHomeHeroScreen() {
 
       if (uploadedUrls.length === 0) return;
       const next = [...images, ...uploadedUrls];
-      await save(next);
+      const ok = await save(next);
+      if (ok) {
+        setUploadSuccessAnimKey((k) => k + 1);
+        setShowUploadSuccessModal(true);
+      }
     } catch (e) {
       console.error('pickAndUpload home hero failed', e);
       Alert.alert(t('error.generic', 'Error'), t('settings.profile.uploadFailed', 'Failed to upload image'));
     } finally {
       setIsUploading(false);
     }
-  }, [busy, images, save, t]);
+  }, [busy, images, router, save, t]);
 
   const removeAt = useCallback(
     (index: number) => {
@@ -501,27 +535,18 @@ export default function EditHomeHeroScreen() {
     ]);
   }, [busy, save, t]);
 
-  const tips = useMemo(
-    () => [
-      t('settings.profile.heroTipOrder'),
-      t('settings.profile.heroTipTap'),
-      t('settings.profile.heroTipDefault'),
-    ],
-    [t]
-  );
-
   const listHeader = useMemo(
     () => (
       <View>
         <Text style={styles.intro}>{t('settings.profile.homeHeroSubtitle')}</Text>
 
         <View style={styles.tipsCard}>
-          {tips.map((line, i) => (
-            <View key={i} style={styles.tipRow}>
-              <Ionicons name="checkmark-circle" size={20} color={colors.primary} style={{ marginTop: 1 }} />
-              <Text style={styles.tipText}>{line}</Text>
-            </View>
-          ))}
+          <Text style={styles.heroUploadHintSingle}>
+            {t(
+              'settings.profile.heroAnimationUploadHint',
+              'The animation needs at least one image. Select up to your device’s maximum each time, and add more in further uploads if you want.'
+            )}
+          </Text>
         </View>
 
         <View style={styles.statusRow}>
@@ -593,7 +618,6 @@ export default function EditHomeHeroScreen() {
       isUploading,
       styles,
       t,
-      tips,
       pickAndUpload,
       resetToDefault,
     ]
@@ -699,6 +723,23 @@ export default function EditHomeHeroScreen() {
           />
         )}
       </SafeAreaView>
+
+      <Modal
+        visible={showUploadSuccessModal}
+        animationType="fade"
+        transparent
+        statusBarTranslucent
+        onRequestClose={goHomeAfterHeroUpload}
+      >
+        <BookingSuccessAnimatedOverlay
+          key={uploadSuccessAnimKey}
+          lines={heroUploadSuccessLines}
+          rtl={isHebrew}
+          accentColor={colors.primary}
+          onDismiss={goHomeAfterHeroUpload}
+          gotItLabel={t('settings.profile.heroUploadHomeButton', 'Home')}
+        />
+      </Modal>
     </View>
   );
 }

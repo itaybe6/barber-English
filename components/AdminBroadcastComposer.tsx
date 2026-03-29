@@ -5,11 +5,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
 import { messagesApi } from '@/lib/api/messages';
+import { notificationsApi } from '@/lib/api/notifications';
 import { useAuthStore } from '@/stores/authStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/src/theme/ThemeProvider';
 
-// Simplified composer: free-text title and TTL hours
+// Composer: title + content; TTL is fixed server-side (see messagesApi).
 
 type AdminBroadcastComposerProps = {
   variant?: 'floating' | 'icon';
@@ -48,7 +49,6 @@ export default function AdminBroadcastComposer({
   const isLTR = language === 'en';
   const [title, setTitle] = useState('');
   const [notificationContent, setNotificationContent] = useState('');
-  const [ttlInput, setTtlInput] = useState('24');
   const [isSending, setIsSending] = useState(false);
 
   const currentTitle = title.trim();
@@ -65,16 +65,17 @@ export default function AdminBroadcastComposer({
         contentPlaceholder: 'Enter content...',
         previewTitlePlaceholder: 'Title',
         previewContentPlaceholder: 'Content will appear here...',
-        ttlLabel: 'Visible for (hours)',
-        ttlPlaceholder: 'Enter hours (1–720)',
         cancel: 'Cancel',
         sendAll: 'Send to all',
         sending: 'Sending...',
         error: 'Error',
         errorFill: 'Please fill in title and content',
-        ttlError: 'Please enter hours between 1 and 720',
         success: 'Success',
-        successMsg: 'Message published',
+        successMsg: 'Home banner published and notifications sent to all clients with a phone number.',
+        successNoRecipients:
+          'Home banner published. No clients with a phone number were found — no notifications were sent.',
+        successNotifyFailed:
+          'Home banner published, but sending notifications failed. Check your connection and try again.',
         ok: 'OK',
         failMsg: 'Failed to publish message. Please try again.',
         accessibilitySend: 'Send message to clients',
@@ -89,16 +90,17 @@ export default function AdminBroadcastComposer({
       contentPlaceholder: 'הכנס תוכן...',
       previewTitlePlaceholder: 'כותרת',
       previewContentPlaceholder: 'תוכן יופיע כאן...',
-      ttlLabel: 'זמן באוויר (שעות)',
-      ttlPlaceholder: 'הכנס שעות (1–720)',
       cancel: 'ביטול',
       sendAll: 'שלח לכולם',
       sending: 'שולח...',
       error: 'שגיאה',
       errorFill: 'אנא מלא את הכותרת והתוכן של ההתראה',
-      ttlError: 'אנא הזן שעות בין 1 ל‑720',
       success: 'הצלחה',
-      successMsg: 'ההודעה פורסמה',
+      successMsg: 'ההודעה פורסמה בדף הבית והתראות נשלחו לכל הלקוחות עם מספר טלפון.',
+      successNoRecipients:
+        'ההודעה פורסמה בדף הבית. לא נמצאו לקוחות עם מספר טלפון — לא נשלחו התראות.',
+      successNotifyFailed:
+        'ההודעה פורסמה בדף הבית, אך שליחת ההתראות נכשלה. בדוק חיבור ונסה שוב.',
       ok: 'אישור',
       failMsg: 'שגיאה בפרסום ההודעה. אנא נסה שוב.',
       accessibilitySend: 'שליחת הודעה ללקוחות',
@@ -108,7 +110,6 @@ export default function AdminBroadcastComposer({
   const resetState = () => {
     setTitle('');
     setNotificationContent('');
-    setTtlInput('24');
   };
 
   const handleSend = async () => {
@@ -117,28 +118,35 @@ export default function AdminBroadcastComposer({
       Alert.alert(t.error, t.errorFill);
       return;
     }
-    const ttl = parseInt(ttlInput, 10);
-    if (!Number.isFinite(ttl) || ttl < 1 || ttl > 720) {
-      Alert.alert(t.error, t.ttlError);
-      return;
-    }
 
     setIsSending(true);
     try {
-      // Insert a single broadcast message record instead of per-client notifications
       const created = await messagesApi.createMessage({
         title: finalTitle,
         content: notificationContent.trim(),
-        ttlHours: ttl,
         userId: (currentUser as any)?.id || null,
       });
-      if (created) {
-        Alert.alert(t.success, t.successMsg, [
-          { text: t.ok, onPress: () => { setOpen(false); resetState(); } },
-        ]);
-      } else {
+      if (!created) {
         Alert.alert(t.error, t.failMsg);
+        return;
       }
+
+      const notify = await notificationsApi.sendNotificationToAllClients(
+        finalTitle,
+        notificationContent.trim(),
+        'general'
+      );
+
+      let body = t.successMsg;
+      if (notify.ok && notify.recipientCount === 0) {
+        body = t.successNoRecipients;
+      } else if (!notify.ok) {
+        body = t.successNotifyFailed;
+      }
+
+      Alert.alert(t.success, body, [
+        { text: t.ok, onPress: () => { setOpen(false); resetState(); } },
+      ]);
     } catch (e) {
       Alert.alert(t.error, t.failMsg);
     } finally {
@@ -221,26 +229,26 @@ export default function AdminBroadcastComposer({
             <KeyboardAwareScreenScroll style={{ flexGrow: 1, maxHeight: '100%' }} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
               {/* Title */}
               <View style={styles.sectionCard}>
-                <Text style={[styles.label, isLTR && { textAlign: 'left' }]}>{t.titleLabel}</Text>
+                <Text style={[styles.label, styles.labelAlignStart]}>{t.titleLabel}</Text>
                 <View style={{ marginTop: 8 }}>
                   <TextInput
-                    style={[styles.input, isLTR && { textAlign: 'left' }]}
+                    style={[styles.input, styles.inputTextAlignStart]}
                     placeholder={t.customInputPlaceholder}
                     placeholderTextColor={Colors.subtext}
                     value={title}
                     onChangeText={setTitle}
                     maxLength={80}
-                    textAlign={isLTR ? 'left' : 'right'}
+                    textAlign="left"
                   />
-                  <Text style={styles.counter}>{title.length}/80</Text>
+                  <Text style={[styles.counter, styles.counterAlignStart]}>{title.length}/80</Text>
                 </View>
               </View>
 
               {/* Content */}
               <View style={[styles.sectionCard, { marginTop: 12 }]}>
-                <Text style={[styles.label, isLTR && { textAlign: 'left' }]}>{t.contentLabel}</Text>
+                <Text style={[styles.label, styles.labelAlignStart]}>{t.contentLabel}</Text>
                 <TextInput
-                  style={[styles.input, styles.textArea, isLTR && { textAlign: 'left' }]}
+                  style={[styles.input, styles.textArea, styles.inputTextAlignStart]}
                   placeholder={t.contentPlaceholder}
                   placeholderTextColor={Colors.subtext}
                   value={notificationContent}
@@ -248,39 +256,24 @@ export default function AdminBroadcastComposer({
                   multiline
                   numberOfLines={6}
                   maxLength={500}
-                  textAlign={isLTR ? 'left' : 'right'}
+                  textAlign="left"
                   textAlignVertical="top"
                 />
-                <Text style={styles.counter}>{notificationContent.length}/500</Text>
+                <Text style={[styles.counter, styles.counterAlignStart]}>{notificationContent.length}/500</Text>
               </View>
 
-              {/* TTL Hours */}
-              <View style={[styles.sectionCard, { marginTop: 12 }]}>
-                <Text style={[styles.label, isLTR && { textAlign: 'left' }]}>{t.ttlLabel}</Text>
-                <TextInput
-                  style={[styles.input, isLTR && { textAlign: 'left' }]}
-                  placeholder={t.ttlPlaceholder}
-                  placeholderTextColor={Colors.subtext}
-                  value={ttlInput}
-                  onChangeText={(v) => setTtlInput(v.replace(/[^0-9]/g, ''))}
-                  keyboardType="number-pad"
-                  maxLength={3}
-                  textAlign={isLTR ? 'left' : 'right'}
-                />
-              </View>
-
-              {/* Preview */}
+              {/* Preview — same visual order as labels: icon + text from the left */}
               <View style={styles.previewCard}>
                 <LinearGradient
                   colors={["#F2F2F7", "#FFFFFF"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
-                  style={[styles.previewHeader, isLTR && { flexDirection: 'row' }]}
+                  style={[styles.previewHeader, styles.previewHeaderRow]}
                 >
-                  <Ionicons name="notifications-outline" size={18} color={colors.primary} style={isLTR ? { marginRight: 6 } : { marginLeft: 6 }} />
-                  <Text style={[styles.previewTitle, isLTR && { textAlign: 'left' }]}>{currentTitle || t.previewTitlePlaceholder}</Text>
+                  <Ionicons name="notifications-outline" size={18} color={colors.primary} style={{ marginRight: 6 }} />
+                  <Text style={[styles.previewTitle, styles.previewTitleAlignStart]}>{currentTitle || t.previewTitlePlaceholder}</Text>
                 </LinearGradient>
-                <Text style={[styles.previewContent, isLTR && { textAlign: 'left' }]}>{notificationContent || t.previewContentPlaceholder}</Text>
+                <Text style={[styles.previewContent, styles.previewContentAlignStart]}>{notificationContent || t.previewContentPlaceholder}</Text>
               </View>
 
               {/* Actions */}
@@ -441,8 +434,15 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 14,
     color: Colors.text,
     fontWeight: '600',
-    textAlign: 'right',
     marginBottom: 8,
+  },
+  /** Full row width so textAlign affects screen position (RN Text is intrinsic-width by default). */
+  labelAlignStart: {
+    alignSelf: 'stretch',
+    textAlign: 'left',
+  },
+  inputTextAlignStart: {
+    textAlign: 'left',
   },
   dropdown: {
     backgroundColor: '#fff',
@@ -557,6 +557,9 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 12,
     color: Colors.subtext,
     marginTop: 6,
+    alignSelf: 'stretch',
+  },
+  counterAlignStart: {
     textAlign: 'left',
   },
   previewCard: {
@@ -580,9 +583,11 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    flexDirection: 'row-reverse',
     alignItems: 'center',
     marginBottom: 8,
+  },
+  previewHeaderRow: {
+    flexDirection: 'row',
   },
   sectionCard: {
     backgroundColor: '#fff',
@@ -604,14 +609,21 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: Colors.text,
-    textAlign: 'right',
     marginBottom: 6,
+    minWidth: 0,
+  },
+  previewTitleAlignStart: {
+    flex: 1,
+    textAlign: 'left',
   },
   previewContent: {
     fontSize: 14,
     color: Colors.subtext,
-    textAlign: 'right',
     lineHeight: 20,
+    alignSelf: 'stretch',
+  },
+  previewContentAlignStart: {
+    textAlign: 'left',
   },
   actionsRow: {
     flexDirection: 'row',

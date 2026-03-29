@@ -2,7 +2,7 @@
 /**
  * Daily (cron): clients whose birth month/day matches today in Asia/Jerusalem get an in-app
  * notification (+ push/SMS via existing INSERT trigger → notification-push-sms).
- * Runs in the 12:00–13:00 Jerusalem window unless force=true with service role.
+ * Runs from 12:00 Jerusalem until end of day (deduped per user/day) unless force=true.
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -15,14 +15,23 @@ const cors = {
 };
 
 const TZ = "Asia/Jerusalem";
+/** First eligible Jerusalem hour (inclusive). No upper bound until midnight — dedupe via birthday_notification_sent_date. */
 const SCHEDULE_HOUR = 12;
-const SCHEDULE_WINDOW_MINUTES = 60;
 
 const BIRTHDAY_TITLE = "יום הולדת שמח!";
 const NOTIFICATION_TYPE = "general" as const;
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+/** Trimmed; matches Project Settings → API service_role (JWT). */
+const serviceRoleKey = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
+
+function bearerOrApikeyToken(req: Request): string {
+  const auth = (req.headers.get("Authorization") || "")
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+  if (auth) return auth;
+  return (req.headers.get("apikey") || req.headers.get("x-api-key") || "").trim();
+}
 
 function json(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -71,12 +80,10 @@ function isLeapYear(y: number): boolean {
   return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
 }
 
-function shouldRunNowNoon(parts: ReturnType<typeof getJerusalemParts>): boolean {
-  if (parts.hour !== SCHEDULE_HOUR) return false;
-  const nowM = parts.hour * 60 + parts.minute;
-  const startM = SCHEDULE_HOUR * 60;
-  const endM = Math.min(startM + SCHEDULE_WINDOW_MINUTES, 24 * 60);
-  return nowM >= startM && nowM < endM;
+function shouldRunAfterNoonJerusalem(
+  parts: ReturnType<typeof getJerusalemParts>,
+): boolean {
+  return parts.hour >= SCHEDULE_HOUR;
 }
 
 /** Match calendar birthday in Jerusalem (Feb 29 → Feb 28 on non-leap years). */
@@ -112,10 +119,8 @@ serve(async (req) => {
     return json({ error: "Method not allowed" }, 405);
   }
 
-  const authBearer = (req.headers.get("Authorization") || "")
-    .replace(/^Bearer\s+/i, "")
-    .trim();
-  if (authBearer !== serviceRoleKey) {
+  const token = bearerOrApikeyToken(req);
+  if (!serviceRoleKey || token !== serviceRoleKey) {
     return json({ error: "Unauthorized" }, 401);
   }
 
@@ -137,7 +142,7 @@ serve(async (req) => {
     const j = getJerusalemParts();
     const todayYmd = jerusalemYmd(j);
 
-    if (!force && !shouldRunNowNoon(j)) {
+    if (!force && !shouldRunAfterNoonJerusalem(j)) {
       return json({
         ok: true,
         skipped: "outside_schedule",

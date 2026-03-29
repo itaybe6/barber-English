@@ -695,10 +695,10 @@
       "businessName": "שם העסק",
       "businessNamePlaceholder": "לדוגמה: הסטודיו של הדס",
       "bookingWindowDaysTitle": "חלון הזמנות (ימים)",
+      "homeAnimationRowTitle": "תמונות אנימציית הבית",
+      "homeAnimationRowSubtitle": "עריכת התמונות באנימציה בחלק העליון של דף הבית",
       "homeHeroSubtitle": "התמונות האלה מופיעות בקרוסלה בראש מסך הבית של הלקוחות.",
-      "heroTipOrder": "התמונה הראשונה ברשימה מוצגת ראשונה באנימציה.",
-      "heroTipTap": "הקשה על תמונה כדי להעביר אותה לראש הרשימה.",
-      "heroTipDefault": "אם לא תעלו כאן תמונות — יוצגו תמונות ברירת המחדל של האפליקציה.",
+      "heroAnimationUploadHint": "לאנימציה צריך לפחות תמונה אחת. בכל בחירה מהגלריה — עד המקסימום שהמכשיר מאפשר; אפשר להוסיף עוד תמונות בהעלאות נוספות.",
       "heroPreviewLabel": "תצוגה מקדימה — השקופית הראשונה",
       "heroAddPhotos": "בחירת תמונות מהגלריה",
       "heroAddMore": "הוספת תמונות",
@@ -715,7 +715,12 @@
       "heroEmptyTitle": "אין תמונות ראש",
       "heroEmptySubtitle": "הוסיפו תמונות כדי שיוצגו באנימציה בראש הדף. אם תשאירו ריק — יוצגו תמונות ברירת מחדל.",
       "heroHint": "טיפ: הקשה על תמונה כדי להעביר אותה למקום הראשון.",
-      "first": "ראשונה"
+      "first": "ראשונה",
+      "heroUploadSuccessTitle": "נשמר בהצלחה",
+      "heroUploadSuccessMessage": "תמונות דף הבית עודכנו. עברו ללשונית הבית כדי לראות את האנימציה.",
+      "heroUploadAnimatedHeadline": "התמונות נשמרו בהצלחה",
+      "heroUploadViewHome": "מעבר לדף הבית",
+      "heroUploadHomeButton": "דף הבית"
     },
     "sections": {
       "notifications": "התראות",
@@ -821,7 +826,15 @@
       "review": "סקירה",
       "reviewName": "שם",
       "reviewPhone": "טלפון",
-      "reviewEmail": "אימייל"
+      "reviewEmail": "אימייל",
+      "addWizardBasicLead": "הזינו את שם העובד ומספר הטלפון שישמש להתחברות לאפליקציה.",
+      "addWizardPasswordLead": "קבעו סיסמה לעובד (לפחות 6 תווים) ואשרו אותה.",
+      "addWizardReviewLead": "בדקו שהפרטים נכונים. לאחר השמירה העובד יוכל להתחבר עם הטלפון והסיסמה.",
+      "reviewPasswordNote": "הסיסמה נשמרת באופן מאובטח ולא מוצגת כאן.",
+      "addEmployeeSectionProfile": "פרטי העובד",
+      "addEmployeeSectionSecurity": "סיסמת כניסה",
+      "addEmployeeCta": "הוספת עובד למערכת",
+      "addEmployeeFormHint": "העובד יתחבר עם מספר הטלפון והסיסמה שתגדירו."
     }
   },
   "admin": {
@@ -1115,7 +1128,7 @@
       "sendAll": "שלח/י לכל הלקוחות",
       "preview": "תצוגה מקדימה",
       "sentToast": "ההודעה נשלחה בהצלחה לכל הלקוחות עם התראות Push!",
-      "error": {"noTitle":"יש לבחור כותרת","noMessage":"יש להזין תוכן","sendFailed":"אירעה שגיאה בשליחת ההודעה. נסו שוב."}
+      "error": {"noTitle":"יש לבחור כותרת","noMessage":"יש להזין תוכן","sendFailed":"אירעה שגיאה בשליחת ההודעה. נסו שוב.","noRecipients":"לא נמצאו לקוחות עם מספר טלפון — לא נשלח דבר."}
     },
     "waitlist": {
       "title": "רשימת המתנה",

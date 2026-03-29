@@ -2127,8 +2127,8 @@ export default function SettingsScreen() {
               
               {renderSettingItemLTR(
                 <Ionicons name="images-outline" size={20} color={businessColors.primary} />,
-                'Home animation images',
-                'Edit the images in the top home animation',
+                t('settings.profile.homeAnimationRowTitle', 'Home animation images'),
+                t('settings.profile.homeAnimationRowSubtitle', 'Edit the images in the top home animation'),
                 undefined,
                 () => router.push('/(tabs)/edit-home-hero'),
                 false,

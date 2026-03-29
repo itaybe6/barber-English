@@ -672,10 +672,10 @@
       "businessName": "Business name",
       "businessNamePlaceholder": "For example: The Studio of Hadas",
       "bookingWindowDaysTitle": "Booking window (days)",
+      "homeAnimationRowTitle": "Home animation images",
+      "homeAnimationRowSubtitle": "Edit the images in the top home animation",
       "homeHeroSubtitle": "These images appear in the carousel at the top of the client home screen.",
-      "heroTipOrder": "The first image is shown first in the animation.",
-      "heroTipTap": "Tap an image to move it to the front.",
-      "heroTipDefault": "If you add nothing here, the app’s default images are used.",
+      "heroAnimationUploadHint": "The animation needs at least one image. Each gallery pick allows your device’s maximum; use “Add photos” again anytime to add more.",
       "heroPreviewLabel": "First slide preview",
       "heroAddPhotos": "Choose photos from gallery",
       "heroAddMore": "Add more photos",
@@ -692,7 +692,12 @@
       "heroEmptyTitle": "No hero images",
       "heroEmptySubtitle": "Add images to show them in the top animation. If you keep this empty, the default images will be shown.",
       "heroHint": "Tip: tap an image to move it to the first position.",
-      "first": "First"
+      "first": "First",
+      "heroUploadSuccessTitle": "Saved",
+      "heroUploadSuccessMessage": "Your home screen images were updated. Go to the home tab to see the animation.",
+      "heroUploadAnimatedHeadline": "Images saved successfully",
+      "heroUploadViewHome": "Go to home",
+      "heroUploadHomeButton": "Home"
     },
     "sections": {
       "notifications": "Notifications",
@@ -798,7 +803,15 @@
       "review": "Review",
       "reviewName": "Name",
       "reviewPhone": "Phone",
-      "reviewEmail": "Email"
+      "reviewEmail": "Email",
+      "addWizardBasicLead": "Enter the employee's name and the phone number they will use to sign in.",
+      "addWizardPasswordLead": "Choose a password (at least 6 characters) and confirm it.",
+      "addWizardReviewLead": "Check that the details are correct. After saving, the employee can sign in with phone and password.",
+      "reviewPasswordNote": "The password is stored securely and is not shown here.",
+      "addEmployeeSectionProfile": "Employee details",
+      "addEmployeeSectionSecurity": "Sign-in password",
+      "addEmployeeCta": "Add employee to the team",
+      "addEmployeeFormHint": "They will sign in with the phone number and password you set."
     }
   }
   ,
@@ -1114,7 +1127,7 @@
       "sendAll": "Send to all clients",
       "preview": "Preview",
       "sentToast": "Notification sent to all clients with push enabled!",
-      "error": {"noTitle":"Please select a title","noMessage":"Please enter a message","sendFailed":"Failed to send notification. Please try again."}
+      "error": {"noTitle":"Please select a title","noMessage":"Please enter a message","sendFailed":"Failed to send notification. Please try again.","noRecipients":"No clients with a phone number — nothing was sent."}
     },
     "waitlist": {
       "title": "Waitlist",

@@ -257,32 +257,46 @@ export const usersApi = {
     }
   },
 
-  // Create new user with password
-  async createUserWithPassword(userData: Omit<User, 'id' | 'created_at' | 'updated_at'>, password: string): Promise<User | null> {
+  /**
+   * Creates an admin (or other) user with a chosen password.
+   * Returns structured result so callers can show DB/RLS errors instead of failing silently.
+   */
+  async createUserWithPassword(
+    userData: Omit<User, 'id' | 'created_at' | 'updated_at'>,
+    password: string
+  ): Promise<{ ok: true; user: User } | { ok: false; error: string; code?: string }> {
     try {
       const businessId = getBusinessId();
-      
+
       const userWithPassword = {
         ...userData,
-        business_id: businessId, // הוספת business_id אוטומטית
-        password_hash: this.hashPassword(password)
+        business_id: businessId,
+        password_hash: this.hashPassword(password),
       };
 
-      const { data, error } = await supabase
-        .from('users')
-        .insert([userWithPassword])
-        .select()
-        .single();
+      const { data, error } = await supabase.from('users').insert([userWithPassword]).select().single();
 
       if (error) {
         console.error('Error creating user with password:', error);
-        return null;
+        const code = (error as { code?: string }).code;
+        return {
+          ok: false,
+          error: error.message || 'insert_failed',
+          code,
+        };
       }
 
-      return data;
+      if (!data) {
+        return { ok: false, error: 'no_row_returned' };
+      }
+
+      return { ok: true, user: data as User };
     } catch (error) {
       console.error('Error creating user with password:', error);
-      return null;
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'unknown_error',
+      };
     }
   }
   ,

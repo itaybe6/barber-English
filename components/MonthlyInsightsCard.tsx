@@ -5,13 +5,13 @@ import { useTranslation } from 'react-i18next';
 
 interface MonthlyInsightsCardProps {
   appointmentsThisMonth: number;
-  appointmentsToday: number;
+  cancelledAppointmentsThisMonth: number;
   newClientsThisMonth: number;
   loading?: boolean;
   colors: { primary: string; text: string; textSecondary: string; secondary?: string };
 }
 
-const TODAY_SEGMENT_COLOR = '#34C759';
+const CANCELLED_SEGMENT_COLOR = '#EF4444';
 const NEW_CLIENTS_SEGMENT_COLOR = '#FF9500';
 
 const CHART_SIZE = 128;
@@ -22,7 +22,7 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 export default function MonthlyInsightsCard({
   appointmentsThisMonth,
-  appointmentsToday,
+  cancelledAppointmentsThisMonth,
   newClientsThisMonth,
   loading,
   colors,
@@ -30,7 +30,7 @@ export default function MonthlyInsightsCard({
   const { t, i18n } = useTranslation();
   const isHebrewUi =
     (typeof i18n.language === 'string' && i18n.language.startsWith('he')) || I18nManager.isRTL;
-  const total = appointmentsThisMonth + appointmentsToday + newClientsThisMonth;
+  const total = appointmentsThisMonth + cancelledAppointmentsThisMonth + newClientsThisMonth;
 
   const monthLabel = useMemo(() => {
     const locale = typeof i18n.language === 'string' && i18n.language.startsWith('he') ? 'he-IL' : 'en-US';
@@ -46,10 +46,10 @@ export default function MonthlyInsightsCard({
         label: t('admin.insights.monthLegend'),
       },
       {
-        key: 'today',
-        value: appointmentsToday,
-        color: TODAY_SEGMENT_COLOR,
-        label: t('admin.insights.todayLegend'),
+        key: 'cancelled',
+        value: cancelledAppointmentsThisMonth,
+        color: CANCELLED_SEGMENT_COLOR,
+        label: t('admin.insights.cancelledLegend'),
       },
       {
         key: 'clients',
@@ -58,7 +58,7 @@ export default function MonthlyInsightsCard({
         label: t('admin.insights.newClientsLegend'),
       },
     ],
-    [appointmentsThisMonth, appointmentsToday, newClientsThisMonth, colors.primary, t]
+    [appointmentsThisMonth, cancelledAppointmentsThisMonth, newClientsThisMonth, colors.primary, t]
   );
 
   const segments = useMemo(() => {

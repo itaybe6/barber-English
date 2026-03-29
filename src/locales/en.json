@@ -155,6 +155,7 @@
   "admin.insights.newClientsThisMonth": "new clients added this month",
   "admin.insights.monthLegend": "This month",
   "admin.insights.todayLegend": "Today",
+  "admin.insights.cancelledLegend": "Cancelled appointments",
   "admin.insights.newClientsLegend": "New clients",
   "admin.hero.edit": "Main Media",
   "admin.hero.subtitle": "Manage the animation images at the top",

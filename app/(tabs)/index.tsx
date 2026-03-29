@@ -271,7 +271,7 @@ export default function HomeScreen() {
   const [savingClient, setSavingClient] = useState(false);
   const [insightsData, setInsightsData] = useState({
     appointmentsThisMonth: 0,
-    appointmentsToday: 0,
+    cancelledAppointmentsThisMonth: 0,
     newClientsThisMonth: 0,
   });
   const [loadingInsights, setLoadingInsights] = useState(true);
@@ -470,8 +470,6 @@ export default function HomeScreen() {
       const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
       const monthStartIso = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
       const monthEndExclusiveIso = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
-      const todayStr = now.toISOString().split('T')[0];
-
       let monthApptQuery = supabase
         .from('appointments')
         .select('id', { count: 'exact', head: true })
@@ -482,18 +480,18 @@ export default function HomeScreen() {
         .in('status', ['pending', 'confirmed', 'completed', 'cancelled', 'no_show']);
       if (user?.id) monthApptQuery = monthApptQuery.eq('barber_id', user.id);
 
-      let todayApptQuery = supabase
+      let cancelledMonthQuery = supabase
         .from('appointments')
         .select('id', { count: 'exact', head: true })
         .eq('business_id', businessId)
-        .eq('is_available', false)
-        .eq('slot_date', todayStr)
-        .in('status', ['pending', 'confirmed', 'completed', 'cancelled', 'no_show']);
-      if (user?.id) todayApptQuery = todayApptQuery.eq('barber_id', user.id);
+        .eq('status', 'cancelled')
+        .gte('slot_date', firstDayOfMonth)
+        .lte('slot_date', lastDayOfMonth);
+      if (user?.id) cancelledMonthQuery = cancelledMonthQuery.eq('barber_id', user.id);
 
-      const [monthApptRes, todayApptRes, newClientsRes] = await Promise.all([
+      const [monthApptRes, cancelledMonthRes, newClientsRes] = await Promise.all([
         monthApptQuery,
-        todayApptQuery,
+        cancelledMonthQuery,
         supabase
           .from('users')
           .select('id', { count: 'exact', head: true })
@@ -504,12 +502,12 @@ export default function HomeScreen() {
       ]);
 
       if (monthApptRes.error) console.error('Error fetching month appointments count:', monthApptRes.error);
-      if (todayApptRes.error) console.error('Error fetching today appointments count:', todayApptRes.error);
+      if (cancelledMonthRes.error) console.error('Error fetching cancelled appointments count:', cancelledMonthRes.error);
       if (newClientsRes.error) console.error('Error fetching new clients count:', newClientsRes.error);
 
       setInsightsData({
         appointmentsThisMonth: monthApptRes.error ? 0 : monthApptRes.count ?? 0,
-        appointmentsToday: todayApptRes.error ? 0 : todayApptRes.count ?? 0,
+        cancelledAppointmentsThisMonth: cancelledMonthRes.error ? 0 : cancelledMonthRes.count ?? 0,
         newClientsThisMonth: newClientsRes.error ? 0 : newClientsRes.count ?? 0,
       });
 
@@ -1009,7 +1007,7 @@ export default function HomeScreen() {
         {isAdmin && (
           <MonthlyInsightsCard
             appointmentsThisMonth={insightsData.appointmentsThisMonth}
-            appointmentsToday={insightsData.appointmentsToday}
+            cancelledAppointmentsThisMonth={insightsData.cancelledAppointmentsThisMonth}
             newClientsThisMonth={insightsData.newClientsThisMonth}
             loading={loadingInsights}
             colors={colors}

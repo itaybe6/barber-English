@@ -70,52 +70,77 @@ const clientAppointmentsApi = {
   },
 
   // Cancel appointment
-  async cancelAppointment(slotId: string, minCancellationHours: number): Promise<{ success: boolean; error?: string }> {
+  async cancelAppointment(
+    slotId: string,
+    minCancellationHours: number,
+    auth?: { callerPhone?: string | null; callerUserId?: string | null; isAdmin?: boolean }
+  ): Promise<{ success: boolean; error?: string }> {
     try {
-      // First, get the appointment details before cancelling
+      const businessId = getBusinessId();
+
       const { data: appointmentData, error: fetchError } = await supabase
         .from('appointments')
         .select('*')
         .eq('id', slotId)
+        .eq('business_id', businessId)
         .single();
 
-      if (fetchError) {
+      if (fetchError || !appointmentData) {
         console.error('Error fetching appointment before cancellation:', fetchError);
         return { success: false, error: 'Failed to fetch appointment details' };
       }
 
-      if (!appointmentData) {
-        return { success: false, error: 'Appointment not found' };
+      if (appointmentData.status === 'cancelled') {
+        return { success: false, error: 'Appointment already cancelled' };
+      }
+
+      if (appointmentData.is_available === true) {
+        return { success: false, error: 'Appointment is not active' };
+      }
+
+      if (!auth?.isAdmin) {
+        const phone = String(auth?.callerPhone || '').trim();
+        const rowPhone = String(appointmentData.client_phone || '').trim();
+        const phoneOk = phone.length > 0 && rowPhone === phone;
+        const userOk =
+          !!auth?.callerUserId &&
+          !!appointmentData.user_id &&
+          String(appointmentData.user_id) === String(auth.callerUserId);
+        if (!phoneOk && !userOk) {
+          return { success: false, error: 'Not authorized to cancel this appointment' };
+        }
       }
 
       // Note: Cancellation time validation is already done in the component
       // before calling this function, so we skip the validation here
 
-      // Cancel the appointment — keep status=cancelled for tracking, free the slot for rebooking
-      const { error } = await supabase
+      // status=cancelled is used for analytics (e.g. monthly cancelled count). Free the slot for rebooking.
+      const { data: updated, error } = await supabase
         .from('appointments')
         .update({
           status: 'cancelled',
           is_available: true,
           client_name: null,
           client_phone: null,
-          service_name: 'Available Slot', // Set to default value instead of null
+          service_name: 'Available Slot',
+          updated_at: new Date().toISOString(),
         })
         .eq('id', slotId)
-        .eq('business_id', appointmentData.business_id)
-        .eq('is_available', false);
+        .eq('business_id', businessId)
+        .select('id, status')
+        .maybeSingle();
 
       if (error) {
         console.error('Error canceling appointment:', error);
         return { success: false, error: 'Failed to cancel appointment' };
       }
+      if (!updated || updated.status !== 'cancelled') {
+        console.error('Cancel appointment: update did not persist cancelled status', { slotId, updated });
+        return { success: false, error: 'Failed to cancel appointment' };
+      }
 
-      // Check waitlist and notify waiting clients
       if (appointmentData) {
-        // Notify clients waiting for the same date and time period
         await checkWaitlistAndNotify(appointmentData);
-        
-        // Also notify clients waiting for the same service on any future date
         await notifyServiceWaitlistClients(appointmentData);
       }
 
@@ -763,7 +788,11 @@ export default function ClientAppointmentsScreen() {
 
     setIsCanceling(true);
     try {
-      const result = await clientAppointmentsApi.cancelAppointment(selectedAppointment.id, minCancellationHours);
+      const result = await clientAppointmentsApi.cancelAppointment(selectedAppointment.id, minCancellationHours, {
+        callerPhone: user?.phone,
+        callerUserId: user?.id,
+        isAdmin: user?.user_type === 'admin',
+      });
       if (result.success) {
         // Remove the canceled appointment from the list
         setUserAppointments(prev => prev.filter(apt => apt.id !== selectedAppointment.id));

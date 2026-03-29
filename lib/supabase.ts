@@ -177,6 +177,21 @@ export interface BusinessConstraint {
   updated_at: string;
 }
 
+/** Admin calendar sticky notes (`calendar_reminders`; optional if table was dropped in a migration). */
+export interface CalendarReminder {
+  id: string;
+  business_id: string;
+  user_id: string;
+  event_date: string;
+  start_time: string;
+  duration_minutes: number;
+  title: string;
+  notes?: string | null;
+  color_key?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // Waitlist interface
 export interface WaitlistEntry {
   id: string;

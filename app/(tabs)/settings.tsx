@@ -243,18 +243,11 @@ export default function SettingsScreen() {
   const [isSavingAdmin, setIsSavingAdmin] = useState(false);
   const [isUploadingAdminAvatar, setIsUploadingAdminAvatar] = useState(false);
 
-<<<<<<< HEAD
   // Per-admin: reminder for you (optional) vs reminder for clients (optional)
   const [adminReminderMinutes, setAdminReminderMinutes] = useState<number | null>(null);
   const [adminReminderEnabled, setAdminReminderEnabled] = useState(false);
   const [clientReminderMinutes, setClientReminderMinutes] = useState<number | null>(null);
   const [clientReminderEnabled, setClientReminderEnabled] = useState(false);
-=======
-  // Per-admin scheduling preferences: reminder before appointment
-  const [reminderMinutes, setReminderMinutes] = useState<number | null>(null);
-  const [reminderEnabled, setReminderEnabled] = useState(false);
-  const [reminderMinutesDraft, setReminderMinutesDraft] = useState('30');
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
 
   // Animated bottom-sheet controls
   const sheetAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
@@ -580,7 +573,6 @@ export default function SettingsScreen() {
     }
   };
 
-<<<<<<< HEAD
   const reminderMinutesValidate = (v: string) => {
     const s = (v || '').trim();
     if (s.length === 0) return true;
@@ -590,10 +582,6 @@ export default function SettingsScreen() {
 
   const handleSaveAdminReminderInline = async (next: string) => {
     if (!user?.id) return;
-=======
-  const handleSaveReminderInline = async (next: string) => {
-    if (!user?.id || !reminderEnabled) return;
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
     const trimmed = (next || '').trim();
     try {
       setIsSavingProfile(true);
@@ -609,19 +597,13 @@ export default function SettingsScreen() {
         return;
       }
       await businessProfileApi.setReminderMinutesForUser(user.id, mins);
-<<<<<<< HEAD
       setAdminReminderMinutes(mins);
       setAdminReminderEnabled(true);
-=======
-      setReminderMinutes(mins);
-      setReminderMinutesDraft(String(mins));
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
     } finally {
       setIsSavingProfile(false);
     }
   };
 
-<<<<<<< HEAD
   const handleSaveClientReminderInline = async (next: string) => {
     if (!user?.id) return;
     const trimmed = (next || '').trim();
@@ -641,47 +623,6 @@ export default function SettingsScreen() {
       await businessProfileApi.setClientReminderMinutesForUser(user.id, mins);
       setClientReminderMinutes(mins);
       setClientReminderEnabled(true);
-=======
-  const handleReminderToggle = async (next: boolean) => {
-    if (!user?.id) return;
-    const prevEnabled = reminderEnabled;
-    const prevMinutes = reminderMinutes;
-    if (!next) {
-      setReminderEnabled(false);
-      setIsSavingProfile(true);
-      try {
-        await businessProfileApi.setReminderMinutesForUser(user.id, null);
-        setReminderMinutes(null);
-      } catch {
-        setReminderEnabled(prevEnabled);
-        Alert.alert(
-          t('error.generic', 'Error'),
-          t('settings.reminder.saveFailed', 'Could not update reminder setting'),
-        );
-      } finally {
-        setIsSavingProfile(false);
-      }
-      return;
-    }
-    const fromDraft = parseInt((reminderMinutesDraft || '').trim(), 10);
-    const defaultMins =
-      prevMinutes !== null && Number(prevMinutes) > 0 ? Math.floor(Number(prevMinutes)) : 30;
-    const toSave =
-      Number.isFinite(fromDraft) && fromDraft >= 1 && fromDraft <= 1440 ? fromDraft : defaultMins;
-    setReminderEnabled(true);
-    setIsSavingProfile(true);
-    try {
-      await businessProfileApi.setReminderMinutesForUser(user.id, toSave);
-      setReminderMinutes(toSave);
-      setReminderMinutesDraft(String(toSave));
-    } catch {
-      setReminderEnabled(prevEnabled);
-      setReminderMinutes(prevMinutes);
-      Alert.alert(
-        t('error.generic', 'Error'),
-        t('settings.reminder.saveFailed', 'Could not update reminder setting'),
-      );
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
     } finally {
       setIsSavingProfile(false);
     }
@@ -2021,7 +1962,6 @@ export default function SettingsScreen() {
         
         <View style={styles.cardNew}>
           <View style={styles.settingItemLTR}>
-<<<<<<< HEAD
             <View style={styles.settingIconLTR}><Bell size={20} color={businessColors.primary} /></View>
             <View style={{ flex: 1 }}>
               <InlineEditableRow
@@ -2054,61 +1994,8 @@ export default function SettingsScreen() {
               <Text style={[styles.settingSubtitleLTR, { marginTop: 6, paddingHorizontal: 4 }]}>
                 {t('settings.reminder.adminAutomatedHint')}
               </Text>
-=======
-            <View style={styles.settingIconLTR}>
-              <Clock size={20} color={businessColors.primary} />
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
             </View>
-            <View style={{ flex: 1, paddingRight: 8 }}>
-              <Text style={styles.settingTitleLTR}>
-                {t('settings.reminder.enableLabel', 'Reminder before appointment')}
-              </Text>
-              <Text style={styles.settingSubtitleLTR}>
-                {t(
-                  'settings.reminder.enableSubtitle',
-                  'Get notified before your next appointment starts',
-                )}
-              </Text>
-            </View>
-            <Switch
-              value={reminderEnabled}
-              onValueChange={handleReminderToggle}
-              disabled={isSavingProfile}
-              trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
-              thumbColor={
-                reminderEnabled
-                  ? businessColors.primary
-                  : Platform.OS === 'android'
-                    ? '#f4f3f4'
-                    : undefined
-              }
-              ios_backgroundColor="#E5E5EA"
-            />
           </View>
-<<<<<<< HEAD
-=======
-          {reminderEnabled && (
-            <View style={styles.settingItemLTR}>
-              <View style={styles.settingIconLTR}>
-                <Clock size={20} color={businessColors.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <InlineEditableRow
-                  title={t('settings.reminder.titleWithMinutes', 'Reminder before appointment (minutes)')}
-                  value={Number(reminderMinutes) > 0 ? String(reminderMinutes) : ''}
-                  placeholder={`${t('common.eg', 'e.g.')} 30`}
-                  keyboardType="default"
-                  onSave={handleSaveReminderInline}
-                  chevronColor={businessColors.primary}
-                  validate={(v) => {
-                    const n = parseInt((v || '').trim(), 10);
-                    return Number.isFinite(n) && n >= 1 && n <= 1440;
-                  }}
-                />
-              </View>
-            </View>
-          )}
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
         </View>
         
         <View onLayout={onSettingsSectionLayout('services')}>
@@ -2584,7 +2471,6 @@ export default function SettingsScreen() {
         </SafeAreaView>
       </Modal>
 
-<<<<<<< HEAD
       {/* Edit Display Name Modal */}
       <Modal
         visible={showEditDisplayNameModal}
@@ -2639,8 +2525,6 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-=======
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
       {/* Edit Admin (name & phone) Modal */}
       <Modal
         visible={showEditAdminModal}

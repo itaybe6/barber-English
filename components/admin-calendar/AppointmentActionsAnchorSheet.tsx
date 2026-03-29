@@ -12,12 +12,12 @@ import Animated, {
 
 const PANEL_SHADOW_STATIC = Platform.select({
   ios: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.16,
-    shadowRadius: 20,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.22,
+    shadowRadius: 28,
   },
-  android: { elevation: 12 },
+  android: { elevation: 18 },
   default: {},
 });
 
@@ -151,7 +151,8 @@ export function AppointmentActionsAnchorSheet({
     );
   }, [open, duration, progress, scheduleDismissed]);
 
-  const finalH = 340;
+  /** Tall enough for hero + actions; scroll lives in parent content */
+  const finalH = Math.min(Math.max(winH * 0.74, 440), 640);
 
   const backdropStyle = useAnimatedStyle(() => ({
     opacity: interpolate(progress.value, [0, 1], [0, 1], Extrapolation.CLAMP),
@@ -219,15 +220,15 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(15,23,42,0.42)',
   },
   panelTouchWrap: {
     zIndex: 2,
   },
   panelInner: {
     flex: 1,
-    paddingTop: 8,
-    paddingBottom: 18,
-    paddingHorizontal: 16,
+    paddingTop: 0,
+    paddingBottom: 0,
+    paddingHorizontal: 0,
   },
 });

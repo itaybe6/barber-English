@@ -185,6 +185,25 @@ export const businessConstraintsApi = {
       .eq('business_id', businessId);
     return !error;
   },
+
+  async updateConstraint(
+    id: string,
+    patch: { date?: string; start_time?: string; end_time?: string; reason?: string | null }
+  ): Promise<boolean> {
+    const businessId = getBusinessId();
+    const updates: Record<string, string | null> = {};
+    if (patch.date !== undefined) updates.date = patch.date;
+    if (patch.start_time !== undefined) updates.start_time = patch.start_time;
+    if (patch.end_time !== undefined) updates.end_time = patch.end_time;
+    if (patch.reason !== undefined) updates.reason = patch.reason;
+    if (Object.keys(updates).length === 0) return true;
+    const { error } = await supabase
+      .from('business_constraints')
+      .update(updates)
+      .eq('id', id)
+      .eq('business_id', businessId);
+    return !error;
+  },
 };
 
 

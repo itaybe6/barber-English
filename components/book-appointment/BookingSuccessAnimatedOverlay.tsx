@@ -27,11 +27,7 @@ type Props = {
   stagger?: number;
   lineGapMs?: number;
   onDismiss: () => void;
-<<<<<<< HEAD
-  /** When omitted, only the primary dismiss button is shown (e.g. pending-approval message). */
-=======
-  /** When omitted, only the dismiss button is shown (e.g. constraint saved — no calendar action). */
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
+  /** When omitted, only the primary dismiss button is shown (e.g. pending approval or constraint saved — no calendar action). */
   onAddToCalendar?: () => void;
   addToCalendarLabel?: string;
   gotItLabel: string;
@@ -78,13 +74,8 @@ export default function BookingSuccessAnimatedOverlay({
   stagger = 72,
   lineGapMs = 120,
   onDismiss,
-<<<<<<< HEAD
   onAddToCalendar: onAddToCalendarProp,
   addToCalendarLabel: addToCalendarLabelProp,
-=======
-  onAddToCalendar,
-  addToCalendarLabel = '',
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
   gotItLabel,
 }: Props) {
   const showCalendar = Boolean(onAddToCalendarProp && addToCalendarLabelProp?.trim());
@@ -210,7 +201,6 @@ export default function BookingSuccessAnimatedOverlay({
         pointerEvents="box-none"
       >
         <View style={styles.footerInner}>
-<<<<<<< HEAD
           {showCalendar ? (
             <TouchableOpacity
               style={[styles.btnSecondary, { borderColor: 'rgba(255,255,255,0.55)' }]}
@@ -221,38 +211,14 @@ export default function BookingSuccessAnimatedOverlay({
               <Text style={styles.btnSecondaryText}>{addToCalendarLabelProp}</Text>
             </TouchableOpacity>
           ) : null}
-=======
-          {typeof onAddToCalendar === 'function' ? (
-            <>
-              <TouchableOpacity
-                style={[styles.btnSecondary, { borderColor: 'rgba(255,255,255,0.55)' }]}
-                onPress={onAddToCalendar}
-                activeOpacity={0.82}
-              >
-                <Ionicons name="calendar-outline" size={21} color="#FFFFFF" />
-                <Text style={styles.btnSecondaryText}>{addToCalendarLabel}</Text>
-              </TouchableOpacity>
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
-
-              <TouchableOpacity
-                style={[styles.btnSecondary, { borderColor: 'rgba(255,255,255,0.55)' }]}
-                onPress={onDismiss}
-                activeOpacity={0.82}
-                accessibilityRole="button"
-              >
-                <Text style={styles.btnSecondaryText}>{gotItLabel}</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <TouchableOpacity
-              style={[styles.btnSecondary, { borderColor: 'rgba(255,255,255,0.55)' }]}
-              onPress={onDismiss}
-              activeOpacity={0.82}
-              accessibilityRole="button"
-            >
-              <Text style={styles.btnSecondaryText}>{gotItLabel}</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={[styles.btnSecondary, { borderColor: 'rgba(255,255,255,0.55)' }]}
+            onPress={onDismiss}
+            activeOpacity={0.82}
+            accessibilityRole="button"
+          >
+            <Text style={styles.btnSecondaryText}>{gotItLabel}</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </View>

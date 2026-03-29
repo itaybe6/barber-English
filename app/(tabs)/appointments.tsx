@@ -19,13 +19,6 @@ import {
   Platform,
   Pressable,
 } from 'react-native';
-<<<<<<< HEAD
-import Colors from '@/constants/colors';
-import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
-import DaySelector from '@/components/DaySelector';
-import { AvailableTimeSlot, supabase, getBusinessId } from '@/lib/supabase';
-=======
-import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import Colors from '@/constants/colors';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import DaySelector from '@/components/DaySelector';
@@ -36,12 +29,12 @@ import {
   listCalendarRemindersForRange,
   listCalendarReminderDatesInMonth,
 } from '@/lib/api/calendarReminders';
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
 import { businessHoursApi } from '@/lib/api/businessHours';
 import { checkWaitlistAndNotify, notifyServiceWaitlistClients } from '@/lib/api/waitlistNotifications';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { Entypo, Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   AppointmentActionsAnchorSheet,
   getDefaultAppointmentAnchorRect,
@@ -55,9 +48,10 @@ import {
   useAdminCalendarPlusAnchorWindow,
   useAdminCalendarReminderFabRegistration,
 } from '@/contexts/AdminCalendarReminderFabContext';
-import { Ban, Calendar, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react-native';
+import { Ban, Calendar, ChevronLeft, ChevronRight, CheckCircle, StickyNote } from 'lucide-react-native';
 import AddAppointmentModal from '@/components/AddAppointmentModal';
 import BusinessConstraintsModal from '@/components/BusinessConstraintsModal';
+import ConstraintEditModal from '@/components/ConstraintEditModal';
 import CalendarReminderEditorModal from '@/components/CalendarReminderEditorModal';
 import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from 'react-i18next';
@@ -187,8 +181,6 @@ Animated.addWhitelistedNativeProps?.({
   contentOffset: true,
 });
 
-<<<<<<< HEAD
-=======
 const REMINDER_PALETTE: Record<string, { bar: string; bg: string }> = {
   blue: { bar: '#1A73E8', bg: '#E8F0FE' },
   coral: { bar: '#E67C73', bg: '#FCE8E6' },
@@ -259,7 +251,6 @@ function layoutConstraintOnDayGrid(
   return { top, height: Math.max(height, 40) };
 }
 
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
 const AnimatedFlashList = Animated.createAnimatedComponent<FlashListProps<DayBlock>>(FlashList);
 
 function _formatLocalYyyyMmDd(d: Date) {
@@ -313,6 +304,65 @@ function _gregorianDayHeaderParts(date: Date) {
   }
   const dayNum = String(date.getDate());
   return { dayNum, weekday };
+}
+
+/** תצוגת תאריך תור (YYYY-MM-DD) — כמו במודל החודש */
+function _formatSlotDateLine(slotDate: string) {
+  const parts = String(slotDate || '')
+    .split('-')
+    .map((x) => parseInt(x, 10));
+  const yy = parts[0];
+  const mm = parts[1];
+  const dd = parts[2];
+  if (!yy || !mm || !dd) return slotDate || '—';
+  const d = new Date(yy, mm - 1, dd);
+  const p = _gregorianDayHeaderParts(d);
+  return p.weekday ? `${p.weekday} · ${p.dayNum}` : slotDate;
+}
+
+function _adminAppointmentStatusLabel(status: string, tHe: (key: string, fallback: string) => string) {
+  switch (status) {
+    case 'confirmed':
+      return tHe('admin.appointments.statusConfirmed', 'מאושר');
+    case 'pending':
+      return tHe('admin.appointments.statusPending', 'ממתין');
+    case 'cancelled':
+      return tHe('admin.appointments.statusCancelled', 'בוטל');
+    case 'completed':
+      return tHe('admin.appointments.statusCompleted', 'הושלם');
+    case 'no_show':
+      return tHe('admin.appointments.statusNoShow', 'לא הגיע/ה');
+    default:
+      return status || '—';
+  }
+}
+
+function _clientInitials(name: string) {
+  const parts = String(name || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return `${parts[0]![0] ?? ''}${parts[parts.length - 1]![0] ?? ''}`.toUpperCase() || '?';
+}
+
+/** תג סטטוס על רקע בהיר מעל גרדיאנט */
+function _appointmentStatusPillColors(status: string): { bg: string; text: string } {
+  switch (status) {
+    case 'confirmed':
+      return { bg: 'rgba(255,255,255,0.94)', text: '#166534' };
+    case 'pending':
+      return { bg: 'rgba(255,255,255,0.94)', text: '#B45309' };
+    case 'cancelled':
+      return { bg: 'rgba(255,255,255,0.88)', text: '#64748B' };
+    case 'completed':
+      return { bg: 'rgba(255,255,255,0.94)', text: '#1D4ED8' };
+    case 'no_show':
+      return { bg: 'rgba(255,255,255,0.94)', text: '#B91C1C' };
+    default:
+      return { bg: 'rgba(255,255,255,0.9)', text: '#334155' };
+  }
 }
 
 function _formatGregorianMonthYear(date: Date) {
@@ -543,29 +593,27 @@ const WeekDayColumn = memo(
     day,
     index,
     appts,
-<<<<<<< HEAD
-=======
     constraints,
     reminders,
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
     columnWidth,
     hourRowHeight,
     primaryColor,
     onOpenAppointment,
+    onPressReminder,
+    onPressConstraint,
     minutesFromMidnight,
   }: {
     day: DayBlock;
     index: number;
     appts: AvailableTimeSlot[];
-<<<<<<< HEAD
-=======
     constraints: BusinessConstraint[];
     reminders: CalendarReminder[];
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
     columnWidth: number;
     hourRowHeight: number;
     primaryColor: string;
     onOpenAppointment: (apt: AvailableTimeSlot, anchor?: AnchorRect) => void;
+    onPressReminder: (r: CalendarReminder) => void;
+    onPressConstraint: (c: BusinessConstraint) => void;
     minutesFromMidnight: (time?: string | null) => number;
   }) => {
     const { t } = useTranslation();
@@ -602,8 +650,6 @@ const WeekDayColumn = memo(
             );
           })}
 
-<<<<<<< HEAD
-=======
           {constraints.map((c) => {
             const { top, height } = layoutConstraintOnWeekColumn(c, hourRowHeight, minutesFromMidnight);
             const startLbl = formatTime12Hour(String(c.start_time || '').slice(0, 5));
@@ -611,11 +657,7 @@ const WeekDayColumn = memo(
             return (
               <PressableScale
                 key={`wk-con-${c.id}`}
-                onPress={() => {
-                  const title = String(t('admin.calendar.constraintDetailsTitle', 'אילוץ'));
-                  const body = [c.reason?.trim(), `${startLbl} – ${endLbl}`].filter(Boolean).join('\n');
-                  Alert.alert(title, body || '—');
-                }}
+                onPress={() => onPressConstraint(c)}
                 style={[
                   weekStyles.weekConstraintCard,
                   {
@@ -678,7 +720,6 @@ const WeekDayColumn = memo(
             );
           })}
 
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
           {appts.map((apt) => {
             const aptMinutes = minutesFromMidnight(apt.slot_time);
             const durationMinutes = apt.duration_minutes || 30;
@@ -846,10 +887,6 @@ export default function AdminAppointmentsScreen() {
     else dayAptRefMap.current.delete(id);
   }, []);
   const [rangeAppointments, setRangeAppointments] = useState<Map<string, AvailableTimeSlot[]>>(new Map());
-<<<<<<< HEAD
-
-  const [showCalendarFabSheet, setShowCalendarFabSheet] = useState(false);
-=======
   const [rangeConstraints, setRangeConstraints] = useState<Map<string, BusinessConstraint[]>>(new Map());
   const [calendarReminders, setCalendarReminders] = useState<CalendarReminder[]>([]);
   const [rangeReminders, setRangeReminders] = useState<Map<string, CalendarReminder[]>>(new Map());
@@ -858,11 +895,16 @@ export default function AdminAppointmentsScreen() {
 
   const [showCalendarFabSheet, setShowCalendarFabSheet] = useState(false);
   const [showReminderEditor, setShowReminderEditor] = useState(false);
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
   const [showAddAppointmentModal, setShowAddAppointmentModal] = useState(false);
   const [showConstraintsModal, setShowConstraintsModal] = useState(false);
+  const [constraintToEdit, setConstraintToEdit] = useState<BusinessConstraint | null>(null);
 
   const reminderFabPanelStyle = useMemo(() => {
+    /** When open, center on screen (wrapper uses flex center); keep FAB anchor only while collapsed */
+    if (showCalendarFabSheet) {
+      return { position: 'relative' as const };
+    }
+
     if (!reminderOverlayWin) {
       return {
         left: 16,
@@ -889,7 +931,7 @@ export default function AdminAppointmentsScreen() {
       right: undefined,
       bottom: insets.bottom + 12,
     };
-  }, [plusAnchorWindow, reminderOverlayWin, insets.bottom]);
+  }, [showCalendarFabSheet, plusAnchorWindow, reminderOverlayWin, insets.bottom]);
 
   const reminderExternalAnchorSize = useMemo(
     () =>
@@ -899,11 +941,8 @@ export default function AdminAppointmentsScreen() {
     [plusAnchorWindow]
   );
 
-<<<<<<< HEAD
-=======
   const [reminderEditorEditing, setReminderEditorEditing] = useState<CalendarReminder | null>(null);
 
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
   const scrollRef = useRef<ScrollView | null>(null);
 
   const selectedDateStr = useMemo(() => {
@@ -949,11 +988,6 @@ export default function AdminAppointmentsScreen() {
         setAppointments((data as unknown as AvailableTimeSlot[]) || []);
       }
 
-<<<<<<< HEAD
-    } catch (e) {
-      console.error('Error in loadAppointmentsForDate:', e);
-      setAppointments([]);
-=======
       if (user?.id) {
         const rem = await listCalendarRemindersForDate(dateString, user.id);
         setCalendarReminders(rem);
@@ -972,7 +1006,6 @@ export default function AdminAppointmentsScreen() {
       setAppointments([]);
       setCalendarReminders([]);
       setDayConstraints([]);
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
     } finally {
       if (isRefresh) {
         setRefreshing(false);
@@ -989,11 +1022,8 @@ export default function AdminAppointmentsScreen() {
       try {
         if (!user?.id) {
           setRangeAppointments(new Map());
-<<<<<<< HEAD
-=======
           setRangeReminders(new Map());
           setRangeConstraints(new Map());
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
           return;
         }
         const { data, error } = await supabase
@@ -1009,11 +1039,8 @@ export default function AdminAppointmentsScreen() {
         if (error) {
           console.error('Error loading range appointments:', error);
           setRangeAppointments(new Map());
-<<<<<<< HEAD
-=======
           setRangeReminders(new Map());
           setRangeConstraints(new Map());
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
         } else {
           const map = new Map<string, AvailableTimeSlot[]>();
           ((data as unknown as AvailableTimeSlot[]) || []).forEach((apt) => {
@@ -1025,11 +1052,6 @@ export default function AdminAppointmentsScreen() {
           });
           setRangeAppointments(map);
         }
-<<<<<<< HEAD
-      } catch (e) {
-        console.error('Error in loadAppointmentsForRange:', e);
-        setRangeAppointments(new Map());
-=======
 
         const remList = await listCalendarRemindersForRange(startDateStr, endDateStr, user.id);
         const rmap = new Map<string, CalendarReminder[]>();
@@ -1059,7 +1081,6 @@ export default function AdminAppointmentsScreen() {
         setRangeAppointments(new Map());
         setRangeReminders(new Map());
         setRangeConstraints(new Map());
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
       }
     },
     [user?.id]
@@ -1162,8 +1183,6 @@ export default function AdminAppointmentsScreen() {
       setAppointmentCountsByDate(counts);
 
       const unique = new Set<string>(Object.keys(counts));
-<<<<<<< HEAD
-=======
       const reminderDates = await listCalendarReminderDatesInMonth(year, month, user.id);
       reminderDates.forEach((d) => unique.add(d));
 
@@ -1180,7 +1199,6 @@ export default function AdminAppointmentsScreen() {
         /* ignore */
       }
 
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
       setMarkedDates(unique);
     } catch (e) {
       console.error('Error in reloadMonthMarks:', e);
@@ -1589,8 +1607,6 @@ export default function AdminAppointmentsScreen() {
     setShowCalendarFabSheet(false);
   }, []);
 
-<<<<<<< HEAD
-=======
   const closeReminderEditor = useCallback(() => {
     setShowReminderEditor(false);
     setReminderEditorEditing(null);
@@ -1602,7 +1618,6 @@ export default function AdminAppointmentsScreen() {
     setShowReminderEditor(true);
   }, []);
 
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
   const onCalendarFabPickAppointment = useCallback(() => {
     setShowCalendarFabSheet(false);
     setShowAddAppointmentModal(true);
@@ -1649,16 +1664,25 @@ export default function AdminAppointmentsScreen() {
     weekRangeChronoBounds,
   ]);
 
+  const openConstraintEditor = useCallback((c: BusinessConstraint) => {
+    setConstraintToEdit(c);
+  }, []);
+
   useEffect(() => {
     if (
       (!showCalendarFabSheet &&
         !showAddAppointmentModal &&
         !showConstraintsModal &&
-        !showReminderEditor) ||
+        !showReminderEditor &&
+        !constraintToEdit) ||
       Platform.OS !== 'android'
     )
       return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (constraintToEdit) {
+        setConstraintToEdit(null);
+        return true;
+      }
       if (showReminderEditor) {
         closeReminderEditor();
         return true;
@@ -1674,11 +1698,16 @@ export default function AdminAppointmentsScreen() {
     showAddAppointmentModal,
     showConstraintsModal,
     showReminderEditor,
+    constraintToEdit,
     closeReminderModal,
     closeReminderEditor,
   ]);
 
   const reminderFabTabPress = useCallback(() => {
+    if (constraintToEdit) {
+      setConstraintToEdit(null);
+      return;
+    }
     if (showConstraintsModal) {
       setShowConstraintsModal(false);
       return;
@@ -1698,6 +1727,7 @@ export default function AdminAppointmentsScreen() {
     showAddAppointmentModal,
     showConstraintsModal,
     showReminderEditor,
+    constraintToEdit,
     closeReminderModal,
     closeReminderEditor,
   ]);
@@ -1705,7 +1735,11 @@ export default function AdminAppointmentsScreen() {
   useEffect(() => {
     setReminderFabRegistration({
       isOpen:
-        showCalendarFabSheet || showAddAppointmentModal || showConstraintsModal || showReminderEditor,
+        showCalendarFabSheet ||
+        showAddAppointmentModal ||
+        showConstraintsModal ||
+        showReminderEditor ||
+        !!constraintToEdit,
       onPress: reminderFabTabPress,
     });
     return () => setReminderFabRegistration(null);
@@ -1714,20 +1748,38 @@ export default function AdminAppointmentsScreen() {
     showAddAppointmentModal,
     showConstraintsModal,
     showReminderEditor,
+    constraintToEdit,
     reminderFabTabPress,
     setReminderFabRegistration,
   ]);
 
-<<<<<<< HEAD
-=======
   const openEditReminderModal = useCallback((r: CalendarReminder) => {
     setReminderEditorEditing(r);
     setShowCalendarFabSheet(false);
     setShowReminderEditor(true);
   }, []);
 
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
+  const refreshCalendarRemindersOnly = useCallback(async () => {
+    if (!user?.id) return;
+    const rem = await listCalendarRemindersForDate(selectedDateStr, user.id);
+    setCalendarReminders(rem);
+    if (calendarView === 'month') {
+      void reloadMonthMarks();
+    }
+    if (calendarView === 'week' && weekRangeChronoBounds) {
+      void loadAppointmentsForRange(weekRangeChronoBounds.start, weekRangeChronoBounds.end);
+    }
+  }, [
+    user?.id,
+    selectedDateStr,
+    calendarView,
+    weekRangeChronoBounds,
+    reloadMonthMarks,
+    loadAppointmentsForRange,
+  ]);
+
   const calendarPrimary = businessColors.primary || GC_BLUE;
+  const calendarSecondary = businessColors.secondary || calendarPrimary;
   const calendarRipple = `${calendarPrimary}2A`;
 
   const adminMonthAnchorKey = useMemo(
@@ -1931,12 +1983,11 @@ export default function AdminAppointmentsScreen() {
                           hourRowHeight={gridDims.hourSize}
                           primaryColor={calendarPrimary}
                           appts={rangeAppointments.get(item.formatted) ?? []}
-<<<<<<< HEAD
-=======
                           constraints={mergeConstraintsForDisplay(rangeConstraints.get(item.formatted) ?? [])}
                           reminders={rangeReminders.get(item.formatted) ?? []}
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
                           onOpenAppointment={openActionsMenu}
+                          onPressReminder={openEditReminderModal}
+                          onPressConstraint={openConstraintEditor}
                           minutesFromMidnight={minutesFromMidnight}
                         />
                       )}
@@ -1976,8 +2027,6 @@ export default function AdminAppointmentsScreen() {
                 ))}
 
                 <View pointerEvents="box-none" style={[styles.overlayContainer, { height: halfHourLabels.length * HALF_HOUR_BLOCK_HEIGHT }]}>
-<<<<<<< HEAD
-=======
                   {displayDayConstraints.map((c) => {
                     const layout = layoutConstraintOnDayGrid(
                       c,
@@ -1993,11 +2042,7 @@ export default function AdminAppointmentsScreen() {
                     return (
                       <PressableScale
                         key={`dc-${c.id}`}
-                        onPress={() => {
-                          const title = String(t('admin.calendar.constraintDetailsTitle', 'אילוץ'));
-                          const body = [c.reason?.trim(), `${startT} – ${endT}`].filter(Boolean).join('\n');
-                          Alert.alert(title, body || '—');
-                        }}
+                        onPress={() => openConstraintEditor(c)}
                         accessibilityLabel={String(t('admin.calendar.constraintBlockTitle', 'זמן חסום'))}
                         style={[
                           styles.constraintCard,
@@ -2075,7 +2120,6 @@ export default function AdminAppointmentsScreen() {
                       </PressableScale>
                     );
                   })}
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
                   {appointments.map((apt) => {
                     // Calculate exact position using minutes from midnight
                     const aptMinutes = minutesFromMidnight(apt.slot_time);
@@ -2176,11 +2220,7 @@ export default function AdminAppointmentsScreen() {
                 </View>
               </View>
 
-<<<<<<< HEAD
-              {appointments.length === 0 && (
-=======
               {appointments.length === 0 && calendarReminders.length === 0 && dayConstraints.length === 0 && (
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
                 <View style={styles.emptyState}>
                   <Text style={styles.emptyTitle}>{tHe('admin.appointments.emptyTitle', 'אין תורים ליום זה')}</Text>
                   <Text style={styles.emptySubtitle}>{tHe('admin.appointments.emptySubtitle', 'בחר/י יום אחר מהסרגל העליון')}</Text>
@@ -2333,76 +2373,202 @@ export default function AdminAppointmentsScreen() {
           onRequestClose={requestCloseActionsModal}
           onDismissed={onActionsModalDismissed}
         >
-          <View style={[styles.actionsSheetHeaderRow, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
-            <Pressable
-              onPress={requestCloseActionsModal}
-              hitSlop={16}
-              style={styles.actionsSheetCloseHit}
-              accessibilityLabel={tHe('close', 'סגור')}
-            >
-              <Entypo name="cross" size={22} color="#5F6368" />
-            </Pressable>
-            <Text style={[styles.actionsTitle, styles.actionsTitleInSheet]} numberOfLines={1}>
-              {tHe('admin.appointments.chooseAction', 'בחר/י פעולה')}
-            </Text>
-            <View style={styles.actionsSheetHeaderSpacer} />
-          </View>
-          {!!actionsModal.appointment?.client_phone && (
-            <PressableScale
-              style={styles.actionsOption}
-              accessibilityLabel={tHe('admin.appointments.callClient', 'חייג ללקוח')}
-              onPress={async () => {
-                const phone = actionsModal.appointment?.client_phone;
-                requestCloseActionsModal();
-                if (phone) await startPhoneCall(phone);
-              }}
-            >
-              <View style={[styles.actionsIconCircle, { backgroundColor: _primaryOnWhite(calendarPrimary, 0.12) }]}>
-                <Ionicons name="call" size={18} color={calendarPrimary} />
-              </View>
-              <Text style={styles.actionsOptionText}>{tHe('admin.appointments.callClient', 'חייג ללקוח')}</Text>
-            </PressableScale>
-          )}
-          <View style={styles.actionsDivider} />
-          <PressableScale
-            style={styles.actionsOption}
-            accessibilityLabel={tHe('admin.appointments.cancelAndFree', 'ביטול ושחרור משבצת')}
-            onPress={() => {
-              const apt = actionsModal.appointment;
-              if (apt) {
-                askCancelAppointment(apt);
-              }
-              requestCloseActionsModal();
-            }}
+          <ScrollView
+            style={styles.actionsSheetScroll}
+            contentContainerStyle={styles.actionsSheetScrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            bounces={false}
           >
-            <View style={[styles.actionsIconCircle, { backgroundColor: '#FFECEC' }]}>
-              <Ionicons name="close-circle-outline" size={18} color="#FF9500" />
-            </View>
-            <Text style={[styles.actionsOptionText, { color: '#FF9500' }]}>{tHe('admin.appointments.cancelAndFree', 'ביטול ושחרור משבצת')}</Text>
-          </PressableScale>
-          <PressableScale
-            style={styles.actionsOption}
-            accessibilityLabel={tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
-            onPress={() => {
-              const apt = actionsModal.appointment;
-              if (apt) {
-                askDeleteAppointment(apt);
-              }
-              requestCloseActionsModal();
-            }}
-          >
-            <View style={[styles.actionsIconCircle, { backgroundColor: '#FFECEC' }]}>
-              <Ionicons name="trash-outline" size={18} color="#FF3B30" />
-            </View>
-            <Text style={[styles.actionsOptionText, { color: Colors.error }]}>{tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}</Text>
-          </PressableScale>
-          <PressableScale
-            style={styles.actionsCancelButton}
-            accessibilityLabel={tHe('close', 'סגור')}
-            onPress={requestCloseActionsModal}
-          >
-            <Text style={[styles.actionsCancelText, { color: calendarPrimary }]}>{tHe('close', 'סגור')}</Text>
-          </PressableScale>
+            {actionsModal.appointment ? (
+              (() => {
+                const apt = actionsModal.appointment!;
+                const dash = tHe('admin.appointments.detailDash', '—');
+                const dur =
+                  typeof apt.duration_minutes === 'number' && apt.duration_minutes > 0
+                    ? apt.duration_minutes
+                    : 60;
+                const start = apt.slot_time || '00:00';
+                const timeRange = `${formatTime(start)} – ${formatTime(addMinutes(start, dur))}`;
+                const clientLine = (apt.client_name || '').trim() || dash;
+                const serviceLine = (apt.service_name || '').trim() || dash;
+                const phoneLine = (apt.client_phone || '').trim();
+                const dateLine = _formatSlotDateLine(apt.slot_date);
+                const initials = _clientInitials(clientLine === dash ? '' : clientLine);
+                const statusPill = _appointmentStatusPillColors(apt.status);
+                const chipRowDir = isRtl ? 'row-reverse' : 'row';
+                const heroChip = (icon: React.ComponentProps<typeof Ionicons>['name'], text: string, chipKey: string) => (
+                  <View
+                    key={chipKey}
+                    style={[styles.actionsHeroChip, { flexDirection: chipRowDir }]}
+                  >
+                    <Ionicons name={icon} size={15} color="rgba(255,255,255,0.95)" />
+                    <Text style={styles.actionsHeroChipText} numberOfLines={1}>
+                      {text}
+                    </Text>
+                  </View>
+                );
+                return (
+                  <>
+                    <View style={styles.actionsSheetHandleWrap}>
+                      <View style={styles.actionsSheetHandle} />
+                    </View>
+                    <View style={styles.actionsHeroOuter}>
+                      <LinearGradient
+                        colors={[calendarPrimary, calendarSecondary]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.actionsHeroGradient}
+                      >
+                        <Pressable
+                          onPress={requestCloseActionsModal}
+                          hitSlop={18}
+                          style={[
+                            styles.actionsHeroCloseBtn,
+                            isRtl ? { left: 10 } : { right: 10 },
+                          ]}
+                          accessibilityLabel={tHe('close', 'סגור')}
+                        >
+                          <View style={styles.actionsHeroCloseInner}>
+                            <Entypo name="cross" size={18} color="rgba(255,255,255,0.95)" />
+                          </View>
+                        </Pressable>
+                        <View style={styles.actionsHeroContent}>
+                          <View style={[styles.actionsHeroTopRow, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
+                            <LinearGradient
+                              colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0.12)']}
+                              style={styles.actionsHeroAvatarRing}
+                            >
+                              <Text style={styles.actionsHeroAvatarText}>{initials}</Text>
+                            </LinearGradient>
+                            <View style={styles.actionsHeroTitles}>
+                              <Text
+                                style={[styles.actionsHeroClientName, isRtl ? { textAlign: 'right' } : { textAlign: 'left' }]}
+                                numberOfLines={2}
+                              >
+                                {clientLine}
+                              </Text>
+                              <Text
+                                style={[styles.actionsHeroService, isRtl ? { textAlign: 'right' } : { textAlign: 'left' }]}
+                                numberOfLines={2}
+                              >
+                                {serviceLine}
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.actionsHeroChips}>
+                            {heroChip('calendar-outline', dateLine, 'date')}
+                            {heroChip('time-outline', timeRange, 'time')}
+                            {heroChip(
+                              'hourglass-outline',
+                              `${dur} ${tHe('admin.appointments.detailMinutesShort', 'דק׳')}`,
+                              'dur'
+                            )}
+                          </View>
+                          <View
+                            style={[
+                              styles.actionsHeroStatusPill,
+                              { backgroundColor: statusPill.bg },
+                              isRtl ? { alignSelf: 'flex-end' } : { alignSelf: 'flex-start' },
+                            ]}
+                          >
+                            <Text style={[styles.actionsHeroStatusText, { color: statusPill.text }]}>
+                              {_adminAppointmentStatusLabel(apt.status, tHe)}
+                            </Text>
+                          </View>
+                        </View>
+                      </LinearGradient>
+                    </View>
+
+                    {phoneLine ? (
+                      <View style={styles.actionsPhoneCard}>
+                        <View style={[styles.actionsPhoneIconWrap, { backgroundColor: _primaryOnWhite(calendarPrimary, 0.14) }]}>
+                          <Ionicons name="call-outline" size={22} color={calendarPrimary} />
+                        </View>
+                        <View style={styles.actionsPhoneTextCol}>
+                          <Text style={[styles.actionsPhoneLabel, isRtl ? { textAlign: 'right' } : { textAlign: 'left' }]}>
+                            {tHe('admin.appointments.phoneCardLabel', 'טלפון לחיוג')}
+                          </Text>
+                          <Text
+                            style={[styles.actionsPhoneValue, isRtl ? { textAlign: 'right' } : { textAlign: 'left' }]}
+                            selectable
+                          >
+                            {phoneLine}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : null}
+
+                    <Text
+                      style={[styles.actionsSectionLabel, isRtl ? { textAlign: 'right' } : { textAlign: 'left' }]}
+                    >
+                      {tHe('admin.appointments.actionsSection', 'פעולות')}
+                    </Text>
+
+                    {phoneLine ? (
+                      <PressableScale
+                        style={styles.actionsPrimaryBtnWrap}
+                        accessibilityLabel={tHe('admin.appointments.callClient', 'חייג ללקוח')}
+                        onPress={async () => {
+                          const phone = actionsModal.appointment?.client_phone;
+                          requestCloseActionsModal();
+                          if (phone) await startPhoneCall(phone);
+                        }}
+                      >
+                        <LinearGradient
+                          colors={[calendarPrimary, calendarSecondary]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                          style={styles.actionsPrimaryBtnGradient}
+                        >
+                          <Ionicons name="call" size={20} color="#FFFFFF" />
+                          <Text style={styles.actionsPrimaryBtnText}>{tHe('admin.appointments.callClient', 'חייג ללקוח')}</Text>
+                        </LinearGradient>
+                      </PressableScale>
+                    ) : null}
+
+                    <PressableScale
+                      style={styles.actionsSecondaryCard}
+                      accessibilityLabel={tHe('admin.appointments.cancelAndFree', 'ביטול ושחרור משבצת')}
+                      onPress={() => {
+                        const a = actionsModal.appointment;
+                        if (a) askCancelAppointment(a);
+                        requestCloseActionsModal();
+                      }}
+                    >
+                      <View style={styles.actionsSecondaryIconWarn}>
+                        <Ionicons name="close-circle-outline" size={20} color="#EA580C" />
+                      </View>
+                      <Text style={styles.actionsSecondaryTitleWarn}>{tHe('admin.appointments.cancelAndFree', 'ביטול ושחרור משבצת')}</Text>
+                    </PressableScale>
+
+                    <PressableScale
+                      style={styles.actionsSecondaryCard}
+                      accessibilityLabel={tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
+                      onPress={() => {
+                        const a = actionsModal.appointment;
+                        if (a) askDeleteAppointment(a);
+                        requestCloseActionsModal();
+                      }}
+                    >
+                      <View style={styles.actionsSecondaryIconDanger}>
+                        <Ionicons name="trash-outline" size={20} color={Colors.error} />
+                      </View>
+                      <Text style={styles.actionsSecondaryTitleDanger}>{tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}</Text>
+                    </PressableScale>
+
+                    <PressableScale
+                      style={styles.actionsDismissBtn}
+                      accessibilityLabel={tHe('close', 'סגור')}
+                      onPress={requestCloseActionsModal}
+                    >
+                      <Text style={[styles.actionsDismissBtnText, { color: calendarPrimary }]}>{tHe('close', 'סגור')}</Text>
+                    </PressableScale>
+                  </>
+                );
+              })()
+            ) : null}
+          </ScrollView>
         </AppointmentActionsAnchorSheet>
       ) : null}
 
@@ -2511,20 +2677,19 @@ export default function AdminAppointmentsScreen() {
           ref={reminderOverlayRef}
           onLayout={measureReminderOverlay}
           pointerEvents="box-none"
-          style={[StyleSheet.absoluteFill, { direction: 'ltr' } as const]}
+          style={[
+            StyleSheet.absoluteFill,
+            { direction: 'ltr' } as const,
+            showCalendarFabSheet && styles.reminderFabPanelCenteredWrap,
+          ]}
         >
         <CalendarReminderFabPanel
           isOpen={showCalendarFabSheet}
           onFabPress={reminderFabTabPress}
           title={tHe('admin.calendarAdd.choiceTitle', 'מה תרצה להוסיף?')}
           subtitle={tHe(
-<<<<<<< HEAD
-            'admin.calendarAdd.choiceSubtitleNoSticky',
-            'בחרו תור ללקוח או אילוץ שחוסם משבצות. תזכורות (לך וללקוח) מוגדרות בהגדרות.'
-=======
             'admin.calendarAdd.choiceSubtitle',
             'בחרו תור ללקוח, תזכורת פנימית, או אילוץ שחוסם משבצות'
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
           )}
           backgroundColor={calendarPrimary}
           isRtl={isRtl}
@@ -2533,7 +2698,6 @@ export default function AdminAppointmentsScreen() {
           externalAnchorSize={reminderExternalAnchorSize}
           panelStyle={reminderFabPanelStyle}
         >
-<<<<<<< HEAD
           <View style={styles.calendarFabChoiceWrap}>
             <Pressable
               style={({ pressed }) => [
@@ -2553,6 +2717,27 @@ export default function AdminAppointmentsScreen() {
                 </Text>
                 <Text style={styles.calendarFabChoiceHint}>
                   {tHe('admin.calendarAdd.optionAppointmentHint', 'קביעת תור ללקוח לפי שירות ושעה')}
+                </Text>
+              </View>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [
+                styles.calendarFabChoiceCard,
+                pressed && styles.calendarFabChoiceCardPressed,
+              ]}
+              onPress={onCalendarFabPickReminder}
+              accessibilityRole="button"
+              accessibilityLabel={tHe('admin.calendarAdd.optionReminder', 'תזכורת ביומן')}
+            >
+              <View style={[styles.calendarFabChoiceIconWrap, { backgroundColor: '#E8EAED' }]}>
+                <StickyNote size={26} color="#5F6368" />
+              </View>
+              <View style={styles.calendarFabChoiceTextCol}>
+                <Text style={styles.calendarFabChoiceTitle}>
+                  {tHe('admin.calendarAdd.optionReminder', 'תזכורת ביומן')}
+                </Text>
+                <Text style={styles.calendarFabChoiceHint}>
+                  {tHe('admin.calendarAdd.optionReminderHint', 'תזכורת לעצמך — לא חוסמת משבצות')}
                 </Text>
               </View>
             </Pressable>
@@ -2581,82 +2766,10 @@ export default function AdminAppointmentsScreen() {
               </View>
             </Pressable>
           </View>
-=======
-            <View style={styles.calendarFabChoiceWrap}>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.calendarFabChoiceCard,
-                  pressed && styles.calendarFabChoiceCardPressed,
-                ]}
-                onPress={onCalendarFabPickAppointment}
-                accessibilityRole="button"
-                accessibilityLabel={tHe('admin.calendarAdd.optionAppointment', 'תור')}
-              >
-                <View style={[styles.calendarFabChoiceIconWrap, { backgroundColor: `${calendarPrimary}18` }]}>
-                  <Calendar size={26} color={calendarPrimary} />
-                </View>
-                <View style={styles.calendarFabChoiceTextCol}>
-                  <Text style={styles.calendarFabChoiceTitle}>
-                    {tHe('admin.calendarAdd.optionAppointment', 'תור')}
-                  </Text>
-                  <Text style={styles.calendarFabChoiceHint}>
-                    {tHe('admin.calendarAdd.optionAppointmentHint', 'קביעת תור ללקוח לפי שירות ושעה')}
-                  </Text>
-                </View>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.calendarFabChoiceCard,
-                  pressed && styles.calendarFabChoiceCardPressed,
-                ]}
-                onPress={onCalendarFabPickReminder}
-                accessibilityRole="button"
-                accessibilityLabel={tHe('admin.calendarAdd.optionReminder', 'תזכורת ביומן')}
-              >
-                <View style={[styles.calendarFabChoiceIconWrap, { backgroundColor: '#E8EAED' }]}>
-                  <StickyNote size={26} color="#5F6368" />
-                </View>
-                <View style={styles.calendarFabChoiceTextCol}>
-                  <Text style={styles.calendarFabChoiceTitle}>
-                    {tHe('admin.calendarAdd.optionReminder', 'תזכורת ביומן')}
-                  </Text>
-                  <Text style={styles.calendarFabChoiceHint}>
-                    {tHe('admin.calendarAdd.optionReminderHint', 'תזכורת לעצמך — לא חוסמת משבצות')}
-                  </Text>
-                </View>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.calendarFabChoiceCard,
-                  pressed && styles.calendarFabChoiceCardPressed,
-                ]}
-                onPress={onCalendarFabPickConstraints}
-                accessibilityRole="button"
-                accessibilityLabel={tHe('admin.calendarAdd.optionConstraints', 'אילוצים')}
-              >
-                <View style={[styles.calendarFabChoiceIconWrap, { backgroundColor: `${calendarPrimary}12` }]}>
-                  <Ban size={26} color={calendarPrimary} />
-                </View>
-                <View style={styles.calendarFabChoiceTextCol}>
-                  <Text style={styles.calendarFabChoiceTitle}>
-                    {tHe('admin.calendarAdd.optionConstraints', 'אילוצים')}
-                  </Text>
-                  <Text style={styles.calendarFabChoiceHint}>
-                    {tHe(
-                      'admin.calendarAdd.optionConstraintsHint',
-                      'חסימת זמן בלוח — לקוחות לא יוכלו לקבוע תור בחלון זה'
-                    )}
-                  </Text>
-                </View>
-              </Pressable>
-            </View>
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
         </CalendarReminderFabPanel>
         </View>
       )}
 
-<<<<<<< HEAD
-=======
       <CalendarReminderEditorModal
         visible={showReminderEditor}
         onClose={closeReminderEditor}
@@ -2665,7 +2778,6 @@ export default function AdminAppointmentsScreen() {
         defaultDate={selectedDate}
       />
 
->>>>>>> 43624e1412203f7b1cca622d4b860e0924ea9933
       <AddAppointmentModal
         visible={showAddAppointmentModal}
         onClose={() => setShowAddAppointmentModal(false)}
@@ -2677,6 +2789,13 @@ export default function AdminAppointmentsScreen() {
         visible={showConstraintsModal}
         onClose={() => setShowConstraintsModal(false)}
         onConstraintsChanged={onCalendarConstraintsChanged}
+      />
+
+      <ConstraintEditModal
+        visible={constraintToEdit !== null}
+        constraint={constraintToEdit}
+        onClose={() => setConstraintToEdit(null)}
+        onSaved={onCalendarConstraintsChanged}
       />
     </View>
   );
@@ -3424,64 +3543,270 @@ const styles = StyleSheet.create({
     paddingBottom: 26,
     paddingHorizontal: 16,
   },
-  actionsTitle: {
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '800',
-    color: Colors.text,
-    marginBottom: 8,
-  },
-  actionsTitleInSheet: {
-    marginBottom: 0,
+  actionsSheetScroll: {
     flex: 1,
   },
-  actionsSheetHeaderRow: {
-    alignItems: 'center',
-    marginBottom: 4,
+  actionsSheetScrollContent: {
+    paddingBottom: 20,
+    flexGrow: 1,
   },
-  actionsSheetCloseHit: {
+  actionsSheetHandleWrap: {
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  actionsSheetHandle: {
     width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(148,163,184,0.45)',
   },
-  actionsSheetHeaderSpacer: {
-    width: 40,
-    height: 40,
+  actionsHeroOuter: {
+    marginHorizontal: 12,
+    borderRadius: 20,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.12,
+        shadowRadius: 16,
+      },
+      android: { elevation: 6 },
+      default: {},
+    }),
   },
-  actionsOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 16,
+  actionsHeroGradient: {
+    borderRadius: 20,
+    paddingTop: 22,
+    paddingBottom: 20,
+    paddingHorizontal: 18,
   },
-  actionsOptionText: {
-    fontSize: 16,
-    color: Colors.text,
-    fontWeight: '600',
+  actionsHeroCloseBtn: {
+    position: 'absolute',
+    top: 10,
+    zIndex: 2,
   },
-  actionsDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#E5E5EA',
-    marginHorizontal: -16,
-  },
-  actionsIconCircle: {
+  actionsHeroCloseInner: {
     width: 36,
     height: 36,
     borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  actionsHeroContent: {
+    paddingTop: 4,
+  },
+  actionsHeroTopRow: {
+    alignItems: 'center',
+    gap: 14,
+  },
+  actionsHeroAvatarRing: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.45)',
+  },
+  actionsHeroAvatarText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  actionsHeroTitles: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  actionsHeroClientName: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+    lineHeight: 28,
+  },
+  actionsHeroService: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.9)',
+    lineHeight: 20,
+  },
+  actionsHeroChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  actionsHeroChip: {
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.32)',
+    maxWidth: '100%',
+  },
+  actionsHeroChipText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.98)',
+    flexShrink: 1,
+  },
+  actionsHeroStatusPill: {
+    marginTop: 14,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+  },
+  actionsHeroStatusText: {
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  actionsPhoneCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginTop: 16,
+    marginHorizontal: 16,
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.06)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+      },
+      android: { elevation: 2 },
+      default: {},
+    }),
+  },
+  actionsPhoneIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  actionsCancelButton: {
-    marginTop: 14,
+  actionsPhoneTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  actionsPhoneLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.subtext,
+    letterSpacing: 0.2,
+  },
+  actionsPhoneValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: Colors.text,
+    letterSpacing: 0.3,
+  },
+  actionsSectionLabel: {
+    marginTop: 22,
+    marginBottom: 10,
+    marginHorizontal: 18,
+    fontSize: 12,
+    fontWeight: '800',
+    color: Colors.subtext,
+    letterSpacing: 0.8,
+  },
+  actionsPrimaryBtnWrap: {
+    marginHorizontal: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.15,
+        shadowRadius: 10,
+      },
+      android: { elevation: 4 },
+      default: {},
+    }),
+  },
+  actionsPrimaryBtnGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+  },
+  actionsPrimaryBtnText: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+  },
+  actionsSecondaryCard: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.07)',
+  },
+  actionsSecondaryIconWarn: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#FFF7ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionsSecondaryIconDanger: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#FEF2F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionsSecondaryTitleWarn: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#C2410C',
+  },
+  actionsSecondaryTitleDanger: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.error,
+  },
+  actionsDismissBtn: {
+    marginTop: 16,
+    marginHorizontal: 16,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 10,
-    backgroundColor: '#F2F2F7',
+    borderRadius: 14,
+    backgroundColor: 'rgba(15,23,42,0.04)',
   },
-  actionsCancelText: {
+  actionsDismissBtnText: {
     fontSize: 16,
     fontWeight: '800',
   },
@@ -3543,6 +3868,11 @@ const styles = StyleSheet.create({
   reminderFabBackdrop: {
     backgroundColor: 'rgba(0,0,0,0.35)',
     zIndex: 55,
+  },
+  reminderFabPanelCenteredWrap: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
   },
   calendarFabChoiceWrap: {
     paddingHorizontal: 14,

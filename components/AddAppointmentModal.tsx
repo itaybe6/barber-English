@@ -460,12 +460,18 @@ export default function AddAppointmentModal({
           .map((apt: any) => String(apt.slot_time).slice(0, 5))
       );
 
-      const { data: constraintsRows } = await supabase
+      let constraintsQuery = supabase
         .from('business_constraints')
         .select('start_time, end_time')
         .eq('business_id', businessId)
         .eq('date', dateString)
         .order('start_time');
+      if (user?.id) {
+        constraintsQuery = constraintsQuery.or(`user_id.is.null,user_id.eq.${user.id}`);
+      } else {
+        constraintsQuery = constraintsQuery.is('user_id', null);
+      }
+      const { data: constraintsRows } = await constraintsQuery;
       const withinConstraint = (slot: string) => {
         return (constraintsRows || []).some((c: any) => {
           const s = String(c.start_time).slice(0, 5);

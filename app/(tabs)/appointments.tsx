@@ -885,7 +885,7 @@ export default function AdminAppointmentsScreen() {
         const rem = await listCalendarRemindersForDate(dateString, user.id);
         setCalendarReminders(rem);
         try {
-          const cons = await businessConstraintsApi.getConstraintsForBarberInRange(dateString, dateString, user.id);
+          const cons = await businessConstraintsApi.getPersonalConstraintsForBarberInRange(dateString, dateString, user.id);
           setDayConstraints(cons);
         } catch {
           setDayConstraints([]);
@@ -958,7 +958,7 @@ export default function AdminAppointmentsScreen() {
         setRangeReminders(rmap);
 
         try {
-          const cons = await businessConstraintsApi.getConstraintsForBarberInRange(startDateStr, endDateStr, user.id);
+          const cons = await businessConstraintsApi.getPersonalConstraintsForBarberInRange(startDateStr, endDateStr, user.id);
           const cmap = new Map<string, BusinessConstraint[]>();
           cons.forEach((c) => {
             const arr = cmap.get(c.date) ?? [];
@@ -1082,7 +1082,7 @@ export default function AdminAppointmentsScreen() {
       const monthEnd = new Date(year, month + 1, 0);
       monthEnd.setHours(0, 0, 0, 0);
       try {
-        const constraintRows = await businessConstraintsApi.getConstraintsForBarberInRange(
+        const constraintRows = await businessConstraintsApi.getPersonalConstraintsForBarberInRange(
           fmt(firstOfMonth),
           fmt(monthEnd),
           user.id
@@ -1111,7 +1111,7 @@ export default function AdminAppointmentsScreen() {
       start.setHours(0, 0, 0, 0);
       const end = new Date(now.getFullYear(), now.getMonth() + 13, 0);
       end.setHours(0, 0, 0, 0);
-      const rows = await businessConstraintsApi.getConstraintsForBarberInRange(
+      const rows = await businessConstraintsApi.getPersonalConstraintsForBarberInRange(
         _formatLocalYyyyMmDd(start),
         _formatLocalYyyyMmDd(end),
         user.id
@@ -1149,7 +1149,7 @@ export default function AdminAppointmentsScreen() {
           .eq('is_available', false)
           .eq('barber_id', user.id)
           .order('slot_time', { ascending: true }),
-        businessConstraintsApi.getConstraintsForBarberInRange(monthDayModalDate, monthDayModalDate, user.id),
+        businessConstraintsApi.getPersonalConstraintsForBarberInRange(monthDayModalDate, monthDayModalDate, user.id),
       ]);
       if (!alive) return;
       if (error) {

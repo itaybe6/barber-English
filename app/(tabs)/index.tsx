@@ -1442,7 +1442,6 @@ export default function HomeScreen() {
           open={showBroadcast}
           onOpenChange={setShowBroadcast}
           renderTrigger={false}
-          language="en"
         />
       )}
     </View>

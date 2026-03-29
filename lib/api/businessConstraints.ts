@@ -137,6 +137,30 @@ export const businessConstraintsApi = {
     return (data || []) as BusinessConstraint[];
   },
 
+  /**
+   * Only constraints owned by this barber (`user_id` = barberId).
+   * Use for admin calendar UI so each worker sees just their own blocks — not business-wide (`user_id` null) or other barbers'.
+   */
+  async getPersonalConstraintsForBarberInRange(
+    startDate: string,
+    endDate: string,
+    barberId: string | null | undefined
+  ): Promise<BusinessConstraint[]> {
+    if (!barberId) return [];
+    const businessId = getBusinessId();
+    const { data, error } = await supabase
+      .from('business_constraints')
+      .select('*')
+      .eq('business_id', businessId)
+      .eq('user_id', barberId)
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .order('date')
+      .order('start_time');
+    if (error) throw error;
+    return (data || []) as BusinessConstraint[];
+  },
+
   async createConstraints(entries: Array<Omit<BusinessConstraint, 'id' | 'created_at' | 'updated_at'>>, userId?: string | null): Promise<number> {
     if (!entries || entries.length === 0) return 0;
     const businessId = getBusinessId();

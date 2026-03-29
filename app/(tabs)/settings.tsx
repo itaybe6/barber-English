@@ -2391,13 +2391,15 @@ export default function SettingsScreen() {
                         style={styles.adminAvatarRing}
                       >
                         <View style={styles.adminAvatar}>
-                          <Image
-                            source={
-                              user?.image_url ? { uri: (user as any).image_url } : require('@/assets/images/logo-03.png')
-                            }
-                            style={styles.adminAvatarImage}
-                            resizeMode="cover"
-                          />
+                          {user?.image_url ? (
+                            <Image
+                              source={{ uri: (user as any).image_url }}
+                              style={styles.adminAvatarImage}
+                              resizeMode="cover"
+                            />
+                          ) : (
+                            <User size={42} color={Colors.subtext} strokeWidth={1.75} />
+                          )}
                         </View>
                       </LinearGradient>
                     </View>
@@ -2554,7 +2556,11 @@ export default function SettingsScreen() {
                   style={styles.modalAvatarRing}
                 >
                   <TouchableOpacity style={styles.modalAvatar} onPress={handlePickAdminAvatar} activeOpacity={0.9} accessibilityRole="button" accessibilityLabel={t('settings.profile.changeProfilePicture','Change profile picture')}>
-                    <Image source={user?.image_url ? { uri: (user as any).image_url } : require('@/assets/images/logo-03.png')} style={styles.modalAvatarImage} resizeMode="cover" />
+                    {user?.image_url ? (
+                      <Image source={{ uri: (user as any).image_url }} style={styles.modalAvatarImage} resizeMode="cover" />
+                    ) : (
+                      <User size={36} color={Colors.subtext} strokeWidth={1.75} />
+                    )}
                     {isUploadingAdminAvatar && (
                       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 36 }}>
                         <ActivityIndicator size="small" color={businessColors.primary} />
@@ -3298,7 +3304,13 @@ export default function SettingsScreen() {
                                 onPress={() => setExpandedEmployeeId(isExpanded ? null : adm.id)}
                                 activeOpacity={0.7}
                               >
-                                <Image source={adm.image_url ? { uri: adm.image_url } : require('@/assets/images/logo-03.png')} style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12 }} />
+                                {adm.image_url ? (
+                                  <Image source={{ uri: adm.image_url }} style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12 }} resizeMode="cover" />
+                                ) : (
+                                  <View style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12, backgroundColor: '#F2F2F7', alignItems: 'center', justifyContent: 'center' }}>
+                                    <User size={22} color={Colors.subtext} strokeWidth={1.75} />
+                                  </View>
+                                )}
                                 <View style={{ alignItems: 'flex-start', flex: 1 }}>
                                   <Text style={styles.previewNotificationTitle}>{adm.name || 'Admin'}</Text>
                                   {!!adm.phone && <Text style={styles.previewNotificationContent}>{adm.phone}</Text>}

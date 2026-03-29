@@ -319,12 +319,14 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
       try {
         const start = toISODate(today);
         const end = toISODate(addDays(today, 365));
-        const rows = await businessConstraintsApi.getConstraintsInRange(start, end);
+        const rows = (user as any)?.id
+          ? await businessConstraintsApi.getPersonalConstraintsForBarberInRange(start, end, (user as any).id)
+          : [];
         setExisting((rows || []).filter((r: any) => (r.date as string) >= start) as any);
       } catch {}
     };
     load();
-  }, [visible, today]);
+  }, [visible, today, (user as any)?.id]);
 
   const save = async () => {
     try {
@@ -371,7 +373,9 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
       await businessConstraintsApi.createConstraints(entries as any, (user as any)?.id || null);
       const start = toISODate(today);
       const end = toISODate(addDays(today, 365));
-      const rows = await businessConstraintsApi.getConstraintsInRange(start, end);
+      const rows = (user as any)?.id
+        ? await businessConstraintsApi.getPersonalConstraintsForBarberInRange(start, end, (user as any).id)
+        : [];
       setExisting((rows || []).filter((r: any) => (r.date as string) >= start) as any);
       onConstraintsChanged?.();
 

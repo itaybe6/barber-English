@@ -1,9 +1,16 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo, ReactNode } from 'react';
 import { Asset } from 'expo-asset';
 import Constants from 'expo-constants';
 import { getExpoExtra } from '@/lib/getExtra';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
+import {
+  getOnPrimaryForeground,
+  getOnPrimaryForegroundMuted,
+  getPrimaryAsForegroundOnLightSurface,
+  getPrimaryForChartSegment,
+  isLightPrimaryColor,
+} from '@/lib/colorContrast';
 
 // Theme types
 export interface ThemeColors {
@@ -215,6 +222,27 @@ export const useColors = (): ThemeColors => {
   const { theme } = useTheme();
   return theme.colors;
 };
+
+/**
+ * Accessible foregrounds when `primary` is very light (pale yellow, etc.):
+ * - onPrimary / onPrimaryMuted: on solid primary buttons and banners
+ * - primaryOnSurface: icons and accent text on white / light gray
+ * - primaryChartSegment: chart strokes that sit on light backgrounds
+ */
+export function usePrimaryContrast() {
+  const colors = useColors();
+  return useMemo(() => {
+    const { primary, text } = colors;
+    const light = isLightPrimaryColor(primary);
+    return {
+      isLightPrimary: light,
+      onPrimary: getOnPrimaryForeground(primary),
+      onPrimaryMuted: getOnPrimaryForegroundMuted(primary),
+      primaryOnSurface: getPrimaryAsForegroundOnLightSurface(primary, text),
+      primaryChartSegment: getPrimaryForChartSegment(primary),
+    };
+  }, [colors.primary, colors.text]);
+}
 
 // Hook to get just the branding
 export const useBranding = (): ThemeBranding => {

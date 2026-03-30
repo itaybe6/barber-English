@@ -14,7 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { AvailableTimeSlot, supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
-import { useColors } from '@/src/theme/ThemeProvider';
+import { useColors, usePrimaryContrast } from '@/src/theme/ThemeProvider';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/src/config/i18n';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
@@ -60,6 +60,7 @@ export default function DailySchedule({
 }: DailyScheduleProps) {
   const router = useRouter();
   const colors = useColors();
+  const { onPrimary, onPrimaryMuted, primaryOnSurface } = usePrimaryContrast();
   const [clientImageUrl, setClientImageUrl] = useState<string | undefined>(undefined);
   const styles = createStyles(colors);
   const { t } = useTranslation();
@@ -136,23 +137,43 @@ export default function DailySchedule({
           ) : null}
           <View style={[styles.todayBannerContent, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
             <View style={[styles.todayLeft, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
-              <Text style={[styles.todayWeekday, { textAlign: isRTL ? 'right' : 'left' }]}>
+              <Text
+                style={[
+                  styles.todayWeekday,
+                  { textAlign: isRTL ? 'right' : 'left', color: onPrimaryMuted },
+                ]}
+              >
                 {new Date().toLocaleDateString(dateLocale, { weekday: 'long' })}
               </Text>
-              <Text style={[styles.todayDate, { textAlign: isRTL ? 'right' : 'left' }]}>
+              <Text
+                style={[
+                  styles.todayDate,
+                  { textAlign: isRTL ? 'right' : 'left', color: onPrimary },
+                ]}
+              >
                 {new Date().toLocaleDateString(dateLocale, { month: 'short', day: 'numeric' })}
               </Text>
             </View>
 
             <View style={[styles.todayRight, { alignItems: isRTL ? 'flex-start' : 'flex-end' }]}>
               {loadingTodayCount ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ActivityIndicator size="small" color={onPrimary} />
               ) : (
                 <>
-                  <Text style={[styles.todayCount, { textAlign: isRTL ? 'left' : 'right' }]}>
+                  <Text
+                    style={[
+                      styles.todayCount,
+                      { textAlign: isRTL ? 'left' : 'right', color: onPrimary },
+                    ]}
+                  >
                     {todayAppointmentsCount}
                   </Text>
-                  <Text style={[styles.todayCountLabel, { textAlign: isRTL ? 'left' : 'right' }]}>
+                  <Text
+                    style={[
+                      styles.todayCountLabel,
+                      { textAlign: isRTL ? 'left' : 'right', color: onPrimaryMuted },
+                    ]}
+                  >
                     {t('appointments.title', 'Appointments')}
                   </Text>
                 </>
@@ -168,13 +189,9 @@ export default function DailySchedule({
         onPress={onRefresh}
         style={styles.nextCard}
       >
-        {/* Header — direction:'ltr' כופה שמאל→ימין תמיד: חץ משמאל, כותרת+שעון מימין (לא תלוי ב־I18nManager) */}
+        {/* Header — direction:'ltr' כופה שמאל→ימין תמיד: רענון משמאל, כותרת+שעון מימין (לא תלוי ב־I18nManager) */}
         <View style={styles.nextHeader}>
-          <Ionicons
-            name={isRTL ? 'chevron-forward' : 'chevron-back'}
-            size={15}
-            color="#CBD5E1"
-          />
+          <Ionicons name="refresh-outline" size={15} color="#CBD5E1" />
           <View style={styles.nextHeaderTitleGroup}>
             <Text
               style={[styles.nextHeaderTitle, { textAlign: isRTL ? 'right' : 'left' }]}
@@ -183,7 +200,7 @@ export default function DailySchedule({
               {t('appointments.next', 'Next appointment')}
             </Text>
             <View style={[styles.nextHeaderIcon, { backgroundColor: `${colors.primary}18` }]}>
-              <Ionicons name="time-outline" size={15} color={colors.primary} />
+              <Ionicons name="time-outline" size={15} color={primaryOnSurface} />
             </View>
           </View>
         </View>
@@ -194,7 +211,7 @@ export default function DailySchedule({
         {/* Body */}
         {loading ? (
           <View style={styles.loadingRow}>
-            <ActivityIndicator size="small" color={colors.primary} />
+            <ActivityIndicator size="small" color={primaryOnSurface} />
             <Text style={styles.loadingText}>{t('common.loading', 'Loading...')}</Text>
           </View>
         ) : nextAppointment ? (
@@ -233,7 +250,7 @@ export default function DailySchedule({
                 >
                   {nextAppointment.service_name ? (
                     <View style={[styles.servicePill, { backgroundColor: `${colors.primary}14` }]}>
-                      <Text style={[styles.serviceText, { color: colors.primary }]}>
+                      <Text style={[styles.serviceText, { color: primaryOnSurface }]}>
                         {nextAppointment.service_name}
                       </Text>
                     </View>
@@ -247,9 +264,9 @@ export default function DailySchedule({
 
             {/* Time — plain text, no background */}
             <View style={styles.timeBlock}>
-              <Text style={[styles.timeHM, { color: colors.primary }]}>{timeHM}</Text>
+              <Text style={[styles.timeHM, { color: primaryOnSurface }]}>{timeHM}</Text>
               {timeSuffix ? (
-                <Text style={[styles.timeSuffix, { color: `${colors.primary}70` }]}>{timeSuffix}</Text>
+                <Text style={[styles.timeSuffix, { color: `${primaryOnSurface}B3` }]}>{timeSuffix}</Text>
               ) : null}
             </View>
           </View>

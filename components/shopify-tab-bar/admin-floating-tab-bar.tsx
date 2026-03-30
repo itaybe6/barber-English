@@ -18,7 +18,7 @@ import {
   FileText,
 } from "lucide-react-native";
 import { TabButton } from "./tab-button";
-import { useColors } from "@/src/theme/ThemeProvider";
+import { useColors, usePrimaryContrast } from "@/src/theme/ThemeProvider";
 import { useAdminCalendarView } from "@/contexts/AdminCalendarViewContext";
 import type { CalendarViewMode } from "@/components/admin-calendar/calendarViewMode";
 
@@ -43,7 +43,6 @@ import { useEditProductsTabBar } from "@/contexts/EditProductsTabBarContext";
 import { usePickPrimaryColorTabBar } from "@/contexts/PickPrimaryColorTabBarContext";
 
 const INACTIVE = "#8a8a8a";
-const ICON_ACTIVE = "#ffffff";
 
 /** חודשי משמאל, שבועי במרכז, יומי מימין — direction: ltr על ה־inner */
 const CALENDAR_VIEW_ORDER: CalendarViewMode[] = ["month", "week", "day"];
@@ -54,6 +53,7 @@ export const AdminFloatingTabBar: React.FC = () => {
   const insets = useSafeAreaInsets();
   const { t, i18n } = useTranslation();
   const { primary } = useColors();
+  const { onPrimary } = usePrimaryContrast();
   const { calendarView, setCalendarView } = useAdminCalendarView();
   const reminderFab = useAdminCalendarReminderFab();
   const setPlusAnchorWindow = useAdminCalendarSetPlusAnchorWindow();
@@ -67,7 +67,7 @@ export const AdminFloatingTabBar: React.FC = () => {
   const isActive = (tab: string) =>
     currentTab === tab || (tab === "index" && !currentTab);
 
-  const iconColor = (tab: string) => (isActive(tab) ? ICON_ACTIVE : INACTIVE);
+  const iconColor = (tab: string) => (isActive(tab) ? onPrimary : INACTIVE);
 
   const measurePlusInWindow = useCallback(() => {
     plusPillRef.current?.measureInWindow((x, y, width, height) => {
@@ -109,7 +109,7 @@ export const AdminFloatingTabBar: React.FC = () => {
             >
               <Plus
                 size={22}
-                color={reminderFab?.isOpen ? ICON_ACTIVE : INACTIVE}
+                color={reminderFab?.isOpen ? onPrimary : INACTIVE}
               />
             </TabButton>
           </View>
@@ -119,7 +119,7 @@ export const AdminFloatingTabBar: React.FC = () => {
           >
             {CALENDAR_VIEW_ORDER.map((mode) => {
               const focused = calendarView === mode;
-              const fg = focused ? ICON_ACTIVE : INACTIVE;
+              const fg = focused ? onPrimary : INACTIVE;
               const lng = typeof i18n.language === "string" ? i18n.language : "";
               const fallback = lng.startsWith("he")
                 ? CALENDAR_MODE_LABEL_HE[mode]
@@ -222,11 +222,11 @@ export const AdminFloatingTabBar: React.FC = () => {
               accessibilityRole="button"
             >
               {editProductsTabBar.reorderMode && editProductsTabBar.reorderDirty ? (
-                <Check size={22} color={ICON_ACTIVE} strokeWidth={2.5} />
+                <Check size={22} color={onPrimary} strokeWidth={2.5} />
               ) : (
                 <ArrowDownUp
                   size={22}
-                  color={editProductsTabBar.reorderMode ? ICON_ACTIVE : INACTIVE}
+                  color={editProductsTabBar.reorderMode ? onPrimary : INACTIVE}
                 />
               )}
             </TabButton>
@@ -239,7 +239,7 @@ export const AdminFloatingTabBar: React.FC = () => {
             >
               <Trash2
                 size={22}
-                color={editProductsTabBar.deleteMode ? ICON_ACTIVE : INACTIVE}
+                color={editProductsTabBar.deleteMode ? onPrimary : INACTIVE}
               />
             </TabButton>
           </View>
@@ -315,12 +315,12 @@ export const AdminFloatingTabBar: React.FC = () => {
             >
               {editGalleryTabBar.reorderMode &&
               editGalleryTabBar.reorderDirty ? (
-                <Check size={22} color={ICON_ACTIVE} strokeWidth={2.5} />
+                <Check size={22} color={onPrimary} strokeWidth={2.5} />
               ) : (
                 <ArrowDownUp
                   size={22}
                   color={
-                    editGalleryTabBar.reorderMode ? ICON_ACTIVE : INACTIVE
+                    editGalleryTabBar.reorderMode ? onPrimary : INACTIVE
                   }
                 />
               )}
@@ -337,7 +337,7 @@ export const AdminFloatingTabBar: React.FC = () => {
             >
               <Trash2
                 size={22}
-                color={editGalleryTabBar.deleteMode ? ICON_ACTIVE : INACTIVE}
+                color={editGalleryTabBar.deleteMode ? onPrimary : INACTIVE}
               />
             </TabButton>
           </View>
@@ -391,13 +391,13 @@ export const AdminFloatingTabBar: React.FC = () => {
               <View style={styles.financeTabCell}>
                 <Wallet
                   size={20}
-                  color={financeMain ? ICON_ACTIVE : INACTIVE}
+                  color={financeMain ? onPrimary : INACTIVE}
                 />
                 <Text
                   numberOfLines={2}
                   style={[
                     styles.financeTabLabel,
-                    { color: financeMain ? ICON_ACTIVE : INACTIVE },
+                    { color: financeMain ? onPrimary : INACTIVE },
                     lng.startsWith("he")
                       ? { writingDirection: "rtl" as const }
                       : null,
@@ -418,13 +418,13 @@ export const AdminFloatingTabBar: React.FC = () => {
               <View style={styles.financeTabCell}>
                 <FileText
                   size={20}
-                  color={financeAcct ? ICON_ACTIVE : INACTIVE}
+                  color={financeAcct ? onPrimary : INACTIVE}
                 />
                 <Text
                   numberOfLines={2}
                   style={[
                     styles.financeTabLabel,
-                    { color: financeAcct ? ICON_ACTIVE : INACTIVE },
+                    { color: financeAcct ? onPrimary : INACTIVE },
                     lng.startsWith("he")
                       ? { writingDirection: "rtl" as const }
                       : null,
@@ -557,7 +557,7 @@ export const AdminFloatingTabBar: React.FC = () => {
               size={22}
               color={
                 isActive("finance") || currentTab === "finance-accountant"
-                  ? ICON_ACTIVE
+                  ? onPrimary
                   : INACTIVE
               }
             />

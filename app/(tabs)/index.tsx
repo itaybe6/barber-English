@@ -32,7 +32,7 @@ import DailySchedule from '@/components/DailySchedule';
 import { useAuthStore } from '@/stores/authStore';
 import { useNotificationsStore } from '@/stores/notificationsStore';
 import { getCurrentClientLogo } from '@/src/theme/assets';
-import { useColors } from '@/src/theme/ThemeProvider';
+import { useColors, usePrimaryContrast } from '@/src/theme/ThemeProvider';
 import { useProductsStore } from '@/stores/productsStore';
 import { StatusBar, setStatusBarStyle, setStatusBarBackgroundColor } from 'expo-status-bar';
 import { useTranslation } from 'react-i18next';
@@ -42,13 +42,22 @@ import { ManicureMarqueeTile } from '@/components/ManicureMarqueeTile';
 import MonthlyInsightsCard from '@/components/MonthlyInsightsCard';
 import { PendingClientApprovalsCard, PendingClientApprovalsCardHandle } from '@/components/admin/PendingClientApprovalsCard';
 import { clientAppointmentStatsApi } from '@/lib/api/clientAppointmentStats';
+import { HorizontalCarouselDots, carouselIndexFromOffset } from '@/components/HorizontalCarouselDots';
+
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-/** Top band above marquee — semi-transparent scrim for logo contrast over marquee */
-const HERO_TOP_SCHEDULE_BAND_HEIGHT = 105;
+
+/** Admin home — products row (must match `productAdminTile` width + content `gap`) */
+const ADMIN_PRODUCT_TILE_WIDTH = 160;
+const ADMIN_PRODUCT_TILE_GAP = 14;
+const ADMIN_PRODUCT_CAROUSEL_STRIDE = ADMIN_PRODUCT_TILE_WIDTH + ADMIN_PRODUCT_TILE_GAP;
+/** Top band above marquee — must cover safe area + full logo; floor so short phones still clear “BARBERSHOP” row */
+const HERO_TOP_SCHEDULE_BAND_HEIGHT = Math.round(
+  Math.max(196, Math.min(SCREEN_HEIGHT * 0.23, 226))
+);
 /** Marquee starts flush from top (under status bar) — scrim + logo sit on top */
 const HERO_MARQUEE_TRANSLATE_Y = 0;
 /** Bottom corner radius of the hero schedule band (matches DailySchedule banner feel) */
-const HERO_TOP_SCHEDULE_BAND_BOTTOM_RADIUS = 24;
+const HERO_TOP_SCHEDULE_BAND_BOTTOM_RADIUS = 32;
 /** Tile size — smaller tiles so the grid feels less “zoomed in” */
 const HERO_ITEM_SIZE = Platform.OS === 'web' ? SCREEN_WIDTH * 0.255 : SCREEN_WIDTH * 0.35;
 const HERO_SPACING = Platform.OS === 'web' ? 12 : 6;
@@ -81,6 +90,17 @@ function chunkArray<T>(array: T[], size: number): T[][] {
     index += safeSize;
   }
   return chunked;
+}
+
+/** Build rgba() strings for LinearGradient from theme hex (e.g. hero scrim behind white logo). */
+function hexToRgba(hex: string, a: number): string {
+  const h = hex.replace('#', '');
+  if (h.length < 6) return `rgba(0,0,0,${a})`;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return `rgba(0,0,0,${a})`;
+  return `rgba(${r},${g},${b},${a})`;
 }
 
 const manicureHeroRootStyle = {
@@ -159,6 +179,8 @@ export default function HomeScreen() {
   const isLoadingProducts = useProductsStore((state) => state.isLoading);
   const fetchProducts = useProductsStore((state) => state.fetchProducts);
 
+  const [adminProductCarouselIndex, setAdminProductCarouselIndex] = useState(0);
+
   const isAdmin = useAuthStore((state) => state.isAdmin);
   const isSuperAdmin = useAuthStore((state) => state.isSuperAdmin);
   const user = useAuthStore((state) => state.user);
@@ -180,7 +202,17 @@ export default function HomeScreen() {
   const unreadCount = useNotificationsStore((state) => state.unreadCount);
   const fetchUnread = useNotificationsStore((state) => state.fetchUnreadCount);
   const colors = useColors();
-  const styles = createStyles(colors);
+  const { primaryOnSurface, onPrimary } = usePrimaryContrast();
+  const styles = createStyles(colors, primaryOnSurface);
+  const heroLogoScrimGradientColors = useMemo(
+    () => [
+      hexToRgba(colors.primary, 0.9),
+      hexToRgba(colors.primary, 0.82),
+      hexToRgba(colors.primary, 0.48),
+      hexToRgba(colors.primary, 0),
+    ],
+    [colors.primary]
+  );
   /** Section headers: Hebrew titles flush right, edit control on the opposite side (LTR physical layout). */
   const adminSectionTitleOnRight = Boolean(i18n.language?.startsWith('he'));
 
@@ -199,6 +231,22 @@ export default function HomeScreen() {
   useEffect(() => {
     loadHeroImages();
   }, [loadHeroImages]);
+
+  useEffect(() => {
+    setAdminProductCarouselIndex(0);
+  }, [productsFromStore.length]);
+
+  const syncAdminProductCarouselIndex = useCallback(
+    (offsetX: number) => {
+      const next = carouselIndexFromOffset(
+        offsetX,
+        ADMIN_PRODUCT_CAROUSEL_STRIDE,
+        productsFromStore.length
+      );
+      setAdminProductCarouselIndex((prev) => (prev === next ? prev : next));
+    },
+    [productsFromStore.length]
+  );
 
   useFocusEffect(
     React.useCallback(() => {
@@ -838,7 +886,7 @@ export default function HomeScreen() {
     if (isLoadingProducts) {
       return (
         <View style={{ paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center', paddingVertical: 20 }}>
-          <ActivityIndicator size="small" color={colors.primary} />
+          <ActivityIndicator size="small" color={primaryOnSurface} />
           <Text style={{ marginTop: 8, color: colors.textSecondary }}>{t('admin.products.loading','Loading products...')}</Text>
         </View>
       );
@@ -906,13 +954,13 @@ export default function HomeScreen() {
 
       {/* Sheet + outer scroll only moves the white panel; background stays visually independent */}
       <Animated.ScrollView
-        style={{ flex: 1, zIndex: 2, backgroundColor: 'transparent' }}
+        style={{ flex: 1, zIndex: 3, backgroundColor: 'transparent' }}
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled
         bounces={false}
         overScrollMode="never"
         pointerEvents="box-none"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={primaryOnSurface} />}
         contentContainerStyle={{ paddingTop: HERO_HEIGHT - HERO_OVERLAP }}
         scrollEventThrottle={1}
         onLayout={(e) => {
@@ -984,7 +1032,7 @@ export default function HomeScreen() {
                 accessibilityLabel={t('admin.pendingClients.bannerA11y')}
               >
                 <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
-                  <Ionicons name="person-add-outline" size={24} color={colors.primary} />
+                  <Ionicons name="person-add-outline" size={24} color={primaryOnSurface} />
                   {pendingClientsCount > 0 ? (
                     <View style={[styles.quickTileBadge, { backgroundColor: '#EF4444' }]}>
                       <Text style={styles.quickTileBadgeText}>
@@ -1005,7 +1053,7 @@ export default function HomeScreen() {
                 accessibilityRole="button"
               >
                 <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
-                  <Ionicons name="megaphone-outline" size={24} color={colors.primary} />
+                  <Ionicons name="megaphone-outline" size={24} color={primaryOnSurface} />
                 </View>
                 <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
                   {t('admin.home.broadcastTile')}
@@ -1020,7 +1068,7 @@ export default function HomeScreen() {
                 accessibilityLabel={t('notifications.title', 'Notifications')}
               >
                 <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
-                  <Ionicons name="notifications-outline" size={24} color={colors.primary} />
+                  <Ionicons name="notifications-outline" size={24} color={primaryOnSurface} />
                   {unreadCount > 0 ? (
                     <View style={[styles.quickTileBadge, { backgroundColor: '#EF4444' }]}>
                       <Text style={styles.quickTileBadgeText}>
@@ -1044,7 +1092,7 @@ export default function HomeScreen() {
             >
               {/* LTR: מונה משמאל | רווח | כותרת+סאב צמודים לאייקון | אייקון מימין (לא לזוז) */}
               <View style={styles.waitlistTileCount}>
-                <Text style={[styles.waitlistTileCountNum, { color: colors.primary }]}>
+                <Text style={[styles.waitlistTileCountNum, { color: primaryOnSurface }]}>
                   {waitlistWaitingCount}
                 </Text>
                 <Text style={[styles.waitlistTileCountLabel, { color: colors.textSecondary }]}>
@@ -1075,7 +1123,7 @@ export default function HomeScreen() {
                 </Text>
               </View>
               <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
-                <Ionicons name="hourglass-outline" size={24} color={colors.primary} />
+                <Ionicons name="hourglass-outline" size={24} color={primaryOnSurface} />
               </View>
             </TouchableOpacity>
           </View>
@@ -1107,9 +1155,9 @@ export default function HomeScreen() {
                       accessibilityLabel={t('admin.gallery.homeSectionEditA11y', 'עריכת גלריה')}
                     >
                       <View style={[styles.galleryEditIconWrap, { backgroundColor: `${colors.primary}24` }]}>
-                        <Pencil size={15} color={colors.primary} strokeWidth={2.4} />
+                        <Pencil size={15} color={primaryOnSurface} strokeWidth={2.4} />
                       </View>
-                      <Text style={[styles.galleryEditBtnText, { color: colors.primary }]}>
+                      <Text style={[styles.galleryEditBtnText, { color: primaryOnSurface }]}>
                         {t('admin.gallery.homeSectionEdit', 'עריכה')}
                       </Text>
                     </TouchableOpacity>
@@ -1142,9 +1190,9 @@ export default function HomeScreen() {
                       accessibilityLabel={t('admin.gallery.homeSectionEditA11y', 'עריכת גלריה')}
                     >
                       <View style={[styles.galleryEditIconWrap, { backgroundColor: `${colors.primary}24` }]}>
-                        <Pencil size={15} color={colors.primary} strokeWidth={2.4} />
+                        <Pencil size={15} color={primaryOnSurface} strokeWidth={2.4} />
                       </View>
-                      <Text style={[styles.galleryEditBtnText, { color: colors.primary }]}>
+                      <Text style={[styles.galleryEditBtnText, { color: primaryOnSurface }]}>
                         {t('admin.gallery.homeSectionEdit', 'עריכה')}
                       </Text>
                     </TouchableOpacity>
@@ -1153,11 +1201,11 @@ export default function HomeScreen() {
               </View>
             ) : null}
             {isLoadingDesigns ? (
-              <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 12 }} />
+              <ActivityIndicator size="small" color={primaryOnSurface} style={{ marginVertical: 12 }} />
             ) : (designsFromStore?.length ?? 0) === 0 ? (
               <View style={styles.galleryEmpty}>
                 <View style={[styles.galleryEmptyIconWrap, { backgroundColor: `${colors.primary}14` }]}>
-                  <Ionicons name="images-outline" size={34} color={colors.primary} />
+                  <Ionicons name="images-outline" size={34} color={primaryOnSurface} />
                 </View>
                 <Text style={[styles.galleryEmptyTitle, { color: colors.text }]}>
                   {t('admin.gallery.homeEmptyTitle')}
@@ -1172,8 +1220,8 @@ export default function HomeScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={t('admin.gallery.homeEmptyCta')}
                 >
-                  <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
-                  <Text style={styles.galleryEmptyCtaText}>{t('admin.gallery.homeEmptyCta')}</Text>
+                  <Ionicons name="add-circle-outline" size={20} color={onPrimary} />
+                  <Text style={[styles.galleryEmptyCtaText, { color: onPrimary }]}>{t('admin.gallery.homeEmptyCta')}</Text>
                 </TouchableOpacity>
               </View>
             ) : (
@@ -1197,9 +1245,9 @@ export default function HomeScreen() {
                       accessibilityLabel={t('admin.products.homeSectionEditA11y', 'עריכת מוצרים')}
                     >
                       <View style={[styles.galleryEditIconWrap, { backgroundColor: `${colors.primary}24` }]}>
-                        <Pencil size={15} color={colors.primary} strokeWidth={2.4} />
+                        <Pencil size={15} color={primaryOnSurface} strokeWidth={2.4} />
                       </View>
-                      <Text style={[styles.galleryEditBtnText, { color: colors.primary }]}>
+                      <Text style={[styles.galleryEditBtnText, { color: primaryOnSurface }]}>
                         {t('admin.products.homeSectionEdit', 'עריכה')}
                       </Text>
                     </TouchableOpacity>
@@ -1232,9 +1280,9 @@ export default function HomeScreen() {
                       accessibilityLabel={t('admin.products.homeSectionEditA11y', 'עריכת מוצרים')}
                     >
                       <View style={[styles.galleryEditIconWrap, { backgroundColor: `${colors.primary}24` }]}>
-                        <Pencil size={15} color={colors.primary} strokeWidth={2.4} />
+                        <Pencil size={15} color={primaryOnSurface} strokeWidth={2.4} />
                       </View>
-                      <Text style={[styles.galleryEditBtnText, { color: colors.primary }]}>
+                      <Text style={[styles.galleryEditBtnText, { color: primaryOnSurface }]}>
                         {t('admin.products.homeSectionEdit', 'עריכה')}
                       </Text>
                     </TouchableOpacity>
@@ -1243,11 +1291,11 @@ export default function HomeScreen() {
               </View>
             ) : null}
             {isLoadingProducts ? (
-              <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 12 }} />
+              <ActivityIndicator size="small" color={primaryOnSurface} style={{ marginVertical: 12 }} />
             ) : (productsFromStore?.length ?? 0) === 0 ? (
               <View style={styles.galleryEmpty}>
                 <View style={[styles.galleryEmptyIconWrap, { backgroundColor: `${colors.primary}14` }]}>
-                  <Ionicons name="bag-outline" size={34} color={colors.primary} />
+                  <Ionicons name="bag-outline" size={34} color={primaryOnSurface} />
                 </View>
                 <Text style={[styles.galleryEmptyTitle, { color: colors.text }]}>
                   {t('admin.products.homeEmptyTitle', 'עדיין אין מוצרים בחנות')}
@@ -1262,67 +1310,83 @@ export default function HomeScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={t('admin.products.homeEmptyCta', 'הוספת מוצר')}
                 >
-                  <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
-                  <Text style={styles.galleryEmptyCtaText}>{t('admin.products.homeEmptyCta', 'הוספת מוצר')}</Text>
+                  <Ionicons name="add-circle-outline" size={20} color={onPrimary} />
+                  <Text style={[styles.galleryEmptyCtaText, { color: onPrimary }]}>{t('admin.products.homeEmptyCta', 'הוספת מוצר')}</Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.productAdminCarousel}
-                contentContainerStyle={styles.productAdminCarouselContent}
-              >
-                {productsFromStore.map((product) => {
-                  const priceStr = product.price % 1 === 0
-                    ? `₪${product.price.toFixed(0)}`
-                    : `₪${product.price.toFixed(2)}`;
-                  return (
-                    <TouchableOpacity
-                      key={product.id}
-                      onPress={() => router.push('/(tabs)/edit-products')}
-                      activeOpacity={0.88}
-                      style={styles.productAdminTile}
-                    >
-                      <View style={styles.productAdminImageWrap}>
-                        {product.image_url ? (
-                          <Image
-                            source={{ uri: product.image_url }}
-                            style={styles.productAdminImage}
-                            resizeMode="cover"
+              <View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.productAdminCarousel}
+                  contentContainerStyle={styles.productAdminCarouselContent}
+                  decelerationRate="fast"
+                  snapToInterval={ADMIN_PRODUCT_CAROUSEL_STRIDE}
+                  snapToAlignment="start"
+                  scrollEventThrottle={16}
+                  onScroll={(e) => syncAdminProductCarouselIndex(e.nativeEvent.contentOffset.x)}
+                  onMomentumScrollEnd={(e) =>
+                    syncAdminProductCarouselIndex(e.nativeEvent.contentOffset.x)
+                  }
+                >
+                  {productsFromStore.map((product) => {
+                    const priceStr = product.price % 1 === 0
+                      ? `₪${product.price.toFixed(0)}`
+                      : `₪${product.price.toFixed(2)}`;
+                    return (
+                      <TouchableOpacity
+                        key={product.id}
+                        onPress={() => router.push('/(tabs)/edit-products')}
+                        activeOpacity={0.88}
+                        style={styles.productAdminTile}
+                      >
+                        <View style={styles.productAdminImageWrap}>
+                          {product.image_url ? (
+                            <Image
+                              source={{ uri: product.image_url }}
+                              style={styles.productAdminImage}
+                              resizeMode="cover"
+                            />
+                          ) : (
+                            <View style={styles.productAdminPlaceholder}>
+                              <Ionicons name="bag-outline" size={40} color="#8E8E93" />
+                            </View>
+                          )}
+                          <LinearGradient
+                            pointerEvents="none"
+                            colors={['rgba(0,0,0,0.5)', 'transparent']}
+                            locations={[0, 0.65]}
+                            style={styles.productAdminOverlayGradientTop}
                           />
-                        ) : (
-                          <View style={styles.productAdminPlaceholder}>
-                            <Ionicons name="bag-outline" size={40} color="#8E8E93" />
+                          <LinearGradient
+                            pointerEvents="none"
+                            colors={['transparent', 'rgba(0,0,0,0.45)', 'rgba(0,0,0,0.88)']}
+                            locations={[0.15, 0.55, 1]}
+                            style={styles.productAdminOverlayGradient}
+                          />
+                          <View style={styles.productAdminPricePillWrap} pointerEvents="none">
+                            <View style={[styles.productAdminPricePill, { backgroundColor: colors.primary }]}>
+                              <Text style={[styles.productAdminPrice, { color: onPrimary }]}>{priceStr}</Text>
+                            </View>
                           </View>
-                        )}
-                        <LinearGradient
-                          pointerEvents="none"
-                          colors={['rgba(0,0,0,0.5)', 'transparent']}
-                          locations={[0, 0.65]}
-                          style={styles.productAdminOverlayGradientTop}
-                        />
-                        <LinearGradient
-                          pointerEvents="none"
-                          colors={['transparent', 'rgba(0,0,0,0.45)', 'rgba(0,0,0,0.88)']}
-                          locations={[0.15, 0.55, 1]}
-                          style={styles.productAdminOverlayGradient}
-                        />
-                        <View style={styles.productAdminPricePillWrap} pointerEvents="none">
-                          <View style={[styles.productAdminPricePill, { backgroundColor: colors.primary }]}>
-                            <Text style={styles.productAdminPrice}>{priceStr}</Text>
+                          <View style={styles.productAdminNameWrap} pointerEvents="none">
+                            <Text style={styles.productAdminNameOverlay} numberOfLines={2}>
+                              {product.name}
+                            </Text>
                           </View>
                         </View>
-                        <View style={styles.productAdminNameWrap} pointerEvents="none">
-                          <Text style={styles.productAdminNameOverlay} numberOfLines={2}>
-                            {product.name}
-                          </Text>
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                <HorizontalCarouselDots
+                  count={productsFromStore.length}
+                  minCount={2}
+                  activeIndex={adminProductCarouselIndex}
+                  activeColor={colors.primary}
+                />
+              </View>
             )}
           </View>
         )}
@@ -1348,8 +1412,8 @@ export default function HomeScreen() {
       >
         <LinearGradient
           pointerEvents="none"
-          colors={['rgba(15, 23, 42, 0.5)', 'rgba(15, 23, 42, 0.22)', 'rgba(15, 23, 42, 0)']}
-          locations={[0, 0.48, 1]}
+          colors={heroLogoScrimGradientColors}
+          locations={[0, 0.22, 0.52, 1]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={StyleSheet.absoluteFillObject}
@@ -1426,7 +1490,7 @@ export default function HomeScreen() {
 
              {/* Search Bar */}
              <View style={styles.searchContainer}>
-               <Ionicons name="search" size={20} color={colors.primary} style={styles.searchIcon} />
+               <Ionicons name="search" size={20} color={primaryOnSurface} style={styles.searchIcon} />
                <TextInput
                  style={styles.searchInput}
                  placeholder={t('common.searchByName','Search by name...')}
@@ -1464,7 +1528,7 @@ export default function HomeScreen() {
              {/* Clients List */}
              {loadingClients ? (
                <View style={styles.loadingContainer}>
-                 <ActivityIndicator size="large" color={colors.primary} />
+                 <ActivityIndicator size="large" color={primaryOnSurface} />
                  <Text style={styles.loadingText}>{t('clients.loading','Loading clients...')}</Text>
                </View>
               ) : (
@@ -1500,7 +1564,7 @@ export default function HomeScreen() {
                        >
                          <View style={styles.statBox}>
                            <View style={[styles.statIconCircle, { backgroundColor: `${colors.primary}18` }]}>
-                             <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+                             <Ionicons name="calendar-outline" size={18} color={primaryOnSurface} />
                            </View>
                            <Text style={styles.statBoxValue}>{totalAppts}</Text>
                            <Text style={styles.statBoxLabel}>
@@ -1510,7 +1574,7 @@ export default function HomeScreen() {
                          <View style={styles.statBoxDivider} />
                          <View style={styles.statBox}>
                            <View style={[styles.statIconCircle, { backgroundColor: `${colors.primary}18` }]}>
-                             <Ionicons name="wallet-outline" size={18} color={colors.primary} />
+                             <Ionicons name="wallet-outline" size={18} color={primaryOnSurface} />
                            </View>
                            <Text
                              style={[styles.statBoxValue, avgMo == null && styles.statBoxValueMuted]}
@@ -1531,7 +1595,7 @@ export default function HomeScreen() {
                          accessibilityRole="button"
                          accessibilityLabel={t('clients.call.title', 'Call')}
                        >
-                         <Ionicons name="call" size={20} color={colors.primary} />
+                         <Ionicons name="call" size={20} color={primaryOnSurface} />
                        </TouchableOpacity>
                        <TouchableOpacity
                          style={styles.blockButton}
@@ -1578,7 +1642,7 @@ export default function HomeScreen() {
   );
  }
 
-const createStyles = (colors: any) => StyleSheet.create({
+const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -2059,7 +2123,8 @@ const createStyles = (colors: any) => StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    zIndex: 3,
+    /** Below white sheet (ScrollView zIndex 3) so the card slides over the scrim */
+    zIndex: 1,
     overflow: 'hidden',
     borderCurve: 'continuous',
   },
@@ -2642,7 +2707,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
   },
   editGalleryButtonText: {
-    color: colors.primary,
+    color: primaryOnSurface,
     fontWeight: '600',
     letterSpacing: -0.2,
     marginLeft: 8,
@@ -2843,7 +2908,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: 14,
   },
   filterButtonTextActive: {
-    color: colors.primary,
+    color: primaryOnSurface,
     fontWeight: '600',
   },
   clientItem: {

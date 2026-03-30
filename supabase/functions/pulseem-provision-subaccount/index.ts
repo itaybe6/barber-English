@@ -10,6 +10,7 @@
  * Secrets (Supabase Dashboard → Edge Functions):
  *   - PULSEEM_MAIN_API_KEY — main Pulseem REST API key (plaintext; not the Expo Base64 trick)
  *   - PULSEEM_FIELD_ENCRYPTION_KEY — same Base64-32-byte key as other Pulseem edges
+ *   - JWT_SECRET — optional; JWT signing secret (Settings → API) if app sends legacy eyJ service_role; UI cannot add SUPABASE_JWT_SECRET
  *
  * POST JSON:
  *   { "businessId": "uuid", "subPassword"?: string, "fromNumber"?: string, "directSmsCredits"?: number (default 20),
@@ -51,7 +52,11 @@ async function authorizeServiceRole(req: Request): Promise<boolean> {
   const expected = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").trim();
   if (expected && auth === expected) return true;
 
-  const jwtSecret = (Deno.env.get("SUPABASE_JWT_SECRET") ?? "").trim();
+  const jwtSecret = (
+    Deno.env.get("SUPABASE_JWT_SECRET") ??
+    Deno.env.get("JWT_SECRET") ??
+    ""
+  ).trim();
   if (!jwtSecret || !auth.startsWith("eyJ")) return false;
 
   try {

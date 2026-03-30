@@ -1,14 +1,16 @@
 // @ts-nocheck
 /**
  * Super-admin only: encrypt/decrypt Pulseem secrets for business_profile.
- * Auth: Bearer = Secret API key (sb_secret_…) or legacy JWT service_role (verified with SUPABASE_JWT_SECRET).
+ * Auth: Bearer = Secret API key (sb_secret_…) or legacy JWT service_role.
  * Secret: PULSEEM_FIELD_ENCRYPTION_KEY — Base64 of 32 bytes (openssl rand -base64 32).
  *
  * verify_jwt is disabled at the Gateway level; auth is done here.
  *
  * Bearer is accepted if it equals SUPABASE_SERVICE_ROLE_KEY (new sb_secret_… format)
- * OR if it is a legacy JWT with role service_role verified with SUPABASE_JWT_SECRET
- * (same JWT as Dashboard → API → service_role legacy key).
+ * OR if it is a legacy JWT with role service_role, verified with JWT signing secret:
+ *   - SUPABASE_JWT_SECRET (if present in runtime), or
+ *   - JWT_SECRET — use this name in Dashboard → Edge Functions → Secrets (UI forbids SUPABASE_* for manual secrets).
+ *   Value = Project Settings → API → JWT Secret (same as legacy key verification).
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -49,6 +51,15 @@ function bearerShape(token: string): "empty" | "jwt_eyJ" | "sb_secret" | "other"
   return "other";
 }
 
+/** Dashboard blocks manual secrets named SUPABASE_*; use JWT_SECRET with API JWT Secret value. */
+function jwtSigningSecretForVerify(): string {
+  return (
+    Deno.env.get("SUPABASE_JWT_SECRET") ??
+    Deno.env.get("JWT_SECRET") ??
+    ""
+  ).trim();
+}
+
 /**
  * New secret key (sb_secret_…) or legacy JWT service_role from the same project.
  * On failure, logs safe diagnostics to Supabase Functions logs (Dashboard → Logs).
@@ -68,7 +79,7 @@ async function authorizeServiceRole(req: Request): Promise<boolean> {
   }
 
   const expected = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").trim();
-  const jwtSecret = (Deno.env.get("SUPABASE_JWT_SECRET") ?? "").trim();
+  const jwtSecret = jwtSigningSecretForVerify();
 
   if (!expected) {
     console.error("[pulseem-admin-credentials] auth_fail", {
@@ -96,7 +107,7 @@ async function authorizeServiceRole(req: Request): Promise<boolean> {
       apikeyLength: apikey.length,
       apikeySameLengthAsBearer: apikey.length === auth.length,
       hint:
-        "Secrets named EXPO_PUBLIC_* in the Dashboard are NOT injected into Edge Functions — only into your Expo build. Edge uses SUPABASE_SERVICE_ROLE_KEY + SUPABASE_JWT_SECRET.",
+        "EXPO_PUBLIC_* in Dashboard Secrets is for Expo only. For JWT verify add Edge secret JWT_SECRET (JWT Secret from Settings → API); manual names cannot start with SUPABASE_.",
     });
     return false;
   }
@@ -105,7 +116,7 @@ async function authorizeServiceRole(req: Request): Promise<boolean> {
     console.error("[pulseem-admin-credentials] auth_fail", {
       step: "jwt_path",
       problem:
-        "Client sent a JWT (eyJ…) but SUPABASE_JWT_SECRET is empty in Edge — cannot verify. Add JWT Secret in Dashboard (Settings → API) to function env, or use the non-JWT service_role key that matches Edge SUPABASE_SERVICE_ROLE_KEY.",
+        "Client sent JWT (eyJ…) but no JWT signing secret in Edge. Add Edge Function secret named JWT_SECRET (value = Settings → API → JWT Secret). Dashboard disallows SUPABASE_JWT_SECRET as manual name. Or use sb_secret service_role in app to match Edge SUPABASE_SERVICE_ROLE_KEY.",
       bearerLength: auth.length,
       edgeSecretLength: expected.length,
     });

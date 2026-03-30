@@ -576,6 +576,44 @@ export const superAdminApi = {
     return null;
   },
 
+  /**
+   * יתרת «חבילת SMS בAPI» (Direct) מפולסים — GetCreditBalance בשרת.
+   * דורש pulseem_has_api_key + PULSEEM_MAIN_API_KEY ב-Edge.
+   */
+  async fetchPulseemDirectSmsBalance(
+    businessId: string,
+    options?: { subAccountName?: string },
+  ): Promise<
+    | { ok: true; directSmsCredits: string }
+    | { ok: false; message: string }
+  > {
+    const { data: result, status } = await invokePulseemCredentialsAdmin<{
+      ok: boolean;
+      directSmsCredits?: string;
+      message?: string;
+    }>({
+      action: 'fetch_direct_sms_balance',
+      businessId,
+      ...(options?.subAccountName?.trim()
+        ? { subAccountName: options.subAccountName.trim() }
+        : {}),
+    });
+    if (!result) {
+      if (status === 401) {
+        return { ok: false, message: MSG_PULSEEM_401 };
+      }
+      return {
+        ok: false,
+        message:
+          'שגיאת שרת — ודא פריסת pulseem-admin-credentials ו-PULSEEM_MAIN_API_KEY',
+      };
+    }
+    if (result.ok && typeof result.directSmsCredits === 'string') {
+      return { ok: true, directSmsCredits: result.directSmsCredits };
+    }
+    return { ok: false, message: result.message || 'לא ניתן לטעון יתרה' };
+  },
+
   async getPulseemEditorState(businessId: string): Promise<{
     userId: string;
     fromNumber: string;
@@ -641,19 +679,33 @@ export const superAdminApi = {
     businessId: string,
     userId: string,
     passwordOverride: string,
+    options?: { subAccountName?: string },
   ): Promise<
-    | { readonly ok: true; readonly credits: string }
+    | {
+        readonly ok: true;
+        /** ערך מועדף להצגה: יתרת SMS API (Direct) אם קיימת, אחרת Web Service */
+        readonly credits: string;
+        readonly directSmsCredits?: string | null;
+        readonly legacyWsCredits?: string | null;
+        readonly balanceNote?: string | null;
+      }
     | { readonly ok: false; readonly message: string }
   > {
     const { data: result, status } = await invokePulseemCredentialsAdmin<{
       ok: boolean;
       credits?: string;
       message?: string;
+      directSmsCredits?: string | null;
+      legacyWsCredits?: string | null;
+      balanceNote?: string | null;
     }>({
       action: 'test_connection',
       businessId,
       userId: userId.trim(),
       password: passwordOverride.trim(),
+      ...(options?.subAccountName?.trim()
+        ? { subAccountName: options.subAccountName.trim() }
+        : {}),
     });
     if (!result) {
       if (status === 401) {
@@ -666,7 +718,13 @@ export const superAdminApi = {
       };
     }
     if (result.ok && typeof result.credits === 'string') {
-      return { ok: true, credits: result.credits };
+      return {
+        ok: true,
+        credits: result.credits,
+        directSmsCredits: result.directSmsCredits ?? null,
+        legacyWsCredits: result.legacyWsCredits ?? null,
+        balanceNote: result.balanceNote ?? null,
+      };
     }
     return { ok: false, message: result.message || 'בדיקה נכשלה' };
   },

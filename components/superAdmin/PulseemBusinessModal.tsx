@@ -41,6 +41,12 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
   const [autoSubPassword, setAutoSubPassword] = useState('');
   const [creditTransferAmount, setCreditTransferAmount] = useState('50');
   const [transferringCredits, setTransferringCredits] = useState(false);
+  /** שם תת-חשבון כפי בפולסים — ל־GetCreditBalance (עמודת SMS API); ברירת מחדל שם תצוגה */
+  const [pulseSubAccountName, setPulseSubAccountName] = useState('');
+  /** יתרת «חבילת SMS בAPI» — נטענת אוטומטית בפתיחת המודאל */
+  const [directSmsBalance, setDirectSmsBalance] = useState<string | null>(null);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
+  const [balanceRefreshing, setBalanceRefreshing] = useState(false);
 
   const extra = getExpoExtra();
   const hasPulseemMainKeyInApp = !!String(extra.PULSEEM_MAIN_API_KEY ?? '').replace(/^\uFEFF/, '').trim();
@@ -52,6 +58,10 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
     setHadPassword(false);
     setAutoSubPassword('');
     setCreditTransferAmount('50');
+    setPulseSubAccountName('');
+    setDirectSmsBalance(null);
+    setBalanceError(null);
+    setBalanceRefreshing(false);
   }, []);
 
   useEffect(() => {
@@ -62,6 +72,9 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
     let cancelled = false;
     (async () => {
       setLoading(true);
+      setDirectSmsBalance(null);
+      setBalanceError(null);
+      const subForBalance = (business.display_name ?? '').trim();
       const state = await superAdminApi.getPulseemEditorState(business.id);
       if (cancelled) return;
       if (state) {
@@ -70,22 +83,79 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
         setHadPassword(state.hasPassword);
       } else {
         resetFields();
+        setPulseSubAccountName(subForBalance);
+        setPassword('');
+        setLoading(false);
+        return;
       }
+      setPulseSubAccountName(subForBalance);
       setPassword('');
-      setLoading(false);
+
+      if (business.pulseemHasApiKey) {
+        const bal = await superAdminApi.fetchPulseemDirectSmsBalance(business.id, {
+          subAccountName: subForBalance || undefined,
+        });
+        if (!cancelled) {
+          if (bal.ok) {
+            setDirectSmsBalance(bal.directSmsCredits);
+            setBalanceError(null);
+          } else {
+            setBalanceError(bal.message);
+          }
+        }
+      }
+      if (!cancelled) setLoading(false);
     })();
     return () => {
       cancelled = true;
     };
   }, [visible, business?.id, resetFields, business]);
 
+  const refreshDirectSmsBalance = useCallback(async () => {
+    if (!business?.pulseemHasApiKey) return;
+    setBalanceRefreshing(true);
+    setBalanceError(null);
+    try {
+      const bal = await superAdminApi.fetchPulseemDirectSmsBalance(business.id, {
+        subAccountName: pulseSubAccountName.trim() || undefined,
+      });
+      if (bal.ok) {
+        setDirectSmsBalance(bal.directSmsCredits);
+        setBalanceError(null);
+      } else {
+        setBalanceError(bal.message);
+      }
+    } finally {
+      setBalanceRefreshing(false);
+    }
+  }, [business?.id, business?.pulseemHasApiKey, pulseSubAccountName]);
+
   const handleTest = async () => {
     if (!business) return;
     setTesting(true);
-    const result = await superAdminApi.testPulseemForBusiness(business.id, userId, password);
+    const result = await superAdminApi.testPulseemForBusiness(business.id, userId, password, {
+      subAccountName: pulseSubAccountName.trim() || undefined,
+    });
     setTesting(false);
     if (result.ok) {
-      Alert.alert('חיבור תקין', `יתרת SMS בפולסים: ${result.credits}`);
+      const lines: string[] = [];
+      if (result.directSmsCredits != null) {
+        lines.push(`יתרת SMS API (Direct / חבילת SMS בAPI): ${result.directSmsCredits}`);
+      }
+      if (result.legacyWsCredits != null) {
+        lines.push(`יתרת Web Service (ישנה, לא API): ${result.legacyWsCredits}`);
+      }
+      if (lines.length === 0) {
+        lines.push(`יתרה: ${result.credits}`);
+      }
+      if (result.balanceNote) {
+        lines.push('', result.balanceNote);
+      }
+      if (result.directSmsCredits != null) {
+        setDirectSmsBalance(result.directSmsCredits);
+        setBalanceError(null);
+      }
+      Alert.alert('חיבור תקין', lines.join('\n'));
     } else if ('message' in result) {
       Alert.alert('בדיקה נכשלה', result.message);
     }
@@ -119,6 +189,13 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
               'נוצר',
               `מזהה WS: ${result.loginUserName ?? '—'}\nיתרה/קרדיטים: ${result.directSmsCredits ?? '—'}${envNote}`,
             );
+            const balAfter = await superAdminApi.fetchPulseemDirectSmsBalance(business.id, {
+              subAccountName: (business.display_name ?? '').trim() || undefined,
+            });
+            if (balAfter.ok) {
+              setDirectSmsBalance(balAfter.directSmsCredits);
+              setBalanceError(null);
+            }
             const state = await superAdminApi.getPulseemEditorState(business.id);
             if (state) {
               setUserId(state.userId);
@@ -162,6 +239,7 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
                 ? `\nיתרת Direct SMS אחרי (לפי תשובת Pulseem): ${result.directSmsCreditsAfter}`
                 : '';
             Alert.alert('בוצע', `הועברו ${n} קרדיטים.${after}`);
+            await refreshDirectSmsBalance();
             onSaved();
           },
         },
@@ -209,6 +287,40 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
             {business?.display_name || 'עסק'}
           </Text>
 
+          {business ? (
+            <View style={styles.balanceStrip}>
+              {loading ? (
+                <View style={styles.balanceRow}>
+                  <ActivityIndicator size="small" color={ACCENT} />
+                  <Text style={styles.balanceStripText}>טוען יתרת SMS API…</Text>
+                </View>
+              ) : balanceRefreshing ? (
+                <View style={styles.balanceRow}>
+                  <ActivityIndicator size="small" color="#059669" />
+                  <Text style={styles.balanceStripText}>מרענן יתרה…</Text>
+                </View>
+              ) : directSmsBalance != null ? (
+                <View style={styles.balanceRow}>
+                  <Ionicons name="wallet-outline" size={22} color="#059669" />
+                  <Text style={styles.balanceStripText}>
+                    יתרת SMS (חבילת API):{' '}
+                    <Text style={styles.balanceValue}>{directSmsBalance}</Text>
+                  </Text>
+                </View>
+              ) : balanceError ? (
+                <Text style={styles.balanceStripError} numberOfLines={3}>
+                  {balanceError}
+                </Text>
+              ) : !business.pulseemHasApiKey ? (
+                <Text style={styles.balanceStripMuted}>
+                  אין מפתח API Direct — היתרה תוצג אוטומטית אחרי יצירת תת-חשבון
+                </Text>
+              ) : (
+                <Text style={styles.balanceStripMuted}>לא נטענה יתרה</Text>
+              )}
+            </View>
+          ) : null}
+
           {loading || !business ? (
             <View style={styles.centerPad}>
               {loading ? <ActivityIndicator size="large" color={ACCENT} /> : null}
@@ -220,7 +332,7 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
               contentContainerStyle={styles.scrollPad}
             >
               <Text style={styles.hint}>
-                מפתח ה-API החדש (מ«הגדרות API») מוזן ביצירת עסק חדש ונשמר ב-.env. כאן: ממשק ה-Web Service הישן (מזהה משתמש + סיסמה). כפתור «בדיקת חיבור» בודק רק את הישן; אם השתמשת רק במפתח API — התעלם מהבדיקה או השלם כאן פרטי WS אם יש לך.
+                בדיקת חיבור: אם יש מפתח Direct API (מסד), השרת שואל גם את יתרת «חבילת SMS בAPI» דרך Pulseem REST (GetCreditBalance) עם PULSEEM_MAIN_API_KEY ב-Supabase. Web Service הישן (מזהה + סיסמה) מציג יתרה קלאסית — לעיתים ‎-1‎ כשאין חבילה ישנה למרות שב-API יש קרדיטים.
               </Text>
 
               {!business.pulseemHasApiKey ? (
@@ -262,9 +374,26 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
 
               {business.pulseemHasApiKey ? (
                 <View style={styles.creditBox}>
+                  <Text style={styles.label}>שם תת-חשבון (פולסים) — ליתרת SMS API</Text>
+                  <Text style={styles.subHint}>
+                    כפי שמופיע בפולסים בעמודת «שם החשבון» (למשל EliyaMoshe). אם היתרה לא נטענת, התאם לשם המדויק.
+                  </Text>
+                  <TextInput
+                    style={styles.input}
+                    value={pulseSubAccountName}
+                    onChangeText={setPulseSubAccountName}
+                    onEndEditing={() => {
+                      void refreshDirectSmsBalance();
+                    }}
+                    placeholder="ברירת מחדל: שם תצוגה של העסק"
+                    placeholderTextColor={TEXT_MUTED}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    textAlign="right"
+                  />
                   <Text style={styles.creditTitle}>טעינת קרדיטים — CreditTransfer</Text>
                   <Text style={styles.creditHint}>
-                    לפי דוקומנטציית Pulseem: POST /AccountsApi/CreditTransfer. המפתח הראשי בכותרת APIKEY (סוד Edge), מפתח ה-Direct של העסק בגוף הבקשה — מתבצע בשרת בלבד.
+                    POST /AccountsApi/CreditTransfer — שדה directSmsCredits בגוף הבקשה מטעין את «חבילת SMS בAPI» (Direct). המפתח הראשי בכותרת APIKEY (סוד Edge), מפתח ה-Direct של העסק בשדה apikey — בשרת בלבד.
                   </Text>
                   <Text style={styles.label}>כמות Direct SMS להעברה</Text>
                   <TextInput
@@ -336,7 +465,7 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
                   <ActivityIndicator color={ACCENT} />
                 ) : (
                   <>
-                    <Text style={styles.secondaryBtnText}>בדיקת חיבור (יתרת SMS)</Text>
+                    <Text style={styles.secondaryBtnText}>בדיקת חיבור (יתרת SMS API + WS)</Text>
                     <Ionicons name="flash-outline" size={18} color={ACCENT} />
                   </>
                 )}
@@ -386,6 +515,21 @@ const styles = StyleSheet.create({
   },
   sheetTitle: { fontSize: 17, fontWeight: '800', color: TEXT_PRIMARY },
   bizLine: { fontSize: 13, color: TEXT_SECONDARY, textAlign: 'center', paddingVertical: 8, paddingHorizontal: 20 },
+  balanceStrip: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: 'rgba(5, 150, 105, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(5, 150, 105, 0.22)',
+  },
+  balanceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  balanceStripText: { fontSize: 15, color: TEXT_PRIMARY, textAlign: 'center', flexShrink: 1 },
+  balanceValue: { fontSize: 18, fontWeight: '800', color: '#047857' },
+  balanceStripMuted: { fontSize: 12, color: TEXT_MUTED, textAlign: 'center', lineHeight: 18 },
+  balanceStripError: { fontSize: 12, color: '#DC2626', textAlign: 'center', lineHeight: 18 },
   centerPad: { paddingVertical: 40, alignItems: 'center' },
   scrollPad: { paddingHorizontal: 20, paddingTop: 8 },
   hint: {
@@ -450,6 +594,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   creditTitle: { fontSize: 14, fontWeight: '800', color: '#059669', textAlign: 'right', marginBottom: 6 },
+  subHint: { fontSize: 11, color: TEXT_MUTED, textAlign: 'right', lineHeight: 15, marginBottom: 6 },
   creditHint: { fontSize: 11, color: TEXT_SECONDARY, textAlign: 'right', lineHeight: 16, marginBottom: 8 },
   primaryBtn: {
     marginTop: 12,

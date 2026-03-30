@@ -20,6 +20,11 @@
  * OTP send order: **REST first** when pulseem_api_key is set, then ASMX fallback (with ASMX credit check).
  * Set PULSEEM_OTP_PREFER_ASMX=1 for ASMX-first (legacy behavior).
  *
+ * REST SendSms: **PULSEEM_REST_IS_ASYNC** — default `true` (queued send). Set `0`/`false` for synchronous API.
+ * **PULSEEM_REST_FETCH_SMS_REPORT** — default `1`: after SendSms, best-effort GetSMSReport is logged (debug delivery).
+ * Pulseem `status: Success` / `success: 1` means they accepted the message; handset delivery depends on carrier/sender.
+ * Supabase log `Shutdown` / `EarlyDrop` is runtime teardown after the handler finished — it does not cancel Pulseem.
+ *
  * sender_same_as_recipient uses the actual from string sent to Pulseem (REST vs ASMX), not only
  * pulse.fromNumber — otherwise PULSEEM_REST_FROM_NUMBER identical to the user’s phone yields OK with no warning.
  *
@@ -77,6 +82,8 @@ const cors = {
 const PULSEEM_ASMX =
   "https://www.pulseem.co.il/Pulseem/pulseemsendservices.asmx";
 const PULSEEM_REST = "https://api.pulseem.com/api/v1/SmsApi/SendSms";
+const PULSEEM_REST_SMS_REPORT =
+  "https://api.pulseem.com/api/v1/SmsApi/GetSMSReport";
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 const MAX_SENDS_PER_HOUR = 8;
@@ -265,6 +272,21 @@ function classifyPulseemRestJson(
   if (boolKeys.some((v) => v === true)) return "success";
   if (boolKeys.some((v) => v === false)) return "failure";
 
+  const failN =
+    typeof payload.failure === "number"
+      ? payload.failure
+      : typeof payload.Failure === "number"
+        ? payload.Failure
+        : null;
+  const succN =
+    typeof payload.success === "number"
+      ? payload.success
+      : typeof payload.Success === "number"
+        ? payload.Success
+        : null;
+  if (failN !== null && failN > 0) return "failure";
+  if (succN !== null && succN > 0) return "success";
+
   const ec = payload.errorCode ?? payload.ErrorCode ?? payload.code ?? payload.Code;
   if (typeof ec === "number" && ec !== 0 && ec !== 200) return "failure";
 
@@ -278,6 +300,13 @@ function classifyPulseemRestJson(
     (typeof payload.FailedCount === "number" ? payload.FailedCount : null) ??
     (typeof payload.failedSmsCount === "number" ? payload.failedSmsCount : null);
   if (typeof failCount === "number" && failCount > 0) return "failure";
+
+  const sentOk =
+    (typeof payload.sentSmsCount === "number" ? payload.sentSmsCount : null) ??
+    (typeof payload.SentSmsCount === "number" ? payload.SentSmsCount : null) ??
+    (typeof payload.successSmsCount === "number" ? payload.successSmsCount : null) ??
+    (typeof payload.validSmsCount === "number" ? payload.validSmsCount : null);
+  if (typeof sentOk === "number" && sentOk > 0) return "success";
 
   return "unknown";
 }
@@ -293,11 +322,9 @@ function assertPulseemRestJsonSuccess(responseText: string): void {
     if (low === "false" || low === '"false"') {
       throw new Error("pulseem_rest_rejected");
     }
-    console.warn(
-      "[auth-phone-otp] pulseem REST non-JSON 2xx body (trusting HTTP):",
-      trimmed.slice(0, 200),
+    throw new Error(
+      `pulseem_rest_non_json_body:${trimmed.slice(0, 240).replace(/\s+/g, " ")}`,
     );
-    return;
   }
 
   let payload: Record<string, unknown>;
@@ -321,16 +348,61 @@ function assertPulseemRestJsonSuccess(responseText: string): void {
     throw new Error(msg || "pulseem_rest_rejected");
   }
   if (c === "unknown") {
-    console.warn(
+    console.error(
       "[auth-phone-otp] pulseem REST ambiguous JSON (HTTP was 2xx). Body:",
       trimmed.slice(0, 600),
     );
+    throw new Error(
+      `pulseem_rest_ambiguous_response:${trimmed.slice(0, 400).replace(/\s+/g, " ")}`,
+    );
+  }
+}
+
+function pulseemRestIsAsync(): boolean {
+  const v = String(Deno.env.get("PULSEEM_REST_IS_ASYNC") ?? "true").trim().toLowerCase();
+  return !/^(0|false|no|off)$/.test(v);
+}
+
+/** Best-effort report for support; does not throw. */
+async function pulseemLogSmsReportBestEffort(opts: {
+  apiKey: string;
+  sendId?: string;
+  reference?: string;
+  cellphone?: string;
+}): Promise<void> {
+  if (/^(0|false|no|off)$/i.test(String(Deno.env.get("PULSEEM_REST_FETCH_SMS_REPORT") ?? "1").trim())) {
+    return;
+  }
+  try {
+    const res = await fetch(PULSEEM_REST_SMS_REPORT, {
+      method: "POST",
+      headers: {
+        APIKEY: opts.apiKey,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        sendId: opts.sendId ?? null,
+        reference: opts.reference ?? null,
+        cellphone: opts.cellphone ?? null,
+      }),
+    });
+    const t = await res.text();
+    console.log(
+      "[auth-phone-otp] pulseem GetSMSReport status=",
+      res.status,
+      "body=",
+      t.slice(0, 1200),
+    );
+  } catch (e) {
+    console.warn("[auth-phone-otp] GetSMSReport failed:", (e as Error)?.message ?? e);
   }
 }
 
 /**
  * Sends via Pulseem REST API (requires DirectSmsCredits on the sub-account).
- * Auth: APIKey header with pulseem_api_key.
+ * Auth: **APIKEY** request header (same as pulseem-credit-transfer / pulseem-admin-credentials).
+ * Do not use "APIKey" alone — Pulseem may return HTTP 200 without enqueueing SMS.
  */
 async function sendPulseemViaRestApi(opts: {
   apiKey: string;
@@ -340,10 +412,11 @@ async function sendPulseemViaRestApi(opts: {
 }): Promise<void> {
   const to = normalizeSmsDestination(opts.toNumber);
   const ref = crypto.randomUUID().replace(/-/g, "").slice(0, 20);
+  const isAsync = pulseemRestIsAsync();
 
   const body = {
     sendId: ref,
-    isAsync: false,
+    isAsync,
     smsSendData: {
       fromNumber: opts.fromNumber,
       toNumberList: [to],
@@ -353,13 +426,21 @@ async function sendPulseemViaRestApi(opts: {
     },
   };
 
-  console.log("[auth-phone-otp] sending via Pulseem REST API, to=", to, "from=", opts.fromNumber);
+  console.log(
+    "[auth-phone-otp] sending via Pulseem REST API, to=",
+    to,
+    "from=",
+    opts.fromNumber,
+    "isAsync=",
+    isAsync,
+  );
 
   const res = await fetch(PULSEEM_REST, {
     method: "POST",
     headers: {
+      APIKEY: opts.apiKey,
       "Content-Type": "application/json",
-      "APIKey": opts.apiKey,
+      Accept: "application/json",
     },
     body: JSON.stringify(body),
   });
@@ -372,6 +453,19 @@ async function sendPulseemViaRestApi(opts: {
   }
 
   assertPulseemRestJsonSuccess(responseText);
+
+  try {
+    const parsed = JSON.parse(responseText.trim()) as Record<string, unknown>;
+    const sid = String(parsed.sendId ?? parsed.SendId ?? "").trim();
+    await pulseemLogSmsReportBestEffort({
+      apiKey: opts.apiKey,
+      sendId: sid || undefined,
+      reference: ref,
+      cellphone: to,
+    });
+  } catch {
+    /* ignore parse / report */
+  }
 
   console.log("[auth-phone-otp] pulseem REST ok, to=", to);
 }
@@ -1255,7 +1349,11 @@ serve(async (req) => {
       if (pulse.apiKey) {
         const restRes = await fetch("https://api.pulseem.com/api/v1/AccountsApi/GetCreditBalance", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "APIKey": pulse.apiKey },
+          headers: {
+            APIKEY: pulse.apiKey,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
           body: JSON.stringify({}),
         });
         restCredits = await restRes.text();

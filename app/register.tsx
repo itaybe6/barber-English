@@ -355,6 +355,15 @@ export default function RegisterScreen() {
         }
         return;
       }
+      if (res.warning === 'sender_same_as_recipient') {
+        Alert.alert(
+          t('register.otp.sameNumberAsSenderTitle', 'אותו מספר שולח ונמען'),
+          t(
+            'register.otp.sameNumberAsSenderMessage',
+            'ביקשת קוד למספר הטלפון של העסק (ממנו נשלחות הודעות ה-SMS). רשתות נייד לרוב חוסמות הודעה כשהשולח והנמען זהים. נסה ממספר אחר, או בקש מפולסים שולח ייעודי.',
+          ),
+        );
+      }
       // Fresh SMS round: drop any stale profile-completion session from a previous attempt
       setProfileSetupToken('');
       setPendingUserId(null);

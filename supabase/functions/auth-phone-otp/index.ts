@@ -5,13 +5,23 @@
  * pulseem_password / pulseem_api_key: decrypt with PULSEEM_FIELD_ENCRYPTION_KEY if stored as enc:v1:...
  * Needs: pulseem_user_id, pulseem_password, pulseem_from_number (or Edge secret override).
  *
- * Sender (Pulseem “FROM NUMBER”): alphanumeric name after carrier approval (e.g. EliyaMoshe).
- * Optional Edge secret PULSEEM_FROM_NUMBER — if set, overrides business_profile.pulseem_from_number
- * for this function only (same name as in Supabase Dashboard secrets).
+ * Sender resolution (first match wins):
+ *   PULSEEM_OTP_FROM_NUMBER — actual from string for OTP (and notification-push-sms if set).
+ *   PULSEEM_FROM_NUMBER — overrides business_profile.pulseem_from_number.
+ *   If pulseem_from_number is alphanumeric (letters) and no env override: business_profile.phone → 972…
+ *   Else business_profile.pulseem_from_number
  *
- * Direct REST API (SendSms + APIKey) often requires a different approved sender than ASMX.
- * Optional PULSEEM_REST_FROM_NUMBER — used only for REST sends (e.g. numeric sender tied to Direct).
- * If REST returns “sender name is not approved”, we automatically retry via ASMX with the main fromNumber.
+ * ASMX-only override (when DB is alphanumeric but ASMX still needs a numeric sender):
+ *   PULSEEM_ASMX_FROM_NUMBER
+ *
+ * REST-only override:
+ *   PULSEEM_REST_FROM_NUMBER (e.g. numeric on Direct API)
+ *
+ * If REST returns “sender name is not approved”, we retry ASMX using PULSEEM_OTP_FROM_NUMBER ||
+ * PULSEEM_ASMX_FROM_NUMBER || resolved main fromNumber.
+ *
+ * sender_same_as_recipient uses the actual from string sent to Pulseem (REST vs ASMX), not only
+ * pulse.fromNumber — otherwise PULSEEM_REST_FROM_NUMBER identical to the user’s phone yields OK with no warning.
  *
  * Pulseem decrypt helpers are inlined below so Dashboard / single-file bundles succeed.
  * Keep in sync with pulseem-admin-credentials/pulseemFieldCrypto.ts (same enc:v1: format).
@@ -123,7 +133,41 @@ function normalizeSmsDestination(raw: string): string {
   const d = phoneDigits(raw);
   if (d.startsWith("972")) return d;
   if (d.startsWith("0") && d.length >= 9 && d.length <= 11) return "972" + d.slice(1);
+  // 5XXXXXXXX (9 digits, no leading 0) — common user input; gateways expect 972…
+  if (d.length === 9 && /^5\d{8}$/.test(d)) return "972" + d;
   return d;
+}
+
+/**
+ * Alphanumeric pulseem_from_number (e.g. brand name) is often not linked yet in Pulseem REST/ASMX.
+ * When DB value contains letters and no PULSEEM_* from override is set, use business phone digits.
+ */
+function pulseemEffectiveFromNumber(
+  fromDb: string,
+  otpFrom: string,
+  fromSecret: string,
+  businessPhone: string | null | undefined,
+): string {
+  const envFrom = (otpFrom || fromSecret).trim();
+  if (envFrom) return envFrom;
+  const db = String(fromDb ?? "").trim();
+  if (!db) return "";
+  if (/[a-zA-Z]/.test(db)) {
+    const p = String(businessPhone ?? "").trim();
+    if (p) {
+      const d = normalizeSmsDestination(p);
+      if (d.length >= 10) return d;
+    }
+  }
+  return db;
+}
+
+/** When Pulseem "from" equals destination (972…), carriers often drop the SMS though the API returns OK. */
+function pulseemFromSameAsDestination(fromSender: string, toRaw: string): boolean {
+  const to = normalizeSmsDestination(toRaw);
+  if (to.length < 10) return false;
+  const fromNorm = normalizeSmsDestination(fromSender);
+  return fromNorm.length >= 10 && fromNorm === to;
 }
 
 function escapeXml(s: string): string {
@@ -240,6 +284,18 @@ async function sendPulseemViaRestApi(opts: {
       if (st === "error") {
         throw new Error(errMsg || "pulseem_rest_error");
       }
+      const succ = payload.success ?? payload.Success ?? payload.isSuccess ?? payload.IsSuccess;
+      if (succ === false) {
+        throw new Error(
+          String(
+            payload.message ??
+              payload.Message ??
+              payload.error ??
+              payload.Error ??
+              "pulseem_rest_rejected",
+          ),
+        );
+      }
     } catch (e) {
       if (e instanceof SyntaxError) {
         // non-JSON or truncated body — treat as ok if HTTP was 2xx
@@ -297,6 +353,15 @@ function pulseemRestFromNumber(mainFrom: string): string {
   return restOnly || mainFrom;
 }
 
+/** Sender used for ASMX SendSingleSMS (numeric fallback without changing DB). */
+function pulseemAsmxEffectiveFrom(mainFrom: string): string {
+  const otp = (Deno.env.get("PULSEEM_OTP_FROM_NUMBER") ?? "").trim();
+  const asmxOnly = (Deno.env.get("PULSEEM_ASMX_FROM_NUMBER") ?? "").trim();
+  if (otp) return otp;
+  if (asmxOnly) return asmxOnly;
+  return mainFrom;
+}
+
 function isPulseemSenderNotApprovedError(message: string): boolean {
   return /sender name is not approved|sender.*not approved|not approved.*sender/i.test(
     message,
@@ -306,7 +371,9 @@ function isPulseemSenderNotApprovedError(message: string): boolean {
 /**
  * Main send function — prefers REST API (DirectSmsCredits) when apiKey is available,
  * falls back to legacy ASMX (userID + password) otherwise.
- * REST uses PULSEEM_REST_FROM_NUMBER when set; on “sender not approved” we retry ASMX with main fromNumber.
+ * REST uses PULSEEM_REST_FROM_NUMBER when set; on “sender not approved” we retry ASMX with
+ * pulseemAsmxEffectiveFrom (numeric secrets without changing DB).
+ * Returns the fromNumber string actually passed to Pulseem on the path that succeeded.
  */
 async function sendPulseemSingleSms(opts: {
   userId: string;
@@ -315,7 +382,8 @@ async function sendPulseemSingleSms(opts: {
   toNumber: string;
   text: string;
   apiKey?: string;
-}): Promise<void> {
+}): Promise<{ fromUsed: string }> {
+  const asmxFrom = pulseemAsmxEffectiveFrom(opts.fromNumber);
   if (opts.apiKey) {
     const fromRest = pulseemRestFromNumber(opts.fromNumber);
     try {
@@ -325,34 +393,38 @@ async function sendPulseemSingleSms(opts: {
         toNumber: opts.toNumber,
         text: opts.text,
       });
-      return;
+      return { fromUsed: fromRest };
     } catch (e) {
       const msg = String((e as Error)?.message ?? e);
       if (isPulseemSenderNotApprovedError(msg)) {
         console.warn(
-          "[auth-phone-otp] Pulseem REST rejected sender; retrying ASMX. REST from was:",
+          "[auth-phone-otp] Pulseem REST rejected sender; retrying ASMX. REST from=",
           fromRest,
+          "ASMX from=",
+          asmxFrom,
           "msg:",
           msg.slice(0, 160),
         );
-        return sendPulseemViaAsmx({
+        await sendPulseemViaAsmx({
           userId: opts.userId,
           password: opts.password,
-          fromNumber: opts.fromNumber,
+          fromNumber: asmxFrom,
           toNumber: opts.toNumber,
           text: opts.text,
         });
+        return { fromUsed: asmxFrom };
       }
       throw e;
     }
   }
-  return sendPulseemViaAsmx({
+  await sendPulseemViaAsmx({
     userId: opts.userId,
     password: opts.password,
-    fromNumber: opts.fromNumber,
+    fromNumber: asmxFrom,
     toNumber: opts.toNumber,
     text: opts.text,
   });
+  return { fromUsed: asmxFrom };
 }
 
 async function findUserByPhoneFlexible(
@@ -394,7 +466,7 @@ async function loadPulseemCredentials(
   const { data: row, error } = await admin
     .from("business_profile")
     .select(
-      "id, pulseem_user_id, pulseem_password, pulseem_from_number, pulseem_api_key",
+      "id, phone, pulseem_user_id, pulseem_password, pulseem_from_number, pulseem_api_key",
     )
     .eq("id", businessId)
     .maybeSingle();
@@ -402,7 +474,13 @@ async function loadPulseemCredentials(
   const userId = (row.pulseem_user_id || "").trim();
   const fromDb = (row.pulseem_from_number || "").trim();
   const fromSecret = (Deno.env.get("PULSEEM_FROM_NUMBER") ?? "").trim();
-  const fromNumber = fromSecret || fromDb;
+  const otpFrom = (Deno.env.get("PULSEEM_OTP_FROM_NUMBER") ?? "").trim();
+  const fromNumber = pulseemEffectiveFromNumber(
+    fromDb,
+    otpFrom,
+    fromSecret,
+    row.phone,
+  );
   const encKey = (Deno.env.get("PULSEEM_FIELD_ENCRYPTION_KEY") ?? "").trim();
   let password: string;
   let apiKey: string;
@@ -759,8 +837,9 @@ serve(async (req) => {
       });
 
       const msg = `Your login code: ${code}`;
+      let pulseFromUsed: string;
       try {
-        await sendPulseemSingleSms({
+        const sent = await sendPulseemSingleSms({
           userId: pulse.userId,
           password: pulse.password,
           fromNumber: pulse.fromNumber,
@@ -768,6 +847,7 @@ serve(async (req) => {
           text: msg,
           apiKey: pulse.apiKey || undefined,
         });
+        pulseFromUsed = sent.fromUsed;
       } catch (e) {
         console.error("[auth-phone-otp] pulseem send", e);
         await admin.from("auth_phone_otp_challenges").delete().eq(
@@ -780,6 +860,12 @@ serve(async (req) => {
         );
       }
 
+      if (pulseemFromSameAsDestination(pulseFromUsed, phone.trim())) {
+        console.warn(
+          "[auth-phone-otp] sender equals recipient (normalized); SMS may not be delivered",
+        );
+        return json({ ok: true, warning: "sender_same_as_recipient" });
+      }
       return json({ ok: true });
     }
 
@@ -923,8 +1009,9 @@ serve(async (req) => {
       });
 
       const msg = `Your registration code: ${code}`;
+      let pulseFromUsed: string;
       try {
-        await sendPulseemSingleSms({
+        const sent = await sendPulseemSingleSms({
           userId: pulse.userId,
           password: pulse.password,
           fromNumber: pulse.fromNumber,
@@ -932,6 +1019,7 @@ serve(async (req) => {
           text: msg,
           apiKey: pulse.apiKey || undefined,
         });
+        pulseFromUsed = sent.fromUsed;
       } catch (e) {
         console.error("[auth-phone-otp] pulseem send", e);
         await admin.from("auth_phone_otp_challenges").delete().eq(
@@ -944,6 +1032,12 @@ serve(async (req) => {
         );
       }
 
+      if (pulseemFromSameAsDestination(pulseFromUsed, phone.trim())) {
+        console.warn(
+          "[auth-phone-otp] sender equals recipient (normalized); SMS may not be delivered",
+        );
+        return json({ ok: true, warning: "sender_same_as_recipient" });
+      }
       return json({ ok: true });
     }
 
@@ -1079,6 +1173,7 @@ serve(async (req) => {
         ok: true,
         pulseem_userId: pulse.userId,
         pulseem_fromNumber: pulse.fromNumber,
+        pulseem_asmxFromNumber: pulseemAsmxEffectiveFrom(pulse.fromNumber),
         pulseem_restFromNumber: pulse.apiKey
           ? pulseemRestFromNumber(pulse.fromNumber)
           : null,

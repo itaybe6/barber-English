@@ -9,6 +9,8 @@
  * notification_edge_invoke_jwt (service_role JWT). Optional: same URL via Dashboard Webhook
  * (do not enable both, or deliveries duplicate).
  * Requires same secrets as auth-phone-otp: SUPABASE_*, PULSEEM_FIELD_ENCRYPTION_KEY (if Pulseem fields encrypted).
+ * Sender secrets: PULSEEM_OTP_FROM_NUMBER, PULSEEM_FROM_NUMBER, PULSEEM_REST_FROM_NUMBER, PULSEEM_ASMX_FROM_NUMBER
+ * (same precedence / fallback as auth-phone-otp).
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -40,7 +42,28 @@ function normalizeSmsDestination(raw: string): string {
   const d = phoneDigits(raw);
   if (d.startsWith("972")) return d;
   if (d.startsWith("0") && d.length >= 9 && d.length <= 11) return "972" + d.slice(1);
+  if (d.length === 9 && /^5\d{8}$/.test(d)) return "972" + d;
   return d;
+}
+
+function pulseemEffectiveFromNumber(
+  fromDb: string,
+  otpFrom: string,
+  fromSecret: string,
+  businessPhone: string | null | undefined,
+): string {
+  const envFrom = (otpFrom || fromSecret).trim();
+  if (envFrom) return envFrom;
+  const db = String(fromDb ?? "").trim();
+  if (!db) return "";
+  if (/[a-zA-Z]/.test(db)) {
+    const p = String(businessPhone ?? "").trim();
+    if (p) {
+      const d = normalizeSmsDestination(p);
+      if (d.length >= 10) return d;
+    }
+  }
+  return db;
 }
 
 function parsePulseemSendSingleResult(
@@ -107,6 +130,18 @@ async function sendPulseemViaRestApi(opts: {
       const st = String(payload.status ?? payload.Status ?? "").toLowerCase();
       const errMsg = String(payload.error ?? payload.Error ?? "").trim();
       if (st === "error") throw new Error(errMsg || "pulseem_rest_error");
+      const succ = payload.success ?? payload.Success ?? payload.isSuccess ?? payload.IsSuccess;
+      if (succ === false) {
+        throw new Error(
+          String(
+            payload.message ??
+              payload.Message ??
+              payload.error ??
+              payload.Error ??
+              "pulseem_rest_rejected",
+          ),
+        );
+      }
     } catch (e) {
       if (!(e instanceof SyntaxError)) throw e;
     }
@@ -137,6 +172,25 @@ async function sendPulseemViaAsmx(opts: {
   if (!parsed.ok) throw new Error(parsed.reason);
 }
 
+function pulseemRestFromNumber(mainFrom: string): string {
+  const restOnly = (Deno.env.get("PULSEEM_REST_FROM_NUMBER") ?? "").trim();
+  return restOnly || mainFrom;
+}
+
+function pulseemAsmxEffectiveFrom(mainFrom: string): string {
+  const otp = (Deno.env.get("PULSEEM_OTP_FROM_NUMBER") ?? "").trim();
+  const asmxOnly = (Deno.env.get("PULSEEM_ASMX_FROM_NUMBER") ?? "").trim();
+  if (otp) return otp;
+  if (asmxOnly) return asmxOnly;
+  return mainFrom;
+}
+
+function isPulseemSenderNotApprovedError(message: string): boolean {
+  return /sender name is not approved|sender.*not approved|not approved.*sender/i.test(
+    message,
+  );
+}
+
 async function sendPulseemSingleSms(opts: {
   userId: string;
   password: string;
@@ -145,18 +199,41 @@ async function sendPulseemSingleSms(opts: {
   text: string;
   apiKey?: string;
 }): Promise<void> {
+  const asmxFrom = pulseemAsmxEffectiveFrom(opts.fromNumber);
   if (opts.apiKey) {
-    return sendPulseemViaRestApi({
-      apiKey: opts.apiKey,
-      fromNumber: opts.fromNumber,
-      toNumber: opts.toNumber,
-      text: opts.text,
-    });
+    const fromRest = pulseemRestFromNumber(opts.fromNumber);
+    try {
+      await sendPulseemViaRestApi({
+        apiKey: opts.apiKey,
+        fromNumber: fromRest,
+        toNumber: opts.toNumber,
+        text: opts.text,
+      });
+      return;
+    } catch (e) {
+      const msg = String((e as Error)?.message ?? e);
+      if (isPulseemSenderNotApprovedError(msg)) {
+        console.warn(
+          "[notification-push-sms] Pulseem REST sender rejected; ASMX retry. REST from=",
+          fromRest,
+          "ASMX from=",
+          asmxFrom,
+        );
+        return sendPulseemViaAsmx({
+          userId: opts.userId,
+          password: opts.password,
+          fromNumber: asmxFrom,
+          toNumber: opts.toNumber,
+          text: opts.text,
+        });
+      }
+      throw e;
+    }
   }
   return sendPulseemViaAsmx({
     userId: opts.userId,
     password: opts.password,
-    fromNumber: opts.fromNumber,
+    fromNumber: asmxFrom,
     toNumber: opts.toNumber,
     text: opts.text,
   });
@@ -169,13 +246,21 @@ async function loadPulseemCredentials(
   const { data: row, error } = await admin
     .from("business_profile")
     .select(
-      "id, pulseem_user_id, pulseem_password, pulseem_from_number, pulseem_api_key",
+      "id, phone, pulseem_user_id, pulseem_password, pulseem_from_number, pulseem_api_key",
     )
     .eq("id", businessId)
     .maybeSingle();
   if (error || !row) return { error: "business_not_found" as const };
   const userId = (row.pulseem_user_id || "").trim();
-  const fromNumber = (row.pulseem_from_number || "").trim();
+  const fromDb = (row.pulseem_from_number || "").trim();
+  const fromSecret = (Deno.env.get("PULSEEM_FROM_NUMBER") ?? "").trim();
+  const otpFrom = (Deno.env.get("PULSEEM_OTP_FROM_NUMBER") ?? "").trim();
+  const fromNumber = pulseemEffectiveFromNumber(
+    fromDb,
+    otpFrom,
+    fromSecret,
+    row.phone,
+  );
   const encKey = (Deno.env.get("PULSEEM_FIELD_ENCRYPTION_KEY") ?? "").trim();
   let password: string;
   let apiKey: string;

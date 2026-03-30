@@ -272,6 +272,15 @@ export default function LoginScreen() {
         }
         return;
       }
+      if (res.warning === 'sender_same_as_recipient') {
+        Alert.alert(
+          t('login.otp.sameNumberAsSenderTitle', 'אותו מספר שולח ונמען'),
+          t(
+            'login.otp.sameNumberAsSenderMessage',
+            'ביקשת קוד למספר הטלפון של העסק (ממנו נשלחות הודעות ה-SMS). רשתות נייד לרוב חוסמות הודעה כשהשולח והנמען זהים. נסה ממספר אחר, או בקש מפולסים שולח ייעודי.',
+          ),
+        );
+      }
       setLoginSmsToast(null);
       router.push({
         pathname: '/login-otp',

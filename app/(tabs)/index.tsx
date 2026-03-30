@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Platform, Modal, ActivityIndicator, TextInput, FlatList, Alert, Linking, RefreshControl, Dimensions } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Platform, Modal, ActivityIndicator, TextInput, FlatList, Alert, Linking, RefreshControl, Dimensions, I18nManager } from 'react-native';
+import Animated, { useSharedValue, useAnimatedScrollHandler, runOnJS } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -13,10 +13,9 @@ import { clients } from '@/constants/clients';
 import { supabase } from '@/lib/supabase';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import Card from '@/components/Card';
-import { Calendar, Clock, ChevronLeft, ChevronRight, Star, Images, Store } from 'lucide-react-native';
+import { Calendar, Clock, ChevronLeft, ChevronRight, Star, Pencil } from 'lucide-react-native';
 import DaySelector from '@/components/DaySelector';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { ScrollView as RNScrollView } from 'react-native';
 import { MaterialCommunityIcons, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import AdminBroadcastComposer from '@/components/AdminBroadcastComposer';
@@ -43,37 +42,36 @@ import { ManicureMarqueeTile } from '@/components/ManicureMarqueeTile';
 import MonthlyInsightsCard from '@/components/MonthlyInsightsCard';
 import { PendingClientApprovalsCard, PendingClientApprovalsCardHandle } from '@/components/admin/PendingClientApprovalsCard';
 import { clientAppointmentStatsApi } from '@/lib/api/clientAppointmentStats';
-import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
-
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-/** Top band above marquee — matches `DailySchedule` today banner tone (+ room for glass action chips) */
+/** Top band above marquee — semi-transparent scrim for logo contrast over marquee */
 const HERO_TOP_SCHEDULE_BAND_HEIGHT = 105;
-/** Push marquee tiles down so they sit clearer under the schedule-tone band */
-const HERO_MARQUEE_TRANSLATE_Y = 89;
+/** Marquee starts flush from top (under status bar) — scrim + logo sit on top */
+const HERO_MARQUEE_TRANSLATE_Y = 0;
 /** Bottom corner radius of the hero schedule band (matches DailySchedule banner feel) */
 const HERO_TOP_SCHEDULE_BAND_BOTTOM_RADIUS = 24;
-
-function darkenHex(hex: string, ratio: number): string {
-  const h = hex.replace('#', '');
-  if (h.length !== 6) return hex;
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  const f = 1 - ratio;
-  const to = (n: number) => Math.round(Math.max(0, Math.min(255, n * f))).toString(16).padStart(2, '0');
-  return `#${to(r)}${to(g)}${to(b)}`;
-}
-/** Tile size: balance ~3 visible marquee rows vs. sheet overlap */
-const HERO_ITEM_SIZE = Platform.OS === 'web' ? SCREEN_WIDTH * 0.26 : SCREEN_WIDTH * 0.36;
+/** Tile size — smaller tiles so the grid feels less “zoomed in” */
+const HERO_ITEM_SIZE = Platform.OS === 'web' ? SCREEN_WIDTH * 0.255 : SCREEN_WIDTH * 0.35;
 const HERO_SPACING = Platform.OS === 'web' ? 12 : 6;
-const HERO_BG = '#FFFFFF';
-const HERO_HEIGHT = Math.round(SCREEN_HEIGHT * 0.68);
-const HERO_OVERLAP = 100; // how far the white sheet overlaps the hero
+/** Logical hero height (scroll padding / snap math) */
+const HERO_HEIGHT = Math.round(SCREEN_HEIGHT * 0.82);
+/** Taller marquee layer so tiles can extend under the white sheet (z-index below sheet) */
+const HERO_MARQUEE_BOTTOM_BLEED = Math.round(SCREEN_HEIGHT * 0.135);
+const HERO_MARQUEE_HOST_HEIGHT = HERO_HEIGHT + HERO_MARQUEE_BOTTOM_BLEED;
+/** How much the white sheet overlaps the hero (larger = sheet sits higher, hides wedge gap) */
+const HERO_OVERLAP = 214;
+/** Extra pull: negative margin so the sheet covers the tilted marquee’s lower wedge */
+const HERO_SHEET_PULL_UP = 64;
+/** Subtle tilt + scale; nudge pushes grid down into the bleed zone under the sheet */
+const MARQUEE_TILT_Z = I18nManager.isRTL ? '3.2deg' : '-3.2deg';
+const MARQUEE_PLANE_SCALE = 1.075;
+const MARQUEE_POST_TRANSFORM_NUDGE_Y = 48;
 /** Logo overlay (align with `overlayLogoWrapper` top + `overlayLogoInner` height) */
 const ADMIN_HOME_LOGO_TOP_OFFSET = -15;
 const ADMIN_HOME_LOGO_HEIGHT = 78;
 const ADMIN_HOME_LOGO_WIDTH = 200;
-
+const OUTER_INNER_HANDOFF_ON_PX = 4;
+/** Wider band reduces handoff flutter when flinging the sheet down */
+const OUTER_INNER_HANDOFF_OFF_PX = 36;
 function chunkArray<T>(array: T[], size: number): T[][] {
   const chunked: T[][] = [];
   let index = 0;
@@ -87,10 +85,10 @@ function chunkArray<T>(array: T[], size: number): T[][] {
 
 const manicureHeroRootStyle = {
   position: 'absolute' as const,
-  left: -SCREEN_WIDTH * 0.1,
-  right: -SCREEN_WIDTH * 0.1,
-  top: 0,
-  bottom: 0,
+  left: -SCREEN_WIDTH * 0.18,
+  right: -SCREEN_WIDTH * 0.18,
+  top: -SCREEN_HEIGHT * 0.02,
+  bottom: -SCREEN_HEIGHT * 0.07,
   overflow: 'hidden' as const,
 };
 
@@ -106,7 +104,12 @@ const ManicureMarqueeHero = React.memo(({ images }: { images: string[] }) => {
         style={{
           flex: 1,
           gap: HERO_SPACING,
-          transform: [{ translateY: HERO_MARQUEE_TRANSLATE_Y }],
+          transform: [
+            { perspective: 1000 },
+            { rotateZ: MARQUEE_TILT_Z },
+            { scale: MARQUEE_PLANE_SCALE },
+            { translateY: HERO_MARQUEE_TRANSLATE_Y + MARQUEE_POST_TRANSFORM_NUDGE_Y },
+          ],
         }}
         pointerEvents="auto"
       >
@@ -178,6 +181,8 @@ export default function HomeScreen() {
   const fetchUnread = useNotificationsStore((state) => state.fetchUnreadCount);
   const colors = useColors();
   const styles = createStyles(colors);
+  /** Section headers: Hebrew titles flush right, edit control on the opposite side (LTR physical layout). */
+  const adminSectionTitleOnRight = Boolean(i18n.language?.startsWith('he'));
 
   const [heroImages, setHeroImages] = useState<string[] | null>(null);
 
@@ -280,7 +285,28 @@ export default function HomeScreen() {
   const [innerScrollEnabled, setInnerScrollEnabled] = useState(false);
   const innerScrollEnabledRef = useRef(false);
   const innerScrollRef = useRef<ScrollView>(null);
-  const maxOuterScroll = HERO_HEIGHT - HERO_OVERLAP - insets.top - 60;
+  /** SharedValue cap so the animated scroll handler (UI thread) can access it */
+  const outerScrollCapSV = useSharedValue(0);
+  const outerScrollLayoutHRef = useRef(0);
+  const outerScrollContentHRef = useRef(0);
+  const applyOuterScrollCap = useCallback(() => {
+    const lh = outerScrollLayoutHRef.current;
+    const ch = outerScrollContentHRef.current;
+    if (lh > 0 && ch > lh + 1) {
+      outerScrollCapSV.value = ch - lh;
+    } else {
+      outerScrollCapSV.value = Math.max(
+        0,
+        HERO_HEIGHT - HERO_OVERLAP - insets.top - 60 - HERO_SHEET_PULL_UP
+      );
+    }
+  }, [insets.top, outerScrollCapSV]);
+  useEffect(() => {
+    outerScrollCapSV.value = Math.max(
+      0,
+      HERO_HEIGHT - HERO_OVERLAP - insets.top - 60 - HERO_SHEET_PULL_UP
+    );
+  }, [insets.top, outerScrollCapSV]);
   const [blockedFilter, setBlockedFilter] = useState<'all' | 'blocked' | 'unblocked'>('all');
   const [clientStatsMap, setClientStatsMap] = useState<
     Record<string, { totalAppointments: number; avgMonthlySpend: number | null }>
@@ -290,11 +316,50 @@ export default function HomeScreen() {
   const pendingCardRef = React.useRef<PendingClientApprovalsCardHandle>(null);
   const [waitlistWaitingCount, setWaitlistWaitingCount] = useState(0);
 
-  /** Keeps the hero marquee visually fixed while it lives inside the outer ScrollView (enables pan gestures). */
-  const outerScrollY = useSharedValue(0);
-  const heroMarqueeCompensateStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: outerScrollY.value }],
-  }));
+  /** SharedValue tracks inner-scroll state so the UI-thread worklet can read it without crossing to JS */
+  const innerActiveSV = useSharedValue(0);
+
+  const enableInnerScrollJS = useCallback(
+    (enabled: boolean) => {
+      innerScrollEnabledRef.current = enabled;
+      setInnerScrollEnabled(enabled);
+      if (!enabled) {
+        const resetInner = () => innerScrollRef.current?.scrollTo({ y: 0, animated: false });
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(resetInner);
+          });
+        } else {
+          resetInner();
+        }
+      }
+    },
+    []
+  );
+
+  /** Only coordinates outer ↔ inner scroll handoff — hero marquee is a fixed layer, not driven by scroll */
+  const outerScrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      'worklet';
+      const y = event.contentOffset.y;
+      const cap = outerScrollCapSV.value;
+      const wasInner = innerActiveSV.value === 1;
+      let nextInner = wasInner;
+      if (cap > 0) {
+        if (wasInner) {
+          nextInner = y > cap - OUTER_INNER_HANDOFF_OFF_PX;
+        } else {
+          nextInner = y >= cap - OUTER_INNER_HANDOFF_ON_PX;
+        }
+      } else {
+        nextInner = false;
+      }
+      if (nextInner !== wasInner) {
+        innerActiveSV.value = nextInner ? 1 : 0;
+        runOnJS(enableInnerScrollJS)(nextInner);
+      }
+    },
+  });
 
   const formatClientMoney = useCallback(
     (amount: number) => {
@@ -834,40 +899,39 @@ export default function HomeScreen() {
         />
       </View>
 
-      {/* Content ScrollView — marquee is first child + translateY(scroll) so it stays fixed and pan gestures work */}
-      <ScrollView
-        style={{ flex: 1 }}
+      {/* Fixed hero marquee — not a child of the sheet ScrollView; sheet slides over it, zero scroll coupling */}
+      <View style={styles.adminHeroMarqueeHost} pointerEvents="none" collapsable={false}>
+        <ManicureMarqueeHero images={heroImagesResolved} />
+      </View>
+
+      {/* Sheet + outer scroll only moves the white panel; background stays visually independent */}
+      <Animated.ScrollView
+        style={{ flex: 1, zIndex: 2, backgroundColor: 'transparent' }}
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled
+        bounces={false}
+        overScrollMode="never"
         pointerEvents="box-none"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         contentContainerStyle={{ paddingTop: HERO_HEIGHT - HERO_OVERLAP }}
-        scrollEventThrottle={16}
-        onScroll={(e) => {
-          const y = e.nativeEvent.contentOffset.y;
-          outerScrollY.value = y;
-          const atTop = y >= maxOuterScroll - 4;
-          if (atTop !== innerScrollEnabledRef.current) {
-            innerScrollEnabledRef.current = atTop;
-            setInnerScrollEnabled(atTop);
-            if (!atTop) {
-              innerScrollRef.current?.scrollTo({ y: 0, animated: false });
-            }
-          }
+        scrollEventThrottle={1}
+        onLayout={(e) => {
+          outerScrollLayoutHRef.current = e.nativeEvent.layout.height;
+          applyOuterScrollCap();
         }}
+        onContentSizeChange={(_w, h) => {
+          outerScrollContentHRef.current = h;
+          applyOuterScrollCap();
+        }}
+        onScroll={outerScrollHandler}
       >
-        <Animated.View
-          style={[
-            styles.adminHeroMarqueeHost,
-            heroMarqueeCompensateStyle,
-          ]}
-          pointerEvents="box-none"
-          collapsable={false}
-        >
-          <ManicureMarqueeHero images={heroImagesResolved} />
-        </Animated.View>
         {/* Content wrapper — fixed height so outer scroll stops below header */}
-        <View style={[styles.contentWrapper, { height: SCREEN_HEIGHT - insets.top - 60 }]}>
+        <View
+          style={[
+            styles.contentWrapper,
+            { height: SCREEN_HEIGHT - insets.top - 60, marginTop: -HERO_SHEET_PULL_UP },
+          ]}
+        >
           {/* Drag handle indicator */}
           <View style={styles.dragHandle} />
           {/* Subtle top-edge shadow line for separation */}
@@ -908,22 +972,29 @@ export default function HomeScreen() {
           onCountChange={setPendingClientsCount}
         />
 
-        {/* ── Quick: gallery · broadcast · products + waitlist ── */}
+        {/* ── Quick: pending clients · broadcast · notifications + waitlist (gallery/products via section headers) ── */}
         {isAdmin && (
           <View style={styles.quickTilesGrid}>
             <View style={styles.quickTilesRow}>
               <TouchableOpacity
                 style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
                 activeOpacity={0.82}
-                onPress={() => router.push('/(tabs)/edit-gallery')}
+                onPress={() => pendingCardRef.current?.open()}
                 accessibilityRole="button"
-                accessibilityLabel={t('admin.gallery.edit', 'עריכת גלריה')}
+                accessibilityLabel={t('admin.pendingClients.bannerA11y')}
               >
                 <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
-                  <Images size={22} color={colors.primary} strokeWidth={2.35} />
+                  <Ionicons name="person-add-outline" size={24} color={colors.primary} />
+                  {pendingClientsCount > 0 ? (
+                    <View style={[styles.quickTileBadge, { backgroundColor: '#EF4444' }]}>
+                      <Text style={styles.quickTileBadgeText}>
+                        {pendingClientsCount > 99 ? '99+' : pendingClientsCount}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
                 <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
-                  {t('admin.gallery.edit', 'עריכת גלריה')}
+                  {t('admin.pendingClients.bannerTitle')}
                 </Text>
               </TouchableOpacity>
 
@@ -944,15 +1015,22 @@ export default function HomeScreen() {
               <TouchableOpacity
                 style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
                 activeOpacity={0.82}
-                onPress={() => router.push('/(tabs)/edit-products')}
+                onPress={() => router.push('/(tabs)/notifications')}
                 accessibilityRole="button"
-                accessibilityLabel={t('admin.products.homeEdit', 'עריכת מוצרים')}
+                accessibilityLabel={t('notifications.title', 'Notifications')}
               >
                 <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
-                  <Store size={22} color={colors.primary} strokeWidth={2.35} />
+                  <Ionicons name="notifications-outline" size={24} color={colors.primary} />
+                  {unreadCount > 0 ? (
+                    <View style={[styles.quickTileBadge, { backgroundColor: '#EF4444' }]}>
+                      <Text style={styles.quickTileBadgeText}>
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
                 <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
-                  {t('admin.products.homeEdit', 'עריכת מוצרים')}
+                  {t('notifications.title', 'Notifications')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1019,9 +1097,59 @@ export default function HomeScreen() {
           <View style={styles.galleryCard}>
             {(designsFromStore?.length ?? 0) > 0 ? (
               <View style={styles.galleryCardHeader}>
-                <Text style={[styles.galleryCardTitle, { color: colors.text }]}>
-                  {t('admin.gallery.title', 'גלרייה')}
-                </Text>
+                {adminSectionTitleOnRight ? (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.galleryEditBtn, { backgroundColor: `${colors.primary}18`, flexShrink: 0 }]}
+                      activeOpacity={0.82}
+                      onPress={() => router.push('/(tabs)/edit-gallery')}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('admin.gallery.homeSectionEditA11y', 'עריכת גלריה')}
+                    >
+                      <View style={[styles.galleryEditIconWrap, { backgroundColor: `${colors.primary}24` }]}>
+                        <Pencil size={15} color={colors.primary} strokeWidth={2.4} />
+                      </View>
+                      <Text style={[styles.galleryEditBtnText, { color: colors.primary }]}>
+                        {t('admin.gallery.homeSectionEdit', 'עריכה')}
+                      </Text>
+                    </TouchableOpacity>
+                    <Text
+                      style={[
+                        styles.galleryCardTitle,
+                        { color: colors.text, flex: 1, flexShrink: 1, textAlign: 'right' },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {t('admin.gallery.title', 'גלרייה')}
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Text
+                      style={[
+                        styles.galleryCardTitle,
+                        { color: colors.text, flex: 1, flexShrink: 1, textAlign: 'left' },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {t('admin.gallery.title', 'גלרייה')}
+                    </Text>
+                    <TouchableOpacity
+                      style={[styles.galleryEditBtn, { backgroundColor: `${colors.primary}18`, flexShrink: 0 }]}
+                      activeOpacity={0.82}
+                      onPress={() => router.push('/(tabs)/edit-gallery')}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('admin.gallery.homeSectionEditA11y', 'עריכת גלריה')}
+                    >
+                      <View style={[styles.galleryEditIconWrap, { backgroundColor: `${colors.primary}24` }]}>
+                        <Pencil size={15} color={colors.primary} strokeWidth={2.4} />
+                      </View>
+                      <Text style={[styles.galleryEditBtnText, { color: colors.primary }]}>
+                        {t('admin.gallery.homeSectionEdit', 'עריכה')}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
             ) : null}
             {isLoadingDesigns ? (
@@ -1059,9 +1187,59 @@ export default function HomeScreen() {
           <View style={styles.galleryCard}>
             {(productsFromStore?.length ?? 0) > 0 ? (
               <View style={styles.galleryCardHeader}>
-                <Text style={[styles.galleryCardTitle, { color: colors.text }]}>
-                  {t('admin.products.homeTitle', 'מוצרים')}
-                </Text>
+                {adminSectionTitleOnRight ? (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.galleryEditBtn, { backgroundColor: `${colors.primary}18`, flexShrink: 0 }]}
+                      activeOpacity={0.82}
+                      onPress={() => router.push('/(tabs)/edit-products')}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('admin.products.homeSectionEditA11y', 'עריכת מוצרים')}
+                    >
+                      <View style={[styles.galleryEditIconWrap, { backgroundColor: `${colors.primary}24` }]}>
+                        <Pencil size={15} color={colors.primary} strokeWidth={2.4} />
+                      </View>
+                      <Text style={[styles.galleryEditBtnText, { color: colors.primary }]}>
+                        {t('admin.products.homeSectionEdit', 'עריכה')}
+                      </Text>
+                    </TouchableOpacity>
+                    <Text
+                      style={[
+                        styles.galleryCardTitle,
+                        { color: colors.text, flex: 1, flexShrink: 1, textAlign: 'right' },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {t('admin.products.homeTitle', 'מוצרים')}
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Text
+                      style={[
+                        styles.galleryCardTitle,
+                        { color: colors.text, flex: 1, flexShrink: 1, textAlign: 'left' },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {t('admin.products.homeTitle', 'מוצרים')}
+                    </Text>
+                    <TouchableOpacity
+                      style={[styles.galleryEditBtn, { backgroundColor: `${colors.primary}18`, flexShrink: 0 }]}
+                      activeOpacity={0.82}
+                      onPress={() => router.push('/(tabs)/edit-products')}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('admin.products.homeSectionEditA11y', 'עריכת מוצרים')}
+                    >
+                      <View style={[styles.galleryEditIconWrap, { backgroundColor: `${colors.primary}24` }]}>
+                        <Pencil size={15} color={colors.primary} strokeWidth={2.4} />
+                      </View>
+                      <Text style={[styles.galleryEditBtnText, { color: colors.primary }]}>
+                        {t('admin.products.homeSectionEdit', 'עריכה')}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
             ) : null}
             {isLoadingProducts ? (
@@ -1154,9 +1332,9 @@ export default function HomeScreen() {
             </View>
           </ScrollView>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
-      {/* Top schedule-tone band + glass chips (notifications L, pending clients R — LTR physical sides) */}
+      {/* Top scrim over marquee — semi-transparent gradient so the white logo reads clearly */}
       <View
         pointerEvents="box-none"
         style={[
@@ -1168,81 +1346,14 @@ export default function HomeScreen() {
           },
         ]}
       >
-        <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
-          <LinearGradient
-            colors={[colors.primary, `${colors.primary}CC`]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFillObject}
-          />
-          {Platform.OS !== 'web' ? (
-            <BrandLavaLampBackground
-              primaryColor={colors.primary}
-              baseColor={darkenHex(colors.primary, 0.22)}
-              layoutWidth={SCREEN_WIDTH}
-              layoutHeight={HERO_TOP_SCHEDULE_BAND_HEIGHT}
-              count={4}
-              duration={10500}
-              blurIntensity={28}
-            />
-          ) : null}
-        </View>
-
-        {isAdmin ? (
-          <View style={styles.heroBandGlassRow} pointerEvents="box-none">
-            <TouchableOpacity
-              style={styles.heroBandGlassTouchable}
-              activeOpacity={0.88}
-              onPress={() => router.push('/(tabs)/notifications')}
-              accessibilityRole="button"
-              accessibilityLabel={t('notifications.title', 'Notifications')}
-            >
-              {Platform.OS === 'web' ? (
-                <View style={[styles.heroBandGlassBlurFill, { backgroundColor: 'rgba(255,255,255,0.32)' }]} />
-              ) : (
-                <BlurView intensity={42} tint="light" style={styles.heroBandGlassBlurFill} />
-              )}
-              <View style={styles.heroBandGlassInner}>
-                <View style={styles.heroBandGlassIconSlot}>
-                  <Ionicons name="notifications-outline" size={22} color="#FFFFFF" />
-                  {unreadCount > 0 ? (
-                    <View style={styles.heroBandGlassBadge}>
-                      <Text style={styles.heroBandGlassBadgeText}>
-                        {unreadCount > 99 ? '99+' : unreadCount}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.heroBandGlassTouchable}
-              activeOpacity={0.88}
-              onPress={() => pendingCardRef.current?.open()}
-              accessibilityRole="button"
-              accessibilityLabel={t('admin.pendingClients.bannerA11y')}
-            >
-              {Platform.OS === 'web' ? (
-                <View style={[styles.heroBandGlassBlurFill, { backgroundColor: 'rgba(255,255,255,0.32)' }]} />
-              ) : (
-                <BlurView intensity={42} tint="light" style={styles.heroBandGlassBlurFill} />
-              )}
-              <View style={styles.heroBandGlassInner}>
-                <View style={styles.heroBandGlassIconSlot}>
-                  <Ionicons name="person-add-outline" size={22} color="#FFFFFF" />
-                  {pendingClientsCount > 0 ? (
-                    <View style={styles.heroBandGlassBadge}>
-                      <Text style={styles.heroBandGlassBadgeText}>
-                        {pendingClientsCount > 99 ? '99+' : pendingClientsCount}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-              </View>
-            </TouchableOpacity>
-          </View>
-        ) : null}
+        <LinearGradient
+          pointerEvents="none"
+          colors={['rgba(15, 23, 42, 0.5)', 'rgba(15, 23, 42, 0.22)', 'rgba(15, 23, 42, 0)']}
+          locations={[0, 0.48, 1]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
       </View>
 
       {/* Overlay Header - always on top of scroll */}
@@ -1484,14 +1595,14 @@ const createStyles = (colors: any) => StyleSheet.create({
     shadowRadius: 24,
     elevation: 18,
   },
-  /** Marquee inside outer ScrollView; translateY offsets scroll so tiles stay pinned under the status area */
+  /** Fixed behind the sheet (sibling under ScrollView z-index); never translated by scroll */
   adminHeroMarqueeHost: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: HERO_HEIGHT,
-    zIndex: 2,
+    height: HERO_MARQUEE_HOST_HEIGHT,
+    zIndex: 1,
     overflow: 'hidden',
   },
   dragHandle: {
@@ -1727,9 +1838,12 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   galleryCardHeader: {
     flexDirection: 'row',
+    direction: 'ltr',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
+    width: '100%',
+    alignSelf: 'stretch',
   },
   galleryCardTitle: {
     fontSize: 18,
@@ -1918,15 +2032,15 @@ const createStyles = (colors: any) => StyleSheet.create({
     marginTop: 2,
     textAlign: 'right',
   },
-  // Hero styles (aligned with client home)
+  // Hero styles (aligned with client home) — transparent so marquee shows through any edge
   fullScreenHero: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: HERO_HEIGHT,
+    height: HERO_MARQUEE_HOST_HEIGHT,
     zIndex: 0,
-    backgroundColor: HERO_BG,
+    backgroundColor: 'transparent',
   },
   fullScreenHeroImage: {
     width: '100%',
@@ -1948,70 +2062,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     zIndex: 3,
     overflow: 'hidden',
     borderCurve: 'continuous',
-  },
-  /** LTR: physical left = notifications, physical right = pending clients */
-  heroBandGlassRow: {
-    position: 'absolute',
-    left: 10,
-    right: 10,
-    bottom: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 8,
-    zIndex: 2,
-    ...({ direction: 'ltr' } as const),
-  },
-  heroBandGlassTouchable: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth * 2,
-    borderColor: 'rgba(255,255,255,0.52)',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.14,
-        shadowRadius: 8,
-      },
-      android: { elevation: 4 },
-    }),
-  },
-  heroBandGlassBlurFill: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  heroBandGlassInner: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heroBandGlassIconSlot: {
-    position: 'relative',
-    width: 26,
-    height: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heroBandGlassBadge: {
-    position: 'absolute',
-    top: -7,
-    right: -12,
-    minWidth: 18,
-    height: 18,
-    paddingHorizontal: 4,
-    borderRadius: 9,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth * 2,
-    borderColor: 'rgba(255,255,255,0.95)',
-  },
-  heroBandGlassBadgeText: {
-    color: '#0F172A',
-    fontSize: 9,
-    fontWeight: '800',
   },
   overlayHeader: {
     position: 'absolute',

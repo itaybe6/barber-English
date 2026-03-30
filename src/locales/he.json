@@ -165,6 +165,8 @@
   "admin.gallery.homeEmptyTitle": "עדיין אין תמונות בגלריה",
   "admin.gallery.homeEmptySubtitle": "הוסיפו תמונות כדי שהלקוחות יראו את העבודות שלכם — לחצו על הכפתור למטה.",
   "admin.gallery.homeEmptyCta": "הוספת תמונות לגלריה",
+  "admin.gallery.homeSectionEdit": "עריכה",
+  "admin.gallery.homeSectionEditA11y": "עריכת גלריה",
   "admin.gallery.tabAddDesign": "הוספת עיצוב",
   "admin.gallery.tabEditDesign": "עריכת עיצוב",
   "admin.gallery.tabDeleteMode": "מצב מחיקה — לחצו על הפח בכרטיס",
@@ -204,6 +206,8 @@
   "admin.tab.store": "חנות",
   "admin.products.subtitle": "נהל את רשימת המוצרים והמחירים שלך",
   "admin.products.homeTitle": "מוצרים",
+  "admin.products.homeSectionEdit": "עריכה",
+  "admin.products.homeSectionEditA11y": "עריכת מוצרים",
   "admin.products.homeEdit": "עריכת מוצרים",
   "admin.products.homeEmptyTitle": "עדיין אין מוצרים בחנות",
   "admin.products.homeEmptySubtitle": "הוסיפו מוצרים כדי שהלקוחות יראו את המבצעים שלכם.",
@@ -867,7 +871,7 @@
       "notificationsUnreadLine_one": "יש לך התראה אחת שלא נקראה",
       "notificationsUnreadLine_other": "יש לך {{count}} התראות שלא נקראו",
       "notificationsAllClear": "אין התראות חדשות",
-      "broadcastTile": "התראה לכל הלקוחות"
+      "broadcastTile": "הודעת שידור"
     },
     "broadcastComposer": {
       "triggerLabel": "התראה לכל הלקוחות",

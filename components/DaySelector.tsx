@@ -16,6 +16,13 @@ const DAY_CELL_WIDTH = 52;
 const DAY_CELL_GAP = 6;
 const ITEM_STRIDE = DAY_CELL_WIDTH + DAY_CELL_GAP * 2;
 
+/** יום שחסום לחלוטין באילוצים (מול שעות עבודה) */
+const FULL_BLOCK_BG = '#FEE2E2';
+const FULL_BLOCK_BORDER = '#F87171';
+const FULL_BLOCK_TEXT = '#991B1B';
+const FULL_BLOCK_SELECTED_BG = '#DC2626';
+const FULL_BLOCK_SELECTED_SHADOW = '#B91C1C';
+
 interface DaySelectorProps {
   selectedDate: Date;
   onSelectDate: (date: Date) => void;
@@ -25,6 +32,8 @@ interface DaySelectorProps {
   startFromToday?: boolean;
   /** רקע מיכל השורה — ברירת מחדל שקוף כדי להתמזג עם רקע המסך (למשל יומן אדמין) */
   containerBackgroundColor?: string;
+  /** תאריכים (YYYY-MM-DD) שבהם אילוץ מכסה את כל שעות העבודה — הדגשה באדום */
+  fullyBlockedDateKeys?: Set<string> | string[];
 }
 
 export default function DaySelector({
@@ -35,9 +44,10 @@ export default function DaySelector({
   markedDates,
   startFromToday = false,
   containerBackgroundColor = 'transparent',
+  fullyBlockedDateKeys,
 }: DaySelectorProps) {
   const colors = useColors();
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   const [dates, setDates] = useState<Date[]>([]);
   const scrollRef = useRef<ScrollView | null>(null);
   const didInitialAutoScrollRef = useRef(false);
@@ -100,6 +110,12 @@ export default function DaySelector({
     if (Array.isArray(markedDates)) return new Set(markedDates);
     return new Set<string>(Array.from(markedDates as Set<string>));
   }, [markedDates]);
+
+  const fullyBlockedSet = useMemo(() => {
+    if (fullyBlockedDateKeys == null) return null;
+    if (fullyBlockedDateKeys instanceof Set) return fullyBlockedDateKeys;
+    return new Set<string>(fullyBlockedDateKeys);
+  }, [fullyBlockedDateKeys]);
 
   const isToday = (date: Date) => {
     const today = new Date();
@@ -189,7 +205,15 @@ export default function DaySelector({
         {dates.map((date, index) => {
           const selected = isSelected(date);
           const today = isToday(date);
-          const isMarked = !!markedSet && markedSet.has(toLocalISODate(date));
+          const ymd = toLocalISODate(date);
+          const isMarked = !!markedSet && markedSet.has(ymd);
+          const fullBlock = !!fullyBlockedSet?.has(ymd);
+          const blockHint = String(
+            t('admin.appointments.dayStripFullDayConstraint', 'יום חסום לחלוטין באילוץ')
+          );
+          const a11yLabel = fullBlock
+            ? `${getDayName(date)} ${date.getDate()}, ${blockHint}`
+            : undefined;
 
           const pillBase = [
             styles.dayPill,
@@ -197,18 +221,21 @@ export default function DaySelector({
           ];
 
           if (selected) {
+            const selBg = fullBlock ? FULL_BLOCK_SELECTED_BG : colors.primary;
+            const selShadow = fullBlock ? FULL_BLOCK_SELECTED_SHADOW : colors.primary;
             return (
               <Pressable
                 key={index}
                 accessibilityRole="button"
+                accessibilityLabel={a11yLabel}
                 accessibilityState={{ selected: true }}
                 onPress={() => onSelectDate(date)}
                 style={({ pressed }) => [
                   ...pillBase,
                   styles.dayPillSelected,
                   {
-                    backgroundColor: colors.primary,
-                    shadowColor: colors.primary,
+                    backgroundColor: selBg,
+                    shadowColor: selShadow,
                   },
                   pressed && styles.dayPillPressed,
                 ]}
@@ -216,6 +243,36 @@ export default function DaySelector({
                 <Text style={[styles.dayName, styles.dayNameOnPrimary]}>{getDayName(date)}</Text>
                 <Text style={[styles.dayNumber, styles.dayNumberOnPrimary]}>{date.getDate()}</Text>
                 {isMarked ? <View style={styles.markDotSelected} /> : <View style={styles.markDotPlaceholder} />}
+              </Pressable>
+            );
+          }
+
+          if (fullBlock) {
+            return (
+              <Pressable
+                key={index}
+                accessibilityRole="button"
+                accessibilityLabel={a11yLabel}
+                accessibilityState={{ selected: false }}
+                onPress={() => onSelectDate(date)}
+                android_ripple={{ color: 'rgba(220,38,38,0.12)', borderless: false }}
+                style={({ pressed }) => [
+                  ...pillBase,
+                  styles.dayPillIdle,
+                  styles.dayPillFullBlock,
+                  today && styles.dayPillFullBlockToday,
+                  pressed && styles.dayPillPressedIdle,
+                ]}
+              >
+                <Text style={[styles.dayName, { color: FULL_BLOCK_TEXT }]}>{getDayName(date)}</Text>
+                <Text style={[styles.dayNumber, { color: FULL_BLOCK_TEXT }, today && styles.dayNumberFullBlockToday]}>
+                  {date.getDate()}
+                </Text>
+                {isMarked ? (
+                  <View style={[styles.markDotIdle, { backgroundColor: FULL_BLOCK_TEXT }]} />
+                ) : (
+                  <View style={styles.markDotPlaceholder} />
+                )}
               </Pressable>
             );
           }
@@ -286,6 +343,18 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 8,
     minHeight: 72,
+  },
+  dayPillFullBlock: {
+    backgroundColor: FULL_BLOCK_BG,
+    borderWidth: 2,
+    borderColor: FULL_BLOCK_BORDER,
+  },
+  dayPillFullBlockToday: {
+    borderColor: FULL_BLOCK_SELECTED_BG,
+    backgroundColor: '#FECACA',
+  },
+  dayNumberFullBlockToday: {
+    fontWeight: '900',
   },
   dayPillIdle: {
     backgroundColor: '#FFFFFF',

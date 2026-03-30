@@ -298,6 +298,13 @@ function _formatLocalYyyyMmDd(d: Date) {
   return `${y}-${m}-${da}`;
 }
 
+function _addOneLocalDayYmd(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map((x) => parseInt(x, 10));
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + 1);
+  return _formatLocalYyyyMmDd(dt);
+}
+
 function _getStartOfWeek(date: Date) {
   // Israel typically starts week on Sunday (0)
   const d = new Date(date);
@@ -1531,13 +1538,6 @@ export default function AdminAppointmentsScreen() {
     return [];
   }, [selectedDateStr, calendarView, weekGridReverseDays]);
 
-  /** טווח תאריכים כרונולוגי לשאילתות — `gridDays` יכול להיות הפוך לתצוגה (ש׳…א׳) */
-  const weekRangeChronoBounds = useMemo(() => {
-    if (gridDays.length === 0) return null;
-    const sorted = [...gridDays].sort((a, b) => a.formatted.localeCompare(b.formatted));
-    return { start: sorted[0]!.formatted, end: sorted[sorted.length - 1]!.formatted };
-  }, [gridDays]);
-
   /** Week that contains selectedDate — used to refresh week-range data even when calendar is on month/day */
   const selectedWeekChronoRange = useMemo(() => {
     const wkStart = _getStartOfWeek(selectedDate);
@@ -1545,6 +1545,28 @@ export default function AdminAppointmentsScreen() {
     const sorted = [...days].sort((a, b) => a.formatted.localeCompare(b.formatted));
     return { start: sorted[0]!.formatted, end: sorted[sorted.length - 1]!.formatted };
   }, [selectedDateStr, selectedDate]);
+
+  /** ימים בשבוע הנבחר שבהם אילוצים מכסים את כל שעות העבודה — לסרגל הימים בתצוגה יומית */
+  const dayStripFullBlockDates = useMemo(() => {
+    const out = new Set<string>();
+    if (!user?.id) return out;
+    const { start, end } = selectedWeekChronoRange;
+    let key = start;
+    while (true) {
+      const [yy, mo, da] = key.split('-').map((n) => parseInt(n, 10));
+      const dow = new Date(yy, mo - 1, da).getDay();
+      const wh = weeklyHoursByDow.get(dow);
+      if (wh?.active) {
+        const cons = rangeConstraints.get(key) ?? [];
+        if (isBusinessDayFullyBlockedByConstraints(cons, wh.startMin, wh.endMin)) {
+          out.add(key);
+        }
+      }
+      if (key === end) break;
+      key = _addOneLocalDayYmd(key);
+    }
+    return out;
+  }, [user?.id, selectedWeekChronoRange, weeklyHoursByDow, rangeConstraints]);
 
   const gridDims = useMemo(() => {
     const sw = Dimensions.get('window').width;
@@ -1559,10 +1581,10 @@ export default function AdminAppointmentsScreen() {
   }, []);
 
   useEffect(() => {
-    if (calendarView !== 'week') return;
-    if (!weekRangeChronoBounds) return;
-    void loadAppointmentsForRange(weekRangeChronoBounds.start, weekRangeChronoBounds.end);
-  }, [calendarView, weekRangeChronoBounds, loadAppointmentsForRange]);
+    if (calendarView !== 'week' && calendarView !== 'day') return;
+    if (!user?.id) return;
+    void loadAppointmentsForRange(selectedWeekChronoRange.start, selectedWeekChronoRange.end);
+  }, [calendarView, selectedWeekChronoRange, loadAppointmentsForRange, user?.id]);
 
   const nowLineOffsetY = useMemo(() => {
     if (calendarView !== 'day') return null;
@@ -2020,6 +2042,7 @@ export default function AdminAppointmentsScreen() {
             onSelectDate={setSelectedDate}
             mode="week"
             markedDates={markedDates}
+            fullyBlockedDateKeys={dayStripFullBlockDates}
           />
         </View>
       ) : (

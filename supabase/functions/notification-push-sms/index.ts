@@ -9,6 +9,8 @@
  * notification_edge_invoke_jwt (service_role JWT). Optional: same URL via Dashboard Webhook
  * (do not enable both, or deliveries duplicate).
  * Requires same secrets as auth-phone-otp: SUPABASE_*, PULSEEM_FIELD_ENCRYPTION_KEY (if Pulseem fields encrypted).
+ * Sender secrets: PULSEEM_OTP_FROM_NUMBER, PULSEEM_FROM_NUMBER, PULSEEM_REST_FROM_NUMBER, PULSEEM_ASMX_FROM_NUMBER
+ * (same precedence / fallback as auth-phone-otp).
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -137,6 +139,25 @@ async function sendPulseemViaAsmx(opts: {
   if (!parsed.ok) throw new Error(parsed.reason);
 }
 
+function pulseemRestFromNumber(mainFrom: string): string {
+  const restOnly = (Deno.env.get("PULSEEM_REST_FROM_NUMBER") ?? "").trim();
+  return restOnly || mainFrom;
+}
+
+function pulseemAsmxEffectiveFrom(mainFrom: string): string {
+  const otp = (Deno.env.get("PULSEEM_OTP_FROM_NUMBER") ?? "").trim();
+  const asmxOnly = (Deno.env.get("PULSEEM_ASMX_FROM_NUMBER") ?? "").trim();
+  if (otp) return otp;
+  if (asmxOnly) return asmxOnly;
+  return mainFrom;
+}
+
+function isPulseemSenderNotApprovedError(message: string): boolean {
+  return /sender name is not approved|sender.*not approved|not approved.*sender/i.test(
+    message,
+  );
+}
+
 async function sendPulseemSingleSms(opts: {
   userId: string;
   password: string;
@@ -145,18 +166,41 @@ async function sendPulseemSingleSms(opts: {
   text: string;
   apiKey?: string;
 }): Promise<void> {
+  const asmxFrom = pulseemAsmxEffectiveFrom(opts.fromNumber);
   if (opts.apiKey) {
-    return sendPulseemViaRestApi({
-      apiKey: opts.apiKey,
-      fromNumber: opts.fromNumber,
-      toNumber: opts.toNumber,
-      text: opts.text,
-    });
+    const fromRest = pulseemRestFromNumber(opts.fromNumber);
+    try {
+      await sendPulseemViaRestApi({
+        apiKey: opts.apiKey,
+        fromNumber: fromRest,
+        toNumber: opts.toNumber,
+        text: opts.text,
+      });
+      return;
+    } catch (e) {
+      const msg = String((e as Error)?.message ?? e);
+      if (isPulseemSenderNotApprovedError(msg)) {
+        console.warn(
+          "[notification-push-sms] Pulseem REST sender rejected; ASMX retry. REST from=",
+          fromRest,
+          "ASMX from=",
+          asmxFrom,
+        );
+        return sendPulseemViaAsmx({
+          userId: opts.userId,
+          password: opts.password,
+          fromNumber: asmxFrom,
+          toNumber: opts.toNumber,
+          text: opts.text,
+        });
+      }
+      throw e;
+    }
   }
   return sendPulseemViaAsmx({
     userId: opts.userId,
     password: opts.password,
-    fromNumber: opts.fromNumber,
+    fromNumber: asmxFrom,
     toNumber: opts.toNumber,
     text: opts.text,
   });
@@ -175,7 +219,10 @@ async function loadPulseemCredentials(
     .maybeSingle();
   if (error || !row) return { error: "business_not_found" as const };
   const userId = (row.pulseem_user_id || "").trim();
-  const fromNumber = (row.pulseem_from_number || "").trim();
+  const fromDb = (row.pulseem_from_number || "").trim();
+  const fromSecret = (Deno.env.get("PULSEEM_FROM_NUMBER") ?? "").trim();
+  const otpFrom = (Deno.env.get("PULSEEM_OTP_FROM_NUMBER") ?? "").trim();
+  const fromNumber = otpFrom || fromSecret || fromDb;
   const encKey = (Deno.env.get("PULSEEM_FIELD_ENCRYPTION_KEY") ?? "").trim();
   let password: string;
   let apiKey: string;

@@ -11,6 +11,8 @@
  *   - SUPABASE_JWT_SECRET (if present in runtime), or
  *   - JWT_SECRET — use this name in Dashboard → Edge Functions → Secrets (UI forbids SUPABASE_* for manual secrets).
  *   Value = Project Settings → API → JWT Secret (same as legacy key verification).
+ *
+ * Optional for test_connection (יתרת SMS API): PULSEEM_MAIN_API_KEY — same as pulseem-credit-transfer (POST GetCreditBalance).
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -29,6 +31,7 @@ const cors = {
 
 const PULSEEM_ASMX =
   "https://www.pulseem.co.il/Pulseem/pulseemsendservices.asmx";
+const PULSEEM_REST_BASE = "https://api.pulseem.com/api/v1";
 
 function json(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -151,6 +154,113 @@ async function authorizeServiceRole(req: Request): Promise<boolean> {
   }
 }
 
+function slugFromBranding(name: string | null | undefined): string {
+  const raw = String(name ?? "app").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  return raw || "app";
+}
+
+/** Same shape as CreditTransfer response — swagger leaves GetCreditBalance body schema open. */
+function extractDirectSmsCreditsFromPulseemJson(
+  j: Record<string, unknown>,
+): number | null {
+  const ctr =
+    j.creditTransferModelResult ??
+    j.CreditTransferModelResult ??
+    j.creditBalanceModelResult ??
+    j.CreditBalanceModelResult ??
+    j.result;
+  const ctrObj = ctr as Record<string, unknown> | undefined;
+  if (ctrObj && typeof ctrObj === "object") {
+    const ds =
+      ctrObj.directSms ??
+      ctrObj.DirectSms ??
+      ctrObj.directSMS ??
+      ctrObj.DirectSMS;
+    const dsObj = ds as Record<string, unknown> | undefined;
+    const c = dsObj?.credits ?? dsObj?.Credits;
+    if (typeof c === "number" && Number.isFinite(c)) return c;
+  }
+  const flat =
+    j.directSmsCredits ??
+    j.DirectSmsCredits ??
+    j.directSmsBalance ??
+    j.DirectSmsBalance;
+  if (typeof flat === "number" && Number.isFinite(flat)) return flat;
+  return null;
+}
+
+/**
+ * יתרת SMS בחבילת API / Direct (כמו בעמודת «חבילת SMS בAPI» בפולסים).
+ * דורש מפתח REST של החשבון הראשי (PULSEEM_MAIN_API_KEY) ושם תת-החשבון כפי בפולסים.
+ */
+async function getDirectSmsApiBalance(
+  mainApiKey: string,
+  subAccountName: string,
+): Promise<
+  | { ok: true; credits: string }
+  | { ok: false; message: string }
+> {
+  const name = subAccountName.trim();
+  if (!name) {
+    return { ok: false, message: "שם תת-חשבון ריק" };
+  }
+  const key = mainApiKey.trim();
+  if (!key) {
+    return { ok: false, message: "חסר מפתח Pulseem ראשי" };
+  }
+  const url = `${PULSEEM_REST_BASE}/AccountsApi/GetCreditBalance`;
+  const bodies = [
+    { subAccountName: name, isSMSIncludeVoice: false },
+    { SubAccountName: name, IsSMSIncludeVoice: false },
+  ];
+  try {
+    let lastText = "";
+    let lastHttpErr = "";
+    for (const bodyObj of bodies) {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          APIKEY: key,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(bodyObj),
+      });
+      const text = await res.text();
+      lastText = text;
+      if (!res.ok) {
+        lastHttpErr = `Pulseem HTTP ${res.status}: ${text.slice(0, 180)}`;
+        continue;
+      }
+      let j: Record<string, unknown> = {};
+      try {
+        j = JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      const st = j.status ?? j.Status;
+      if (st && String(st).toLowerCase() !== "success") {
+        const err =
+          j.errorMessage ?? j.ErrorMessage ?? j.error ?? j.Error ?? text;
+        return { ok: false, message: `Pulseem: ${String(err).slice(0, 200)}` };
+      }
+      const n = extractDirectSmsCreditsFromPulseemJson(j);
+      if (n !== null) {
+        return { ok: true, credits: String(n) };
+      }
+    }
+    return {
+      ok: false,
+      message:
+        lastHttpErr ||
+        `לא נמצאה יתרת Direct SMS בתשובה. דוגמה: ${lastText.slice(0, 280)}`,
+    };
+  } catch (e) {
+    return { ok: false, message: (e as Error)?.message ?? "GetCreditBalance נכשלה" };
+  }
+}
+
+/** יתרת SMS דרך Web Service הישן (לא חבילת API) — לעיתים -1 כשאין חבילה קלאסית. */
 async function testPulseemCredits(userId: string, password: string): Promise<
   | { ok: true; credits: string }
   | { ok: false; message: string }
@@ -325,6 +435,7 @@ serve(async (req) => {
     const businessId = String(body.businessId ?? "").trim();
     const userId = String(body.userId ?? "").trim();
     const passwordOverride = String(body.password ?? "").trim();
+    const subAccountOverride = String(body.subAccountName ?? "").trim();
     if (!businessId) {
       return json({ ok: false, message: "חסר מזהה עסק" });
     }
@@ -332,26 +443,160 @@ serve(async (req) => {
       return json({ ok: false, message: "חסר מזהה משתמש" });
     }
 
+    const { data: row } = await admin
+      .from("business_profile")
+      .select(
+        "pulseem_password, display_name, branding_client_name, pulseem_has_api_key",
+      )
+      .eq("id", businessId)
+      .maybeSingle();
+
+    if (!row) {
+      return json({ ok: false, message: "לא נמצא עסק" });
+    }
+
+    const slug = slugFromBranding(row.branding_client_name);
+    const nameCandidates = [
+      subAccountOverride,
+      String(row.display_name ?? "").trim(),
+      slug,
+    ].filter((s, i, arr) => s.length > 0 && arr.indexOf(s) === i);
+
+    const mainKey = (Deno.env.get("PULSEEM_MAIN_API_KEY") ?? "").trim();
+
+    let directSmsCredits: string | null = null;
+    let directError: string | null = null;
+    if (row.pulseem_has_api_key && mainKey && nameCandidates.length > 0) {
+      for (const candidate of nameCandidates) {
+        const dr = await getDirectSmsApiBalance(mainKey, candidate);
+        if (dr.ok) {
+          directSmsCredits = dr.credits;
+          directError = null;
+          break;
+        }
+        directError = dr.message;
+      }
+    } else if (row.pulseem_has_api_key && !mainKey) {
+      directError =
+        "חסר PULSEEM_MAIN_API_KEY ב-Supabase Secrets — לא ניתן לשאול יתרת SMS API (Direct)";
+    } else if (row.pulseem_has_api_key && nameCandidates.length === 0) {
+      directError =
+        "חסר שם תת-חשבון לשאילת API — מלא «שם תת-חשבון (פולסים)» או שם תצוגה בעסק";
+    }
+
     let password = passwordOverride;
     if (!password) {
-      const { data: row } = await admin
-        .from("business_profile")
-        .select("pulseem_password")
-        .eq("id", businessId)
-        .maybeSingle();
       try {
         password = await decryptPulseemField(
-          String(row?.pulseem_password ?? "").trim(),
+          String(row.pulseem_password ?? "").trim(),
           encKey,
         );
       } catch (e) {
         console.error("[pulseem-admin-credentials] test decrypt:", e);
+        if (directSmsCredits != null) {
+          return json({
+            ok: true,
+            credits: directSmsCredits,
+            directSmsCredits,
+            legacyWsCredits: null,
+            balanceNote:
+              "יתרת Web Service לא נבדקה (לא ניתן לפענח סיסמה מהמסד)",
+          });
+        }
         return json({ ok: false, message: "לא ניתן לפענח סיסמה מהמסד" });
       }
     }
 
-    const result = await testPulseemCredits(userId, password);
-    return json(result.ok ? { ok: true, credits: result.credits } : result);
+    const legacy = await testPulseemCredits(userId, password);
+    const legacyWsCredits = legacy.ok ? legacy.credits : null;
+    const legacyFailMsg = legacy.ok ? null : legacy.message;
+
+    if (directSmsCredits == null && legacyWsCredits == null) {
+      return json({
+        ok: false,
+        message:
+          directError ||
+          legacyFailMsg ||
+          "בדיקת יתרה נכשלה",
+      });
+    }
+
+    const primary = directSmsCredits ?? legacyWsCredits!;
+    let balanceNote: string | undefined;
+    if (directSmsCredits != null && legacyWsCredits != null) {
+      if (directSmsCredits !== legacyWsCredits) {
+        balanceNote =
+          "יתרת SMS API (Direct) שונה מיתרת Web Service הישנה — לשליחת SMS דרך API עומדים לפי העמודה «חבילת SMS בAPI».";
+      }
+    } else if (directSmsCredits == null && directError) {
+      balanceNote = directError;
+    }
+
+    return json({
+      ok: true,
+      credits: primary,
+      directSmsCredits,
+      legacyWsCredits,
+      ...(balanceNote ? { balanceNote } : {}),
+    });
+  }
+
+  /** יתרת SMS API בלבד (GetCreditBalance) — בלי Web Service; לתצוגה אוטומטית בממשק סופר-אדמין */
+  if (action === "fetch_direct_sms_balance") {
+    const businessId = String(body.businessId ?? "").trim();
+    const subAccountOverride = String(body.subAccountName ?? "").trim();
+    if (!businessId) {
+      return json({ ok: false, message: "חסר מזהה עסק" });
+    }
+
+    const { data: row } = await admin
+      .from("business_profile")
+      .select("display_name, branding_client_name, pulseem_has_api_key")
+      .eq("id", businessId)
+      .maybeSingle();
+
+    if (!row) {
+      return json({ ok: false, message: "לא נמצא עסק" });
+    }
+    if (!row.pulseem_has_api_key) {
+      return json({ ok: false, message: "אין מפתח API Direct לעסק זה" });
+    }
+
+    const slug = slugFromBranding(row.branding_client_name);
+    const nameCandidates = [
+      subAccountOverride,
+      String(row.display_name ?? "").trim(),
+      slug,
+    ].filter((s, i, arr) => s.length > 0 && arr.indexOf(s) === i);
+
+    const mainKey = (Deno.env.get("PULSEEM_MAIN_API_KEY") ?? "").trim();
+    if (!mainKey) {
+      return json({
+        ok: false,
+        message:
+          "חסר PULSEEM_MAIN_API_KEY ב-Supabase Secrets — לא ניתן לשאול יתרת SMS API",
+      });
+    }
+    if (nameCandidates.length === 0) {
+      return json({
+        ok: false,
+        message:
+          "חסר שם תת-חשבון — עדכן שם תצוגה בעסק או מלא «שם תת-חשבון (פולסים)»",
+      });
+    }
+
+    let directError: string | null = null;
+    for (const candidate of nameCandidates) {
+      const dr = await getDirectSmsApiBalance(mainKey, candidate);
+      if (dr.ok) {
+        return json({ ok: true, directSmsCredits: dr.credits });
+      }
+      directError = dr.message;
+    }
+    return json({
+      ok: false,
+      message: directError ?? "לא ניתן לקרוא יתרת SMS API",
+    });
   }
 
   return json({ error: "unknown_action" }, 400);

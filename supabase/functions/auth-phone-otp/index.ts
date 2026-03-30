@@ -3,11 +3,59 @@
  * Phone SMS OTP for tenant login/register via Pulseem (legacy SendSingleSMS).
  * Reads credentials only from public.business_profile (service role) — never from the app’s local branding/.env.
  * pulseem_password / pulseem_api_key: decrypt with PULSEEM_FIELD_ENCRYPTION_KEY if stored as enc:v1:...
- * Needs: pulseem_user_id, pulseem_password, pulseem_from_number. REST send uses pulseem_api_key when set.
+ * Needs: pulseem_user_id, pulseem_password, pulseem_from_number (or Edge secret override).
+ *
+ * Sender (Pulseem “FROM NUMBER”): alphanumeric name after carrier approval (e.g. EliyaMoshe).
+ * Optional Edge secret PULSEEM_FROM_NUMBER — if set, overrides business_profile.pulseem_from_number
+ * for this function only (same name as in Supabase Dashboard secrets).
+ *
+ * Direct REST API (SendSms + APIKey) often requires a different approved sender than ASMX.
+ * Optional PULSEEM_REST_FROM_NUMBER — used only for REST sends (e.g. numeric sender tied to Direct).
+ * If REST returns “sender name is not approved”, we automatically retry via ASMX with the main fromNumber.
+ *
+ * Pulseem decrypt helpers are inlined below so Dashboard / single-file bundles succeed.
+ * Keep in sync with pulseem-admin-credentials/pulseemFieldCrypto.ts (same enc:v1: format).
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { decryptPulseemField } from "./pulseemFieldCrypto.ts";
+
+const PULSEEM_ENC_PREFIX = "enc:v1:";
+
+function pulseemB64ToBytes(b64: string): Uint8Array {
+  const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
+  const normalized = b64.replace(/-/g, "+").replace(/_/g, "/") + pad;
+  const bin = atob(normalized);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function pulseemImportAesKey(keyB64: string): Promise<CryptoKey> {
+  const raw = pulseemB64ToBytes(keyB64.trim());
+  if (raw.length !== 32) {
+    throw new Error(
+      "PULSEEM_FIELD_ENCRYPTION_KEY must be Base64 for 32 bytes (e.g. openssl rand -base64 32)",
+    );
+  }
+  return await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+
+async function decryptPulseemField(stored: string, keyB64: string): Promise<string> {
+  const s = String(stored ?? "").trim();
+  if (!s) return "";
+  if (!s.startsWith(PULSEEM_ENC_PREFIX)) return s;
+  if (!String(keyB64 ?? "").trim()) {
+    throw new Error(
+      "Encrypted Pulseem fields in DB require PULSEEM_FIELD_ENCRYPTION_KEY on the Edge Function",
+    );
+  }
+  const key = await pulseemImportAesKey(keyB64);
+  const combined = pulseemB64ToBytes(s.slice(PULSEEM_ENC_PREFIX.length));
+  const iv = combined.slice(0, 12);
+  const ct = combined.slice(12);
+  const dec = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
+  return new TextDecoder().decode(dec);
+}
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -244,9 +292,21 @@ async function sendPulseemViaAsmx(opts: {
   console.log("[auth-phone-otp] pulseem ASMX ok, messageRef=", parsed.ref, "to=", to);
 }
 
+function pulseemRestFromNumber(mainFrom: string): string {
+  const restOnly = (Deno.env.get("PULSEEM_REST_FROM_NUMBER") ?? "").trim();
+  return restOnly || mainFrom;
+}
+
+function isPulseemSenderNotApprovedError(message: string): boolean {
+  return /sender name is not approved|sender.*not approved|not approved.*sender/i.test(
+    message,
+  );
+}
+
 /**
  * Main send function — prefers REST API (DirectSmsCredits) when apiKey is available,
  * falls back to legacy ASMX (userID + password) otherwise.
+ * REST uses PULSEEM_REST_FROM_NUMBER when set; on “sender not approved” we retry ASMX with main fromNumber.
  */
 async function sendPulseemSingleSms(opts: {
   userId: string;
@@ -257,12 +317,34 @@ async function sendPulseemSingleSms(opts: {
   apiKey?: string;
 }): Promise<void> {
   if (opts.apiKey) {
-    return sendPulseemViaRestApi({
-      apiKey: opts.apiKey,
-      fromNumber: opts.fromNumber,
-      toNumber: opts.toNumber,
-      text: opts.text,
-    });
+    const fromRest = pulseemRestFromNumber(opts.fromNumber);
+    try {
+      await sendPulseemViaRestApi({
+        apiKey: opts.apiKey,
+        fromNumber: fromRest,
+        toNumber: opts.toNumber,
+        text: opts.text,
+      });
+      return;
+    } catch (e) {
+      const msg = String((e as Error)?.message ?? e);
+      if (isPulseemSenderNotApprovedError(msg)) {
+        console.warn(
+          "[auth-phone-otp] Pulseem REST rejected sender; retrying ASMX. REST from was:",
+          fromRest,
+          "msg:",
+          msg.slice(0, 160),
+        );
+        return sendPulseemViaAsmx({
+          userId: opts.userId,
+          password: opts.password,
+          fromNumber: opts.fromNumber,
+          toNumber: opts.toNumber,
+          text: opts.text,
+        });
+      }
+      throw e;
+    }
   }
   return sendPulseemViaAsmx({
     userId: opts.userId,
@@ -318,7 +400,9 @@ async function loadPulseemCredentials(
     .maybeSingle();
   if (error || !row) return { error: "business_not_found" as const };
   const userId = (row.pulseem_user_id || "").trim();
-  const fromNumber = (row.pulseem_from_number || "").trim();
+  const fromDb = (row.pulseem_from_number || "").trim();
+  const fromSecret = (Deno.env.get("PULSEEM_FROM_NUMBER") ?? "").trim();
+  const fromNumber = fromSecret || fromDb;
   const encKey = (Deno.env.get("PULSEEM_FIELD_ENCRYPTION_KEY") ?? "").trim();
   let password: string;
   let apiKey: string;
@@ -995,6 +1079,9 @@ serve(async (req) => {
         ok: true,
         pulseem_userId: pulse.userId,
         pulseem_fromNumber: pulse.fromNumber,
+        pulseem_restFromNumber: pulse.apiKey
+          ? pulseemRestFromNumber(pulse.fromNumber)
+          : null,
         has_api_key: !!pulse.apiKey,
         asmx_credits_raw: asmxXml,
         rest_credits_raw: restCredits,

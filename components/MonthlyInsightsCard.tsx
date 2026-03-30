@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Platform, ActivityIndicator, I18nManager } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
+import { usePrimaryContrast } from '@/src/theme/ThemeProvider';
 
 interface MonthlyInsightsCardProps {
   appointmentsThisMonth: number;
@@ -28,6 +29,7 @@ export default function MonthlyInsightsCard({
   colors,
 }: MonthlyInsightsCardProps) {
   const { t, i18n } = useTranslation();
+  const { primaryOnSurface, primaryChartSegment } = usePrimaryContrast();
   const isHebrewUi =
     (typeof i18n.language === 'string' && i18n.language.startsWith('he')) || I18nManager.isRTL;
   const total = appointmentsThisMonth + cancelledAppointmentsThisMonth + newClientsThisMonth;
@@ -42,7 +44,7 @@ export default function MonthlyInsightsCard({
       {
         key: 'month',
         value: appointmentsThisMonth,
-        color: colors.primary,
+        color: primaryChartSegment,
         label: t('admin.insights.monthLegend'),
       },
       {
@@ -58,7 +60,13 @@ export default function MonthlyInsightsCard({
         label: t('admin.insights.newClientsLegend'),
       },
     ],
-    [appointmentsThisMonth, cancelledAppointmentsThisMonth, newClientsThisMonth, colors.primary, t]
+    [
+      appointmentsThisMonth,
+      cancelledAppointmentsThisMonth,
+      newClientsThisMonth,
+      primaryChartSegment,
+      t,
+    ]
   );
 
   const segments = useMemo(() => {
@@ -78,7 +86,7 @@ export default function MonthlyInsightsCard({
       {/* direction: ltr — תג החודש משמאל, כותרת מימין ומיושרת לקצה (כמו RTL נכון) */}
       <View style={styles.header}>
         <View style={[styles.monthPill, { backgroundColor: `${colors.primary}14` }]}>
-          <Text style={[styles.monthPillText, { color: colors.primary }]}>{monthLabel}</Text>
+          <Text style={[styles.monthPillText, { color: primaryOnSurface }]}>{monthLabel}</Text>
         </View>
         <Text style={[styles.title, { color: colors.text }, isHebrewUi ? styles.titleRtl : styles.titleLtr]}>
           {t('admin.insights.title')}
@@ -146,7 +154,7 @@ export default function MonthlyInsightsCard({
     return (
       <View style={styles.card}>
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="small" color={colors.primary} />
+          <ActivityIndicator size="small" color={primaryOnSurface} />
         </View>
       </View>
     );

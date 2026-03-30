@@ -24,11 +24,13 @@ import { GalleryLoopVideo } from '@/components/GalleryLoopVideo';
 import { supabase, getBusinessId } from '@/lib/supabase';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { useTranslation } from 'react-i18next';
+import { HorizontalCarouselDots, carouselIndexFromOffset } from '@/components/HorizontalCarouselDots';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH * 0.38; // Increased from 0.32 to 0.38 for larger cards
 const CARD_HEIGHT = 240; // Increased from 200 to 240 for taller cards
 const CARD_SPACING = 16; // Increased spacing between cards
+const CARD_STRIDE = CARD_WIDTH + CARD_SPACING;
 
 const AVATAR_PLACEHOLDER = require('@/assets/images/user.png');
 
@@ -133,6 +135,7 @@ export default function DesignCarousel({
   const [selectedDesign, setSelectedDesign] = useState<Design | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
+  const [carouselIndex, setCarouselIndex] = useState(0);
   const colors = useColors();
   const { t } = useTranslation();
   const sessionUserId = useAuthStore((s) => s.user?.id);
@@ -238,6 +241,15 @@ export default function DesignCarousel({
       };
     });
   }, [sessionUserId, sessionImageUrl]);
+
+  useEffect(() => {
+    setCarouselIndex(0);
+  }, [designs.length]);
+
+  const syncCarouselIndex = useCallback((offsetX: number) => {
+    const next = carouselIndexFromOffset(offsetX, CARD_STRIDE, designs.length);
+    setCarouselIndex((prev) => (prev === next ? prev : next));
+  }, [designs.length]);
 
   useEffect(() => {
     const startAnimations = () => {
@@ -398,12 +410,22 @@ export default function DesignCarousel({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContainer}
         decelerationRate="fast"
-        snapToInterval={CARD_WIDTH + CARD_SPACING}
-        snapToAlignment="center"
+        snapToInterval={CARD_STRIDE}
+        snapToAlignment="start"
         style={styles.scrollView}
+        scrollEventThrottle={16}
+        onScroll={(e) => syncCarouselIndex(e.nativeEvent.contentOffset.x)}
+        onMomentumScrollEnd={(e) => syncCarouselIndex(e.nativeEvent.contentOffset.x)}
       >
         {designs.map((design, index) => renderDesignCard(design, index))}
       </ScrollView>
+
+      <HorizontalCarouselDots
+        count={designs.length}
+        minCount={2}
+        activeIndex={carouselIndex}
+        activeColor={colors.primary}
+      />
 
       {/* Design Modal */}
       <Modal

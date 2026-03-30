@@ -35,6 +35,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useAuthStore } from '@/stores/authStore';
 import { usersApi } from '@/lib/api/users';
+import { usePrimaryContrast } from '@/src/theme/ThemeProvider';
 import type { User as DbUser } from '@/lib/supabase';
 
 const AnimatedEntypo = Animated.createAnimatedComponent(Entypo);
@@ -69,6 +70,7 @@ export const PendingClientApprovalsCard = React.forwardRef<
   onCountChange,
 }, ref) {
   const { t } = useTranslation();
+  const { onPrimary, onPrimaryMuted, primaryOnSurface } = usePrimaryContrast();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const offBottom = React.useMemo(
@@ -279,21 +281,21 @@ export const PendingClientApprovalsCard = React.forwardRef<
             <View style={styles.bannerShine} pointerEvents="none" />
             <View style={styles.bannerRow}>
               <View style={styles.bannerIconWrap}>
-                <Ionicons name="person-add-outline" size={26} color="#FFFFFF" />
+                <Ionicons name="person-add-outline" size={26} color={onPrimary} />
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>{count > 99 ? '99+' : String(count)}</Text>
                 </View>
               </View>
               <View style={styles.bannerTextCol}>
-                <Text style={styles.bannerTitle} numberOfLines={1}>
+                <Text style={[styles.bannerTitle, { color: onPrimary }]} numberOfLines={1}>
                   {t('admin.pendingClients.bannerTitle', 'New clients')}
                 </Text>
-                <Text style={styles.bannerSub} numberOfLines={2}>
+                <Text style={[styles.bannerSub, { color: onPrimaryMuted }]} numberOfLines={2}>
                   {t('admin.pendingClients.bannerSubtitle', '{{count}} waiting for your approval', { count })}
                 </Text>
               </View>
               <View style={styles.bannerChevronCircle}>
-                <Ionicons name="chevron-back" size={20} color="rgba(255,255,255,0.95)" />
+                <Ionicons name="chevron-back" size={20} color={onPrimary} />
               </View>
             </View>
           </LinearGradient>
@@ -385,7 +387,7 @@ export const PendingClientApprovalsCard = React.forwardRef<
               <Animated.View layout={LinearTransition.duration(SHEET_ANIM_MS)} style={styles.sheetBody}>
                 {loading ? (
                   <View style={styles.centered}>
-                    <ActivityIndicator size="large" color={colors.primary} />
+                    <ActivityIndicator size="large" color={primaryOnSurface} />
                     <Text style={[styles.loadingLabel, { color: colors.textSecondary }]}>
                       {t('admin.pendingClients.loading', 'Loading…')}
                     </Text>
@@ -404,7 +406,7 @@ export const PendingClientApprovalsCard = React.forwardRef<
                     ListEmptyComponent={
                       <View style={styles.emptyWrap}>
                         <View style={[styles.emptyIconWrap, { backgroundColor: `${colors.primary}12` }]}>
-                          <Ionicons name="people-outline" size={36} color={colors.primary} />
+                          <Ionicons name="people-outline" size={36} color={primaryOnSurface} />
                         </View>
                         <Text style={[styles.empty, { color: colors.textSecondary }]}>
                           {t('admin.pendingClients.empty', 'No pending clients')}
@@ -468,9 +470,9 @@ export const PendingClientApprovalsCard = React.forwardRef<
                                   disabled={busy}
                                 >
                                   {busy ? (
-                                    <ActivityIndicator size="small" color="#fff" />
+                                    <ActivityIndicator size="small" color={onPrimary} />
                                   ) : (
-                                    <Text style={styles.btnPrimaryText}>
+                                    <Text style={[styles.btnPrimaryText, { color: onPrimary }]}>
                                       {t('admin.pendingClients.approve', 'Approve')}
                                     </Text>
                                   )}
@@ -522,9 +524,9 @@ export const PendingClientApprovalsCard = React.forwardRef<
                                   disabled={busy}
                                 >
                                   {busy ? (
-                                    <ActivityIndicator size="small" color="#fff" />
+                                    <ActivityIndicator size="small" color={onPrimary} />
                                   ) : (
-                                    <Text style={styles.btnPrimaryText}>
+                                    <Text style={[styles.btnPrimaryText, { color: onPrimary }]}>
                                       {t('admin.pendingClients.approve', 'Approve')}
                                     </Text>
                                   )}

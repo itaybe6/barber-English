@@ -16,6 +16,7 @@ type FnResponse = {
   ok?: boolean;
   error?: string;
   detail?: string;
+  warning?: string;
   user?: OtpAuthUserPayload;
   profile_setup_token?: string;
 };
@@ -53,7 +54,7 @@ async function invokeAuthPhoneOtp(body: Record<string, unknown>): Promise<FnResp
 }
 
 export const authPhoneOtpApi = {
-  async sendLoginOtp(phone: string): Promise<{ ok: boolean; error?: string }> {
+  async sendLoginOtp(phone: string): Promise<{ ok: boolean; error?: string; warning?: string }> {
     const businessId = getBusinessId();
     const p = await invokeAuthPhoneOtp({
       action: 'send_login_otp',
@@ -63,7 +64,7 @@ export const authPhoneOtpApi = {
     if (p.ok !== true) {
       return { ok: false, error: p.error || 'send_failed' };
     }
-    return { ok: true };
+    return { ok: true, ...(p.warning ? { warning: p.warning } : {}) };
   },
 
   async verifyLoginOtp(
@@ -83,7 +84,7 @@ export const authPhoneOtpApi = {
     return { ok: true, user: p.user };
   },
 
-  async sendRegisterOtp(phone: string): Promise<{ ok: boolean; error?: string }> {
+  async sendRegisterOtp(phone: string): Promise<{ ok: boolean; error?: string; warning?: string }> {
     const businessId = getBusinessId();
     const p = await invokeAuthPhoneOtp({
       action: 'send_register_otp',
@@ -93,7 +94,7 @@ export const authPhoneOtpApi = {
     if (p.ok !== true) {
       return { ok: false, error: p.error || 'send_failed' };
     }
-    return { ok: true };
+    return { ok: true, ...(p.warning ? { warning: p.warning } : {}) };
   },
 
   async verifyRegisterOtp(params: {

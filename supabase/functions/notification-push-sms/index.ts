@@ -45,6 +45,26 @@ function normalizeSmsDestination(raw: string): string {
   return d;
 }
 
+function pulseemEffectiveFromNumber(
+  fromDb: string,
+  otpFrom: string,
+  fromSecret: string,
+  businessPhone: string | null | undefined,
+): string {
+  const envFrom = (otpFrom || fromSecret).trim();
+  if (envFrom) return envFrom;
+  const db = String(fromDb ?? "").trim();
+  if (!db) return "";
+  if (/[a-zA-Z]/.test(db)) {
+    const p = String(businessPhone ?? "").trim();
+    if (p) {
+      const d = normalizeSmsDestination(p);
+      if (d.length >= 10) return d;
+    }
+  }
+  return db;
+}
+
 function parsePulseemSendSingleResult(
   xml: string,
 ): { ok: true; ref: string } | { ok: false; reason: string } {
@@ -109,6 +129,18 @@ async function sendPulseemViaRestApi(opts: {
       const st = String(payload.status ?? payload.Status ?? "").toLowerCase();
       const errMsg = String(payload.error ?? payload.Error ?? "").trim();
       if (st === "error") throw new Error(errMsg || "pulseem_rest_error");
+      const succ = payload.success ?? payload.Success ?? payload.isSuccess ?? payload.IsSuccess;
+      if (succ === false) {
+        throw new Error(
+          String(
+            payload.message ??
+              payload.Message ??
+              payload.error ??
+              payload.Error ??
+              "pulseem_rest_rejected",
+          ),
+        );
+      }
     } catch (e) {
       if (!(e instanceof SyntaxError)) throw e;
     }
@@ -213,7 +245,7 @@ async function loadPulseemCredentials(
   const { data: row, error } = await admin
     .from("business_profile")
     .select(
-      "id, pulseem_user_id, pulseem_password, pulseem_from_number, pulseem_api_key",
+      "id, phone, pulseem_user_id, pulseem_password, pulseem_from_number, pulseem_api_key",
     )
     .eq("id", businessId)
     .maybeSingle();
@@ -222,7 +254,12 @@ async function loadPulseemCredentials(
   const fromDb = (row.pulseem_from_number || "").trim();
   const fromSecret = (Deno.env.get("PULSEEM_FROM_NUMBER") ?? "").trim();
   const otpFrom = (Deno.env.get("PULSEEM_OTP_FROM_NUMBER") ?? "").trim();
-  const fromNumber = otpFrom || fromSecret || fromDb;
+  const fromNumber = pulseemEffectiveFromNumber(
+    fromDb,
+    otpFrom,
+    fromSecret,
+    row.phone,
+  );
   const encKey = (Deno.env.get("PULSEEM_FIELD_ENCRYPTION_KEY") ?? "").trim();
   let password: string;
   let apiKey: string;

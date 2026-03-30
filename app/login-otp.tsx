@@ -320,6 +320,15 @@ export default function LoginOtpScreen() {
         Alert.alert(t('error.generic', 'שגיאה'), otpErrorMessage(t, res.error));
         return;
       }
+      if (res.warning === 'sender_same_as_recipient') {
+        Alert.alert(
+          t('login.otp.sameNumberAsSenderTitle', 'אותו מספר שולח ונמען'),
+          t(
+            'login.otp.sameNumberAsSenderMessage',
+            'ביקשת קוד למספר הטלפון של העסק (ממנו נשלחות הודעות ה-SMS). רשתות נייד לרוב חוסמות הודעה כשהשולח והנמען זהים. נסה ממספר אחר, או בקש מפולסים שולח ייעודי.',
+          ),
+        );
+      }
       setOtpCooldownSec(45);
       setPasscode([]);
       setResendToastTick((n) => n + 1);

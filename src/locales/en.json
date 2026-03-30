@@ -485,6 +485,8 @@
       "tagPhoneNotRegistered": "This phone number isn’t registered with us",
       "resendSuccessTag": "Code sent again successfully",
       "errorPhoneNotRegistered": "This phone number isn’t registered with us. You can sign up from the registration screen or double-check the number.",
+      "sameNumberAsSenderTitle": "Sender and recipient are the same",
+      "sameNumberAsSenderMessage": "You requested a code to the business phone number that SMS is sent from. Many mobile networks block that. Try another phone, or ask Pulseem for a dedicated sender ID.",
       "a11y": { "delete": "Delete" }
     }
   },
@@ -505,7 +507,9 @@
       "resend": "Resend code",
       "resendWait": "Resend in {{s}}s",
       "cta": "Verify and continue",
-      "sentToast": "Code sent successfully"
+      "sentToast": "Code sent successfully",
+      "sameNumberAsSenderTitle": "Sender and recipient are the same",
+      "sameNumberAsSenderMessage": "You requested a code to the business phone number that SMS is sent from. Many mobile networks block that. Try another phone, or ask Pulseem for a dedicated sender ID."
     },
     "profile": {
       "abortTitle": "Leave registration?",

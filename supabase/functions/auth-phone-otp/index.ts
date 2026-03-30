@@ -157,6 +157,14 @@ function pulseemEffectiveFromNumber(
   return db;
 }
 
+/** When Pulseem "from" equals destination (972…), carriers often drop the SMS though the API returns OK. */
+function pulseemFromSameAsDestination(fromSender: string, toRaw: string): boolean {
+  const to = normalizeSmsDestination(toRaw);
+  if (to.length < 10) return false;
+  const fromNorm = normalizeSmsDestination(fromSender);
+  return fromNorm.length >= 10 && fromNorm === to;
+}
+
 function escapeXml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -270,6 +278,18 @@ async function sendPulseemViaRestApi(opts: {
       const errMsg = String(payload.error ?? payload.Error ?? "").trim();
       if (st === "error") {
         throw new Error(errMsg || "pulseem_rest_error");
+      }
+      const succ = payload.success ?? payload.Success ?? payload.isSuccess ?? payload.IsSuccess;
+      if (succ === false) {
+        throw new Error(
+          String(
+            payload.message ??
+              payload.Message ??
+              payload.error ??
+              payload.Error ??
+              "pulseem_rest_rejected",
+          ),
+        );
       }
     } catch (e) {
       if (e instanceof SyntaxError) {
@@ -830,6 +850,12 @@ serve(async (req) => {
         );
       }
 
+      if (pulseemFromSameAsDestination(pulse.fromNumber, phone.trim())) {
+        console.warn(
+          "[auth-phone-otp] sender equals recipient (normalized); SMS may not be delivered",
+        );
+        return json({ ok: true, warning: "sender_same_as_recipient" });
+      }
       return json({ ok: true });
     }
 
@@ -994,6 +1020,12 @@ serve(async (req) => {
         );
       }
 
+      if (pulseemFromSameAsDestination(pulse.fromNumber, phone.trim())) {
+        console.warn(
+          "[auth-phone-otp] sender equals recipient (normalized); SMS may not be delivered",
+        );
+        return json({ ok: true, warning: "sender_same_as_recipient" });
+      }
       return json({ ok: true });
     }
 

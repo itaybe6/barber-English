@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef } from "react";
-import { View, StyleSheet, Text, useWindowDimensions } from "react-native";
+import { View, StyleSheet, useWindowDimensions } from "react-native";
 import { useRouter, useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
@@ -116,7 +116,13 @@ export const AdminFloatingTabBar: React.FC = () => {
           </View>
 
           <View
-            style={[styles.pill, styles.center, styles.border, styles.shadow]}
+            style={[
+              styles.pill,
+              styles.center,
+              styles.appointmentsCalendarCenterPill,
+              styles.border,
+              styles.shadow,
+            ]}
           >
             {CALENDAR_VIEW_ORDER.map((mode) => {
               const focused = calendarView === mode;
@@ -134,22 +140,12 @@ export const AdminFloatingTabBar: React.FC = () => {
                   focused={focused}
                   activeColor={primary}
                   onPress={() => setCalendarView(mode)}
-                  buttonPadding={6}
+                  buttonPadding={9}
                   accessibilityLabel={label}
                   accessibilityRole="button"
                 >
                   <View style={styles.calendarModeCell}>
-                    <CalendarViewModeIcon mode={mode} color={fg} iconSize={20} />
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        styles.calendarModeLabel,
-                        { color: fg },
-                        lng.startsWith("he") ? { writingDirection: "rtl" as const } : null,
-                      ]}
-                    >
-                      {label}
-                    </Text>
+                    <CalendarViewModeIcon mode={mode} color={fg} iconSize={23} />
                   </View>
                 </TabButton>
               );
@@ -358,7 +354,6 @@ export const AdminFloatingTabBar: React.FC = () => {
   }
 
   if (currentTab === "finance" || currentTab === "finance-accountant") {
-    const lng = typeof i18n.language === "string" ? i18n.language : "";
     const labelIncome = t(
       "admin.financeTab.incomeExpenses",
       "הכנסות והוצאות"
@@ -379,60 +374,42 @@ export const AdminFloatingTabBar: React.FC = () => {
         >
           {/* ltr row: פיננסים משמאל, בית מימין */}
           <View
-            style={[styles.pill, styles.center, styles.border, styles.shadow]}
+            style={[
+              styles.pill,
+              styles.center,
+              styles.financeCenterPill,
+              styles.border,
+              styles.shadow,
+            ]}
           >
             <TabButton
               focused={financeMain}
               activeColor={primary}
               onPress={() => router.push("/(tabs)/finance")}
-              buttonPadding={6}
+              buttonPadding={9}
               accessibilityLabel={labelIncome}
               accessibilityRole="button"
             >
               <View style={styles.financeTabCell}>
                 <Wallet
-                  size={20}
+                  size={23}
                   color={financeMain ? onPrimary : INACTIVE}
                 />
-                <Text
-                  numberOfLines={2}
-                  style={[
-                    styles.financeTabLabel,
-                    { color: financeMain ? onPrimary : INACTIVE },
-                    lng.startsWith("he")
-                      ? { writingDirection: "rtl" as const }
-                      : null,
-                  ]}
-                >
-                  {labelIncome}
-                </Text>
               </View>
             </TabButton>
             <TabButton
               focused={financeAcct}
               activeColor={primary}
               onPress={() => router.push("/(tabs)/finance-accountant")}
-              buttonPadding={6}
+              buttonPadding={9}
               accessibilityLabel={labelAccountant}
               accessibilityRole="button"
             >
               <View style={styles.financeTabCell}>
                 <FileText
-                  size={20}
+                  size={23}
                   color={financeAcct ? onPrimary : INACTIVE}
                 />
-                <Text
-                  numberOfLines={2}
-                  style={[
-                    styles.financeTabLabel,
-                    { color: financeAcct ? onPrimary : INACTIVE },
-                    lng.startsWith("he")
-                      ? { writingDirection: "rtl" as const }
-                      : null,
-                  ]}
-                >
-                  {labelAccountant}
-                </Text>
               </View>
             </TabButton>
           </View>
@@ -618,33 +595,25 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
     justifyContent: "center",
   },
+  /** רק סרגל יומן — פיל תצוגה (חודש/שבוע/יום) מעט גדול יותר */
+  appointmentsCalendarCenterPill: {
+    padding: 5,
+  },
+  /** סרגל פיננסים — פיל ארנק / רואה חשבון */
+  financeCenterPill: {
+    padding: 5,
+  },
   calendarModeCell: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    paddingVertical: 3,
-    minWidth: 54,
-    maxWidth: 76,
-  },
-  calendarModeLabel: {
-    fontSize: 11,
-    fontWeight: "800",
-    textAlign: "center",
-    letterSpacing: -0.15,
+    paddingVertical: 4,
+    minWidth: 46,
   },
   financeTabCell: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    paddingVertical: 3,
-    minWidth: 56,
-    maxWidth: 100,
-  },
-  financeTabLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    textAlign: "center",
-    letterSpacing: -0.15,
+    paddingVertical: 4,
+    minWidth: 46,
   },
   border: {
     borderWidth: 1,

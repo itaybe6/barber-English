@@ -20,6 +20,9 @@ pnpm-debug.log*
 .dist/
 .cache/
 
+# Local MCP / one-off edge deploy payloads (large JSON; do not commit)
+.cursor-deploy*.json
+
 # OS/Editor
 .DS_Store
 Thumbs.db

@@ -332,7 +332,7 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
               contentContainerStyle={styles.scrollPad}
             >
               <Text style={styles.hint}>
-                בדיקת חיבור: אם יש מפתח Direct API (מסד), השרת שואל גם את יתרת «חבילת SMS בAPI» דרך Pulseem REST (GetCreditBalance) עם PULSEEM_MAIN_API_KEY ב-Supabase. Web Service הישן (מזהה + סיסמה) מציג יתרה קלאסית — לעיתים ‎-1‎ כשאין חבילה ישנה למרות שב-API יש קרדיטים.
+                יתרת «חבילת SMS בAPI» נשלפת עם מפתח ה-Direct של העסק (אותו מפתח שמקבל טעינה ב-CreditTransfer). אם זה נכשל, נעשה fallback עם מפתח ראשי + שם תת-חשבון. Web Service (מזהה + סיסמה) מציג יתרה קלאסית — לעיתים ‎-1‎ למרות שב-API יש קרדיטים.
               </Text>
 
               {!business.pulseemHasApiKey ? (
@@ -374,9 +374,9 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
 
               {business.pulseemHasApiKey ? (
                 <View style={styles.creditBox}>
-                  <Text style={styles.label}>שם תת-חשבון (פולסים) — ליתרת SMS API</Text>
+                  <Text style={styles.label}>שם תת-חשבון (פולסים) — fallback ליתרה</Text>
                   <Text style={styles.subHint}>
-                    כפי שמופיע בפולסים בעמודת «שם החשבון» (למשל EliyaMoshe). אם היתרה לא נטענת, התאם לשם המדויק.
+                    ברירת המחדל ליתרה היא מפתח ה-API של התת-חשבון מהמסד. השדה הזה משמש רק אם צריך לשאול דרך החשבון הראשי (שם כפי בעמודת «שם החשבון» בפולסים).
                   </Text>
                   <TextInput
                     style={styles.input}

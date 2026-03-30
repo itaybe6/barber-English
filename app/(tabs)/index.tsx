@@ -573,7 +573,6 @@ export default function HomeScreen() {
   };
 
   const fetchInsightsData = async () => {
-    if (isSuperAdmin) { setLoadingInsights(false); return; }
     try {
       setLoadingInsights(true);
       const { getBusinessId } = await import('@/lib/supabase');
@@ -591,7 +590,6 @@ export default function HomeScreen() {
         .gte('slot_date', firstDayOfMonth)
         .lte('slot_date', lastDayOfMonth)
         .in('status', ['pending', 'confirmed', 'completed', 'cancelled', 'no_show']);
-      if (user?.id) monthApptQuery = monthApptQuery.eq('barber_id', user.id);
 
       let cancelledMonthQuery = supabase
         .from('appointments')
@@ -600,7 +598,13 @@ export default function HomeScreen() {
         .eq('status', 'cancelled')
         .gte('slot_date', firstDayOfMonth)
         .lte('slot_date', lastDayOfMonth);
-      if (user?.id) cancelledMonthQuery = cancelledMonthQuery.eq('barber_id', user.id);
+
+      // Super admin: business-wide. Barber admin: own slots + legacy rows with no barber_id (client booking without barber).
+      if (!isSuperAdmin && user?.id) {
+        const barberOrUnassigned = `barber_id.eq.${user.id},barber_id.is.null`;
+        monthApptQuery = monthApptQuery.or(barberOrUnassigned);
+        cancelledMonthQuery = cancelledMonthQuery.or(barberOrUnassigned);
+      }
 
       const [monthApptRes, cancelledMonthRes, newClientsRes] = await Promise.all([
         monthApptQuery,
@@ -637,6 +641,16 @@ export default function HomeScreen() {
       setLoadingInsights(false);
     }
   };
+
+  /** Refresh dashboard stats when returning to home (e.g. client cancelled elsewhere). */
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!isAdmin) return;
+      void fetchInsightsData();
+      void fetchNextAppointment();
+      void fetchTodayAppointmentsCount();
+    }, [isAdmin, user?.id, isSuperAdmin])
+  );
 
   // Fetch clients
   const fetchClients = async () => {

@@ -18,12 +18,18 @@ import {
   BackHandler,
   Platform,
   Pressable,
+  DeviceEventEmitter,
 } from 'react-native';
 import Colors from '@/constants/colors';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import DaySelector from '@/components/DaySelector';
 import { AvailableTimeSlot, supabase, getBusinessId, type CalendarReminder, type BusinessConstraint } from '@/lib/supabase';
-import { businessConstraintsApi, mergeConstraintsForDisplay } from '@/lib/api/businessConstraints';
+import {
+  businessConstraintsApi,
+  mergeConstraintsForDisplay,
+  isBusinessDayFullyBlockedByConstraints,
+  constraintTimeToMinutes as constraintTimeToMinutesFromApi,
+} from '@/lib/api/businessConstraints';
 import {
   listCalendarRemindersForDate,
   listCalendarRemindersForRange,
@@ -49,7 +55,7 @@ import {
   useAdminCalendarReminderFabRegistration,
 } from '@/contexts/AdminCalendarReminderFabContext';
 import { Ban, Calendar, ChevronLeft, ChevronRight, CheckCircle, StickyNote } from 'lucide-react-native';
-import AddAppointmentModal from '@/components/AddAppointmentModal';
+import { ADMIN_CALENDAR_APPOINTMENTS_CHANGED } from '@/constants/adminCalendarEvents';
 import BusinessConstraintsModal from '@/components/BusinessConstraintsModal';
 import ConstraintEditModal from '@/components/ConstraintEditModal';
 import CalendarReminderEditorModal from '@/components/CalendarReminderEditorModal';
@@ -290,6 +296,13 @@ function _formatLocalYyyyMmDd(d: Date) {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const da = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${da}`;
+}
+
+function _addOneLocalDayYmd(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map((x) => parseInt(x, 10));
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + 1);
+  return _formatLocalYyyyMmDd(dt);
 }
 
 function _getStartOfWeek(date: Date) {
@@ -975,6 +988,10 @@ export default function AdminAppointmentsScreen() {
   }, []);
   const [rangeAppointments, setRangeAppointments] = useState<Map<string, AvailableTimeSlot[]>>(new Map());
   const [rangeConstraints, setRangeConstraints] = useState<Map<string, BusinessConstraint[]>>(new Map());
+  /** שעות פתיחה לפי יום בשבוע (0–6) — לזיהוי יום שחסום לחלוטין באילוצים */
+  const [weeklyHoursByDow, setWeeklyHoursByDow] = useState<
+    Map<number, { startMin: number; endMin: number; active: boolean }>
+  >(new Map());
   const [calendarReminders, setCalendarReminders] = useState<CalendarReminder[]>([]);
   const [rangeReminders, setRangeReminders] = useState<Map<string, CalendarReminder[]>>(new Map());
   const [dayConstraints, setDayConstraints] = useState<BusinessConstraint[]>([]);
@@ -982,7 +999,6 @@ export default function AdminAppointmentsScreen() {
 
   const [showCalendarFabSheet, setShowCalendarFabSheet] = useState(false);
   const [showReminderEditor, setShowReminderEditor] = useState(false);
-  const [showAddAppointmentModal, setShowAddAppointmentModal] = useState(false);
   const [showConstraintsModal, setShowConstraintsModal] = useState(false);
   const [constraintToEdit, setConstraintToEdit] = useState<BusinessConstraint | null>(null);
 
@@ -1172,6 +1188,60 @@ export default function AdminAppointmentsScreen() {
     },
     [user?.id]
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!user?.id) {
+        setWeeklyHoursByDow(new Map());
+        return;
+      }
+      try {
+        const businessId = getBusinessId();
+        const [{ data: userBh }, { data: globalBh }] = await Promise.all([
+          supabase
+            .from('business_hours')
+            .select('day_of_week,start_time,end_time,is_active')
+            .eq('business_id', businessId)
+            .eq('user_id', user.id),
+          supabase
+            .from('business_hours')
+            .select('day_of_week,start_time,end_time,is_active')
+            .eq('business_id', businessId)
+            .is('user_id', null),
+        ]);
+        if (cancelled) return;
+        const u = (userBh || []) as {
+          day_of_week: number;
+          start_time: string;
+          end_time: string;
+          is_active: boolean;
+        }[];
+        const g = (globalBh || []) as typeof u;
+        const map = new Map<number, { startMin: number; endMin: number; active: boolean }>();
+        for (let dow = 0; dow <= 6; dow++) {
+          const uRow = u.find((r) => r.day_of_week === dow && r.is_active);
+          const gRow = g.find((r) => r.day_of_week === dow && r.is_active);
+          const row = uRow || gRow;
+          if (!row) {
+            map.set(dow, { startMin: 0, endMin: 0, active: false });
+            continue;
+          }
+          map.set(dow, {
+            startMin: constraintTimeToMinutesFromApi(row.start_time),
+            endMin: constraintTimeToMinutesFromApi(row.end_time),
+            active: true,
+          });
+        }
+        setWeeklyHoursByDow(map);
+      } catch {
+        if (!cancelled) setWeeklyHoursByDow(new Map());
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     // Load business hours for selected day to drive the grid
@@ -1468,13 +1538,6 @@ export default function AdminAppointmentsScreen() {
     return [];
   }, [selectedDateStr, calendarView, weekGridReverseDays]);
 
-  /** טווח תאריכים כרונולוגי לשאילתות — `gridDays` יכול להיות הפוך לתצוגה (ש׳…א׳) */
-  const weekRangeChronoBounds = useMemo(() => {
-    if (gridDays.length === 0) return null;
-    const sorted = [...gridDays].sort((a, b) => a.formatted.localeCompare(b.formatted));
-    return { start: sorted[0]!.formatted, end: sorted[sorted.length - 1]!.formatted };
-  }, [gridDays]);
-
   /** Week that contains selectedDate — used to refresh week-range data even when calendar is on month/day */
   const selectedWeekChronoRange = useMemo(() => {
     const wkStart = _getStartOfWeek(selectedDate);
@@ -1482,6 +1545,28 @@ export default function AdminAppointmentsScreen() {
     const sorted = [...days].sort((a, b) => a.formatted.localeCompare(b.formatted));
     return { start: sorted[0]!.formatted, end: sorted[sorted.length - 1]!.formatted };
   }, [selectedDateStr, selectedDate]);
+
+  /** ימים בשבוע הנבחר שבהם אילוצים מכסים את כל שעות העבודה — לסרגל הימים בתצוגה יומית */
+  const dayStripFullBlockDates = useMemo(() => {
+    const out = new Set<string>();
+    if (!user?.id) return out;
+    const { start, end } = selectedWeekChronoRange;
+    let key = start;
+    while (true) {
+      const [yy, mo, da] = key.split('-').map((n) => parseInt(n, 10));
+      const dow = new Date(yy, mo - 1, da).getDay();
+      const wh = weeklyHoursByDow.get(dow);
+      if (wh?.active) {
+        const cons = rangeConstraints.get(key) ?? [];
+        if (isBusinessDayFullyBlockedByConstraints(cons, wh.startMin, wh.endMin)) {
+          out.add(key);
+        }
+      }
+      if (key === end) break;
+      key = _addOneLocalDayYmd(key);
+    }
+    return out;
+  }, [user?.id, selectedWeekChronoRange, weeklyHoursByDow, rangeConstraints]);
 
   const gridDims = useMemo(() => {
     const sw = Dimensions.get('window').width;
@@ -1496,10 +1581,10 @@ export default function AdminAppointmentsScreen() {
   }, []);
 
   useEffect(() => {
-    if (calendarView !== 'week') return;
-    if (!weekRangeChronoBounds) return;
-    void loadAppointmentsForRange(weekRangeChronoBounds.start, weekRangeChronoBounds.end);
-  }, [calendarView, weekRangeChronoBounds, loadAppointmentsForRange]);
+    if (calendarView !== 'week' && calendarView !== 'day') return;
+    if (!user?.id) return;
+    void loadAppointmentsForRange(selectedWeekChronoRange.start, selectedWeekChronoRange.end);
+  }, [calendarView, selectedWeekChronoRange, loadAppointmentsForRange, user?.id]);
 
   const nowLineOffsetY = useMemo(() => {
     if (calendarView !== 'day') return null;
@@ -1753,8 +1838,11 @@ export default function AdminAppointmentsScreen() {
 
   const onCalendarFabPickAppointment = useCallback(() => {
     setShowCalendarFabSheet(false);
-    setShowAddAppointmentModal(true);
-  }, []);
+    router.push({
+      pathname: '/(tabs)/add-appointment',
+      params: { date: selectedDateStr },
+    } as unknown as Parameters<typeof router.push>[0]);
+  }, [router, selectedDateStr]);
 
   const onCalendarFabPickConstraints = useCallback(() => {
     setShowCalendarFabSheet(false);
@@ -1808,11 +1896,7 @@ export default function AdminAppointmentsScreen() {
 
   useEffect(() => {
     if (
-      (!showCalendarFabSheet &&
-        !showAddAppointmentModal &&
-        !showConstraintsModal &&
-        !showReminderEditor &&
-        !constraintToEdit) ||
+      (!showCalendarFabSheet && !showConstraintsModal && !showReminderEditor && !constraintToEdit) ||
       Platform.OS !== 'android'
     )
       return;
@@ -1826,14 +1910,12 @@ export default function AdminAppointmentsScreen() {
         return true;
       }
       closeReminderModal();
-      setShowAddAppointmentModal(false);
       setShowConstraintsModal(false);
       return true;
     });
     return () => sub.remove();
   }, [
     showCalendarFabSheet,
-    showAddAppointmentModal,
     showConstraintsModal,
     showReminderEditor,
     constraintToEdit,
@@ -1854,15 +1936,13 @@ export default function AdminAppointmentsScreen() {
       closeReminderEditor();
       return;
     }
-    if (showCalendarFabSheet || showAddAppointmentModal) {
+    if (showCalendarFabSheet) {
       closeReminderModal();
-      setShowAddAppointmentModal(false);
     } else {
       setShowCalendarFabSheet(true);
     }
   }, [
     showCalendarFabSheet,
-    showAddAppointmentModal,
     showConstraintsModal,
     showReminderEditor,
     constraintToEdit,
@@ -1874,7 +1954,6 @@ export default function AdminAppointmentsScreen() {
     setReminderFabRegistration({
       isOpen:
         showCalendarFabSheet ||
-        showAddAppointmentModal ||
         showConstraintsModal ||
         showReminderEditor ||
         !!constraintToEdit,
@@ -1883,13 +1962,19 @@ export default function AdminAppointmentsScreen() {
     return () => setReminderFabRegistration(null);
   }, [
     showCalendarFabSheet,
-    showAddAppointmentModal,
     showConstraintsModal,
     showReminderEditor,
     constraintToEdit,
     reminderFabTabPress,
     setReminderFabRegistration,
   ]);
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(ADMIN_CALENDAR_APPOINTMENTS_CHANGED, () => {
+      handleAddAppointmentModalSuccess();
+    });
+    return () => sub.remove();
+  }, [handleAddAppointmentModalSuccess]);
 
   const openEditReminderModal = useCallback((r: CalendarReminder) => {
     setReminderEditorEditing(r);
@@ -1950,89 +2035,76 @@ export default function AdminAppointmentsScreen() {
 
   return (
     <View style={[styles.gcRoot, calendarView === 'month' && styles.gcRootMonth]}>
-      <View
-        style={[
-          styles.gcTopChrome,
-          { paddingTop: insets.top },
-          calendarView === 'month' && styles.gcTopChromeMonth,
-        ]}
-      >
-        <View style={[styles.gcHeader, calendarView === 'month' && styles.gcHeaderMonth]}>
-        {calendarView !== 'month' ? (
+      {calendarView === 'day' ? (
+        <View style={{ paddingTop: insets.top }}>
+          <DaySelector
+            selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
+            mode="week"
+            markedDates={markedDates}
+            fullyBlockedDateKeys={dayStripFullBlockDates}
+          />
+        </View>
+      ) : (
         <View
           style={[
-            styles.gcNavTrack,
-            { flexDirection: isRtl ? 'row-reverse' : 'row' },
+            styles.gcTopChrome,
+            { paddingTop: insets.top },
+            calendarView === 'month' && styles.gcTopChromeMonth,
           ]}
         >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={String(t('admin.appointments.navPrev'))}
-            onPress={() => {
-              const d = new Date(selectedDate);
-              if (calendarView === 'week') {
-                d.setDate(d.getDate() - 7);
-                d.setHours(0, 0, 0, 0);
-                /** לא להשאיר את אותו יום בשבוע מסומן — ראשון השבוע (כמו ב־grid) */
-                setSelectedDate(_getStartOfWeek(d));
-              } else {
-                d.setDate(1);
-                d.setMonth(d.getMonth() - 1);
-                d.setHours(0, 0, 0, 0);
-                setSelectedDate(d);
-              }
-            }}
-            android_ripple={{ color: calendarRipple, borderless: false }}
-            style={({ pressed }) => [
-              styles.gcNavCircleBtn,
-              Platform.OS === 'ios' && pressed && styles.gcNavCircleBtnPressedIos,
-            ]}
-          >
-            <ChevronRight size={22} color={calendarPrimary} strokeWidth={2.5} />
-          </Pressable>
-          <View style={styles.gcMonthTitleWrap} pointerEvents="none">
-            <Text style={styles.gcMonthTitle} numberOfLines={1}>
-              {calendarView === 'week'
-                ? _formatGregorianWeekRange(selectedDate)
-                : _formatGregorianMonthYear(selectedDate)}
-            </Text>
+          <View style={[styles.gcHeader, calendarView === 'month' && styles.gcHeaderMonth]}>
+            {calendarView === 'week' ? (
+              <View
+                style={[
+                  styles.gcNavTrack,
+                  { flexDirection: isRtl ? 'row-reverse' : 'row' },
+                ]}
+              >
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={String(t('admin.appointments.navPrev'))}
+                  onPress={() => {
+                    const d = new Date(selectedDate);
+                    d.setDate(d.getDate() - 7);
+                    d.setHours(0, 0, 0, 0);
+                    /** לא להשאיר את אותו יום בשבוע מסומן — ראשון השבוע (כמו ב־grid) */
+                    setSelectedDate(_getStartOfWeek(d));
+                  }}
+                  android_ripple={{ color: calendarRipple, borderless: false }}
+                  style={({ pressed }) => [
+                    styles.gcNavCircleBtn,
+                    Platform.OS === 'ios' && pressed && styles.gcNavCircleBtnPressedIos,
+                  ]}
+                >
+                  <ChevronRight size={22} color={calendarPrimary} strokeWidth={2.5} />
+                </Pressable>
+                <View style={styles.gcMonthTitleWrap} pointerEvents="none">
+                  <Text style={styles.gcMonthTitle} numberOfLines={1}>
+                    {_formatGregorianWeekRange(selectedDate)}
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={String(t('admin.appointments.navNext'))}
+                  onPress={() => {
+                    const d = new Date(selectedDate);
+                    d.setDate(d.getDate() + 7);
+                    d.setHours(0, 0, 0, 0);
+                    setSelectedDate(_getStartOfWeek(d));
+                  }}
+                  android_ripple={{ color: calendarRipple, borderless: false }}
+                  style={({ pressed }) => [
+                    styles.gcNavCircleBtn,
+                    Platform.OS === 'ios' && pressed && styles.gcNavCircleBtnPressedIos,
+                  ]}
+                >
+                  <ChevronLeft size={22} color={calendarPrimary} strokeWidth={2.5} />
+                </Pressable>
+              </View>
+            ) : null}
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={String(t('admin.appointments.navNext'))}
-            onPress={() => {
-              const d = new Date(selectedDate);
-              if (calendarView === 'week') {
-                d.setDate(d.getDate() + 7);
-                d.setHours(0, 0, 0, 0);
-                setSelectedDate(_getStartOfWeek(d));
-              } else {
-                d.setDate(1);
-                d.setMonth(d.getMonth() + 1);
-                d.setHours(0, 0, 0, 0);
-                setSelectedDate(d);
-              }
-            }}
-            android_ripple={{ color: calendarRipple, borderless: false }}
-            style={({ pressed }) => [
-              styles.gcNavCircleBtn,
-              Platform.OS === 'ios' && pressed && styles.gcNavCircleBtnPressedIos,
-            ]}
-          >
-            <ChevronLeft size={22} color={calendarPrimary} strokeWidth={2.5} />
-          </Pressable>
         </View>
-        ) : null}
-        </View>
-      </View>
-
-      {calendarView === 'day' && (
-        <DaySelector
-          selectedDate={selectedDate}
-          onSelectDate={setSelectedDate}
-          mode="week"
-          markedDates={markedDates}
-        />
       )}
 
       {isLoading && calendarView !== 'month' ? (
@@ -2925,13 +2997,6 @@ export default function AdminAppointmentsScreen() {
         onSaved={refreshCalendarRemindersOnly}
         editingReminder={reminderEditorEditing}
         defaultDate={selectedDate}
-      />
-
-      <AddAppointmentModal
-        visible={showAddAppointmentModal}
-        onClose={() => setShowAddAppointmentModal(false)}
-        onSuccess={handleAddAppointmentModalSuccess}
-        initialDate={selectedDate}
       />
 
       <BusinessConstraintsModal

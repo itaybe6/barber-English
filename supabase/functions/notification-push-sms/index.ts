@@ -19,6 +19,8 @@ import { decryptPulseemField } from "./pulseemFieldCrypto.ts";
 const PULSEEM_ASMX =
   "https://www.pulseem.co.il/Pulseem/pulseemsendservices.asmx";
 const PULSEEM_REST = "https://api.pulseem.com/api/v1/SmsApi/SendSms";
+const PULSEEM_REST_SMS_REPORT =
+  "https://api.pulseem.com/api/v1/SmsApi/GetSMSReport";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 /** Unicode SMS safe cap (one segment ~70 chars; keep one message reasonable). */
@@ -95,6 +97,151 @@ function parsePulseemSendSingleResult(
   return { ok: false, reason: "unparseable_pulseem_xml" };
 }
 
+/** Align with auth-phone-otp / pulseem-admin-credentials — Pulseem expects header APIKEY. */
+function classifyPulseemRestJson(
+  payload: Record<string, unknown>,
+): "success" | "failure" | "unknown" {
+  const errs = payload.errors ?? payload.Errors;
+  if (Array.isArray(errs) && errs.length > 0) return "failure";
+
+  const errMsg = String(
+    payload.errorMessage ?? payload.ErrorMessage ?? payload.errorDescription ?? "",
+  ).trim();
+  if (errMsg && !/^null$/i.test(errMsg)) return "failure";
+
+  const st = String(payload.status ?? payload.Status ?? "").toLowerCase();
+  if (st === "error" || st === "failed" || st === "failure") return "failure";
+  if (st === "success" || st === "ok" || st === "succeeded") return "success";
+
+  const boolKeys = [
+    payload.success,
+    payload.Success,
+    payload.isSuccess,
+    payload.IsSuccess,
+    payload.isSucceeded,
+    payload.IsSucceeded,
+    payload.succeeded,
+    payload.Succeeded,
+  ];
+  if (boolKeys.some((v) => v === true)) return "success";
+  if (boolKeys.some((v) => v === false)) return "failure";
+
+  const failN =
+    typeof payload.failure === "number"
+      ? payload.failure
+      : typeof payload.Failure === "number"
+        ? payload.Failure
+        : null;
+  const succN =
+    typeof payload.success === "number"
+      ? payload.success
+      : typeof payload.Success === "number"
+        ? payload.Success
+        : null;
+  if (failN !== null && failN > 0) return "failure";
+  if (succN !== null && succN > 0) return "success";
+
+  const ec = payload.errorCode ?? payload.ErrorCode ?? payload.code ?? payload.Code;
+  if (typeof ec === "number" && ec !== 0 && ec !== 200) return "failure";
+
+  const nested = payload.data ?? payload.Data ?? payload.result ?? payload.Result;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    return classifyPulseemRestJson(nested as Record<string, unknown>);
+  }
+
+  const failCount =
+    (typeof payload.failedCount === "number" ? payload.failedCount : null) ??
+    (typeof payload.FailedCount === "number" ? payload.FailedCount : null) ??
+    (typeof payload.failedSmsCount === "number" ? payload.failedSmsCount : null);
+  if (typeof failCount === "number" && failCount > 0) return "failure";
+
+  const sentOk =
+    (typeof payload.sentSmsCount === "number" ? payload.sentSmsCount : null) ??
+    (typeof payload.SentSmsCount === "number" ? payload.SentSmsCount : null) ??
+    (typeof payload.successSmsCount === "number" ? payload.successSmsCount : null) ??
+    (typeof payload.validSmsCount === "number" ? payload.validSmsCount : null);
+  if (typeof sentOk === "number" && sentOk > 0) return "success";
+
+  return "unknown";
+}
+
+function assertPulseemRestJsonSuccess(responseText: string): void {
+  const trimmed = responseText.trim();
+  if (!trimmed) throw new Error("pulseem_rest_empty_response");
+  if (!trimmed.startsWith("{")) {
+    const low = trimmed.toLowerCase();
+    if (low === "true" || low === '"true"') return;
+    if (low === "false" || low === '"false"') throw new Error("pulseem_rest_rejected");
+    throw new Error(
+      `pulseem_rest_non_json_body:${trimmed.slice(0, 240).replace(/\s+/g, " ")}`,
+    );
+  }
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(trimmed) as Record<string, unknown>;
+  } catch {
+    throw new Error("pulseem_rest_invalid_json");
+  }
+  const c = classifyPulseemRestJson(payload);
+  if (c === "failure") {
+    const msg = String(
+      payload.message ??
+        payload.Message ??
+        payload.errorMessage ??
+        payload.ErrorMessage ??
+        payload.error ??
+        payload.Error ??
+        "pulseem_rest_rejected",
+    ).trim();
+    throw new Error(msg || "pulseem_rest_rejected");
+  }
+  if (c === "unknown") {
+    throw new Error(
+      `pulseem_rest_ambiguous_response:${trimmed.slice(0, 400).replace(/\s+/g, " ")}`,
+    );
+  }
+}
+
+function pulseemRestIsAsync(): boolean {
+  const v = String(Deno.env.get("PULSEEM_REST_IS_ASYNC") ?? "true").trim().toLowerCase();
+  return !/^(0|false|no|off)$/.test(v);
+}
+
+async function pulseemLogSmsReportBestEffort(opts: {
+  apiKey: string;
+  sendId?: string;
+  reference?: string;
+  cellphone?: string;
+}): Promise<void> {
+  if (/^(0|false|no|off)$/i.test(String(Deno.env.get("PULSEEM_REST_FETCH_SMS_REPORT") ?? "1").trim())) {
+    return;
+  }
+  try {
+    const res = await fetch(PULSEEM_REST_SMS_REPORT, {
+      method: "POST",
+      headers: {
+        APIKEY: opts.apiKey,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        sendId: opts.sendId ?? null,
+        reference: opts.reference ?? null,
+        cellphone: opts.cellphone ?? null,
+      }),
+    });
+    const t = await res.text();
+    console.log(
+      "[notification-push-sms] pulseem GetSMSReport status=",
+      res.status,
+      "body=",
+      t.slice(0, 1200),
+    );
+  } catch (e) {
+    console.warn("[notification-push-sms] GetSMSReport failed:", (e as Error)?.message ?? e);
+  }
+}
+
 async function sendPulseemViaRestApi(opts: {
   apiKey: string;
   fromNumber: string;
@@ -103,9 +250,10 @@ async function sendPulseemViaRestApi(opts: {
 }): Promise<void> {
   const to = normalizeSmsDestination(opts.toNumber);
   const ref = crypto.randomUUID().replace(/-/g, "").slice(0, 20);
+  const isAsync = pulseemRestIsAsync();
   const body = {
     sendId: ref,
-    isAsync: false,
+    isAsync,
     smsSendData: {
       fromNumber: opts.fromNumber,
       toNumberList: [to],
@@ -116,35 +264,29 @@ async function sendPulseemViaRestApi(opts: {
   };
   const res = await fetch(PULSEEM_REST, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "APIKey": opts.apiKey },
+    headers: {
+      APIKEY: opts.apiKey,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
     body: JSON.stringify(body),
   });
   const responseText = await res.text();
   if (!res.ok) {
     throw new Error(`Pulseem REST ${res.status}: ${responseText.slice(0, 300)}`);
   }
-  const trimmed = responseText.trim();
-  if (trimmed.startsWith("{")) {
-    try {
-      const payload = JSON.parse(trimmed) as Record<string, unknown>;
-      const st = String(payload.status ?? payload.Status ?? "").toLowerCase();
-      const errMsg = String(payload.error ?? payload.Error ?? "").trim();
-      if (st === "error") throw new Error(errMsg || "pulseem_rest_error");
-      const succ = payload.success ?? payload.Success ?? payload.isSuccess ?? payload.IsSuccess;
-      if (succ === false) {
-        throw new Error(
-          String(
-            payload.message ??
-              payload.Message ??
-              payload.error ??
-              payload.Error ??
-              "pulseem_rest_rejected",
-          ),
-        );
-      }
-    } catch (e) {
-      if (!(e instanceof SyntaxError)) throw e;
-    }
+  assertPulseemRestJsonSuccess(responseText);
+  try {
+    const parsed = JSON.parse(responseText.trim()) as Record<string, unknown>;
+    const sid = String(parsed.sendId ?? parsed.SendId ?? "").trim();
+    await pulseemLogSmsReportBestEffort({
+      apiKey: opts.apiKey,
+      sendId: sid || undefined,
+      reference: ref,
+      cellphone: to,
+    });
+  } catch {
+    /* ignore */
   }
 }
 

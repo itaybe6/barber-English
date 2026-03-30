@@ -1,12 +1,60 @@
 import { supabase, getBusinessId } from '@/lib/supabase';
 import type { BusinessConstraint } from '@/lib/supabase';
 
-function constraintTimeToMinutes(t: string | undefined | null): number {
+export function constraintTimeToMinutes(t: string | undefined | null): number {
   if (!t) return 0;
   const parts = String(t).split(':');
   const hh = parseInt(parts[0] || '0', 10);
   const mm = parseInt(parts[1] || '0', 10);
   return hh * 60 + mm;
+}
+
+/** תואם ל־`_isFullDayConstraint` ביומן האדמין — חסימה מלאה ליום */
+function isFullCalendarDayConstraint(c: BusinessConstraint): boolean {
+  const s = constraintTimeToMinutes(c.start_time);
+  const e = constraintTimeToMinutes(c.end_time);
+  return s <= 0 && e >= 23 * 60 + 45;
+}
+
+/**
+ * האם איחוד כל חלונות האילוץ ליום מסוים מכסה את כל חלון שעות העבודה [openStartMin, openEndMin]
+ * (דקות מחצות; openEnd כלול — כמו end_time בשעות עבודה).
+ */
+export function isBusinessDayFullyBlockedByConstraints(
+  constraints: BusinessConstraint[],
+  openStartMin: number,
+  openEndMin: number
+): boolean {
+  if (!constraints?.length) return false;
+  if (openEndMin <= openStartMin) return false;
+
+  const intervals: [number, number][] = [];
+  for (const c of constraints) {
+    if (isFullCalendarDayConstraint(c)) {
+      intervals.push([0, 24 * 60]);
+      continue;
+    }
+    let s = constraintTimeToMinutes(c.start_time);
+    let e = constraintTimeToMinutes(c.end_time);
+    if (e <= s) e = s + 30;
+    intervals.push([s, e]);
+  }
+
+  intervals.sort((a, b) => a[0] - b[0]);
+  const merged: [number, number][] = [];
+  for (const [s, e] of intervals) {
+    const end = Math.max(s, e);
+    if (!merged.length || s > merged[merged.length - 1][1] + 1) {
+      merged.push([s, end]);
+    } else {
+      merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], end);
+    }
+  }
+
+  for (const [s, e] of merged) {
+    if (s <= openStartMin && e >= openEndMin) return true;
+  }
+  return false;
 }
 
 function minutesToHHMM(total: number): string {

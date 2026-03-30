@@ -1006,7 +1006,11 @@ export default function SettingsScreen() {
   const [uploadingServiceId, setUploadingServiceId] = useState<string | null>(null);
 
 
-  const durationOptions: number[] = Array.from({ length: ((180 - 10) / 5) + 1 }, (_, i) => 10 + i * 5);
+  /** 5 דק׳ עד 3 שעות (180), בקפיצות של 5 דק׳ */
+  const durationOptions: number[] = useMemo(
+    () => Array.from({ length: (180 - 5) / 5 + 1 }, (_, i) => 5 + i * 5),
+    [],
+  );
 
   const guessMimeFromUri = (uriOrName: string): string => {
     const ext = uriOrName.split('.').pop()?.toLowerCase().split('?')[0] || 'jpg';
@@ -4316,37 +4320,44 @@ export default function SettingsScreen() {
               <View style={styles.durationPickerHeader}>
                 <Text style={styles.durationPickerTitle}>{t('settings.services.duration','משך הזמן')}</Text>
               </View>
-              {[15, 20, 30, 45, 60, 90, 120].map((mins, idx, arr) => {
-                const currentVal = editingServiceDurationId
-                  ? editableServices.find(s => s.id === editingServiceDurationId)?.duration_minutes
-                  : parseInt(addSvcDuration, 10);
-                const isSelected = currentVal === mins;
-                return (
-                  <TouchableOpacity
-                    key={mins}
-                    style={[
-                      styles.durationPickerRow,
-                      idx < arr.length - 1 && styles.durationPickerRowBorder,
-                      isSelected && styles.durationPickerRowSelected,
-                    ]}
-                    onPress={() => {
-                      if (editingServiceDurationId) {
-                        updateLocalServiceField(editingServiceDurationId, 'duration_minutes', mins as any);
-                      } else {
-                        setAddSvcDuration(String(mins));
-                      }
-                      setShowDurationPicker(false);
-                      setEditingServiceDurationId(null);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.durationPickerRowText, isSelected && { color: businessColors.primary, fontWeight: '700' }]}>
-                      {mins} {t('settings.services.minShort','דק׳')}
-                    </Text>
-                    {isSelected && <Check size={18} color={businessColors.primary} />}
-                  </TouchableOpacity>
-                );
-              })}
+              <ScrollView
+                style={styles.durationPickerScroll}
+                contentContainerStyle={styles.durationPickerScrollContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator
+              >
+                {durationOptions.map((mins, idx) => {
+                  const currentVal = editingServiceDurationId
+                    ? editableServices.find(s => s.id === editingServiceDurationId)?.duration_minutes
+                    : parseInt(addSvcDuration, 10);
+                  const isSelected = currentVal === mins;
+                  return (
+                    <TouchableOpacity
+                      key={mins}
+                      style={[
+                        styles.durationPickerRow,
+                        idx < durationOptions.length - 1 && styles.durationPickerRowBorder,
+                        isSelected && styles.durationPickerRowSelected,
+                      ]}
+                      onPress={() => {
+                        if (editingServiceDurationId) {
+                          updateLocalServiceField(editingServiceDurationId, 'duration_minutes', mins as any);
+                        } else {
+                          setAddSvcDuration(String(mins));
+                        }
+                        setShowDurationPicker(false);
+                        setEditingServiceDurationId(null);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.durationPickerRowText, isSelected && { color: businessColors.primary, fontWeight: '700' }]}>
+                        {mins} {t('settings.services.minShort','דק׳')}
+                      </Text>
+                      {isSelected && <Check size={18} color={businessColors.primary} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             </Pressable>
           </Pressable>
         )}
@@ -6412,6 +6423,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: Colors.text,
+  },
+  durationPickerScroll: {
+    maxHeight: Dimensions.get('window').height * 0.52,
+  },
+  durationPickerScrollContent: {
+    flexGrow: 0,
   },
   durationPickerRow: {
     flexDirection: 'row',

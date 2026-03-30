@@ -9,6 +9,7 @@
  *
  * Auth: same as pulseem-provision-subaccount (service_role JWT or sb_secret).
  * verify_jwt must stay false (custom Bearer check).
+ * If app uses legacy JWT: set Edge secret JWT_SECRET = API JWT Secret (Dashboard blocks SUPABASE_* manual names).
  *
  * POST JSON:
  *   { "businessId": "uuid",
@@ -50,7 +51,11 @@ async function authorizeServiceRole(req: Request): Promise<boolean> {
   const expected = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").trim();
   if (expected && auth === expected) return true;
 
-  const jwtSecret = (Deno.env.get("SUPABASE_JWT_SECRET") ?? "").trim();
+  const jwtSecret = (
+    Deno.env.get("SUPABASE_JWT_SECRET") ??
+    Deno.env.get("JWT_SECRET") ??
+    ""
+  ).trim();
   if (!jwtSecret || !auth.startsWith("eyJ")) return false;
 
   try {

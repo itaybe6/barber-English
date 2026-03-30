@@ -41,16 +41,76 @@ function bearerFromRequest(req: Request): string {
     .trim();
 }
 
-/** New secret key (sb_secret_…) or legacy JWT service_role from the same project. */
+/** Token shape for logs only — never log full secrets or JWTs. */
+function bearerShape(token: string): "empty" | "jwt_eyJ" | "sb_secret" | "other" {
+  if (!token) return "empty";
+  if (token.startsWith("eyJ")) return "jwt_eyJ";
+  if (token.startsWith("sb_secret_")) return "sb_secret";
+  return "other";
+}
+
+/**
+ * New secret key (sb_secret_…) or legacy JWT service_role from the same project.
+ * On failure, logs safe diagnostics to Supabase Functions logs (Dashboard → Logs).
+ */
 async function authorizeServiceRole(req: Request): Promise<boolean> {
+  const hasAuthHeader = !!(req.headers.get("Authorization") ?? "").trim();
+  const apikey = (req.headers.get("apikey") ?? "").trim();
   const auth = bearerFromRequest(req);
-  if (!auth) return false;
+
+  if (!auth) {
+    console.error("[pulseem-admin-credentials] auth_fail", {
+      step: "missing_or_empty_bearer",
+      hasAuthorizationHeader: hasAuthHeader,
+      apikeyHeaderLength: apikey.length,
+    });
+    return false;
+  }
 
   const expected = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").trim();
-  if (expected && auth === expected) return true;
-
   const jwtSecret = (Deno.env.get("SUPABASE_JWT_SECRET") ?? "").trim();
-  if (!jwtSecret || !auth.startsWith("eyJ")) return false;
+
+  if (!expected) {
+    console.error("[pulseem-admin-credentials] auth_fail", {
+      step: "edge_env",
+      problem: "SUPABASE_SERVICE_ROLE_KEY is empty in Edge runtime — check Supabase auto-secrets / project link",
+      bearerShape: bearerShape(auth),
+      bearerLength: auth.length,
+    });
+    return false;
+  }
+
+  if (auth === expected) {
+    return true;
+  }
+
+  // Client token differs from Edge's service role: try JWT path (legacy eyJ… service_role)
+  if (!auth.startsWith("eyJ")) {
+    console.error("[pulseem-admin-credentials] auth_fail", {
+      step: "secret_compare",
+      problem:
+        "Bearer !== Edge SUPABASE_SERVICE_ROLE_KEY and token does not start with eyJ (not a legacy JWT). App must send the same service_role secret/JWT as this project's API settings.",
+      bearerShape: bearerShape(auth),
+      bearerLength: auth.length,
+      edgeSecretLength: expected.length,
+      apikeyLength: apikey.length,
+      apikeySameLengthAsBearer: apikey.length === auth.length,
+      hint:
+        "Secrets named EXPO_PUBLIC_* in the Dashboard are NOT injected into Edge Functions — only into your Expo build. Edge uses SUPABASE_SERVICE_ROLE_KEY + SUPABASE_JWT_SECRET.",
+    });
+    return false;
+  }
+
+  if (!jwtSecret) {
+    console.error("[pulseem-admin-credentials] auth_fail", {
+      step: "jwt_path",
+      problem:
+        "Client sent a JWT (eyJ…) but SUPABASE_JWT_SECRET is empty in Edge — cannot verify. Add JWT Secret in Dashboard (Settings → API) to function env, or use the non-JWT service_role key that matches Edge SUPABASE_SERVICE_ROLE_KEY.",
+      bearerLength: auth.length,
+      edgeSecretLength: expected.length,
+    });
+    return false;
+  }
 
   try {
     const { payload } = await jwtVerify(
@@ -58,8 +118,24 @@ async function authorizeServiceRole(req: Request): Promise<boolean> {
       new TextEncoder().encode(jwtSecret),
       { algorithms: ["HS256"] },
     );
-    return String(payload.role ?? "") === "service_role";
-  } catch {
+    const role = String(payload.role ?? "");
+    if (role === "service_role") {
+      return true;
+    }
+    console.error("[pulseem-admin-credentials] auth_fail", {
+      step: "jwt_role",
+      problem: "JWT signature OK but role is not service_role (often anon key sent by mistake)",
+      role,
+      iss: payload.iss,
+    });
+    return false;
+  } catch (e) {
+    console.error("[pulseem-admin-credentials] auth_fail", {
+      step: "jwt_verify",
+      problem: "jwtVerify threw — wrong JWT secret, expired token, or malformed JWT",
+      errorMessage: (e as Error)?.message ?? String(e),
+      bearerLength: auth.length,
+    });
     return false;
   }
 }
@@ -104,6 +180,10 @@ serve(async (req) => {
 
   const encKey = (Deno.env.get("PULSEEM_FIELD_ENCRYPTION_KEY") ?? "").trim();
   if (!encKey) {
+    console.error("[pulseem-admin-credentials] config_fail", {
+      step: "after_auth",
+      problem: "PULSEEM_FIELD_ENCRYPTION_KEY missing or empty in Edge secrets",
+    });
     return json({ error: "missing_pulseem_encryption_key" }, 500);
   }
 

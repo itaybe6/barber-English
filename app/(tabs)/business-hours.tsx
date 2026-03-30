@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -11,6 +11,7 @@ import {
   Modal,
   Pressable,
   InteractionManager,
+  Platform,
 } from 'react-native';
 import Animated, {
   FadeIn,
@@ -19,7 +20,8 @@ import Animated, {
   FadeOutDown,
   LinearTransition,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { businessHoursApi } from '@/lib/api/businessHours';
 import { notifyWaitlistOnBusinessHoursUpdate } from '@/lib/api/waitlistNotifications';
@@ -28,6 +30,21 @@ import { businessProfileApi } from '@/lib/api/businessProfile';
 import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from 'react-i18next';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
+import { darkenHex } from '@/lib/colorContrast';
+import { readableOnHex } from '@/lib/utils/readableOnHex';
+import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
+
+/** Same as login / register — brand gradient stops */
+function lightenHex(hex: string, ratio: number): string {
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return hex;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const mix = (c: number) => Math.min(255, Math.round(c + (255 - c) * ratio));
+  const to = (n: number) => n.toString(16).padStart(2, '0');
+  return `#${to(mix(r))}${to(mix(g))}${to(mix(b))}`;
+}
 
 // Modern Apple-like Colors
 const Colors = {
@@ -60,6 +77,8 @@ const _fadeExit = FadeOut.springify();
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
 const GLOBAL_BREAK_MINUTES_VALUES = [0, 5, 10, 15, 20, 25, 30] as const;
+
+type HoursScreenSegment = 'workingHours' | 'fixedBreaks';
 
 // Format time string to HH:MM (strip seconds if present)
 const formatHHMM = (time?: string | null): string => {
@@ -240,8 +259,20 @@ const TimePicker: React.FC<TimePickerProps & { primaryColor?: string; useAmPm?: 
 
 export default function BusinessHoursScreen() {
   const { t, i18n } = useTranslation();
+  const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const { colors: businessColors } = useBusinessColors();
+  const primary = businessColors.primary;
+  const loginGradient = useMemo(
+    () => [lightenHex(primary, 0.1), darkenHex(primary, 0.42)] as const,
+    [primary],
+  );
+  const gradientEnd = loginGradient[1];
+  const contrastAnchor = useMemo(() => darkenHex(primary, 0.22), [primary]);
+  const useLightFg = readableOnHex(contrastAnchor) === '#FFFFFF';
+  const heroText = useLightFg ? '#FFFFFF' : '#141414';
+
+  const [heroLayout, setHeroLayout] = useState<{ w: number; h: number } | null>(null);
   const [businessHours, setBusinessHours] = useState<BusinessHours[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -250,6 +281,7 @@ export default function BusinessHoursScreen() {
   const [globalBreakMinutes, setGlobalBreakMinutes] = useState<number>(0);
   const [isSavingGlobalBreak, setIsSavingGlobalBreak] = useState<boolean>(false);
   const [isBreakPickerOpen, setIsBreakPickerOpen] = useState<boolean>(false);
+  const [hoursSegment, setHoursSegment] = useState<HoursScreenSegment>('workingHours');
   const isHebrewOrRtl = (i18n?.language?.toLowerCase?.().startsWith('he') ?? false) || (i18n?.dir?.() === 'rtl');
   const useAmPm = user?.user_type === 'admin' && !isHebrewOrRtl;
 
@@ -309,6 +341,10 @@ export default function BusinessHoursScreen() {
     };
     fetchData();
   }, [user?.id, user?.user_type]);
+
+  useEffect(() => {
+    setIsBreakPickerOpen(false);
+  }, [hoursSegment]);
 
   const saveGlobalBreakMinutes = useCallback(
     async (m: number) => {
@@ -711,113 +747,190 @@ export default function BusinessHoursScreen() {
     );
   };
 
+  const renderHoursSegments = () => (
+    <View style={styles.hoursSegmentBarWrap}>
+      <View style={styles.hoursTabRow}>
+        {(['workingHours', 'fixedBreaks'] as const).map((seg) => {
+          const active = hoursSegment === seg;
+          return (
+            <TouchableOpacity
+              key={seg}
+              style={styles.hoursTabHit}
+              onPress={() => setHoursSegment(seg)}
+              activeOpacity={0.65}
+            >
+              <View style={styles.hoursTabInner}>
+                <Text
+                  style={[
+                    styles.hoursTabLabel,
+                    active && styles.hoursTabLabelActive,
+                    active && { color: primary },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {seg === 'workingHours'
+                    ? t('admin.hours.tabWorkingHours')
+                    : t('admin.hours.tabFixedBreaks')}
+                </Text>
+                <View
+                  style={[
+                    styles.hoursTabUnderline,
+                    active && { backgroundColor: primary },
+                  ]}
+                />
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+
+  const renderHoursHero = () => (
+    <>
+      <View
+        style={[styles.hoursHeroShell, { backgroundColor: gradientEnd }]}
+        onLayout={(e) => {
+          const { width, height } = e.nativeEvent.layout;
+          if (width > 0 && height > 0) {
+            setHeroLayout((prev) =>
+              prev?.w === width && prev?.h === height ? prev : { w: width, h: height },
+            );
+          }
+        }}
+      >
+        <LinearGradient colors={[...loginGradient]} style={StyleSheet.absoluteFillObject} />
+        {Platform.OS !== 'web' && heroLayout ? (
+          <BrandLavaLampBackground
+            primaryColor={primary}
+            baseColor={gradientEnd}
+            layoutWidth={heroLayout.w}
+            layoutHeight={heroLayout.h}
+            count={4}
+            duration={16000}
+            blurIntensity={48}
+          />
+        ) : null}
+
+        <View style={[styles.hoursHeroInner, { paddingTop: insets.top + 12 }]}>
+          <Text style={[styles.hoursHeroTitle, { color: heroText }]}>{t('admin.hours.title')}</Text>
+        </View>
+      </View>
+      {renderHoursSegments()}
+    </>
+  );
+
   if (isLoading) {
     return (
-      <SafeAreaView edges={['top', 'left', 'right']} style={styles.screenRoot}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.loadingText}>{t('admin.hours.loading')}</Text>
+      <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.screenRoot}>
+        <View style={styles.hoursScreenBody}>
+          {renderHoursHero()}
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={businessColors.primary} />
+            <Text style={styles.loadingText}>{t('admin.hours.loading')}</Text>
+          </View>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} style={styles.screenRoot}>
-      <ScrollView
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        onScrollBeginDrag={() => {
-          if (isBreakPickerOpen) setIsBreakPickerOpen(false);
-        }}
-      >
+    <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.screenRoot}>
+      <View style={styles.hoursScreenBody}>
+        {renderHoursHero()}
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          onScrollBeginDrag={() => {
+            if (isBreakPickerOpen) setIsBreakPickerOpen(false);
+          }}
+        >
+          {hoursSegment === 'fixedBreaks' && (
+            <View style={styles.breakSectionWrap}>
+              <View style={styles.breakGroupedCard}>
+                <View style={styles.breakGroupedHeader}>
+                  <Text style={styles.breakGroupedTitle}>{t('admin.hours.breakMinutes')}</Text>
+                  <Ionicons name="timer-outline" size={18} color={businessColors.primary} />
+                </View>
+                <TouchableOpacity
+                  style={[styles.breakGroupedControl, isBreakPickerOpen && styles.breakGroupedControlOpen]}
+                  onPress={() => {
+                    if (!isSavingGlobalBreak) setIsBreakPickerOpen((o) => !o);
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <Text style={styles.breakControlValue}>
+                    {globalBreakMinutes} {t('admin.hours.min')}
+                  </Text>
+                  <View style={styles.breakControlAffordance}>
+                    {isSavingGlobalBreak ? (
+                      <ActivityIndicator size="small" color={businessColors.primary} />
+                    ) : (
+                      <Ionicons
+                        name={isBreakPickerOpen ? 'chevron-up' : 'chevron-down'}
+                        size={18}
+                        color={Colors.secondaryText}
+                      />
+                    )}
+                  </View>
+                </TouchableOpacity>
 
-        {/* Global break minutes — grouped card + settings-style control */}
-        <View style={styles.breakSectionWrap}>
-          <View style={styles.breakGroupedCard}>
-            <View style={styles.breakGroupedHeader}>
-              <Text style={styles.breakGroupedTitle}>{t('admin.hours.breakMinutes')}</Text>
-              <Ionicons name="timer-outline" size={18} color={businessColors.primary} />
-            </View>
-            <TouchableOpacity
-              style={[styles.breakGroupedControl, isBreakPickerOpen && styles.breakGroupedControlOpen]}
-              onPress={() => {
-                if (!isSavingGlobalBreak) setIsBreakPickerOpen((o) => !o);
-              }}
-              activeOpacity={0.75}
-            >
-              <Text style={styles.breakControlValue}>
-                {globalBreakMinutes} {t('admin.hours.min')}
-              </Text>
-              <View style={styles.breakControlAffordance}>
-                {isSavingGlobalBreak ? (
-                  <ActivityIndicator size="small" color={businessColors.primary} />
-                ) : (
-                  <Ionicons
-                    name={isBreakPickerOpen ? 'chevron-up' : 'chevron-down'}
-                    size={18}
-                    color={Colors.secondaryText}
-                  />
+                {isBreakPickerOpen && (
+                  <Animated.View
+                    entering={FadeIn.duration(220)}
+                    exiting={FadeOut.duration(160)}
+                    style={styles.breakDropdownPanel}
+                  >
+                    {GLOBAL_BREAK_MINUTES_VALUES.map((m, index) => (
+                      <TouchableOpacity
+                        key={m}
+                        style={[
+                          styles.breakDropdownRow,
+                          index < GLOBAL_BREAK_MINUTES_VALUES.length - 1 && styles.breakDropdownRowBorder,
+                          globalBreakMinutes === m && { backgroundColor: `${businessColors.primary}18` },
+                        ]}
+                        onPress={() => saveGlobalBreakMinutes(m)}
+                        disabled={isSavingGlobalBreak}
+                        activeOpacity={0.65}
+                      >
+                        <Text
+                          style={[
+                            styles.breakDropdownRowText,
+                            globalBreakMinutes === m && { color: businessColors.primary, fontWeight: '700' },
+                          ]}
+                        >
+                          {m} {t('admin.hours.min')}
+                        </Text>
+                        {globalBreakMinutes === m ? (
+                          <Ionicons name="checkmark-circle" size={22} color={businessColors.primary} />
+                        ) : (
+                          <View style={styles.breakDropdownRowSpacer} />
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </Animated.View>
                 )}
               </View>
-            </TouchableOpacity>
+            </View>
+          )}
 
-            {isBreakPickerOpen && (
-              <Animated.View
-                entering={FadeIn.duration(220)}
-                exiting={FadeOut.duration(160)}
-                style={styles.breakDropdownPanel}
-              >
-                {GLOBAL_BREAK_MINUTES_VALUES.map((m, index) => (
-                  <TouchableOpacity
-                    key={m}
-                    style={[
-                      styles.breakDropdownRow,
-                      index < GLOBAL_BREAK_MINUTES_VALUES.length - 1 && styles.breakDropdownRowBorder,
-                      globalBreakMinutes === m && { backgroundColor: `${businessColors.primary}18` },
-                    ]}
-                    onPress={() => saveGlobalBreakMinutes(m)}
-                    disabled={isSavingGlobalBreak}
-                    activeOpacity={0.65}
-                  >
-                    <Text
-                      style={[
-                        styles.breakDropdownRowText,
-                        globalBreakMinutes === m && { color: businessColors.primary, fontWeight: '700' },
-                      ]}
-                    >
-                      {m} {t('admin.hours.min')}
-                    </Text>
-                    {globalBreakMinutes === m ? (
-                      <Ionicons name="checkmark-circle" size={22} color={businessColors.primary} />
-                    ) : (
-                      <View style={styles.breakDropdownRowSpacer} />
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </Animated.View>
-            )}
-          </View>
-        </View>
+          {error && (
+            <View style={styles.errorContainer}>
+              <Ionicons name="warning-outline" size={20} color={Colors.danger} />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
 
+          {hoursSegment === 'workingHours' && (
+            <View style={styles.daysContainer}>
+              {[0, 1, 2, 3, 4, 5, 6].map(renderDayCard)}
+            </View>
+          )}
 
-        {/* Error Message */}
-        {error && (
-          <View style={styles.errorContainer}>
-            <Ionicons name="warning-outline" size={20} color={Colors.danger} />
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        )}
-
-        {/* Days List */}
-        <View style={styles.daysContainer}>
-          {[0, 1, 2, 3, 4, 5, 6].map(renderDayCard)}
-        </View>
-
-        {/* Footer Spacing */}
-        <View style={styles.footerSpacing} />
-      </ScrollView>
+          <View style={styles.footerSpacing} />
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -898,6 +1011,81 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.card,
   },
+  hoursScreenBody: {
+    flex: 1,
+  },
+  hoursHeroShell: {
+    position: 'relative',
+    width: '100%',
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+  hoursHeroInner: {
+    paddingHorizontal: 24,
+    paddingBottom: 20,
+    alignItems: 'center',
+  },
+  hoursHeroTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.22)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+  },
+  hoursSegmentBarWrap: {
+    width: '100%',
+    backgroundColor: Colors.card,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(60, 60, 67, 0.16)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  hoursTabRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: 28,
+  },
+  hoursTabHit: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  hoursTabInner: {
+    alignItems: 'center',
+    alignSelf: 'center',
+  },
+  hoursTabLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: Colors.secondaryText,
+    letterSpacing: -0.2,
+    textAlign: 'center',
+  },
+  hoursTabLabelActive: {
+    fontWeight: '700',
+  },
+  hoursTabUnderline: {
+    marginTop: 8,
+    height: 3,
+    alignSelf: 'stretch',
+    borderRadius: 2,
+    backgroundColor: 'transparent',
+  },
   backButton: {
     width: 44,
     height: 44,
@@ -916,8 +1104,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
   },
   scrollContent: {
-    paddingTop: 16,
+    paddingTop: 12,
     paddingBottom: 100,
+    flexGrow: 1,
   },
   descriptionContainer: {
     paddingHorizontal: 24,
@@ -945,6 +1134,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
+    backgroundColor: Colors.card,
   },
   loadingText: {
     fontSize: 16,

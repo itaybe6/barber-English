@@ -1171,6 +1171,8 @@
     },
     "hours": {
       "title": "Working hours",
+      "tabWorkingHours": "Working hours",
+      "tabFixedBreaks": "Fixed breaks",
       "subtitle": "Set your weekly working schedule and breaks",
       "manageConstraints": "Manage constraints (closed dates/hours)",
       "breakMinutes": "Fixed break minutes between appointments",

@@ -131,12 +131,17 @@ export default function AddAppointmentScreen() {
   const placeholderOnGlass = useLightFg ? 'rgba(255,255,255,0.78)' : undefined;
   const ctaElevatedBg = useLightFg ? '#FFFFFF' : primary;
   const ctaElevatedLabel = useLightFg ? '#141414' : '#FFFFFF';
+  /** Lucide icons on glass / gradient — solid white reads clearer than brand primary */
+  const iconOnGlass = useLightFg ? heroText : primary;
+  const iconOnField = useLightFg ? heroText : innerMuted;
 
   const dateLocale = isHeCopy ? 'he-IL' : 'en-US';
   /** `start` follows writingDirection — reliable with forced RTL mirroring */
   const textAlignPrimary = (layoutRtl ? 'start' : 'left') as 'start' | 'left';
   /** Placeholders on Android often ignore `start`; explicit `right` keeps hint + value on the correct edge */
   const inputTextAlign = (layoutRtl ? 'right' : 'left') as 'right' | 'left';
+  /** Custom placeholder layer when RTL or Hebrew copy — native hint often stays LTR-left */
+  const useRtlInputPlaceholder = layoutRtl || isHeCopy;
   const writingDir = (layoutRtl ? 'rtl' : 'ltr') as 'rtl' | 'ltr';
   const titleShadowStyle = useMemo(
     () =>
@@ -156,7 +161,7 @@ export default function AddAppointmentScreen() {
       textDayFontSize: 15,
       textMonthFontSize: 16,
       textDayHeaderFontSize: 12,
-      arrowColor: primary,
+      arrowColor: useLightFg ? heroText : primary,
       selectedDayBackgroundColor: primary,
       todayTextColor: primary,
       dayTextColor: useLightFg ? 'rgba(255,255,255,0.95)' : '#1C1C1E',
@@ -190,7 +195,7 @@ export default function AddAppointmentScreen() {
         },
       },
     }),
-    [primary, useLightFg]
+    [primary, useLightFg, heroText]
   );
 
   const calendarRenderArrow = useCallback(
@@ -289,7 +294,7 @@ export default function AddAppointmentScreen() {
           <View style={styles.section}>
             <View style={[styles.sectionHead, layoutRtl && styles.sectionHeadVisualRtl]}>
               <View style={[styles.sectionIconWrap, { backgroundColor: `${primary}33` }]}>
-                <User size={18} color={primary} strokeWidth={2} />
+                <User size={18} color={iconOnGlass} strokeWidth={2} />
               </View>
               <View style={styles.sectionTitleWrap}>
                 <Text
@@ -323,22 +328,44 @@ export default function AddAppointmentScreen() {
                     layoutRtl && styles.fieldShellVisualRtl,
                   ]}
                 >
-                  <TextInput
-                    style={[
-                      styles.fieldInput,
-                      {
-                        color: innerText,
-                        textAlign: inputTextAlign,
-                        writingDirection: writingDir,
-                      },
-                    ]}
-                    value={form.clientSearch}
-                    onChangeText={form.setClientSearch}
-                    placeholder={t('admin.appointmentsAdmin.selectClientPlaceholder', 'Select client...')}
-                    placeholderTextColor={placeholderOnGlass ?? innerMuted}
-                    onFocus={() => form.setShowClientDropdown(true)}
-                    textAlignVertical="center"
-                  />
+                  <View style={styles.fieldInputSlot}>
+                    <TextInput
+                      style={[
+                        styles.fieldInput,
+                        {
+                          color: innerText,
+                          textAlign: inputTextAlign,
+                          writingDirection: writingDir,
+                        },
+                      ]}
+                      value={form.clientSearch}
+                      onChangeText={form.setClientSearch}
+                      placeholder={
+                        useRtlInputPlaceholder
+                          ? ''
+                          : t('admin.appointmentsAdmin.selectClientPlaceholder', 'Select client...')
+                      }
+                      placeholderTextColor={placeholderOnGlass ?? innerMuted}
+                      onFocus={() => form.setShowClientDropdown(true)}
+                      textAlignVertical="center"
+                    />
+                    {useRtlInputPlaceholder && !form.clientSearch.trim() ? (
+                      <Text
+                        pointerEvents="none"
+                        numberOfLines={1}
+                        style={[
+                          styles.inputPlaceholderOverlay,
+                          {
+                            color: placeholderOnGlass ?? innerMuted,
+                            textAlign: inputTextAlign,
+                            writingDirection: writingDir,
+                          },
+                        ]}
+                      >
+                        {t('admin.appointmentsAdmin.selectClientPlaceholder', 'Select client...')}
+                      </Text>
+                    ) : null}
+                  </View>
                   <Search size={18} color={innerMuted} />
                 </View>
                 {form.showClientDropdown ? (
@@ -433,7 +460,7 @@ export default function AddAppointmentScreen() {
           <View style={styles.section}>
             <View style={[styles.sectionHead, layoutRtl && styles.sectionHeadVisualRtl]}>
               <View style={[styles.sectionIconWrap, { backgroundColor: `${primary}33` }]}>
-                <CalendarIcon size={18} color={primary} strokeWidth={2} />
+                <CalendarIcon size={18} color={iconOnGlass} strokeWidth={2} />
               </View>
               <View style={styles.sectionTitleWrap}>
                 <Text
@@ -469,6 +496,7 @@ export default function AddAppointmentScreen() {
               <Text
                 style={[
                   styles.fieldInput,
+                  styles.fieldPlaceholderText,
                   {
                     flex: 1,
                     color: form.selectedService ? innerText : innerMuted,
@@ -482,7 +510,7 @@ export default function AddAppointmentScreen() {
                   ? `${form.selectedService.name} · ₪${form.selectedService.price}`
                   : t('admin.appointmentsAdmin.selectServicePlaceholder', 'Select service...')}
               </Text>
-              <CalendarIcon size={18} color={innerMuted} />
+              <CalendarIcon size={18} color={iconOnField} />
             </Pressable>
             {form.showServiceDropdown ? (
               <View style={[styles.dropdown, { borderColor: fieldBorder, backgroundColor: glassBg }]}>
@@ -506,14 +534,21 @@ export default function AddAppointmentScreen() {
                       >
                         <Text
                           style={[
-                            styles.serviceName,
-                            { color: innerText, textAlign: textAlignPrimary, writingDirection: writingDir },
+                            styles.serviceRowText,
+                            styles.hintBlock,
+                            {
+                              color: innerText,
+                              textAlign: inputTextAlign,
+                              writingDirection: writingDir,
+                            },
                           ]}
                           numberOfLines={2}
                         >
                           {service.name}
+                          <Text style={[styles.servicePriceInline, { color: innerText }]}>
+                            {` · ₪${service.price}`}
+                          </Text>
                         </Text>
-                        <Text style={[styles.servicePrice, { color: primary }]}>₪{service.price}</Text>
                       </Pressable>
                     ))
                   )}
@@ -528,7 +563,7 @@ export default function AddAppointmentScreen() {
           <View style={styles.section}>
             <View style={[styles.sectionHead, layoutRtl && styles.sectionHeadVisualRtl]}>
               <View style={[styles.sectionIconWrap, { backgroundColor: `${primary}33` }]}>
-                <CalendarDays size={18} color={primary} strokeWidth={2} />
+                <CalendarDays size={18} color={iconOnGlass} strokeWidth={2} />
               </View>
               <View style={styles.sectionTitleWrap}>
                 <Text
@@ -590,7 +625,7 @@ export default function AddAppointmentScreen() {
           <View style={[styles.section, styles.sectionLast]}>
             <View style={[styles.sectionHead, layoutRtl && styles.sectionHeadVisualRtl]}>
               <View style={[styles.sectionIconWrap, { backgroundColor: `${primary}33` }]}>
-                <Clock size={18} color={primary} strokeWidth={2} />
+                <Clock size={18} color={iconOnGlass} strokeWidth={2} />
               </View>
               <View style={styles.sectionTitleWrap}>
                 <Text
@@ -619,7 +654,7 @@ export default function AddAppointmentScreen() {
             {form.selectedDate && form.selectedService ? (
               form.isLoadingTimes ? (
                 <View style={styles.timesLoading}>
-                  <ActivityIndicator color={primary} />
+                  <ActivityIndicator color={iconOnGlass} />
                   <Text
                     style={[
                       styles.emptyTxt,
@@ -911,10 +946,37 @@ const styles = StyleSheet.create({
     direction: 'ltr',
     flexDirection: 'row-reverse',
   },
+  fieldInputSlot: {
+    flex: 1,
+    minWidth: 0,
+    position: 'relative',
+    justifyContent: 'center',
+  },
   fieldInput: {
     flex: 1,
     fontSize: 16,
     paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+    minHeight: Platform.OS === 'ios' ? 44 : 40,
+  },
+  /** Service row uses Text as placeholder — must span full width so `textAlign: right` applies */
+  fieldPlaceholderText: {
+    alignSelf: 'stretch',
+    width: '100%',
+  },
+  /** RN TextInput native placeholder ignores textAlign on many builds — custom layer for RTL */
+  inputPlaceholderOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 2,
+    fontSize: 16,
+    lineHeight: Platform.OS === 'ios' ? 22 : 20,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    ...(Platform.OS === 'android' ? { elevation: 1 } : {}),
   },
   dropdown: {
     marginTop: 10,
@@ -974,21 +1036,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   serviceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingVertical: 14,
     paddingHorizontal: 12,
-    gap: 12,
   },
-  serviceName: {
-    flex: 1,
+  serviceRowText: {
     fontSize: 16,
     fontWeight: '600',
   },
-  servicePrice: {
+  servicePriceInline: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   divider: {
     height: StyleSheet.hairlineWidth,

@@ -17,11 +17,17 @@
  * REST-only override:
  *   PULSEEM_REST_FROM_NUMBER (e.g. numeric on Direct API)
  *
+ * OTP send order: ASMX first, then REST if ASMX fails (unless PULSEEM_OTP_PREFER_REST=1).
+ *
  * If REST returns “sender name is not approved”, we retry ASMX using PULSEEM_OTP_FROM_NUMBER ||
  * PULSEEM_ASMX_FROM_NUMBER || resolved main fromNumber.
  *
  * sender_same_as_recipient uses the actual from string sent to Pulseem (REST vs ASMX), not only
  * pulse.fromNumber — otherwise PULSEEM_REST_FROM_NUMBER identical to the user’s phone yields OK with no warning.
+ *
+ * Send order (OTP): **ASMX first**, then REST if ASMX fails and pulseem_api_key is set. Many tenants have
+ * legacy SMS credits on ASMX only; REST can return HTTP 200 with a weak JSON body while nothing is delivered.
+ * Set PULSEEM_OTP_PREFER_REST=1 to use REST-first (old behavior).
  *
  * Pulseem decrypt helpers are inlined below so Dashboard / single-file bundles succeed.
  * Keep in sync with pulseem-admin-credentials/pulseemFieldCrypto.ts (same enc:v1: format).
@@ -233,6 +239,100 @@ function parsePulseemSendSingleResult(
 }
 
 /**
+ * Classifies Pulseem REST JSON body. Many responses omit explicit success flags; we at least catch failures.
+ */
+function classifyPulseemRestJson(
+  payload: Record<string, unknown>,
+): "success" | "failure" | "unknown" {
+  const errs = payload.errors ?? payload.Errors;
+  if (Array.isArray(errs) && errs.length > 0) return "failure";
+
+  const errMsg = String(
+    payload.errorMessage ?? payload.ErrorMessage ?? payload.errorDescription ?? "",
+  ).trim();
+  if (errMsg && !/^null$/i.test(errMsg)) return "failure";
+
+  const st = String(payload.status ?? payload.Status ?? "").toLowerCase();
+  if (st === "error" || st === "failed" || st === "failure") return "failure";
+  if (st === "success" || st === "ok" || st === "succeeded") return "success";
+
+  const boolKeys = [
+    payload.success,
+    payload.Success,
+    payload.isSuccess,
+    payload.IsSuccess,
+    payload.isSucceeded,
+    payload.IsSucceeded,
+    payload.succeeded,
+    payload.Succeeded,
+  ];
+  if (boolKeys.some((v) => v === true)) return "success";
+  if (boolKeys.some((v) => v === false)) return "failure";
+
+  const ec = payload.errorCode ?? payload.ErrorCode ?? payload.code ?? payload.Code;
+  if (typeof ec === "number" && ec !== 0 && ec !== 200) return "failure";
+
+  const nested = payload.data ?? payload.Data ?? payload.result ?? payload.Result;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    return classifyPulseemRestJson(nested as Record<string, unknown>);
+  }
+
+  const failCount =
+    (typeof payload.failedCount === "number" ? payload.failedCount : null) ??
+    (typeof payload.FailedCount === "number" ? payload.FailedCount : null) ??
+    (typeof payload.failedSmsCount === "number" ? payload.failedSmsCount : null);
+  if (typeof failCount === "number" && failCount > 0) return "failure";
+
+  return "unknown";
+}
+
+function assertPulseemRestJsonSuccess(responseText: string): void {
+  const trimmed = responseText.trim();
+  if (!trimmed) {
+    throw new Error("pulseem_rest_empty_response");
+  }
+  if (!trimmed.startsWith("{")) {
+    const low = trimmed.toLowerCase();
+    if (low === "true" || low === '"true"') return;
+    if (low === "false" || low === '"false"') {
+      throw new Error("pulseem_rest_rejected");
+    }
+    console.warn(
+      "[auth-phone-otp] pulseem REST non-JSON 2xx body (trusting HTTP):",
+      trimmed.slice(0, 200),
+    );
+    return;
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(trimmed) as Record<string, unknown>;
+  } catch {
+    throw new Error("pulseem_rest_invalid_json");
+  }
+
+  const c = classifyPulseemRestJson(payload);
+  if (c === "failure") {
+    const msg = String(
+      payload.message ??
+        payload.Message ??
+        payload.errorMessage ??
+        payload.ErrorMessage ??
+        payload.error ??
+        payload.Error ??
+        "pulseem_rest_rejected",
+    ).trim();
+    throw new Error(msg || "pulseem_rest_rejected");
+  }
+  if (c === "unknown") {
+    console.warn(
+      "[auth-phone-otp] pulseem REST ambiguous JSON (HTTP was 2xx). Body:",
+      trimmed.slice(0, 600),
+    );
+  }
+}
+
+/**
  * Sends via Pulseem REST API (requires DirectSmsCredits on the sub-account).
  * Auth: APIKey header with pulseem_api_key.
  */
@@ -275,35 +375,7 @@ async function sendPulseemViaRestApi(opts: {
     throw new Error(`Pulseem REST ${res.status}: ${responseText.slice(0, 300)}`);
   }
 
-  const trimmed = responseText.trim();
-  if (trimmed.startsWith("{")) {
-    try {
-      const payload = JSON.parse(trimmed) as Record<string, unknown>;
-      const st = String(payload.status ?? payload.Status ?? "").toLowerCase();
-      const errMsg = String(payload.error ?? payload.Error ?? "").trim();
-      if (st === "error") {
-        throw new Error(errMsg || "pulseem_rest_error");
-      }
-      const succ = payload.success ?? payload.Success ?? payload.isSuccess ?? payload.IsSuccess;
-      if (succ === false) {
-        throw new Error(
-          String(
-            payload.message ??
-              payload.Message ??
-              payload.error ??
-              payload.Error ??
-              "pulseem_rest_rejected",
-          ),
-        );
-      }
-    } catch (e) {
-      if (e instanceof SyntaxError) {
-        // non-JSON or truncated body — treat as ok if HTTP was 2xx
-      } else {
-        throw e;
-      }
-    }
-  }
+  assertPulseemRestJsonSuccess(responseText);
 
   console.log("[auth-phone-otp] pulseem REST ok, to=", to);
 }
@@ -368,11 +440,15 @@ function isPulseemSenderNotApprovedError(message: string): boolean {
   );
 }
 
+function pulseemOtpPreferRestFirst(): boolean {
+  return /^(1|true|yes)$/i.test(
+    String(Deno.env.get("PULSEEM_OTP_PREFER_REST") ?? "").trim(),
+  );
+}
+
 /**
- * Main send function — prefers REST API (DirectSmsCredits) when apiKey is available,
- * falls back to legacy ASMX (userID + password) otherwise.
- * REST uses PULSEEM_REST_FROM_NUMBER when set; on “sender not approved” we retry ASMX with
- * pulseemAsmxEffectiveFrom (numeric secrets without changing DB).
+ * OTP SMS: default **ASMX first** (legacy credits / clearer queueing), then REST if ASMX fails and apiKey exists.
+ * REST-first when PULSEEM_OTP_PREFER_REST=1; on “sender not approved” REST still falls back to ASMX.
  * Returns the fromNumber string actually passed to Pulseem on the path that succeeded.
  */
 async function sendPulseemSingleSms(opts: {
@@ -384,15 +460,28 @@ async function sendPulseemSingleSms(opts: {
   apiKey?: string;
 }): Promise<{ fromUsed: string }> {
   const asmxFrom = pulseemAsmxEffectiveFrom(opts.fromNumber);
-  if (opts.apiKey) {
-    const fromRest = pulseemRestFromNumber(opts.fromNumber);
+  const fromRest = pulseemRestFromNumber(opts.fromNumber);
+
+  const tryAsmx = () =>
+    sendPulseemViaAsmx({
+      userId: opts.userId,
+      password: opts.password,
+      fromNumber: asmxFrom,
+      toNumber: opts.toNumber,
+      text: opts.text,
+    });
+
+  const tryRest = () =>
+    sendPulseemViaRestApi({
+      apiKey: opts.apiKey!,
+      fromNumber: fromRest,
+      toNumber: opts.toNumber,
+      text: opts.text,
+    });
+
+  if (pulseemOtpPreferRestFirst() && opts.apiKey) {
     try {
-      await sendPulseemViaRestApi({
-        apiKey: opts.apiKey,
-        fromNumber: fromRest,
-        toNumber: opts.toNumber,
-        text: opts.text,
-      });
+      await tryRest();
       return { fromUsed: fromRest };
     } catch (e) {
       const msg = String((e as Error)?.message ?? e);
@@ -405,26 +494,26 @@ async function sendPulseemSingleSms(opts: {
           "msg:",
           msg.slice(0, 160),
         );
-        await sendPulseemViaAsmx({
-          userId: opts.userId,
-          password: opts.password,
-          fromNumber: asmxFrom,
-          toNumber: opts.toNumber,
-          text: opts.text,
-        });
+        await tryAsmx();
         return { fromUsed: asmxFrom };
       }
       throw e;
     }
   }
-  await sendPulseemViaAsmx({
-    userId: opts.userId,
-    password: opts.password,
-    fromNumber: asmxFrom,
-    toNumber: opts.toNumber,
-    text: opts.text,
-  });
-  return { fromUsed: asmxFrom };
+
+  try {
+    await tryAsmx();
+    return { fromUsed: asmxFrom };
+  } catch (asmxErr) {
+    if (!opts.apiKey) throw asmxErr;
+    const am = String((asmxErr as Error)?.message ?? asmxErr);
+    console.warn(
+      "[auth-phone-otp] ASMX failed; falling back to Pulseem REST. ASMX error:",
+      am.slice(0, 220),
+    );
+    await tryRest();
+    return { fromUsed: fromRest };
+  }
 }
 
 async function findUserByPhoneFlexible(

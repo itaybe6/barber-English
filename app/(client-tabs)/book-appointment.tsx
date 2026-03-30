@@ -301,14 +301,16 @@ const bookingApi = {
         .select('min_cancellation_hours')
         .single();
 
-      const minCancellationHours = businessProfile?.min_cancellation_hours || 24;
-      
+      const rawMc = businessProfile?.min_cancellation_hours;
+      const minCancellationHours =
+        rawMc === null || rawMc === undefined ? 24 : Math.max(0, Number(rawMc));
+
       // Calculate time difference
       const appointmentDateTime = new Date(`${appointmentData.slot_date}T${appointmentData.slot_time}`);
       const now = new Date();
       const hoursUntilAppointment = (appointmentDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
 
-      if (hoursUntilAppointment < minCancellationHours) {
+      if (minCancellationHours > 0 && hoursUntilAppointment < minCancellationHours) {
         return { 
           success: false, 
           error: `Cannot cancel appointment. Minimum cancellation time is ${minCancellationHours} hours before the appointment.` 

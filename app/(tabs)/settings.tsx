@@ -5,7 +5,8 @@ import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplet
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
@@ -53,17 +54,9 @@ import AddAdminModal from '@/components/AddAdminModal';
 import DeleteAccountModal from '@/components/DeleteAccountModal';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { useTranslation } from 'react-i18next';
-import Reanimated, {
-  Extrapolation,
-  interpolate,
-  runOnJS,
-  useAnimatedReaction,
-  useAnimatedScrollHandler,
-  useAnimatedStyle,
-  useSharedValue,
-} from 'react-native-reanimated';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
-import { SettingsStickyNavSectionTitle } from '@/components/settings/SettingsStickyNavSectionTitle';
+import { SettingsScreenTabs } from '@/components/settings/SettingsScreenTabs';
+import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
 
 // Helper for shadow style
 const shadowStyle = Platform.select({
@@ -77,6 +70,9 @@ const shadowStyle = Platform.select({
     elevation: 3,
   },
 });
+
+/** Grouped settings canvas — ScrollView content + screen root use this so bottom padding isn’t white */
+const SETTINGS_GROUPED_BG = '#F2F2F7';
 
 export default function SettingsScreen() {
   const logout = useAuthStore((state) => state.logout);
@@ -105,81 +101,6 @@ export default function SettingsScreen() {
     });
   }, [i18n.language]);
 
-  /** Bank-app style 3D collapse for admin profile header on scroll (Dribbble-style) */
-  const adminProfileScrollY = useSharedValue(0);
-  const adminProfileHeaderBlockHeight = useSharedValue(96);
-  const onAdminProfileScroll = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      adminProfileScrollY.value = e.contentOffset.y;
-    },
-  });
-  const adminProfileDummySpacerStyle = useAnimatedStyle(() => ({
-    height: adminProfileHeaderBlockHeight.value,
-  }));
-  const adminProfileCardFlipStyle = useAnimatedStyle(() => {
-    const y = Math.max(adminProfileScrollY.value, 0);
-    const h = Math.max(adminProfileHeaderBlockHeight.value, 72);
-    return {
-      transform: [
-        { perspective: h * 5 },
-        {
-          translateY: interpolate(y, [0, h], [0, -h * 0.5], Extrapolation.CLAMP),
-        },
-        {
-          rotateX: `${interpolate(y, [0, h], [0, 88], Extrapolation.CLAMP)}deg`,
-        },
-      ],
-      opacity: interpolate(y, [0, h * 0.55, h], [1, 0.92, 0], Extrapolation.CLAMP),
-    };
-  });
-  const onAdminProfileHeaderLayout = (e: LayoutChangeEvent) => {
-    const next = e.nativeEvent.layout.height;
-    if (next > 0) {
-      adminProfileHeaderBlockHeight.value = next;
-    }
-  };
-
-  /** Height below safe area: must match ~settingsMainNavInner (minHeight + paddingBottom). */
-  const SETTINGS_MAIN_NAV_BELOW_INSET_H = 60;
-
-  const safeTopSV = useSharedValue(insets.top);
-  useEffect(() => {
-    safeTopSV.value = insets.top;
-  }, [insets.top]);
-
-  /** Slides down with scroll when the profile card collapses; reverses when scrolling back up. */
-  const settingsMainNavAnimatedStyle = useAnimatedStyle(() => {
-    const y = Math.max(adminProfileScrollY.value, 0);
-    const h = Math.max(adminProfileHeaderBlockHeight.value, 72);
-    const slideRange = safeTopSV.value + SETTINGS_MAIN_NAV_BELOW_INSET_H + 10;
-    const translateY = interpolate(
-      y,
-      [h * 0.2, h * 0.58],
-      [-slideRange, 0],
-      Extrapolation.CLAMP,
-    );
-    const opacity = interpolate(
-      y,
-      [h * 0.2, h * 0.42],
-      [0, 1],
-      Extrapolation.CLAMP,
-    );
-    return {
-      transform: [{ translateY }],
-      opacity,
-    };
-  });
-
-  /** Y positions of each section title (scroll content coords) → sticky header label while scrolling */
-  const sectionPositionsRef = useRef<Map<string, number>>(new Map());
-  const stickySectionOrderRef = useRef<string[]>([]);
-  const stickyScrollAnchorRef = useRef(insets.top + SETTINGS_MAIN_NAV_BELOW_INSET_H + 16);
-  const lastStickySectionIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    stickyScrollAnchorRef.current = insets.top + SETTINGS_MAIN_NAV_BELOW_INSET_H + 16;
-  }, [insets.top]);
-  
   // Notification modal states
   const [showSupportModal, setShowSupportModal] = useState(false);
   
@@ -246,6 +167,15 @@ export default function SettingsScreen() {
   const [adminPhoneDraft, setAdminPhoneDraft] = useState('');
   const [isSavingAdmin, setIsSavingAdmin] = useState(false);
   const [isUploadingAdminAvatar, setIsUploadingAdminAvatar] = useState(false);
+  const [adminProfileLavaLayout, setAdminProfileLavaLayout] = useState({ w: 0, h: 0 });
+  const onAdminProfileLavaLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    if (width > 0 && height > 0) {
+      setAdminProfileLavaLayout((prev) =>
+        prev.w === width && prev.h === height ? prev : { w: width, h: height },
+      );
+    }
+  }, []);
 
   /** Primary business owner (profile phone matches user phone); used for owner-only settings. */
   const canSeeAddEmployee = React.useMemo(() => {
@@ -259,6 +189,16 @@ export default function SettingsScreen() {
   const [adminReminderEnabled, setAdminReminderEnabled] = useState(false);
   const [clientReminderMinutes, setClientReminderMinutes] = useState<number | null>(null);
   const [clientReminderEnabled, setClientReminderEnabled] = useState(false);
+  const [showClientReminderModal, setShowClientReminderModal] = useState(false);
+  const [clientReminderModalHoursDraft, setClientReminderModalHoursDraft] = useState('');
+  const [clientReminderModalMinutesDraft, setClientReminderModalMinutesDraft] = useState('');
+  const [clientReminderSwitchPending, setClientReminderSwitchPending] = useState(false);
+  const [showAdminReminderModal, setShowAdminReminderModal] = useState(false);
+  const [adminReminderModalHoursDraft, setAdminReminderModalHoursDraft] = useState('');
+  const [adminReminderModalMinutesDraft, setAdminReminderModalMinutesDraft] = useState('');
+  /** Lets the switch show “on” while the user fills the modal after enabling */
+  const [adminReminderSwitchPending, setAdminReminderSwitchPending] = useState(false);
+  const [cancellationSwitchPending, setCancellationSwitchPending] = useState(false);
 
   // Animated bottom-sheet controls
   const sheetAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
@@ -289,7 +229,12 @@ export default function SettingsScreen() {
         setProfileInstagram(p?.instagram_url || '');
         setProfileFacebook(p?.facebook_url || '');
         setProfileTiktok((p as any)?.tiktok_url || '');
-        setProfileMinCancellationHours(p?.min_cancellation_hours || 24);
+        {
+          const mc = (p as any)?.min_cancellation_hours;
+          setProfileMinCancellationHours(
+            mc === null || mc === undefined ? 24 : Math.max(0, Math.min(168, Number(mc))),
+          );
+        }
         if (user?.id) {
           try {
             const myDays = await businessProfileApi.getBookingOpenDaysForUser(user.id);
@@ -491,35 +436,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleSaveCancellationInline = async (next: string) => {
-    if (!canSeeAddEmployee) return;
-    const trimmed = (next || '').trim();
-    const hours = parseInt(trimmed, 10);
-    if (isNaN(hours) || hours < 0 || hours > 168) {
-      Alert.alert(t('error.generic','Error'), t('settings.profile.cancellationInvalid','Please enter a valid number between 0 and 168 hours'));
-      return;
-    }
-    setIsSavingProfile(true);
-    try {
-      const updated = await businessProfileApi.upsertProfile({
-        display_name: (profileDisplayName || '').trim() || null as any,
-        address: (profileAddress || '').trim() || null as any,
-        instagram_url: (profileInstagram || '').trim() || null as any,
-        facebook_url: (profileFacebook || '').trim() || null as any,
-        tiktok_url: (profileTiktok || '').trim() || null as any,
-        min_cancellation_hours: hours,
-      });
-      if (!updated) {
-        Alert.alert(t('error.generic','Error'), t('settings.profile.cancellationSaveFailed','Failed to save cancellation policy'));
-        return;
-      }
-      setProfile(updated);
-      setProfileMinCancellationHours(updated.min_cancellation_hours || 24);
-    } finally {
-      setIsSavingProfile(false);
-    }
-  };
-
   const handleClientSwapToggle = async (next: boolean) => {
     if (!canSeeAddEmployee) return;
     const prev = clientSwapEnabled;
@@ -618,65 +534,225 @@ export default function SettingsScreen() {
     }
   };
 
-  const reminderMinutesValidate = (v: string) => {
-    const s = (v || '').trim();
-    if (s.length === 0) return true;
-    const n = parseInt(s, 10);
-    return Number.isFinite(n) && n >= 1 && n <= 1440;
-  };
-
-  const handleSaveAdminReminderInline = async (next: string) => {
-    if (!user?.id) return;
-    const trimmed = (next || '').trim();
-    try {
-      setIsSavingProfile(true);
-      if (!trimmed) {
-        await businessProfileApi.setReminderMinutesForUser(user.id, null);
-        setAdminReminderMinutes(null);
-        setAdminReminderEnabled(false);
-        return;
+  const openClientReminderModal = useCallback(
+    (fromSwitch = false) => {
+      if (!user?.id) return;
+      if (fromSwitch) setClientReminderSwitchPending(true);
+      if (clientReminderMinutes != null && clientReminderMinutes > 0) {
+        setClientReminderModalHoursDraft(String(Math.floor(clientReminderMinutes / 60)));
+        setClientReminderModalMinutesDraft(String(clientReminderMinutes % 60));
+      } else {
+        setClientReminderModalHoursDraft('');
+        setClientReminderModalMinutesDraft('');
       }
-      const mins = parseInt(trimmed, 10);
-      if (!Number.isFinite(mins) || mins < 1 || mins > 1440) {
-        Alert.alert(t('error.generic','Error'), t('settings.profile.reminderInvalid','Enter a valid number between 1 and 1440 minutes'));
-        return;
-      }
-      await businessProfileApi.setReminderMinutesForUser(user.id, mins);
-      setAdminReminderMinutes(mins);
-      setAdminReminderEnabled(true);
-    } finally {
-      setIsSavingProfile(false);
-    }
-  };
+      setShowClientReminderModal(true);
+    },
+    [user?.id, clientReminderMinutes],
+  );
 
-  const handleSaveClientReminderInline = async (next: string) => {
+  const dismissClientReminderModal = useCallback(() => {
+    setShowClientReminderModal(false);
+    setClientReminderSwitchPending(false);
+  }, []);
+
+  const handleClientReminderSwitch = async (on: boolean) => {
     if (!user?.id) return;
-    const trimmed = (next || '').trim();
-    try {
-      setIsSavingProfile(true);
-      if (!trimmed) {
+    if (!on) {
+      setClientReminderSwitchPending(false);
+      setShowClientReminderModal(false);
+      try {
+        setIsSavingProfile(true);
         await businessProfileApi.setClientReminderMinutesForUser(user.id, null);
         setClientReminderMinutes(null);
         setClientReminderEnabled(false);
+      } finally {
+        setIsSavingProfile(false);
+      }
+      return;
+    }
+    openClientReminderModal(true);
+  };
+
+  const clientReminderActive =
+    (clientReminderMinutes != null && clientReminderMinutes > 0) || clientReminderSwitchPending;
+
+  const saveClientReminderFromModal = async () => {
+    if (!user?.id) return;
+    const hRaw = clientReminderModalHoursDraft.trim();
+    const mRaw = clientReminderModalMinutesDraft.trim();
+    if ((hRaw && !/^\d+$/.test(hRaw)) || (mRaw && !/^\d+$/.test(mRaw))) {
+      Alert.alert(t('error.generic', 'Error'), t('settings.reminder.clientDialogInvalidParts'));
+      return;
+    }
+    const h = hRaw ? parseInt(hRaw, 10) : 0;
+    const m = mRaw ? parseInt(mRaw, 10) : 0;
+    if (m > 59) {
+      Alert.alert(t('error.generic', 'Error'), t('settings.reminder.clientDialogInvalidParts'));
+      return;
+    }
+    if (h > 24) {
+      Alert.alert(t('error.generic', 'Error'), t('settings.profile.reminderInvalid', 'Enter a valid number between 1 and 1440 minutes'));
+      return;
+    }
+    const total = h * 60 + m;
+    try {
+      setIsSavingProfile(true);
+      if (total === 0) {
+        await businessProfileApi.setClientReminderMinutesForUser(user.id, null);
+        setClientReminderMinutes(null);
+        setClientReminderEnabled(false);
+        setClientReminderSwitchPending(false);
+        setShowClientReminderModal(false);
         return;
       }
-      const mins = parseInt(trimmed, 10);
-      if (!Number.isFinite(mins) || mins < 1 || mins > 1440) {
-        Alert.alert(t('error.generic','Error'), t('settings.profile.reminderInvalid','Enter a valid number between 1 and 1440 minutes'));
+      if (total < 1 || total > 1440) {
+        Alert.alert(t('error.generic', 'Error'), t('settings.profile.reminderInvalid', 'Enter a valid number between 1 and 1440 minutes'));
         return;
       }
-      await businessProfileApi.setClientReminderMinutesForUser(user.id, mins);
-      setClientReminderMinutes(mins);
+      await businessProfileApi.setClientReminderMinutesForUser(user.id, total);
+      setClientReminderMinutes(total);
       setClientReminderEnabled(true);
+      setClientReminderSwitchPending(false);
+      setShowClientReminderModal(false);
     } finally {
       setIsSavingProfile(false);
     }
   };
 
-  const openEditCancellation = () => {
-    setCancellationHoursDraft(profileMinCancellationHours.toString());
-    setShowEditCancellationModal(true);
+  const openAdminReminderModal = useCallback(
+    (fromSwitch = false) => {
+      if (!user?.id) return;
+      if (fromSwitch) setAdminReminderSwitchPending(true);
+      if (adminReminderMinutes != null && adminReminderMinutes > 0) {
+        setAdminReminderModalHoursDraft(String(Math.floor(adminReminderMinutes / 60)));
+        setAdminReminderModalMinutesDraft(String(adminReminderMinutes % 60));
+      } else {
+        setAdminReminderModalHoursDraft('');
+        setAdminReminderModalMinutesDraft('');
+      }
+      setShowAdminReminderModal(true);
+    },
+    [user?.id, adminReminderMinutes],
+  );
+
+  const dismissAdminReminderModal = useCallback(() => {
+    setShowAdminReminderModal(false);
+    setAdminReminderSwitchPending(false);
+  }, []);
+
+  const saveAdminReminderFromModal = async () => {
+    if (!user?.id) return;
+    const hRaw = adminReminderModalHoursDraft.trim();
+    const mRaw = adminReminderModalMinutesDraft.trim();
+    if ((hRaw && !/^\d+$/.test(hRaw)) || (mRaw && !/^\d+$/.test(mRaw))) {
+      Alert.alert(t('error.generic', 'Error'), t('settings.reminder.clientDialogInvalidParts'));
+      return;
+    }
+    const h = hRaw ? parseInt(hRaw, 10) : 0;
+    const m = mRaw ? parseInt(mRaw, 10) : 0;
+    if (m > 59) {
+      Alert.alert(t('error.generic', 'Error'), t('settings.reminder.clientDialogInvalidParts'));
+      return;
+    }
+    if (h > 24) {
+      Alert.alert(t('error.generic', 'Error'), t('settings.profile.reminderInvalid', 'Enter a valid number between 1 and 1440 minutes'));
+      return;
+    }
+    const total = h * 60 + m;
+    try {
+      setIsSavingProfile(true);
+      if (total === 0) {
+        await businessProfileApi.setReminderMinutesForUser(user.id, null);
+        setAdminReminderMinutes(null);
+        setAdminReminderEnabled(false);
+        setAdminReminderSwitchPending(false);
+        setShowAdminReminderModal(false);
+        return;
+      }
+      if (total < 1 || total > 1440) {
+        Alert.alert(t('error.generic', 'Error'), t('settings.profile.reminderInvalid', 'Enter a valid number between 1 and 1440 minutes'));
+        return;
+      }
+      await businessProfileApi.setReminderMinutesForUser(user.id, total);
+      setAdminReminderMinutes(total);
+      setAdminReminderEnabled(true);
+      setAdminReminderSwitchPending(false);
+      setShowAdminReminderModal(false);
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
+
+  const handleAdminReminderSwitch = async (on: boolean) => {
+    if (!user?.id) return;
+    if (!on) {
+      setAdminReminderSwitchPending(false);
+      setShowAdminReminderModal(false);
+      try {
+        setIsSavingProfile(true);
+        await businessProfileApi.setReminderMinutesForUser(user.id, null);
+        setAdminReminderMinutes(null);
+        setAdminReminderEnabled(false);
+      } finally {
+        setIsSavingProfile(false);
+      }
+      return;
+    }
+    openAdminReminderModal(true);
+  };
+
+  const adminSelfReminderOn =
+    (adminReminderMinutes != null && adminReminderMinutes > 0) || adminReminderSwitchPending;
+
+  const openCancellationEditor = useCallback(
+    (fromSwitch = false) => {
+      if (!canSeeAddEmployee) return;
+      if (fromSwitch) setCancellationSwitchPending(true);
+      const h = profileMinCancellationHours;
+      setCancellationHoursDraft(h > 0 ? String(h) : '24');
+      setShowEditCancellationModal(true);
+    },
+    [canSeeAddEmployee, profileMinCancellationHours],
+  );
+
+  const dismissCancellationModal = useCallback(() => {
+    setShowCancellationDropdown(false);
+    setShowEditCancellationModal(false);
+    setCancellationSwitchPending(false);
+  }, []);
+
+  const handleCancellationSwitchToggle = async (on: boolean) => {
+    if (!canSeeAddEmployee) return;
+    if (!on) {
+      setCancellationSwitchPending(false);
+      setShowEditCancellationModal(false);
+      setIsSavingProfile(true);
+      try {
+        const updated = await businessProfileApi.upsertProfile({
+          display_name: (profileDisplayName || '').trim() || null as any,
+          address: (profileAddress || '').trim() || null as any,
+          instagram_url: (profileInstagram || '').trim() || null as any,
+          facebook_url: (profileFacebook || '').trim() || null as any,
+          tiktok_url: (profileTiktok || '').trim() || null as any,
+          min_cancellation_hours: 0,
+          client_swap_enabled: clientSwapEnabled,
+          require_client_approval: requireClientApproval,
+        });
+        if (!updated) {
+          Alert.alert(t('error.generic', 'Error'), t('settings.profile.cancellationSaveFailed', 'Failed to save cancellation policy'));
+          return;
+        }
+        setProfile(updated);
+        setProfileMinCancellationHours(0);
+      } finally {
+        setIsSavingProfile(false);
+      }
+      return;
+    }
+    openCancellationEditor(true);
+  };
+
+  const cancellationLimitActive = profileMinCancellationHours > 0 || cancellationSwitchPending;
 
   // Save single-field handlers (preserve other values)
   const saveAddress = async () => {
@@ -883,7 +959,9 @@ export default function SettingsScreen() {
         return;
       }
       setProfile(updated);
-      setProfileMinCancellationHours(updated.min_cancellation_hours || 24);
+      const mh = updated.min_cancellation_hours;
+      setProfileMinCancellationHours(typeof mh === 'number' && !Number.isNaN(mh) ? mh : 0);
+      setCancellationSwitchPending(false);
       setShowCancellationDropdown(false);
       setShowEditCancellationModal(false);
     } finally {
@@ -1334,99 +1412,60 @@ export default function SettingsScreen() {
   // Recurring appointment modal state
   const isAdmin = useAuthStore((s) => s.isAdmin);
 
-  const settingsStickySections = useMemo(() => {
-    const items: { id: string; title: string }[] = [];
-    items.push({
-      id: 'notifications',
-      title: t('settings.sections.notificationsMessages', 'Notifications & messages'),
-    });
-    items.push({
-      id: 'services',
-      title: t('settings.sections.services', 'Services'),
-    });
-    if (canSeeAddEmployee) {
-      items.push({
-        id: 'business',
-        title: t('settings.sections.businessDetails', 'Business details'),
+  const settingsScreenTabs = useMemo(
+    () => {
+      const list: { id: string; label: string }[] = [];
+      /** LTR array order: account → … → appointments. SettingsScreenTabs reverses in RTL for correct visual + indicator. */
+      if (user) {
+        list.push({
+          id: 'account',
+          label: t('settings.sections.accountManagement', 'Account Management'),
+        });
+      }
+      list.push({
+        id: 'security',
+        label: t('settings.sections.securitySupport', 'Security & support'),
       });
-      items.push({
-        id: 'design',
-        title: t('settings.sections.designApp', 'Design Application'),
+      if (canSeeAddEmployee) {
+        list.push({
+          id: 'design',
+          label: t('settings.sections.designApp', 'Design Application'),
+        });
+        list.push({
+          id: 'business',
+          label: t('settings.sections.businessDetails', 'Business details'),
+        });
+        list.push({ id: 'employees', label: t('settings.sections.employees', 'Employees') });
+      }
+      list.push({ id: 'services', label: t('settings.sections.services', 'Services') });
+      list.push({
+        id: 'appointments',
+        label: t('settings.sections.appointments', 'Appointments'),
       });
-    }
-    items.push({
-      id: 'policies',
-      title: t('settings.sections.appointmentPolicies', 'Appointment policies'),
-    });
-    if (isAdmin) {
-      items.push({
-        id: 'recurring',
-        title: t('settings.sections.recurringTitle', 'Recurring appointments'),
-      });
-    }
-    items.push({
-      id: 'security',
-      title: t('settings.sections.securitySupport', 'Security & support'),
-    });
-    if (user) {
-      items.push({
-        id: 'account',
-        title: t('settings.sections.accountManagement', 'Account Management'),
-      });
-    }
-    return items;
-  }, [canSeeAddEmployee, isAdmin, user, t]);
-
-  const [activeStickySectionId, setActiveStickySectionId] = useState<string>('notifications');
-
-  useEffect(() => {
-    stickySectionOrderRef.current = settingsStickySections.map((s) => s.id);
-  }, [settingsStickySections]);
-
-  useEffect(() => {
-    const ids = settingsStickySections.map((s) => s.id);
-    if (!ids.length) return;
-    if (!ids.includes(activeStickySectionId)) {
-      const next = ids[0]!;
-      lastStickySectionIdRef.current = next;
-      setActiveStickySectionId(next);
-    }
-  }, [settingsStickySections, activeStickySectionId]);
-
-  const onSettingsSectionLayout = useCallback((id: string) => (e: LayoutChangeEvent) => {
-    sectionPositionsRef.current.set(id, e.nativeEvent.layout.y);
-  }, []);
-
-  const syncStickySectionFromScroll = useCallback((scrollY: number) => {
-    const anchor = scrollY + stickyScrollAnchorRef.current;
-    const ids = stickySectionOrderRef.current;
-    if (!ids.length) return;
-    const pos = sectionPositionsRef.current;
-    let bestId = ids[0]!;
-    for (const id of ids) {
-      const y = pos.get(id);
-      if (y !== undefined && y <= anchor) bestId = id;
-    }
-    if (bestId !== lastStickySectionIdRef.current) {
-      lastStickySectionIdRef.current = bestId;
-      setActiveStickySectionId(bestId);
-    }
-  }, []);
-
-  useAnimatedReaction(
-    () => adminProfileScrollY.value,
-    (y) => {
-      runOnJS(syncStickySectionFromScroll)(y);
+      return list;
     },
-    [syncStickySectionFromScroll],
+    [canSeeAddEmployee, user, t],
   );
 
-  const stickyNavTitle = useMemo(
-    () =>
-      settingsStickySections.find((s) => s.id === activeStickySectionId)?.title ??
-      t('profile.settings', 'Settings'),
-    [settingsStickySections, activeStickySectionId, t],
-  );
+  const [activeSettingsTab, setActiveSettingsTab] = useState<string>('appointments');
+  const { tab: settingsDeepTabParam } = useLocalSearchParams<{ tab?: string | string[] }>();
+
+  useEffect(() => {
+    const raw = settingsDeepTabParam;
+    const tab = Array.isArray(raw) ? raw[0] : raw;
+    if (!tab || typeof tab !== 'string') return;
+    const ids = settingsScreenTabs.map((x) => x.id);
+    if (!ids.includes(tab)) return;
+    setActiveSettingsTab(tab);
+    router.setParams({ tab: undefined });
+  }, [settingsDeepTabParam, settingsScreenTabs, router]);
+
+  useEffect(() => {
+    const ids = settingsScreenTabs.map((x) => x.id);
+    if (ids.length && !ids.includes(activeSettingsTab)) {
+      setActiveSettingsTab(ids[0]!);
+    }
+  }, [settingsScreenTabs, activeSettingsTab]);
 
   const [showRecurringModal, setShowRecurringModal] = useState(false);
   const [isSubmittingRecurring, setIsSubmittingRecurring] = useState(false);
@@ -1859,6 +1898,12 @@ export default function SettingsScreen() {
       if (created) {
         Alert.alert(t('success.generic','Success'), t('settings.recurring.createSuccess','Recurring appointment created. The slot will be kept after weekly generation.'));
         setShowRecurringModal(false);
+        try {
+          const items = await recurringAppointmentsApi.listAll();
+          setRecurringList(items);
+        } catch {
+          /* list refresh optional */
+        }
       } else {
         Alert.alert(t('error.generic','Error'), t('settings.recurring.createFailed','Failed to create recurring appointment'));
       }
@@ -1982,450 +2027,79 @@ export default function SettingsScreen() {
   
   return (
     <SafeAreaView style={[styles.container, styles.settingsPageRoot]} edges={['left', 'right']}>
+      <StatusBar style="light" />
       <View style={styles.settingsScroll}>
-        <Reanimated.ScrollView
-          style={styles.settingsScrollFill}
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24 },
-          ]}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="interactive"
-          automaticallyAdjustKeyboardInsets
-          showsVerticalScrollIndicator={false}
-          onScroll={onAdminProfileScroll}
-          scrollEventThrottle={16}
-        >
-          <Reanimated.View style={adminProfileDummySpacerStyle} />
-
-        <View onLayout={onSettingsSectionLayout('notifications')}>
-          <View style={[styles.sectionTitleWrapper, styles.sectionTitleWrapperFirst]}>
-            <Text style={styles.sectionTitleNew}>{t('settings.sections.notificationsMessages','Notifications & messages')}</Text>
-          </View>
-        </View>
-        
-        <View style={styles.cardNew}>
-          <View style={styles.settingItemLTR}>
-            <View style={styles.settingIconLTR}><Bell size={20} color={businessColors.primary} /></View>
-            <View style={{ flex: 1 }}>
-              <InlineEditableRow
-                title={t('settings.reminder.clientTitleWithMinutes', 'Client reminder (minutes before)')}
-                value={clientReminderEnabled && Number(clientReminderMinutes) > 0 ? String(clientReminderMinutes) : ''}
-                placeholder={t('settings.reminder.leaveEmptyOff', 'Leave empty to turn off')}
-                keyboardType="default"
-                onSave={handleSaveClientReminderInline}
-                chevronColor={businessColors.primary}
-                validate={reminderMinutesValidate}
-              />
-              <Text style={[styles.settingSubtitleLTR, { marginTop: 6, paddingHorizontal: 4 }]}>
-                {t('settings.reminder.clientAutomatedHint')}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.settingDivider} />
-          <View style={styles.settingItemLTR}>
-            <View style={styles.settingIconLTR}><Clock size={20} color={businessColors.primary} /></View>
-            <View style={{ flex: 1 }}>
-              <InlineEditableRow
-                title={t('settings.reminder.adminTitleWithMinutes', 'Your reminder before appointment (minutes)')}
-                value={adminReminderEnabled && Number(adminReminderMinutes) > 0 ? String(adminReminderMinutes) : ''}
-                placeholder={t('settings.reminder.leaveEmptyOff', 'Leave empty to turn off')}
-                keyboardType="default"
-                onSave={handleSaveAdminReminderInline}
-                chevronColor={businessColors.primary}
-                validate={reminderMinutesValidate}
-              />
-              <Text style={[styles.settingSubtitleLTR, { marginTop: 6, paddingHorizontal: 4 }]}>
-                {t('settings.reminder.adminAutomatedHint')}
-              </Text>
-            </View>
-          </View>
-        </View>
-        
-        <View onLayout={onSettingsSectionLayout('services')}>
-          <View style={styles.sectionTitleWrapper}>
-            <Text style={styles.sectionTitleNew}>{t('settings.sections.services','Services')}</Text>
-          </View>
-        </View>
-        <View style={styles.cardNew}>
-          {renderSettingItem(
-            <Pencil size={20} color={businessColors.primary} />,
-            t('settings.services.edit','Edit services'),
-            t('settings.services.editSubtitle','Update prices and durations'),
-            undefined,
-            openServicesModal
-          )}
-        </View>
-
-        {canSeeAddEmployee && (
-          <>
-            <View onLayout={onSettingsSectionLayout('business')}>
-              <View style={styles.sectionTitleWrapper}>
-                <Text style={styles.sectionTitleNew}>{t('settings.sections.businessDetails','Business details')}</Text>
-              </View>
-            </View>
-            <View style={styles.cardNew}>
-              {renderSettingItemLTR(
-                <Calendar size={20} color={businessColors.primary} />,
-                t('settings.profile.bookingWindowRowTitle', 'How far ahead clients can book you'),
-                t('settings.profile.bookingWindowRowSubtitle', { count: profileBookingOpenDays || 7 }),
-                undefined,
-                () => setShowBookingWindowModal(true)
-              )}
-              {renderSettingItemLTR(
-                <MapPin size={20} color="#FF3B30" />, 
-                t('settings.profile.businessAddressTitle','Business address'),
-                businessAddressDisplay || t('settings.profile.addAddress','Add address'),
-                undefined,
-                openEditAddress
-              )}
-              {/* Inline editable social links */}
-              <View style={styles.settingItemLTR}>
-                <View style={styles.settingIconLTR}><Instagram size={20} color="#E4405F" /></View>
-                <View style={{ flex: 1 }}>
-                  <InlineEditableRow
-                    title={t('settings.profile.instagram','Instagram')}
-                    value={profileInstagram || ''}
-                    placeholder={t('settings.profile.instagramUrlPlaceholder','https://instagram.com/yourpage')}
-                    keyboardType="url"
-                    onSave={handleSaveInstagramInline}
-                    chevronColor={businessColors.primary}
-                    validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
-                  />
-                </View>
-              </View>
-              <View style={styles.settingItemLTR}>
-                <View style={styles.settingIconLTR}><Facebook size={20} color="#1877F2" /></View>
-                <View style={{ flex: 1 }}>
-                  <InlineEditableRow
-                    title={t('settings.profile.facebook','Facebook')}
-                    value={profileFacebook || ''}
-                    placeholder={t('settings.profile.facebookUrlPlaceholder','https://facebook.com/yourpage')}
-                    keyboardType="url"
-                    onSave={handleSaveFacebookInline}
-                    chevronColor={businessColors.primary}
-                    validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
-                  />
-                </View>
-              </View>
-              <View style={styles.settingItemLTR}>
-                <View style={styles.settingIconLTR}><Ionicons name="logo-tiktok" size={20} color="#000000" /></View>
-                <View style={{ flex: 1 }}>
-                  <InlineEditableRow
-                    title={t('settings.profile.tiktok','TikTok')}
-                    value={profileTiktok || ''}
-                    placeholder={t('settings.profile.tiktokUrlPlaceholder','https://www.tiktok.com/@yourpage')}
-                    keyboardType="url"
-                    onSave={handleSaveTiktokInline}
-                    chevronColor={businessColors.primary}
-                    validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
-                  />
-                </View>
-              </View>
-            </View>
-          </>
-        )}
-
-        {canSeeAddEmployee && (
-          <>
-            <View onLayout={onSettingsSectionLayout('design')}>
-              <View style={styles.sectionTitleWrapper}>
-                <Text style={styles.sectionTitleNew}>{t('settings.sections.designApp','Design Application')}</Text>
-              </View>
-            </View>
-            <View style={styles.cardNew}>
-              <View style={styles.colorPickerWrapper}>
-              <ColorPicker currentColor={profile?.primary_color || '#000000'} />
-              </View>
-              
-              {renderSettingItemLTR(
-                <Ionicons name="images-outline" size={20} color={businessColors.primary} />,
-                t('settings.profile.homeAnimationRowTitle', 'Home animation images'),
-                t('settings.profile.homeAnimationRowSubtitle', 'Edit the images in the top home animation'),
-                undefined,
-                () => router.push('/(tabs)/edit-home-hero'),
-                false,
-                false
-              )}
-            </View>
-          </>
-        )}
-
-        <View onLayout={onSettingsSectionLayout('policies')}>
-          <View style={styles.sectionTitleWrapper}>
-            <Text style={styles.sectionTitleNew}>{t('settings.sections.appointmentPolicies','Appointment policies')}</Text>
-          </View>
-        </View>
-        <View style={styles.cardNew}>
-          {!canSeeAddEmployee ? (
-            <Text style={[styles.settingSubtitleLTR, { paddingHorizontal: 16, paddingBottom: 8 }]}>
-              {t(
-                'settings.policies.ownerOnlyEditHint',
-                'Only the business owner (account linked to the business phone) can change these policies.',
-              )}
-            </Text>
-          ) : null}
-          <View style={styles.settingItemLTR}>
-            <View style={styles.settingIconLTR}><Clock size={20} color={businessColors.primary} /></View>
-            <View style={{ flex: 1 }}>
-              <InlineEditableRow
-                title={t('settings.policies.minCancellationHoursTitle','Minimum cancellation time (hours)')}
-                value={String(profileMinCancellationHours || 24)}
-                placeholder={`${t('common.eg','e.g.')} 24`}
-                keyboardType="default"
-                onSave={handleSaveCancellationInline}
-                chevronColor={businessColors.primary}
-                editable={canSeeAddEmployee}
-                validate={(v) => {
-                  const n = parseInt((v || '').trim(), 10);
-                  return !isNaN(n) && n >= 0 && n <= 168;
-                }}
-              />
-            </View>
-          </View>
-          <View style={styles.settingItemLTR}>
-            <View style={styles.settingIconLTR}>
-              <Ionicons name="swap-horizontal" size={20} color={businessColors.primary} />
-            </View>
-            <View style={{ flex: 1, paddingRight: 8 }}>
-              <Text style={styles.settingTitleLTR}>
-                {t('settings.policies.clientSwapTitle', 'Client appointment swap')}
-              </Text>
-              <Text style={styles.settingSubtitleLTR}>
-                {t('settings.policies.clientSwapSubtitle', 'Allow clients to exchange time slots with each other')}
-              </Text>
-            </View>
-            <Switch
-              value={clientSwapEnabled}
-              onValueChange={handleClientSwapToggle}
-              disabled={!canSeeAddEmployee || isSavingProfile}
-              trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
-              thumbColor={
-                clientSwapEnabled
-                  ? businessColors.primary
-                  : Platform.OS === 'android'
-                    ? '#f4f3f4'
-                    : undefined
-              }
-              ios_backgroundColor="#E5E5EA"
-            />
-          </View>
-          <View style={styles.settingItemLTR}>
-            <View style={styles.settingIconLTR}>
-              <User size={20} color={businessColors.primary} />
-            </View>
-            <View style={{ flex: 1, paddingRight: 8 }}>
-              <Text style={styles.settingTitleLTR}>
-                {t('settings.policies.requireClientApprovalTitle', 'Approve new clients')}
-              </Text>
-              <Text style={styles.settingSubtitleLTR}>
-                {t(
-                  'settings.policies.requireClientApprovalSubtitle',
-                  'When on, new sign-ups wait for your approval before booking',
-                )}
-              </Text>
-            </View>
-            <Switch
-              value={requireClientApproval}
-              onValueChange={handleRequireClientApprovalToggle}
-              disabled={!canSeeAddEmployee || isSavingProfile}
-              trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
-              thumbColor={
-                requireClientApproval
-                  ? businessColors.primary
-                  : Platform.OS === 'android'
-                    ? '#f4f3f4'
-                    : undefined
-              }
-              ios_backgroundColor="#E5E5EA"
-            />
-          </View>
-        </View>
-
-
-        {isAdmin && (
-          <>
-            <View onLayout={onSettingsSectionLayout('recurring')}>
-              <View style={styles.sectionTitleWrapper}>
-                <Text style={styles.sectionTitleNew}>{t('settings.sections.recurringTitle','Recurring appointments')}</Text>
-              </View>
-            </View>
-            <View style={styles.cardNew}>
-              {renderSettingItem(
-                <Pencil size={20} color={businessColors.primary} />, // reuse icon
-                t('settings.recurring.addTitle','Add recurring appointment'),
-                t('settings.recurring.fillAll','Please fill all fields: client, day, time, and service'),
-                undefined,
-                () => setShowRecurringModal(true)
-              )}
-              {renderSettingItem(
-                <Pencil size={20} color={businessColors.primary} />, // reuse icon
-                t('settings.recurring.manageTitle','Manage recurring appointments'),
-                t('settings.recurring.manageSubtitle','View, edit, and delete existing recurring appointments'),
-                undefined,
-                async () => {
-                  setShowManageRecurringModal(true);
-                  animateOpenSheet();
-                  setIsLoadingRecurring(true);
-                  try {
-                    const items = await recurringAppointmentsApi.listAll();
-                    setRecurringList(items);
-                  } finally {
-                    setIsLoadingRecurring(false);
-                  }
-                }
-              )}
-            </View>
-          </>
-        )}
-        
-        <View onLayout={onSettingsSectionLayout('security')}>
-          <View style={styles.sectionTitleWrapper}>
-            <Text style={styles.sectionTitleNew}>{t('settings.sections.securitySupport','Security & support')}</Text>
-          </View>
-        </View>
-        
-        <View style={styles.cardNew}>
-          {canSeeAddEmployee && (
-            renderSettingItem(
-              <User size={20} color={businessColors.primary} />,
-              t('settings.admin.addEmployee','Add employee user'),
-              t('settings.admin.addEmployeeSubtitle','Add another employee to the system'),
-              undefined,
-              () => setShowAddAdminModal(true)
-            )
-          )}
-          {canSeeAddEmployee && (
-            renderSettingItem(
-              <Users size={20} color={businessColors.primary} />,
-              t('settings.admin.manageEmployees','Manage employees'),
-              t('settings.admin.manageEmployeesSubtitle','Remove employees from this business'),
-              undefined,
-              async () => {
-                setShowManageEmployeesModal(true);
-                setIsLoadingEmployees(true);
-                try {
-                  const list = await usersApi.getAdminUsers();
-                  const filtered = (list || []).filter((u: any) => u.id !== (user as any)?.id);
-                  setAdminUsers(filtered);
-                  
-                  // Load booking_open_days for each employee
-                  const daysMap: Record<string, number> = {};
-                  for (const emp of filtered) {
-                    try {
-                      const days = await businessProfileApi.getBookingOpenDaysForUser(emp.id);
-                      daysMap[emp.id] = days;
-                    } catch (e) {
-                      console.error('Error loading booking days for user:', emp.id, e);
-                      daysMap[emp.id] = 7; // default
-                    }
-                  }
-                  setBookingOpenDaysByUser(daysMap);
-                } finally {
-                  setIsLoadingEmployees(false);
-                }
-              }
-            )
-          )}
-          {renderSettingItem(
-            <HelpCircle size={20} color={businessColors.primary} />,
-            t('settings.support.title','Support and help'),
-            t('settings.support.common','Common questions and contact'),
-            undefined,
-            () => setShowSupportModal(true)
-          )}
-        </View>
-
-        {user && (
-          <>
-            <View onLayout={onSettingsSectionLayout('account')}>
-              <View style={styles.sectionTitleWrapper}>
-                <Text style={styles.sectionTitleNew}>{t('settings.sections.accountManagement','Account Management')}</Text>
-              </View>
-            </View>
-            
-            <View style={styles.cardNew}>
-              {renderSettingItem(
-                <Ionicons name="globe-outline" size={20} color={businessColors.primary} />,
-                t('profile.language.title', 'Language'),
-                i18n.language?.startsWith('he') ? t('profile.language.hebrew', 'Hebrew') : t('profile.language.english', 'English'),
-                undefined,
-                () => setIsLanguageOpen(true)
-              )}
-              {renderSettingItem(
-                <Trash2 size={20} color="#FF3B30" />,
-                t('profile.delete.title','Delete Account'),
-                t('profile.delete.subtitle','Permanently delete your account'),
-                undefined,
-                () => setShowDeleteAccountModal(true)
-              )}
-            </View>
-          </>
-        )}
-        
-        <TouchableOpacity style={[styles.logoutButton, { backgroundColor: businessColors.primary }]} onPress={handleLogout}>
-          <LogOut size={20} color={Colors.white} />
-          <Text style={styles.logoutText}>{t('settings.sections.logoutLabel','Logout')}</Text>
-        </TouchableOpacity>
-        
-        <Text style={styles.versionText}>{t('settings.sections.version','Version')} 1.0.0</Text>
-        </Reanimated.ScrollView>
-
-        <Reanimated.View
-          pointerEvents="none"
-          style={[
-            styles.settingsMainNavShell,
-            { paddingTop: insets.top },
-            settingsMainNavAnimatedStyle,
-          ]}
-        >
-          <View style={styles.settingsMainNavInner}>
-            <SettingsStickyNavSectionTitle sectionKey={activeStickySectionId} title={stickyNavTitle} />
-          </View>
-        </Reanimated.View>
-
-        <View
-          pointerEvents="box-none"
-          style={[styles.adminProfileStickyHost, { top: insets.top + 8 }]}
-        >
-          <View style={styles.adminProfileHeaderMeasure} onLayout={onAdminProfileHeaderLayout}>
-            <TouchableOpacity
-              activeOpacity={0.88}
-              onPress={() => {
-                setAdminNameDraft(user?.name || '');
-                setAdminPhoneDraft(user?.phone || '');
-                setShowEditAdminModal(true);
-              }}
-            >
-              <Reanimated.View style={[styles.adminProfileCardOuter, adminProfileCardFlipStyle]}>
+        <View style={[styles.settingsScrollFill, styles.settingsPageColumn]}>
+          <View style={styles.adminProfileHeaderRoot}>
+            <View style={styles.adminProfileHeaderColumn}>
+              <View style={styles.adminProfileBlueBackdrop} onLayout={onAdminProfileLavaLayout} pointerEvents="none">
                 <LinearGradient
                   colors={[businessColors.primary, businessColors.primary + 'CC']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1.1, y: 1 }}
-                  style={styles.adminProfileCardFlat}
-                >
-                  <View style={styles.adminProfileRow}>
-                    <View style={styles.adminAvatarWrap}>
-                      <LinearGradient
-                        colors={['rgba(255,255,255,0.40)', 'rgba(255,255,255,0.15)']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.adminAvatarRing}
-                      >
-                        <View style={styles.adminAvatar}>
-                          {user?.image_url ? (
-                            <Image
-                              source={{ uri: (user as any).image_url }}
-                              style={styles.adminAvatarImage}
-                              resizeMode="cover"
-                            />
-                          ) : (
-                            <User size={42} color={Colors.subtext} strokeWidth={1.75} />
-                          )}
-                        </View>
-                      </LinearGradient>
+                  style={StyleSheet.absoluteFillObject}
+                />
+                {adminProfileLavaLayout.w > 0 && adminProfileLavaLayout.h > 0 ? (
+                  <BrandLavaLampBackground
+                    primaryColor={businessColors.primary}
+                    baseColor={businessColors.primary}
+                    layoutWidth={adminProfileLavaLayout.w}
+                    layoutHeight={adminProfileLavaLayout.h}
+                    emphasis="bold"
+                    count={6}
+                    duration={10000}
+                    blurIntensity={28}
+                  />
+                ) : null}
+              </View>
+              <View style={[styles.adminProfileHeaderContent, { paddingTop: insets.top + 10 }]}>
+                <View style={styles.adminProfileHeaderRowSlot}>
+                  <TouchableOpacity
+                    style={[
+                      styles.adminProfileEditIconHit,
+                      I18nManager.isRTL ? styles.adminProfileEditIconHitRtl : styles.adminProfileEditIconHitLtr,
+                    ]}
+                    activeOpacity={0.88}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('settings.admin.edit', 'Edit admin')}
+                    onPress={() => {
+                      setAdminNameDraft(user?.name || '');
+                      setAdminPhoneDraft(user?.phone || '');
+                      setShowEditAdminModal(true);
+                    }}
+                  >
+                    <View style={styles.adminProfileEditIconCircle}>
+                      <Pencil size={20} color="rgba(255,255,255,0.95)" strokeWidth={2} />
                     </View>
-                    <View style={styles.adminProfileInfo}>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.88}
+                    onPress={() => {
+                      setAdminNameDraft(user?.name || '');
+                      setAdminPhoneDraft(user?.phone || '');
+                      setShowEditAdminModal(true);
+                    }}
+                  >
+                    <View style={[styles.adminProfileRow, I18nManager.isRTL ? styles.adminProfileRowRtl : styles.adminProfileRowLtr]}>
+                    <LinearGradient
+                      colors={['rgba(255,255,255,0.38)', 'rgba(255,255,255,0.14)']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.adminAvatarRing}
+                    >
+                      <View style={styles.adminAvatar}>
+                        {user?.image_url ? (
+                          <Image
+                            source={{ uri: (user as any).image_url }}
+                            style={styles.adminAvatarImage}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <User size={32} color={Colors.subtext} strokeWidth={1.75} />
+                        )}
+                      </View>
+                    </LinearGradient>
+                    <View style={[styles.adminProfileInfo, I18nManager.isRTL ? styles.adminProfileInfoRtl : styles.adminProfileInfoLtr]}>
                       <TouchableOpacity
                         activeOpacity={0.88}
                         onPress={() => {
@@ -2434,11 +2108,11 @@ export default function SettingsScreen() {
                         }}
                       >
                         {(profileDisplayName || '').trim() ? (
-                          <Text style={styles.adminBusinessDisplayName} numberOfLines={2}>
+                          <Text style={styles.adminBusinessDisplayName} numberOfLines={1}>
                             {profileDisplayName}
                           </Text>
                         ) : (
-                          <Text style={[styles.adminBusinessDisplayName, { opacity: 0.72 }]} numberOfLines={2}>
+                          <Text style={[styles.adminBusinessDisplayName, { opacity: 0.64 }]} numberOfLines={1}>
                             {t('settings.profile.addBusinessName', 'Add business name')}
                           </Text>
                         )}
@@ -2451,9 +2125,474 @@ export default function SettingsScreen() {
                       </Text>
                     </View>
                   </View>
-                </LinearGradient>
-              </Reanimated.View>
-            </TouchableOpacity>
+                </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.settingsTabsStickyHost}>
+            <SettingsScreenTabs
+              tabs={settingsScreenTabs}
+              activeId={activeSettingsTab}
+              onSelect={setActiveSettingsTab}
+              accentColor={businessColors.primary}
+            />
+          </View>
+
+          <View style={[styles.settingsBelowTabs, { paddingBottom: insets.bottom + 100 }]}>
+        {activeSettingsTab === 'appointments' && (
+        <View style={styles.settingsTabPanel}>
+          <View style={styles.settingsAccordionBody}>
+            {!canSeeAddEmployee ? (
+              <Text style={[styles.settingSubtitleLTR, { paddingHorizontal: 16, paddingBottom: 12 }]}>
+                {t(
+                  'settings.policies.ownerOnlyEditHint',
+                  'Only the business owner (account linked to the business phone) can change these policies.',
+                )}
+              </Text>
+            ) : null}
+            {canSeeAddEmployee
+              ? renderSettingItemLTR(
+                  <Calendar size={20} color={businessColors.primary} />,
+                  t('settings.profile.bookingWindowRowTitle', 'How far ahead clients can book you'),
+                  t('settings.profile.bookingWindowRowSubtitle', { count: profileBookingOpenDays || 7 }),
+                  undefined,
+                  () => setShowBookingWindowModal(true)
+                )
+              : null}
+            {isAdmin
+              ? renderSettingItem(
+                  <Repeat size={20} color={businessColors.primary} />,
+                  t('settings.recurring.hubTitle', 'Fixed appointments'),
+                  t('settings.recurring.hubSubtitle', 'View the list — tap + to add'),
+                  undefined,
+                  async () => {
+                    setShowManageRecurringModal(true);
+                    animateOpenSheet();
+                    setIsLoadingRecurring(true);
+                    try {
+                      const items = await recurringAppointmentsApi.listAll();
+                      setRecurringList(items);
+                    } finally {
+                      setIsLoadingRecurring(false);
+                    }
+                  },
+                )
+              : null}
+            <View style={styles.settingItemLTR}>
+              <View style={styles.settingIconLTR}>
+                <Clock size={20} color={businessColors.primary} />
+              </View>
+              <Pressable
+                style={({ pressed }) => [
+                  { flex: 1, paddingRight: 8, opacity: cancellationLimitActive && canSeeAddEmployee ? 1 : 0.55 },
+                  pressed && cancellationLimitActive && canSeeAddEmployee ? { opacity: 0.88 } : null,
+                ]}
+                onPress={() => {
+                  if (cancellationLimitActive && canSeeAddEmployee) openCancellationEditor(false);
+                }}
+                disabled={!cancellationLimitActive || !canSeeAddEmployee}
+              >
+                <Text style={styles.settingTitleLTR}>
+                  {t('settings.policies.minCancellationRowTitle', 'Appointment cancellation time')}
+                </Text>
+                {cancellationLimitActive ? (
+                  profileMinCancellationHours > 0 ? (
+                    <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
+                      {t('settings.policies.cancellationLimitActiveSubtitle', {
+                        count: profileMinCancellationHours,
+                        unit:
+                          profileMinCancellationHours === 1
+                            ? t('settings.policies.hour', 'hour')
+                            : t('settings.policies.hours', 'hours'),
+                      })}
+                    </Text>
+                  ) : (
+                    <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
+                      {t('settings.policies.minCancellationTapToEdit', 'Tap to edit the time')}
+                    </Text>
+                  )
+                ) : (
+                  <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
+                    {t(
+                      'settings.policies.cancellationLimitOffSubtitle',
+                      'Off — appointments can be cancelled anytime',
+                    )}
+                  </Text>
+                )}
+              </Pressable>
+              <Switch
+                value={cancellationLimitActive}
+                onValueChange={(v) => {
+                  void handleCancellationSwitchToggle(v);
+                }}
+                disabled={!canSeeAddEmployee || isSavingProfile}
+                trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                thumbColor={
+                  cancellationLimitActive
+                    ? businessColors.primary
+                    : Platform.OS === 'android'
+                      ? '#f4f3f4'
+                      : undefined
+                }
+                ios_backgroundColor="#E5E5EA"
+              />
+            </View>
+            <View style={styles.settingDivider} />
+            <View style={styles.settingItemLTR}>
+              <View style={styles.settingIconLTR}>
+                <Bell size={20} color={businessColors.primary} />
+              </View>
+              <Pressable
+                style={({ pressed }) => [
+                  { flex: 1, paddingRight: 8, opacity: clientReminderActive && user?.id ? 1 : 0.55 },
+                  pressed && clientReminderActive && user?.id ? { opacity: 0.88 } : null,
+                ]}
+                onPress={() => {
+                  if (clientReminderActive && user?.id) openClientReminderModal(false);
+                }}
+                disabled={!clientReminderActive || !user?.id}
+              >
+                <Text style={styles.settingTitleLTR}>
+                  {t('settings.reminder.clientRowTitle', 'Client reminder before appointment')}
+                </Text>
+                {clientReminderActive ? (
+                  clientReminderMinutes != null && clientReminderMinutes > 0 ? (
+                    <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
+                      {t('settings.reminder.clientRowValueMinutes', { count: clientReminderMinutes })}
+                    </Text>
+                  ) : (
+                    <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
+                      {t('settings.reminder.clientTapToEdit', 'Tap to edit reminder timing')}
+                    </Text>
+                  )
+                ) : (
+                  <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
+                    {t('settings.reminder.clientRowValueOff', 'Off')}
+                  </Text>
+                )}
+              </Pressable>
+              <Switch
+                value={clientReminderActive}
+                onValueChange={(v) => {
+                  void handleClientReminderSwitch(v);
+                }}
+                disabled={!user?.id || isSavingProfile}
+                trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                thumbColor={
+                  clientReminderActive
+                    ? businessColors.primary
+                    : Platform.OS === 'android'
+                      ? '#f4f3f4'
+                      : undefined
+                }
+                ios_backgroundColor="#E5E5EA"
+              />
+            </View>
+            <View style={styles.settingDivider} />
+            <View style={styles.settingItemLTR}>
+              <View style={styles.settingIconLTR}>
+                <Clock size={20} color={businessColors.primary} />
+              </View>
+              <Pressable
+                style={({ pressed }) => [
+                  { flex: 1, paddingRight: 8, opacity: adminSelfReminderOn ? 1 : 0.55 },
+                  pressed && adminSelfReminderOn ? { opacity: 0.88 } : null,
+                ]}
+                onPress={() => {
+                  if (adminSelfReminderOn) openAdminReminderModal(false);
+                }}
+                disabled={!adminSelfReminderOn || !user?.id}
+              >
+                <Text style={styles.settingTitleLTR}>
+                  {t('settings.reminder.adminRowTitle', 'Self-reminder before appointment')}
+                </Text>
+                {adminSelfReminderOn ? (
+                  adminReminderMinutes != null && adminReminderMinutes > 0 ? (
+                    <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
+                      {t('settings.reminder.clientRowValueMinutes', { count: adminReminderMinutes })}
+                    </Text>
+                  ) : (
+                    <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
+                      {t('settings.reminder.adminTapToEdit', 'Tap to edit the time')}
+                    </Text>
+                  )
+                ) : (
+                  <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
+                    {t('settings.reminder.clientRowValueOff', 'Off')}
+                  </Text>
+                )}
+              </Pressable>
+              <Switch
+                value={adminSelfReminderOn}
+                onValueChange={(v) => {
+                  void handleAdminReminderSwitch(v);
+                }}
+                disabled={!user?.id || isSavingProfile}
+                trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                thumbColor={
+                  adminSelfReminderOn
+                    ? businessColors.primary
+                    : Platform.OS === 'android'
+                      ? '#f4f3f4'
+                      : undefined
+                }
+                ios_backgroundColor="#E5E5EA"
+              />
+            </View>
+            <View style={styles.settingDivider} />
+            <View style={styles.settingItemLTR}>
+              <View style={styles.settingIconLTR}>
+                <User size={20} color={businessColors.primary} />
+              </View>
+              <View
+                style={{
+                  flex: 1,
+                  paddingRight: 8,
+                  opacity: requireClientApproval && canSeeAddEmployee ? 1 : 0.55,
+                }}
+              >
+                <Text style={styles.settingTitleLTR}>
+                  {t('settings.policies.requireClientApprovalTitle', 'Approve new clients')}
+                </Text>
+                <Text style={styles.settingSubtitleLTR}>
+                  {t(
+                    'settings.policies.requireClientApprovalSubtitle',
+                    'When on, new sign-ups wait for your approval before booking',
+                  )}
+                </Text>
+              </View>
+              <Switch
+                value={requireClientApproval}
+                onValueChange={handleRequireClientApprovalToggle}
+                disabled={!canSeeAddEmployee || isSavingProfile}
+                trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                thumbColor={
+                  requireClientApproval
+                    ? businessColors.primary
+                    : Platform.OS === 'android'
+                      ? '#f4f3f4'
+                      : undefined
+                }
+                ios_backgroundColor="#E5E5EA"
+              />
+            </View>
+            <View style={styles.settingDivider} />
+            <View style={styles.settingItemLTR}>
+              <View style={styles.settingIconLTR}>
+                <Ionicons name="swap-horizontal" size={20} color={businessColors.primary} />
+              </View>
+              <View
+                style={{
+                  flex: 1,
+                  paddingRight: 8,
+                  opacity: clientSwapEnabled && canSeeAddEmployee ? 1 : 0.55,
+                }}
+              >
+                <Text style={styles.settingTitleLTR}>
+                  {t('settings.policies.clientSwapTitle', 'Client appointment swap')}
+                </Text>
+                <Text style={styles.settingSubtitleLTR}>
+                  {t('settings.policies.clientSwapSubtitle', 'Allow clients to exchange time slots with each other')}
+                </Text>
+              </View>
+              <Switch
+                value={clientSwapEnabled}
+                onValueChange={handleClientSwapToggle}
+                disabled={!canSeeAddEmployee || isSavingProfile}
+                trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                thumbColor={
+                  clientSwapEnabled
+                    ? businessColors.primary
+                    : Platform.OS === 'android'
+                      ? '#f4f3f4'
+                      : undefined
+                }
+                ios_backgroundColor="#E5E5EA"
+              />
+            </View>
+          </View>
+        </View>
+        )}
+
+        {activeSettingsTab === 'services' && (
+        <View style={styles.settingsTabPanel}>
+          <View style={styles.settingsAccordionBody}>
+            {renderSettingItem(
+              <Pencil size={20} color={businessColors.primary} />,
+              t('settings.services.edit', 'Edit services'),
+              t('settings.services.editSubtitle', 'Update prices and durations'),
+              undefined,
+              openServicesModal
+            )}
+          </View>
+        </View>
+        )}
+
+        {canSeeAddEmployee && activeSettingsTab === 'business' && (
+        <View style={styles.settingsTabPanel}>
+          <View style={styles.settingsAccordionBody}>
+              {renderSettingItemLTR(
+                <MapPin size={20} color="#FF3B30" />,
+                t('settings.profile.businessAddressTitle', 'Business address'),
+                businessAddressDisplay || t('settings.profile.addAddress', 'Add address'),
+                undefined,
+                openEditAddress
+              )}
+              <View style={styles.settingItemLTR}>
+                <View style={styles.settingIconLTR}><Instagram size={20} color="#E4405F" /></View>
+                <View style={{ flex: 1 }}>
+                  <InlineEditableRow
+                    title={t('settings.profile.instagram', 'Instagram')}
+                    value={profileInstagram || ''}
+                    placeholder={t('settings.profile.instagramUrlPlaceholder', 'https://instagram.com/yourpage')}
+                    keyboardType="url"
+                    onSave={handleSaveInstagramInline}
+                    chevronColor={businessColors.primary}
+                    validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
+                  />
+                </View>
+              </View>
+              <View style={styles.settingItemLTR}>
+                <View style={styles.settingIconLTR}><Facebook size={20} color="#1877F2" /></View>
+                <View style={{ flex: 1 }}>
+                  <InlineEditableRow
+                    title={t('settings.profile.facebook', 'Facebook')}
+                    value={profileFacebook || ''}
+                    placeholder={t('settings.profile.facebookUrlPlaceholder', 'https://facebook.com/yourpage')}
+                    keyboardType="url"
+                    onSave={handleSaveFacebookInline}
+                    chevronColor={businessColors.primary}
+                    validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
+                  />
+                </View>
+              </View>
+              <View style={styles.settingItemLTR}>
+                <View style={styles.settingIconLTR}><Ionicons name="logo-tiktok" size={20} color="#000000" /></View>
+                <View style={{ flex: 1 }}>
+                  <InlineEditableRow
+                    title={t('settings.profile.tiktok', 'TikTok')}
+                    value={profileTiktok || ''}
+                    placeholder={t('settings.profile.tiktokUrlPlaceholder', 'https://www.tiktok.com/@yourpage')}
+                    keyboardType="url"
+                    onSave={handleSaveTiktokInline}
+                    chevronColor={businessColors.primary}
+                    validate={(v) => v.trim().length === 0 || /^https?:\/\//i.test(v)}
+                  />
+                </View>
+              </View>
+            </View>
+        </View>
+        )}
+
+        {canSeeAddEmployee && activeSettingsTab === 'design' && (
+        <View style={styles.settingsTabPanel}>
+          <View style={styles.settingsAccordionBody}>
+              <View style={styles.colorPickerWrapper}>
+                <ColorPicker
+                  currentColor={profile?.primary_color || '#000000'}
+                  returnSettingsTab="design"
+                />
+              </View>
+              {renderSettingItemLTR(
+                <Ionicons name="images-outline" size={20} color={businessColors.primary} />,
+                t('settings.profile.homeAnimationRowTitle', 'Home animation images'),
+                t('settings.profile.homeAnimationRowSubtitle', 'Edit the images in the top home animation'),
+                undefined,
+                () => router.push('/(tabs)/edit-home-hero'),
+                false,
+                false
+              )}
+          </View>
+        </View>
+        )}
+
+        {canSeeAddEmployee && activeSettingsTab === 'employees' && (
+        <View style={styles.settingsTabPanel}>
+          <View style={styles.settingsAccordionBody}>
+              {renderSettingItem(
+                <User size={20} color={businessColors.primary} />,
+                t('settings.admin.addEmployee', 'Add employee user'),
+                t('settings.admin.addEmployeeSubtitle', 'Add another employee to the system'),
+                undefined,
+                () => setShowAddAdminModal(true)
+              )}
+              {renderSettingItem(
+                <Users size={20} color={businessColors.primary} />,
+                t('settings.admin.manageEmployees', 'Manage employees'),
+                t('settings.admin.manageEmployeesSubtitle', 'Remove employees from this business'),
+                undefined,
+                async () => {
+                  setShowManageEmployeesModal(true);
+                  setIsLoadingEmployees(true);
+                  try {
+                    const list = await usersApi.getAdminUsers();
+                    const filtered = (list || []).filter((u: any) => u.id !== (user as any)?.id);
+                    setAdminUsers(filtered);
+                    const daysMap: Record<string, number> = {};
+                    for (const emp of filtered) {
+                      try {
+                        const days = await businessProfileApi.getBookingOpenDaysForUser(emp.id);
+                        daysMap[emp.id] = days;
+                      } catch (e) {
+                        console.error('Error loading booking days for user:', emp.id, e);
+                        daysMap[emp.id] = 7;
+                      }
+                    }
+                    setBookingOpenDaysByUser(daysMap);
+                  } finally {
+                    setIsLoadingEmployees(false);
+                  }
+                }
+              )}
+          </View>
+        </View>
+        )}
+
+        {activeSettingsTab === 'security' && (
+        <View style={styles.settingsTabPanel}>
+          <View style={styles.settingsAccordionBody}>
+            {renderSettingItem(
+              <HelpCircle size={20} color={businessColors.primary} />,
+              t('settings.support.title', 'Support and help'),
+              t('settings.support.common', 'Common questions and contact'),
+              undefined,
+              () => setShowSupportModal(true)
+            )}
+          </View>
+        </View>
+        )}
+
+        {user && activeSettingsTab === 'account' && (
+        <View style={styles.settingsTabPanel}>
+          <View style={styles.settingsAccordionBody}>
+              {renderSettingItem(
+                <Ionicons name="globe-outline" size={20} color={businessColors.primary} />,
+                t('profile.language.title', 'Language'),
+                i18n.language?.startsWith('he') ? t('profile.language.hebrew', 'Hebrew') : t('profile.language.english', 'English'),
+                undefined,
+                () => setIsLanguageOpen(true)
+              )}
+              {renderSettingItem(
+                <Trash2 size={20} color="#FF3B30" />,
+                t('profile.delete.title', 'Delete Account'),
+                t('profile.delete.subtitle', 'Permanently delete your account'),
+                undefined,
+                () => setShowDeleteAccountModal(true)
+              )}
+          </View>
+        </View>
+        )}
+
+        {user && activeSettingsTab === 'account' ? (
+          <TouchableOpacity style={[styles.logoutButton, { backgroundColor: businessColors.primary }]} onPress={handleLogout}>
+            <LogOut size={20} color={Colors.white} />
+            <Text style={styles.logoutText}>{t('settings.sections.logoutLabel', 'Logout')}</Text>
+          </TouchableOpacity>
+        ) : null}
+
+        <Text style={styles.versionText}>{t('settings.sections.version', 'Version')} 1.0.0</Text>
           </View>
         </View>
       </View>
@@ -2578,6 +2717,172 @@ export default function SettingsScreen() {
             </ScrollView>
           </View>
         </View>
+      </Modal>
+
+      {/* Client reminder (before appointment) — full copy + hours/minutes in modal */}
+      <Modal
+        visible={showClientReminderModal}
+        animationType="fade"
+        transparent
+        onRequestClose={dismissClientReminderModal}
+      >
+        <KeyboardAvoidingView
+          style={styles.smallModalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.smallModalCard}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity style={styles.modalCloseButton} onPress={dismissClientReminderModal}>
+                <Text style={styles.modalCloseText}>{t('cancel', 'Cancel')}</Text>
+              </TouchableOpacity>
+              <Text style={[styles.modalTitleLTR, I18nManager.isRTL && { textAlign: 'center' }]} numberOfLines={2}>
+                {t('settings.reminder.clientRowTitle', 'Client reminder before appointment')}
+              </Text>
+              <TouchableOpacity
+                style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]}
+                onPress={() => {
+                  void saveClientReminderFromModal();
+                }}
+                disabled={isSavingProfile}
+              >
+                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>
+                  {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              style={styles.smallModalContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Text
+                style={[
+                  styles.settingSubtitleLTR,
+                  { marginBottom: 16, lineHeight: 22 },
+                  I18nManager.isRTL && { textAlign: 'right' },
+                ]}
+              >
+                {t('settings.reminder.clientAutomatedHint')}
+              </Text>
+              <Text style={[styles.inputLabelLTR, I18nManager.isRTL && { textAlign: 'right' }]}>
+                {t('settings.reminder.clientDialogHoursLabel', 'Hours')}
+              </Text>
+              <TextInput
+                style={[styles.textInput, { marginBottom: 12 }]}
+                value={clientReminderModalHoursDraft}
+                onChangeText={setClientReminderModalHoursDraft}
+                placeholder="0"
+                placeholderTextColor={Colors.subtext}
+                keyboardType="number-pad"
+                textAlign={I18nManager.isRTL ? 'right' : 'left'}
+              />
+              <Text style={[styles.inputLabelLTR, I18nManager.isRTL && { textAlign: 'right' }]}>
+                {t('settings.reminder.clientDialogMinutesLabel', 'Minutes (0–59)')}
+              </Text>
+              <TextInput
+                style={[styles.textInput, { marginBottom: 12 }]}
+                value={clientReminderModalMinutesDraft}
+                onChangeText={setClientReminderModalMinutesDraft}
+                placeholder="0"
+                placeholderTextColor={Colors.subtext}
+                keyboardType="number-pad"
+                textAlign={I18nManager.isRTL ? 'right' : 'left'}
+              />
+              <Text
+                style={[
+                  styles.settingSubtitleLTR,
+                  { fontSize: 13, opacity: 0.85 },
+                  I18nManager.isRTL && { textAlign: 'right' },
+                ]}
+              >
+                {t('settings.reminder.clientDialogCombinedHint')}
+              </Text>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Admin self-reminder — same time fields as client reminder */}
+      <Modal
+        visible={showAdminReminderModal}
+        animationType="fade"
+        transparent
+        onRequestClose={dismissAdminReminderModal}
+      >
+        <KeyboardAvoidingView
+          style={styles.smallModalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.smallModalCard}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity style={styles.modalCloseButton} onPress={dismissAdminReminderModal}>
+                <Text style={styles.modalCloseText}>{t('cancel', 'Cancel')}</Text>
+              </TouchableOpacity>
+              <Text style={[styles.modalTitleLTR, I18nManager.isRTL && { textAlign: 'center' }]} numberOfLines={2}>
+                {t('settings.reminder.adminRowTitle', 'Self-reminder before appointment')}
+              </Text>
+              <TouchableOpacity
+                style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]}
+                onPress={() => {
+                  void saveAdminReminderFromModal();
+                }}
+                disabled={isSavingProfile}
+              >
+                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>
+                  {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              style={styles.smallModalContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Text
+                style={[
+                  styles.settingSubtitleLTR,
+                  { marginBottom: 16, lineHeight: 22 },
+                  I18nManager.isRTL && { textAlign: 'right' },
+                ]}
+              >
+                {t('settings.reminder.adminAutomatedHint')}
+              </Text>
+              <Text style={[styles.inputLabelLTR, I18nManager.isRTL && { textAlign: 'right' }]}>
+                {t('settings.reminder.clientDialogHoursLabel', 'Hours')}
+              </Text>
+              <TextInput
+                style={[styles.textInput, { marginBottom: 12 }]}
+                value={adminReminderModalHoursDraft}
+                onChangeText={setAdminReminderModalHoursDraft}
+                placeholder="0"
+                placeholderTextColor={Colors.subtext}
+                keyboardType="number-pad"
+                textAlign={I18nManager.isRTL ? 'right' : 'left'}
+              />
+              <Text style={[styles.inputLabelLTR, I18nManager.isRTL && { textAlign: 'right' }]}>
+                {t('settings.reminder.clientDialogMinutesLabel', 'Minutes (0–59)')}
+              </Text>
+              <TextInput
+                style={[styles.textInput, { marginBottom: 12 }]}
+                value={adminReminderModalMinutesDraft}
+                onChangeText={setAdminReminderModalMinutesDraft}
+                placeholder="0"
+                placeholderTextColor={Colors.subtext}
+                keyboardType="number-pad"
+                textAlign={I18nManager.isRTL ? 'right' : 'left'}
+              />
+              <Text
+                style={[
+                  styles.settingSubtitleLTR,
+                  { fontSize: 13, opacity: 0.85 },
+                  I18nManager.isRTL && { textAlign: 'right' },
+                ]}
+              >
+                {t('settings.reminder.adminDialogCombinedHint')}
+              </Text>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Edit Admin (name & phone) Modal */}
@@ -3042,26 +3347,17 @@ export default function SettingsScreen() {
         visible={showEditCancellationModal}
         animationType="fade"
         transparent
-        onRequestClose={() => {
-          setShowCancellationDropdown(false);
-          setShowEditCancellationModal(false);
-        }}
+        onRequestClose={dismissCancellationModal}
       >
-        <TouchableWithoutFeedback onPress={() => {
-          setShowCancellationDropdown(false);
-          setShowEditCancellationModal(false);
-        }}>
+        <TouchableWithoutFeedback onPress={dismissCancellationModal}>
           <View style={styles.smallModalOverlay}>
             <TouchableWithoutFeedback onPress={() => {}}>
               <View style={styles.smallModalCard}>
                 <View style={styles.modalHeader}>
-                  <TouchableOpacity style={styles.cancellationModalCloseButton} onPress={() => {
-                    setShowCancellationDropdown(false);
-                    setShowEditCancellationModal(false);
-                  }}>
+                  <TouchableOpacity style={styles.cancellationModalCloseButton} onPress={dismissCancellationModal}>
                     <X size={20} color={Colors.text} />
                   </TouchableOpacity>
-                  <Text style={styles.modalTitleLTR}>{t('settings.policies.minCancellationTitle','Minimum cancellation time')}</Text>
+                  <Text style={styles.modalTitleLTR}>{t('settings.policies.minCancellationTitle','Appointment cancellation time')}</Text>
                   <TouchableOpacity style={[styles.modalSendButton, { backgroundColor: businessColors.primary }, isSavingProfile && styles.modalSendButtonDisabled]} onPress={saveCancellationHours} disabled={isSavingProfile}>
                     <Text style={[styles.modalSendText, { color: Colors.white }, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? t('settings.common.saving','Saving...') : t('save','Save')}</Text>
                   </TouchableOpacity>
@@ -3307,10 +3603,17 @@ export default function SettingsScreen() {
               <TouchableOpacity style={[styles.servicesModalCloseButton, { marginLeft: 0 }]} onPress={() => animateCloseSheet(() => setShowManageRecurringModal(false))}>
                 <X size={20} color={Colors.text} />
               </TouchableOpacity>
-              <Text style={[styles.modalTitle, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>
-                Manage recurring appointments
+              <Text style={[styles.modalTitle, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]} numberOfLines={2}>
+                {t('settings.recurring.hubTitle', 'Fixed appointments')}
               </Text>
-              <View style={{ width: 44 }} />
+              <TouchableOpacity
+                style={[styles.servicesModalCloseButton, { marginLeft: 0, marginRight: -4 }]}
+                onPress={() => setShowRecurringModal(true)}
+                accessibilityRole="button"
+                accessibilityLabel={t('settings.recurring.addFromHubA11y', 'Add fixed appointment')}
+              >
+                <Plus size={22} color={businessColors.primary} strokeWidth={2.25} />
+              </TouchableOpacity>
             </View>
             <View style={styles.sheetBody}>
               <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.modalContentContainer, { paddingBottom: insets.bottom + 8 }]}
@@ -4571,72 +4874,96 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  /** Full settings screen: white + gray section cards */
+  /**
+   * Top safe area is covered by the full-bleed profile header overlay; body uses grouped gray in scroll.
+   */
   settingsPageRoot: {
     flex: 1,
-    backgroundColor: Colors.white,
+    backgroundColor: SETTINGS_GROUPED_BG,
   },
   settingsScroll: {
     flex: 1,
-    backgroundColor: Colors.white,
+    backgroundColor: SETTINGS_GROUPED_BG,
   },
   settingsScrollFill: {
     flex: 1,
-    backgroundColor: Colors.white,
+    backgroundColor: SETTINGS_GROUPED_BG,
   },
-  settingsMainNavShell: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+  /** Main column: header + tabs + content — no vertical ScrollView */
+  settingsPageColumn: {
+    flex: 1,
+  },
+  settingsTabsStickyHost: {
     backgroundColor: Colors.white,
-    zIndex: 6,
+    zIndex: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(60,60,67,0.18)',
+    borderBottomColor: 'rgba(60,60,67,0.12)',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 3,
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
       },
-      android: { elevation: 5 },
+      android: { elevation: 3 },
     }),
   },
-  settingsMainNavInner: {
-    minHeight: 48,
-    justifyContent: 'center',
-    alignItems: 'center',
+  /** Canvas under horizontal tabs: grouped list look (cards read as white on soft gray) */
+  settingsBelowTabs: {
+    flex: 1,
+    flexGrow: 1,
+    paddingTop: 16,
     paddingBottom: 12,
-    paddingHorizontal: 20,
+    backgroundColor: SETTINGS_GROUPED_BG,
   },
-  /** Sticky profile header overlay (bank-app scroll flip) */
-  adminProfileStickyHost: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    zIndex: 2,
-    ...Platform.select({
-      android: { elevation: 4 },
-    }),
-  },
-  adminProfileHeaderMeasure: {
-    marginTop: 8,
-    marginHorizontal: 16,
-    marginBottom: 4,
-  },
-  adminProfileCardOuter: {
-    borderRadius: 22,
-    overflow: 'hidden',
-    marginHorizontal: 16,
-    alignSelf: 'center',
+  /** Profile header in layout flow (full-width gradient + lava) */
+  adminProfileHeaderRoot: {
     width: '100%',
   },
-  adminProfileCardFlat: {
-    paddingTop: 28,
-    paddingBottom: 24,
-    paddingHorizontal: 24,
+  adminProfileHeaderColumn: {
+    width: '100%',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  adminProfileBlueBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  adminProfileHeaderContent: {
+    width: '100%',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    position: 'relative',
+    zIndex: 1,
+  },
+  /** Only the avatar row — edit button absolute top/bottom centers vs profile image, not vs safe-area padding */
+  adminProfileHeaderRowSlot: {
+    position: 'relative',
+    width: '100%',
+  },
+  /** Opposite side from avatar block (RTL: physical left); does not shift the profile row layout */
+  adminProfileEditIconHit: {
+    position: 'absolute',
+    zIndex: 2,
+    top: 0,
+    bottom: 0,
+    width: 44,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  adminProfileEditIconHitRtl: {
+    left: 14,
+  },
+  adminProfileEditIconHitLtr: {
+    right: 14,
+  },
+  adminProfileEditIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sheetRoot: {
     flex: 1,
@@ -4688,67 +5015,71 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   adminProfileRow: {
-    flexDirection: 'column',
+    flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
+    gap: 16,
+  },
+  adminProfileRowLtr: {
+    flexDirection: 'row',
+  },
+  adminProfileRowRtl: {
+    flexDirection: 'row-reverse',
   },
   adminProfileInfo: {
-    alignItems: 'center',
-    marginTop: 14,
+    flex: 1,
+    gap: 2,
+  },
+  adminProfileInfoLtr: {
+    alignItems: 'flex-start',
+  },
+  adminProfileInfoRtl: {
+    alignItems: 'flex-end',
   },
   adminBusinessDisplayName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.95)',
-    textAlign: 'center',
-    marginBottom: 6,
-    paddingHorizontal: 12,
+    fontSize: 13,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.80)',
+    letterSpacing: 0.1,
   },
   adminAvatarWrap: {
-    position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
   },
   adminAvatarRing: {
-    padding: 3,
-    borderRadius: 46,
+    padding: 2.5,
+    borderRadius: 38,
     alignItems: 'center',
     justifyContent: 'center',
   },
   adminAvatar: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
   },
   adminAvatarImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
   },
   adminName: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: '#FFFFFF',
-    textAlign: 'center',
+    letterSpacing: -0.4,
   },
   adminPhone: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.78)',
-    marginTop: 4,
-    textAlign: 'center',
+    color: 'rgba(255,255,255,0.72)',
+    marginTop: 1,
   },
   adminEmail: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.60)',
-    marginTop: 3,
-    textAlign: 'center',
-  },
-  scrollContent: {
-    paddingHorizontal: 0,
-    backgroundColor: Colors.white,
+    color: 'rgba(255,255,255,0.55)',
+    marginTop: 2,
   },
   statsRowNew: {
     flexDirection: 'row-reverse',
@@ -4811,6 +5142,38 @@ const styles = StyleSheet.create({
       },
       android: { elevation: 2 },
     }),
+  },
+  /** Inner panel for tab content (replaces accordion card body) */
+  settingsAccordionBody: {
+    overflow: 'hidden',
+  },
+  settingsTabPanel: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    marginHorizontal: 14,
+    marginBottom: 14,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60, 60, 67, 0.14)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 10,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  settingsAppointmentsSubsectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#8E8E93',
+    letterSpacing: 0.45,
+    textTransform: 'uppercase',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
   },
   colorPickerWrapper: {
     paddingHorizontal: 16,
@@ -5082,8 +5445,9 @@ const styles = StyleSheet.create({
   },
   settingDivider: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: '#E8E8ED',
-    marginLeft: 66,
+    backgroundColor: 'rgba(60,60,67,0.1)',
+    marginLeft: 68,
+    marginRight: 8,
   },
   settingIcon: {
     width: 36,
@@ -5121,16 +5485,16 @@ const styles = StyleSheet.create({
   settingItemLTR: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 13,
     paddingHorizontal: 16,
     minHeight: 56,
     backgroundColor: Colors.white,
   },
   settingIconLTR: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#F5F5F7',
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    backgroundColor: '#F2F2F7',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
@@ -5142,21 +5506,22 @@ const styles = StyleSheet.create({
   settingContentLTR: {
     flex: 1,
     alignItems: 'flex-start',
+    gap: 2,
   },
   settingTitleLTR: {
-    fontSize: 15.5,
+    fontSize: 15,
     fontWeight: '500',
     color: Colors.text,
-    marginBottom: 1,
     textAlign: 'left',
     alignSelf: 'flex-start',
+    letterSpacing: -0.15,
   },
   settingSubtitleLTR: {
-    fontSize: 12.5,
+    fontSize: 12,
     color: '#8E8E93',
     textAlign: 'left',
     alignSelf: 'flex-start',
-    lineHeight: 16,
+    lineHeight: 17,
   },
   settingItemDisabled: {
     opacity: 0.5,
@@ -5242,7 +5607,7 @@ const styles = StyleSheet.create({
 
   versionText: {
     fontSize: 11.5,
-    color: '#C7C7CC',
+    color: '#8E8E93',
     textAlign: 'center',
     marginTop: 10,
     marginBottom: 8,

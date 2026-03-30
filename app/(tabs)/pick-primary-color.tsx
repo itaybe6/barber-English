@@ -16,7 +16,7 @@ import {
 import Animated, { FadeIn, ZoomIn } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { RotateCcw } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
@@ -75,6 +75,14 @@ const LINE_GAP_MS = 108;
 export default function PickPrimaryColorScreen() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
+  const { returnSettingsTab: returnSettingsTabParam } = useLocalSearchParams<{
+    returnSettingsTab?: string | string[];
+  }>();
+  const normalizedReturnSettingsTab = useMemo(() => {
+    const raw = returnSettingsTabParam;
+    const v = Array.isArray(raw) ? raw[0] : raw;
+    return typeof v === 'string' && v.trim() ? v.trim() : undefined;
+  }, [returnSettingsTabParam]);
   const { height: windowHeight } = useWindowDimensions();
   const { colors, updatePrimaryColor } = useBusinessColors();
   const { triggerColorUpdate } = useColorUpdate();
@@ -210,10 +218,17 @@ export default function PickPrimaryColorScreen() {
     setPreviewHex(n.startsWith('#') ? n : `#${n}`);
   }, [colors.primary]);
 
-  /** Hidden tab screen: `router.back()` often pops to the default tab (home), not settings. */
+  /** טאב נסתר: חזרה ל־settings עם אותו מקטע (tab) שממנו נכנסו. */
   const exitToSettings = useCallback(() => {
-    router.replace('/(tabs)/settings' as const);
-  }, [router]);
+    if (normalizedReturnSettingsTab) {
+      router.replace({
+        pathname: '/(tabs)/settings',
+        params: { tab: normalizedReturnSettingsTab },
+      });
+    } else {
+      router.replace('/(tabs)/settings' as const);
+    }
+  }, [router, normalizedReturnSettingsTab]);
 
   const confirmAndSave = useCallback(async () => {
     if (savingLock.current) return;
@@ -246,9 +261,10 @@ export default function PickPrimaryColorScreen() {
         if (isSavingRef.current) return;
         setShowExtendedPalette(true);
       },
+      returnSettingsTab: normalizedReturnSettingsTab,
     });
     return () => pickPrimaryTabBar.register(null);
-  }, [pickPrimaryTabBar]);
+  }, [pickPrimaryTabBar, normalizedReturnSettingsTab]);
 
   useEffect(() => {
     setColorFanOpen(false);

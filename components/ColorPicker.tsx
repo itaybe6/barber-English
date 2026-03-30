@@ -6,10 +6,13 @@ import { useTranslation } from 'react-i18next';
 
 interface ColorPickerProps {
   currentColor?: string;
+  /** טאב פעיל בהגדרות לשחזור אחרי מסך בחירת הצבע */
+  returnSettingsTab?: string;
 }
 
 export const ColorPicker: React.FC<ColorPickerProps> = ({
   currentColor = '#000000',
+  returnSettingsTab = 'design',
 }) => {
   const { t } = useTranslation();
   const router = useRouter();
@@ -36,7 +39,12 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
         </View>
         <TouchableOpacity
           style={[styles.changeColorButton, { backgroundColor: colors.primary }]}
-          onPress={() => router.push('/(tabs)/pick-primary-color')}
+          onPress={() =>
+            router.push({
+              pathname: '/(tabs)/pick-primary-color',
+              params: { returnSettingsTab },
+            })
+          }
           activeOpacity={0.85}
         >
           <Text style={styles.changeColorButtonText}>

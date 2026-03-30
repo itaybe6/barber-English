@@ -230,8 +230,8 @@ export default function ClientAppointmentsScreen() {
     const dateTime = new Date(`${appointment.slot_date}T${hh.padStart(2, '0')}:${mm.padStart(2, '0')}`);
     const diffMs = dateTime.getTime() - Date.now();
     const hours = diffMs / (1000 * 60 * 60);
-    // Use the configured value as-is; only default to 24 if it's undefined/null
-    const minHours = (minCancellationHours ?? 24);
+    const minHours = minCancellationHours ?? 24;
+    if (minHours <= 0) return false;
     return hours < minHours;
   }, [minCancellationHours]);
 

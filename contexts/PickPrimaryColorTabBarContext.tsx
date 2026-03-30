@@ -9,6 +9,8 @@ import React, {
 export interface PickPrimaryColorTabBarActions {
   openCustomPicker: () => void;
   openPaletteGrid: () => void;
+  /** מזהה טאב בהגדרות (למשל design) — כפתור חזרה משחזר את אותו אזור */
+  returnSettingsTab?: string;
 }
 
 type PickPrimaryColorTabBarContextValue = {

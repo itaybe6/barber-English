@@ -16,6 +16,7 @@ import {
   Palette,
   LayoutGrid,
   FileText,
+  ChevronRight,
 } from "lucide-react-native";
 import { TabButton } from "./tab-button";
 import { useColors, usePrimaryContrast } from "@/src/theme/ThemeProvider";
@@ -496,14 +497,21 @@ export const AdminFloatingTabBar: React.FC = () => {
             <TabButton
               focused={false}
               activeColor={primary}
-              onPress={() => router.replace("/(tabs)/settings")}
-              accessibilityLabel={t(
-                "color.pickTabSettings",
-                "הגדרות"
-              )}
+              onPress={() => {
+                const tab = pickPrimaryTabBar.get()?.returnSettingsTab;
+                if (tab) {
+                  router.replace({
+                    pathname: "/(tabs)/settings",
+                    params: { tab },
+                  });
+                } else {
+                  router.replace("/(tabs)/settings");
+                }
+              }}
+              accessibilityLabel={t("back", "Back")}
               accessibilityRole="button"
             >
-              <Settings size={22} color={INACTIVE} />
+              <ChevronRight size={22} color={INACTIVE} strokeWidth={2.4} />
             </TabButton>
           </View>
         </View>

@@ -62,6 +62,10 @@ export interface BrandLavaLampBackgroundProps {
   /** When both set (>0), blob positions/sizes use this box instead of the full window (e.g. admin banner). */
   layoutWidth?: number;
   layoutHeight?: number;
+  /**
+   * `bold` — stronger blob opacity, larger blobs in bounded layouts, less blur wash, no per-blob blur (good for small cards).
+   */
+  emphasis?: 'default' | 'bold';
 }
 
 type Circle = {
@@ -76,9 +80,11 @@ type LavaBlobCircleProps = {
   circle: Circle;
   duration: number;
   withBlur: boolean;
+  /** Extra BlurView on each blob — softens edges; disable for sharper “lava” on small surfaces */
+  perBlobBlur: boolean;
 };
 
-function LavaBlobCircle({ circle, duration, withBlur }: LavaBlobCircleProps) {
+function LavaBlobCircle({ circle, duration, withBlur, perBlobBlur }: LavaBlobCircleProps) {
   const randRotation = useRef(Math.random() * 360).current;
   const rotation = useSharedValue(randRotation);
 
@@ -111,7 +117,7 @@ function LavaBlobCircle({ circle, duration, withBlur }: LavaBlobCircleProps) {
           borderRadius: circle.radius,
         }}
       />
-      {withBlur && Platform.OS === 'ios' ? (
+      {withBlur && perBlobBlur && Platform.OS === 'ios' ? (
         <BlurView style={StyleSheet.absoluteFill} intensity={8} tint="light" />
       ) : null}
     </Animated.View>
@@ -130,6 +136,19 @@ function buildBrandPalette(primary: string, count: number): string[] {
   return palette.slice(0, Math.max(1, count));
 }
 
+/** Higher contrast blobs for compact UI (admin header card, etc.) */
+function buildBrandPaletteBold(primary: string, count: number): string[] {
+  const palette = [
+    hexToRgba(lightenHex(primary, 0.22), 0.68),
+    hexToRgba(lightenHex(primary, 0.06), 0.58),
+    hexToRgba(lightenHex(primary, 0.4), 0.52),
+    hexToRgba(darkenHex(primary, 0.25), 0.62),
+    hexToRgba(lightenHex(primary, 0.5), 0.46),
+    hexToRgba(darkenHex(primary, 0.14), 0.55),
+  ];
+  return palette.slice(0, Math.max(1, count));
+}
+
 /**
  * Full-screen lava lamp using **brand primary** (and friends). Place above a gradient.
  */
@@ -141,20 +160,26 @@ export function BrandLavaLampBackground({
   blurIntensity = 52,
   layoutWidth,
   layoutHeight,
+  emphasis = 'default',
 }: BrandLavaLampBackgroundProps) {
   const { width: winW, height: winH } = useWindowDimensions();
 
+  const useBox =
+    typeof layoutWidth === 'number' &&
+    typeof layoutHeight === 'number' &&
+    layoutWidth > 0 &&
+    layoutHeight > 0;
+  const isBold = emphasis === 'bold';
+
   const circles = useMemo<Circle[]>(() => {
-    const cols = buildBrandPalette(primaryColor, count);
-    const useBox =
-      typeof layoutWidth === 'number' &&
-      typeof layoutHeight === 'number' &&
-      layoutWidth > 0 &&
-      layoutHeight > 0;
-    const w = Math.max(useBox ? layoutWidth : winW, 1);
-    const h = Math.max(useBox ? layoutHeight : winH, 1);
+    const cols = isBold ? buildBrandPaletteBold(primaryColor, count) : buildBrandPalette(primaryColor, count);
+    const w = Math.max(useBox ? layoutWidth! : winW, 1);
+    const h = Math.max(useBox ? layoutHeight! : winH, 1);
     /** באנר רחב ונמוך — מקטינים מעט את המחלק כדי שהבלובים ייחסו לגובה */
-    const radiusDiv = h < 100 ? 1.75 : 2.2;
+    let radiusDiv = h < 100 ? 1.75 : 2.2;
+    if (useBox && isBold) {
+      radiusDiv = h < 100 ? 1.35 : 1.38;
+    }
     return cols.map((color, index) => {
       const rand = randomNumber(5, 11) / 10;
       const radius = (Math.min(w, h) * rand) / radiusDiv;
@@ -162,27 +187,40 @@ export function BrandLavaLampBackground({
       const y = Math.random() * Math.max(8, h - radius * 1.2);
       return { x, y, radius, index, color };
     });
-  }, [primaryColor, count, winW, winH, layoutWidth, layoutHeight]);
+  }, [primaryColor, count, winW, winH, layoutWidth, layoutHeight, useBox, isBold]);
 
   if (Platform.OS === 'web') {
     return null;
   }
 
   const withBlur = blurIntensity > 0;
+  /** Strong blur + small area = uniform mush; cap and use a less “milky” tint in bold card mode */
+  const resolvedBlur =
+    withBlur && useBox && isBold ? Math.max(10, Math.min(blurIntensity, 24)) : blurIntensity;
+  const blurTint = useBox && isBold ? ('default' as const) : ('light' as const);
+  const perBlobBlur = !(useBox && isBold);
 
   return (
     <View style={[StyleSheet.absoluteFill, { backgroundColor: 'transparent' }]} pointerEvents="none">
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: baseColor, opacity: 0.12 }]} />
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          { backgroundColor: baseColor, opacity: useBox && isBold ? 0.06 : 0.12 },
+        ]}
+      />
       {circles.map((circle) => (
         <LavaBlobCircle
           key={`lava-${circle.index}`}
           circle={circle}
-          duration={duration}
+          duration={
+            useBox && isBold ? duration + circle.index * Math.round(duration * 0.14) : duration
+          }
           withBlur={withBlur}
+          perBlobBlur={perBlobBlur}
         />
       ))}
       {withBlur ? (
-        <BlurView style={StyleSheet.absoluteFill} intensity={blurIntensity} tint="light" />
+        <BlurView style={StyleSheet.absoluteFill} intensity={resolvedBlur} tint={blurTint} />
       ) : null}
     </View>
   );
@@ -247,6 +285,7 @@ export function LavaLamp({
           circle={circle}
           duration={duration}
           withBlur={withBlur}
+          perBlobBlur
         />
       ))}
       {withBlur ? (

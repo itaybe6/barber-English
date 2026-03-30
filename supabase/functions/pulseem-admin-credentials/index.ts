@@ -12,7 +12,8 @@
  *   - JWT_SECRET — use this name in Dashboard → Edge Functions → Secrets (UI forbids SUPABASE_* for manual secrets).
  *   Value = Project Settings → API → JWT Secret (same as legacy key verification).
  *
- * Optional for test_connection (יתרת SMS API): PULSEEM_MAIN_API_KEY — same as pulseem-credit-transfer (POST GetCreditBalance).
+ * Optional fallback for balance when sub-account key fails: PULSEEM_MAIN_API_KEY + subAccountName (legacy).
+ * Preferred: GetCreditBalance with the business encrypted pulseem_api_key as header APIKEY (same identity as CreditTransfer body.apikey).
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -190,8 +191,77 @@ function extractDirectSmsCreditsFromPulseemJson(
 }
 
 /**
- * יתרת SMS בחבילת API / Direct (כמו בעמודת «חבילת SMS בAPI» בפולסים).
- * דורש מפתח REST של החשבון הראשי (PULSEEM_MAIN_API_KEY) ושם תת-החשבון כפי בפולסים.
+ * יתרת Direct SMS לחשבון המשנה — אותו מפתח שמועבר ב-CreditTransfer כ־body.apikey.
+ * (מומלץ; ב-auth-phone-otp משתמשים באותה שיטה עם body ריק.)
+ */
+async function getDirectSmsBalanceWithDirectKey(
+  directApiKey: string,
+): Promise<
+  | { ok: true; credits: string }
+  | { ok: false; message: string }
+> {
+  const key = directApiKey.trim();
+  if (!key) {
+    return { ok: false, message: "מפתח API Direct ריק" };
+  }
+  const url = `${PULSEEM_REST_BASE}/AccountsApi/GetCreditBalance`;
+  const bodies = [{}, { isSMSIncludeVoice: false }, { IsSMSIncludeVoice: false }];
+  const headerVariants: Record<string, string>[] = [
+    { APIKEY: key },
+    { APIKey: key },
+  ];
+  let lastText = "";
+  let lastHttpErr = "";
+  for (const bodyObj of bodies) {
+    for (const apiHeader of headerVariants) {
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            ...apiHeader,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(bodyObj),
+        });
+        const text = await res.text();
+        lastText = text;
+        if (!res.ok) {
+          lastHttpErr = `Pulseem HTTP ${res.status}: ${text.slice(0, 180)}`;
+          continue;
+        }
+        let j: Record<string, unknown> = {};
+        try {
+          j = JSON.parse(text) as Record<string, unknown>;
+        } catch {
+          continue;
+        }
+        const st = j.status ?? j.Status;
+        if (st && String(st).toLowerCase() !== "success") {
+          const err =
+            j.errorMessage ?? j.ErrorMessage ?? j.error ?? j.Error ?? text;
+          lastHttpErr = `Pulseem: ${String(err).slice(0, 200)}`;
+          continue;
+        }
+        const n = extractDirectSmsCreditsFromPulseemJson(j);
+        if (n !== null) {
+          return { ok: true, credits: String(n) };
+        }
+      } catch (e) {
+        lastHttpErr = (e as Error)?.message ?? "GetCreditBalance נכשלה";
+      }
+    }
+  }
+  return {
+    ok: false,
+    message:
+      lastHttpErr ||
+      `לא נמצאה יתרת Direct SMS בתשובה. דוגמה: ${lastText.slice(0, 280)}`,
+  };
+}
+
+/**
+ * יתרת SMS בחבילת API — שאילתה דרך מפתח ראשי + שם תת-חשבון (לעיתים מחזירה יתרת ראשי; נשאר כ-fallback).
  */
 async function getDirectSmsApiBalance(
   mainApiKey: string,
@@ -446,7 +516,7 @@ serve(async (req) => {
     const { data: row } = await admin
       .from("business_profile")
       .select(
-        "pulseem_password, display_name, branding_client_name, pulseem_has_api_key",
+        "pulseem_password, pulseem_api_key, display_name, branding_client_name, pulseem_has_api_key",
       )
       .eq("id", businessId)
       .maybeSingle();
@@ -466,22 +536,49 @@ serve(async (req) => {
 
     let directSmsCredits: string | null = null;
     let directError: string | null = null;
-    if (row.pulseem_has_api_key && mainKey && nameCandidates.length > 0) {
-      for (const candidate of nameCandidates) {
-        const dr = await getDirectSmsApiBalance(mainKey, candidate);
-        if (dr.ok) {
-          directSmsCredits = dr.credits;
-          directError = null;
-          break;
-        }
-        directError = dr.message;
+    if (row.pulseem_has_api_key) {
+      let directApiPlain = "";
+      try {
+        directApiPlain = await decryptPulseemField(
+          String(row.pulseem_api_key ?? "").trim(),
+          encKey,
+        );
+      } catch (e) {
+        console.error("[pulseem-admin-credentials] test decrypt api key:", e);
+        directApiPlain = "";
       }
-    } else if (row.pulseem_has_api_key && !mainKey) {
-      directError =
-        "חסר PULSEEM_MAIN_API_KEY ב-Supabase Secrets — לא ניתן לשאול יתרת SMS API (Direct)";
-    } else if (row.pulseem_has_api_key && nameCandidates.length === 0) {
-      directError =
-        "חסר שם תת-חשבון לשאילת API — מלא «שם תת-חשבון (פולסים)» או שם תצוגה בעסק";
+      directApiPlain = directApiPlain.trim();
+
+      if (directApiPlain) {
+        const subBal = await getDirectSmsBalanceWithDirectKey(directApiPlain);
+        if (subBal.ok) {
+          directSmsCredits = subBal.credits;
+          directError = null;
+        } else {
+          directError = subBal.message;
+        }
+      }
+
+      if (directSmsCredits == null && mainKey && nameCandidates.length > 0) {
+        for (const candidate of nameCandidates) {
+          const dr = await getDirectSmsApiBalance(mainKey, candidate);
+          if (dr.ok) {
+            directSmsCredits = dr.credits;
+            directError = null;
+            break;
+          }
+          directError = dr.message;
+        }
+      } else if (directSmsCredits == null && !mainKey && !directApiPlain) {
+        directError =
+          "אין מפתח Direct במסד או חסר PULSEEM_MAIN_API_KEY — לא ניתן לשאול יתרת SMS API";
+      } else if (directSmsCredits == null && !mainKey && directApiPlain) {
+        /* נשאר directError מ-getDirectSmsBalanceWithDirectKey */
+      } else if (directSmsCredits == null && mainKey && nameCandidates.length === 0) {
+        directError =
+          directError ??
+          "חסר שם תת-חשבון ל-fallback — מלא «שם תת-חשבון (פולסים)» או שם תצוגה בעסק";
+      }
     }
 
     let password = passwordOverride;
@@ -541,7 +638,7 @@ serve(async (req) => {
     });
   }
 
-  /** יתרת SMS API בלבד (GetCreditBalance) — בלי Web Service; לתצוגה אוטומטית בממשק סופר-אדמין */
+  /** יתרת SMS API בלבד — קודם מפתח Direct של העסק (כמו CreditTransfer); אחר כך fallback ראשי+שם */
   if (action === "fetch_direct_sms_balance") {
     const businessId = String(body.businessId ?? "").trim();
     const subAccountOverride = String(body.subAccountName ?? "").trim();
@@ -551,7 +648,9 @@ serve(async (req) => {
 
     const { data: row } = await admin
       .from("business_profile")
-      .select("display_name, branding_client_name, pulseem_has_api_key")
+      .select(
+        "display_name, branding_client_name, pulseem_has_api_key, pulseem_api_key",
+      )
       .eq("id", businessId)
       .maybeSingle();
 
@@ -560,6 +659,25 @@ serve(async (req) => {
     }
     if (!row.pulseem_has_api_key) {
       return json({ ok: false, message: "אין מפתח API Direct לעסק זה" });
+    }
+
+    let directApiPlain = "";
+    try {
+      directApiPlain = await decryptPulseemField(
+        String(row.pulseem_api_key ?? "").trim(),
+        encKey,
+      );
+    } catch (e) {
+      console.error("[pulseem-admin-credentials] fetch balance decrypt api:", e);
+      directApiPlain = "";
+    }
+    directApiPlain = directApiPlain.trim();
+
+    if (directApiPlain) {
+      const subBal = await getDirectSmsBalanceWithDirectKey(directApiPlain);
+      if (subBal.ok) {
+        return json({ ok: true, directSmsCredits: subBal.credits });
+      }
     }
 
     const slug = slugFromBranding(row.branding_client_name);
@@ -573,15 +691,16 @@ serve(async (req) => {
     if (!mainKey) {
       return json({
         ok: false,
-        message:
-          "חסר PULSEEM_MAIN_API_KEY ב-Supabase Secrets — לא ניתן לשאול יתרת SMS API",
+        message: directApiPlain
+          ? "לא ניתן לקרוא יתרה עם מפתח העסק; חסר גם PULSEEM_MAIN_API_KEY ל-fallback"
+          : "חסר מפתח Direct במסד או פענוח נכשל; חסר PULSEEM_MAIN_API_KEY ב-Supabase Secrets",
       });
     }
     if (nameCandidates.length === 0) {
       return json({
         ok: false,
         message:
-          "חסר שם תת-חשבון — עדכן שם תצוגה בעסק או מלא «שם תת-חשבון (פולסים)»",
+          "לא ניתן לקרוא יתרה עם מפתח העסק; חסר שם תת-חשבון ל-fallback — עדכן שם תצוגה או «שם תת-חשבון (פולסים)»",
       });
     }
 

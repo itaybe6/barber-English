@@ -8,26 +8,20 @@
  * Sender resolution (first match wins):
  *   PULSEEM_OTP_FROM_NUMBER — actual from string for OTP (and notification-push-sms if set).
  *   PULSEEM_FROM_NUMBER — overrides business_profile.pulseem_from_number.
- *   If pulseem_from_number is alphanumeric (letters) and no env override: business_profile.phone → 972…
+ *   If pulseem_from_number is alphanumeric and no env override: business phone → 972…
  *   Else business_profile.pulseem_from_number
  *
- * ASMX-only override (when DB is alphanumeric but ASMX still needs a numeric sender):
+ * ASMX-only override:
  *   PULSEEM_ASMX_FROM_NUMBER
  *
  * REST-only override:
  *   PULSEEM_REST_FROM_NUMBER (e.g. numeric on Direct API)
  *
- * OTP send order: ASMX first, then REST if ASMX fails (unless PULSEEM_OTP_PREFER_REST=1).
- *
- * If REST returns “sender name is not approved”, we retry ASMX using PULSEEM_OTP_FROM_NUMBER ||
- * PULSEEM_ASMX_FROM_NUMBER || resolved main fromNumber.
+ * OTP send order: **REST first** when pulseem_api_key is set, then ASMX fallback (with ASMX credit check).
+ * Set PULSEEM_OTP_PREFER_ASMX=1 for ASMX-first (legacy behavior).
  *
  * sender_same_as_recipient uses the actual from string sent to Pulseem (REST vs ASMX), not only
  * pulse.fromNumber — otherwise PULSEEM_REST_FROM_NUMBER identical to the user’s phone yields OK with no warning.
- *
- * Send order (OTP): **ASMX first**, then REST if ASMX fails and pulseem_api_key is set. Many tenants have
- * legacy SMS credits on ASMX only; REST can return HTTP 200 with a weak JSON body while nothing is delivered.
- * Set PULSEEM_OTP_PREFER_REST=1 to use REST-first (old behavior).
  *
  * Pulseem decrypt helpers are inlined below so Dashboard / single-file bundles succeed.
  * Keep in sync with pulseem-admin-credentials/pulseemFieldCrypto.ts (same enc:v1: format).
@@ -145,8 +139,10 @@ function normalizeSmsDestination(raw: string): string {
 }
 
 /**
- * Alphanumeric pulseem_from_number (e.g. brand name) is often not linked yet in Pulseem REST/ASMX.
- * When DB value contains letters and no PULSEEM_* from override is set, use business phone digits.
+ * Resolve the effective Pulseem sender (fromNumber).
+ * Priority: env PULSEEM_OTP_FROM_NUMBER → PULSEEM_FROM_NUMBER → DB pulseem_from_number.
+ * If DB value is alphanumeric (brand name) and no env override → fall back to business phone
+ * in 972… format, because Pulseem ASMX/REST may not accept unregistered alphanumeric senders.
  */
 function pulseemEffectiveFromNumber(
   fromDb: string,
@@ -434,22 +430,31 @@ function pulseemAsmxEffectiveFrom(mainFrom: string): string {
   return mainFrom;
 }
 
-function isPulseemSenderNotApprovedError(message: string): boolean {
-  return /sender name is not approved|sender.*not approved|not approved.*sender/i.test(
-    message,
+function pulseemOtpPreferAsmxFirst(): boolean {
+  return /^(1|true|yes)$/i.test(
+    String(Deno.env.get("PULSEEM_OTP_PREFER_ASMX") ?? "").trim(),
   );
 }
 
-function pulseemOtpPreferRestFirst(): boolean {
-  return /^(1|true|yes)$/i.test(
-    String(Deno.env.get("PULSEEM_OTP_PREFER_REST") ?? "").trim(),
-  );
+async function getAsmxCreditsLeft(userId: string, password: string): Promise<number> {
+  try {
+    const url = new URL(`${PULSEEM_ASMX}/GetSMScreditsLeft`);
+    url.searchParams.set("userID", userId);
+    url.searchParams.set("password", password);
+    const res = await fetch(url.toString());
+    const xml = await res.text();
+    const m = xml.match(/<(?:string|int)[^>]*>\s*(-?\d+)\s*<\//i);
+    if (m) return parseInt(m[1], 10);
+    return -1;
+  } catch {
+    return -1;
+  }
 }
 
 /**
- * OTP SMS: default **ASMX first** (legacy credits / clearer queueing), then REST if ASMX fails and apiKey exists.
- * REST-first when PULSEEM_OTP_PREFER_REST=1; on “sender not approved” REST still falls back to ASMX.
- * Returns the fromNumber string actually passed to Pulseem on the path that succeeded.
+ * OTP SMS: default **REST first** (DirectSms credits), then ASMX if REST fails.
+ * ASMX path skips send when GetSMScreditsLeft returns 0 (avoids silent no-delivery).
+ * PULSEEM_OTP_PREFER_ASMX=1 forces ASMX-first.
  */
 async function sendPulseemSingleSms(opts: {
   userId: string;
@@ -462,14 +467,20 @@ async function sendPulseemSingleSms(opts: {
   const asmxFrom = pulseemAsmxEffectiveFrom(opts.fromNumber);
   const fromRest = pulseemRestFromNumber(opts.fromNumber);
 
-  const tryAsmx = () =>
-    sendPulseemViaAsmx({
+  const tryAsmx = async () => {
+    const credits = await getAsmxCreditsLeft(opts.userId, opts.password);
+    console.log("[auth-phone-otp] ASMX credits remaining:", credits);
+    if (credits === 0) {
+      throw new Error("pulseem_asmx_zero_credits");
+    }
+    await sendPulseemViaAsmx({
       userId: opts.userId,
       password: opts.password,
       fromNumber: asmxFrom,
       toNumber: opts.toNumber,
       text: opts.text,
     });
+  };
 
   const tryRest = () =>
     sendPulseemViaRestApi({
@@ -479,41 +490,33 @@ async function sendPulseemSingleSms(opts: {
       text: opts.text,
     });
 
-  if (pulseemOtpPreferRestFirst() && opts.apiKey) {
+  if (pulseemOtpPreferAsmxFirst()) {
     try {
+      await tryAsmx();
+      return { fromUsed: asmxFrom };
+    } catch (asmxErr) {
+      if (!opts.apiKey) throw asmxErr;
+      const am = String((asmxErr as Error)?.message ?? asmxErr);
+      console.warn("[auth-phone-otp] ASMX failed; trying REST. Error:", am.slice(0, 220));
       await tryRest();
       return { fromUsed: fromRest };
-    } catch (e) {
-      const msg = String((e as Error)?.message ?? e);
-      if (isPulseemSenderNotApprovedError(msg)) {
-        console.warn(
-          "[auth-phone-otp] Pulseem REST rejected sender; retrying ASMX. REST from=",
-          fromRest,
-          "ASMX from=",
-          asmxFrom,
-          "msg:",
-          msg.slice(0, 160),
-        );
-        await tryAsmx();
-        return { fromUsed: asmxFrom };
-      }
-      throw e;
     }
   }
 
-  try {
-    await tryAsmx();
-    return { fromUsed: asmxFrom };
-  } catch (asmxErr) {
-    if (!opts.apiKey) throw asmxErr;
-    const am = String((asmxErr as Error)?.message ?? asmxErr);
-    console.warn(
-      "[auth-phone-otp] ASMX failed; falling back to Pulseem REST. ASMX error:",
-      am.slice(0, 220),
-    );
-    await tryRest();
-    return { fromUsed: fromRest };
+  if (opts.apiKey) {
+    try {
+      await tryRest();
+      return { fromUsed: fromRest };
+    } catch (restErr) {
+      const msg = String((restErr as Error)?.message ?? restErr);
+      console.warn("[auth-phone-otp] REST failed; trying ASMX. Error:", msg.slice(0, 220));
+      await tryAsmx();
+      return { fromUsed: asmxFrom };
+    }
   }
+
+  await tryAsmx();
+  return { fromUsed: asmxFrom };
 }
 
 async function findUserByPhoneFlexible(

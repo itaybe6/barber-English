@@ -577,8 +577,8 @@ export const superAdminApi = {
   },
 
   /**
-   * יתרת «חבילת SMS בAPI» (Direct) מפולסים — GetCreditBalance בשרת.
-   * דורש pulseem_has_api_key + PULSEEM_MAIN_API_KEY ב-Edge.
+   * יתרת Direct SMS לעסק — GetCreditBalance עם מפתח ה-Direct המוצפן (כמו יעד CreditTransfer).
+   * Fallback: מפתח ראשי + subAccountName אם נדרש.
    */
   async fetchPulseemDirectSmsBalance(
     businessId: string,

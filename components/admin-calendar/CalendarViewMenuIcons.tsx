@@ -1,5 +1,5 @@
 import React from 'react';
-import { CalendarClock, CalendarRange, LayoutGrid } from 'lucide-react-native';
+import { Calendar, CalendarDays, Grid3x3 } from 'lucide-react-native';
 import type { CalendarViewMode } from './calendarViewMode';
 
 export function CalendarViewModeIcon({
@@ -13,11 +13,11 @@ export function CalendarViewModeIcon({
 }) {
   switch (mode) {
     case 'day':
-      return <CalendarClock size={iconSize} color={color} strokeWidth={2.2} />;
+      return <Calendar size={iconSize} color={color} strokeWidth={2.2} />;
     case 'week':
-      return <CalendarRange size={iconSize} color={color} strokeWidth={2.2} />;
+      return <CalendarDays size={iconSize} color={color} strokeWidth={2.2} />;
     case 'month':
-      return <LayoutGrid size={iconSize} color={color} strokeWidth={2.2} />;
+      return <Grid3x3 size={iconSize} color={color} strokeWidth={2.2} />;
     default:
       return null;
   }

@@ -1,18 +1,30 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Dimensions, I18nManager } from 'react-native';
-import Colors from '@/constants/colors';
-import { ChevronLeft, ChevronRight } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import {
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  Pressable,
+  Dimensions,
+  Platform,
+} from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useColors } from '@/src/theme/ThemeProvider';
+
+/** רוחב תא + מרווחים — לסנכרון גלילה למרכז */
+const DAY_CELL_WIDTH = 52;
+const DAY_CELL_GAP = 6;
+const ITEM_STRIDE = DAY_CELL_WIDTH + DAY_CELL_GAP * 2;
 
 interface DaySelectorProps {
   selectedDate: Date;
   onSelectDate: (date: Date) => void;
   daysToShow?: number;
   mode?: 'week' | 'month';
-  markedDates?: Set<string> | string[]; // YYYY-MM-DD strings to mark with a dot
-  startFromToday?: boolean; // when in week mode, start range from today instead of start-of-week
+  markedDates?: Set<string> | string[];
+  startFromToday?: boolean;
+  /** רקע מיכל השורה — ברירת מחדל שקוף כדי להתמזג עם רקע המסך (למשל יומן אדמין) */
+  containerBackgroundColor?: string;
 }
 
 export default function DaySelector({
@@ -22,19 +34,18 @@ export default function DaySelector({
   mode = 'week',
   markedDates,
   startFromToday = false,
+  containerBackgroundColor = 'transparent',
 }: DaySelectorProps) {
   const colors = useColors();
-  const { t, i18n } = useTranslation();
+  const { i18n } = useTranslation();
   const [dates, setDates] = useState<Date[]>([]);
-  const [currentMonth, setCurrentMonth] = useState('');
   const scrollRef = useRef<ScrollView | null>(null);
   const didInitialAutoScrollRef = useRef(false);
-  const contentWidthRef = useRef(0);
-  
+
   useEffect(() => {
     generateDates(selectedDate);
   }, [selectedDate, daysToShow, mode]);
-  
+
   const generateDates = (anchor: Date) => {
     const base = new Date(anchor);
     const newDates: Date[] = [];
@@ -42,18 +53,15 @@ export default function DaySelector({
     if (mode === 'month') {
       const year = base.getFullYear();
       const month = base.getMonth();
-      const firstOfMonth = new Date(year, month, 1);
       const lastDay = new Date(year, month + 1, 0).getDate();
 
       for (let day = 1; day <= lastDay; day++) {
         newDates.push(new Date(year, month, day));
       }
       setDates(newDates);
-      updateCurrentMonth(firstOfMonth);
       return;
     }
 
-    // week mode
     if (startFromToday) {
       const start = new Date();
       start.setHours(0, 0, 0, 0);
@@ -63,12 +71,10 @@ export default function DaySelector({
         newDates.push(d);
       }
       setDates(newDates);
-      updateCurrentMonth(newDates[0]);
       return;
     }
 
-    // default: build the week that contains the selected date, starting on Sunday (א)
-    const dayOfWeek = base.getDay(); // 0 = Sunday
+    const dayOfWeek = base.getDay();
     const startOfWeek = new Date(base);
     startOfWeek.setDate(base.getDate() - dayOfWeek);
 
@@ -78,55 +84,23 @@ export default function DaySelector({
       newDates.push(d);
     }
 
-    setDates(newDates);
-    updateCurrentMonth(newDates[0]);
+    /** סדר תצוגה: שמאל = ש׳ (סוף השבוע), ימינה עד א׳ — מתאים ל-RTL ולציפיית משתמשים בעברית */
+    setDates([...newDates].reverse());
   };
-  
+
   const toLocalISODate = (date: Date) => {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
     const d = String(date.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   };
-  
+
   const markedSet = useMemo(() => {
     if (!markedDates) return null;
     if (Array.isArray(markedDates)) return new Set(markedDates);
-    // Assume Set<string>
     return new Set<string>(Array.from(markedDates as Set<string>));
   }, [markedDates]);
-  
-  const updateCurrentMonth = (date: Date) => {
-    setCurrentMonth(
-      date.toLocaleDateString(i18n?.language?.startsWith('he') ? 'he-IL' : 'en-US', { month: 'long', year: 'numeric' } as any)
-    );
-  };
-  
-  const navigateDays = (direction: 'prev' | 'next') => {
-    const newDates: Date[] = [];
-    // Determine range shift base from current shown range
-    const first = dates[0] ? new Date(dates[0]) : new Date(selectedDate);
-    let baseDate: Date;
-    if (startFromToday) {
-      baseDate = new Date(first);
-    } else {
-      // start of week (Sunday)
-      const startOfWeek = new Date(first);
-      startOfWeek.setDate(first.getDate() - first.getDay());
-      baseDate = new Date(startOfWeek);
-    }
-    baseDate.setDate(baseDate.getDate() + (direction === 'prev' ? -daysToShow : daysToShow));
-    
-    for (let i = 0; i < daysToShow; i++) {
-      const d = new Date(baseDate);
-      d.setDate(baseDate.getDate() + i);
-      newDates.push(d);
-    }
-    
-    setDates(newDates);
-    updateCurrentMonth(newDates[0]);
-  };
-  
+
   const isToday = (date: Date) => {
     const today = new Date();
     return (
@@ -135,7 +109,7 @@ export default function DaySelector({
       date.getFullYear() === today.getFullYear()
     );
   };
-  
+
   const isSelected = (date: Date) => {
     return (
       date.getDate() === selectedDate.getDate() &&
@@ -143,42 +117,40 @@ export default function DaySelector({
       date.getFullYear() === selectedDate.getFullYear()
     );
   };
-  
+
   const getDayName = (date: Date) => {
     const daysEn = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const daysHe = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
     const list = i18n?.language?.startsWith('he') ? daysHe : daysEn;
     return list[date.getDay()];
   };
-  
+
   const scrollToSelected = (animated: boolean) => {
     if (!scrollRef.current || dates.length === 0) return;
-    const selectedIdx = dates.findIndex((d) =>
-      d.getDate() === selectedDate.getDate() &&
-      d.getMonth() === selectedDate.getMonth() &&
-      d.getFullYear() === selectedDate.getFullYear()
+    const selectedIdx = dates.findIndex(
+      (d) =>
+        d.getDate() === selectedDate.getDate() &&
+        d.getMonth() === selectedDate.getMonth() &&
+        d.getFullYear() === selectedDate.getFullYear()
     );
     if (selectedIdx < 0) return;
-    
-    const ITEM_FULL_WIDTH = 68; // 56 width + ~12 margins
+
     const screenWidth = Dimensions.get('window').width;
-    
-    // For LTR, center the selected item in view
-    const totalContentWidth = dates.length * ITEM_FULL_WIDTH;
-    const centerOffset = (screenWidth - ITEM_FULL_WIDTH) / 2;
-    const itemPosition = selectedIdx * ITEM_FULL_WIDTH;
-    const targetX = Math.max(0, Math.min(
-      totalContentWidth - screenWidth,
-      itemPosition - centerOffset
-    ));
-    
+    const totalContentWidth = dates.length * ITEM_STRIDE;
+    const centerOffset = (screenWidth - ITEM_STRIDE) / 2;
+    const itemPosition = selectedIdx * ITEM_STRIDE;
+    const targetX = Math.max(
+      0,
+      Math.min(totalContentWidth - screenWidth, itemPosition - centerOffset)
+    );
+
     try {
       scrollRef.current.scrollTo({ x: targetX, animated });
-    } catch (error) {
+    } catch {
+      /* ignore */
     }
   };
 
-  // Ensure selected day is visible (especially on first load in month mode)
   useEffect(() => {
     if (mode !== 'month') return;
     const t = setTimeout(() => {
@@ -189,24 +161,24 @@ export default function DaySelector({
     }, 10);
     return () => clearTimeout(t);
   }, [dates, selectedDate, mode]);
-  
+
   return (
-    <View style={[styles.container, { direction: 'ltr' }] }>
+    <View style={[styles.container, { backgroundColor: containerBackgroundColor, direction: 'ltr' }]}>
       <ScrollView
         ref={scrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[styles.daysContainer, { flexDirection: 'row' }]}
+        /** כפיית LTR — באפליקציה בעברית (RTL) ScrollView אופקי הופך סדר: א׳ חייב להישאר משמאל */
+        style={styles.scrollLtr}
+        contentContainerStyle={styles.daysContainer}
         onLayout={() => {
           if (mode !== 'month') return;
           if (!didInitialAutoScrollRef.current) {
-            // Ensure initial centering once layout is ready
             scrollToSelected(false);
             didInitialAutoScrollRef.current = true;
           }
         }}
-        onContentSizeChange={(w) => {
-          contentWidthRef.current = w || 0;
+        onContentSizeChange={() => {
           if (mode !== 'month') return;
           if (!didInitialAutoScrollRef.current) {
             scrollToSelected(false);
@@ -216,40 +188,75 @@ export default function DaySelector({
       >
         {dates.map((date, index) => {
           const selected = isSelected(date);
+          const today = isToday(date);
           const isMarked = !!markedSet && markedSet.has(toLocalISODate(date));
-          const common = [styles.dayItem, { marginHorizontal: 6 }];
+
+          const pillBase = [
+            styles.dayPill,
+            { width: DAY_CELL_WIDTH, marginHorizontal: DAY_CELL_GAP },
+          ];
+
           if (selected) {
             return (
-              <LinearGradient
+              <Pressable
                 key={index}
-                colors={[colors.primary, colors.primary]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[...common, styles.selectedDayItem]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: true }}
+                onPress={() => onSelectDate(date)}
+                style={({ pressed }) => [
+                  ...pillBase,
+                  styles.dayPillSelected,
+                  {
+                    backgroundColor: colors.primary,
+                    shadowColor: colors.primary,
+                  },
+                  pressed && styles.dayPillPressed,
+                ]}
               >
-                <TouchableOpacity
-                  style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
-                  onPress={() => onSelectDate(date)}
-                  activeOpacity={0.9}
-                >
-                  <Text style={[styles.dayName, styles.selectedDayText]}>{getDayName(date)}</Text>
-                  <Text style={[styles.dayNumber, styles.selectedDayText]}>{date.getDate()}</Text>
-                  {isMarked && <View style={styles.selectedMarkDot} />}
-                </TouchableOpacity>
-              </LinearGradient>
+                <Text style={[styles.dayName, styles.dayNameOnPrimary]}>{getDayName(date)}</Text>
+                <Text style={[styles.dayNumber, styles.dayNumberOnPrimary]}>{date.getDate()}</Text>
+                {isMarked ? <View style={styles.markDotSelected} /> : <View style={styles.markDotPlaceholder} />}
+              </Pressable>
             );
           }
+
           return (
-            <TouchableOpacity
+            <Pressable
               key={index}
-              style={[...common, { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#EFEFF4' }]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: false }}
               onPress={() => onSelectDate(date)}
-              activeOpacity={0.85}
+              android_ripple={{ color: 'rgba(0,0,0,0.06)', borderless: false }}
+              style={({ pressed }) => [
+                ...pillBase,
+                styles.dayPillIdle,
+                today && { borderColor: colors.primary, borderWidth: 2, backgroundColor: `${colors.primary}10` },
+                pressed && styles.dayPillPressedIdle,
+              ]}
             >
-              <Text style={styles.dayName}>{getDayName(date)}</Text>
-              <Text style={[styles.dayNumber, isToday(date) && styles.todayText]}>{date.getDate()}</Text>
-              {isMarked && <View style={styles.markDot} />}
-            </TouchableOpacity>
+              <Text
+                style={[
+                  styles.dayName,
+                  { color: colors.textSecondary },
+                ]}
+              >
+                {getDayName(date)}
+              </Text>
+              <Text
+                style={[
+                  styles.dayNumber,
+                  { color: colors.text },
+                  today && { color: colors.primary },
+                ]}
+              >
+                {date.getDate()}
+              </Text>
+              {isMarked ? (
+                <View style={[styles.markDotIdle, { backgroundColor: colors.primary }]} />
+              ) : (
+                <View style={styles.markDotPlaceholder} />
+              )}
+            </Pressable>
           );
         })}
       </ScrollView>
@@ -259,84 +266,93 @@ export default function DaySelector({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: Colors.white,
-    paddingBottom: 12,
+    paddingTop: 6,
+    paddingBottom: 14,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  monthTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text,
-  },
-  navButton: {
-    padding: 4,
+  scrollLtr: {
+    direction: 'ltr',
   },
   daysContainer: {
-    paddingHorizontal: 0,
-  },
-  dayItem: {
-    width: 56,
-    height: 56,
-    justifyContent: 'center',
+    flexDirection: 'row',
+    direction: 'ltr',
     alignItems: 'center',
-    borderRadius: 28,
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
-    marginVertical: 4,
-    marginHorizontal: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
   },
-  selectedDayItem: {
-    shadowColor: Colors.black,
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+  dayPill: {
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 10,
+    paddingBottom: 8,
+    minHeight: 72,
+  },
+  dayPillIdle: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: 'rgba(60, 64, 67, 0.12)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  dayPillSelected: {
+    borderWidth: 0,
+    ...Platform.select({
+      ios: {
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.28,
+        shadowRadius: 10,
+      },
+      android: { elevation: 5 },
+    }),
+  },
+  dayPillPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.97 }],
+  },
+  dayPillPressedIdle: {
+    opacity: 0.88,
+    transform: [{ scale: 0.98 }],
   },
   dayName: {
-    fontSize: 14,
-    color: Colors.subtext,
-    marginBottom: 4,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+    marginBottom: 2,
+  },
+  dayNameOnPrimary: {
+    color: 'rgba(255,255,255,0.92)',
   },
   dayNumber: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text,
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.4,
   },
-  selectedDayText: {
-    color: Colors.white,
+  dayNumberOnPrimary: {
+    color: '#FFFFFF',
   },
-  todayText: {
-    color: Colors.primary,
+  markDotIdle: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    marginTop: 6,
+    opacity: 0.85,
   },
-  todayDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Colors.primary,
-    marginTop: 4,
+  markDotSelected: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    marginTop: 6,
+    backgroundColor: 'rgba(255,255,255,0.95)',
   },
-  markDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.black,
-    marginTop: 4,
-  },
-  selectedMarkDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.white,
-    marginTop: 4,
+  markDotPlaceholder: {
+    height: 5,
+    marginTop: 6,
   },
 });

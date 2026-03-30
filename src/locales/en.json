@@ -163,7 +163,11 @@
   "admin.gallery.homeEmptyTitle": "No gallery photos yet",
   "admin.gallery.homeEmptySubtitle": "Add photos so clients can see your work — tap the button below.",
   "admin.gallery.homeEmptyCta": "Add photos to gallery",
+  "admin.gallery.homeSectionEdit": "Edit",
+  "admin.gallery.homeSectionEditA11y": "Edit gallery",
   "admin.products.homeTitle": "Products",
+  "admin.products.homeSectionEdit": "Edit",
+  "admin.products.homeSectionEditA11y": "Edit products",
   "admin.products.homeEdit": "Edit products",
   "admin.products.homeEmptyTitle": "No products yet",
   "admin.products.homeEmptySubtitle": "Add products so clients can see what you offer.",
@@ -866,7 +870,7 @@
       "notificationsUnreadLine_one": "You have 1 unread notification",
       "notificationsUnreadLine_other": "You have {{count}} unread notifications",
       "notificationsAllClear": "No unread notifications",
-      "broadcastTile": "Notify all clients"
+      "broadcastTile": "Broadcast message"
     },
     "broadcastComposer": {
       "triggerLabel": "Notify all clients",

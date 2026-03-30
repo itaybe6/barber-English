@@ -20,6 +20,9 @@
  * If REST returns “sender name is not approved”, we retry ASMX using PULSEEM_OTP_FROM_NUMBER ||
  * PULSEEM_ASMX_FROM_NUMBER || resolved main fromNumber.
  *
+ * sender_same_as_recipient uses the actual from string sent to Pulseem (REST vs ASMX), not only
+ * pulse.fromNumber — otherwise PULSEEM_REST_FROM_NUMBER identical to the user’s phone yields OK with no warning.
+ *
  * Pulseem decrypt helpers are inlined below so Dashboard / single-file bundles succeed.
  * Keep in sync with pulseem-admin-credentials/pulseemFieldCrypto.ts (same enc:v1: format).
  */
@@ -130,6 +133,8 @@ function normalizeSmsDestination(raw: string): string {
   const d = phoneDigits(raw);
   if (d.startsWith("972")) return d;
   if (d.startsWith("0") && d.length >= 9 && d.length <= 11) return "972" + d.slice(1);
+  // 5XXXXXXXX (9 digits, no leading 0) — common user input; gateways expect 972…
+  if (d.length === 9 && /^5\d{8}$/.test(d)) return "972" + d;
   return d;
 }
 
@@ -368,6 +373,7 @@ function isPulseemSenderNotApprovedError(message: string): boolean {
  * falls back to legacy ASMX (userID + password) otherwise.
  * REST uses PULSEEM_REST_FROM_NUMBER when set; on “sender not approved” we retry ASMX with
  * pulseemAsmxEffectiveFrom (numeric secrets without changing DB).
+ * Returns the fromNumber string actually passed to Pulseem on the path that succeeded.
  */
 async function sendPulseemSingleSms(opts: {
   userId: string;
@@ -376,7 +382,7 @@ async function sendPulseemSingleSms(opts: {
   toNumber: string;
   text: string;
   apiKey?: string;
-}): Promise<void> {
+}): Promise<{ fromUsed: string }> {
   const asmxFrom = pulseemAsmxEffectiveFrom(opts.fromNumber);
   if (opts.apiKey) {
     const fromRest = pulseemRestFromNumber(opts.fromNumber);
@@ -387,7 +393,7 @@ async function sendPulseemSingleSms(opts: {
         toNumber: opts.toNumber,
         text: opts.text,
       });
-      return;
+      return { fromUsed: fromRest };
     } catch (e) {
       const msg = String((e as Error)?.message ?? e);
       if (isPulseemSenderNotApprovedError(msg)) {
@@ -399,24 +405,26 @@ async function sendPulseemSingleSms(opts: {
           "msg:",
           msg.slice(0, 160),
         );
-        return sendPulseemViaAsmx({
+        await sendPulseemViaAsmx({
           userId: opts.userId,
           password: opts.password,
           fromNumber: asmxFrom,
           toNumber: opts.toNumber,
           text: opts.text,
         });
+        return { fromUsed: asmxFrom };
       }
       throw e;
     }
   }
-  return sendPulseemViaAsmx({
+  await sendPulseemViaAsmx({
     userId: opts.userId,
     password: opts.password,
     fromNumber: asmxFrom,
     toNumber: opts.toNumber,
     text: opts.text,
   });
+  return { fromUsed: asmxFrom };
 }
 
 async function findUserByPhoneFlexible(
@@ -829,8 +837,9 @@ serve(async (req) => {
       });
 
       const msg = `Your login code: ${code}`;
+      let pulseFromUsed: string;
       try {
-        await sendPulseemSingleSms({
+        const sent = await sendPulseemSingleSms({
           userId: pulse.userId,
           password: pulse.password,
           fromNumber: pulse.fromNumber,
@@ -838,6 +847,7 @@ serve(async (req) => {
           text: msg,
           apiKey: pulse.apiKey || undefined,
         });
+        pulseFromUsed = sent.fromUsed;
       } catch (e) {
         console.error("[auth-phone-otp] pulseem send", e);
         await admin.from("auth_phone_otp_challenges").delete().eq(
@@ -850,7 +860,7 @@ serve(async (req) => {
         );
       }
 
-      if (pulseemFromSameAsDestination(pulse.fromNumber, phone.trim())) {
+      if (pulseemFromSameAsDestination(pulseFromUsed, phone.trim())) {
         console.warn(
           "[auth-phone-otp] sender equals recipient (normalized); SMS may not be delivered",
         );
@@ -999,8 +1009,9 @@ serve(async (req) => {
       });
 
       const msg = `Your registration code: ${code}`;
+      let pulseFromUsed: string;
       try {
-        await sendPulseemSingleSms({
+        const sent = await sendPulseemSingleSms({
           userId: pulse.userId,
           password: pulse.password,
           fromNumber: pulse.fromNumber,
@@ -1008,6 +1019,7 @@ serve(async (req) => {
           text: msg,
           apiKey: pulse.apiKey || undefined,
         });
+        pulseFromUsed = sent.fromUsed;
       } catch (e) {
         console.error("[auth-phone-otp] pulseem send", e);
         await admin.from("auth_phone_otp_challenges").delete().eq(
@@ -1020,7 +1032,7 @@ serve(async (req) => {
         );
       }
 
-      if (pulseemFromSameAsDestination(pulse.fromNumber, phone.trim())) {
+      if (pulseemFromSameAsDestination(pulseFromUsed, phone.trim())) {
         console.warn(
           "[auth-phone-otp] sender equals recipient (normalized); SMS may not be delivered",
         );

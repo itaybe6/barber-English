@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   RefreshControl,
   Image,
   Modal,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,17 +26,31 @@ import { superAdminApi, BusinessOverview } from '@/lib/api/superAdmin';
 import { getExpoExtra } from '@/lib/getExtra';
 import { PulseemBusinessModal } from '@/components/superAdmin/PulseemBusinessModal';
 
-const ACCENT = '#6C5CE7';
-const ACCENT_DARK = '#5A4BD1';
-const GREEN = '#00B894';
-const ORANGE = '#E17055';
-const PINK = '#FD79A8';
-const BG = '#F5F6FA';
+/** iOS-style system palette (Super Admin is its own shell — not tenant-themed) */
+const ACCENT = '#007AFF';
+const ACCENT_DARK = '#0056CC';
+const GREEN = '#34C759';
+const ORANGE = '#FF9500';
+const PINK = '#FF2D55';
+const INDIGO = '#5856D6';
+const BG = '#F2F2F7';
 const CARD_BG = '#FFFFFF';
-const CARD_BORDER = '#ECEEF4';
-const TEXT_PRIMARY = '#1A1A2E';
-const TEXT_SECONDARY = '#6B7280';
-const TEXT_MUTED = '#9CA3AF';
+const CARD_BORDER = 'rgba(60,60,67,0.12)';
+const TEXT_PRIMARY = '#000000';
+const TEXT_SECONDARY = '#3C3C43';
+const TEXT_TERTIARY = '#8E8E93';
+const TEXT_MUTED = '#AEAEB2';
+const SEPARATOR = 'rgba(60,60,67,0.18)';
+
+const shadowCard = Platform.select({
+  ios: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+  },
+  default: { elevation: 2 },
+});
 
 type TabKey = 'dashboard' | 'add' | 'settings';
 
@@ -72,6 +87,21 @@ export default function SuperAdminDashboard() {
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [feedbackDialog, setFeedbackDialog] = useState<{ title: string; message: string } | null>(null);
   const [logoutConfirmVisible, setLogoutConfirmVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredBusinesses = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return businesses;
+    return businesses.filter(
+      (b) =>
+        (b.display_name || '').toLowerCase().includes(q) ||
+        (b.address || '').toLowerCase().includes(q) ||
+        (b.branding_client_name || '').toLowerCase().includes(q) ||
+        b.id.toLowerCase().includes(q) ||
+        (b.phone || '').toLowerCase().includes(q) ||
+        (b.adminPhone || '').toLowerCase().includes(q),
+    );
+  }, [businesses, searchQuery]);
 
   const buildDeleteSuccessMessage = (item: BusinessOverview) => {
     const folder = item.branding_client_name?.trim();
@@ -242,7 +272,7 @@ export default function SuperAdminDashboard() {
       </TouchableOpacity>
       {asset && (
         <TouchableOpacity style={styles.imgRemoveBtn} onPress={() => setter(null)}>
-          <Ionicons name="trash-outline" size={14} color="#FF6B6B" />
+          <Ionicons name="trash-outline" size={14} color="#FF3B30" />
           <Text style={styles.imgRemoveText}>הסר</Text>
         </TouchableOpacity>
       )}
@@ -260,139 +290,215 @@ export default function SuperAdminDashboard() {
       );
     }
 
+    const emptyBecauseFilter = businesses.length > 0 && filteredBusinesses.length === 0;
+
     return (
       <FlatList
-        data={businesses}
+        data={filteredBusinesses}
         keyExtractor={(item) => item.id}
         renderItem={renderBusinessCard}
-        contentContainerStyle={[styles.listContent, { paddingBottom: 100 }]}
+        contentContainerStyle={[styles.listContent, { paddingBottom: 120 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={ACCENT} />}
         ListHeaderComponent={
           <View>
             <View style={styles.statsRow}>
-              <LinearGradient colors={['#6C5CE7', '#A29BFE']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.statCard}>
-                <Ionicons name="apps" size={24} color="#FFFFFF" />
-                <Text style={styles.statValue}>{businesses.length}</Text>
-                <Text style={styles.statLabel}>אפליקציות</Text>
-              </LinearGradient>
-
-              <LinearGradient colors={['#00B894', '#55EFC4']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.statCard}>
-                <Ionicons name="people" size={24} color="#FFFFFF" />
-                <Text style={styles.statValue}>{totalClients}</Text>
-                <Text style={styles.statLabel}>לקוחות</Text>
-              </LinearGradient>
-
-              <LinearGradient colors={['#E17055', '#FAB1A0']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.statCard}>
-                <Ionicons name="shield-checkmark" size={24} color="#FFFFFF" />
-                <Text style={styles.statValue}>{totalAdmins}</Text>
-                <Text style={styles.statLabel}>מנהלים</Text>
-              </LinearGradient>
+              <View style={[styles.statCardApple, shadowCard]}>
+                <View style={[styles.statIconCircle, { backgroundColor: 'rgba(0,122,255,0.12)' }]}>
+                  <Ionicons name="apps" size={20} color={ACCENT} />
+                </View>
+                <Text style={styles.statValueApple}>{businesses.length}</Text>
+                <Text style={styles.statLabelApple}>אפליקציות</Text>
+              </View>
+              <View style={[styles.statCardApple, shadowCard]}>
+                <View style={[styles.statIconCircle, { backgroundColor: 'rgba(52,199,89,0.14)' }]}>
+                  <Ionicons name="people" size={20} color={GREEN} />
+                </View>
+                <Text style={styles.statValueApple}>{totalClients}</Text>
+                <Text style={styles.statLabelApple}>לקוחות</Text>
+              </View>
+              <View style={[styles.statCardApple, shadowCard]}>
+                <View style={[styles.statIconCircle, { backgroundColor: 'rgba(255,149,0,0.14)' }]}>
+                  <Ionicons name="shield-checkmark" size={20} color={ORANGE} />
+                </View>
+                <Text style={styles.statValueApple}>{totalAdmins}</Text>
+                <Text style={styles.statLabelApple}>מנהלים</Text>
+              </View>
             </View>
 
-            <Text style={styles.sectionTitle}>כל העסקים</Text>
+            <View style={[styles.searchShell, shadowCard]}>
+              <Ionicons name="search" size={18} color={TEXT_TERTIARY} style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="חיפוש לפי שם, כתובת, מזהה..."
+                placeholderTextColor={TEXT_MUTED}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                textAlign="right"
+              />
+              {searchQuery.length > 0 ? (
+                <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="close-circle" size={20} color={TEXT_TERTIARY} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>כל הארגונים</Text>
+              <View style={styles.sectionCountPill}>
+                <Text style={styles.sectionCountText}>{filteredBusinesses.length}</Text>
+              </View>
+            </View>
           </View>
         }
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIconWrap}>
-              <Ionicons name="business-outline" size={44} color={TEXT_MUTED} />
+          emptyBecauseFilter ? (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconWrap}>
+                <Ionicons name="search-outline" size={40} color={TEXT_TERTIARY} />
+              </View>
+              <Text style={styles.emptyText}>לא נמצאו תוצאות</Text>
+              <Text style={styles.emptySubtext}>נסה מילת חיפוש אחרת או נקה את השדה</Text>
             </View>
-            <Text style={styles.emptyText}>אין עסקים עדיין</Text>
-            <Text style={styles.emptySubtext}>עבור ללשונית "הוספה" כדי ליצור את העסק הראשון</Text>
-          </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconWrap}>
+                <Ionicons name="business-outline" size={40} color={TEXT_TERTIARY} />
+              </View>
+              <Text style={styles.emptyText}>אין עסקים עדיין</Text>
+              <Text style={styles.emptySubtext}>עבור ללשונית "הוספה" כדי ליצור את הארגון הראשון</Text>
+            </View>
+          )
         }
       />
     );
   };
 
-  const renderBusinessCard = ({ item }: { item: BusinessOverview }) => (
-    <View style={styles.bizCard}>
-      <View style={styles.bizHeader}>
-        <View style={styles.bizInfo}>
-          <Text style={styles.bizName} numberOfLines={1}>
-            {item.display_name || 'עסק ללא שם'}
-          </Text>
-          {item.address ? (
-            <View style={styles.bizAddressRow}>
-              <Text style={styles.bizAddress} numberOfLines={1}>{item.address}</Text>
-              <Ionicons name="location-outline" size={13} color={TEXT_MUTED} />
+  const renderBusinessCard = ({ item }: { item: BusinessOverview }) => {
+    const brand = item.branding_client_name?.trim();
+    const pulseOk = item.pulseemHasApiKey || (item.pulseem_user_id && item.pulseemHasPassword);
+    const tint = item.primary_color && /^#([0-9A-Fa-f]{6})$/.test(item.primary_color) ? item.primary_color : ACCENT;
+
+    return (
+      <View style={[styles.bizCard, shadowCard]}>
+        <View style={styles.bizCardTop}>
+          <LinearGradient colors={[tint, `${tint}CC`]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.bizAvatar}>
+            <Text style={styles.bizAvatarText}>{(item.display_name || '?')[0].toUpperCase()}</Text>
+          </LinearGradient>
+          <View style={styles.bizInfo}>
+            <Text style={styles.bizName} numberOfLines={2}>
+              {item.display_name || 'עסק ללא שם'}
+            </Text>
+            {brand ? (
+              <Text style={styles.bizBundleId} numberOfLines={1}>
+                {brand}
+              </Text>
+            ) : null}
+            {item.address ? (
+              <View style={styles.bizAddressRow}>
+                <Ionicons name="location-outline" size={14} color={TEXT_TERTIARY} />
+                <Text style={styles.bizAddress} numberOfLines={2}>
+                  {item.address}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+
+        <View style={styles.metricsGrid}>
+          <View style={styles.metricCell}>
+            <Text style={styles.metricValue}>{item.clientCount}</Text>
+            <View style={styles.metricLabelRow}>
+              <Ionicons name="people-outline" size={13} color={TEXT_TERTIARY} />
+              <Text style={styles.metricLabel}>לקוחות</Text>
+            </View>
+          </View>
+          <View style={styles.metricDividerV} />
+          <View style={styles.metricCell}>
+            <Text style={styles.metricValue}>{item.adminCount}</Text>
+            <View style={styles.metricLabelRow}>
+              <Ionicons name="shield-outline" size={13} color={TEXT_TERTIARY} />
+              <Text style={styles.metricLabel}>מנהלים</Text>
+            </View>
+          </View>
+          <View style={styles.metricDividerV} />
+          <View style={styles.metricCell}>
+            <Text style={styles.metricValue}>{item.broadcastMessageCount}</Text>
+            <View style={styles.metricLabelRow}>
+              <Ionicons name="megaphone-outline" size={13} color={TEXT_TERTIARY} />
+              <Text style={styles.metricLabel}>שידור</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.bizMetaRow}>
+          {item.phone ? (
+            <View style={styles.metaPill}>
+              <Ionicons name="call-outline" size={14} color={GREEN} />
+              <Text style={styles.metaPillText} numberOfLines={1}>
+                {item.phone}
+              </Text>
             </View>
           ) : null}
+          {pulseOk ? (
+            <View style={[styles.metaPill, styles.metaPillAccent]}>
+              <Ionicons name="checkmark-circle" size={14} color={ACCENT} />
+              <Text style={[styles.metaPillText, { color: ACCENT }]}>פולסים</Text>
+            </View>
+          ) : (
+            <View style={[styles.metaPill, styles.metaPillMuted]}>
+              <Ionicons name="remove-circle-outline" size={14} color={TEXT_MUTED} />
+              <Text style={[styles.metaPillText, { color: TEXT_TERTIARY }]}>ללא פולסים</Text>
+            </View>
+          )}
         </View>
-        <LinearGradient
-          colors={[item.primary_color || ACCENT, (item.primary_color || ACCENT) + 'AA']}
-          style={styles.bizAvatar}
-        >
-          <Text style={styles.bizAvatarText}>
-            {(item.display_name || '?')[0].toUpperCase()}
-          </Text>
-        </LinearGradient>
-      </View>
 
-      <View style={styles.bizStatsRow}>
-        <View style={[styles.bizChip, { backgroundColor: 'rgba(108,92,231,0.1)' }]}>
-          <Text style={[styles.bizChipText, { color: ACCENT }]}>{item.clientCount} לקוחות</Text>
-          <Ionicons name="people" size={14} color={ACCENT} />
-        </View>
-        <View style={[styles.bizChip, { backgroundColor: 'rgba(225,112,85,0.1)' }]}>
-          <Text style={[styles.bizChipText, { color: ORANGE }]}>{item.adminCount} מנהלים</Text>
-          <Ionicons name="shield-checkmark" size={14} color={ORANGE} />
-        </View>
-        <View style={[styles.bizChip, { backgroundColor: 'rgba(253,121,168,0.12)' }]}>
-          <Text style={[styles.bizChipText, { color: PINK }]}>{item.broadcastMessageCount} הודעות שידור</Text>
-          <Ionicons name="megaphone-outline" size={14} color={PINK} />
-        </View>
-        {item.phone ? (
-          <View style={[styles.bizChip, { backgroundColor: 'rgba(0,184,148,0.1)' }]}>
-            <Text style={[styles.bizChipText, { color: GREEN }]}>{item.phone}</Text>
-            <Ionicons name="call" size={14} color={GREEN} />
+        {item.adminPhone || item.adminPassword ? (
+          <View style={styles.adminCredentials}>
+            <View style={styles.adminCredentialsHeader}>
+              <Ionicons name="key-outline" size={15} color={INDIGO} />
+              <Text style={styles.adminCredentialsTitle}>התחברות מנהל</Text>
+            </View>
+            {item.adminPhone ? (
+              <View style={styles.credentialRow}>
+                <Text style={styles.credentialLabel}>טלפון</Text>
+                <Text style={styles.credentialValue} selectable>
+                  {item.adminPhone}
+                </Text>
+              </View>
+            ) : null}
+            {item.adminPassword ? (
+              <View style={styles.credentialRow}>
+                <Text style={styles.credentialLabel}>סיסמה</Text>
+                <Text style={styles.credentialValue} selectable>
+                  {item.adminPassword}
+                </Text>
+              </View>
+            ) : null}
           </View>
         ) : null}
-        {item.pulseemHasApiKey || (item.pulseem_user_id && item.pulseemHasPassword) ? (
-          <View style={[styles.bizChip, { backgroundColor: 'rgba(108,92,231,0.12)' }]}>
-            <Text style={[styles.bizChipText, { color: ACCENT }]}>פולסים מוגדר</Text>
-            <Ionicons name="chatbubbles" size={14} color={ACCENT} />
-          </View>
-        ) : null}
-      </View>
 
-      {(item.adminPhone || item.adminPassword) ? (
-        <View style={styles.adminCredentials}>
-          <View style={styles.adminCredentialsHeader}>
-            <Text style={styles.adminCredentialsTitle}>פרטי התחברות מנהל</Text>
-            <Ionicons name="key" size={14} color={ACCENT} />
-          </View>
-          {item.adminPhone ? (
-            <View style={styles.credentialRow}>
-              <Text style={styles.credentialValue} selectable>{item.adminPhone}</Text>
-              <Text style={styles.credentialLabel}>טלפון:</Text>
-            </View>
-          ) : null}
-          {item.adminPassword ? (
-            <View style={styles.credentialRow}>
-              <Text style={styles.credentialValue} selectable>{item.adminPassword}</Text>
-              <Text style={styles.credentialLabel}>סיסמה:</Text>
-            </View>
-          ) : null}
+        <View style={styles.bizDivider} />
+
+        <View style={styles.bizIdRow}>
+          <Text style={styles.bizIdLabel}>מזהה</Text>
+          <Text style={styles.bizId} selectable numberOfLines={1}>
+            {item.id}
+          </Text>
         </View>
-      ) : null}
 
-      <View style={styles.bizFooter}>
-        <View style={styles.bizFooterLeft}>
-          <TouchableOpacity style={styles.pulseBtn} onPress={() => setPulseModalBiz(item)} activeOpacity={0.7}>
-            <Text style={styles.pulseBtnText}>פולסים SMS</Text>
-            <Ionicons name="keypad-outline" size={14} color={ACCENT} />
+        <View style={styles.bizActions}>
+          <TouchableOpacity style={styles.actionBtnPrimary} onPress={() => setPulseModalBiz(item)} activeOpacity={0.65}>
+            <Ionicons name="chatbubble-ellipses-outline" size={17} color="#FFFFFF" />
+            <Text style={styles.actionBtnPrimaryText}>פולסים SMS</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item)} activeOpacity={0.7}>
-            <Text style={styles.deleteBtnText}>מחק</Text>
-            <Ionicons name="trash-outline" size={14} color="#FF6B6B" />
+          <TouchableOpacity style={styles.actionBtnGhost} onPress={() => handleDelete(item)} activeOpacity={0.65}>
+            <Ionicons name="trash-outline" size={17} color="#FF3B30" />
           </TouchableOpacity>
         </View>
-        <Text style={styles.bizId} selectable numberOfLines={1}>{item.id}</Text>
       </View>
-    </View>
-  );
+    );
+  };
 
   // ─── Tab: Add Business ───
   const renderAddBusiness = () => (
@@ -616,7 +722,7 @@ export default function SuperAdminDashboard() {
       <TouchableOpacity style={styles.logoutCard} onPress={handleLogout} activeOpacity={0.8}>
         <Ionicons name="chevron-back" size={18} color={TEXT_MUTED} />
         <Text style={styles.logoutText}>התנתקות</Text>
-        <Ionicons name="log-out-outline" size={22} color="#FF6B6B" />
+        <Ionicons name="log-out-outline" size={22} color="#FF3B30" />
       </TouchableOpacity>
     </ScrollView>
   );
@@ -708,10 +814,11 @@ export default function SuperAdminDashboard() {
         onClose={() => setPulseModalBiz(null)}
         onSaved={() => loadBusinesses()}
       />
-      <LinearGradient colors={['#FFFFFF', '#F5F6FA']} style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <Text style={styles.headerEyebrow}>מערכת</Text>
         <Text style={styles.headerTitle}>לוח בקרה</Text>
-        <Text style={styles.headerSubtitle}>ניהול כל האפליקציות</Text>
-      </LinearGradient>
+        <Text style={styles.headerSubtitle}>ניהול ארגונים ואפליקציות</Text>
+      </View>
 
       <View style={styles.body}>
         {activeTab === 'dashboard' && renderDashboard()}
@@ -749,81 +856,217 @@ export default function SuperAdminDashboard() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  loadingText: { fontSize: 15, color: TEXT_SECONDARY },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14 },
+  loadingText: { fontSize: 15, color: TEXT_TERTIARY, fontWeight: '500' },
 
   header: {
     paddingHorizontal: 20,
-    paddingBottom: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ECEEF4',
+    paddingBottom: 10,
+    backgroundColor: BG,
     alignItems: 'flex-start',
   },
-  headerTitle: { fontSize: 28, fontWeight: '800', color: TEXT_PRIMARY, textAlign: 'right' },
-  headerSubtitle: { fontSize: 14, color: TEXT_SECONDARY, marginTop: 4, textAlign: 'right' },
+  headerEyebrow: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: TEXT_TERTIARY,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 2,
+    textAlign: 'right',
+    alignSelf: 'stretch',
+  },
+  headerTitle: {
+    fontSize: 34,
+    fontWeight: '700',
+    color: TEXT_PRIMARY,
+    textAlign: 'right',
+    alignSelf: 'stretch',
+    letterSpacing: Platform.OS === 'ios' ? 0.37 : 0,
+  },
+  headerSubtitle: { fontSize: 15, color: TEXT_TERTIARY, marginTop: 4, textAlign: 'right', alignSelf: 'stretch', fontWeight: '400' },
 
   body: { flex: 1 },
 
-  // ── Dashboard ──
-  listContent: { padding: 16 },
-  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
-  statCard: { flex: 1, borderRadius: 18, padding: 16, alignItems: 'flex-start', gap: 6 },
-  statValue: { fontSize: 28, fontWeight: '900', color: '#FFFFFF' },
-  statLabel: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.8)' },
+  // ── Dashboard (Apple-style) ──
+  listContent: { paddingHorizontal: 16, paddingTop: 4 },
+  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  statCardApple: {
+    flex: 1,
+    backgroundColor: CARD_BG,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: CARD_BORDER,
+  },
+  statIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  statValueApple: { fontSize: 22, fontWeight: '700', color: TEXT_PRIMARY, fontVariant: ['tabular-nums'] },
+  statLabelApple: { fontSize: 11, fontWeight: '600', color: TEXT_TERTIARY, marginTop: 2 },
 
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: TEXT_PRIMARY, marginBottom: 14, textAlign: 'right', alignSelf: 'stretch' },
+  searchShell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: CARD_BG,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 8,
+    marginBottom: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: CARD_BORDER,
+  },
+  searchIcon: { marginEnd: 8 },
+  searchInput: {
+    flex: 1,
+    fontSize: 17,
+    color: TEXT_PRIMARY,
+    paddingVertical: 0,
+    fontWeight: '400',
+  },
+
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+    alignSelf: 'stretch',
+  },
+  sectionTitle: { fontSize: 20, fontWeight: '700', color: TEXT_PRIMARY, textAlign: 'right', flex: 1 },
+  sectionCountPill: {
+    backgroundColor: 'rgba(0,122,255,0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 100,
+  },
+  sectionCountText: { fontSize: 13, fontWeight: '700', color: ACCENT, fontVariant: ['tabular-nums'] },
 
   bizCard: {
     backgroundColor: CARD_BG,
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 14,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: CARD_BORDER,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
   },
-  bizHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
-  bizAvatar: { width: 50, height: 50, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  bizAvatarText: { fontSize: 22, fontWeight: '800', color: '#FFFFFF' },
-  bizInfo: { flex: 1, marginLeft: 12, alignItems: 'flex-start' },
-  bizName: { fontSize: 17, fontWeight: '700', color: TEXT_PRIMARY, textAlign: 'right' },
-  bizAddressRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
-  bizAddress: { fontSize: 13, color: TEXT_MUTED, textAlign: 'right' },
+  bizCardTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16 },
+  bizAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginEnd: 14,
+  },
+  bizAvatarText: { fontSize: 24, fontWeight: '700', color: '#FFFFFF' },
+  bizInfo: { flex: 1, alignItems: 'flex-start', minWidth: 0 },
+  bizName: { fontSize: 20, fontWeight: '700', color: TEXT_PRIMARY, textAlign: 'right', lineHeight: 26 },
+  bizBundleId: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: TEXT_TERTIARY,
+    marginTop: 2,
+    textAlign: 'right',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  bizAddressRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 8 },
+  bizAddress: { fontSize: 14, color: TEXT_SECONDARY, textAlign: 'right', flex: 1, lineHeight: 20 },
 
-  bizStatsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  bizChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
-  bizChipText: { fontSize: 12, fontWeight: '600' },
+  metricsGrid: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: BG,
+    borderRadius: 14,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  metricCell: { flex: 1, paddingVertical: 12, alignItems: 'center' },
+  metricDividerV: { width: StyleSheet.hairlineWidth, backgroundColor: SEPARATOR },
+  metricValue: { fontSize: 20, fontWeight: '700', color: TEXT_PRIMARY, fontVariant: ['tabular-nums'] },
+  metricLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  metricLabel: { fontSize: 11, fontWeight: '600', color: TEXT_TERTIARY },
+
+  bizMetaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  metaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 100,
+    backgroundColor: 'rgba(52,199,89,0.1)',
+    maxWidth: '100%',
+  },
+  metaPillAccent: { backgroundColor: 'rgba(0,122,255,0.1)' },
+  metaPillMuted: { backgroundColor: 'rgba(142,142,147,0.12)' },
+  metaPillText: { fontSize: 13, fontWeight: '600', color: GREEN, flexShrink: 1 },
 
   adminCredentials: {
-    marginTop: 12,
-    backgroundColor: 'rgba(108,92,231,0.05)',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(108,92,231,0.12)',
+    marginTop: 10,
+    backgroundColor: BG,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: CARD_BORDER,
   },
-  adminCredentialsHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-  adminCredentialsTitle: { fontSize: 12, fontWeight: '700', color: ACCENT },
-  credentialRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
-  credentialLabel: { fontSize: 12, fontWeight: '600', color: TEXT_SECONDARY },
-  credentialValue: { fontSize: 13, fontWeight: '700', color: TEXT_PRIMARY, fontFamily: 'monospace' },
+  adminCredentialsHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  adminCredentialsTitle: { fontSize: 13, fontWeight: '700', color: TEXT_PRIMARY },
+  credentialRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 6,
+  },
+  credentialLabel: { fontSize: 12, fontWeight: '600', color: TEXT_TERTIARY },
+  credentialValue: { fontSize: 14, fontWeight: '600', color: TEXT_PRIMARY, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', flex: 1, textAlign: 'left' },
 
-  bizFooter: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: CARD_BORDER, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  bizFooterLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
-  bizId: { fontSize: 10, color: TEXT_MUTED, fontFamily: 'monospace', flex: 1, textAlign: 'left', minWidth: 0 },
-  pulseBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(108,92,231,0.08)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(108,92,231,0.2)' },
-  pulseBtnText: { fontSize: 12, fontWeight: '600', color: ACCENT },
-  deleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FFF0F0', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#FFE0E0' },
-  deleteBtnText: { fontSize: 12, fontWeight: '600', color: '#FF6B6B' },
+  bizDivider: { height: StyleSheet.hairlineWidth, backgroundColor: SEPARATOR, marginTop: 14, marginBottom: 10 },
+  bizIdRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 14 },
+  bizIdLabel: { fontSize: 12, fontWeight: '600', color: TEXT_TERTIARY },
+  bizId: { fontSize: 11, color: TEXT_TERTIARY, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', flex: 1, textAlign: 'left' },
 
-  emptyState: { alignItems: 'center', paddingVertical: 50, gap: 10 },
-  emptyIconWrap: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#ECEEF4', alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
-  emptyText: { fontSize: 18, fontWeight: '700', color: TEXT_PRIMARY },
-  emptySubtext: { fontSize: 14, color: TEXT_SECONDARY, textAlign: 'center', paddingHorizontal: 20 },
+  bizActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  actionBtnPrimary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: ACCENT,
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  actionBtnPrimaryText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
+  actionBtnGhost: {
+    width: 50,
+    height: 50,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,59,48,0.08)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,59,48,0.2)',
+  },
+
+  emptyState: { alignItems: 'center', paddingVertical: 48, gap: 8, paddingHorizontal: 24 },
+  emptyIconWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: 'rgba(142,142,147,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  emptyText: { fontSize: 20, fontWeight: '700', color: TEXT_PRIMARY },
+  emptySubtext: { fontSize: 15, color: TEXT_TERTIARY, textAlign: 'center', lineHeight: 22 },
 
   // ── Add Business ──
   addScroll: { flex: 1 },
@@ -835,27 +1078,26 @@ const styles = StyleSheet.create({
 
   formCard: {
     backgroundColor: CARD_BG,
-    borderRadius: 18,
-    borderWidth: 1,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: CARD_BORDER,
     padding: 18,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 12 },
+      default: { elevation: 1 },
+    }),
   },
   formSectionLabel: { fontSize: 15, fontWeight: '700', color: ACCENT, marginBottom: 12, textAlign: 'right', alignSelf: 'stretch' },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: TEXT_SECONDARY, marginBottom: 6, marginTop: 12, textAlign: 'right', alignSelf: 'stretch' },
   input: {
-    backgroundColor: '#F8F9FD',
+    backgroundColor: BG,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 14,
-    fontSize: 15,
+    fontSize: 17,
     color: TEXT_PRIMARY,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: CARD_BORDER,
     textAlign: 'right',
   },
@@ -864,7 +1106,7 @@ const styles = StyleSheet.create({
   colorPreview: { width: 50, height: 50, borderRadius: 14, borderWidth: 1, borderColor: CARD_BORDER },
 
   brandHint: { fontSize: 12, color: TEXT_MUTED, textAlign: 'right', marginBottom: 12, alignSelf: 'stretch' },
-  pulseemAutoBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0FFF4', borderRadius: 8, padding: 10, marginBottom: 12, gap: 4 },
+  pulseemAutoBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(52,199,89,0.12)', borderRadius: 12, padding: 12, marginBottom: 12, gap: 6 },
   imgRow: { flexDirection: 'row', gap: 10 },
   imgPickerWrap: { flex: 1, alignItems: 'center' },
   imgPickerBtn: {
@@ -875,20 +1117,20 @@ const styles = StyleSheet.create({
     borderColor: CARD_BORDER,
     borderStyle: 'dashed',
     overflow: 'hidden',
-    backgroundColor: '#F8F9FD',
+    backgroundColor: BG,
   },
   imgPickerPreview: { width: '100%', height: '100%', borderRadius: 13 },
   imgPickerEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 },
   imgPickerHint: { fontSize: 10, color: TEXT_MUTED, textAlign: 'center' },
   imgRemoveBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
-  imgRemoveText: { fontSize: 11, color: '#FF6B6B', fontWeight: '600' },
+  imgRemoveText: { fontSize: 11, color: '#FF3B30', fontWeight: '600' },
 
-  infoBox: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: 'rgba(108,92,231,0.08)', borderRadius: 14, padding: 14, gap: 10, marginBottom: 8 },
+  infoBox: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: 'rgba(0,122,255,0.08)', borderRadius: 14, padding: 14, gap: 10, marginBottom: 8 },
   infoText: { flex: 1, fontSize: 13, color: TEXT_SECONDARY, lineHeight: 20, textAlign: 'right' },
 
-  createBtn: { marginTop: 16, borderRadius: 16, overflow: 'hidden' },
+  createBtn: { marginTop: 16, borderRadius: 14, overflow: 'hidden' },
   createBtnGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, gap: 8 },
-  createBtnText: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
+  createBtnText: { color: '#FFFFFF', fontSize: 17, fontWeight: '600' },
 
   // ── Settings ──
   settingsContent: { padding: 20, alignItems: 'center' },
@@ -898,44 +1140,71 @@ const styles = StyleSheet.create({
   settingsName: { fontSize: 22, fontWeight: '800', color: TEXT_PRIMARY },
   settingsRole: { fontSize: 14, color: TEXT_SECONDARY, marginTop: 4 },
 
-  settingsCard: { width: '100%', backgroundColor: CARD_BG, borderRadius: 18, borderWidth: 1, borderColor: CARD_BORDER, padding: 4, marginBottom: 20 },
+  settingsCard: { width: '100%', backgroundColor: CARD_BG, borderRadius: 20, borderWidth: StyleSheet.hairlineWidth, borderColor: CARD_BORDER, padding: 4, marginBottom: 20, overflow: 'hidden' },
   settingsRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 16, gap: 12 },
   settingsRowLabel: { flex: 1, fontSize: 15, color: TEXT_PRIMARY, fontWeight: '500', textAlign: 'right' },
   settingsRowValue: { fontSize: 17, fontWeight: '800', color: TEXT_PRIMARY },
-  settingsDivider: { height: 1, backgroundColor: CARD_BORDER, marginHorizontal: 16 },
+  settingsDivider: { height: StyleSheet.hairlineWidth, backgroundColor: SEPARATOR, marginHorizontal: 16 },
 
-  logoutCard: { width: '100%', flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF5F5', borderRadius: 16, borderWidth: 1, borderColor: '#FFE0E0', paddingHorizontal: 18, paddingVertical: 16, gap: 12 },
-  logoutText: { flex: 1, fontSize: 16, fontWeight: '600', color: '#FF6B6B', textAlign: 'right' },
+  logoutCard: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,59,48,0.08)',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,59,48,0.15)',
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    gap: 12,
+  },
+  logoutText: { flex: 1, fontSize: 16, fontWeight: '600', color: '#FF3B30', textAlign: 'right' },
 
   // ── Bottom Tab Bar ──
-  tabBarOuter: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 16 },
-  tabBarBlur: { borderRadius: 26, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 16, shadowOffset: { width: 0, height: -4 }, elevation: 10 },
-  tabBarOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.82)', borderRadius: 26 },
-  tabBarRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingVertical: 10 },
+  tabBarOuter: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 20 },
+  tabBarBlur: { borderRadius: 28, overflow: 'hidden', ...Platform.select({ ios: { shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 24, shadowOffset: { width: 0, height: -2 } }, default: { elevation: 8 } }) },
+  tabBarOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(250,250,250,0.88)', borderRadius: 28 },
+  tabBarRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingVertical: 12 },
   tabItem: { alignItems: 'center', justifyContent: 'center', flex: 1, paddingVertical: 4 },
-  tabLabel: { fontSize: 11, fontWeight: '600', color: TEXT_MUTED, marginTop: 3 },
+  tabLabel: { fontSize: 10, fontWeight: '600', color: TEXT_TERTIARY, marginTop: 4 },
   tabLabelFocused: { color: ACCENT },
-  addTabBtn: { width: 52, height: 52, borderRadius: 26, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center', marginTop: -20, shadowColor: ACCENT, shadowOpacity: 0.45, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 },
-  addTabBtnFocused: { backgroundColor: ACCENT_DARK, transform: [{ scale: 1.08 }] },
+  addTabBtn: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: ACCENT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -22,
+    ...Platform.select({
+      ios: { shadowColor: ACCENT, shadowOpacity: 0.35, shadowRadius: 16, shadowOffset: { width: 0, height: 6 } },
+      default: { elevation: 6 },
+    }),
+  },
+  addTabBtnFocused: { backgroundColor: ACCENT_DARK, transform: [{ scale: 1.04 }] },
 
   confirmOverlay: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    paddingHorizontal: 24,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    paddingHorizontal: 28,
   },
   confirmCard: {
     width: '100%',
     maxWidth: 340,
-    borderRadius: 14,
+    borderRadius: 20,
     backgroundColor: CARD_BG,
     overflow: 'hidden',
-    paddingTop: 16,
+    paddingTop: 20,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.25, shadowRadius: 24 },
+      default: { elevation: 12 },
+    }),
   },
   confirmTitle: {
     fontSize: 17,
-    fontWeight: '800',
+    fontWeight: '600',
     color: TEXT_PRIMARY,
     textAlign: 'center',
     marginBottom: 8,
@@ -943,10 +1212,10 @@ const styles = StyleSheet.create({
   },
   confirmMessage: {
     fontSize: 13,
-    color: TEXT_SECONDARY,
+    color: TEXT_TERTIARY,
     textAlign: 'center',
     paddingHorizontal: 18,
-    marginBottom: 14,
+    marginBottom: 18,
     lineHeight: 20,
   },
   confirmButtonsRow: {

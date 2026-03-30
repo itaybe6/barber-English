@@ -42,6 +42,7 @@ function normalizeSmsDestination(raw: string): string {
   const d = phoneDigits(raw);
   if (d.startsWith("972")) return d;
   if (d.startsWith("0") && d.length >= 9 && d.length <= 11) return "972" + d.slice(1);
+  if (d.length === 9 && /^5\d{8}$/.test(d)) return "972" + d;
   return d;
 }
 

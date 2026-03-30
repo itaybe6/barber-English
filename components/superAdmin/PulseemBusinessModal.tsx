@@ -39,6 +39,8 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
   const [saving, setSaving] = useState(false);
   const [provisioning, setProvisioning] = useState(false);
   const [autoSubPassword, setAutoSubPassword] = useState('');
+  const [creditTransferAmount, setCreditTransferAmount] = useState('50');
+  const [transferringCredits, setTransferringCredits] = useState(false);
 
   const extra = getExpoExtra();
   const hasPulseemMainKeyInApp = !!String(extra.PULSEEM_MAIN_API_KEY ?? '').replace(/^\uFEFF/, '').trim();
@@ -49,6 +51,7 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
     setFromNumber('');
     setHadPassword(false);
     setAutoSubPassword('');
+    setCreditTransferAmount('50');
   }, []);
 
   useEffect(() => {
@@ -123,6 +126,42 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
               setHadPassword(state.hasPassword);
             }
             setPassword('');
+            onSaved();
+          },
+        },
+      ],
+    );
+  };
+
+  const handleCreditTransfer = () => {
+    if (!business) return;
+    const n = parseInt(creditTransferAmount.replace(/\D/g, ''), 10);
+    if (!Number.isFinite(n) || n < 1) {
+      Alert.alert('סכום לא תקין', 'הזן מספר שלם חיובי של קרדיטי Direct SMS להעברה.');
+      return;
+    }
+    Alert.alert(
+      'טעינת קרדיטים (CreditTransfer)',
+      `יועברו ${n} קרדיטי Direct SMS מהחשבון הראשי בפולסים (מפתח ב-Supabase: PULSEEM_MAIN_API_KEY) לתת-החשבון של העסק (מפתח ה-Direct שבמסד).`,
+      [
+        { text: 'ביטול', style: 'cancel' },
+        {
+          text: 'העבר',
+          onPress: async () => {
+            setTransferringCredits(true);
+            const result = await superAdminApi.transferPulseemCreditsForBusiness(business.id, {
+              directSmsCredits: n,
+            });
+            setTransferringCredits(false);
+            if (!result.ok) {
+              Alert.alert('נכשל', result.errorMessage || 'נסה שוב');
+              return;
+            }
+            const after =
+              result.directSmsCreditsAfter != null
+                ? `\nיתרת Direct SMS אחרי (לפי תשובת Pulseem): ${result.directSmsCreditsAfter}`
+                : '';
+            Alert.alert('בוצע', `הועברו ${n} קרדיטים.${after}`);
             onSaved();
           },
         },
@@ -215,6 +254,39 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
                       <>
                         <Text style={styles.accentOutlineBtnText}>צור תת-חשבון Pulseem</Text>
                         <Ionicons name="sparkles-outline" size={18} color={ACCENT} />
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+
+              {business.pulseemHasApiKey ? (
+                <View style={styles.creditBox}>
+                  <Text style={styles.creditTitle}>טעינת קרדיטים — CreditTransfer</Text>
+                  <Text style={styles.creditHint}>
+                    לפי דוקומנטציית Pulseem: POST /AccountsApi/CreditTransfer. המפתח הראשי בכותרת APIKEY (סוד Edge), מפתח ה-Direct של העסק בגוף הבקשה — מתבצע בשרת בלבד.
+                  </Text>
+                  <Text style={styles.label}>כמות Direct SMS להעברה</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={creditTransferAmount}
+                    onChangeText={setCreditTransferAmount}
+                    placeholder="למשל 50"
+                    placeholderTextColor={TEXT_MUTED}
+                    keyboardType="number-pad"
+                    textAlign="right"
+                  />
+                  <TouchableOpacity
+                    style={[styles.accentOutlineBtn, transferringCredits && { opacity: 0.6 }]}
+                    onPress={handleCreditTransfer}
+                    disabled={transferringCredits}
+                  >
+                    {transferringCredits ? (
+                      <ActivityIndicator color={ACCENT} />
+                    ) : (
+                      <>
+                        <Text style={styles.accentOutlineBtnText}>העבר קרדיטי Direct SMS</Text>
+                        <Ionicons name="arrow-down-circle-outline" size={18} color={ACCENT} />
                       </>
                     )}
                   </TouchableOpacity>
@@ -369,6 +441,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   accentOutlineBtnText: { fontSize: 14, fontWeight: '700', color: ACCENT },
+  creditBox: {
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
+    padding: 14,
+    marginBottom: 16,
+  },
+  creditTitle: { fontSize: 14, fontWeight: '800', color: '#059669', textAlign: 'right', marginBottom: 6 },
+  creditHint: { fontSize: 11, color: TEXT_SECONDARY, textAlign: 'right', lineHeight: 16, marginBottom: 8 },
   primaryBtn: {
     marginTop: 12,
     flexDirection: 'row',

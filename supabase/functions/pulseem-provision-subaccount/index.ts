@@ -2,7 +2,7 @@
 /**
  * Super-admin only: create a Pulseem sub-account (Direct SMS package) for an existing business_profile row.
  *
- * Auth: Authorization Bearer must equal SUPABASE_SERVICE_ROLE_KEY (same as pulseem-admin-credentials).
+ * Auth: same as pulseem-admin-credentials — sb_secret_… or legacy JWT service_role.
  * verify_jwt is disabled at the Gateway level because this function implements
  * its own authorizeServiceRole() check. With verify_jwt:true the Gateway can
  * strip/rewrite the Authorization header, causing the in-function check to fail.
@@ -19,6 +19,7 @@
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { jwtVerify } from "https://deno.land/x/jose@v5.2.3/index.ts";
 import { encryptPulseemField } from "./pulseemFieldCrypto.ts";
 
 const PULSEEM_REST_BASE = "https://api.pulseem.com/api/v1";
@@ -37,13 +38,32 @@ function json(body: Record<string, unknown>, status = 200): Response {
   });
 }
 
-function authorizeServiceRole(req: Request): boolean {
+function bearerFromRequest(req: Request): string {
+  return (req.headers.get("Authorization") ?? "")
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+}
+
+async function authorizeServiceRole(req: Request): Promise<boolean> {
+  const auth = bearerFromRequest(req);
+  if (!auth) return false;
+
   const expected = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").trim();
-  const auth = (req.headers.get("Authorization") ?? "").replace(
-    /^Bearer\s+/i,
-    "",
-  ).trim();
-  return Boolean(expected && auth === expected);
+  if (expected && auth === expected) return true;
+
+  const jwtSecret = (Deno.env.get("SUPABASE_JWT_SECRET") ?? "").trim();
+  if (!jwtSecret || !auth.startsWith("eyJ")) return false;
+
+  try {
+    const { payload } = await jwtVerify(
+      auth,
+      new TextEncoder().encode(jwtSecret),
+      { algorithms: ["HS256"] },
+    );
+    return String(payload.role ?? "") === "service_role";
+  } catch {
+    return false;
+  }
 }
 
 function slugFromBranding(name: string | null | undefined): string {
@@ -160,7 +180,7 @@ serve(async (req) => {
   if (req.method !== "POST") {
     return json({ error: "method_not_allowed" }, 405);
   }
-  if (!authorizeServiceRole(req)) {
+  if (!(await authorizeServiceRole(req))) {
     return json({ error: "unauthorized" }, 401);
   }
 

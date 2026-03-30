@@ -57,7 +57,7 @@ function getAdminSupabaseClient(): SupabaseClient | null {
 }
 
 const MSG_PULSEEM_401 =
-  'הרשאה נדחתה (401): הוסף ל־branding/<CLIENT>/.env את EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY (העתק מ־Supabase → Settings → API → service_role, אותו פרויקט כמו ה־URL). אל תדביק את ה־anon. אחרי שינוי — הפעל מחדש Metro (npx expo start -c).';
+  'הרשאה נדחתה (401): ב־branding/<CLIENT>/.env הגדר EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY — מפתח service_role מאותו פרויקט כמו ה־URL (JWT שמתחיל ב־eyJ… או מפתח סוד חדש מ־API). לא anon. אחרי שינוי — npx expo start -c.';
 
 /** Encrypts Pulseem secrets server-side (AES-GCM); DB never stores plaintext for new writes. */
 async function invokePulseemCredentialsAdmin<T extends Record<string, unknown>>(
@@ -87,8 +87,7 @@ async function invokePulseemCredentialsAdmin<T extends Record<string, unknown>>(
     | { error?: string }
     | null;
   if (!res.ok) {
-    console.error('[pulseem-admin] HTTP', res.status, JSON.stringify(data));
-    console.error('[pulseem-admin] sent key len=', serviceRoleKey.length, 'first20=', serviceRoleKey.slice(0, 20), 'last10=', serviceRoleKey.slice(-10));
+    console.error('[pulseem-admin] HTTP', res.status, data);
     return { data: null, status: res.status };
   }
   if (data && typeof data === 'object' && (data as { error?: string }).error === 'unauthorized') {
@@ -123,6 +122,40 @@ async function invokePulseemProvisionSubaccount<T extends Record<string, unknown
     | null;
   if (!res.ok) {
     console.error('[pulseem-provision] HTTP', res.status, data);
+    return { data: null, status: res.status };
+  }
+  if (data && typeof data === 'object' && (data as { error?: string }).error === 'unauthorized') {
+    return { data: null, status: 401 };
+  }
+  return { data: data as T, status: res.status };
+}
+
+async function invokePulseemCreditTransfer<T extends Record<string, unknown>>(
+  body: Record<string, unknown>,
+): Promise<{ data: T | null; status: number }> {
+  const { url: supabaseUrl, serviceRole: serviceRoleKey } = getAdminSupabaseEnv();
+  if (!serviceRoleKey || !supabaseUrl) {
+    console.error(
+      '[pulseem-credit-transfer] Missing EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY or URL',
+    );
+    return { data: null, status: 0 };
+  }
+  const base = supabaseUrl.replace(/\/$/, '');
+  const res = await fetch(`${base}/functions/v1/pulseem-credit-transfer`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: serviceRoleKey,
+    },
+    body: JSON.stringify(body),
+  });
+  const data = (await res.json().catch(() => null)) as
+    | (T & { error?: string })
+    | { error?: string }
+    | null;
+  if (!res.ok) {
+    console.error('[pulseem-credit-transfer] HTTP', res.status, data);
     return { data: null, status: res.status };
   }
   if (data && typeof data === 'object' && (data as { error?: string }).error === 'unauthorized') {
@@ -739,6 +772,66 @@ export const superAdminApi = {
       envSynced,
       loginUserName: edge.loginUserName,
       directSmsCredits: edge.directSmsCredits,
+    };
+  },
+
+  /**
+   * Pulseem REST `AccountsApi/CreditTransfer`: מעביר קרדיטים מהחשבון הראשי (סוד Edge PULSEEM_MAIN_API_KEY)
+   * לתת-החשבון שמזוהה ב־`pulseem_api_key` המוצפן של העסק.
+   */
+  async transferPulseemCreditsForBusiness(
+    businessId: string,
+    opts: {
+      directSmsCredits?: number;
+      emailCredits?: number;
+      smsCredits?: number;
+      directEmailCredits?: number;
+    },
+  ): Promise<{
+    ok: boolean;
+    errorMessage?: string;
+    directSmsCreditsAfter?: number;
+    smsCreditsAfter?: number;
+    emailCreditsAfter?: number;
+    directEmailCreditsAfter?: number;
+  }> {
+    const { data: edge, status } = await invokePulseemCreditTransfer<{
+      ok?: boolean;
+      errorMessage?: string;
+      directSmsCreditsAfter?: number;
+      smsCreditsAfter?: number;
+      emailCreditsAfter?: number;
+      directEmailCreditsAfter?: number;
+    }>({
+      businessId,
+      ...(typeof opts.directSmsCredits === 'number'
+        ? { directSmsCredits: opts.directSmsCredits }
+        : {}),
+      ...(typeof opts.emailCredits === 'number' ? { emailCredits: opts.emailCredits } : {}),
+      ...(typeof opts.smsCredits === 'number' ? { smsCredits: opts.smsCredits } : {}),
+      ...(typeof opts.directEmailCredits === 'number'
+        ? { directEmailCredits: opts.directEmailCredits }
+        : {}),
+    });
+
+    if (!edge) {
+      return {
+        ok: false,
+        errorMessage:
+          status === 401
+            ? MSG_PULSEEM_401
+            : 'קריאת CreditTransfer נכשלה — פרוס pulseem-credit-transfer והגדר PULSEEM_MAIN_API_KEY ו-PULSEEM_FIELD_ENCRYPTION_KEY ב-Supabase Secrets',
+      };
+    }
+    if (!edge.ok) {
+      return { ok: false, errorMessage: edge.errorMessage || 'CreditTransfer נכשל' };
+    }
+    return {
+      ok: true,
+      directSmsCreditsAfter: edge.directSmsCreditsAfter,
+      smsCreditsAfter: edge.smsCreditsAfter,
+      emailCreditsAfter: edge.emailCreditsAfter,
+      directEmailCreditsAfter: edge.directEmailCreditsAfter,
     };
   },
 

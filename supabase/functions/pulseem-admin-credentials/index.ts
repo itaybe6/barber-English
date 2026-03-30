@@ -1,16 +1,18 @@
 // @ts-nocheck
 /**
  * Super-admin only: encrypt/decrypt Pulseem secrets for business_profile.
- * Auth: Authorization Bearer must equal SUPABASE_SERVICE_ROLE_KEY (same as app EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY).
+ * Auth: Bearer = Secret API key (sb_secret_…) or legacy JWT service_role (verified with SUPABASE_JWT_SECRET).
  * Secret: PULSEEM_FIELD_ENCRYPTION_KEY — Base64 of 32 bytes (openssl rand -base64 32).
  *
- * verify_jwt is disabled at the Gateway level because this function implements
- * its own authorizeServiceRole() check (strict string match against service_role key).
- * With verify_jwt:true the Gateway can strip/rewrite the Authorization header,
- * causing the in-function check to fail with 401.
+ * verify_jwt is disabled at the Gateway level; auth is done here.
+ *
+ * Bearer is accepted if it equals SUPABASE_SERVICE_ROLE_KEY (new sb_secret_… format)
+ * OR if it is a legacy JWT with role service_role verified with SUPABASE_JWT_SECRET
+ * (same JWT as Dashboard → API → service_role legacy key).
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { jwtVerify } from "https://deno.land/x/jose@v5.2.3/index.ts";
 import {
   decryptPulseemField,
   encryptPulseemField,
@@ -33,13 +35,33 @@ function json(body: Record<string, unknown>, status = 200): Response {
   });
 }
 
-function authorizeServiceRole(req: Request): boolean {
+function bearerFromRequest(req: Request): string {
+  return (req.headers.get("Authorization") ?? "")
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+}
+
+/** New secret key (sb_secret_…) or legacy JWT service_role from the same project. */
+async function authorizeServiceRole(req: Request): Promise<boolean> {
+  const auth = bearerFromRequest(req);
+  if (!auth) return false;
+
   const expected = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").trim();
-  const auth = (req.headers.get("Authorization") ?? "").replace(
-    /^Bearer\s+/i,
-    "",
-  ).trim();
-  return Boolean(expected && auth === expected);
+  if (expected && auth === expected) return true;
+
+  const jwtSecret = (Deno.env.get("SUPABASE_JWT_SECRET") ?? "").trim();
+  if (!jwtSecret || !auth.startsWith("eyJ")) return false;
+
+  try {
+    const { payload } = await jwtVerify(
+      auth,
+      new TextEncoder().encode(jwtSecret),
+      { algorithms: ["HS256"] },
+    );
+    return String(payload.role ?? "") === "service_role";
+  } catch {
+    return false;
+  }
 }
 
 async function testPulseemCredits(userId: string, password: string): Promise<
@@ -76,7 +98,7 @@ serve(async (req) => {
   if (req.method !== "POST") {
     return json({ error: "method_not_allowed" }, 405);
   }
-  if (!authorizeServiceRole(req)) {
+  if (!(await authorizeServiceRole(req))) {
     return json({ error: "unauthorized" }, 401);
   }
 

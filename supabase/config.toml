@@ -30,6 +30,10 @@ verify_jwt = false
 [functions.pulseem-provision-subaccount]
 verify_jwt = false
 
+# Pulseem: CreditTransfer from main account to existing Direct API key on business_profile
+[functions.pulseem-credit-transfer]
+verify_jwt = false
+
 # Green Invoice (חשבונית ירוקה): admin JWT — save encrypted API secret on business_profile
 [functions.greeninvoice-connect]
 verify_jwt = true

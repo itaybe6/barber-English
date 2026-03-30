@@ -29,6 +29,8 @@ interface SettingsScreenTabsProps {
   activeId: string;
   onSelect: (id: string) => void;
   accentColor: string;
+  /** When true, row is centered horizontally (e.g. only 2 tabs). */
+  centerRow?: boolean;
 }
 
 /** Physics for sliding the underline between tabs */
@@ -51,6 +53,7 @@ export function SettingsScreenTabs({
   activeId,
   onSelect,
   accentColor,
+  centerRow = false,
 }: SettingsScreenTabsProps) {
   /**
    * RTL: `row-reverse` makes visual order correct but `onLayout.x` no longer matches the same
@@ -110,6 +113,7 @@ export function SettingsScreenTabs({
         bounces={false}
         alwaysBounceHorizontal={false}
         removeClippedSubviews={false}
+        contentContainerStyle={centerRow ? styles.scrollContentCentered : undefined}
         {...(Platform.OS === 'android' ? { overScrollMode: 'never' as const } : {})}
       >
         <View style={styles.row}>
@@ -155,6 +159,10 @@ const styles = StyleSheet.create({
   outer: {
     width: '100%',
     alignSelf: 'stretch',
+  },
+  scrollContentCentered: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   row: {
     position: 'relative',

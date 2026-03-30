@@ -3,6 +3,7 @@ import {
   StyleSheet,
   Text,
   View,
+  StatusBar,
   TouchableOpacity,
   Switch,
   ScrollView,
@@ -20,7 +21,6 @@ import Animated, {
   FadeOutDown,
   LinearTransition,
 } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { businessHoursApi } from '@/lib/api/businessHours';
@@ -30,21 +30,8 @@ import { businessProfileApi } from '@/lib/api/businessProfile';
 import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from 'react-i18next';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
-import { darkenHex } from '@/lib/colorContrast';
 import { readableOnHex } from '@/lib/utils/readableOnHex';
-import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
-
-/** Same as login / register — brand gradient stops */
-function lightenHex(hex: string, ratio: number): string {
-  const h = hex.replace('#', '');
-  if (h.length !== 6) return hex;
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  const mix = (c: number) => Math.min(255, Math.round(c + (255 - c) * ratio));
-  const to = (n: number) => n.toString(16).padStart(2, '0');
-  return `#${to(mix(r))}${to(mix(g))}${to(mix(b))}`;
-}
+import { SettingsScreenTabs } from '@/components/settings/SettingsScreenTabs';
 
 // Modern Apple-like Colors
 const Colors = {
@@ -263,16 +250,18 @@ export default function BusinessHoursScreen() {
   const { user } = useAuthStore();
   const { colors: businessColors } = useBusinessColors();
   const primary = businessColors.primary;
-  const loginGradient = useMemo(
-    () => [lightenHex(primary, 0.1), darkenHex(primary, 0.42)] as const,
-    [primary],
-  );
-  const gradientEnd = loginGradient[1];
-  const contrastAnchor = useMemo(() => darkenHex(primary, 0.22), [primary]);
-  const useLightFg = readableOnHex(contrastAnchor) === '#FFFFFF';
-  const heroText = useLightFg ? '#FFFFFF' : '#141414';
 
-  const [heroLayout, setHeroLayout] = useState<{ w: number; h: number } | null>(null);
+  const hoursPageBg = Colors.background;
+  const hoursOnGrayFg = readableOnHex(hoursPageBg);
+
+  const hoursScreenTabs = useMemo(
+    () => [
+      { id: 'fixedBreaks' as const, label: t('admin.hours.tabFixedBreaks') },
+      { id: 'workingHours' as const, label: t('admin.hours.tabWorkingHours') },
+    ],
+    [t],
+  );
+
   const [businessHours, setBusinessHours] = useState<BusinessHours[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -747,87 +736,41 @@ export default function BusinessHoursScreen() {
     );
   };
 
-  const renderHoursSegments = () => (
-    <View style={styles.hoursSegmentBarWrap}>
-      <View style={styles.hoursTabRow}>
-        {(['workingHours', 'fixedBreaks'] as const).map((seg) => {
-          const active = hoursSegment === seg;
-          return (
-            <TouchableOpacity
-              key={seg}
-              style={styles.hoursTabHit}
-              onPress={() => setHoursSegment(seg)}
-              activeOpacity={0.65}
-            >
-              <View style={styles.hoursTabInner}>
-                <Text
-                  style={[
-                    styles.hoursTabLabel,
-                    active && styles.hoursTabLabelActive,
-                    active && { color: primary },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {seg === 'workingHours'
-                    ? t('admin.hours.tabWorkingHours')
-                    : t('admin.hours.tabFixedBreaks')}
-                </Text>
-                <View
-                  style={[
-                    styles.hoursTabUnderline,
-                    active && { backgroundColor: primary },
-                  ]}
-                />
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+  const renderHoursPageTabs = () => (
+    <View style={[styles.hoursTabsBar, { paddingTop: insets.top + 6 }]}>
+      <SettingsScreenTabs
+        tabs={hoursScreenTabs}
+        activeId={hoursSegment}
+        onSelect={(id) => setHoursSegment(id as HoursScreenSegment)}
+        accentColor={primary}
+        centerRow
+      />
     </View>
   );
 
-  const renderHoursHero = () => (
-    <>
-      <View
-        style={[styles.hoursHeroShell, { backgroundColor: gradientEnd }]}
-        onLayout={(e) => {
-          const { width, height } = e.nativeEvent.layout;
-          if (width > 0 && height > 0) {
-            setHeroLayout((prev) =>
-              prev?.w === width && prev?.h === height ? prev : { w: width, h: height },
-            );
-          }
-        }}
-      >
-        <LinearGradient colors={[...loginGradient]} style={StyleSheet.absoluteFillObject} />
-        {Platform.OS !== 'web' && heroLayout ? (
-          <BrandLavaLampBackground
-            primaryColor={primary}
-            baseColor={gradientEnd}
-            layoutWidth={heroLayout.w}
-            layoutHeight={heroLayout.h}
-            count={4}
-            duration={16000}
-            blurIntensity={48}
-          />
-        ) : null}
-
-        <View style={[styles.hoursHeroInner, { paddingTop: insets.top + 12 }]}>
-          <Text style={[styles.hoursHeroTitle, { color: heroText }]}>{t('admin.hours.title')}</Text>
-        </View>
-      </View>
-      {renderHoursSegments()}
-    </>
+  const renderHoursScrollBackdrop = () => (
+    <View
+      style={[StyleSheet.absoluteFillObject, { backgroundColor: hoursPageBg }]}
+      pointerEvents="none"
+    />
   );
 
   if (isLoading) {
     return (
-      <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.screenRoot}>
+      <SafeAreaView edges={['left', 'right']} style={[styles.screenRoot, { backgroundColor: hoursPageBg }]}>
+        <StatusBar barStyle="dark-content" />
         <View style={styles.hoursScreenBody}>
-          {renderHoursHero()}
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={businessColors.primary} />
-            <Text style={styles.loadingText}>{t('admin.hours.loading')}</Text>
+          <View style={styles.hoursScrollSurface}>
+            {renderHoursScrollBackdrop()}
+            <View style={styles.hoursPageBelowHeader}>
+              {renderHoursPageTabs()}
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={businessColors.primary} />
+                <Text style={[styles.loadingText, { color: hoursOnGrayFg, opacity: 0.85 }]}>
+                  {t('admin.hours.loading')}
+                </Text>
+              </View>
+            </View>
           </View>
         </View>
       </SafeAreaView>
@@ -835,17 +778,21 @@ export default function BusinessHoursScreen() {
   }
 
   return (
-    <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.screenRoot}>
+    <SafeAreaView edges={['left', 'right']} style={[styles.screenRoot, { backgroundColor: hoursPageBg }]}>
+      <StatusBar barStyle="dark-content" />
       <View style={styles.hoursScreenBody}>
-        {renderHoursHero()}
-        <ScrollView
-          style={styles.content}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-          onScrollBeginDrag={() => {
-            if (isBreakPickerOpen) setIsBreakPickerOpen(false);
-          }}
-        >
+        <View style={styles.hoursScrollSurface}>
+          {renderHoursScrollBackdrop()}
+          <View style={styles.hoursPageBelowHeader}>
+            {renderHoursPageTabs()}
+            <ScrollView
+              style={styles.content}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.scrollContent}
+              onScrollBeginDrag={() => {
+                if (isBreakPickerOpen) setIsBreakPickerOpen(false);
+              }}
+            >
           {hoursSegment === 'fixedBreaks' && (
             <View style={styles.breakSectionWrap}>
               <View style={styles.breakGroupedCard}>
@@ -929,7 +876,9 @@ export default function BusinessHoursScreen() {
           )}
 
           <View style={styles.footerSpacing} />
-        </ScrollView>
+            </ScrollView>
+          </View>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -1014,77 +963,30 @@ const styles = StyleSheet.create({
   hoursScreenBody: {
     flex: 1,
   },
-  hoursHeroShell: {
+  hoursScrollSurface: {
+    flex: 1,
     position: 'relative',
+  },
+  hoursPageBelowHeader: {
+    flex: 1,
+  },
+  hoursTabsBar: {
     width: '100%',
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    elevation: 10,
-  },
-  hoursHeroInner: {
-    paddingHorizontal: 24,
-    paddingBottom: 20,
-    alignItems: 'center',
-  },
-  hoursHeroTitle: {
-    fontSize: 26,
-    fontWeight: '800',
-    letterSpacing: -0.4,
-    textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.22)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 6,
-  },
-  hoursSegmentBarWrap: {
-    width: '100%',
-    backgroundColor: Colors.card,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(60, 60, 67, 0.16)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 5,
-    elevation: 3,
-  },
-  hoursTabRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    flexWrap: 'wrap',
-    gap: 28,
-  },
-  hoursTabHit: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-  },
-  hoursTabInner: {
-    alignItems: 'center',
-    alignSelf: 'center',
-  },
-  hoursTabLabel: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: Colors.secondaryText,
-    letterSpacing: -0.2,
-    textAlign: 'center',
-  },
-  hoursTabLabelActive: {
-    fontWeight: '700',
-  },
-  hoursTabUnderline: {
-    marginTop: 8,
-    height: 3,
     alignSelf: 'stretch',
-    borderRadius: 2,
-    backgroundColor: 'transparent',
+    backgroundColor: Colors.card,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(60, 60, 67, 0.12)',
+    paddingBottom: 2,
+    marginBottom: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+      },
+      android: { elevation: 3 },
+    }),
   },
   backButton: {
     width: 44,
@@ -1101,10 +1003,10 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    backgroundColor: Colors.card,
+    backgroundColor: 'transparent',
   },
   scrollContent: {
-    paddingTop: 12,
+    paddingTop: 18,
     paddingBottom: 100,
     flexGrow: 1,
   },
@@ -1134,7 +1036,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
-    backgroundColor: Colors.card,
+    backgroundColor: 'transparent',
   },
   loadingText: {
     fontSize: 16,
@@ -1167,7 +1069,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   dayCard: {
-    backgroundColor: '#F2F2F7',
+    backgroundColor: Colors.card,
     borderRadius: 24,
     padding: 18,
     shadowColor: '#000',
@@ -1547,7 +1449,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   breakGroupedCard: {
-    backgroundColor: '#F2F2F7',
+    backgroundColor: Colors.card,
     borderRadius: 20,
     padding: 16,
     borderWidth: StyleSheet.hairlineWidth,

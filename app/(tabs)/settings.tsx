@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking, Dimensions, Switch, I18nManager, type LayoutChangeEvent } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking, Dimensions, Switch, I18nManager, DeviceEventEmitter, type LayoutChangeEvent } from 'react-native';
 import Constants from 'expo-constants';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import * as ImagePicker from 'expo-image-picker';
@@ -29,7 +29,6 @@ import {
   Facebook,
   MapPin,
   Calendar,
-  Image as ImageIcon,
   Home,
   Clock,
   User,
@@ -48,7 +47,8 @@ import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import AddAdminModal from '@/components/AddAdminModal';
 import DeleteAccountModal from '@/components/DeleteAccountModal';
-import { formatTime12Hour } from '@/lib/utils/timeFormat';
+import { formatTimeToAMPM } from '@/lib/hooks/useAdminAddAppointmentForm';
+import { ADMIN_RECURRING_APPOINTMENTS_CHANGED } from '@/constants/adminCalendarEvents';
 import { useTranslation } from 'react-i18next';
 import { normalizeAppLanguage, isRtlLanguage, toBcp47Locale } from '@/lib/i18nLocale';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
@@ -72,8 +72,12 @@ const shadowStyle = Platform.select({
 /** Grouped settings canvas — ScrollView content + screen root use this so bottom padding isn’t white */
 const SETTINGS_GROUPED_BG = '#F2F2F7';
 
-const BOOKING_WINDOW_MIN = 1;
+const BOOKING_WINDOW_MIN = 0;
 const BOOKING_WINDOW_MAX = 60;
+/** Ruler shows ticks 0…60; only 1…60 are saved (0 snaps to 1). */
+const BOOKING_RULER_MIN_DISPLAY = 0;
+
+const RECURRING_DOW_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
 export default function SettingsScreen() {
   const logout = useAuthStore((state) => state.logout);
@@ -448,6 +452,7 @@ export default function SettingsScreen() {
   };
 
   const handleShowServiceImagesToggle = async (next: boolean) => {
+    if (!canSeeAddEmployee) return;
     const prev = showServiceImages;
     setShowServiceImages(next);
     setIsSavingProfile(true);
@@ -531,11 +536,11 @@ export default function SettingsScreen() {
     }
     const trimmed = (next || '').trim();
     const n = parseInt(trimmed, 10);
-    if (!Number.isFinite(n) || n < 1 || n > 60) {
-      Alert.alert(t('error.generic', 'Error'), t('settings.profile.bookingWindowInvalid', 'Enter a number between 1 and 60.'));
+    if (!Number.isFinite(n) || n < 0 || n > 60) {
+      Alert.alert(t('error.generic', 'Error'), t('settings.profile.bookingWindowInvalid', 'Enter a number between 0 and 60.'));
       return false;
     }
-    const parsed = Math.max(1, Math.min(60, Math.floor(n)));
+    const parsed = Math.max(0, Math.min(60, Math.floor(n)));
     setIsSavingProfile(true);
     try {
       await businessProfileApi.setBookingOpenDaysForUser(user.id, parsed);
@@ -564,7 +569,13 @@ export default function SettingsScreen() {
   };
 
   const onBookingWindowRulerDay = useCallback((day: number) => {
-    setBookingWindowDraft(String(day));
+    if (day < BOOKING_WINDOW_MIN) {
+      setBookingWindowDraft(String(BOOKING_WINDOW_MIN));
+      requestAnimationFrame(() => bookingDaysRulerRef.current?.scrollToDay(BOOKING_WINDOW_MIN));
+      return;
+    }
+    const d = Math.min(BOOKING_WINDOW_MAX, day);
+    setBookingWindowDraft(String(d));
   }, []);
 
   const onBookingWindowTextChange = useCallback((text: string) => {
@@ -1484,40 +1495,29 @@ export default function SettingsScreen() {
     }
   }, [settingsScreenTabs, activeSettingsTab]);
 
-  const [showRecurringModal, setShowRecurringModal] = useState(false);
-  const [isSubmittingRecurring, setIsSubmittingRecurring] = useState(false);
   const [showManageRecurringModal, setShowManageRecurringModal] = useState(false);
 
   const [isLoadingRecurring, setIsLoadingRecurring] = useState(false);
   const [recurringList, setRecurringList] = useState<any[]>([]);
-  const [clientSearch, setClientSearch] = useState('');
-  const [clientResults, setClientResults] = useState<Array<{ name: string; phone: string }>>([]);
-  const [selectedClient, setSelectedClient] = useState<{ name: string; phone: string } | null>(null);
-  const [selectedDayOfWeek, setSelectedDayOfWeek] = useState<number | null>(null);
-  const [showDayDropdown, setShowDayDropdown] = useState(false);
-  const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  const [showTimeDropdown, setShowTimeDropdown] = useState(false);
-  const [availableTimes, setAvailableTimes] = useState<string[]>([]);
-  const [isLoadingTimes, setIsLoadingTimes] = useState(false);
-  const [showTimeSheet, setShowTimeSheet] = useState(false);
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [showServiceDropdown, setShowServiceDropdown] = useState(false);
-  const [recurringServices, setRecurringServices] = useState<Service[]>([]);
-  const [showClientDropdown, setShowClientDropdown] = useState(false);
-  const [repeatWeeks, setRepeatWeeks] = useState<number>(1);
-  const [showRepeatDropdown, setShowRepeatDropdown] = useState(false);
-
-  // Stepper state for recurring appointment modal
-  const [recStep, setRecStep] = useState<number>(0); // 0: client, 1: service, 2: day, 3: time, 4: repeat
-  const recTranslateX = useRef(new Animated.Value(0)).current;
-  const recProgressAnim = useRef(new Animated.Value(0)).current;
-  // Give the steps viewport an initial width so content doesn't overflow on first render
-  const initialRecViewportWidth = Math.max(1, (Dimensions.get('window')?.width || 0) - 40);
-  const [recViewportWidth, setRecViewportWidth] = useState<number>(initialRecViewportWidth);
-  const [recRenderKey, setRecRenderKey] = useState<number>(0);
 
   useEffect(() => {
     closeManageRecurringSheetRef.current = () => setShowManageRecurringModal(false);
+  }, []);
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(ADMIN_RECURRING_APPOINTMENTS_CHANGED, () => {
+      void (async () => {
+        try {
+          const items = await recurringAppointmentsApi.listAll();
+          setRecurringList(items);
+        } catch {
+          /* ignore */
+        }
+        setShowManageRecurringModal(true);
+        animateOpenSheet();
+      })();
+    });
+    return () => sub.remove();
   }, []);
 
   useEffect(() => {
@@ -1548,32 +1548,6 @@ export default function SettingsScreen() {
       cancelled = true;
     };
   }, [activeSettingsTab, user?.id, sortServicesLikeClientBooking, t]);
-
-  const goToRecStep = (next: number, animate: boolean = true) => {
-    const maxStep = 4;
-    const clamped = Math.max(0, Math.min(maxStep, next));
-    setRecStep(clamped);
-    const widthToUse = recViewportWidth || 0;
-    if (widthToUse && animate) {
-      Animated.timing(recTranslateX, {
-        toValue: -clamped * widthToUse,
-        duration: 260,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
-      Animated.timing(recProgressAnim, {
-        toValue: clamped / maxStep,
-        duration: 260,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: false,
-      }).start();
-    } else {
-      recTranslateX.setValue(-(clamped * widthToUse));
-      recProgressAnim.setValue(clamped / maxStep);
-    }
-  };
-  const goNextRec = () => goToRecStep(recStep + 1);
-  const goBackRec = () => goToRecStep(recStep - 1);
 
   // Employees tab (inline list + FAB)
   const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
@@ -1627,373 +1601,6 @@ export default function SettingsScreen() {
       setSavingBookingDaysForUser(null);
     }
   };
-
-  const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  const timeOptions = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2,'0')}:00`);
-
-  // Compute next date string (YYYY-MM-DD, local) for a given dayOfWeek (0..6) from today
-  const getNextDateForDay = (dayOfWeek: number): string => {
-    const today = new Date();
-    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const currentDow = start.getDay();
-    const delta = (dayOfWeek - currentDow + 7) % 7; // 0..6
-    const target = new Date(start);
-    target.setDate(start.getDate() + delta);
-    const y = target.getFullYear();
-    const m = String(target.getMonth() + 1).padStart(2, '0');
-    const d = String(target.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  };
-
-  // Validate that the selected time is still available for the nearest occurrence of the chosen day for this barber
-  const isTimeAvailable = async (dayOfWeek: number, timeHHmm: string): Promise<boolean> => {
-    try {
-      const businessId = getBusinessId();
-      
-      // 1) Check conflicts with other recurring rules for this barber
-      let recurringQuery = supabase
-        .from('recurring_appointments')
-        .select('slot_time')
-        .eq('business_id', businessId)
-        .eq('day_of_week', dayOfWeek);
-      // Only filter by user_id if the column exists (avoid schema errors)
-      try {
-        if (user?.id) {
-          recurringQuery = recurringQuery.eq('user_id', user.id);
-        }
-      } catch {
-        // If user_id column doesn't exist, just get all recurring appointments for this day
-      }
-      const { data: recurring } = await recurringQuery;
-      const recurringTimes = new Set((recurring || []).map((r: any) => String(r.slot_time).slice(0,5)));
-      if (recurringTimes.has(timeHHmm)) return false;
-
-      // 2) Check conflicts with existing booked slots on ANY date that falls on this day of week
-      // Limit to recent dates to avoid loading too much data
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const thirtyDaysFromNow = new Date();
-      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-      
-      let bookedQuery = supabase
-        .from('appointments')
-        .select('slot_time, slot_date, is_available')
-        .eq('business_id', businessId)
-        .eq('is_available', false)
-        .gte('slot_date', thirtyDaysAgo.toISOString().split('T')[0])
-        .lte('slot_date', thirtyDaysFromNow.toISOString().split('T')[0])
-        .limit(1000); // Limit results to prevent hanging
-      if (user?.id) {
-        bookedQuery = bookedQuery.or(`user_id.eq.${user.id},user_id.is.null`);
-      } else {
-        bookedQuery = bookedQuery.is('user_id', null);
-      }
-      const { data: allBooked } = await bookedQuery;
-      
-      // Filter to only appointments that fall on the selected day of week
-      const bookedOnThisDay = (allBooked || []).filter((apt: any) => {
-        const aptDate = new Date(apt.slot_date + 'T00:00:00'); // Local date
-        return aptDate.getDay() === dayOfWeek;
-      });
-      const bookedTimes = new Set(bookedOnThisDay.map((s: any) => String(s.slot_time).slice(0,5)));
-      if (bookedTimes.has(timeHHmm)) return false;
-
-      return true;
-    } catch {
-      // If check fails for any reason, be conservative and prevent selection
-      return false;
-    }
-  };
-
-  const loadAvailableTimesForDay = async (dayOfWeek: number) => {
-    setIsLoadingTimes(true);
-    setAvailableTimes([]);
-    try {
-      const businessId = getBusinessId();
-      
-      // Add timeout to prevent hanging
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout loading times')), 10000)
-      );
-      
-      const loadPromise = (async () => {
-      
-      // Fetch business hours for day: prefer user-specific row, fallback to global (user_id IS NULL)
-      let bhRow: any | null = null;
-      try {
-        const { data: bhUser } = await supabase
-          .from('business_hours')
-          .select('*')
-          .eq('business_id', businessId)
-          .eq('day_of_week', dayOfWeek)
-          .eq('is_active', true)
-          .eq('user_id', user?.id)
-          .maybeSingle();
-        if (bhUser) bhRow = bhUser;
-      } catch {}
-      if (!bhRow) {
-        const { data: bhGlobal } = await supabase
-          .from('business_hours')
-          .select('*')
-          .eq('business_id', businessId)
-          .eq('day_of_week', dayOfWeek)
-          .eq('is_active', true)
-          .is('user_id', null)
-          .maybeSingle();
-        bhRow = bhGlobal || null;
-      }
-
-      if (!bhRow) {
-        setAvailableTimes([]);
-        return;
-      }
-
-      // Normalize to HH:mm to avoid HH:mm:ss mismatches
-      const normalize = (s: any) => String(s).slice(0, 5);
-
-      // Build windows minus breaks
-      type Window = { start: string; end: string };
-      const startTime = normalize((bhRow as any).start_time);
-      const endTime = normalize((bhRow as any).end_time);
-      const baseWindows: Window[] = [{ start: startTime, end: endTime }];
-      const brks: Array<{ start_time: string; end_time: string }> = (bhRow as any).breaks || [];
-      const singleBreak = (bhRow.break_start_time && bhRow.break_end_time)
-        ? [{ start_time: (bhRow as any).break_start_time, end_time: (bhRow as any).break_end_time }]
-        : [];
-      const allBreaks = [...brks, ...singleBreak].map(b => ({
-        start_time: normalize(b.start_time),
-        end_time: normalize(b.end_time),
-      }));
-
-      const subtractBreaks = (wins: Window[], breaks: typeof allBreaks): Window[] => {
-        let result = wins.slice();
-        for (const b of breaks) {
-          const next: Window[] = [];
-          for (const w of result) {
-            if (b.end_time <= w.start || b.start_time >= w.end) {
-              next.push(w);
-              continue;
-            }
-            if (w.start < b.start_time) next.push({ start: w.start, end: b.start_time });
-            if (b.end_time < w.end) next.push({ start: b.end_time, end: w.end });
-          }
-          result = next;
-        }
-        return result.filter(w => w.start < w.end);
-      };
-
-      const windows = subtractBreaks(baseWindows, allBreaks);
-
-      // Enumerate options by slot duration (prefer selected service's duration)
-      const dur: number = (selectedService?.duration_minutes && selectedService.duration_minutes > 0)
-        ? (selectedService.duration_minutes as number)
-        : (bhRow.slot_duration_minutes && bhRow.slot_duration_minutes > 0 ? bhRow.slot_duration_minutes : 60);
-      const addMinutes = (hhmm: string, minutes: number): string => {
-        const [h, m] = hhmm.split(':').map((x: string) => parseInt(x, 10));
-        const total = h * 60 + m + minutes;
-        const hh = Math.floor(total / 60) % 24;
-        const mm = total % 60;
-        return `${hh.toString().padStart(2, '0')}:${mm.toString().padStart(2, '0')}`;
-      };
-
-      const compareTimes = (a: string, b: string) => a.localeCompare(b);
-      const baseTimes: string[] = [];
-      for (const w of windows) {
-        let t = w.start as string;
-        while (compareTimes(addMinutes(t, dur), w.end) <= 0) {
-          baseTimes.push(t.slice(0,5));
-          t = addMinutes(t, dur);
-        }
-      }
-
-      // Exclude conflicts with other recurring rules for this barber (same day/time)
-      let recurringQuery = supabase
-        .from('recurring_appointments')
-        .select('slot_time')
-        .eq('business_id', businessId)
-        .eq('day_of_week', dayOfWeek);
-      // Only filter by user_id if the column exists (avoid schema errors)
-      try {
-        if (user?.id) {
-          recurringQuery = recurringQuery.eq('user_id', user.id);
-        }
-      } catch {
-        // If user_id column doesn't exist, just get all recurring appointments for this day
-      }
-      const { data: recurring } = await recurringQuery;
-      const recurringTimes = new Set((recurring || []).map((r: any) => String(r.slot_time).slice(0,5)));
-
-      // Exclude conflicts with existing booked slots on ANY date that falls on this day of week
-      let bookedQuery = supabase
-        .from('appointments')
-        .select('slot_time, slot_date, is_available')
-        .eq('business_id', businessId)
-        .eq('is_available', false);
-      if (user?.id) {
-        bookedQuery = bookedQuery.or(`user_id.eq.${user.id},user_id.is.null`);
-      } else {
-        bookedQuery = bookedQuery.is('user_id', null);
-      }
-      const { data: allBooked } = await bookedQuery;
-      
-      // Filter to only appointments that fall on the selected day of week
-      const bookedOnThisDay = (allBooked || []).filter((apt: any) => {
-        const aptDate = new Date(apt.slot_date + 'T00:00:00'); // Local date
-        return aptDate.getDay() === dayOfWeek;
-      });
-      const bookedTimes = new Set(bookedOnThisDay.map((s: any) => String(s.slot_time).slice(0,5)));
-
-      const filtered = baseTimes.filter(t => !recurringTimes.has(t) && !bookedTimes.has(t));
-      setAvailableTimes(filtered);
-      // Reset selected time if it became invalid
-      if (selectedTime && !filtered.includes(selectedTime)) {
-        setSelectedTime(null);
-      }
-      })();
-      
-      // Race between loading and timeout
-      await Promise.race([loadPromise, timeoutPromise]);
-      
-    } catch (error) {
-      console.error('Error loading available times:', error);
-      setAvailableTimes([]);
-      // Show error to user
-      Alert.alert(t('error.generic','Error'), t('settings.recurring.timesLoadFailed','Failed to load available times. Please try again.'));
-    } finally {
-      setIsLoadingTimes(false);
-    }
-  };
-
-  // Reload available times when the day changes or when opening modal
-  useEffect(() => {
-    if (showRecurringModal && Number.isInteger(selectedDayOfWeek as any)) {
-      loadAvailableTimesForDay(selectedDayOfWeek as number);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showRecurringModal, selectedDayOfWeek]);
-
-  useEffect(() => {
-    if (showRecurringModal) {
-      // Preload services list for selection
-      servicesApi
-        .getAllServices()
-        .then((all) => {
-          const mine = (all || []).filter(
-            (s) => String(s.worker_id || '') === String(user?.id || '')
-          );
-          setRecurringServices(mine);
-        })
-        .catch(() => setRecurringServices([]));
-      // Reset fields
-      setClientSearch('');
-      setSelectedClient(null);
-      setSelectedDayOfWeek(null);
-      setSelectedTime(null);
-      setSelectedService(null);
-      setRepeatWeeks(1);
-      setShowDayDropdown(false);
-      setShowTimeDropdown(false);
-      setShowServiceDropdown(false);
-      setShowClientDropdown(false);
-      setShowRepeatDropdown(false);
-      // Load initial client list (show all clients by default)
-      searchClients('');
-      // Reset stepper
-      setTimeout(() => {
-        setRecStep(0);
-        recTranslateX.setValue(0);
-        recProgressAnim.setValue(0);
-        setRecRenderKey((k) => k + 1);
-      }, 0);
-    }
-  }, [showRecurringModal, user?.id]);
-
-  const searchClients = async (q: string) => {
-    setClientSearch(q);
-    const query = (q || '').trim();
-    const businessId = getBusinessId();
-    
-    let builder = supabase
-      .from('users')
-      .select('id, name, phone')
-      .eq('user_type', 'client')
-      .eq('business_id', businessId)
-      .order('name');
-    if (query.length > 0) {
-      builder = builder.or(`name.ilike.%${query}%,phone.ilike.%${query}%`);
-    }
-    const { data, error } = await builder;
-    if (error) {
-      setClientResults([]);
-      return;
-    }
-    // Exclude clients that already have a recurring appointment with this barber
-    const { data: recs } = await supabase
-      .from('recurring_appointments')
-      .select('client_phone')
-      .eq('business_id', businessId)
-      .eq('admin_id', user?.id);
-    const recurringPhones = new Set((recs || []).map((r: any) => String(r.client_phone).trim()).filter(Boolean));
-
-    const filtered = (data || [])
-      .filter((u: any) => u.phone && u.phone.trim() !== '')
-      .filter((u: any) => !recurringPhones.has(String(u.phone).trim()));
-
-    setClientResults(filtered);
-  };
-
-  const handleSubmitRecurring = async () => {
-    if (!selectedClient || selectedDayOfWeek === null || !selectedTime || !selectedService) {
-      Alert.alert(t('error.generic','Error'), t('settings.recurring.fillAll','Please fill all fields: client, day, time, and service'));
-      return;
-    }
-    // Final guard before creating: verify time is still available for the nearest occurrence
-    const stillAvailable = await isTimeAvailable(selectedDayOfWeek as number, selectedTime as string);
-    if (!stillAvailable) {
-      Alert.alert(t('settings.recurring.slotTakenTitle','Slot taken'), t('settings.recurring.slotTaken','The selected time is already booked this week. Please choose another time.'));
-      return;
-    }
-    setIsSubmittingRecurring(true);
-    try {
-      const recurringData: any = {
-        client_name: selectedClient.name || 'Client',
-        client_phone: selectedClient.phone,
-        day_of_week: selectedDayOfWeek,
-        slot_time: selectedTime,
-        service_name: selectedService.name,
-        service_id: selectedService.id, // Add service_id reference
-        repeat_interval: repeatWeeks,
-        business_id: getBusinessId(), // Add business_id from the current business
-      };
-      // Add admin_id (the current admin creating the recurring appointment)
-      if (user?.id) {
-        recurringData.admin_id = user.id;
-      }
-      // Add client_id if the selected client has an ID (optional)
-      if ((selectedClient as any).id) {
-        recurringData.client_id = (selectedClient as any).id;
-      }
-      const created = await recurringAppointmentsApi.create(recurringData);
-      if (created) {
-        Alert.alert(t('success.generic','Success'), t('settings.recurring.createSuccess','Recurring appointment created. The slot will be kept after weekly generation.'));
-        setShowRecurringModal(false);
-        try {
-          const items = await recurringAppointmentsApi.listAll();
-          setRecurringList(items);
-        } catch {
-          /* list refresh optional */
-        }
-      } else {
-        Alert.alert(t('error.generic','Error'), t('settings.recurring.createFailed','Failed to create recurring appointment'));
-      }
-    } catch (e) {
-      Alert.alert(t('error.generic','Error'), t('settings.recurring.createFailed','Failed to create recurring appointment'));
-    } finally {
-      setIsSubmittingRecurring(false);
-    }
-  };
-
-
 
   const renderSettingItem = (
     icon: React.ReactNode,
@@ -2539,7 +2146,7 @@ export default function SettingsScreen() {
                   </View>
                 )}
 
-                {!isLoadingServices && !servicesError && (
+                {!isLoadingServices && !servicesError && canSeeAddEmployee && (
                   <View style={[styles.servicesModalFullWidthBlock, styles.serviceImagesPrefOuter]}>
                     <View
                       style={[
@@ -2562,17 +2169,6 @@ export default function SettingsScreen() {
                         style={styles.serviceImagesPrefAccentBar}
                       />
                       <View style={styles.serviceImagesPrefInner}>
-                        <View
-                          style={[
-                            styles.serviceImagesPrefIconRing,
-                            {
-                              borderColor: `${businessColors.primary}2A`,
-                              backgroundColor: `${businessColors.primary}10`,
-                            },
-                          ]}
-                        >
-                          <ImageIcon size={24} color={businessColors.primary} strokeWidth={2.2} />
-                        </View>
                         <View style={styles.serviceImagesPrefCopy}>
                           <View style={styles.serviceImagesPrefTitleRow}>
                             <Text style={styles.serviceImagesPrefTitle} numberOfLines={2}>
@@ -2603,7 +2199,7 @@ export default function SettingsScreen() {
                           <Text style={styles.serviceImagesPrefSubtitle}>
                             {t(
                               'settings.services.showImagesSubtitle',
-                              'Off hides thumbnails here and in client booking',
+                              'Turn on to show your services with photos',
                             )}
                           </Text>
                         </View>
@@ -2676,9 +2272,17 @@ export default function SettingsScreen() {
                       <View style={[styles.svcCard, styles.svcListCard, justSaved && styles.svcCardSaved, isActive && styles.svcListCardDragging]}>
                         <View style={[styles.svcCardAccent, { backgroundColor: businessColors.primary }]} />
                         {!isExpanded ? (
-                          <View style={styles.svcListCollapsedRow}>
+                          <View
+                            style={[
+                              styles.svcListCollapsedRow,
+                              !showServiceImages && styles.svcListCollapsedRowNoThumb,
+                            ]}
+                          >
                             <TouchableOpacity
-                              style={styles.svcListChevronHit}
+                              style={[
+                                styles.svcListChevronHit,
+                                !showServiceImages && styles.svcListChevronHitNoThumb,
+                              ]}
                               activeOpacity={0.85}
                               onPress={() => setExpandedServiceId(prev => (prev === svc.id ? null : svc.id))}
                             >
@@ -4186,7 +3790,7 @@ export default function SettingsScreen() {
                 <View style={styles.bookingWindowRulerLtr}>
                   <BookingDaysRuler
                     ref={bookingDaysRulerRef}
-                    minDay={BOOKING_WINDOW_MIN}
+                    minDay={BOOKING_RULER_MIN_DISPLAY}
                     maxDay={BOOKING_WINDOW_MAX}
                     fadeColor={Colors.white}
                     tickColor={Colors.text}
@@ -4262,7 +3866,9 @@ export default function SettingsScreen() {
               </Text>
               <TouchableOpacity
                 style={[styles.servicesModalCloseButton, { marginLeft: 0, marginRight: -4 }]}
-                onPress={() => setShowRecurringModal(true)}
+                onPress={() => {
+                  animateCloseSheet(() => router.push('/(tabs)/add-recurring-appointment'));
+                }}
                 accessibilityRole="button"
                 accessibilityLabel={t('settings.recurring.addFromHubA11y', 'Add fixed appointment')}
               >
@@ -4292,10 +3898,22 @@ export default function SettingsScreen() {
                                 <Text style={styles.previewNotificationTitle}>{item.client_name}</Text>
                                 <Text style={styles.previewNotificationContent}>{item.client_phone}</Text>
                                 <Text style={styles.previewNotificationContent}>{item.service_name}</Text>
-                                <Text style={styles.previewNotificationContent}>{['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][item.day_of_week]} · {String(item.slot_time).slice(0,5)}</Text>
+                                <Text style={styles.previewNotificationContent}>
+                                  {t(
+                                    `day.${RECURRING_DOW_KEYS[Math.min(Math.max(0, item.day_of_week), 6)]}`,
+                                  )}{' '}
+                                  · {formatTimeToAMPM(String(item.slot_time).slice(0, 5))}
+                                </Text>
                                 {!!item.repeat_interval && (
                                   <Text style={styles.previewNotificationContent}>
-                                    Repeat: {item.repeat_interval === 1 ? 'every week' : `every ${item.repeat_interval} weeks`}
+                                    {t('settings.recurring.listRepeat', 'Repeats {{label}}', {
+                                      label:
+                                        item.repeat_interval === 1
+                                          ? t('settings.recurring.everyWeek', 'every week')
+                                          : t('settings.recurring.everyNWeeks', 'every {{count}} weeks', {
+                                              count: item.repeat_interval,
+                                            }),
+                                    })}
                                   </Text>
                                 )}
                               </View>
@@ -4325,333 +3943,6 @@ export default function SettingsScreen() {
             </View>
           </Animated.View>
         </View>
-      </Modal>
-      {/* Recurring Appointment Modal */}
-      <Modal
-        visible={showRecurringModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowRecurringModal(false)}
-      >
-        <SafeAreaView edges={['top']} style={[styles.modalContainer, { backgroundColor: Colors.white }]}> 
-          <View style={styles.modalHeader}>
-            <TouchableOpacity 
-              style={styles.cancellationModalCloseButton}
-              onPress={() => setShowRecurringModal(false)}
-            >
-              <X size={20} color={Colors.text} />
-            </TouchableOpacity>
-            <Text style={[styles.modalTitle, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>{t('settings.recurring.addTitle','Add recurring appointment')}</Text>
-            <View style={{ width: 44 }} />
-          </View>
-
-          <View key={`rec-body-${recRenderKey}`} style={styles.modalBodyRounded}>
-          {/* Stepper */}
-          <View style={{ paddingHorizontal: 20, paddingTop: 12 }} onLayout={(e) => {
-            const w = e.nativeEvent.layout.width;
-            if (w && w > 0 && w !== recViewportWidth) {
-              setRecViewportWidth(w);
-              recTranslateX.setValue(-recStep * w);
-            }
-          }}>
-            <View style={{ height: 4, backgroundColor: '#E5E5EA', borderRadius: 2, overflow: 'hidden' }}>
-              <Animated.View style={{ height: '100%', backgroundColor: businessColors.primary, width: recProgressAnim.interpolate({ inputRange: [0,1], outputRange: ['0%','100%'] }) }} />
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-              {['Client','Service','Day','Time','Repeat'].map((label, idx) => (
-                <View key={label} style={{ alignItems: 'center', flex: 1 }}>
-                  <View style={{ width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: idx <= recStep ? businessColors.primary : '#D1D1D6', backgroundColor: idx < recStep ? businessColors.primary : '#FFFFFF', marginBottom: 4 }} />
-                  <Text style={{ fontSize: 12, color: idx <= recStep ? businessColors.primary : Colors.subtext }}>{label}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* Steps viewport */}
-          <View style={{ paddingHorizontal: 20 }}>
-            <View style={{ overflow: 'hidden' }} onLayout={(e) => {
-              const w = e.nativeEvent.layout.width;
-              if (w && w > 0 && w !== recViewportWidth) {
-                setRecViewportWidth(w);
-                recTranslateX.setValue(-recStep * w);
-              }
-            }}>
-              <Animated.View key={`steps-${recViewportWidth}-${recRenderKey}`} style={{ flexDirection: 'row', width: Math.max(1, recViewportWidth || 0) * 5, minHeight: 1, transform: [{ translateX: recTranslateX }] }}>
-                <View style={{ width: recViewportWidth }}>
-                  <View style={styles.wizardSectionCard}>
-                    <View style={styles.inputContainer}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <User size={18} color={businessColors.primary} />
-                        <Text style={[styles.inputLabel, { textAlign: 'left', marginBottom: 0 }]}>{t('adminEx.appointmentsAdmin.client','Client')}</Text>
-                      </View>
-                      <Text style={styles.stepHint}>{t('adminEx.appointmentsAdmin.pickClient','Pick the client for this appointment')}</Text>
-                      {!selectedClient ? (
-                        <>
-                      <Pressable style={[styles.dropdownContainer, styles.grayField, { minHeight: 52 }]} onPress={() => setShowClientDropdown(!showClientDropdown)}>
-                            <View style={styles.dropdownHeader}>
-                              <Text style={[styles.dropdownText, styles.dropdownPlaceholder, { textAlign: 'left' }]}>{t('adminEx.appointmentsAdmin.selectClientPlaceholder','Select client...')}</Text>
-                              {showClientDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
-                            </View>
-                          </Pressable>
-                          {showClientDropdown && (
-                            <View style={[styles.dropdownOptions, styles.dropPanelRecurring]}>
-                              <View style={{ paddingHorizontal: 12, paddingVertical: 10 }}>
-                                <TextInput
-                                  style={[styles.textInput, { borderWidth: 1, borderColor: '#E5E5EA', backgroundColor: '#F2F2F7' }]}
-                                  value={clientSearch}
-                                  onChangeText={searchClients}
-                                  placeholder={t('common.searchByNamePhone','Search by name or phone...')}
-                                  placeholderTextColor={Colors.subtext}
-                                  textAlign="left"
-                                />
-                              </View>
-                              <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                                {clientResults.map((c, idx) => (
-                                  <Pressable
-                                    key={c.phone}
-                                    style={[styles.dropdownOption, idx === clientResults.length - 1 && styles.dropdownOptionLast]}
-                                    onPress={() => { setSelectedClient(c); setShowClientDropdown(false); goToRecStep(1); }}
-                                  >
-                                    <View style={styles.dropdownOptionContent}>
-                                      <Text style={styles.dropdownOptionTitle}>{c.name || t('commonEx.client','Client')}</Text>
-                                      <Text style={styles.dropdownOptionDescription}>{c.phone}</Text>
-                                    </View>
-                                  </Pressable>
-                                ))}
-                                {clientResults.length === 0 && (
-                                  <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-                                    <Text style={{ textAlign: 'center', color: Colors.subtext }}>{t('common.noResults','No results')}</Text>
-                                  </View>
-                                )}
-                              </ScrollView>
-                            </View>
-                          )}
-                        </>
-                      ) : (
-                        <View style={[styles.previewCard, { marginTop: 6 }]}>
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <View style={{ alignItems: 'flex-start' }}>
-                              <Text style={styles.previewNotificationTitle}>{selectedClient.name}</Text>
-                              <Text style={styles.previewNotificationContent}>{selectedClient.phone}</Text>
-                            </View>
-                            <TouchableOpacity onPress={() => { setSelectedClient(null); setShowClientDropdown(false); }}>
-                              <Text style={{ color: '#FF3B30', fontWeight: '600' }}>{t('commonEx.change','Change')}</Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                </View>
-                <View style={{ width: recViewportWidth }}>
-                  <View style={styles.wizardSectionCard}>
-                    <View style={styles.inputContainer}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <Calendar size={18} color={businessColors.primary} />
-                        <Text style={[styles.inputLabel, { textAlign: 'left', marginBottom: 0 }]}>{t('booking.field.service','Service')}</Text>
-                      </View>
-                      <Text style={styles.stepHint}>{t('adminEx.appointmentsAdmin.pickService','Choose the service to perform')}</Text>
-                      <Pressable style={[styles.dropdownContainer, styles.grayField, { minHeight: 52 }]} onPress={() => setShowServiceDropdown(!showServiceDropdown)}>
-                        <View style={styles.dropdownHeader}>
-                          {selectedService ? (
-                            <View style={{ flex: 1, alignItems: 'flex-start' }}>
-                              <Text style={styles.serviceHeaderTitle}>{selectedService.name}</Text>
-                              {!!selectedService.duration_minutes && (
-                                <Text style={styles.serviceHeaderSub}>{`${selectedService.duration_minutes} ${t('settings.services.minutes','minutes')}`}</Text>
-                              )}
-                            </View>
-                          ) : (
-                            <Text style={[styles.dropdownText, styles.dropdownPlaceholder, { textAlign: 'left' }]}>{t('adminEx.appointmentsAdmin.selectServicePlaceholder','Select service...')}</Text>
-                          )}
-                          {showServiceDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
-                        </View>
-                      </Pressable>
-                      {showServiceDropdown && (
-                        <View style={[styles.dropdownOptions, styles.dropPanelRecurring]}>
-                          <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                            {recurringServices.map((svc, idx) => (
-                              <Pressable
-                                key={svc.id}
-                                style={[styles.dropdownOption, idx === recurringServices.length - 1 && styles.dropdownOptionLast]}
-                                onPress={() => { setSelectedService(svc); setShowServiceDropdown(false); goToRecStep(2); }}
-                              >
-                                <View style={styles.dropdownOptionContent}>
-                                  <Text style={styles.dropdownOptionTitle}>{svc.name}</Text>
-                                  {!!svc.duration_minutes && (
-                                    <Text style={styles.dropdownOptionDescription}>{`${svc.duration_minutes} ${t('settings.services.minutes','minutes')}`}</Text>
-                                  )}
-                                </View>
-                              </Pressable>
-                            ))}
-                          </ScrollView>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                </View>
-                <View style={{ width: recViewportWidth }}>
-                  <View style={styles.wizardSectionCard}>
-                    <View style={styles.inputContainer}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <Calendar size={18} color={businessColors.primary} />
-                        <Text style={[styles.inputLabel, { textAlign: 'left', marginBottom: 0 }]}>{t('settings.recurring.dayOfWeek','Day of week')}</Text>
-                      </View>
-                      <Text style={styles.stepHint}>{t('settings.recurring.selectDayOfWeek','Select a day of the week')}</Text>
-                      <Pressable
-                        style={[styles.dropdownContainer, styles.grayField, { opacity: selectedService ? 1 : 0.6 }]}
-                        onPress={() => {
-                          if (!selectedService) { Alert.alert(t('error.generic','Error'), t('settings.recurring.selectServiceFirst','Please select a service')); return; }
-                          setShowDayDropdown(!showDayDropdown);
-                        }}
-                      >
-                        <View style={styles.dropdownHeader}>
-                          <Text style={[styles.dropdownText, !Number.isInteger(selectedDayOfWeek as any) && styles.dropdownPlaceholder, { textAlign: 'left' }]}>
-                            {Number.isInteger(selectedDayOfWeek as any) ? dayNames[selectedDayOfWeek as number] : t('admin2.hours.selectDate','Please select a date')}
-                          </Text>
-                          {showDayDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
-                        </View>
-                      </Pressable>
-                      {showDayDropdown && (
-                        <View style={[styles.dropdownOptions, styles.dropPanelRecurring]}>
-                          <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                            {dayNames.map((n, idx) => (
-                              <Pressable key={n} style={[styles.dropdownOption, idx === dayNames.length - 1 && styles.dropdownOptionLast]} onPress={() => { setSelectedDayOfWeek(idx); setShowDayDropdown(false); goToRecStep(3); }}>
-                                <Text style={styles.dropdownOptionTitle}>{n}</Text>
-                              </Pressable>
-                            ))}
-                          </ScrollView>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                </View>
-                <View style={{ width: recViewportWidth }}>
-                  <View style={styles.wizardSectionCard}>
-                    <View style={styles.inputContainer}> 
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <Clock size={18} color={businessColors.primary} />
-                        <Text style={[styles.sectionHeaderTitle, { textAlign: 'left' }]}>{t('selectTime.selectTime','Select Time')}</Text>
-                      </View>
-                      <Text style={styles.stepHint}>{t('adminEx.appointmentsAdmin.pickTime','Pick an available time slot')}</Text>
-                      <Pressable
-                        style={[styles.dropdownContainer, styles.grayField, { minHeight: 52, opacity: Number.isInteger(selectedDayOfWeek as any) ? 1 : 0.6 }]}
-                        onPress={() => {
-                          if (!selectedService) { Alert.alert(t('error.generic','Error'), t('settings.recurring.selectServiceFirst','Please select a service')); return; }
-                          if (!Number.isInteger(selectedDayOfWeek as any)) { Alert.alert(t('error.generic','Error'), t('settings.recurring.selectDayFirst','Please select a day of the week')); return; }
-                          if (!showTimeDropdown) { setIsLoadingTimes(true); if (Number.isInteger(selectedDayOfWeek as any)) { loadAvailableTimesForDay(selectedDayOfWeek as number); } }
-                          setShowTimeDropdown(!showTimeDropdown);
-                        }}
-                      >
-                        <View style={styles.dropdownHeader}>
-                          <Text style={[styles.dropdownText, !selectedTime && styles.dropdownPlaceholder, { textAlign: 'left' }]}>
-                            {selectedTime ? formatTime12Hour(selectedTime) : (isLoadingTimes ? 'Loading times...' : 'Select time...')}
-                          </Text>
-                          {showTimeDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
-                        </View>
-                      </Pressable>
-                      {showTimeDropdown && (
-                        <View style={[styles.dropdownOptions, styles.dropPanelRecurring]}>
-                          {isLoadingTimes ? (
-                            <View style={{ padding: 12, alignItems: 'center' }}>
-                              <ActivityIndicator size="small" color={businessColors.primary} />
-                              <Text style={{ textAlign: 'center', color: Colors.subtext, marginTop: 8 }}>
-                                {t('selectTime.loadingTimes','Loading available times...')}
-                              </Text>
-                            </View>
-                          ) : availableTimes.length === 0 ? (
-                            <View style={{ padding: 12 }}>
-                              <Text style={{ textAlign: 'center', color: Colors.subtext }}>
-                                {t('selectTime.noTimes','No available times for this day')}
-                              </Text>
-                            </View>
-                          ) : (
-                            <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                              {availableTimes.map((timeStr, idx) => (
-                                <Pressable
-                                  key={timeStr}
-                                  style={[styles.dropdownOption, idx === availableTimes.length - 1 && styles.dropdownOptionLast]}
-                                  onPress={async () => {
-                                    if (!Number.isInteger(selectedDayOfWeek as any)) return;
-                                    const ok = await isTimeAvailable(selectedDayOfWeek as number, timeStr);
-                                    if (!ok) { Alert.alert(t('settings.recurring.slotTakenTitle','Slot taken'), t('settings.recurring.slotTaken','The selected time is already booked this week. Please choose another time.')); return; }
-                                    setSelectedTime(timeStr);
-                                    setShowTimeDropdown(false);
-                                    goToRecStep(4);
-                                  }}
-                                >
-                                  <View style={styles.dropdownOptionContent}>
-                                    <Text style={styles.dropdownOptionTitle}>{formatTime12Hour(timeStr)}</Text>
-                                  </View>
-                                </Pressable>
-                              ))}
-                            </ScrollView>
-                          )}
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                </View>
-                <View style={{ width: recViewportWidth }}>
-                  <View style={styles.wizardSectionCard}>
-                    <View style={styles.inputContainer}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <Repeat size={18} color={businessColors.primary} />
-                        <Text style={[styles.inputLabel, { textAlign: 'left', marginBottom: 0 }]}>{t('settings.recurring.repeatEvery','Repeat every')}</Text>
-                      </View>
-                      <Text style={styles.stepHint}>{t('settings.recurring.repeatHint','Set how often this repeats')}</Text>
-                      <Pressable style={[styles.dropdownContainer, styles.grayField, { minHeight: 52 }]} onPress={() => setShowRepeatDropdown(!showRepeatDropdown)}>
-                        <View style={styles.dropdownHeader}>
-                          <Text style={[styles.dropdownText, { textAlign: 'left' }]}>{repeatWeeks === 1 ? t('settings.recurring.everyWeek','every week') : t('settings.recurring.everyNWeeks','every {{count}} weeks', { count: repeatWeeks })}</Text>
-                          {showRepeatDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
-                        </View>
-                      </Pressable>
-                      {showRepeatDropdown && (
-                        <View style={[styles.dropdownOptions, styles.dropPanelRecurring]}>
-                          <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                            {[1, 2, 3, 4].map((w, idx) => (
-                              <Pressable
-                                key={w}
-                                style={[styles.dropdownOption, idx === 3 && styles.dropdownOptionLast]}
-                                onPress={() => { setRepeatWeeks(w); setShowRepeatDropdown(false); }}
-                              >
-                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                                  <Text style={styles.dropdownOptionTitle}>{w === 1 ? 'every week' : `every ${w} weeks`}</Text>
-                                  {repeatWeeks === w && <Check size={18} color={businessColors.primary} />}
-                                </View>
-                              </Pressable>
-                            ))}
-                          </ScrollView>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                </View>
-              </Animated.View>
-            </View>
-            {/* Step navigation visible for all steps */}
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, paddingHorizontal: 4 }}>
-              <TouchableOpacity onPress={goBackRec} disabled={recStep === 0} style={[styles.stepNavButton, recStep === 0 && styles.stepNavButtonDisabled]}>
-                <Text style={[styles.stepNavText, recStep === 0 && styles.stepNavTextDisabled]}>{t('back','Back')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={recStep < 4 ? goNextRec : handleSubmitRecurring}
-                disabled={
-                  (recStep === 0 && !selectedClient) ||
-                  (recStep === 1 && !selectedService) ||
-                  (recStep === 2 && selectedDayOfWeek === null) ||
-                  (recStep === 3 && !selectedTime) ||
-                  (recStep === 4 && !repeatWeeks)
-                }
-                style={[styles.stepNavPrimary, { backgroundColor: businessColors.primary }, ((recStep === 0 && !selectedClient) || (recStep === 1 && !selectedService) || (recStep === 2 && selectedDayOfWeek === null) || (recStep === 3 && !selectedTime) || (recStep === 4 && !repeatWeeks)) && { opacity: 0.6 }]}
-              >
-                <Text style={styles.stepNavPrimaryText}>{recStep < 4 ? 'Next' : (isSubmittingRecurring ? 'Saving...' : 'Done')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          
-          </View>
-        </SafeAreaView>
       </Modal>
 
       {activeSettingsTab === 'services' && (
@@ -6239,18 +5530,10 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingTop: 17,
   },
-  serviceImagesPrefIconRing: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-  },
   serviceImagesPrefCopy: {
     flex: 1,
     minWidth: 0,
-    marginHorizontal: 14,
+    marginInlineEnd: 14,
   },
   serviceImagesPrefTitleRow: {
     flexDirection: 'row',
@@ -6308,6 +5591,11 @@ const styles = StyleSheet.create({
     paddingRight: 8,
     gap: 10,
   },
+  /** Extra inset on chevron side when service thumbnails are hidden */
+  svcListCollapsedRowNoThumb: {
+    paddingLeft: 28,
+    paddingRight: 12,
+  },
   svcListThumbOuter: {
     position: 'relative',
     width: 70,
@@ -6364,6 +5652,11 @@ const styles = StyleSheet.create({
     minWidth: 28,
     minHeight: 44,
     paddingHorizontal: 2,
+  },
+  svcListChevronHitNoThumb: {
+    paddingLeft: 8,
+    paddingRight: 8,
+    minWidth: 40,
   },
   inputContainer: {
     marginBottom: 24,

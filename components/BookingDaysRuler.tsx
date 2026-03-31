@@ -1,7 +1,8 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { forwardRef, useCallback, useImperativeHandle, useMemo, useRef } from 'react';
+import React, { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
+  LayoutChangeEvent,
   StyleSheet,
   Text,
   TextInput,
@@ -117,7 +118,7 @@ export interface BookingDaysRulerProps {
 export const BookingDaysRuler = forwardRef<BookingDaysRulerHandle, BookingDaysRulerProps>(
   function BookingDaysRuler(
     {
-      minDay = 1,
+      minDay = 0,
       maxDay = 60,
       fadeColor = '#ffffff',
       tickColor,
@@ -128,11 +129,21 @@ export const BookingDaysRuler = forwardRef<BookingDaysRulerHandle, BookingDaysRu
     ref,
   ) {
     const { width: windowWidth } = useWindowDimensions();
+    const [rulerTrackWidth, setRulerTrackWidth] = useState(0);
     const tick = tickColor ?? Colors.text;
     const center = indicatorColor ?? Colors.primary;
 
+    const onRulerHostLayout = useCallback((e: LayoutChangeEvent) => {
+      const w = e.nativeEvent.layout.width;
+      setRulerTrackWidth((prev) => (Math.abs(w - prev) > 0.5 ? w : prev));
+    }, []);
+
     const tickCount = maxDay - minDay + 1;
     const data = useMemo(() => Array.from({ length: tickCount }, (_, i) => i), [tickCount]);
+    const snapOffsets = useMemo(
+      () => Array.from({ length: tickCount }, (_, i) => i * ITEM_SIZE),
+      [tickCount],
+    );
 
     const scrollX = useSharedValue(0);
     const listRef = useRef<FlatList<number>>(null);
@@ -170,16 +181,18 @@ export const BookingDaysRuler = forwardRef<BookingDaysRulerHandle, BookingDaysRu
 
     useImperativeHandle(ref, () => ({ scrollToDay }), [scrollToDay]);
 
-    const sidePad = windowWidth / 2 - ITEM_SIZE / 2;
+    /* Match padding to the real list width (parent card padding ≠ full window), or ticks drift from the center line. */
+    const trackW = rulerTrackWidth > 0 ? rulerTrackWidth : windowWidth;
+    const sidePad = trackW / 2 - ITEM_SIZE / 2;
 
     return (
-      <View style={styles.wrap}>
+      <View style={[styles.wrap, styles.ltrRoot]}>
         <View style={styles.valueBlock}>
           <AnimatedDayText scrollX={scrollX} minDay={minDay} color={center} />
           <Text style={styles.unit}>{unitLabel}</Text>
         </View>
 
-        <View style={styles.rulerHost}>
+        <View style={[styles.rulerHost, styles.ltrRoot]} onLayout={onRulerHostLayout}>
           <Animated.FlatList
             ref={listRef}
             data={data}
@@ -187,8 +200,10 @@ export const BookingDaysRuler = forwardRef<BookingDaysRulerHandle, BookingDaysRu
             horizontal
             decelerationRate="fast"
             showsHorizontalScrollIndicator={false}
-            snapToInterval={ITEM_SIZE}
+            snapToOffsets={snapOffsets}
             snapToAlignment="start"
+            nestedScrollEnabled
+            style={styles.listLtr}
             contentContainerStyle={{
               paddingHorizontal: sidePad,
             }}
@@ -196,13 +211,16 @@ export const BookingDaysRuler = forwardRef<BookingDaysRulerHandle, BookingDaysRu
             onScroll={onScroll}
             scrollEventThrottle={1000 / 60}
           />
-          <View style={[styles.centerLine, { backgroundColor: center }]} />
+          <View style={[styles.centerLine, { backgroundColor: center }]} pointerEvents="none" />
+          {/**
+           * Narrow edge fade only — a wide fade (e.g. 0–28%) hid ticks left of the marker in RTL/LTR.
+           */}
           <LinearGradient
             style={StyleSheet.absoluteFillObject}
             colors={[fadeColor, `${fadeColor}00`, `${fadeColor}00`, fadeColor]}
             start={{ x: 0, y: 0.5 }}
             end={{ x: 1, y: 0.5 }}
-            locations={[0, 0.28, 0.72, 1]}
+            locations={[0, 0.035, 0.965, 1]}
             pointerEvents="none"
           />
         </View>
@@ -212,6 +230,12 @@ export const BookingDaysRuler = forwardRef<BookingDaysRulerHandle, BookingDaysRu
 );
 
 const styles = StyleSheet.create({
+  ltrRoot: {
+    direction: 'ltr',
+  },
+  listLtr: {
+    direction: 'ltr',
+  },
   wrap: {
     justifyContent: 'center',
     gap: SPACING,
@@ -231,6 +255,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   rulerHost: {
+    width: '100%',
     justifyContent: 'center',
   },
   centerLine: {

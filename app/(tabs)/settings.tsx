@@ -77,6 +77,9 @@ const BOOKING_WINDOW_MAX = 60;
 /** Ruler shows ticks 0…60; only 1…60 are saved (0 snaps to 1). */
 const BOOKING_RULER_MIN_DISPLAY = 0;
 
+const CLIENT_REMINDER_HOURS_MIN = 0;
+const CLIENT_REMINDER_HOURS_MAX = 24;
+
 const RECURRING_DOW_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
 export default function SettingsScreen() {
@@ -153,6 +156,7 @@ export default function SettingsScreen() {
   } | null>(null);
   const [bookingWindowDraft, setBookingWindowDraft] = useState('7');
   const bookingDaysRulerRef = useRef<BookingDaysRulerHandle>(null);
+  const clientReminderHoursRulerRef = useRef<BookingDaysRulerHandle>(null);
   const [showCancellationDropdown, setShowCancellationDropdown] = useState(false);
   // Address bottom sheet animation
   const addressSheetAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
@@ -197,7 +201,6 @@ export default function SettingsScreen() {
   const [clientReminderEnabled, setClientReminderEnabled] = useState(false);
   const [showClientReminderModal, setShowClientReminderModal] = useState(false);
   const [clientReminderModalHoursDraft, setClientReminderModalHoursDraft] = useState('');
-  const [clientReminderModalMinutesDraft, setClientReminderModalMinutesDraft] = useState('');
   const [clientReminderSwitchPending, setClientReminderSwitchPending] = useState(false);
   const [showAdminReminderModal, setShowAdminReminderModal] = useState(false);
   const [adminReminderModalHoursDraft, setAdminReminderModalHoursDraft] = useState('');
@@ -341,6 +344,19 @@ export default function SettingsScreen() {
     });
     return () => cancelAnimationFrame(id);
   }, [showBookingWindowModal, profileBookingOpenDays]);
+
+  useLayoutEffect(() => {
+    if (!showClientReminderModal) return;
+    const h =
+      clientReminderMinutes != null && clientReminderMinutes > 0
+        ? Math.min(CLIENT_REMINDER_HOURS_MAX, Math.ceil(clientReminderMinutes / 60))
+        : 0;
+    setClientReminderModalHoursDraft(String(h));
+    const id = requestAnimationFrame(() => {
+      clientReminderHoursRulerRef.current?.scrollToDay(h);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [showClientReminderModal, clientReminderMinutes]);
 
   const handleSaveBusinessProfile = async () => {
     setIsSavingProfile(true);
@@ -597,16 +613,9 @@ export default function SettingsScreen() {
     (fromSwitch = false) => {
       if (!user?.id) return;
       if (fromSwitch) setClientReminderSwitchPending(true);
-      if (clientReminderMinutes != null && clientReminderMinutes > 0) {
-        setClientReminderModalHoursDraft(String(Math.floor(clientReminderMinutes / 60)));
-        setClientReminderModalMinutesDraft(String(clientReminderMinutes % 60));
-      } else {
-        setClientReminderModalHoursDraft('');
-        setClientReminderModalMinutesDraft('');
-      }
       setShowClientReminderModal(true);
     },
-    [user?.id, clientReminderMinutes],
+    [user?.id],
   );
 
   const dismissClientReminderModal = useCallback(() => {
@@ -635,25 +644,33 @@ export default function SettingsScreen() {
   const clientReminderActive =
     (clientReminderMinutes != null && clientReminderMinutes > 0) || clientReminderSwitchPending;
 
+  const onClientReminderHoursRulerChange = useCallback((hours: number) => {
+    const d = Math.min(CLIENT_REMINDER_HOURS_MAX, Math.max(CLIENT_REMINDER_HOURS_MIN, hours));
+    setClientReminderModalHoursDraft(String(d));
+  }, []);
+
+  const onClientReminderHoursTextChange = useCallback((text: string) => {
+    setClientReminderModalHoursDraft(text);
+    const digits = text.replace(/\D/g, '');
+    const n = parseInt(digits, 10);
+    if (Number.isFinite(n) && n >= CLIENT_REMINDER_HOURS_MIN && n <= CLIENT_REMINDER_HOURS_MAX) {
+      clientReminderHoursRulerRef.current?.scrollToDay(n);
+    }
+  }, []);
+
   const saveClientReminderFromModal = async () => {
     if (!user?.id) return;
     const hRaw = clientReminderModalHoursDraft.trim();
-    const mRaw = clientReminderModalMinutesDraft.trim();
-    if ((hRaw && !/^\d+$/.test(hRaw)) || (mRaw && !/^\d+$/.test(mRaw))) {
-      Alert.alert(t('error.generic', 'Error'), t('settings.reminder.clientDialogInvalidParts'));
+    if (!hRaw || !/^\d+$/.test(hRaw)) {
+      Alert.alert(t('error.generic', 'Error'), t('settings.reminder.clientDialogInvalidHours'));
       return;
     }
-    const h = hRaw ? parseInt(hRaw, 10) : 0;
-    const m = mRaw ? parseInt(mRaw, 10) : 0;
-    if (m > 59) {
-      Alert.alert(t('error.generic', 'Error'), t('settings.reminder.clientDialogInvalidParts'));
+    const h = parseInt(hRaw, 10);
+    if (h < CLIENT_REMINDER_HOURS_MIN || h > CLIENT_REMINDER_HOURS_MAX) {
+      Alert.alert(t('error.generic', 'Error'), t('settings.reminder.clientDialogInvalidHours'));
       return;
     }
-    if (h > 24) {
-      Alert.alert(t('error.generic', 'Error'), t('settings.profile.reminderInvalid', 'Enter a valid number between 1 and 1440 minutes'));
-      return;
-    }
-    const total = h * 60 + m;
+    const total = h * 60;
     try {
       setIsSavingProfile(true);
       if (total === 0) {
@@ -664,7 +681,7 @@ export default function SettingsScreen() {
         setShowClientReminderModal(false);
         return;
       }
-      if (total < 1 || total > 1440) {
+      if (total > 1440) {
         Alert.alert(t('error.generic', 'Error'), t('settings.profile.reminderInvalid', 'Enter a valid number between 1 and 1440 minutes'));
         return;
       }
@@ -2963,87 +2980,113 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      {/* Client reminder (before appointment) — full copy + hours/minutes in modal */}
+      {/* Client reminder — bottom sheet (same pattern as booking window) */}
       <Modal
         visible={showClientReminderModal}
-        animationType="fade"
-        transparent
+        animationType="slide"
+        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
         onRequestClose={dismissClientReminderModal}
       >
-        <KeyboardAvoidingView
-          style={styles.smallModalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <View style={styles.smallModalCard}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity style={styles.modalCloseButton} onPress={dismissClientReminderModal}>
-                <Text style={styles.modalCloseText}>{t('cancel', 'Cancel')}</Text>
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: SETTINGS_GROUPED_BG }]} edges={['top']}>
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+          >
+            <View style={[styles.modalHeader, styles.bookingWindowModalHeader]}>
+              <TouchableOpacity
+                style={styles.cancellationModalCloseButton}
+                onPress={dismissClientReminderModal}
+                accessibilityRole="button"
+                accessibilityLabel={t('cancel', 'Cancel')}
+              >
+                <X size={22} color={Colors.text} strokeWidth={2} />
               </TouchableOpacity>
-              <Text style={[styles.modalTitleLTR, I18nManager.isRTL && { textAlign: 'center' }]} numberOfLines={2}>
+              <Text style={[styles.modalTitle, styles.bookingWindowModalTitle]} numberOfLines={2}>
                 {t('settings.reminder.clientRowTitle', 'Client reminder before appointment')}
               </Text>
+              <View style={styles.bookingWindowHeaderSpacer} />
+            </View>
+
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{
+                paddingHorizontal: 20,
+                paddingTop: 8,
+                paddingBottom: insets.bottom + 120,
+              }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+            >
+              <LinearGradient
+                colors={[`${businessColors.primary}18`, `${businessColors.primary}08`, 'transparent']}
+                locations={[0, 0.55, 1]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.bookingWindowExplainer}
+              >
+                <View style={[styles.bookingWindowExplainerIcon, { backgroundColor: `${businessColors.primary}20` }]}>
+                  <Bell size={22} color={businessColors.primary} strokeWidth={2} />
+                </View>
+                <Text style={styles.bookingWindowExplainerText}>{t('settings.reminder.clientAutomatedHint')}</Text>
+              </LinearGradient>
+
+              <View style={styles.bookingWindowHeroCard}>
+                <Text style={styles.bookingWindowFieldLabel}>
+                  {t('settings.reminder.clientDialogHoursLabel', 'Hours before appointment')}
+                </Text>
+                <View style={styles.bookingWindowRulerLtr}>
+                  <BookingDaysRuler
+                    ref={clientReminderHoursRulerRef}
+                    minDay={CLIENT_REMINDER_HOURS_MIN}
+                    maxDay={CLIENT_REMINDER_HOURS_MAX}
+                    fadeColor={Colors.white}
+                    tickColor={Colors.text}
+                    indicatorColor={businessColors.primary}
+                    unitLabel={t('settings.reminder.clientDialogHoursUnit', 'hours')}
+                    onDayChange={onClientReminderHoursRulerChange}
+                  />
+                </View>
+                <Text style={styles.bookingWindowManualLabel}>
+                  {t('settings.reminder.clientDialogManualHours', 'Or enter a number')}
+                </Text>
+                <TextInput
+                  style={styles.bookingWindowManualInput}
+                  value={clientReminderModalHoursDraft}
+                  onChangeText={onClientReminderHoursTextChange}
+                  placeholder="0"
+                  placeholderTextColor={Colors.subtext}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  selectTextOnFocus
+                />
+                <Text style={styles.bookingWindowRangeFoot}>
+                  {t('settings.reminder.clientDialogHoursRange', '0–24 hours. 0 turns the reminder off.')}
+                </Text>
+              </View>
+            </ScrollView>
+
+            <View style={[styles.bookingWindowFooter, { paddingBottom: Math.max(insets.bottom, 10) }]}>
               <TouchableOpacity
-                style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]}
+                style={[
+                  styles.bookingWindowFooterBtn,
+                  { backgroundColor: businessColors.primary },
+                  isSavingProfile && styles.bookingWindowFooterBtnDisabled,
+                ]}
                 onPress={() => {
                   void saveClientReminderFromModal();
                 }}
                 disabled={isSavingProfile}
+                activeOpacity={0.88}
               >
-                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>
+                <Text style={[styles.bookingWindowFooterBtnText, isSavingProfile && { opacity: 0.85 }]}>
                   {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
                 </Text>
               </TouchableOpacity>
             </View>
-            <ScrollView
-              style={styles.smallModalContent}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              <Text
-                style={[
-                  styles.settingSubtitleLTR,
-                  { marginBottom: 16, lineHeight: 22 },
-                  I18nManager.isRTL && { textAlign: 'right' },
-                ]}
-              >
-                {t('settings.reminder.clientAutomatedHint')}
-              </Text>
-              <Text style={[styles.inputLabelLTR, I18nManager.isRTL && { textAlign: 'right' }]}>
-                {t('settings.reminder.clientDialogHoursLabel', 'Hours')}
-              </Text>
-              <TextInput
-                style={[styles.textInput, { marginBottom: 12 }]}
-                value={clientReminderModalHoursDraft}
-                onChangeText={setClientReminderModalHoursDraft}
-                placeholder="0"
-                placeholderTextColor={Colors.subtext}
-                keyboardType="number-pad"
-                textAlign={I18nManager.isRTL ? 'right' : 'left'}
-              />
-              <Text style={[styles.inputLabelLTR, I18nManager.isRTL && { textAlign: 'right' }]}>
-                {t('settings.reminder.clientDialogMinutesLabel', 'Minutes (0–59)')}
-              </Text>
-              <TextInput
-                style={[styles.textInput, { marginBottom: 12 }]}
-                value={clientReminderModalMinutesDraft}
-                onChangeText={setClientReminderModalMinutesDraft}
-                placeholder="0"
-                placeholderTextColor={Colors.subtext}
-                keyboardType="number-pad"
-                textAlign={I18nManager.isRTL ? 'right' : 'left'}
-              />
-              <Text
-                style={[
-                  styles.settingSubtitleLTR,
-                  { fontSize: 13, opacity: 0.85 },
-                  I18nManager.isRTL && { textAlign: 'right' },
-                ]}
-              >
-                {t('settings.reminder.clientDialogCombinedHint')}
-              </Text>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
       </Modal>
 
       {/* Admin self-reminder — same time fields as client reminder */}
@@ -3610,10 +3653,10 @@ export default function SettingsScreen() {
             />
             <TouchableWithoutFeedback onPress={() => {}}>
               <View style={styles.cancellationModalCard}>
-                <View style={styles.cancellationModalRtlShell}>
+                <View style={styles.cancellationModalInner}>
                 <View style={styles.cancellationModalHeader}>
                   <TouchableOpacity
-                    style={styles.cancellationModalCloseButton}
+                    style={[styles.cancellationModalCloseButton, styles.cancellationModalCloseOnEnd]}
                     onPress={dismissCancellationModal}
                     accessibilityRole="button"
                     accessibilityLabel={t('cancel', 'Cancel')}
@@ -3642,12 +3685,6 @@ export default function SettingsScreen() {
                         end={{ x: 1, y: 1 }}
                         style={styles.cancellationModalExplainer}
                       >
-                        <Text style={styles.cancellationModalExplainerText}>
-                          {t(
-                            'settings.policies.cancellationModalHint',
-                            'Clients cannot cancel inside this window before the appointment starts. Choose how many hours ahead they must cancel by.',
-                          )}
-                        </Text>
                         <View
                           style={[
                             styles.cancellationModalExplainerIcon,
@@ -3656,6 +3693,12 @@ export default function SettingsScreen() {
                         >
                           <Clock size={22} color={businessColors.primary} strokeWidth={2} />
                         </View>
+                        <Text style={styles.cancellationModalExplainerText}>
+                          {t(
+                            'settings.policies.cancellationModalHint',
+                            'Clients cannot cancel inside this window before the appointment starts. Choose how many hours ahead they must cancel by.',
+                          )}
+                        </Text>
                       </LinearGradient>
 
                       <View style={styles.cancellationModalHero}>
@@ -3674,6 +3717,11 @@ export default function SettingsScreen() {
                           onPress={() => setShowCancellationDropdown(!showCancellationDropdown)}
                           activeOpacity={0.92}
                         >
+                          {showCancellationDropdown ? (
+                            <Ionicons name="chevron-up" size={22} color={businessColors.primary} />
+                          ) : (
+                            <Ionicons name="chevron-down" size={22} color={businessColors.primary} />
+                          )}
                           <Text style={styles.cancellationModalPickerText} numberOfLines={3}>
                             {cancellationHoursDraft === '0'
                               ? t('settings.policies.noRestriction', '0 hours (No restriction)')
@@ -3695,11 +3743,6 @@ export default function SettingsScreen() {
                                     : ''
                                 }`}
                           </Text>
-                          {showCancellationDropdown ? (
-                            <Ionicons name="chevron-up" size={22} color={businessColors.primary} />
-                          ) : (
-                            <Ionicons name="chevron-down" size={22} color={businessColors.primary} />
-                          )}
                         </TouchableOpacity>
 
                         {showCancellationDropdown ? (
@@ -5196,8 +5239,11 @@ const styles = StyleSheet.create({
     padding: 20,
     position: 'relative',
   },
-  cancellationModalRtlShell: {
-    direction: 'rtl',
+  /** LTR box so textAlign:right is physical right (global RTL swaps left/right on Text). */
+  cancellationModalInner: {
+    direction: 'ltr',
+    width: '100%',
+    alignSelf: 'stretch',
   },
   cancellationModalCard: {
     width: '100%',
@@ -5217,7 +5263,7 @@ const styles = StyleSheet.create({
     }),
   },
   cancellationModalHeader: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 14,
@@ -5230,7 +5276,7 @@ const styles = StyleSheet.create({
   cancellationModalTitle: {
     flex: 1,
     minWidth: 0,
-    marginRight: 6,
+    marginLeft: 6,
     textAlign: 'right',
     fontSize: 17,
     fontWeight: '700',
@@ -5251,8 +5297,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 18,
     paddingBottom: 8,
+    alignItems: 'stretch',
+    width: '100%',
   },
   cancellationModalExplainer: {
+    direction: 'ltr',
     borderRadius: 18,
     paddingVertical: 16,
     paddingHorizontal: 16,
@@ -5272,6 +5321,7 @@ const styles = StyleSheet.create({
   },
   cancellationModalExplainerText: {
     flex: 1,
+    minWidth: 0,
     fontSize: 14,
     fontWeight: '500',
     color: Colors.text,
@@ -5295,6 +5345,7 @@ const styles = StyleSheet.create({
     }),
   },
   cancellationModalFieldLabel: {
+    alignSelf: 'stretch',
     fontSize: 14,
     fontWeight: '600',
     color: Colors.subtext,
@@ -5303,6 +5354,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   cancellationModalPicker: {
+    direction: 'ltr',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -5316,6 +5368,7 @@ const styles = StyleSheet.create({
   },
   cancellationModalPickerText: {
     flex: 1,
+    minWidth: 0,
     fontSize: 16,
     fontWeight: '600',
     color: Colors.text,
@@ -5323,6 +5376,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   cancellationModalDropdownPanel: {
+    direction: 'ltr',
     marginTop: 10,
     backgroundColor: Colors.white,
     borderRadius: 14,
@@ -5352,6 +5406,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   cancellationModalDropdownRowText: {
+    alignSelf: 'stretch',
     fontSize: 16,
     color: Colors.text,
     fontWeight: '500',
@@ -5451,6 +5506,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginLeft: -4,
     zIndex: 10,
+  },
+  cancellationModalCloseOnEnd: {
+    marginLeft: 0,
+    marginRight: -4,
   },
   modalActionButton: {
     width: 44,

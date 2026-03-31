@@ -35,6 +35,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Phone, User, Calendar, Camera, RotateCcw } from 'lucide-react-native';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useTranslation } from 'react-i18next';
+import { isRtlLanguage } from '@/lib/i18nLocale';
 import { authPhoneOtpApi } from '@/lib/api/authPhoneOtp';
 import { usersApi } from '@/lib/api/users';
 import { useAuthStore } from '@/stores/authStore';
@@ -170,7 +171,7 @@ export default function RegisterScreen() {
   }>({ visible: false, phone: '', key: 0 });
   const router = useRouter();
   const login = useAuthStore((s) => s.login);
-  const isRtl = i18n.language?.startsWith('he') ?? true;
+  const isRtl = isRtlLanguage(i18n.language);
 
   const primary = businessColors.primary;
   const loginGradient = useMemo(

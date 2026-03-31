@@ -37,6 +37,7 @@ import { businessProfileApi, isClientApprovalRequired } from '@/lib/api/business
 import { PendingApprovalAnimatedModal } from '@/components/login/PendingApprovalAnimatedModal';
 import { shouldDenyClientSession } from '@/lib/utils/clientApproval';
 import { useTranslation } from 'react-i18next';
+import { isRtlLanguage } from '@/lib/i18nLocale';
 import { readableOnHex } from '@/lib/utils/readableOnHex';
 import {
   MAX_LOGIN_FAILURES,
@@ -128,7 +129,7 @@ export default function LoginScreen() {
   const login = useAuthStore((state) => state.login);
   const { colors: businessColors } = useBusinessColors();
   const { t, i18n } = useTranslation();
-  const isRtl = i18n.language?.startsWith('he') ?? true;
+  const isRtl = isRtlLanguage(i18n.language);
 
   const primary = businessColors.primary;
 

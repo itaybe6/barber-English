@@ -1,7 +1,9 @@
 export type AppLanguageCode = 'en' | 'he' | 'ar' | 'ru';
 
+/** Empty / missing language defaults to Hebrew (app default). */
 export function normalizeAppLanguage(raw: string | undefined | null): AppLanguageCode {
-  const l = (raw || '').trim().toLowerCase();
+  const t = typeof raw === 'string' ? raw.trim() : '';
+  const l = (t === '' ? 'he' : t).toLowerCase();
   if (l.startsWith('he')) return 'he';
   if (l.startsWith('ar')) return 'ar';
   if (l.startsWith('ru')) return 'ru';
@@ -9,7 +11,7 @@ export function normalizeAppLanguage(raw: string | undefined | null): AppLanguag
 }
 
 export function isRtlLanguage(code: string | undefined | null): boolean {
-  const l = (code || '').toLowerCase();
+  const l = (code == null || String(code).trim() === '' ? 'he' : String(code)).toLowerCase();
   return l.startsWith('he') || l.startsWith('ar');
 }
 

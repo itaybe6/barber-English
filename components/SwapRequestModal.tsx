@@ -14,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { swapRequestsApi } from '@/lib/api/swapRequests';
+import { toBcp47Locale } from '@/lib/i18nLocale';
 import type { Appointment } from '@/lib/supabase';
 
 interface SwapRequestModalProps {
@@ -45,7 +46,7 @@ export default function SwapRequestModal({
   const [timeTo, setTimeTo] = useState<number>(21);
   const [isSaving, setIsSaving] = useState(false);
 
-  const appLocale = i18n?.language === 'he' ? 'he-IL' : 'en-US';
+  const appLocale = toBcp47Locale(i18n?.language);
 
   const upcomingDays = useMemo(() => {
     const days: { date: string; label: string; dayName: string }[] = [];

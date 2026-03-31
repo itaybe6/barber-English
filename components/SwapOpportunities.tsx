@@ -17,6 +17,7 @@ import { businessProfileApi, isClientSwapEnabled } from '@/lib/api/businessProfi
 import { supabase, getBusinessId } from '@/lib/supabase';
 import type { SwapRequest, Appointment } from '@/lib/supabase';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
+import { toBcp47Locale } from '@/lib/i18nLocale';
 
 interface SwapOpportunity {
   swapRequest: SwapRequest;
@@ -31,7 +32,7 @@ export default function SwapOpportunities() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSwapping, setIsSwapping] = useState<string | null>(null);
 
-  const appLocale = i18n?.language === 'he' ? 'he-IL' : 'en-US';
+  const appLocale = toBcp47Locale(i18n?.language);
 
   const loadOpportunities = useCallback(async () => {
     if (!user?.phone) return;

@@ -54,6 +54,7 @@ import AddAdminModal from '@/components/AddAdminModal';
 import DeleteAccountModal from '@/components/DeleteAccountModal';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { useTranslation } from 'react-i18next';
+import { normalizeAppLanguage, isRtlLanguage, toBcp47Locale } from '@/lib/i18nLocale';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import { SettingsScreenTabs } from '@/components/settings/SettingsScreenTabs';
 import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
@@ -86,7 +87,7 @@ export default function SettingsScreen() {
 
   /** Match client booking list: `order_index` (then name). Missing index sorts after indexed rows. */
   const sortServicesLikeClientBooking = useCallback((list: Service[]) => {
-    const locale = i18n.language || undefined;
+    const locale = toBcp47Locale(i18n.language);
     return [...list].sort((a, b) => {
       const ai =
         typeof a.order_index === 'number' && !Number.isNaN(a.order_index)
@@ -2583,7 +2584,18 @@ export default function SettingsScreen() {
               {renderSettingItem(
                 <Ionicons name="globe-outline" size={20} color={businessColors.primary} />,
                 t('profile.language.title', 'Language'),
-                i18n.language?.startsWith('he') ? t('profile.language.hebrew', 'Hebrew') : t('profile.language.english', 'English'),
+                (() => {
+                  switch (normalizeAppLanguage(i18n.language)) {
+                    case 'he':
+                      return t('profile.language.hebrew', 'Hebrew');
+                    case 'ar':
+                      return t('profile.language.arabic', 'Arabic');
+                    case 'ru':
+                      return t('profile.language.russian', 'Russian');
+                    default:
+                      return t('profile.language.english', 'English');
+                  }
+                })(),
                 undefined,
                 () => setIsLanguageOpen(true)
               )}
@@ -3142,7 +3154,7 @@ export default function SettingsScreen() {
                           nearbyPlacesAPI={undefined as any}
                           query={{
                             key: (Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_PLACES_KEY || process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY,
-                            language: (i18n.language || '').toLowerCase().startsWith('he') ? 'he' : 'en',
+                            language: normalizeAppLanguage(i18n.language),
                             types: 'geocode',
                           }}
                           ref={placesInputRef}
@@ -3180,7 +3192,7 @@ export default function SettingsScreen() {
                             placeholderTextColor: '#9CA3AF',
                             autoCorrect: false,
                             autoCapitalize: 'none',
-                            textAlign: (i18n.language || '').toLowerCase().startsWith('he') ? 'right' : 'left',
+                            textAlign: isRtlLanguage(i18n.language) ? 'right' : 'left',
                           }}
                           styles={{
                             container: { flex: 0 },
@@ -3889,7 +3901,7 @@ export default function SettingsScreen() {
                                       )}
                                     </TouchableOpacity>
                                   </View>
-                                  <Text style={{ fontSize: 12, color: Colors.subtext, marginTop: 8, textAlign: i18n.language === 'he' ? 'right' : 'left' }}>
+                                  <Text style={{ fontSize: 12, color: Colors.subtext, marginTop: 8, textAlign: isRtlLanguage(i18n.language) ? 'right' : 'left' }}>
                                     {t('settings.profile.bookingWindowHint','How many days ahead can clients book appointments with this employee?')}
                                   </Text>
                                 </View>
@@ -4871,6 +4883,42 @@ export default function SettingsScreen() {
               >
                 <Text style={styles.languagePickerOptionText}>{t('profile.language.hebrew', 'Hebrew')}</Text>
                 {i18n.language?.startsWith('he') && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.languagePickerOption}
+                onPress={async () => {
+                  try {
+                    await i18n.changeLanguage('ar');
+                    if (user?.id) {
+                      const updated = await usersApi.updateUser(user.id, { language: 'ar' } as any);
+                      if (updated) updateUserProfile({ language: 'ar' } as any);
+                    }
+                  } finally {
+                    setIsLanguageOpen(false);
+                  }
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.languagePickerOptionText}>{t('profile.language.arabic', 'Arabic')}</Text>
+                {i18n.language?.startsWith('ar') && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.languagePickerOption}
+                onPress={async () => {
+                  try {
+                    await i18n.changeLanguage('ru');
+                    if (user?.id) {
+                      const updated = await usersApi.updateUser(user.id, { language: 'ru' } as any);
+                      if (updated) updateUserProfile({ language: 'ru' } as any);
+                    }
+                  } finally {
+                    setIsLanguageOpen(false);
+                  }
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.languagePickerOptionText}>{t('profile.language.russian', 'Russian')}</Text>
+                {i18n.language?.startsWith('ru') && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
               </TouchableOpacity>
               <Text style={styles.languagePickerNote}>{t('profile.language.restartNote', 'Direction changes may require app restart')}</Text>
             </View>

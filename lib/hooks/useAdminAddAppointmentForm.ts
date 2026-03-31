@@ -14,6 +14,19 @@ export function formatDateToLocalString(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+/** Calendar `YYYY-MM-DD` must not use `new Date(str)` — that is UTC midnight and shifts the local calendar day in many timezones. */
+export function parseDateKeyToLocalDate(key: string): Date | null {
+  const s = key.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const y = parseInt(s.slice(0, 4), 10);
+  const mo = parseInt(s.slice(5, 7), 10);
+  const d = parseInt(s.slice(8, 10), 10);
+  const next = new Date(y, mo - 1, d);
+  next.setHours(0, 0, 0, 0);
+  if (next.getFullYear() !== y || next.getMonth() !== mo - 1 || next.getDate() !== d) return null;
+  return next;
+}
+
 export function formatTimeToAMPM(time24: string): string {
   const [hours, minutes] = time24.split(':');
   const hour24 = parseInt(hours, 10);
@@ -30,13 +43,24 @@ function triggerMediumHaptic() {
   }
 }
 
+export interface AdminBookingSaveSuccessPayload {
+  client: { name: string; phone: string };
+  service: Service;
+  date: Date;
+  /** `HH:MM` */
+  time: string;
+}
+
 export interface UseAdminAddAppointmentFormOptions {
   /** `YYYY-MM-DD` from route params */
   initialDateKey?: string | null;
+  /** When set, a successful insert calls this instead of the default success `Alert` (e.g. animated overlay). */
+  onSaveSuccess?: (payload: AdminBookingSaveSuccessPayload) => void;
+  /** Called after the user acknowledges success (Alert OK, or overlay dismiss). */
   onSuccess?: () => void;
 }
 
-export function useAdminAddAppointmentForm({ initialDateKey, onSuccess }: UseAdminAddAppointmentFormOptions) {
+export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSuccess }: UseAdminAddAppointmentFormOptions) {
   const user = useAuthStore((state) => state.user);
   const { t } = useTranslation();
 
@@ -103,15 +127,11 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSuccess }: UseAdm
 
   useEffect(() => {
     const key = initialDateKey?.trim() ?? '';
-    if (!key || !/^\d{4}-\d{2}-\d{2}$/.test(key)) return;
+    if (!key) return;
     if (appliedInitialDateRef.current === key) return;
+    const next = parseDateKeyToLocalDate(key);
+    if (!next) return;
     appliedInitialDateRef.current = key;
-    const y = parseInt(key.slice(0, 4), 10);
-    const mo = parseInt(key.slice(5, 7), 10);
-    const d = parseInt(key.slice(8, 10), 10);
-    const next = new Date(y, mo - 1, d);
-    next.setHours(0, 0, 0, 0);
-    if (next.getFullYear() !== y || next.getMonth() !== mo - 1 || next.getDate() !== d) return;
     setSelectedDate(next);
     setSelectedTime(null);
   }, [initialDateKey]);
@@ -361,21 +381,30 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSuccess }: UseAdm
 
       if (error) throw error;
 
-      Alert.alert(t('success.generic', 'Success'), t('admin.appointmentsAdmin.scheduled', 'Appointment scheduled successfully'), [
-        {
-          text: t('ok', 'OK'),
-          onPress: () => {
-            onSuccess?.();
+      if (onSaveSuccess) {
+        onSaveSuccess({
+          client: { name: selectedClient.name, phone: selectedClient.phone },
+          service: selectedService,
+          date: selectedDate,
+          time: selectedTime,
+        });
+      } else {
+        Alert.alert(t('success.generic', 'Success'), t('admin.appointmentsAdmin.scheduled', 'Appointment scheduled successfully'), [
+          {
+            text: t('ok', 'OK'),
+            onPress: () => {
+              onSuccess?.();
+            },
           },
-        },
-      ]);
+        ]);
+      }
     } catch (error) {
       console.error('Error creating appointment:', error);
       Alert.alert(t('error.generic', 'Error'), t('admin.appointmentsAdmin.scheduleFailed', 'Error scheduling appointment'));
     } finally {
       setIsSubmitting(false);
     }
-  }, [selectedDate, selectedClient, selectedService, selectedTime, user?.id, t, onSuccess]);
+  }, [selectedDate, selectedClient, selectedService, selectedTime, user?.id, t, onSaveSuccess, onSuccess]);
 
   return {
     selectedDate,

@@ -17,7 +17,16 @@ import Colors from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
 import { notificationsApi } from '@/lib/api/notifications';
 import { Notification } from '@/lib/supabase';
-import { Bell, Clock, CheckCircle, AlertCircle, Calendar, XCircle, User } from 'lucide-react-native';
+import {
+  Bell,
+  Clock,
+  CheckCircle,
+  AlertCircle,
+  Calendar,
+  XCircle,
+  User,
+  ListTodo,
+} from 'lucide-react-native';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { formatTimeFromDate } from '@/lib/utils/timeFormat';
 
@@ -89,105 +98,204 @@ function parseNotificationContentStatic(title: string, content: string) {
 
 type ParsedNotification = ReturnType<typeof parseNotificationContentStatic>;
 
+type NotifKind = 'new' | 'cancel' | 'reminder' | 'waitlist' | 'system' | 'default';
+
+interface TypeConfig {
+  color: string;
+  bg: string;
+  tint: string;
+  icon: React.ReactNode;
+}
+
+function getTypeConfig(kind: NotifKind): TypeConfig {
+  switch (kind) {
+    case 'new':
+      return {
+        color: '#007AFF',
+        bg: '#EBF4FF',
+        tint: '#F0F7FF',
+        icon: <Calendar size={18} color="#007AFF" />,
+      };
+    case 'cancel':
+      return {
+        color: '#FF3B30',
+        bg: '#FFEEED',
+        tint: '#FFF5F5',
+        icon: <XCircle size={18} color="#FF3B30" />,
+      };
+    case 'reminder':
+      return {
+        color: '#FF9500',
+        bg: '#FFF3E0',
+        tint: '#FFFAF0',
+        icon: <Clock size={18} color="#FF9500" />,
+      };
+    case 'waitlist':
+      return {
+        color: '#34C759',
+        bg: '#E8FAF0',
+        tint: '#F3FDF6',
+        icon: <ListTodo size={18} color="#34C759" />,
+      };
+    case 'system':
+      return {
+        color: '#8E8E93',
+        bg: '#F2F2F7',
+        tint: '#F9F9FB',
+        icon: <AlertCircle size={18} color="#8E8E93" />,
+      };
+    default:
+      return {
+        color: '#5E5CE6',
+        bg: '#EEEEFF',
+        tint: '#F5F5FF',
+        icon: <Bell size={18} color="#5E5CE6" />,
+      };
+  }
+}
+
+function formatRelativeDate(dateString: string): string {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHrs = Math.floor(diffMin / 60);
+  if (diffMin < 1) return 'עכשיו';
+  if (diffMin < 60) return `לפני ${diffMin} דק׳`;
+  if (diffHrs < 24) return `לפני ${diffHrs} שע׳`;
+  if (diffHrs < 48) return 'אתמול';
+  return date.toLocaleDateString('he-IL', { day: 'numeric', month: 'short' });
+}
+
 interface NotificationListRowProps {
   notification: Notification;
+  kind: NotifKind;
   pressable: boolean;
   onPress: (n: Notification) => void;
   isAdminReminder: (n: Notification) => boolean;
-  getTitleStatusIcon: (title: string) => React.ReactNode;
-  ios: {
-    readonly background: string;
-    readonly card: string;
-    readonly border: string;
-    readonly primary: string;
-    readonly secondary: string;
-    readonly success: string;
-    readonly warning: string;
-    readonly error: string;
-  };
 }
 
 const NotificationListRow = memo(function NotificationListRow({
   notification,
+  kind,
   pressable,
   onPress,
   isAdminReminder,
-  getTitleStatusIcon,
-  ios,
 }: NotificationListRowProps) {
   const parsed: ParsedNotification = parseNotificationContentStatic(notification.title, notification.content);
-
-  const cardStyles = [
-    styles.notificationCard,
-    styles.notificationCardNoMargin,
-    !notification.is_read && styles.unreadCard,
-  ];
+  const cfg = getTypeConfig(kind);
+  const isUnread = !notification.is_read;
+  const timeAgo = formatRelativeDate((notification as any).created_at || '');
 
   const cardBody = (
-    <>
-      <View style={styles.titleRow}>
-        <View style={styles.titleWithIcon}>
-          {getTitleStatusIcon(notification.title)}
-          <Text style={styles.notificationTitle}>{notification.title}</Text>
-        </View>
-        {isAdminReminder(notification) ? <Clock size={18} color={Colors.primary} /> : null}
-      </View>
-      <View>
-        {parsed.primary ? <Text style={styles.notificationContent}>{parsed.primary}</Text> : null}
-        <View style={styles.detailsContainer}>
-          {parsed.name ? (
-            <View style={styles.detailRow}>
-              <View style={styles.detailIcon}>
-                <User size={14} color="#8E8E93" />
-              </View>
-              <Text style={styles.detailText}>{parsed.name}</Text>
-            </View>
-          ) : null}
-          {parsed.datePretty ? (
-            <View style={styles.detailRow}>
-              <View style={styles.detailIcon}>
-                <Calendar size={14} color="#8E8E93" />
-              </View>
-              <Text style={styles.detailText}>{parsed.datePretty}</Text>
-            </View>
-          ) : null}
-          {parsed.timePretty ? (
-            <View style={styles.detailRow}>
-              <View style={styles.detailIcon}>
-                <Clock size={14} color="#8E8E93" />
-              </View>
-              <Text style={styles.detailText}>{parsed.timePretty}</Text>
-            </View>
-          ) : null}
-        </View>
+    <View style={styles.cardInner}>
+      {/* Left accent bar */}
+      <View style={[styles.accentBar, { backgroundColor: cfg.color }]} />
+
+      {/* Icon avatar */}
+      <View style={[styles.iconAvatar, { backgroundColor: cfg.bg }]}>
+        {cfg.icon}
       </View>
 
-      {(notification as { push_sent?: boolean }).push_sent && (
-        <View style={styles.pushStatus}>
-          <CheckCircle size={14} color={ios.success} />
-          <Text style={styles.pushStatusText}>נשלח בהצלחה</Text>
+      {/* Content */}
+      <View style={styles.cardContent}>
+        {/* Top row: title + time */}
+        <View style={styles.cardTopRow}>
+          <Text style={styles.cardTitle} numberOfLines={2}>
+            {notification.title}
+          </Text>
+          <View style={styles.cardMeta}>
+            {isUnread && <View style={[styles.unreadDot, { backgroundColor: cfg.color }]} />}
+            {timeAgo ? <Text style={styles.cardTime}>{timeAgo}</Text> : null}
+          </View>
         </View>
-      )}
-    </>
+
+        {/* Body text */}
+        {parsed.primary ? (
+          <Text style={styles.cardBody} numberOfLines={3}>
+            {parsed.primary}
+          </Text>
+        ) : null}
+
+        {/* Detail chips */}
+        {(parsed.name || parsed.datePretty || parsed.timePretty) ? (
+          <View style={styles.chipsRow}>
+            {parsed.name ? (
+              <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
+                <User size={11} color={cfg.color} />
+                <Text style={[styles.chipText, { color: cfg.color }]}>{parsed.name}</Text>
+              </View>
+            ) : null}
+            {parsed.datePretty ? (
+              <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
+                <Calendar size={11} color={cfg.color} />
+                <Text style={[styles.chipText, { color: cfg.color }]}>{parsed.datePretty}</Text>
+              </View>
+            ) : null}
+            {parsed.timePretty ? (
+              <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
+                <Clock size={11} color={cfg.color} />
+                <Text style={[styles.chipText, { color: cfg.color }]}>{parsed.timePretty}</Text>
+              </View>
+            ) : null}
+            {isAdminReminder(notification) ? (
+              <View style={[styles.chip, { backgroundColor: '#FFF3E0' }]}>
+                <Clock size={11} color="#FF9500" />
+                <Text style={[styles.chipText, { color: '#FF9500' }]}>תזכורת</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
+        {/* Push sent badge */}
+        {(notification as { push_sent?: boolean }).push_sent && (
+          <View style={styles.pushBadge}>
+            <CheckCircle size={12} color="#34C759" />
+            <Text style={styles.pushBadgeText}>נשלח בהצלחה</Text>
+          </View>
+        )}
+      </View>
+    </View>
   );
 
+  const cardStyle = [
+    styles.card,
+    isUnread && { backgroundColor: cfg.tint },
+  ];
+
   return (
-    <View style={styles.notificationRowWrap}>
+    <View style={styles.rowWrap}>
       {pressable ? (
-        <TouchableOpacity style={cardStyles} onPress={() => onPress(notification)} activeOpacity={0.7}>
+        <TouchableOpacity style={cardStyle} onPress={() => onPress(notification)} activeOpacity={0.75}>
           {cardBody}
         </TouchableOpacity>
       ) : (
-        <View style={cardStyles}>{cardBody}</View>
+        <View style={cardStyle}>{cardBody}</View>
       )}
     </View>
   );
 });
 
+/* ---------- Skeleton loader ---------- */
+const SkeletonCard = memo(function SkeletonCard() {
+  return (
+    <View style={[styles.card, styles.skeletonCard]}>
+      <View style={[styles.accentBar, { backgroundColor: '#E5E5EA' }]} />
+      <View style={[styles.iconAvatar, { backgroundColor: '#F2F2F7' }]} />
+      <View style={styles.cardContent}>
+        <View style={styles.skeletonLine} />
+        <View style={[styles.skeletonLine, { width: '60%', marginTop: 8 }]} />
+        <View style={[styles.skeletonLine, { width: '40%', marginTop: 6, height: 10 }]} />
+      </View>
+    </View>
+  );
+});
+
 export default function ClientNotificationsScreen() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const BOTTOM_SPACER = 124; // to keep last item above the tab bar
+  const BOTTOM_SPACER = 124;
   const bottomPadding = BOTTOM_SPACER + (insets?.bottom || 0);
   const router = useRouter();
   const { user } = useAuthStore();
@@ -199,68 +307,34 @@ export default function ClientNotificationsScreen() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeFilter, setActiveFilter] = useState<'all' | 'new' | 'cancel' | 'waitlist'>('all');
 
-  // Local iOS-like palette for this screen (Colors in project are currently monochrome)
-  const ios = {
-    background: '#F2F2F7',
-    card: '#FFFFFF',
-    border: '#E5E5EA',
-    primary: '#007AFF',
-    secondary: '#8E8E93',
-    success: '#34C759',
-    warning: '#FF9500',
-    error: '#FF3B30',
-  } as const;
-
-  // Allow both admin and client to access this shared screen
   useEffect(() => {
     if (!user) {
       router.replace('/login');
-      return;
     }
   }, [user, router]);
 
   const loadNotifications = useCallback(async (isRefresh = false) => {
     if (!user?.phone) {
-      if (isRefresh) {
-        setRefreshing(false);
-      } else {
-        setLoading(false);
-      }
+      isRefresh ? setRefreshing(false) : setLoading(false);
       return;
     }
-
-    if (isRefresh) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-
+    isRefresh ? setRefreshing(true) : setLoading(true);
     try {
       const [notificationsData, unreadCountData] = await Promise.all([
         notificationsApi.getUserNotifications(user.phone),
-        notificationsApi.getUnreadCount(user.phone)
+        notificationsApi.getUnreadCount(user.phone),
       ]);
-
       setNotifications(notificationsData);
       setUnreadCount(unreadCountData);
     } catch (error) {
       console.error('❌ Error loading notifications:', error);
-      // Silent fail UI-wise; could add a toast here if needed
     } finally {
-      if (isRefresh) {
-        setRefreshing(false);
-      } else {
-        setLoading(false);
-      }
+      isRefresh ? setRefreshing(false) : setLoading(false);
     }
   }, [user?.phone]);
 
-  // On screen focus: first mark all as read, then load fresh notifications
   const markAllAndLoad = useCallback(async () => {
-    if (!user?.phone) {
-      setLoading(false);
-      return;
-    }
+    if (!user?.phone) { setLoading(false); return; }
     setLoading(true);
     try {
       await notificationsApi.markAllAsReadForUser(user.phone);
@@ -277,17 +351,11 @@ export default function ClientNotificationsScreen() {
     }
   }, [user?.phone]);
 
-  useFocusEffect(
-    useCallback(() => {
-      markAllAndLoad();
-    }, [markAllAndLoad])
-  );
+  useFocusEffect(useCallback(() => { markAllAndLoad(); }, [markAllAndLoad]));
 
-  const onRefresh = useCallback(() => {
-    loadNotifications(true);
-  }, [loadNotifications]);
+  const onRefresh = useCallback(() => { loadNotifications(true); }, [loadNotifications]);
 
-  /** Matches in-app admin notification when a new client registers (see register.tsx + locales). */
+  /* ---- notification classifiers ---- */
   const isPendingClientApprovalNotification = (n: Notification): boolean => {
     const title = n.title || '';
     const titleLower = title.toLowerCase();
@@ -296,14 +364,10 @@ export default function ClientNotificationsScreen() {
     if (/לקוח חדש ממתין לאישור/.test(title)) return true;
     if (/new client awaiting approval/i.test(titleLower)) return true;
     if (
-      /נרשם\/ה וממתין\/ה לאישור|נרשם\/ה וממתין\/ה לאישורר|ממתין\/ה לאישורר?|ממתינ\/ה לאישורר?ך/i.test(
-        body
-      ) ||
+      /נרשם\/ה וממתין\/ה לאישור|ממתין\/ה לאישורר?|ממתינ\/ה לאישורר?ך/i.test(body) ||
       /ממתין לאישורך באפליקציה/i.test(body) ||
       /registered and is waiting|waiting for you to approve/i.test(bodyLower)
-    ) {
-      return true;
-    }
+    ) return true;
     return false;
   };
 
@@ -344,15 +408,22 @@ export default function ClientNotificationsScreen() {
     );
   };
 
-  const isSwapNotification = (n: Notification): boolean => {
-    const blob = `${n.title || ''} ${n.content || ''}`.toLowerCase();
-    return /appointment swapped|swapped to|החלפ/.test(blob);
-  };
+  const isSwapNotification = (n: Notification): boolean =>
+    /appointment swapped|swapped to|החלפ/.test(`${n.title || ''} ${n.content || ''}`.toLowerCase());
 
   const isAdminReminder = (n: Notification): boolean => {
     if (!n) return false;
     if (n.type === 'admin_reminder') return true;
     return n.type === 'system' && typeof n.content === 'string' && /\bReminder:\b/i.test(n.content);
+  };
+
+  const getNotifKind = (n: Notification): NotifKind => {
+    if (isCancellationNotification(n)) return 'cancel';
+    if (isNewAppointmentNotification(n)) return 'new';
+    if (isWaitlistNotification(n)) return 'waitlist';
+    if (isAdminReminder(n) || n.type === 'client_reminder' || n.type === 'appointment_reminder' || n.type === 'admin_reminder') return 'reminder';
+    if (n.type === 'system') return 'system';
+    return 'default';
   };
 
   const resolveNotificationRoute = (n: Notification): string | null => {
@@ -365,422 +436,358 @@ export default function ClientNotificationsScreen() {
         const qs: string[] = [];
         if (focusDate) qs.push(`focusDate=${encodeURIComponent(focusDate)}`);
         if (n.appointment_id) qs.push(`focusAppointmentId=${encodeURIComponent(n.appointment_id)}`);
-        if (qs.length > 0) return `/(tabs)/appointments?${qs.join('&')}`;
-        return '/(tabs)/appointments';
+        return qs.length > 0 ? `/(tabs)/appointments?${qs.join('&')}` : '/(tabs)/appointments';
       }
-      if (
-        isAdminReminder(n) ||
-        n.type === 'admin_reminder' ||
-        /תזכורת לתור קרוב/i.test(n.title || '')
-      ) {
-        return '/(tabs)/appointments';
-      }
+      if (isAdminReminder(n) || n.type === 'admin_reminder' || /תזכורת לתור קרוב/i.test(n.title || '')) return '/(tabs)/appointments';
       if (isSwapNotification(n)) return '/(tabs)/appointments';
       return '/(tabs)/';
     }
     if (isWaitlistNotification(n)) return '/(client-tabs)/book-appointment';
     if (isSwapNotification(n)) return '/(client-tabs)/appointments';
-    if (
-      n.type === 'client_reminder' ||
-      n.type === 'appointment_reminder' ||
-      isNewAppointmentNotification(n)
-    ) {
+    if (n.type === 'client_reminder' || n.type === 'appointment_reminder' || isNewAppointmentNotification(n))
       return '/(client-tabs)/appointments';
-    }
     return '/(client-tabs)/';
   };
 
   const handleNotificationPress = async (notification: Notification) => {
     if (isCancellationNotification(notification)) return;
-
     if (!notification.is_read) {
       try {
         await notificationsApi.markAsRead(notification.id);
         setNotifications(prev =>
-          prev.map(n =>
-            n.id === notification.id
-              ? { ...n, is_read: true, read_at: new Date().toISOString() }
-              : n
-          )
+          prev.map(n => n.id === notification.id ? { ...n, is_read: true, read_at: new Date().toISOString() } : n)
         );
         setUnreadCount(prev => Math.max(0, prev - 1));
       } catch (error) {
         console.error('Error marking notification as read:', error);
       }
     }
-
     const route = resolveNotificationRoute(notification);
-    if (route) {
-      router.push(route as any);
-    }
-  };
-
-  const getNotificationIcon = (type: Notification['type']) => {
-    switch (type) {
-      case 'appointment_reminder':
-      case 'client_reminder':
-      case 'admin_reminder':
-        return <Clock size={20} color={Colors.primary} />;
-      case 'promotion':
-        return <AlertCircle size={20} color={Colors.warning} />;
-      case 'system':
-        return <AlertCircle size={20} color={Colors.error} />;
-      default:
-        return <Bell size={20} color={Colors.primary} />;
-    }
-  };
-
-  const getNotificationTypeText = (type: Notification['type']) => {
-    switch (type) {
-      case 'appointment_reminder':
-        return 'Appointment Reminder';
-      case 'client_reminder':
-        return t('notifications.type.clientReminder', 'Upcoming appointment');
-      case 'admin_reminder':
-        return t('notifications.type.adminReminder', 'Upcoming appointment (staff)');
-      case 'promotion':
-        return 'Promotion';
-      case 'system':
-        return 'System Alert';
-      default:
-        return 'General Message';
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
-
-    if (diffInHours < 1) {
-      return 'Now';
-    } else if (diffInHours < 24) {
-      return `${Math.floor(diffInHours)} hours ago`;
-    } else if (diffInHours < 48) {
-      return 'Yesterday';
-    } else {
-      return date.toLocaleDateString('en-US', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric'
-      });
-    }
-  };
-
-  const getTitleStatusIcon = (title: string) => {
-    const t = (title || '').toLowerCase();
-    if (/cancel/.test(t)) return <XCircle size={18} color="#FF3B30" />;
-    if (/confirmed|approved|new/.test(t)) return <CheckCircle size={18} color="#34C759" />;
-    return null;
+    if (route) router.push(route as any);
   };
 
   const filteredNotifications = notifications.filter((n) => {
     switch (activeFilter) {
-      case 'new':
-        return isNewAppointmentNotification(n);
-      case 'cancel':
-        return isCancellationNotification(n);
-      case 'waitlist':
-        return isWaitlistNotification(n);
-      case 'all':
-      default:
-        return true;
+      case 'new': return isNewAppointmentNotification(n);
+      case 'cancel': return isCancellationNotification(n);
+      case 'waitlist': return isWaitlistNotification(n);
+      default: return true;
     }
   });
 
-  if (loading) {
-    return (
-      <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: ios.background }}>
-        <StatusBar barStyle="dark-content" backgroundColor={ios.background} />
-        <View style={styles.container}>
-          <View style={styles.contentWrapper}>
-            <View style={styles.loadingContainer}>
-              <Text style={styles.loadingText}>{t('notifications.loading', 'Loading notifications...')}</Text>
-            </View>
-          </View>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const FILTERS = [
+    { key: 'all' as const, label: t('notifications.filter.all', 'הכל') },
+    { key: 'new' as const, label: t('notifications.filter.new', 'תורים חדשים') },
+    { key: 'cancel' as const, label: t('notifications.filter.cancel', 'ביטולים') },
+    { key: 'waitlist' as const, label: t('notifications.filter.waitlist', 'המתנה') },
+  ];
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: ios.background }}>
-      <StatusBar barStyle="dark-content" backgroundColor={ios.background} />
-      <View style={styles.container}>
-        <View style={styles.contentWrapper}>
-        {/* Filters */}
-        {isAdmin && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.filterScroll}
-            contentContainerStyle={styles.filterBar}
-          >
-            {([
-              { key: 'all', label: t('notifications.filter.all', 'All') },
-              { key: 'new', label: t('notifications.filter.new', 'New Appointments') },
-              { key: 'cancel', label: t('notifications.filter.cancel', 'Cancellations') },
-              { key: 'waitlist', label: t('notifications.filter.waitlist', 'Waitlist') },
-            ] as const).map(({ key, label }) => {
-              const isActive = activeFilter === key;
-              return (
-                <TouchableOpacity
-                  key={key}
-                  onPress={() => setActiveFilter(key)}
-                  style={[
-                    styles.filterChip,
-                    isActive && { backgroundColor: colors.primary, borderColor: colors.primary },
-                  ]}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[
-                    styles.filterChipText,
-                    isActive && { color: '#FFFFFF' },
-                  ]}>
-                    {label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        )}
+    <SafeAreaView edges={['top']} style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F8F8FC" />
 
-          <FlatList
-            data={filteredNotifications}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <NotificationListRow
-                notification={item}
-                pressable={!isCancellationNotification(item)}
-                onPress={handleNotificationPress}
-                isAdminReminder={isAdminReminder}
-                getTitleStatusIcon={getTitleStatusIcon}
-                ios={ios}
-              />
-            )}
-            contentContainerStyle={[
-              styles.scrollContent,
-              styles.notificationsListContent,
-              { paddingBottom: bottomPadding, flexGrow: 1 },
-            ]}
-            style={styles.scrollView}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-            showsVerticalScrollIndicator={false}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Bell size={64} color={ios.secondary} />
-                <Text style={styles.emptyTitle}>{t('notifications.empty', 'No notifications')}</Text>
-                <Text style={styles.emptySubtitle}>
-                  {t('notifications.emptySubtitle', 'When you have a new notification, it will appear here')}
-                </Text>
-              </View>
-            }
-          />
+      {/* ── Screen Header ── */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.headerTitle}>{t('notifications.title', 'התראות')}</Text>
+          {unreadCount > 0 && (
+            <View style={styles.headerBadge}>
+              <Text style={styles.headerBadgeText}>{unreadCount}</Text>
+            </View>
+          )}
         </View>
+        <Bell size={22} color="#8E8E93" />
       </View>
+
+      {/* ── Admin Filters ── */}
+      {isAdmin && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterScroll}
+          contentContainerStyle={styles.filterBar}
+        >
+          {FILTERS.map(({ key, label }) => {
+            const isActive = activeFilter === key;
+            return (
+              <TouchableOpacity
+                key={key}
+                onPress={() => setActiveFilter(key)}
+                style={[styles.filterChip, isActive && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.filterChipText, isActive && { color: '#FFFFFF' }]}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
+
+      {/* ── List ── */}
+      {loading ? (
+        <View style={styles.listPad}>
+          {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
+        </View>
+      ) : (
+        <FlatList
+          data={filteredNotifications}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <NotificationListRow
+              notification={item}
+              kind={getNotifKind(item)}
+              pressable={!isCancellationNotification(item)}
+              onPress={handleNotificationPress}
+              isAdminReminder={isAdminReminder}
+            />
+          )}
+          contentContainerStyle={[
+            styles.listPad,
+            { paddingBottom: bottomPadding, flexGrow: 1 },
+          ]}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIconWrap}>
+                <Bell size={36} color="#C7C7CC" />
+              </View>
+              <Text style={styles.emptyTitle}>{t('notifications.empty', 'אין התראות')}</Text>
+              <Text style={styles.emptySubtitle}>
+                {t('notifications.emptySubtitle', 'כשתגיע התראה חדשה, היא תופיע כאן')}
+              </Text>
+            </View>
+          }
+        />
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#F8F8FC',
   },
-  loadingContainer: {
-    flex: 1,
+
+  /* ─── Header ─── */
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    letterSpacing: -0.5,
+  },
+  headerBadge: {
+    backgroundColor: '#FF3B30',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  headerBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+
+  /* ─── Filters ─── */
+  filterScroll: {
+    maxHeight: 48,
+    marginBottom: 4,
+  },
+  filterBar: {
+    paddingHorizontal: 16,
+    gap: 8,
     alignItems: 'center',
   },
-  loadingText: {
-    fontSize: 16,
-    color: '#8E8E93',
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E5E5EA',
   },
-  contentWrapper: {
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#3C3C43',
+  },
+
+  /* ─── List padding ─── */
+  listPad: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+
+  /* ─── Card ─── */
+  rowWrap: {
+    marginBottom: 10,
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  cardInner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 14,
+    gap: 12,
+  },
+  accentBar: {
+    width: 3.5,
+    borderRadius: 2,
+    alignSelf: 'stretch',
+    minHeight: 40,
+  },
+  iconAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  cardContent: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 4,
+  },
+  cardTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    lineHeight: 20,
+  },
+  cardMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flexShrink: 0,
+    paddingTop: 2,
+  },
+  unreadDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  cardTime: {
+    fontSize: 11,
+    color: '#AEAEB2',
+    fontWeight: '500',
+  },
+  cardBody: {
+    fontSize: 14,
+    color: '#48484A',
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+
+  /* ─── Chips ─── */
+  chipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 2,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  chipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  /* ─── Push badge ─── */
+  pushBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 8,
     paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E5E5EA',
   },
-  scrollView: {
-    flex: 1,
+  pushBadgeText: {
+    fontSize: 12,
+    color: '#34C759',
+    fontWeight: '600',
   },
-  scrollContent: {
-    paddingBottom: 24,
+
+  /* ─── Skeleton ─── */
+  skeletonCard: {
+    shadowOpacity: 0,
+    elevation: 0,
   },
+  skeletonLine: {
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#EBEBEB',
+    width: '80%',
+  },
+
+  /* ─── Empty state ─── */
   emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
-    paddingTop: 100,
+    justifyContent: 'center',
+    paddingHorizontal: 48,
+    paddingTop: 80,
+  },
+  emptyIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    backgroundColor: '#F2F2F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
   },
   emptyTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#1C1C1E',
-    marginTop: 16,
     marginBottom: 8,
     textAlign: 'center',
   },
   emptySubtitle: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#8E8E93',
     textAlign: 'center',
-    lineHeight: 24,
-  },
-  notificationsListContent: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-  },
-  notificationRowWrap: {
-    marginBottom: 12,
-  },
-  notificationCardNoMargin: {
-    marginBottom: 0,
-  },
-  notificationCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  unreadCard: {
-    borderColor: '#007AFF',
-    backgroundColor: '#FFFFFF',
-  },
-  notificationHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  notificationIconWrapper: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F2F2F7',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 12,
-  },
-  notificationInfo: {
-    flex: 1,
-  },
-  notificationType: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#8E8E93',
-    marginBottom: 2,
-    textAlign: 'left',
-  },
-  notificationTime: {
-    fontSize: 12,
-    color: '#8E8E93',
-    textAlign: 'left',
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#007AFF',
-  },
-  notificationTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1C1C1E',
-    marginBottom: 8,
-    textAlign: 'left',
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  titleWithIcon: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  notificationContent: {
-    fontSize: 15,
-    color: '#1C1C1E',
     lineHeight: 22,
-    textAlign: 'left',
   },
-  detailsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginTop: 8,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F2F2F7',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  detailIcon: {
-    width: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 6,
-  },
-  detailText: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  pushStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E5EA',
-  },
-  pushStatusText: {
-    fontSize: 12,
-    color: '#34C759',
-    marginLeft: 4,
-    textAlign: 'left',
-  },
-  filterScroll: {
-    maxHeight: 52,
-  },
-  filterBar: {
-    paddingHorizontal: 12,
-    paddingBottom: 8,
-    gap: 8,
-  },
-  filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: '#F2F2F7',
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-    marginTop: 4,
-  },
-  filterChipActive: {
-    // Kept for fallback; dynamic color applied inline using useColors()
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  filterChipText: {
-    fontSize: 14,
-    color: '#1C1C1E',
-    fontWeight: '600',
-  },
-  filterChipTextActive: {
-    color: '#FFFFFF',
-  },
-}); 
+});

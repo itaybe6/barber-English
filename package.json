@@ -4,6 +4,7 @@
   "main": "index.js",
   "private": true,
   "scripts": {
+    "postinstall": "patch-package && node scripts/patch-expo-hmr-client-url.cjs",
     "preinstall": "npx npm-force-resolutions",
     "start": "expo start --tunnel",
     "start:lan": "expo start --lan",

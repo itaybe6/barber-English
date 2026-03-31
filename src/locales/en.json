@@ -228,6 +228,8 @@
     "noVisit": "No visit yet",
     "lastVisit": "Last visit",
     "listTitle": "Clients List",
+    "listEmpty": "No clients match your search or filter.",
+    "statusBlocked": "Blocked",
     "loading": "Loading clients...",
     "filter": { "all": "All", "blocked": "Blocked", "unblocked": "Unblocked" },
     "thisClient": "this client",
@@ -647,7 +649,8 @@
       "saveFailed": "Failed to save service",
       "saveSuccess": "Service saved successfully",
       "orderSaveFailed": "Could not save service order. Try again.",
-      "reorderHint": "Drag ≡ to reorder services"
+      "reorderHint": "Drag ≡ to reorder services",
+      "fabAddHint": "Long-press a row to reorder · + below to add"
     },
     "broadcastTemplates": {
       "promotion": { "title": "New Promotion! 🎉", "description": "Message about promotion or discount" },
@@ -816,7 +819,7 @@
     },
     "support": {
       "title": "Support and help",
-      "header": "Need help? Contact Slotlys support team",
+      "header": "Need help? Contact Tori's support team",
       "description": "Our dedicated support team is here to assist you with any questions or issues you may have. Whether you need help with appointments, account settings, or technical support, we're ready to help. Please use the contact button below to reach out to us directly.",
       "contactNow": "Contact us now",
       "common": "Common questions and contact"
@@ -1049,10 +1052,12 @@
       "phoneCardLabel": "Phone",
       "callClient": "Call client",
       "cancelMessage": "This will free the time, mark as cancelled, and make the slot available for rebooking.",
+      "cancelFailed": "Could not release this slot. Please try again.",
       "cancelAndFree": "Cancel and free slot",
       "deleteAppointment": "Delete appointment",
       "deleteTitle": "Delete appointment",
       "deleteMessage": "This will permanently remove the appointment. This action cannot be undone.",
+      "deleteFailed": "Could not delete this appointment. Please try again.",
       "openActions": "Open appointment actions",
       "loadClientsFailed": "Error loading client list",
       "loadServicesFailed": "Error loading services list",
@@ -1130,10 +1135,12 @@
       "phoneCardLabel": "Phone",
       "callClient": "Call client",
       "cancelMessage": "This will free the time and remove the client details for the selected appointment.",
+      "cancelFailed": "Could not release this slot. Please try again.",
       "cancelAndFree": "Cancel and free slot",
       "deleteAppointment": "Delete appointment",
       "deleteTitle": "Delete appointment",
       "deleteMessage": "This will permanently remove the appointment. This action cannot be undone.",
+      "deleteFailed": "Could not delete this appointment. Please try again.",
       "openActions": "Open appointment actions",
       "addAppointment": "Add appointment",
       "summary": "Appointment Summary",

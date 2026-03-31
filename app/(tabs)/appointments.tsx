@@ -61,7 +61,7 @@ import ConstraintEditModal from '@/components/ConstraintEditModal';
 import CalendarReminderEditorModal from '@/components/CalendarReminderEditorModal';
 import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from 'react-i18next';
-import dayjs from 'dayjs';
+import dayjs, { type Dayjs } from 'dayjs';
 import { FlashList, FlashListProps } from '@shopify/flash-list';
 import Animated, {
   setNativeProps,
@@ -184,8 +184,9 @@ const _baseDaySize = _screenWidth / (_daysInWeekToDisplay + 1);
 const _daySize = Math.max(_baseDaySize, 64);
 const _hourSize = Math.max(_daySize * 1.35, 78);
 const _extraPaddingBottom = _hourSize;
-const _startOfDay = dayjs().startOf('day').set('hour', 0).set('minute', 0);
-const _hourBlocks = [...Array(25).keys()].map((hour) => _startOfDay.add(hour, 'hour'));
+/** תצוגת יומן שבועית (אדמין): חלון שעות קבוע, בנפרד משעות העסק של התצוגה היומית */
+const WEEK_GRID_VIEW_START = '07:00';
+const WEEK_GRID_VIEW_END = '22:00';
 
 Animated.addWhitelistedNativeProps?.({
   contentOffset: true,
@@ -245,20 +246,29 @@ function _isFullDayConstraint(c: BusinessConstraint, mf: (t?: string | null) => 
 function layoutConstraintOnWeekColumn(
   c: BusinessConstraint,
   hourRowHeight: number,
-  mf: (t?: string | null) => number
+  mf: (t?: string | null) => number,
+  gridStartMin: number,
+  gridHourCount: number
 ): { top: number; height: number } {
+  const gridHeightPx = gridHourCount * hourRowHeight;
   if (_isFullDayConstraint(c, mf)) {
-    return { top: 2, height: 24 * hourRowHeight - 4 };
+    return { top: 2, height: gridHeightPx - 4 };
   }
   const startM = mf(c.start_time);
   let endM = mf(c.end_time);
   if (endM <= startM) endM = startM + 30;
-  const top = (startM / 60) * hourRowHeight + 2;
-  const rawH = ((endM - startM) / 60) * hourRowHeight;
+  const gridEndMin = gridStartMin + gridHourCount * 60;
+  const visStart = Math.max(startM, gridStartMin);
+  const visEnd = Math.min(endM, gridEndMin);
+  if (visEnd <= gridStartMin || visStart >= gridEndMin) {
+    return { top: 0, height: 0 };
+  }
+  const top = ((visStart - gridStartMin) / 60) * hourRowHeight + 2;
+  const rawH = ((visEnd - visStart) / 60) * hourRowHeight;
   const height = Math.max(34, rawH - 4);
-  const maxTop = 24 * hourRowHeight - 6;
+  const maxTop = gridHeightPx - 6;
   const clampedTop = Math.min(Math.max(0, top), maxTop);
-  const clampedH = Math.min(height, 24 * hourRowHeight - clampedTop - 2);
+  const clampedH = Math.min(height, gridHeightPx - clampedTop - 2);
   return { top: clampedTop, height: Math.max(32, clampedH) };
 }
 
@@ -652,6 +662,9 @@ const WeekDayColumn = memo(
     reminders,
     columnWidth,
     hourRowHeight,
+    weekHourBlocks,
+    weekGridStartMin,
+    weekGridHourCount,
     primaryColor,
     onOpenAppointment,
     onPressReminder,
@@ -665,6 +678,9 @@ const WeekDayColumn = memo(
     reminders: CalendarReminder[];
     columnWidth: number;
     hourRowHeight: number;
+    weekHourBlocks: Dayjs[];
+    weekGridStartMin: number;
+    weekGridHourCount: number;
     primaryColor: string;
     onOpenAppointment: (apt: AvailableTimeSlot, anchor?: AnchorRect) => void;
     onPressReminder: (r: CalendarReminder) => void;
@@ -722,8 +738,14 @@ const WeekDayColumn = memo(
           weekStyles.borderRight,
         ]}
       >
-        <View style={{ height: hourRowHeight * 24, position: 'relative' }}>
-          {_hourBlocks.map((hourBlock, i) => {
+        <View
+          style={{
+            height: hourRowHeight * weekGridHourCount,
+            position: 'relative',
+            overflow: 'hidden',
+          }}
+        >
+          {weekHourBlocks.map((hourBlock, i) => {
             const hourDate = hourBlock.toDate();
             return (
               <View
@@ -746,7 +768,14 @@ const WeekDayColumn = memo(
           })}
 
           {constraints.map((c) => {
-            const { top, height } = layoutConstraintOnWeekColumn(c, hourRowHeight, minutesFromMidnight);
+            const { top, height } = layoutConstraintOnWeekColumn(
+              c,
+              hourRowHeight,
+              minutesFromMidnight,
+              weekGridStartMin,
+              weekGridHourCount
+            );
+            if (height < 1) return null;
             const startLbl = formatTime12Hour(String(c.start_time || '').slice(0, 5));
             const endLbl = formatTime12Hour(String(c.end_time || '').slice(0, 5));
             return (
@@ -784,8 +813,13 @@ const WeekDayColumn = memo(
           {reminders.map((r) => {
             const startM = minutesFromMidnight(r.start_time);
             const durationMinutes = r.duration_minutes || 30;
-            const top = (startM / 60) * hourRowHeight;
-            const height = (durationMinutes / 60) * hourRowHeight;
+            const endM = startM + durationMinutes;
+            const gridEndMin = weekGridStartMin + weekGridHourCount * 60;
+            if (endM <= weekGridStartMin || startM >= gridEndMin) return null;
+            const visStart = Math.max(startM, weekGridStartMin);
+            const visEnd = Math.min(endM, gridEndMin);
+            const top = ((visStart - weekGridStartMin) / 60) * hourRowHeight;
+            const height = ((visEnd - visStart) / 60) * hourRowHeight;
             const pal = reminderPalette(r.color_key);
             const splitWithAppt = reminderIdsOverlappingAppt.has(r.id);
             return (
@@ -820,8 +854,13 @@ const WeekDayColumn = memo(
           {appts.map((apt) => {
             const aptMinutes = minutesFromMidnight(apt.slot_time);
             const durationMinutes = apt.duration_minutes || 30;
-            const top = Math.max(0, (aptMinutes / 60) * hourRowHeight + 2);
-            const height = (durationMinutes / 60) * hourRowHeight;
+            const aptEnd = aptMinutes + durationMinutes;
+            const gridEndMin = weekGridStartMin + weekGridHourCount * 60;
+            if (aptEnd <= weekGridStartMin || aptMinutes >= gridEndMin) return null;
+            const visStart = Math.max(aptMinutes, weekGridStartMin);
+            const visEnd = Math.min(aptEnd, gridEndMin);
+            const top = ((visStart - weekGridStartMin) / 60) * hourRowHeight + 2;
+            const height = ((visEnd - visStart) / 60) * hourRowHeight;
             const clientName = apt.client_name || 'לקוח';
             const serviceName = apt.service_name || 'שירות';
             const hasPhone = !!apt.client_phone;
@@ -979,6 +1018,10 @@ export default function AdminAppointmentsScreen() {
     appointment: AvailableTimeSlot | null;
     anchor: AnchorRect | null;
   }>({ open: false, appointment: null, anchor: null });
+
+  /** Open confirm dialog only after anchor sheet Modal unmounts — avoids invisible layer / wrong z-order (esp. Android). */
+  const pendingCancelAppointmentRef = useRef<AvailableTimeSlot | null>(null);
+  const pendingDeleteAppointmentRef = useRef<AvailableTimeSlot | null>(null);
 
   const dayAptRefMap = useRef<Map<string, View>>(new Map());
 
@@ -1480,6 +1523,23 @@ export default function AdminAppointmentsScreen() {
     return labels;
   }, [dayStart, dayEnd]);
 
+  /** Week grid: 07:00–22:00, one row per hour (not tied to business-hours day strip). */
+  const weekTimeline = useMemo(() => {
+    const [sh, smin] = WEEK_GRID_VIEW_START.split(':').map((x) => parseInt(x, 10));
+    const [eh, emin] = WEEK_GRID_VIEW_END.split(':').map((x) => parseInt(x, 10));
+    const startMin = (sh || 0) * 60 + (smin || 0);
+    const endMin = (eh || 0) * 60 + (emin || 0);
+    const spanMin = Math.max(60, endMin - startMin);
+    const hourCount = spanMin / 60;
+    const labelBlocks = Array.from({ length: hourCount }, (_, i) => {
+      const m = startMin + i * 60;
+      const hh = Math.floor(m / 60);
+      const mm = m % 60;
+      return dayjs().startOf('day').hour(hh).minute(mm).second(0).millisecond(0);
+    });
+    return { startMin, endMin, hourCount, labelBlocks };
+  }, []);
+
   const displayDayConstraints = useMemo(
     () => mergeConstraintsForDisplay(dayConstraints),
     [dayConstraints]
@@ -1671,13 +1731,9 @@ export default function AdminAppointmentsScreen() {
     }
   }, []);
 
-  const askCancelAppointment = useCallback((apt: AvailableTimeSlot) => {
-    // Ensure immediate responsiveness between consecutive presses
-    setSelectedAppointment(apt);
-    setShowCancelModal(true);
-  }, []);
-
   const openActionsMenu = useCallback((apt: AvailableTimeSlot, anchor?: AnchorRect) => {
+    pendingCancelAppointmentRef.current = null;
+    pendingDeleteAppointmentRef.current = null;
     setActionsModal({
       open: true,
       appointment: apt,
@@ -1724,9 +1780,34 @@ export default function AdminAppointmentsScreen() {
     setActionsModal((prev) => (prev.appointment && prev.open ? { ...prev, open: false } : prev));
   }, []);
 
-  const onActionsModalDismissed = useCallback(() => {
+  const resetActionsModal = useCallback(() => {
     setActionsModal({ open: false, appointment: null, anchor: null });
   }, []);
+
+  const beginCancelAppointmentFromSheet = useCallback(
+    (apt: AvailableTimeSlot) => {
+      pendingDeleteAppointmentRef.current = null;
+      pendingCancelAppointmentRef.current = apt;
+      requestCloseActionsModal();
+    },
+    [requestCloseActionsModal]
+  );
+
+  const beginDeleteAppointmentFromSheet = useCallback(
+    (apt: AvailableTimeSlot) => {
+      pendingCancelAppointmentRef.current = null;
+      pendingDeleteAppointmentRef.current = apt;
+      requestCloseActionsModal();
+    },
+    [requestCloseActionsModal]
+  );
+
+  /** Fully tear down anchor sheet + cancel confirm — avoids a stuck full-screen Modal if close animation never completes. */
+  const closeCancelAppointmentModal = useCallback(() => {
+    setShowCancelModal(false);
+    setSelectedAppointment(null);
+    resetActionsModal();
+  }, [resetActionsModal]);
 
   /** Week view reads from rangeAppointments — keep it in sync after cancel/delete */
   const removeBookedFromRangeMap = useCallback((id: string, slotDate: string) => {
@@ -1744,6 +1825,8 @@ export default function AdminAppointmentsScreen() {
   const confirmCancelAppointment = useCallback(async () => {
     if (!selectedAppointment) return;
     setIsCancelling(true);
+    const apt = selectedAppointment;
+    const businessId = getBusinessId();
     try {
       const { error } = await supabase
         .from('appointments')
@@ -1754,40 +1837,75 @@ export default function AdminAppointmentsScreen() {
           client_phone: null,
           service_name: 'Available Slot', // Set to default value instead of null
         })
-        .eq('id', selectedAppointment.id)
+        .eq('id', apt.id)
+        .eq('business_id', businessId)
         .eq('is_available', false);
 
       if (error) {
         console.error('Error canceling appointment:', error);
+        resetActionsModal();
+        Alert.alert(
+          t('error.generic', 'Error'),
+          t('admin.appointments.cancelFailed', 'Could not release this slot. Please try again.')
+        );
       } else {
         try {
-          await checkWaitlistAndNotify(selectedAppointment);
+          await checkWaitlistAndNotify(apt);
         } catch (e) {}
-        const dateKey = String((selectedAppointment as any).slot_date ?? '');
-        setAppointments((prev) => prev.filter((a) => a.id !== selectedAppointment.id));
-        if (dateKey) removeBookedFromRangeMap(selectedAppointment.id, dateKey);
-        setShowCancelModal(false);
-        setSelectedAppointment(null);
+        const dateKey = String((apt as any).slot_date ?? '');
+        setAppointments((prev) => prev.filter((a) => a.id !== apt.id));
+        if (dateKey) removeBookedFromRangeMap(apt.id, dateKey);
+        closeCancelAppointmentModal();
         void reloadMonthMarks();
         if (monthDayModalDate && dateKey === monthDayModalDate) {
-          setModalDayAppointments((prev) => prev.filter((a) => a.id !== selectedAppointment.id));
+          setModalDayAppointments((prev) => prev.filter((a) => a.id !== apt.id));
         }
       }
     } catch (e) {
       console.error('Error in confirmCancelAppointment:', e);
+      resetActionsModal();
+      Alert.alert(
+        t('error.generic', 'Error'),
+        t('admin.appointments.cancelFailed', 'Could not release this slot. Please try again.')
+      );
     } finally {
       setIsCancelling(false);
     }
-  }, [selectedAppointment, removeBookedFromRangeMap, reloadMonthMarks, monthDayModalDate]);
+  }, [
+    selectedAppointment,
+    removeBookedFromRangeMap,
+    reloadMonthMarks,
+    monthDayModalDate,
+    resetActionsModal,
+    closeCancelAppointmentModal,
+    t,
+  ]);
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [appointmentToDelete, setAppointmentToDelete] = useState<AvailableTimeSlot | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const askDeleteAppointment = useCallback((apt: AvailableTimeSlot) => {
-    setAppointmentToDelete(apt);
-    setShowDeleteModal(true);
-  }, []);
+  /** After anchor sheet finishes its close animation — show confirm (must run after delete modal state hooks exist). */
+  const onAnchorSheetFullyDismissed = useCallback(() => {
+    const pendingCancel = pendingCancelAppointmentRef.current;
+    const pendingDelete = pendingDeleteAppointmentRef.current;
+    pendingCancelAppointmentRef.current = null;
+    pendingDeleteAppointmentRef.current = null;
+    resetActionsModal();
+    if (pendingCancel) {
+      setSelectedAppointment(pendingCancel);
+      setShowCancelModal(true);
+    } else if (pendingDelete) {
+      setAppointmentToDelete(pendingDelete);
+      setShowDeleteModal(true);
+    }
+  }, [resetActionsModal]);
+
+  const closeDeleteAppointmentModal = useCallback(() => {
+    setShowDeleteModal(false);
+    setAppointmentToDelete(null);
+    resetActionsModal();
+  }, [resetActionsModal]);
 
   const confirmDeleteAppointment = useCallback(async () => {
     if (!appointmentToDelete) return;
@@ -1801,13 +1919,16 @@ export default function AdminAppointmentsScreen() {
 
       if (error) {
         console.error('Error deleting appointment:', error);
+        resetActionsModal();
+        Alert.alert(
+          t('error.generic', 'Error'),
+          t('admin.appointments.deleteFailed', 'Could not delete this appointment. Please try again.')
+        );
       } else {
         const dateKey = String((appointmentToDelete as any).slot_date ?? '');
         setAppointments((prev) => prev.filter((a) => a.id !== appointmentToDelete.id));
         if (dateKey) removeBookedFromRangeMap(appointmentToDelete.id, dateKey);
-        setShowDeleteModal(false);
-        setAppointmentToDelete(null);
-        requestCloseActionsModal();
+        closeDeleteAppointmentModal();
         void reloadMonthMarks();
         if (monthDayModalDate && dateKey === monthDayModalDate) {
           setModalDayAppointments((prev) => prev.filter((a) => a.id !== appointmentToDelete.id));
@@ -1815,10 +1936,23 @@ export default function AdminAppointmentsScreen() {
       }
     } catch (e) {
       console.error('Error in confirmDeleteAppointment:', e);
+      resetActionsModal();
+      Alert.alert(
+        t('error.generic', 'Error'),
+        t('admin.appointments.deleteFailed', 'Could not delete this appointment. Please try again.')
+      );
     } finally {
       setIsDeleting(false);
     }
-  }, [appointmentToDelete, removeBookedFromRangeMap, requestCloseActionsModal, reloadMonthMarks, monthDayModalDate]);
+  }, [
+    appointmentToDelete,
+    removeBookedFromRangeMap,
+    reloadMonthMarks,
+    monthDayModalDate,
+    resetActionsModal,
+    closeDeleteAppointmentModal,
+    t,
+  ]);
 
   const closeReminderModal = useCallback(() => {
     setShowCalendarFabSheet(false);
@@ -2131,14 +2265,11 @@ export default function AdminAppointmentsScreen() {
                   scrollEnabled={false}
                   showsVerticalScrollIndicator={false}
                 >
-                  {_hourBlocks.map((hourBlock, idx) => {
+                  {weekTimeline.labelBlocks.map((hourBlock, idx) => {
                     const hourDate = hourBlock.toDate();
-                    const h = hourDate.getHours();
                     return (
                       <View key={`wk-hour-${idx}`} style={[weekStyles.hourRow, { height: gridDims.hourSize }]}>
-                        <Text style={[weekStyles.hourText, h === 0 && { opacity: 0 }]}>
-                          {_formatHebrewTimeLabel(hourDate)}
-                        </Text>
+                        <Text style={weekStyles.hourText}>{_formatHebrewTimeLabel(hourDate)}</Text>
                       </View>
                     );
                   })}
@@ -2188,6 +2319,9 @@ export default function AdminAppointmentsScreen() {
                           index={index}
                           columnWidth={gridDims.daySize}
                           hourRowHeight={gridDims.hourSize}
+                          weekHourBlocks={weekTimeline.labelBlocks}
+                          weekGridStartMin={weekTimeline.startMin}
+                          weekGridHourCount={weekTimeline.hourCount}
                           primaryColor={calendarPrimary}
                           appts={rangeAppointments.get(item.formatted) ?? []}
                           constraints={mergeConstraintsForDisplay(rangeConstraints.get(item.formatted) ?? [])}
@@ -2591,7 +2725,7 @@ export default function AdminAppointmentsScreen() {
           open={actionsModal.open}
           anchor={actionsModal.anchor}
           onRequestClose={requestCloseActionsModal}
-          onDismissed={onActionsModalDismissed}
+          onDismissed={onAnchorSheetFullyDismissed}
         >
           <ScrollView
             style={styles.actionsSheetScroll}
@@ -2752,8 +2886,7 @@ export default function AdminAppointmentsScreen() {
                       accessibilityLabel={tHe('admin.appointments.cancelAndFree', 'ביטול ושחרור משבצת')}
                       onPress={() => {
                         const a = actionsModal.appointment;
-                        if (a) askCancelAppointment(a);
-                        requestCloseActionsModal();
+                        if (a) beginCancelAppointmentFromSheet(a);
                       }}
                     >
                       <View style={styles.actionsSecondaryIconWarn}>
@@ -2767,8 +2900,7 @@ export default function AdminAppointmentsScreen() {
                       accessibilityLabel={tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
                       onPress={() => {
                         const a = actionsModal.appointment;
-                        if (a) askDeleteAppointment(a);
-                        requestCloseActionsModal();
+                        if (a) beginDeleteAppointmentFromSheet(a);
                       }}
                     >
                       <View style={styles.actionsSecondaryIconDanger}>
@@ -2797,10 +2929,7 @@ export default function AdminAppointmentsScreen() {
         visible={showCancelModal}
         transparent
         animationType="fade"
-        onRequestClose={() => {
-          setShowCancelModal(false);
-          setSelectedAppointment(null);
-        }}
+        onRequestClose={closeCancelAppointmentModal}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.iosAlertContainer}>
@@ -2812,10 +2941,7 @@ export default function AdminAppointmentsScreen() {
               <TouchableOpacity
                 style={styles.iosAlertButton}
                 activeOpacity={0.8}
-                onPress={() => {
-                  setShowCancelModal(false);
-                  setSelectedAppointment(null);
-                }}
+                onPress={closeCancelAppointmentModal}
                 disabled={isCancelling}
               >
                 <Text style={[styles.iosAlertButtonDefaultText, { color: calendarPrimary }]}>{tHe('cancel', 'ביטול')}</Text>
@@ -2843,10 +2969,7 @@ export default function AdminAppointmentsScreen() {
         visible={showDeleteModal}
         transparent
         animationType="fade"
-        onRequestClose={() => {
-          setShowDeleteModal(false);
-          setAppointmentToDelete(null);
-        }}
+        onRequestClose={closeDeleteAppointmentModal}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.iosAlertContainer}>
@@ -2858,10 +2981,7 @@ export default function AdminAppointmentsScreen() {
               <TouchableOpacity
                 style={styles.iosAlertButton}
                 activeOpacity={0.8}
-                onPress={() => {
-                  setShowDeleteModal(false);
-                  setAppointmentToDelete(null);
-                }}
+                onPress={closeDeleteAppointmentModal}
                 disabled={isDeleting}
               >
                 <Text style={[styles.iosAlertButtonDefaultText, { color: calendarPrimary }]}>{tHe('cancel', 'ביטול')}</Text>

@@ -200,9 +200,18 @@ export function AppointmentActionsAnchorSheet({
 
   return (
     <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={onRequestClose}>
-      <View style={styles.root} pointerEvents="box-none">
-        <Animated.View style={[styles.backdrop, backdropStyle]} pointerEvents="box-none">
-          <Pressable style={StyleSheet.absoluteFill} onPress={onRequestClose} accessibilityRole="button" />
+      <View style={styles.root} pointerEvents={open ? 'box-none' : 'none'}>
+        <Animated.View
+          style={[styles.backdrop, backdropStyle]}
+          pointerEvents={open ? 'box-none' : 'none'}
+        >
+          {/* When `open` is false the sheet is closing; do not steal touches from a stacked Modal (e.g. cancel confirm). */}
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={onRequestClose}
+            accessibilityRole="button"
+            pointerEvents={open ? 'auto' : 'none'}
+          />
         </Animated.View>
         <Animated.View style={[styles.panelTouchWrap, PANEL_SHADOW_STATIC, panelStyle]} pointerEvents="box-none">
           <Animated.View style={[styles.panelInner, innerStyle]} pointerEvents="auto">

@@ -1,14 +1,92 @@
 import { supabase, getBusinessId } from '@/lib/supabase';
 import { AvailableTimeSlot } from '@/lib/supabase';
-import { notificationsApi } from './notifications';
+import i18n from '@/src/config/i18n';
+import { formatTime12Hour } from '@/lib/utils/timeFormat';
 
-// Helper: convert HH:MM[:SS] to minutes
+const GENERAL_SERVICE = 'General service';
+
+// Helper: convert HH:MM[:SS] to minutes from midnight
 const toMinutes = (time: string) => {
   const parts = String(time).split(':');
   const h = parseInt(parts[0] || '0', 10);
   const m = parseInt(parts[1] || '0', 10);
   return h * 60 + m;
 };
+
+/** Morning / afternoon / evening buckets used by the waitlist client (half-open intervals). */
+const timePeriodToRange = (period: 'morning' | 'afternoon' | 'evening' | 'any'): { startMin: number; endMin: number } => {
+  if (period === 'morning') return { startMin: 7 * 60, endMin: 12 * 60 };
+  if (period === 'afternoon') return { startMin: 12 * 60, endMin: 16 * 60 };
+  if (period === 'evening') return { startMin: 16 * 60, endMin: 20 * 60 };
+  return { startMin: 7 * 60, endMin: 20 * 60 };
+};
+
+/** True if the freed slot start time falls inside the waitlist entry's preferred window (minute-accurate). */
+function cancelSlotMatchesWaitlistPeriod(
+  slotTime: string,
+  period: 'morning' | 'afternoon' | 'evening' | 'any'
+): boolean {
+  const m = toMinutes(slotTime);
+  if (!Number.isFinite(m)) return false;
+  const { startMin, endMin } = timePeriodToRange(period);
+  return m >= startMin && m < endMin;
+}
+
+const formatDateForNotification = (dateString: string) => {
+  const d = new Date(`${dateString}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return dateString;
+  const isHe = (i18n.language || '').toLowerCase().startsWith('he');
+  try {
+    return d.toLocaleDateString(isHe ? 'he-IL-u-ca-gregory' : 'en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  } catch {
+    return d.toLocaleDateString(isHe ? 'he-IL' : 'en-US');
+  }
+};
+
+function waitlistServiceMatches(
+  entryService: string | null | undefined,
+  cancelledService: string | null | undefined
+): boolean {
+  const e = String(entryService || '').trim();
+  const c = String(cancelledService || '').trim();
+  if (!e || !c) return false;
+  if (e === GENERAL_SERVICE || c === GENERAL_SERVICE) return true;
+  return e === c;
+}
+
+function serviceLabelForWaitlistNotification(
+  entryService: string | null | undefined,
+  cancelledService: string | null | undefined
+): string {
+  const e = String(entryService || '').trim();
+  if (e === GENERAL_SERVICE) {
+    return i18n.t('waitlist.anyService', 'Any available service');
+  }
+  return e || String(cancelledService || '').trim() || i18n.t('waitlist.anyService', 'Any available service');
+}
+
+function spotOpenedTitleAndContent(
+  entry: { client_name: string; service_name: string },
+  cancelledAppointment: AvailableTimeSlot
+): { title: string; content: string } {
+  const date = formatDateForNotification(cancelledAppointment.slot_date);
+  const time = formatTime12Hour(String(cancelledAppointment.slot_time || ''));
+  const service = serviceLabelForWaitlistNotification(entry.service_name, cancelledAppointment.service_name);
+  return {
+    title: i18n.t('notifications.waitlistSpotOpenedTitle', 'A spot opened up!'),
+    content: i18n.t('notifications.waitlistSpotOpenedBody', {
+      name: entry.client_name,
+      service,
+      date,
+      time,
+    }),
+  };
+}
 
 // Helper: compute working windows after subtracting breaks
 const computeWorkingWindows = (start: string, end: string, breaks: Array<{ start_time: string; end_time: string }>) => {
@@ -27,14 +105,6 @@ const computeWorkingWindows = (start: string, end: string, breaks: Array<{ start
     .map(w => ({ startMin: toMinutes(w.start), endMin: toMinutes(w.end) }))
     .filter(w => w.startMin < w.endMin)
     .sort((a, b) => a.startMin - b.startMin);
-};
-
-// Helper: map time period to minute ranges
-const timePeriodToRange = (period: 'morning' | 'afternoon' | 'evening' | 'any'): { startMin: number; endMin: number } => {
-  if (period === 'morning') return { startMin: 7 * 60, endMin: 12 * 60 };
-  if (period === 'afternoon') return { startMin: 12 * 60, endMin: 16 * 60 };
-  if (period === 'evening') return { startMin: 16 * 60, endMin: 20 * 60 };
-  return { startMin: 7 * 60, endMin: 20 * 60 };
 };
 
 // Helper: check overlap between a window and a range
@@ -94,13 +164,22 @@ export const notifyWaitlistOnBusinessHoursUpdate = async (
 
     if (matches.length === 0) return;
 
-    const notifications = matches.map((e: any) => ({
-      title: 'שעות חדשות נוספו',
-      content: `שלום ${e.client_name}! נוספו שעות פעילות בתאריך ${formatDateForNotification(e.requested_date)} שמתאימות להעדפה שלך עבור ${e.service_name}. ניתן לנסות לקבוע תור עכשיו.`,
-      type: 'appointment_reminder' as const,
-      recipient_name: e.client_name,
-      recipient_phone: e.client_phone,
-    }));
+    const notifications = matches.map((e: any) => {
+      const date = formatDateForNotification(e.requested_date);
+      const service = serviceLabelForWaitlistNotification(e.service_name, e.service_name);
+      return {
+        title: i18n.t('notifications.waitlistBusinessHoursTitle', 'New hours added'),
+        content: i18n.t('notifications.waitlistBusinessHoursBody', {
+          name: e.client_name,
+          date,
+          service,
+        }),
+        type: 'appointment_reminder' as const,
+        recipient_name: e.client_name,
+        recipient_phone: e.client_phone,
+        business_id: businessId,
+      };
+    });
 
     const { error: insertError } = await supabase
       .from('notifications')
@@ -127,41 +206,19 @@ export const notifyWaitlistOnBusinessHoursUpdate = async (
   }
 };
 
-// Function to check waitlist and notify waiting clients for the same date
+// Same calendar day as the freed slot; exact time must fall in the waitlist row's morning/afternoon/evening window (minutes).
 export const checkWaitlistAndNotify = async (cancelledAppointment: AvailableTimeSlot) => {
   try {
-    
-    // Get the time period for the cancelled appointment
-    const appointmentTime = new Date(`2000-01-01T${cancelledAppointment.slot_time}`);
-    const hour = appointmentTime.getHours();
-    
-    let timePeriod: 'morning' | 'afternoon' | 'evening' | 'any';
-    if (hour >= 7 && hour < 12) {
-      timePeriod = 'morning';
-    } else if (hour >= 12 && hour < 16) {
-      timePeriod = 'afternoon';
-    } else if (hour >= 16 && hour < 20) {
-      timePeriod = 'evening';
-    } else {
-      timePeriod = 'any';
-    }
-    
-    
     const businessId = getBusinessId();
-    
-    // Find waitlist entries for the same date and time period
-    // Include both specific time period and 'any' time period
-    // Also include entries for the same service regardless of time period
-    // Filter by user_id if the cancelled appointment has one (for specific barber)
+    const slotTime = String(cancelledAppointment.slot_time || '');
+
     let query = supabase
       .from('waitlist_entries')
       .select('*')
       .eq('business_id', businessId)
       .eq('requested_date', cancelledAppointment.slot_date)
-      .eq('status', 'waiting')
-      .or(`time_period.eq.${timePeriod},time_period.eq.any`);
+      .eq('status', 'waiting');
 
-    // Filter by provider (user_id or barber_id) if the cancelled appointment is for a specific provider
     const providerIdForCancellation = (cancelledAppointment as any).barber_id || (cancelledAppointment as any).user_id;
     if (providerIdForCancellation) {
       query = query.eq('user_id', providerIdForCancellation);
@@ -174,56 +231,41 @@ export const checkWaitlistAndNotify = async (cancelledAppointment: AvailableTime
       return;
     }
 
-    
-    if (!waitlistEntries || waitlistEntries.length === 0) {
+    if (!waitlistEntries?.length) {
       return;
     }
 
-    // Filter entries to avoid duplicates and ensure relevance
-    const relevantEntries = waitlistEntries.filter(entry => {
-      // Must match the same time period (or 'any')
-      const timeMatch = entry.time_period === timePeriod || entry.time_period === 'any';
-      // Also require same service for precision
-      const serviceMatch = entry.service_name === cancelledAppointment.service_name;
-      return timeMatch && serviceMatch;
+    const relevantEntries = waitlistEntries.filter((entry) => {
+      const p = entry.time_period;
+      if (p !== 'morning' && p !== 'afternoon' && p !== 'evening' && p !== 'any') return false;
+      if (!waitlistServiceMatches(entry.service_name, cancelledAppointment.service_name)) return false;
+      return cancelSlotMatchesWaitlistPeriod(slotTime, p);
     });
 
-
-
-    // Create notifications for waiting clients (skip user lookup; use waitlist entry directly)
     const notifications = [];
     const notifiedEntryIds: string[] = [];
-    
-    for (const entry of relevantEntries) {
-      const notificationTitle = '🎉 A spot opened up!';
-      const notificationContent = `Hi ${entry.client_name}! A spot opened up for ${entry.service_name} on ${formatDateForNotification(cancelledAppointment.slot_date)} at ${cancelledAppointment.slot_time}. Book now!`;
 
+    for (const entry of relevantEntries) {
+      const { title, content } = spotOpenedTitleAndContent(entry, cancelledAppointment);
       notifications.push({
-        title: notificationTitle,
-        content: notificationContent,
+        title,
+        content,
         type: 'appointment_reminder' as const,
         recipient_name: entry.client_name,
         recipient_phone: entry.client_phone,
         business_id: businessId,
       });
-
       notifiedEntryIds.push(entry.id);
     }
 
-
-    // Insert notifications into database
     if (notifications.length > 0) {
-      const { error: insertError } = await supabase
-        .from('notifications')
-        .insert(notifications);
+      const { error: insertError } = await supabase.from('notifications').insert(notifications);
 
       if (insertError) {
         console.error('❌ Error inserting notifications:', insertError);
         return;
       }
 
-
-      // Update waitlist entry status to 'contacted' to prevent duplicate notifications
       if (notifiedEntryIds.length > 0) {
         const { error: updateError } = await supabase
           .from('waitlist_entries')
@@ -232,113 +274,16 @@ export const checkWaitlistAndNotify = async (cancelledAppointment: AvailableTime
 
         if (updateError) {
           console.error('❌ Error updating waitlist entry status:', updateError);
-        } else {
         }
       }
     }
-
   } catch (error) {
     console.error('❌ Error in checkWaitlistAndNotify:', error);
   }
 };
 
-// Function to notify clients waiting for the same service on any future date
-export const notifyServiceWaitlistClients = async (cancelledAppointment: AvailableTimeSlot) => {
-  try {
-    
-    const businessId = getBusinessId();
-    
-    // Find waitlist entries for the same service on any future date and matching time period
-    const today = new Date().toISOString().split('T')[0];
-    let query = supabase
-      .from('waitlist_entries')
-      .select('*')
-      .eq('business_id', businessId)
-      .eq('service_name', cancelledAppointment.service_name)
-      .eq('status', 'waiting')
-      .gte('requested_date', today);
-
-    // Filter by provider (user_id or barber_id) if the cancelled appointment is for a specific provider
-    const providerIdForService = (cancelledAppointment as any).barber_id || (cancelledAppointment as any).user_id;
-    if (providerIdForService) {
-      query = query.eq('user_id', providerIdForService);
-    }
-
-    const { data: waitlistEntries, error: waitlistError } = await query
-      .order('requested_date', { ascending: true })
-      .order('created_at', { ascending: true });
-
-    if (waitlistError) {
-      console.error('❌ Error fetching service waitlist entries:', waitlistError);
-      return;
-    }
-
-    
-    if (!waitlistEntries || waitlistEntries.length === 0) {
-      return;
-    }
-
-    // Log found entries for debugging
-    waitlistEntries.forEach((entry, index) => {
-    });
-
-    // Create notifications for waiting clients (skip user lookup; use waitlist entry directly)
-    const notifications = [];
-    const notifiedEntryIds: string[] = [];
-    
-    for (const entry of waitlistEntries) {
-      // Only notify if the time period matches the cancelled slot (or 'any')
-      const appointmentTime = new Date(`2000-01-01T${cancelledAppointment.slot_time}`);
-      const hour = appointmentTime.getHours();
-      const cancelledPeriod = hour >= 7 && hour < 12 ? 'morning' : hour >= 12 && hour < 16 ? 'afternoon' : hour >= 16 && hour < 20 ? 'evening' : 'any';
-      const periodMatch = entry.time_period === 'any' || entry.time_period === cancelledPeriod;
-      if (!periodMatch) continue;
-      const notificationTitle = '🎉 A spot opened up!';
-      const notificationContent = `Hi ${entry.client_name}! A spot opened up for ${entry.service_name} on ${formatDateForNotification(cancelledAppointment.slot_date)} at ${cancelledAppointment.slot_time}. Book now!`;
-
-      notifications.push({
-        title: notificationTitle,
-        content: notificationContent,
-        type: 'appointment_reminder' as const,
-        recipient_name: entry.client_name,
-        recipient_phone: entry.client_phone,
-        business_id: businessId,
-      });
-
-      notifiedEntryIds.push(entry.id);
-    }
-
-
-    // Insert notifications into database
-    if (notifications.length > 0) {
-      const { error: insertError } = await supabase
-        .from('notifications')
-        .insert(notifications);
-
-      if (insertError) {
-        console.error('❌ Error inserting service notifications:', insertError);
-        return;
-      }
-
-
-      // Update waitlist entry status to 'contacted' to prevent duplicate notifications
-      if (notifiedEntryIds.length > 0) {
-        const { error: updateError } = await supabase
-          .from('waitlist_entries')
-          .update({ status: 'contacted' })
-          .in('id', notifiedEntryIds);
-
-        if (updateError) {
-          console.error('❌ Error updating service waitlist entry status:', updateError);
-        } else {
-        }
-      }
-    }
-
-  } catch (error) {
-    console.error('❌ Error in notifyServiceWaitlistClients:', error);
-  }
-};
+/** @deprecated Use only {@link checkWaitlistAndNotify}; kept so existing call sites keep working without duplicate logic. */
+export const notifyServiceWaitlistClients = checkWaitlistAndNotify;
 
 // Function to notify all waitlist clients for any future date (general availability)
 export const notifyAllWaitlistClients = async (cancelledAppointment: AvailableTimeSlot) => {
@@ -384,19 +329,20 @@ export const notifyAllWaitlistClients = async (cancelledAppointment: AvailableTi
     const notifications = [];
     const notifiedEntryIds: string[] = [];
     
+    const slotTime = String(cancelledAppointment.slot_time || '');
+
     for (const entry of waitlistEntries) {
-      // Only notify if the time period matches the cancelled slot (or 'any')
-      const appointmentTime = new Date(`2000-01-01T${cancelledAppointment.slot_time}`);
-      const hour = appointmentTime.getHours();
-      const cancelledPeriod = hour >= 7 && hour < 12 ? 'morning' : hour >= 12 && hour < 16 ? 'afternoon' : hour >= 16 && hour < 20 ? 'evening' : 'any';
-      const periodMatch = entry.time_period === 'any' || entry.time_period === cancelledPeriod;
-      if (!periodMatch) continue;
-      const notificationTitle = '🎉 A spot opened up!';
-      const notificationContent = `Hi ${entry.client_name}! A spot opened up for ${cancelledAppointment.service_name} on ${formatDateForNotification(cancelledAppointment.slot_date)} at ${cancelledAppointment.slot_time}. Book now!`;
+      if (entry.requested_date !== cancelledAppointment.slot_date) continue;
+      const p = entry.time_period;
+      if (p !== 'morning' && p !== 'afternoon' && p !== 'evening' && p !== 'any') continue;
+      if (!waitlistServiceMatches(entry.service_name, cancelledAppointment.service_name)) continue;
+      if (!cancelSlotMatchesWaitlistPeriod(slotTime, p)) continue;
+
+      const { title, content } = spotOpenedTitleAndContent(entry, cancelledAppointment);
 
       notifications.push({
-        title: notificationTitle,
-        content: notificationContent,
+        title,
+        content,
         type: 'appointment_reminder' as const,
         recipient_name: entry.client_name,
         recipient_phone: entry.client_phone,
@@ -437,14 +383,3 @@ export const notifyAllWaitlistClients = async (cancelledAppointment: AvailableTi
     console.error('❌ Error in notifyAllWaitlistClients:', error);
   }
 };
-
-// Helper function to format date for notification
-const formatDateForNotification = (dateString: string) => {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-}; 

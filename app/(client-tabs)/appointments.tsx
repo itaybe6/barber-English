@@ -9,7 +9,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { AvailableTimeSlot } from '@/lib/supabase';
 import { supabase, getBusinessId } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
-import { checkWaitlistAndNotify, notifyServiceWaitlistClients } from '@/lib/api/waitlistNotifications';
+import { checkWaitlistAndNotify } from '@/lib/api/waitlistNotifications';
 import { notificationsApi } from '@/lib/api/notifications';
 import { businessProfileApi, isClientSwapEnabled } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
@@ -141,7 +141,6 @@ const clientAppointmentsApi = {
 
       if (appointmentData) {
         await checkWaitlistAndNotify(appointmentData);
-        await notifyServiceWaitlistClients(appointmentData);
       }
 
       return { success: true };

@@ -36,7 +36,7 @@ import {
   listCalendarReminderDatesInMonth,
 } from '@/lib/api/calendarReminders';
 import { businessHoursApi } from '@/lib/api/businessHours';
-import { checkWaitlistAndNotify, notifyServiceWaitlistClients } from '@/lib/api/waitlistNotifications';
+import { checkWaitlistAndNotify } from '@/lib/api/waitlistNotifications';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { Entypo, Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -1762,7 +1762,6 @@ export default function AdminAppointmentsScreen() {
       } else {
         try {
           await checkWaitlistAndNotify(selectedAppointment);
-          await notifyServiceWaitlistClients(selectedAppointment);
         } catch (e) {}
         const dateKey = String((selectedAppointment as any).slot_date ?? '');
         setAppointments((prev) => prev.filter((a) => a.id !== selectedAppointment.id));

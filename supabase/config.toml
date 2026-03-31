@@ -41,3 +41,7 @@ verify_jwt = true
 # Database Webhook on notifications INSERT — Authorization: Bearer <SERVICE_ROLE_KEY>
 [functions.notification-push-sms]
 verify_jwt = true
+
+# Landing / Lovable: POST with ONBOARDING_WEBHOOK_SECRET (not Supabase JWT)
+[functions.onboarding-webhook]
+verify_jwt = false

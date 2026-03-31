@@ -741,6 +741,7 @@
       "businessName": "שם העסק",
       "businessNamePlaceholder": "לדוגמה: הסטודיו של הדס",
       "bookingWindowDaysTitle": "חלון הזמנות (ימים)",
+      "bookingWindowEmployeeHint": "כמה ימים מראש לקוחות יכולים לקבוע תור לעובד/ת זה/זו? (0–60)",
       "bookingWindowRowTitle": "עד כמה ימים קדימה ניתן להזמין?",
       "bookingWindowRowSubtitle": "{{count}} ימים קדימה",
       "bookingWindowModalTitle": "טווח תורים פתוחים — הלוח שלך",

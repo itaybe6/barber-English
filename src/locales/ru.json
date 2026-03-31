@@ -865,6 +865,7 @@
       "businessName": "Название компании",
       "businessNamePlaceholder": "Например: Студия Хадас.",
       "bookingWindowDaysTitle": "Окно бронирования (дни)",
+      "bookingWindowEmployeeHint": "За сколько дней вперёд клиенты могут записаться к этому сотруднику? (0–60)",
       "bookingWindowRowTitle": "За сколько дней вперед клиенты могут бронировать?",
       "bookingWindowRowSubtitle": "{{count}} дней вперед",
       "bookingWindowModalTitle": "Ваш диапазон бронирования",

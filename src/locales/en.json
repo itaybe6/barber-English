@@ -718,6 +718,7 @@
       "businessName": "Business name",
       "businessNamePlaceholder": "For example: The Studio of Hadas",
       "bookingWindowDaysTitle": "Booking window (days)",
+      "bookingWindowEmployeeHint": "How many days in advance can clients book with this team member? (0–60)",
       "bookingWindowRowTitle": "How many days ahead can clients book?",
       "bookingWindowRowSubtitle": "{{count}} days ahead",
       "bookingWindowModalTitle": "Your booking range",

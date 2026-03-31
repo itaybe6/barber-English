@@ -35,6 +35,7 @@ import {
   Repeat,
   Plus,
   Bell,
+  Camera,
 } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -260,6 +261,11 @@ export default function SettingsScreen() {
         setClientSwapEnabled(isClientSwapEnabled(p));
         setRequireClientApproval(isClientApprovalRequired(p));
         setShowServiceImages(isShowServiceImages(p));
+        {
+          const cr = (p as BusinessProfile)?.client_reminder_minutes;
+          const n = cr === null || cr === undefined ? NaN : Number(cr);
+          setClientReminderMinutes(Number.isFinite(n) && n > 0 ? n : null);
+        }
       }
     } catch (error) {
       console.error('Failed to load business profile:', error);
@@ -282,8 +288,6 @@ export default function SettingsScreen() {
         const adminRem = await businessProfileApi.getReminderMinutesForUser(user.id);
         setAdminReminderMinutes(adminRem);
         setAdminReminderEnabled(adminRem !== null && Number(adminRem) > 0);
-        const clientRem = await businessProfileApi.getClientReminderMinutesForUser(user.id);
-        setClientReminderMinutes(clientRem);
       } catch (e) {
         // silent
       }
@@ -627,9 +631,9 @@ export default function SettingsScreen() {
   }, []);
 
   const openClientReminderModal = useCallback(() => {
-    if (!user?.id) return;
+    if (!user?.id || !canSeeAddEmployee) return;
     setShowClientReminderModal(true);
-  }, [user?.id]);
+  }, [user?.id, canSeeAddEmployee]);
 
   const dismissClientReminderModal = useCallback(() => {
     setShowClientReminderModal(false);
@@ -650,7 +654,7 @@ export default function SettingsScreen() {
   }, []);
 
   const saveClientReminderFromModal = async () => {
-    if (!user?.id) return;
+    if (!user?.id || !canSeeAddEmployee) return;
     const hRaw = clientReminderModalHoursDraft.trim();
     if (!hRaw || !/^\d+$/.test(hRaw)) {
       Alert.alert(t('error.generic', 'Error'), t('settings.reminder.clientDialogInvalidHours'));
@@ -665,8 +669,9 @@ export default function SettingsScreen() {
     try {
       setIsSavingProfile(true);
       if (total === 0) {
-        await businessProfileApi.setClientReminderMinutesForUser(user.id, null);
+        await businessProfileApi.setClientReminderMinutes(null);
         setClientReminderMinutes(null);
+        setProfile((prev) => (prev ? { ...prev, client_reminder_minutes: null } : prev));
         setShowClientReminderModal(false);
         return;
       }
@@ -674,8 +679,9 @@ export default function SettingsScreen() {
         Alert.alert(t('error.generic', 'Error'), t('settings.profile.reminderInvalid', 'Enter a valid number between 1 and 1440 minutes'));
         return;
       }
-      await businessProfileApi.setClientReminderMinutesForUser(user.id, total);
+      await businessProfileApi.setClientReminderMinutes(total);
       setClientReminderMinutes(total);
+      setProfile((prev) => (prev ? { ...prev, client_reminder_minutes: total } : prev));
       setShowClientReminderModal(false);
     } finally {
       setIsSavingProfile(false);
@@ -1569,9 +1575,6 @@ export default function SettingsScreen() {
   // Employees tab (inline list + FAB)
   const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
-  const [bookingOpenDaysByUser, setBookingOpenDaysByUser] = useState<Record<string, number>>({});
-  const [expandedEmployeeId, setExpandedEmployeeId] = useState<string | null>(null);
-  const [savingBookingDaysForUser, setSavingBookingDaysForUser] = useState<string | null>(null);
 
   const loadAdminEmployeesForTab = useCallback(async () => {
     setIsLoadingEmployees(true);
@@ -1579,17 +1582,6 @@ export default function SettingsScreen() {
       const list = await usersApi.getAdminUsers();
       const filtered = (list || []).filter((u: any) => u.id !== (user as any)?.id);
       setAdminUsers(filtered);
-      const daysMap: Record<string, number> = {};
-      for (const emp of filtered) {
-        try {
-          const days = await businessProfileApi.getBookingOpenDaysForUser(emp.id);
-          daysMap[emp.id] = days;
-        } catch (e) {
-          console.error('Error loading booking days for user:', emp.id, e);
-          daysMap[emp.id] = 7;
-        }
-      }
-      setBookingOpenDaysByUser(daysMap);
     } catch {
       setAdminUsers([]);
     } finally {
@@ -1599,28 +1591,10 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     if (activeSettingsTab !== 'employees' || !canSeeAddEmployee) {
-      setExpandedEmployeeId(null);
       return;
     }
     void loadAdminEmployeesForTab();
   }, [activeSettingsTab, canSeeAddEmployee, loadAdminEmployeesForTab]);
-
-  const handleSaveBookingDaysForUser = async (userId: string, days: number) => {
-    setSavingBookingDaysForUser(userId);
-    try {
-      await businessProfileApi.setBookingOpenDaysForUser(userId, days);
-      setBookingOpenDaysByUser((prev) => ({ ...prev, [userId]: days }));
-      setBookingSaveSuccessDialog({
-        title: t('success.generic', 'Success'),
-        message: t('settings.profile.bookingWindowSaved', 'Booking window updated successfully'),
-      });
-    } catch (error) {
-      console.error('Error saving booking days for user:', error);
-      Alert.alert(t('error.generic','Error'), t('settings.profile.bookingWindowSaveFailed','Failed to save booking window'));
-    } finally {
-      setSavingBookingDaysForUser(null);
-    }
-  };
 
   const renderSettingItem = (
     icon: React.ReactNode,
@@ -1886,19 +1860,21 @@ export default function SettingsScreen() {
                   },
                 )
               : null}
-            {renderSettingItemLTR(
-              <Bell size={20} color={businessColors.primary} />,
-              t('settings.reminder.clientRowTitle', 'Client reminder before appointment'),
-              clientReminderMinutes != null && clientReminderMinutes > 0
-                ? t('settings.reminder.clientRowValueHours', {
-                    count: Math.max(1, Math.round(clientReminderMinutes / 60)),
-                  })
-                : t('settings.reminder.clientTapToEdit', 'Tap to edit reminder timing'),
-              undefined,
-              () => openClientReminderModal(),
-              undefined,
-              !user?.id,
-            )}
+            {canSeeAddEmployee
+              ? renderSettingItemLTR(
+                  <Bell size={20} color={businessColors.primary} />,
+                  t('settings.reminder.clientRowTitle', 'Client reminder before appointment'),
+                  clientReminderMinutes != null && clientReminderMinutes > 0
+                    ? t('settings.reminder.clientRowValueHours', {
+                        count: Math.max(1, Math.round(clientReminderMinutes / 60)),
+                      })
+                    : t('settings.reminder.clientTapToEdit', 'Tap to edit reminder timing'),
+                  undefined,
+                  () => openClientReminderModal(),
+                  undefined,
+                  !user?.id,
+                )
+              : null}
             <View style={styles.settingItemLTR}>
               <View style={styles.settingIconLTR}>
                 <Clock size={20} color={businessColors.primary} />
@@ -2588,9 +2564,6 @@ export default function SettingsScreen() {
                       </View>
                     ) : (
                       adminUsers.map((adm: any) => {
-                        const isExpanded = expandedEmployeeId === adm.id;
-                        const currentBookingDays = bookingOpenDaysByUser[adm.id] ?? 7;
-                        const isSaving = savingBookingDaysForUser === adm.id;
                         return (
                           <View key={adm.id} style={{ marginBottom: 10 }}>
                             <Swipeable
@@ -2635,11 +2608,7 @@ export default function SettingsScreen() {
                               )}
                             >
                               <View style={styles.iosCard}>
-                                <TouchableOpacity
-                                  style={{ flexDirection: 'row', alignItems: 'center' }}
-                                  onPress={() => setExpandedEmployeeId(isExpanded ? null : adm.id)}
-                                  activeOpacity={0.7}
-                                >
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                   {adm.image_url ? (
                                     <Image source={{ uri: adm.image_url }} style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12 }} resizeMode="cover" />
                                   ) : (
@@ -2652,7 +2621,6 @@ export default function SettingsScreen() {
                                     {!!adm.phone && <Text style={styles.previewNotificationContent}>{adm.phone}</Text>}
                                   </View>
                                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                    {isExpanded ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
                                     <TouchableOpacity
                                       style={[styles.iconActionButton, { backgroundColor: '#FFECEC', borderColor: '#FFD1D1' }]}
                                       onPress={() => {
@@ -2687,64 +2655,7 @@ export default function SettingsScreen() {
                                       <Trash2 size={20} color="#FF3B30" />
                                     </TouchableOpacity>
                                   </View>
-                                </TouchableOpacity>
-                                {isExpanded && (
-                                  <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: Colors.border }}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                                      <Calendar size={18} color={businessColors.primary} style={{ marginRight: 8 }} />
-                                      <Text style={{ fontSize: 15, color: Colors.text, fontWeight: '500' }}>
-                                        {t('settings.profile.bookingWindow', 'Booking window (days)')}
-                                      </Text>
-                                    </View>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                                      <TextInput
-                                        style={{
-                                          flex: 1,
-                                          borderWidth: 1,
-                                          borderColor: Colors.border,
-                                          borderRadius: 8,
-                                          paddingHorizontal: 12,
-                                          paddingVertical: 10,
-                                          fontSize: 15,
-                                          color: Colors.text,
-                                          backgroundColor: Colors.white,
-                                        }}
-                                        value={String(currentBookingDays)}
-                                        onChangeText={(text) => {
-                                          const digits = text.replace(/\D/g, '');
-                                          const parsed = parseInt(digits, 10);
-                                          const num = Number.isFinite(parsed)
-                                            ? Math.max(0, Math.min(60, parsed))
-                                            : 7;
-                                          setBookingOpenDaysByUser((prev) => ({ ...prev, [adm.id]: num }));
-                                        }}
-                                        placeholder="7"
-                                        keyboardType="number-pad"
-                                        placeholderTextColor={Colors.subtext}
-                                      />
-                                      <TouchableOpacity
-                                        style={{
-                                          backgroundColor: businessColors.primary,
-                                          paddingHorizontal: 20,
-                                          paddingVertical: 10,
-                                          borderRadius: 8,
-                                          opacity: isSaving ? 0.6 : 1,
-                                        }}
-                                        onPress={() => handleSaveBookingDaysForUser(adm.id, currentBookingDays)}
-                                        disabled={isSaving}
-                                      >
-                                        {isSaving ? (
-                                          <ActivityIndicator size="small" color="#FFFFFF" />
-                                        ) : (
-                                          <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '600' }}>{t('save', 'Save')}</Text>
-                                        )}
-                                      </TouchableOpacity>
-                                    </View>
-                                    <Text style={{ fontSize: 12, color: Colors.subtext, marginTop: 8, textAlign: isRtlLanguage(i18n.language) ? 'right' : 'left' }}>
-                                      {t('settings.profile.bookingWindowHint', 'How many days ahead can clients book appointments with this employee?')}
-                                    </Text>
-                                  </View>
-                                )}
+                                </View>
                               </View>
                             </Swipeable>
                           </View>
@@ -3161,113 +3072,193 @@ export default function SettingsScreen() {
         presentationStyle="pageSheet"
         onRequestClose={() => setShowEditAdminModal(false)}
       >
-        <KeyboardAvoidingView 
-          style={{ flex: 1 }} 
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 50}
         >
-          <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#F8F9FA' }]}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowEditAdminModal(false)}>
-              <Text style={styles.modalCloseText}>{t('cancel','Cancel')}</Text>
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>{t('settings.admin.edit','Edit admin')}</Text>
-            <TouchableOpacity
-              style={[styles.modalSendButton, { backgroundColor: businessColors.primary }, (isSavingAdmin) && styles.modalSendButtonDisabled]}
-              onPress={async () => {
-                if (!user?.id) { setShowEditAdminModal(false); return; }
-                if (!adminNameDraft.trim() || !adminPhoneDraft.trim()) { Alert.alert(t('error.generic','Error'), t('settings.admin.fillNamePhone','Please fill in name and phone number')); return; }
-                try {
-                  setIsSavingAdmin(true);
-                  const updated = await usersApi.updateUser(
-                    user.id as any,
-                    {
-                      name: adminNameDraft.trim() as any,
-                      phone: adminPhoneDraft.trim() as any,
-                    } as any
-                  );
-                  if (updated) {
-                    updateUserProfile({ name: updated.name as any, phone: (updated as any).phone } as any);
-                    setShowEditAdminModal(false);
-                  } else {
-                    Alert.alert(t('error.generic','Error'), t('settings.admin.saveDetailsFailed','Failed to save admin details'));
-                  }
-                } finally {
-                  setIsSavingAdmin(false);
-                }
-              }}
-              disabled={isSavingAdmin}
+          <SafeAreaView style={styles.editAdminModalRoot}>
+            <LinearGradient
+              colors={['#EEF2F9', '#F4F6FB', '#FAFBFD']}
+              locations={[0, 0.45, 1]}
+              style={StyleSheet.absoluteFillObject}
+              pointerEvents="none"
+            />
+            <View style={styles.editAdminHeader}>
+              <TouchableOpacity
+                style={[styles.editAdminHeaderSide, styles.editAdminHeaderSideLeading]}
+                onPress={() => setShowEditAdminModal(false)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityRole="button"
+                accessibilityLabel={t('cancel', 'Cancel')}
+              >
+                <Text style={styles.editAdminCancelText}>{t('cancel', 'Cancel')}</Text>
+              </TouchableOpacity>
+              <Text style={styles.editAdminHeaderTitle} numberOfLines={1}>
+                {t('settings.admin.edit', 'Edit admin')}
+              </Text>
+              <View style={[styles.editAdminHeaderSide, styles.editAdminHeaderSideTrailing]}>
+                <TouchableOpacity
+                  style={[
+                    styles.editAdminSavePill,
+                    { backgroundColor: businessColors.primary },
+                    isSavingAdmin && styles.editAdminSavePillDisabled,
+                  ]}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  onPress={async () => {
+                    if (!user?.id) {
+                      setShowEditAdminModal(false);
+                      return;
+                    }
+                    if (!adminNameDraft.trim() || !adminPhoneDraft.trim()) {
+                      Alert.alert(
+                        t('error.generic', 'Error'),
+                        t('settings.admin.fillNamePhone', 'Please fill in name and phone number'),
+                      );
+                      return;
+                    }
+                    try {
+                      setIsSavingAdmin(true);
+                      const updated = await usersApi.updateUser(
+                        user.id as any,
+                        {
+                          name: adminNameDraft.trim() as any,
+                          phone: adminPhoneDraft.trim() as any,
+                        } as any,
+                      );
+                      if (updated) {
+                        updateUserProfile({ name: updated.name as any, phone: (updated as any).phone } as any);
+                        setShowEditAdminModal(false);
+                      } else {
+                        Alert.alert(
+                          t('error.generic', 'Error'),
+                          t('settings.admin.saveDetailsFailed', 'Failed to save admin details'),
+                        );
+                      }
+                    } finally {
+                      setIsSavingAdmin(false);
+                    }
+                  }}
+                  disabled={isSavingAdmin}
+                  activeOpacity={0.88}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('save', 'Save')}
+                >
+                  <Text style={styles.editAdminSavePillText}>
+                    {isSavingAdmin ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <ScrollView
+              style={styles.editAdminScroll}
+              contentContainerStyle={styles.editAdminScrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              contentInsetAdjustmentBehavior="automatic"
+              automaticallyAdjustKeyboardInsets
             >
-              <Text style={[styles.modalSendText, { color: Colors.white }, isSavingAdmin && styles.modalSendTextDisabled]}>{isSavingAdmin ? t('settings.common.saving','Saving...') : t('save','Save')}</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView 
-            style={styles.modalContent} 
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-            contentInsetAdjustmentBehavior="automatic"
-            automaticallyAdjustKeyboardInsets={true}
-          >
-            <View style={{ alignItems: 'center', marginBottom: 12 }}>
-              <View style={styles.modalAvatarWrap}>
+              <View style={styles.editAdminHero}>
                 <LinearGradient
-                  colors={[businessColors.primary, businessColors.primary]}
+                  colors={[businessColors.primary, `${businessColors.primary}BB`]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
-                  style={styles.modalAvatarRing}
+                  style={styles.editAdminAvatarRing}
                 >
-                  <TouchableOpacity style={styles.modalAvatar} onPress={handlePickAdminAvatar} activeOpacity={0.9} accessibilityRole="button" accessibilityLabel={t('settings.profile.changeProfilePicture','Change profile picture')}>
+                  <TouchableOpacity
+                    style={styles.editAdminAvatarInner}
+                    onPress={handlePickAdminAvatar}
+                    activeOpacity={0.92}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('settings.profile.changeProfilePicture', 'Change profile picture')}
+                  >
                     {user?.image_url ? (
-                      <Image source={{ uri: (user as any).image_url }} style={styles.modalAvatarImage} resizeMode="cover" />
+                      <Image
+                        source={{ uri: (user as any).image_url }}
+                        style={styles.editAdminAvatarImage}
+                        resizeMode="cover"
+                      />
                     ) : (
-                      <User size={36} color={Colors.subtext} strokeWidth={1.75} />
+                      <User size={40} color={Colors.subtext} strokeWidth={1.75} />
                     )}
                     {isUploadingAdminAvatar && (
-                      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 36 }}>
+                      <View style={styles.editAdminAvatarLoading}>
                         <ActivityIndicator size="small" color={businessColors.primary} />
                       </View>
                     )}
                   </TouchableOpacity>
                 </LinearGradient>
-              </View>
-              <Text style={styles.modalAdminName}>{adminNameDraft || user?.name || t('settings.admin.admin','Admin')}</Text>
-              <Text style={styles.modalAdminMeta}>{adminPhoneDraft || (user as any)?.phone || ''}</Text>
-              <View style={{ marginTop: 8 }}>
-                <TouchableOpacity onPress={handlePickAdminAvatar} style={[styles.pickButton, { alignSelf: 'center', backgroundColor: '#F2F2F7', borderColor: '#E5E5EA' }]} activeOpacity={0.85} disabled={isUploadingAdminAvatar}>
-                  <Text style={styles.pickButtonText}>{isUploadingAdminAvatar ? t('settings.common.uploading','Uploading...') : t('settings.profile.changeProfilePicture','Change profile picture')}</Text>
+                <Text style={styles.editAdminHeroName}>
+                  {adminNameDraft || user?.name || t('settings.admin.admin', 'Admin')}
+                </Text>
+                <Text style={styles.editAdminHeroPhone}>
+                  {adminPhoneDraft || (user as any)?.phone || '—'}
+                </Text>
+                <TouchableOpacity
+                  onPress={handlePickAdminAvatar}
+                  style={[
+                    styles.editAdminPhotoBtn,
+                    { borderColor: `${businessColors.primary}40`, backgroundColor: `${businessColors.primary}12` },
+                  ]}
+                  activeOpacity={0.88}
+                  disabled={isUploadingAdminAvatar}
+                >
+                  <Camera size={18} color={businessColors.primary} strokeWidth={2.2} />
+                  <Text style={[styles.editAdminPhotoBtnText, { color: businessColors.primary }]}>
+                    {isUploadingAdminAvatar
+                      ? t('settings.common.uploading', 'Uploading...')
+                      : t('settings.profile.changeProfilePicture', 'Change profile picture')}
+                  </Text>
                 </TouchableOpacity>
               </View>
-            </View>
 
-            <View style={styles.iosCard}>
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>{t('settings.admin.name','Admin name')}</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={adminNameDraft}
-                  onChangeText={setAdminNameDraft}
-                  placeholder={t('profile.edit.namePlaceholder','Full Name')}
-                  placeholderTextColor={Colors.subtext}
-                  textAlign="left"
-                />
+              <View style={styles.editAdminFormCard}>
+                <View style={styles.editAdminField}>
+                  <Text
+                    style={[
+                      styles.editAdminFieldLabel,
+                      I18nManager.isRTL ? styles.editAdminFieldLabelRtl : styles.editAdminFieldLabelLtr,
+                    ]}
+                  >
+                    {t('settings.admin.name', 'Admin name')}
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.editAdminFieldInput,
+                      I18nManager.isRTL ? styles.editAdminFieldInputRtl : styles.editAdminFieldInputLtr,
+                    ]}
+                    value={adminNameDraft}
+                    onChangeText={setAdminNameDraft}
+                    placeholder={t('profile.edit.namePlaceholder', 'Full Name')}
+                    placeholderTextColor={Colors.subtext}
+                  />
+                </View>
+                <View style={styles.editAdminFieldLast}>
+                  <Text
+                    style={[
+                      styles.editAdminFieldLabel,
+                      I18nManager.isRTL ? styles.editAdminFieldLabelRtl : styles.editAdminFieldLabelLtr,
+                    ]}
+                  >
+                    {t('profile.phone', 'Phone number')}
+                  </Text>
+                  <TextInput
+                    style={[styles.editAdminFieldInput, styles.editAdminPhoneInput]}
+                    value={adminPhoneDraft}
+                    onChangeText={setAdminPhoneDraft}
+                    placeholder={t('settings.admin.phonePlaceholder', '(555) 123-4567')}
+                    placeholderTextColor={Colors.subtext}
+                    keyboardType="phone-pad"
+                    textAlign="left"
+                    {...(Platform.OS === 'android' ? { textAlignVertical: 'center' as const } : {})}
+                  />
+                </View>
               </View>
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>{t('profile.phone','Phone number')}</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={adminPhoneDraft}
-                  onChangeText={setAdminPhoneDraft}
-                  placeholder={t('settings.admin.phonePlaceholder','(555) 123-4567')}
-                  placeholderTextColor={Colors.subtext}
-                  keyboardType="phone-pad"
-                  textAlign="left"
-                />
-              </View>
-            </View>
-            <View style={{ height: 100 }} />
-          </ScrollView>
-        </SafeAreaView>
+              <View style={{ height: 100 }} />
+            </ScrollView>
+          </SafeAreaView>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -3989,11 +3980,12 @@ export default function SettingsScreen() {
         </SafeAreaView>
       </Modal>
 
-      {/* Booking window save — LTR text block (native Alert follows RTL and misaligns Hebrew here) */}
+      {/* Booking window save — custom modal (Alert RTL/layout quirks; styled like system success sheet) */}
       <Modal
         visible={bookingSaveSuccessDialog !== null}
         transparent
         animationType="fade"
+        statusBarTranslucent
         onRequestClose={() => setBookingSaveSuccessDialog(null)}
       >
         <View style={styles.bookingSaveSuccessOverlay} pointerEvents="box-none">
@@ -4003,10 +3995,28 @@ export default function SettingsScreen() {
             accessibilityRole="button"
             accessibilityLabel={t('cancel', 'Close')}
           />
-          <View style={styles.bookingSaveSuccessCard}>
-            <View style={styles.bookingSaveSuccessLtr}>
-              <Text style={styles.bookingSaveSuccessTitle}>{bookingSaveSuccessDialog?.title}</Text>
-              <Text style={styles.bookingSaveSuccessMessage}>{bookingSaveSuccessDialog?.message}</Text>
+          <View
+            style={styles.bookingSaveSuccessCard}
+            accessibilityViewIsModal
+            accessibilityRole="alert"
+          >
+            <View style={styles.bookingSaveSuccessTextBlock}>
+              <Text
+                style={[
+                  styles.bookingSaveSuccessTitle,
+                  isRtlLanguage(i18n.language) ? styles.bookingSaveSuccessTextRtl : styles.bookingSaveSuccessTextLtr,
+                ]}
+              >
+                {bookingSaveSuccessDialog?.title}
+              </Text>
+              <Text
+                style={[
+                  styles.bookingSaveSuccessMessage,
+                  isRtlLanguage(i18n.language) ? styles.bookingSaveSuccessTextRtl : styles.bookingSaveSuccessTextLtr,
+                ]}
+              >
+                {bookingSaveSuccessDialog?.message}
+              </Text>
             </View>
             <TouchableOpacity
               style={styles.bookingSaveSuccessOkBtn}
@@ -5711,45 +5721,62 @@ const styles = StyleSheet.create({
   },
   bookingSaveSuccessOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.48)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 28,
+    paddingHorizontal: 24,
   },
   bookingSaveSuccessCard: {
     width: '100%',
-    maxWidth: 300,
-    backgroundColor: '#2C2C2E',
-    borderRadius: 14,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
+    maxWidth: 320,
+    backgroundColor: '#1C1C1E',
+    borderRadius: 22,
+    paddingHorizontal: 22,
+    paddingTop: 22,
+    paddingBottom: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.08)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 14 },
+        shadowOpacity: 0.35,
+        shadowRadius: 28,
+      },
+      android: { elevation: 12 },
+    }),
   },
-  bookingSaveSuccessLtr: {
-    direction: 'ltr',
+  bookingSaveSuccessTextBlock: {
     width: '100%',
     alignSelf: 'stretch',
   },
+  bookingSaveSuccessTextRtl: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  bookingSaveSuccessTextLtr: {
+    textAlign: 'left',
+    writingDirection: 'ltr',
+  },
   bookingSaveSuccessTitle: {
     color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '700',
-    textAlign: 'left',
-    writingDirection: 'ltr',
+    letterSpacing: -0.2,
   },
   bookingSaveSuccessMessage: {
-    marginTop: 8,
-    color: '#FFFFFF',
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'left',
-    writingDirection: 'ltr',
+    marginTop: 10,
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 16,
+    lineHeight: 23,
+    fontWeight: '400',
   },
   bookingSaveSuccessOkBtn: {
-    marginTop: 18,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    borderRadius: 12,
-    paddingVertical: 12,
+    marginTop: 20,
+    backgroundColor: '#3A3A3C',
+    borderRadius: 999,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -5805,6 +5832,210 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.subtext,
     textAlign: 'center',
+  },
+  editAdminModalRoot: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  editAdminHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(60,60,67,0.12)',
+  },
+  editAdminHeaderSide: {
+    width: 88,
+    justifyContent: 'center',
+  },
+  editAdminHeaderSideLeading: {
+    alignItems: 'flex-start',
+  },
+  editAdminHeaderSideTrailing: {
+    alignItems: 'flex-end',
+  },
+  editAdminCancelText: {
+    fontSize: 17,
+    fontWeight: '500',
+    color: Colors.text,
+    includeFontPadding: false,
+  },
+  editAdminHeaderTitle: {
+    flex: 1,
+    fontSize: 17,
+    fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'center',
+    letterSpacing: -0.3,
+  },
+  editAdminSavePill: {
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    minWidth: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.12,
+        shadowRadius: 5,
+      },
+      android: { elevation: 3 },
+    }),
+  },
+  editAdminSavePillDisabled: {
+    opacity: 0.5,
+  },
+  editAdminSavePillText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  editAdminScroll: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  editAdminScrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 8,
+  },
+  editAdminHero: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  editAdminAvatarRing: {
+    padding: 4,
+    borderRadius: 52,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.18,
+        shadowRadius: 20,
+      },
+      android: { elevation: 8 },
+    }),
+  },
+  editAdminAvatarInner: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  editAdminAvatarImage: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+  },
+  editAdminAvatarLoading: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.12)',
+    borderRadius: 44,
+  },
+  editAdminHeroName: {
+    marginTop: 16,
+    fontSize: 22,
+    fontWeight: '800',
+    color: Colors.text,
+    textAlign: 'center',
+    letterSpacing: -0.4,
+  },
+  editAdminHeroPhone: {
+    marginTop: 4,
+    fontSize: 15,
+    fontWeight: '500',
+    color: Colors.subtext,
+    textAlign: 'center',
+    writingDirection: 'ltr',
+  },
+  editAdminPhotoBtn: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+  },
+  editAdminPhotoBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  editAdminFormCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    paddingHorizontal: 18,
+    paddingTop: 20,
+    paddingBottom: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.08)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.07,
+        shadowRadius: 24,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  editAdminField: {
+    marginBottom: 20,
+  },
+  editAdminFieldLast: {
+    marginBottom: 0,
+  },
+  editAdminFieldLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#636366',
+    marginBottom: 8,
+    letterSpacing: -0.1,
+  },
+  editAdminFieldLabelRtl: {
+    alignSelf: 'stretch',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  editAdminFieldLabelLtr: {
+    alignSelf: 'stretch',
+    textAlign: 'left',
+    writingDirection: 'ltr',
+  },
+  editAdminFieldInput: {
+    minHeight: 52,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: Platform.OS === 'ios' ? 14 : 10,
+    fontSize: 17,
+    fontWeight: '600',
+    color: Colors.text,
+    backgroundColor: '#F2F4F7',
+    borderWidth: 0,
+  },
+  editAdminFieldInputRtl: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  editAdminFieldInputLtr: {
+    textAlign: 'left',
+    writingDirection: 'ltr',
+  },
+  editAdminPhoneInput: {
+    textAlign: 'left',
+    writingDirection: 'ltr',
   },
   modalContentContainer: {
     paddingHorizontal: 16,

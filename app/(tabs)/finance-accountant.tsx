@@ -69,6 +69,7 @@ export default function FinanceAccountantScreen() {
     year,
     month,
     loading,
+    reportRefreshing,
     totalIncome,
     totalExpenses,
     incomeBreakdown,
@@ -186,28 +187,42 @@ export default function FinanceAccountantScreen() {
           bounces
           keyboardShouldPersistTaps="handled"
         >
-          <View style={[styles.monthStrip, { backgroundColor: theme.surface, borderColor: `${theme.border}18` }]}>
-            <TouchableOpacity
-              onPress={goToPreviousMonth}
-              style={styles.monthStripArrow}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              accessibilityRole="button"
-              accessibilityLabel="חודש קודם"
-            >
-              <ChevronRight size={22} color={primaryColor} />
-            </TouchableOpacity>
-            <Text style={[styles.monthStripTitle, { color: theme.text }]}>
-              {MONTH_NAMES_HE[month - 1]} {year}
-            </Text>
-            <TouchableOpacity
-              onPress={goToNextMonth}
-              style={styles.monthStripArrow}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              accessibilityRole="button"
-              accessibilityLabel="חודש הבא"
-            >
-              <ChevronLeft size={22} color={primaryColor} />
-            </TouchableOpacity>
+          <View style={styles.monthStripWrap}>
+            <View style={[styles.monthStrip, { backgroundColor: theme.surface, borderColor: `${theme.border}18` }]}>
+              <TouchableOpacity
+                onPress={goToPreviousMonth}
+                style={styles.monthStripArrow}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityRole="button"
+                accessibilityLabel="חודש קודם"
+                disabled={reportRefreshing}
+              >
+                <ChevronRight size={22} color={primaryColor} />
+              </TouchableOpacity>
+              <Text style={[styles.monthStripTitle, { color: theme.text }]}>
+                {MONTH_NAMES_HE[month - 1]} {year}
+              </Text>
+              <TouchableOpacity
+                onPress={goToNextMonth}
+                style={styles.monthStripArrow}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityRole="button"
+                accessibilityLabel="חודש הבא"
+                disabled={reportRefreshing}
+              >
+                <ChevronLeft size={22} color={primaryColor} />
+              </TouchableOpacity>
+            </View>
+            {reportRefreshing ? (
+              <View
+                style={[styles.monthStripLoadingOverlay, { backgroundColor: `${theme.surface}E6` }]}
+                pointerEvents="auto"
+                accessibilityRole="progressbar"
+                accessibilityLabel="טוען נתוני חודש"
+              >
+                <ActivityIndicator size="small" color={primaryColor} />
+              </View>
+            ) : null}
           </View>
 
           <View style={[styles.card, { backgroundColor: theme.surface, borderColor: `${theme.border}14` }]}>
@@ -731,17 +746,27 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     direction: 'rtl',
   },
+  monthStripWrap: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    position: 'relative',
+  },
   monthStrip: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginHorizontal: 16,
-    marginTop: 16,
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderRadius: 16,
     borderWidth: 1,
     ...cardShadow,
+  },
+  monthStripLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   monthStripArrow: {
     width: 40,

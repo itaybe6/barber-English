@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   StyleSheet,
   Text,
@@ -11,11 +12,26 @@ import {
   ActivityIndicator,
   Image,
   Linking,
+  type LayoutChangeEvent,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  StatusBar,
+  setStatusBarStyle,
+  setStatusBarBackgroundColor,
+} from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import Animated, {
+  Easing,
+  Extrapolation,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import Colors from '@/constants/colors';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
@@ -26,6 +42,7 @@ import { greenInvoiceConnectApi } from '@/lib/api/greenInvoiceConnect';
 import { GreenInvoiceConnectModal } from '@/components/GreenInvoiceConnectModal';
 import type { BusinessExpense, ExpenseCategory } from '@/lib/supabase';
 import { useAdminFinanceMonthReport } from '@/hooks/useAdminFinanceMonthReport';
+import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
 import {
   ChevronLeft,
   ChevronRight,
@@ -55,9 +72,40 @@ const MONTH_NAMES_HE = [
   'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר',
 ];
 
+const AnimatedKeyboardAwareScrollView = Animated.createAnimatedComponent(KeyboardAwareScrollView);
+
+/** Fade + slide — hide מחמיר (in), show יוצא רך (out) כמו fade-in-up */
+const FINANCE_HEADER_HIDE = { duration: 260, easing: Easing.in(Easing.cubic) } as const;
+const FINANCE_HEADER_SHOW = { duration: 300, easing: Easing.out(Easing.cubic) } as const;
+const FINANCE_SCROLL_DOWN_THRESHOLD = 6;
+const FINANCE_SCROLL_UP_THRESHOLD = 6;
+
+/** Same gradient / lava base as `app/login.tsx` */
+function darkenHex(hex: string, ratio: number): string {
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return hex;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const f = 1 - ratio;
+  const to = (n: number) => Math.round(Math.max(0, Math.min(255, n * f))).toString(16).padStart(2, '0');
+  return `#${to(r)}${to(g)}${to(b)}`;
+}
+
+function lightenHex(hex: string, ratio: number): string {
+  const h = hex.replace('#', '');
+  if (h.length !== 6) return hex;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const mix = (c: number) => Math.min(255, Math.round(c + (255 - c) * ratio));
+  const to = (n: number) => n.toString(16).padStart(2, '0');
+  return `#${to(mix(r))}${to(mix(g))}${to(mix(b))}`;
+}
+
 export default function FinanceScreen() {
   const { t } = useTranslation();
-  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { colors: theme } = useBusinessColors();
   const primaryColor = theme.primary || '#000000';
   const greenInvoiceAccent = '#16A34A';
@@ -66,6 +114,7 @@ export default function FinanceScreen() {
     year,
     month,
     loading,
+    reportRefreshing,
     totalIncome,
     totalExpenses,
     incomeBreakdown,
@@ -87,6 +136,65 @@ export default function FinanceScreen() {
   const [giKeyIdStored, setGiKeyIdStored] = useState<string | null>(null);
   const [giSaving, setGiSaving] = useState(false);
 
+  const [heroLavaLayout, setHeroLavaLayout] = useState<{ w: number; h: number } | null>(null);
+  const onHeroLavaLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setHeroLavaLayout((prev) =>
+      prev?.w === width && prev?.h === height ? prev : { w: width, h: height },
+    );
+  }, []);
+
+  const insetsTopSV = useSharedValue(insets.top);
+  useEffect(() => {
+    insetsTopSV.value = insets.top;
+  }, [insets.top, insetsTopSV]);
+
+  const measuredFinanceHeaderHeight = useSharedValue(insets.top + 80);
+  const financeHeaderOffsetY = useSharedValue(0);
+  const financeLastScrollY = useSharedValue(0);
+
+  const financeScrollHandler = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      const y = e.contentOffset.y;
+      const dy = y - financeLastScrollY.value;
+      financeLastScrollY.value = y;
+      const h = measuredFinanceHeaderHeight.value;
+      const topInset = insetsTopSV.value;
+
+      if (y <= 4) {
+        financeHeaderOffsetY.value = withTiming(0, FINANCE_HEADER_SHOW);
+        return;
+      }
+      if (dy > FINANCE_SCROLL_DOWN_THRESHOLD) {
+        financeHeaderOffsetY.value = withTiming(-h, FINANCE_HEADER_HIDE);
+      } else if (dy < -FINANCE_SCROLL_UP_THRESHOLD) {
+        financeHeaderOffsetY.value = withTiming(0, FINANCE_HEADER_SHOW);
+      }
+    },
+  });
+
+  const financeHeaderSlideStyle = useAnimatedStyle(() => {
+    const h = Math.max(1, measuredFinanceHeaderHeight.value);
+    const t = financeHeaderOffsetY.value;
+    /** מתואם עם translateY — בחזרה למעלה זה נראה כמו fade-in-up */
+    const opacity = interpolate(t, [-h, 0], [0, 1], Extrapolation.CLAMP);
+    return {
+      opacity,
+      transform: [{ translateY: t }],
+    };
+  });
+
+  const financeScrollTopSpacerStyle = useAnimatedStyle(() => ({
+    height: Math.max(insetsTopSV.value, measuredFinanceHeaderHeight.value + financeHeaderOffsetY.value),
+  }));
+
+  const onFinanceHeaderLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      measuredFinanceHeaderHeight.value = e.nativeEvent.layout.height;
+    },
+    [measuredFinanceHeaderHeight],
+  );
+
   const refreshGreenInvoiceStatus = useCallback(async () => {
     const p = await businessProfileApi.getProfile();
     setGiConnected(!!p?.greeninvoice_has_credentials);
@@ -106,6 +214,27 @@ export default function FinanceScreen() {
       cancelled = true;
     };
   }, [loading]);
+
+  /** Home tab uses transparent status bar; restore opaque bar + dark icons so top matches header. */
+  useFocusEffect(
+    useCallback(() => {
+      try {
+        setStatusBarStyle('dark', true);
+        setStatusBarBackgroundColor(theme.surface, true);
+      } catch {
+        /* noop */
+      }
+      return () => {
+        try {
+          setStatusBarBackgroundColor('transparent', true);
+        } catch {
+          /* noop */
+        }
+        financeHeaderOffsetY.value = 0;
+        financeLastScrollY.value = 0;
+      };
+    }, [theme.surface, financeHeaderOffsetY, financeLastScrollY]),
+  );
 
   const openGreenInvoiceModal = () => {
     setShowGreenInvoiceModal(true);
@@ -250,13 +379,13 @@ export default function FinanceScreen() {
   // --- Loading State ---
   if (loading) {
     return (
-      <View style={{ flex: 1, direction: 'rtl' }}>
-        <SafeAreaView style={styles.container} edges={['top']}>
-          <View style={styles.loadingWrap}>
-            <ActivityIndicator size="large" color={primaryColor} />
-            <Text style={[styles.loadingText, { color: theme.textSecondary }]}>טוען נתונים פיננסיים...</Text>
-          </View>
-        </SafeAreaView>
+      <View style={[styles.rtlRoot, { direction: 'rtl' }]}>
+        <StatusBar style="dark" backgroundColor={theme.surface} />
+        <View style={{ paddingTop: insets.top, backgroundColor: theme.surface }} />
+        <View style={[styles.loadingWrap, { flex: 1 }]}>
+          <ActivityIndicator size="large" color={primaryColor} />
+          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>טוען נתונים פיננסיים...</Text>
+        </View>
       </View>
     );
   }
@@ -264,108 +393,145 @@ export default function FinanceScreen() {
   return (
     // direction: 'rtl' makes all flex-row layouts render right→left automatically
     <View style={styles.rtlRoot}>
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar style="dark" backgroundColor={theme.surface} />
 
-        {/* ── Header ── */}
-        <View style={[styles.topBar, { backgroundColor: theme.surface, borderBottomColor: `${theme.border}18` }]}>
-          {/* In RTL row: first element is rightmost → back button on right */}
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={[styles.backBtn, { backgroundColor: styles.rtlRoot.backgroundColor }]}
-            accessibilityRole="button"
-            accessibilityLabel="חזור"
-          >
-            <ChevronRight size={26} color={theme.text} />
-          </TouchableOpacity>
+      <Animated.View
+        style={[styles.financeHeaderFixed, financeHeaderSlideStyle]}
+        onLayout={onFinanceHeaderLayout}
+      >
+        <View
+          style={[
+            styles.topBar,
+            {
+              paddingTop: insets.top + 14,
+              backgroundColor: theme.surface,
+              borderBottomColor: `${theme.border}18`,
+            },
+          ]}
+        >
           <View style={styles.topBarTitleBlock}>
             <Text style={[styles.topBarTitle, { color: theme.text }]}>מעקב פיננסי</Text>
             <Text style={[styles.topBarSubtitle, { color: theme.textSecondary }]}>הכנסות והוצאות</Text>
           </View>
-          <View style={{ width: 44 }} />
         </View>
+      </Animated.View>
 
-        <KeyboardAwareScreenScroll
-          contentContainerStyle={styles.scroll}
-          showsVerticalScrollIndicator={false}
-          bounces
-          keyboardShouldPersistTaps="handled"
-        >
+      <AnimatedKeyboardAwareScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        bounces
+        keyboardShouldPersistTaps="handled"
+        enableOnAndroid
+        extraScrollHeight={36}
+        extraHeight={12}
+        enableResetScrollToCoords={false}
+        onScroll={financeScrollHandler}
+        scrollEventThrottle={16}
+      >
+          <Animated.View style={financeScrollTopSpacerStyle} />
 
-          {/* ── Hero Summary Card ── */}
+          {/* ── Hero Summary Card (gradient + lava lamp כמו login) ── */}
           <View style={styles.heroWrapper}>
-            <LinearGradient
-              colors={[primaryColor, primaryColor, `${primaryColor}CC`]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.heroCard}
-            >
-              {/* Decorative circle */}
-              <View style={styles.heroBubble} />
-              <View style={styles.heroBubbleSmall} />
-
-              {/* Month Navigator — in RTL row: prev on RIGHT, next on LEFT */}
-              <View style={styles.monthRow}>
-                <TouchableOpacity
-                  onPress={goToPreviousMonth}
-                  style={styles.monthArrowBtn}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                  accessibilityRole="button"
-                  accessibilityLabel="חודש קודם"
-                >
-                  <ChevronRight size={22} color="rgba(255,255,255,0.85)" />
-                </TouchableOpacity>
-                <View style={styles.monthCenter}>
-                  <Text style={styles.monthNameHe}>{MONTH_NAMES_HE[month - 1]}</Text>
-                  <Text style={styles.monthYearHe}>{year}</Text>
+            <View style={styles.heroCard} onLayout={onHeroLavaLayout}>
+              <LinearGradient
+                colors={[lightenHex(primaryColor, 0.1), darkenHex(primaryColor, 0.42)]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              {Platform.OS !== 'web' &&
+              heroLavaLayout &&
+              heroLavaLayout.w > 0 &&
+              heroLavaLayout.h > 0 ? (
+                <BrandLavaLampBackground
+                  primaryColor={primaryColor}
+                  baseColor={darkenHex(primaryColor, 0.42)}
+                  layoutWidth={heroLavaLayout.w}
+                  layoutHeight={heroLavaLayout.h}
+                  count={4}
+                  duration={16000}
+                  blurIntensity={40}
+                />
+              ) : null}
+              <View style={styles.heroCardInner}>
+                {/* Month Navigator — in RTL row: prev on RIGHT, next on LEFT */}
+                <View style={styles.monthRow}>
+                  <TouchableOpacity
+                    onPress={goToPreviousMonth}
+                    style={styles.monthArrowBtn}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="חודש קודם"
+                    disabled={reportRefreshing}
+                  >
+                    <ChevronRight size={22} color="rgba(255,255,255,0.85)" />
+                  </TouchableOpacity>
+                  <View style={styles.monthCenter}>
+                    <Text style={styles.monthNameHe}>{MONTH_NAMES_HE[month - 1]}</Text>
+                    <Text style={styles.monthYearHe}>{year}</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={goToNextMonth}
+                    style={styles.monthArrowBtn}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="חודש הבא"
+                    disabled={reportRefreshing}
+                  >
+                    <ChevronLeft size={22} color="rgba(255,255,255,0.85)" />
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  onPress={goToNextMonth}
-                  style={styles.monthArrowBtn}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                  accessibilityRole="button"
-                  accessibilityLabel="חודש הבא"
-                >
-                  <ChevronLeft size={22} color="rgba(255,255,255,0.85)" />
-                </TouchableOpacity>
+
+                {/* Net Profit */}
+                <Text style={styles.heroNetLabel}>רווח נקי</Text>
+                <Text style={[styles.heroNetAmount, { color: netProfit >= 0 ? '#A7F3D0' : '#FCA5A5' }]}>
+                  {netProfit >= 0 ? '+' : ''}{formatCurrency(netProfit)}
+                </Text>
+
+                {/* Income / Expenses mini cards (bento strip) */}
+                <View style={styles.heroMiniRow}>
+                  <View style={styles.heroMiniCard}>
+                    <View style={[styles.heroMiniIcon, { backgroundColor: 'rgba(220,252,231,0.95)' }]}>
+                      <ArrowUpRight size={14} color={theme.success} />
+                    </View>
+                    <Text style={styles.heroMiniLabel}>הכנסות</Text>
+                    <Text style={styles.heroMiniValue}>{formatCurrency(totalIncome)}</Text>
+                  </View>
+                  <View style={styles.heroMiniDivider} />
+                  <View style={styles.heroMiniCard}>
+                    <View style={[styles.heroMiniIcon, { backgroundColor: 'rgba(254,226,226,0.95)' }]}>
+                      <ArrowDownRight size={14} color={theme.error} />
+                    </View>
+                    <Text style={styles.heroMiniLabel}>הוצאות</Text>
+                    <Text style={styles.heroMiniValue}>{formatCurrency(totalExpenses)}</Text>
+                  </View>
+                </View>
+
+                {expenseToIncomePct !== null ? (
+                  <View style={styles.heroRatioBlock} accessibilityLabel={`הוצאות מהוות ${expenseToIncomePct} אחוז מההכנסות`}>
+                    <View style={styles.heroRatioHead}>
+                      <Text style={styles.heroRatioCaption}>הוצאות ביחס להכנסות</Text>
+                      <Text style={styles.heroRatioPct}>{expenseToIncomePct}%</Text>
+                    </View>
+                    <View style={styles.heroRatioTrack}>
+                      <View style={[styles.heroRatioFill, { width: `${expenseToIncomePct}%` }]} />
+                    </View>
+                  </View>
+                ) : null}
               </View>
-
-              {/* Net Profit */}
-              <Text style={styles.heroNetLabel}>רווח נקי</Text>
-              <Text style={[styles.heroNetAmount, { color: netProfit >= 0 ? '#A7F3D0' : '#FCA5A5' }]}>
-                {netProfit >= 0 ? '+' : ''}{formatCurrency(netProfit)}
-              </Text>
-
-              {/* Income / Expenses mini cards (bento strip) */}
-              <View style={styles.heroMiniRow}>
-                <View style={styles.heroMiniCard}>
-                  <View style={[styles.heroMiniIcon, { backgroundColor: 'rgba(220,252,231,0.95)' }]}>
-                    <ArrowUpRight size={14} color={theme.success} />
-                  </View>
-                  <Text style={styles.heroMiniLabel}>הכנסות</Text>
-                  <Text style={styles.heroMiniValue}>{formatCurrency(totalIncome)}</Text>
-                </View>
-                <View style={styles.heroMiniDivider} />
-                <View style={styles.heroMiniCard}>
-                  <View style={[styles.heroMiniIcon, { backgroundColor: 'rgba(254,226,226,0.95)' }]}>
-                    <ArrowDownRight size={14} color={theme.error} />
-                  </View>
-                  <Text style={styles.heroMiniLabel}>הוצאות</Text>
-                  <Text style={styles.heroMiniValue}>{formatCurrency(totalExpenses)}</Text>
-                </View>
-              </View>
-
-              {expenseToIncomePct !== null ? (
-                <View style={styles.heroRatioBlock} accessibilityLabel={`הוצאות מהוות ${expenseToIncomePct} אחוז מההכנסות`}>
-                  <View style={styles.heroRatioHead}>
-                    <Text style={styles.heroRatioCaption}>הוצאות ביחס להכנסות</Text>
-                    <Text style={styles.heroRatioPct}>{expenseToIncomePct}%</Text>
-                  </View>
-                  <View style={styles.heroRatioTrack}>
-                    <View style={[styles.heroRatioFill, { width: `${expenseToIncomePct}%` }]} />
-                  </View>
+              {reportRefreshing ? (
+                <View
+                  style={styles.heroLoadingOverlay}
+                  pointerEvents="auto"
+                  accessibilityLabel="טוען נתוני חודש"
+                  accessibilityRole="progressbar"
+                >
+                  <ActivityIndicator size="large" color="#FFFFFF" />
+                  <Text style={styles.heroLoadingText}>טוען…</Text>
                 </View>
               ) : null}
-            </LinearGradient>
+            </View>
           </View>
 
           {/* ── Green Invoice (חשבונית ירוקה) ── */}
@@ -535,8 +701,7 @@ export default function FinanceScreen() {
           </View>
 
           <View style={{ height: 110 }} />
-        </KeyboardAwareScreenScroll>
-      </SafeAreaView>
+      </AnimatedKeyboardAwareScrollView>
 
       {/* ── Add Expense Modal ── */}
       <Modal visible={showAddExpense} animationType="slide" transparent statusBarTranslucent>
@@ -694,10 +859,6 @@ const styles = StyleSheet.create({
     direction: 'rtl',
     backgroundColor: '#F4F6FB',
   },
-  container: {
-    flex: 1,
-    backgroundColor: '#F4F6FB',
-  },
   loadingWrap: {
     flex: 1,
     alignItems: 'center',
@@ -710,25 +871,24 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 
-  // ── Top bar (clean app-bar + subtitle, 21st-style spacing) ──
+  financeHeaderFixed: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+  },
+
+  // ── Top bar (single block with safe inset — no shadow, avoids seam under status bar) ──
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingBottom: 14,
     backgroundColor: Colors.white,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E7EB',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0f172a',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 6,
-      },
-      android: { elevation: 1 },
-    }),
   },
   topBarTitleBlock: {
     flex: 1,
@@ -742,14 +902,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 2,
     lineHeight: 16,
-  },
-  backBtn: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 22,
-    backgroundColor: '#F4F6FB',
   },
   topBarTitle: {
     fontSize: 19,
@@ -772,8 +924,8 @@ const styles = StyleSheet.create({
   },
   heroCard: {
     borderRadius: 24,
-    padding: 24,
     overflow: 'hidden',
+    position: 'relative',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -784,23 +936,20 @@ const styles = StyleSheet.create({
       android: { elevation: 12 },
     }),
   },
-  heroBubble: {
-    position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    top: -60,
-    left: -40,
+  heroCardInner: {
+    padding: 24,
   },
-  heroBubbleSmall: {
-    position: 'absolute',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    bottom: -30,
-    right: 20,
+  heroLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  heroLoadingText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   monthRow: {
     flexDirection: 'row',

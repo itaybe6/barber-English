@@ -58,12 +58,19 @@ function darkenHex(hex: string, ratio: number): string {
 
 const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
+const SETTINGS_TAB = '/(tabs)/settings' as const;
+
 export default function AddRecurringAppointmentScreen() {
   const insets = useSafeAreaInsets();
+
+  const goBackToSettings = useCallback(() => {
+    router.replace(SETTINGS_TAB);
+  }, []);
+
   const onCreated = useCallback(() => {
     DeviceEventEmitter.emit(ADMIN_RECURRING_APPOINTMENTS_CHANGED);
-    router.back();
-  }, []);
+    goBackToSettings();
+  }, [goBackToSettings]);
 
   const form = useAddRecurringAppointmentForm(onCreated);
 
@@ -140,7 +147,7 @@ export default function AddRecurringAppointmentScreen() {
       <SafeAreaView style={styles.safeTop} edges={['top']}>
         <View style={styles.headerRow}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={goBackToSettings}
             style={({ pressed }) => [styles.headerIconBtn, pressed && { opacity: 0.75 }]}
             accessibilityRole="button"
             accessibilityLabel={t('back', 'Back')}

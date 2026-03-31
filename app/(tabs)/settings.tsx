@@ -80,6 +80,9 @@ const BOOKING_RULER_MIN_DISPLAY = 0;
 const CLIENT_REMINDER_HOURS_MIN = 0;
 const CLIENT_REMINDER_HOURS_MAX = 24;
 
+const ADMIN_SELF_REMINDER_MIN_MINUTES = 5;
+const ADMIN_SELF_REMINDER_MAX_MINUTES = 60;
+
 const RECURRING_DOW_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
 export default function SettingsScreen() {
@@ -157,6 +160,7 @@ export default function SettingsScreen() {
   const [bookingWindowDraft, setBookingWindowDraft] = useState('7');
   const bookingDaysRulerRef = useRef<BookingDaysRulerHandle>(null);
   const clientReminderHoursRulerRef = useRef<BookingDaysRulerHandle>(null);
+  const adminReminderMinutesRulerRef = useRef<BookingDaysRulerHandle>(null);
   const [showCancellationDropdown, setShowCancellationDropdown] = useState(false);
   // Address bottom sheet animation
   const addressSheetAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
@@ -198,12 +202,9 @@ export default function SettingsScreen() {
   const [adminReminderMinutes, setAdminReminderMinutes] = useState<number | null>(null);
   const [adminReminderEnabled, setAdminReminderEnabled] = useState(false);
   const [clientReminderMinutes, setClientReminderMinutes] = useState<number | null>(null);
-  const [clientReminderEnabled, setClientReminderEnabled] = useState(false);
   const [showClientReminderModal, setShowClientReminderModal] = useState(false);
   const [clientReminderModalHoursDraft, setClientReminderModalHoursDraft] = useState('');
-  const [clientReminderSwitchPending, setClientReminderSwitchPending] = useState(false);
   const [showAdminReminderModal, setShowAdminReminderModal] = useState(false);
-  const [adminReminderModalHoursDraft, setAdminReminderModalHoursDraft] = useState('');
   const [adminReminderModalMinutesDraft, setAdminReminderModalMinutesDraft] = useState('');
   /** Lets the switch show “on” while the user fills the modal after enabling */
   const [adminReminderSwitchPending, setAdminReminderSwitchPending] = useState(false);
@@ -283,7 +284,6 @@ export default function SettingsScreen() {
         setAdminReminderEnabled(adminRem !== null && Number(adminRem) > 0);
         const clientRem = await businessProfileApi.getClientReminderMinutesForUser(user.id);
         setClientReminderMinutes(clientRem);
-        setClientReminderEnabled(clientRem !== null && Number(clientRem) > 0);
       } catch (e) {
         // silent
       }
@@ -357,6 +357,23 @@ export default function SettingsScreen() {
     });
     return () => cancelAnimationFrame(id);
   }, [showClientReminderModal, clientReminderMinutes]);
+
+  useLayoutEffect(() => {
+    if (!showAdminReminderModal) return;
+    const raw = adminReminderMinutes;
+    const m =
+      raw != null && raw > 0
+        ? Math.min(
+            ADMIN_SELF_REMINDER_MAX_MINUTES,
+            Math.max(ADMIN_SELF_REMINDER_MIN_MINUTES, raw),
+          )
+        : 15;
+    setAdminReminderModalMinutesDraft(String(m));
+    const id = requestAnimationFrame(() => {
+      adminReminderMinutesRulerRef.current?.scrollToDay(m);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [showAdminReminderModal, adminReminderMinutes]);
 
   const handleSaveBusinessProfile = async () => {
     setIsSavingProfile(true);
@@ -609,40 +626,14 @@ export default function SettingsScreen() {
     }
   }, []);
 
-  const openClientReminderModal = useCallback(
-    (fromSwitch = false) => {
-      if (!user?.id) return;
-      if (fromSwitch) setClientReminderSwitchPending(true);
-      setShowClientReminderModal(true);
-    },
-    [user?.id],
-  );
+  const openClientReminderModal = useCallback(() => {
+    if (!user?.id) return;
+    setShowClientReminderModal(true);
+  }, [user?.id]);
 
   const dismissClientReminderModal = useCallback(() => {
     setShowClientReminderModal(false);
-    setClientReminderSwitchPending(false);
   }, []);
-
-  const handleClientReminderSwitch = async (on: boolean) => {
-    if (!user?.id) return;
-    if (!on) {
-      setClientReminderSwitchPending(false);
-      setShowClientReminderModal(false);
-      try {
-        setIsSavingProfile(true);
-        await businessProfileApi.setClientReminderMinutesForUser(user.id, null);
-        setClientReminderMinutes(null);
-        setClientReminderEnabled(false);
-      } finally {
-        setIsSavingProfile(false);
-      }
-      return;
-    }
-    openClientReminderModal(true);
-  };
-
-  const clientReminderActive =
-    (clientReminderMinutes != null && clientReminderMinutes > 0) || clientReminderSwitchPending;
 
   const onClientReminderHoursRulerChange = useCallback((hours: number) => {
     const d = Math.min(CLIENT_REMINDER_HOURS_MAX, Math.max(CLIENT_REMINDER_HOURS_MIN, hours));
@@ -676,8 +667,6 @@ export default function SettingsScreen() {
       if (total === 0) {
         await businessProfileApi.setClientReminderMinutesForUser(user.id, null);
         setClientReminderMinutes(null);
-        setClientReminderEnabled(false);
-        setClientReminderSwitchPending(false);
         setShowClientReminderModal(false);
         return;
       }
@@ -687,8 +676,6 @@ export default function SettingsScreen() {
       }
       await businessProfileApi.setClientReminderMinutesForUser(user.id, total);
       setClientReminderMinutes(total);
-      setClientReminderEnabled(true);
-      setClientReminderSwitchPending(false);
       setShowClientReminderModal(false);
     } finally {
       setIsSavingProfile(false);
@@ -699,17 +686,31 @@ export default function SettingsScreen() {
     (fromSwitch = false) => {
       if (!user?.id) return;
       if (fromSwitch) setAdminReminderSwitchPending(true);
-      if (adminReminderMinutes != null && adminReminderMinutes > 0) {
-        setAdminReminderModalHoursDraft(String(Math.floor(adminReminderMinutes / 60)));
-        setAdminReminderModalMinutesDraft(String(adminReminderMinutes % 60));
-      } else {
-        setAdminReminderModalHoursDraft('');
-        setAdminReminderModalMinutesDraft('');
-      }
       setShowAdminReminderModal(true);
     },
-    [user?.id, adminReminderMinutes],
+    [user?.id],
   );
+
+  const onAdminReminderMinutesRulerChange = useCallback((minutes: number) => {
+    const d = Math.min(
+      ADMIN_SELF_REMINDER_MAX_MINUTES,
+      Math.max(ADMIN_SELF_REMINDER_MIN_MINUTES, minutes),
+    );
+    setAdminReminderModalMinutesDraft(String(d));
+  }, []);
+
+  const onAdminReminderMinutesTextChange = useCallback((text: string) => {
+    setAdminReminderModalMinutesDraft(text);
+    const digits = text.replace(/\D/g, '');
+    const n = parseInt(digits, 10);
+    if (
+      Number.isFinite(n) &&
+      n >= ADMIN_SELF_REMINDER_MIN_MINUTES &&
+      n <= ADMIN_SELF_REMINDER_MAX_MINUTES
+    ) {
+      adminReminderMinutesRulerRef.current?.scrollToDay(n);
+    }
+  }, []);
 
   const dismissAdminReminderModal = useCallback(() => {
     setShowAdminReminderModal(false);
@@ -718,37 +719,18 @@ export default function SettingsScreen() {
 
   const saveAdminReminderFromModal = async () => {
     if (!user?.id) return;
-    const hRaw = adminReminderModalHoursDraft.trim();
-    const mRaw = adminReminderModalMinutesDraft.trim();
-    if ((hRaw && !/^\d+$/.test(hRaw)) || (mRaw && !/^\d+$/.test(mRaw))) {
-      Alert.alert(t('error.generic', 'Error'), t('settings.reminder.clientDialogInvalidParts'));
+    const raw = adminReminderModalMinutesDraft.trim();
+    if (!raw || !/^\d+$/.test(raw)) {
+      Alert.alert(t('error.generic', 'Error'), t('settings.reminder.adminDialogInvalidMinutes'));
       return;
     }
-    const h = hRaw ? parseInt(hRaw, 10) : 0;
-    const m = mRaw ? parseInt(mRaw, 10) : 0;
-    if (m > 59) {
-      Alert.alert(t('error.generic', 'Error'), t('settings.reminder.clientDialogInvalidParts'));
+    const total = parseInt(raw, 10);
+    if (total < ADMIN_SELF_REMINDER_MIN_MINUTES || total > ADMIN_SELF_REMINDER_MAX_MINUTES) {
+      Alert.alert(t('error.generic', 'Error'), t('settings.reminder.adminDialogInvalidMinutes'));
       return;
     }
-    if (h > 24) {
-      Alert.alert(t('error.generic', 'Error'), t('settings.profile.reminderInvalid', 'Enter a valid number between 1 and 1440 minutes'));
-      return;
-    }
-    const total = h * 60 + m;
     try {
       setIsSavingProfile(true);
-      if (total === 0) {
-        await businessProfileApi.setReminderMinutesForUser(user.id, null);
-        setAdminReminderMinutes(null);
-        setAdminReminderEnabled(false);
-        setAdminReminderSwitchPending(false);
-        setShowAdminReminderModal(false);
-        return;
-      }
-      if (total < 1 || total > 1440) {
-        Alert.alert(t('error.generic', 'Error'), t('settings.profile.reminderInvalid', 'Enter a valid number between 1 and 1440 minutes'));
-        return;
-      }
       await businessProfileApi.setReminderMinutesForUser(user.id, total);
       setAdminReminderMinutes(total);
       setAdminReminderEnabled(true);
@@ -1527,6 +1509,18 @@ export default function SettingsScreen() {
     closeManageRecurringSheetRef.current = () => setShowManageRecurringModal(false);
   }, []);
 
+  /** No close animation — avoids the sheet flashing / jumping over the add screen when navigating away */
+  const dismissRecurringHubAndGoToAdd = useCallback(() => {
+    sheetAnim.stopAnimation();
+    dragY.stopAnimation();
+    sheetAnim.setValue(0);
+    dragY.setValue(0);
+    setShowManageRecurringModal(false);
+    requestAnimationFrame(() => {
+      router.push('/(tabs)/add-recurring-appointment');
+    });
+  }, [router]);
+
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener(ADMIN_RECURRING_APPOINTMENTS_CHANGED, () => {
       void (async () => {
@@ -1892,6 +1886,19 @@ export default function SettingsScreen() {
                   },
                 )
               : null}
+            {renderSettingItemLTR(
+              <Bell size={20} color={businessColors.primary} />,
+              t('settings.reminder.clientRowTitle', 'Client reminder before appointment'),
+              clientReminderMinutes != null && clientReminderMinutes > 0
+                ? t('settings.reminder.clientRowValueHours', {
+                    count: Math.max(1, Math.round(clientReminderMinutes / 60)),
+                  })
+                : t('settings.reminder.clientTapToEdit', 'Tap to edit reminder timing'),
+              undefined,
+              () => openClientReminderModal(),
+              undefined,
+              !user?.id,
+            )}
             <View style={styles.settingItemLTR}>
               <View style={styles.settingIconLTR}>
                 <Clock size={20} color={businessColors.primary} />
@@ -1943,57 +1950,6 @@ export default function SettingsScreen() {
                 trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
                 thumbColor={
                   cancellationLimitActive
-                    ? businessColors.primary
-                    : Platform.OS === 'android'
-                      ? '#f4f3f4'
-                      : undefined
-                }
-                ios_backgroundColor="#E5E5EA"
-              />
-            </View>
-            <View style={styles.settingDivider} />
-            <View style={styles.settingItemLTR}>
-              <View style={styles.settingIconLTR}>
-                <Bell size={20} color={businessColors.primary} />
-              </View>
-              <Pressable
-                style={({ pressed }) => [
-                  { flex: 1, paddingRight: 8, opacity: clientReminderActive && user?.id ? 1 : 0.55 },
-                  pressed && clientReminderActive && user?.id ? { opacity: 0.88 } : null,
-                ]}
-                onPress={() => {
-                  if (clientReminderActive && user?.id) openClientReminderModal(false);
-                }}
-                disabled={!clientReminderActive || !user?.id}
-              >
-                <Text style={styles.settingTitleLTR}>
-                  {t('settings.reminder.clientRowTitle', 'Client reminder before appointment')}
-                </Text>
-                {clientReminderActive ? (
-                  clientReminderMinutes != null && clientReminderMinutes > 0 ? (
-                    <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
-                      {t('settings.reminder.clientRowValueMinutes', { count: clientReminderMinutes })}
-                    </Text>
-                  ) : (
-                    <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
-                      {t('settings.reminder.clientTapToEdit', 'Tap to edit reminder timing')}
-                    </Text>
-                  )
-                ) : (
-                  <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
-                    {t('settings.reminder.clientRowValueOff', 'Off')}
-                  </Text>
-                )}
-              </Pressable>
-              <Switch
-                value={clientReminderActive}
-                onValueChange={(v) => {
-                  void handleClientReminderSwitch(v);
-                }}
-                disabled={!user?.id || isSavingProfile}
-                trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
-                thumbColor={
-                  clientReminderActive
                     ? businessColors.primary
                     : Platform.OS === 'android'
                       ? '#f4f3f4'
@@ -3089,87 +3045,113 @@ export default function SettingsScreen() {
         </SafeAreaView>
       </Modal>
 
-      {/* Admin self-reminder — same time fields as client reminder */}
+      {/* Admin self-reminder — minutes 5–60, ruler + bottom sheet */}
       <Modal
         visible={showAdminReminderModal}
-        animationType="fade"
-        transparent
+        animationType="slide"
+        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
         onRequestClose={dismissAdminReminderModal}
       >
-        <KeyboardAvoidingView
-          style={styles.smallModalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <View style={styles.smallModalCard}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity style={styles.modalCloseButton} onPress={dismissAdminReminderModal}>
-                <Text style={styles.modalCloseText}>{t('cancel', 'Cancel')}</Text>
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: SETTINGS_GROUPED_BG }]} edges={['top']}>
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+          >
+            <View style={[styles.modalHeader, styles.bookingWindowModalHeader]}>
+              <TouchableOpacity
+                style={styles.cancellationModalCloseButton}
+                onPress={dismissAdminReminderModal}
+                accessibilityRole="button"
+                accessibilityLabel={t('cancel', 'Cancel')}
+              >
+                <X size={22} color={Colors.text} strokeWidth={2} />
               </TouchableOpacity>
-              <Text style={[styles.modalTitleLTR, I18nManager.isRTL && { textAlign: 'center' }]} numberOfLines={2}>
+              <Text style={[styles.modalTitle, styles.bookingWindowModalTitle]} numberOfLines={2}>
                 {t('settings.reminder.adminRowTitle', 'Self-reminder before appointment')}
               </Text>
+              <View style={styles.bookingWindowHeaderSpacer} />
+            </View>
+
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{
+                paddingHorizontal: 20,
+                paddingTop: 8,
+                paddingBottom: insets.bottom + 120,
+              }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+            >
+              <LinearGradient
+                colors={[`${businessColors.primary}18`, `${businessColors.primary}08`, 'transparent']}
+                locations={[0, 0.55, 1]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.bookingWindowExplainer}
+              >
+                <View style={[styles.bookingWindowExplainerIcon, { backgroundColor: `${businessColors.primary}20` }]}>
+                  <Clock size={22} color={businessColors.primary} strokeWidth={2} />
+                </View>
+                <Text style={styles.bookingWindowExplainerText}>{t('settings.reminder.adminAutomatedHint')}</Text>
+              </LinearGradient>
+
+              <View style={styles.bookingWindowHeroCard}>
+                <Text style={styles.bookingWindowFieldLabel}>
+                  {t('settings.reminder.adminDialogMinutesLabel', 'Minutes before appointment')}
+                </Text>
+                <View style={styles.bookingWindowRulerLtr}>
+                  <BookingDaysRuler
+                    ref={adminReminderMinutesRulerRef}
+                    minDay={ADMIN_SELF_REMINDER_MIN_MINUTES}
+                    maxDay={ADMIN_SELF_REMINDER_MAX_MINUTES}
+                    fadeColor={Colors.white}
+                    tickColor={Colors.text}
+                    indicatorColor={businessColors.primary}
+                    unitLabel={t('settings.reminder.adminDialogMinutesUnit', 'minutes')}
+                    onDayChange={onAdminReminderMinutesRulerChange}
+                  />
+                </View>
+                <Text style={styles.bookingWindowManualLabel}>
+                  {t('settings.reminder.adminDialogManualMinutes', 'Or enter a number')}
+                </Text>
+                <TextInput
+                  style={styles.bookingWindowManualInput}
+                  value={adminReminderModalMinutesDraft}
+                  onChangeText={onAdminReminderMinutesTextChange}
+                  placeholder="15"
+                  placeholderTextColor={Colors.subtext}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  selectTextOnFocus
+                />
+                <Text style={styles.bookingWindowRangeFoot}>
+                  {t('settings.reminder.adminDialogMinutesRange', '5–60 minutes. Turn off the reminder from settings.')}
+                </Text>
+              </View>
+            </ScrollView>
+
+            <View style={[styles.bookingWindowFooter, { paddingBottom: Math.max(insets.bottom, 10) }]}>
               <TouchableOpacity
-                style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]}
+                style={[
+                  styles.bookingWindowFooterBtn,
+                  { backgroundColor: businessColors.primary },
+                  isSavingProfile && styles.bookingWindowFooterBtnDisabled,
+                ]}
                 onPress={() => {
                   void saveAdminReminderFromModal();
                 }}
                 disabled={isSavingProfile}
+                activeOpacity={0.88}
               >
-                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>
+                <Text style={[styles.bookingWindowFooterBtnText, isSavingProfile && { opacity: 0.85 }]}>
                   {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
                 </Text>
               </TouchableOpacity>
             </View>
-            <ScrollView
-              style={styles.smallModalContent}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              <Text
-                style={[
-                  styles.settingSubtitleLTR,
-                  { marginBottom: 16, lineHeight: 22 },
-                  I18nManager.isRTL && { textAlign: 'right' },
-                ]}
-              >
-                {t('settings.reminder.adminAutomatedHint')}
-              </Text>
-              <Text style={[styles.inputLabelLTR, I18nManager.isRTL && { textAlign: 'right' }]}>
-                {t('settings.reminder.clientDialogHoursLabel', 'Hours')}
-              </Text>
-              <TextInput
-                style={[styles.textInput, { marginBottom: 12 }]}
-                value={adminReminderModalHoursDraft}
-                onChangeText={setAdminReminderModalHoursDraft}
-                placeholder="0"
-                placeholderTextColor={Colors.subtext}
-                keyboardType="number-pad"
-                textAlign={I18nManager.isRTL ? 'right' : 'left'}
-              />
-              <Text style={[styles.inputLabelLTR, I18nManager.isRTL && { textAlign: 'right' }]}>
-                {t('settings.reminder.clientDialogMinutesLabel', 'Minutes (0–59)')}
-              </Text>
-              <TextInput
-                style={[styles.textInput, { marginBottom: 12 }]}
-                value={adminReminderModalMinutesDraft}
-                onChangeText={setAdminReminderModalMinutesDraft}
-                placeholder="0"
-                placeholderTextColor={Colors.subtext}
-                keyboardType="number-pad"
-                textAlign={I18nManager.isRTL ? 'right' : 'left'}
-              />
-              <Text
-                style={[
-                  styles.settingSubtitleLTR,
-                  { fontSize: 13, opacity: 0.85 },
-                  I18nManager.isRTL && { textAlign: 'right' },
-                ]}
-              >
-                {t('settings.reminder.adminDialogCombinedHint')}
-              </Text>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
       </Modal>
 
       {/* Edit Admin (name & phone) Modal */}
@@ -4066,9 +4048,7 @@ export default function SettingsScreen() {
               </Text>
               <TouchableOpacity
                 style={[styles.servicesModalCloseButton, { marginLeft: 0, marginRight: -4 }]}
-                onPress={() => {
-                  animateCloseSheet(() => router.push('/(tabs)/add-recurring-appointment'));
-                }}
+                onPress={dismissRecurringHubAndGoToAdd}
                 accessibilityRole="button"
                 accessibilityLabel={t('settings.recurring.addFromHubA11y', 'Add fixed appointment')}
               >

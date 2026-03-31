@@ -1804,7 +1804,15 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (showRecurringModal) {
       // Preload services list for selection
-      servicesApi.getAllServices().then(setRecurringServices).catch(() => setRecurringServices([]));
+      servicesApi
+        .getAllServices()
+        .then((all) => {
+          const mine = (all || []).filter(
+            (s) => String(s.worker_id || '') === String(user?.id || '')
+          );
+          setRecurringServices(mine);
+        })
+        .catch(() => setRecurringServices([]));
       // Reset fields
       setClientSearch('');
       setSelectedClient(null);
@@ -1827,7 +1835,7 @@ export default function SettingsScreen() {
         setRecRenderKey((k) => k + 1);
       }, 0);
     }
-  }, [showRecurringModal]);
+  }, [showRecurringModal, user?.id]);
 
   const searchClients = async (q: string) => {
     setClientSearch(q);

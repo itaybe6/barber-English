@@ -43,6 +43,8 @@ export type AdminVerticalMonthCalendarProps = {
   onJumpToDate?: (date: Date) => void;
   /** Override pill text under day cells when `displayMode` is count (e.g. waitlist vs appointments). */
   formatCountBadge?: (count: number) => string;
+  /** Floating "Today" chip (default true). Set false e.g. on admin waitlist month view. */
+  showTodayPill?: boolean;
 };
 
 function formatMonthLong(date: Date, language: string): string {
@@ -93,6 +95,7 @@ export default function AdminVerticalMonthCalendar({
   monthHint,
   onJumpToDate,
   formatCountBadge: formatCountBadgeProp,
+  showTodayPill = true,
 }: AdminVerticalMonthCalendarProps) {
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -302,33 +305,35 @@ export default function AdminVerticalMonthCalendar({
         ) : null}
       </ScrollView>
 
-      <View
-        pointerEvents="box-none"
-        style={[styles.todayWrap, { bottom: insets.bottom + tabBarReserve + 8 }]}
-      >
-        <Pressable
-          onPress={onTodayPress}
-          style={({ pressed }) => [
-            styles.todayPill,
-            {
-              opacity: pressed ? 0.88 : 1,
-              ...Platform.select({
-                ios: {
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.12,
-                  shadowRadius: 8,
-                },
-                android: { elevation: 4 },
-              }),
-            },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel={todayLabel}
+      {showTodayPill ? (
+        <View
+          pointerEvents="box-none"
+          style={[styles.todayWrap, { bottom: insets.bottom + tabBarReserve + 8 }]}
         >
-          <Text style={styles.todayPillText}>{todayLabel}</Text>
-        </Pressable>
-      </View>
+          <Pressable
+            onPress={onTodayPress}
+            style={({ pressed }) => [
+              styles.todayPill,
+              {
+                opacity: pressed ? 0.88 : 1,
+                ...Platform.select({
+                  ios: {
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.12,
+                    shadowRadius: 8,
+                  },
+                  android: { elevation: 4 },
+                }),
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={todayLabel}
+          >
+            <Text style={styles.todayPillText}>{todayLabel}</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }

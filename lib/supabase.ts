@@ -90,6 +90,8 @@ export interface Service {
   image_url?: string;
   is_active: boolean;
   business_id: string;
+  /** Admin/barber who owns this service (per-worker catalog). */
+  worker_id?: string | null;
   order_index?: number;
   created_at: string;
   updated_at: string;

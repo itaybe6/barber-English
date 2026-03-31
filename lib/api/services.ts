@@ -1,5 +1,30 @@
 import { supabase, Service, getBusinessId } from '../supabase';
 
+/**
+ * Client booking: which services to show for a selected barber.
+ * - Multiple barbers: only rows with worker_id === barberId (no fallback to other workers’ services).
+ * - Single barber: same match, plus legacy rows with null worker_id (older data before per-worker services).
+ */
+export function filterServicesForBookingBarber(
+  all: Service[],
+  barberId: string | undefined | null,
+  adminUserCount: number
+): Service[] {
+  const list = all || [];
+  if (!barberId) return list;
+  const multiBarber = adminUserCount > 1;
+  const forBarber = list.filter((s) => String(s.worker_id || '') === String(barberId));
+  if (!multiBarber) {
+    const legacy = list.filter((s) => !s.worker_id);
+    const byId = new Map(forBarber.map((s) => [s.id, s]));
+    for (const row of legacy) {
+      if (!byId.has(row.id)) byId.set(row.id, row);
+    }
+    return Array.from(byId.values());
+  }
+  return forBarber;
+}
+
 export const servicesApi = {
   // Get all services
   async getAllServices(): Promise<Service[]> {

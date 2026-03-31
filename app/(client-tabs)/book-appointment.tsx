@@ -18,7 +18,7 @@ import BookingStepTabs, { getBookingStepBarTopFromBottom } from '@/components/bo
 
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { Service } from '@/lib/supabase';
-import { servicesApi } from '@/lib/api/services';
+import { servicesApi, filterServicesForBookingBarber } from '@/lib/api/services';
 import { supabase, getBusinessId, Appointment } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
@@ -966,17 +966,15 @@ export default function BookAppointment() {
     }
   };
 
-  // Filter services by selected barber (worker).
-  // If no service has worker_id set at all, treat all services as available for any barber.
+  // Per-barber service catalog (no cross-worker fallback when there are multiple admins).
   const filteredServices = useMemo(() => {
     if (!selectedBarber) return [] as Service[];
-    const all = availableServices || [];
-    const hasWorkerIds = all.some((s: any) => !!s?.worker_id);
-    if (!hasWorkerIds) return all;
-    const byWorker = all.filter((s: any) => String(s?.worker_id || '') === String(selectedBarber.id));
-    // Fallback: if this barber has no assigned services at all, show all services
-    return byWorker.length > 0 ? byWorker : all;
-  }, [availableServices, selectedBarber?.id]);
+    return filterServicesForBookingBarber(
+      availableServices,
+      selectedBarber.id,
+      availableBarbers.length
+    );
+  }, [availableServices, selectedBarber?.id, availableBarbers.length]);
 
   // Do not auto-select a service on entering step 2; user must choose explicitly
 

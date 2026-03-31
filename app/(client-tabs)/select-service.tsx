@@ -13,7 +13,7 @@ import Animated, {
   useSharedValue,
 } from 'react-native-reanimated';
 
-import { servicesApi } from '@/lib/api/services';
+import { servicesApi, filterServicesForBookingBarber } from '@/lib/api/services';
 import { Service } from '@/lib/supabase';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { getCurrentClientLogo } from '@/src/theme/assets';
@@ -310,6 +310,7 @@ export default function SelectServiceScreen() {
 
   const barberId = params.barberId as string;
   const barberName = params.barberName as string;
+  const multiBarber = params.multiBarber === '1';
 
   const [services, setServices] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -323,9 +324,9 @@ export default function SelectServiceScreen() {
       setIsLoading(true);
       try {
         const list = await servicesApi.getAllServices();
-        // Filter services by worker_id (barber)
-        const filtered = barberId 
-          ? list.filter((s: any) => String(s?.worker_id || '') === String(barberId))
+        const adminCount = multiBarber ? 2 : 1;
+        const filtered = barberId
+          ? filterServicesForBookingBarber(list, barberId, adminCount)
           : list;
         setServices(filtered);
       } catch (e) {
@@ -335,7 +336,7 @@ export default function SelectServiceScreen() {
       }
     };
     loadServices();
-  }, [barberId]);
+  }, [barberId, multiBarber]);
 
   const onScroll = useAnimatedScrollHandler((e) => {
     scrollX.value = e.contentOffset.x / (_slideWidth + _spacing);

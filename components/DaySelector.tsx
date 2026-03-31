@@ -35,6 +35,10 @@ interface DaySelectorProps {
   containerBackgroundColor?: string;
   /** תאריכים (YYYY-MM-DD) שבהם אילוץ מכסה את כל שעות העבודה — הדגשה באדום */
   fullyBlockedDateKeys?: Set<string> | string[];
+  /** דורס את paddingTop של המיכל (ברירת מחדל 8) — לצמצום ריווח מתחת לכותרת */
+  contentPaddingTop?: number;
+  /** דורס את paddingBottom של המיכל (ברירת מחדל 4) */
+  contentPaddingBottom?: number;
 }
 
 export default function DaySelector({
@@ -46,6 +50,8 @@ export default function DaySelector({
   startFromToday = false,
   containerBackgroundColor = 'transparent',
   fullyBlockedDateKeys,
+  contentPaddingTop,
+  contentPaddingBottom,
 }: DaySelectorProps) {
   const colors = useColors();
   const { i18n, t } = useTranslation();
@@ -348,7 +354,14 @@ export default function DaySelector({
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: containerBackgroundColor, direction: 'ltr' }]}>
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: containerBackgroundColor, direction: 'ltr' },
+        contentPaddingTop !== undefined && { paddingTop: contentPaddingTop },
+        contentPaddingBottom !== undefined && { paddingBottom: contentPaddingBottom },
+      ]}
+    >
       {fitWeekToScreen && weekStripLayout ? (
         <View
           style={[

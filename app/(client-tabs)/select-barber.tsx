@@ -288,6 +288,7 @@ export default function SelectBarberScreen() {
       params: {
         barberId: selectedBarber.id,
         barberName: selectedBarber.name,
+        multiBarber: barbers.length > 1 ? '1' : '0',
       } as any,
     });
   };

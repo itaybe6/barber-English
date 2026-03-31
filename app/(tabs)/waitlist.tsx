@@ -14,7 +14,6 @@ import {
   Pressable,
   RefreshControl,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { Phone, Trash2, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -218,7 +217,6 @@ export default function WaitlistScreen() {
   const { user } = useAuthStore();
   const colors = useColors();
   const { t, i18n } = useTranslation();
-  const insets = useSafeAreaInsets();
   const { waitlistCalendarView } = useAdminWaitlistCalendarView();
   const isRtl = I18nManager.isRTL;
 
@@ -525,7 +523,7 @@ export default function WaitlistScreen() {
   );
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: '#fff', marginTop: 8 }}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: '#fff' }}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <View style={styles.headerLikeAppointments}>
         <View style={styles.headerTopRow}>
@@ -542,7 +540,7 @@ export default function WaitlistScreen() {
       </View>
 
       {waitlistCalendarView === 'day' ? (
-        <View style={{ paddingTop: insets.top, backgroundColor: GC_HEADER_CHROME }}>
+        <View style={{ backgroundColor: GC_HEADER_CHROME }}>
           <DaySelector
             selectedDate={selectedDate}
             onSelectDate={setSelectedDate}
@@ -551,12 +549,14 @@ export default function WaitlistScreen() {
             startFromToday={false}
             markedDates={markedDates}
             containerBackgroundColor={GC_HEADER_CHROME}
+            contentPaddingTop={2}
+            contentPaddingBottom={2}
           />
         </View>
       ) : null}
 
       {waitlistCalendarView === 'week' ? (
-        <View style={[styles.gcTopChrome, { paddingTop: insets.top }]}>
+        <View style={styles.gcTopChrome}>
           <View style={styles.gcHeader}>
             <View style={[styles.gcNavTrack, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
               <Pressable
@@ -620,6 +620,7 @@ export default function WaitlistScreen() {
               todayLabel={t('admin.calendar.today', 'Today')}
               monthHint={t('admin.waitlist.monthCalendarHint', 'Numbers show how many clients are on the waitlist that day. Tap a day to see them below.')}
               formatCountBadge={formatCountBadge}
+              showTodayPill={false}
             />
           </View>
           <View style={[styles.waitlistBg, styles.waitlistBgMonthSplit]}>{listScroll}</View>
@@ -635,8 +636,8 @@ const styles = StyleSheet.create({
   headerLikeAppointments: {
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 8,
+    paddingTop: 4,
+    paddingBottom: 4,
     alignItems: 'stretch',
   },
   headerTopRow: {
@@ -683,8 +684,8 @@ const styles = StyleSheet.create({
   gcHeader: {
     backgroundColor: GC_HEADER_CHROME,
     paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 12,
+    paddingTop: 4,
+    paddingBottom: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E8EAED',
     ...Platform.select({

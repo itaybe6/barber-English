@@ -632,12 +632,16 @@ export default function HomeScreen() {
         newClientsThisMonth: newClientsRes.error ? 0 : newClientsRes.count ?? 0,
       });
 
-      // ספירת כל הממתינים (סטטוס waiting), בלי סינון תאריך
-      const { count: wCount } = await supabase
+      // ממתינים בסטטוס waiting — כמו מסך רשימת המתנה: לספר מחובר רק רשומות עם user_id = הספר (barberId מהזמנה)
+      let waitlistCountQuery = supabase
         .from('waitlist_entries')
         .select('id', { count: 'exact', head: true })
         .eq('business_id', businessId)
         .eq('status', 'waiting');
+      if (!isSuperAdmin && user?.id) {
+        waitlistCountQuery = waitlistCountQuery.eq('user_id', user.id);
+      }
+      const { count: wCount } = await waitlistCountQuery;
       setWaitlistWaitingCount(wCount ?? 0);
     } catch (error) {
       console.error('Error in fetchInsightsData:', error);

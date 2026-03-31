@@ -790,7 +790,10 @@
       "saveSuccess": "تم حفظ الخدمة بنجاح",
       "orderSaveFailed": "لا يمكن حفظ أمر الخدمة. حاول ثانية.",
       "reorderHint": "اسحب ≡ لإعادة طلب الخدمات",
-      "fabAddHint": "اضغط مطولاً على صف لإعادة الترتيب · + في الأسفل للإضافة"
+      "fabAddHint": "اضغط مطولاً على صف لإعادة الترتيب · + في الأسفل للإضافة",
+      "showImagesTitle": "صور الخدمات",
+      "showImagesSubtitle": "عند الإيقاف تُخفى الصور هنا وعند حجز العميل",
+      "showImagesSaveFailed": "تعذّر حفظ إعداد العرض"
     },
     "broadcastTemplates": {
       "promotion": {

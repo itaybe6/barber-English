@@ -281,6 +281,8 @@ export interface BusinessProfile {
   client_swap_enabled?: boolean;
   /** When true, new registrations need admin approval (client_approved=false). Defaults to true if unset. */
   require_client_approval?: boolean;
+  /** When false, hide service images in admin service list, add/edit forms, and client booking. Defaults to true if unset. */
+  show_service_images?: boolean;
   primary_color?: string; // Hex color code for primary UI color
   // Number of days forward to open booking window; defaults to 7 on server (legacy - now use booking_open_days_by_user)
   booking_open_days?: number;

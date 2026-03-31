@@ -653,7 +653,10 @@
       "saveSuccess": "Service saved successfully",
       "orderSaveFailed": "Could not save service order. Try again.",
       "reorderHint": "Drag ≡ to reorder services",
-      "fabAddHint": "Long-press a row to reorder · + below to add"
+      "fabAddHint": "Long-press a row to reorder · + below to add",
+      "showImagesTitle": "Service photos",
+      "showImagesSubtitle": "Off hides thumbnails here and when clients book",
+      "showImagesSaveFailed": "Could not save display setting"
     },
     "broadcastTemplates": {
       "promotion": { "title": "New Promotion! 🎉", "description": "Message about promotion or discount" },
@@ -718,6 +721,12 @@
       "bookingWindowModalBody": "Clients can pick dates only within this many days from today. This applies only to your calendar—each team member sets their own under Manage employees.",
       "bookingWindowModalDaysLabel": "Days open for booking",
       "bookingWindowModalRange": "You can choose between 1 and 60 days.",
+      "bookingWindowModalDaysUnit": "days",
+      "bookingWindowModalScrubberHint": "Drag or tap the bar to set",
+      "bookingWindowModalPresets": "Quick picks",
+      "bookingWindowModalManual": "Or type a number",
+      "bookingWindowA11yDecrease": "Fewer days",
+      "bookingWindowA11yIncrease": "More days",
       "bookingWindowInvalid": "Please enter a whole number between 1 and 60.",
       "bookingWindowSelfHint": "Applies only to your schedule. Other staff set their own window under Manage employees.",
       "bookingWindowNeedUser": "Sign in to save your booking window.",

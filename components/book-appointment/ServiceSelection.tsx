@@ -57,6 +57,7 @@ type PerplexityServiceCardProps = {
   scrollY: SharedValue<number>;
   isSelected: boolean;
   primaryColor: string;
+  showServiceImages: boolean;
   t: any;
   onPress: () => void;
 };
@@ -67,12 +68,13 @@ function PerplexityServiceCard({
   scrollY,
   isSelected,
   primaryColor,
+  showServiceImages,
   t,
   onPress,
 }: PerplexityServiceCardProps) {
   const [imgError, setImgError] = useState(false);
   const uri = serviceImageUri(service);
-  const showImage = !!uri && !imgError;
+  const showImage = showServiceImages && !!uri && !imgError;
   const description = ((service as any)?.description as string | undefined)?.trim?.() || '';
   const duration = (service as any)?.duration_minutes ?? 60;
   const price = (service as any)?.price ?? 0;
@@ -204,6 +206,8 @@ type Props = {
   selectedServiceId?: string | number | null;
   selectedServiceIds?: string[];
   externalScrollX?: SharedValue<number>;
+  /** When false, cards use icon placeholder instead of photos (business_profile.show_service_images). */
+  showServiceImages?: boolean;
   t: any;
   onSelectService: (service: Service, index: number) => void;
 };
@@ -218,6 +222,7 @@ export default function ServiceSelection({
   services,
   selectedServiceId,
   selectedServiceIds,
+  showServiceImages = true,
   t,
   onSelectService,
 }: Props) {
@@ -335,6 +340,7 @@ export default function ServiceSelection({
                     scrollY={scrollY}
                     isSelected={isSelected}
                     primaryColor={colors.primary}
+                    showServiceImages={showServiceImages}
                     t={t}
                     onPress={() => onSelectService(item, index)}
                   />

@@ -14,7 +14,7 @@ import { servicesApi, updateService, createService, deleteService, updateService
 import type { Service } from '@/lib/supabase';
 import { recurringAppointmentsApi } from '@/lib/api/recurringAppointments';
 import { supabase, getBusinessId } from '@/lib/supabase';
-import { businessProfileApi, isClientApprovalRequired, isClientSwapEnabled } from '@/lib/api/businessProfile';
+import { businessProfileApi, isClientApprovalRequired, isClientSwapEnabled, isShowServiceImages } from '@/lib/api/businessProfile';
 import type { BusinessProfile } from '@/lib/supabase';
 import { 
   LogOut, 
@@ -35,6 +35,7 @@ import {
   User,
   Repeat,
   Plus,
+  Minus,
   Bell,
 } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -70,6 +71,10 @@ const shadowStyle = Platform.select({
 
 /** Grouped settings canvas — ScrollView content + screen root use this so bottom padding isn’t white */
 const SETTINGS_GROUPED_BG = '#F2F2F7';
+
+const BOOKING_WINDOW_MIN = 1;
+const BOOKING_WINDOW_MAX = 60;
+const BOOKING_WINDOW_PRESETS = [7, 14, 21, 30, 45, 60] as const;
 
 export default function SettingsScreen() {
   const logout = useAuthStore((state) => state.logout);
@@ -131,6 +136,7 @@ export default function SettingsScreen() {
   const [profileBookingOpenDays, setProfileBookingOpenDays] = useState(7);
   const [clientSwapEnabled, setClientSwapEnabled] = useState(true);
   const [requireClientApproval, setRequireClientApproval] = useState(true);
+  const [showServiceImages, setShowServiceImages] = useState(true);
   const [showEditAddressModal, setShowEditAddressModal] = useState(false);
   const [showAddressSheet, setShowAddressSheet] = useState(false);
   const [showEditInstagramModal, setShowEditInstagramModal] = useState(false);
@@ -139,6 +145,18 @@ export default function SettingsScreen() {
   const [showEditCancellationModal, setShowEditCancellationModal] = useState(false);
   const [showBookingWindowModal, setShowBookingWindowModal] = useState(false);
   const [bookingWindowDraft, setBookingWindowDraft] = useState('7');
+  const bookingWindowTrackWidthRef = useRef(0);
+  const bookingWindowLastHapticRef = useRef<number | null>(null);
+  const bookingWindowFromTrackXRef = useRef<(x: number) => void>(() => {});
+  const bookingWindowTrackPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) =>
+        Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 4,
+      onPanResponderGrant: (e) => bookingWindowFromTrackXRef.current(e.nativeEvent.locationX),
+      onPanResponderMove: (e) => bookingWindowFromTrackXRef.current(e.nativeEvent.locationX),
+    }),
+  ).current;
   const [showCancellationDropdown, setShowCancellationDropdown] = useState(false);
   const [cancellationDropdownDirection, setCancellationDropdownDirection] = useState<'up' | 'down'>('down');
   // Address bottom sheet animation
@@ -242,6 +260,7 @@ export default function SettingsScreen() {
         }
         setClientSwapEnabled(isClientSwapEnabled(p));
         setRequireClientApproval(isClientApprovalRequired(p));
+        setShowServiceImages(isShowServiceImages(p));
       }
     } catch (error) {
       console.error('Failed to load business profile:', error);
@@ -316,8 +335,24 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (showBookingWindowModal) {
       setBookingWindowDraft(String(profileBookingOpenDays || 7));
+      bookingWindowLastHapticRef.current = null;
     }
   }, [showBookingWindowModal, profileBookingOpenDays]);
+
+  bookingWindowFromTrackXRef.current = (x: number) => {
+    const w = bookingWindowTrackWidthRef.current;
+    if (!(w > 0)) return;
+    const ratio = Math.max(0, Math.min(1, x / w));
+    const day =
+      BOOKING_WINDOW_MIN +
+      Math.round(ratio * (BOOKING_WINDOW_MAX - BOOKING_WINDOW_MIN));
+    const d = Math.max(BOOKING_WINDOW_MIN, Math.min(BOOKING_WINDOW_MAX, day));
+    setBookingWindowDraft(String(d));
+    if (bookingWindowLastHapticRef.current !== d) {
+      bookingWindowLastHapticRef.current = d;
+      Haptics.selectionAsync();
+    }
+  };
 
   const handleSaveBusinessProfile = async () => {
     setIsSavingProfile(true);
@@ -431,6 +466,24 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleShowServiceImagesToggle = async (next: boolean) => {
+    const prev = showServiceImages;
+    setShowServiceImages(next);
+    setIsSavingProfile(true);
+    try {
+      const updated = await businessProfileApi.setShowServiceImages(next);
+      if (!updated) {
+        setShowServiceImages(prev);
+        Alert.alert(t('error.generic', 'Error'), t('settings.services.showImagesSaveFailed', 'Could not save display setting'));
+        return;
+      }
+      setProfile(updated);
+      setShowServiceImages(isShowServiceImages(updated));
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   const handleClientSwapToggle = async (next: boolean) => {
     if (!canSeeAddEmployee) return;
     const prev = clientSwapEnabled;
@@ -528,6 +581,28 @@ export default function SettingsScreen() {
       setShowBookingWindowModal(false);
     }
   };
+
+  const bookingWindowHeroDay = useMemo(() => {
+    const trimmed = bookingWindowDraft.trim();
+    if (trimmed === '') return profileBookingOpenDays || 7;
+    const n = parseInt(trimmed, 10);
+    if (!Number.isFinite(n)) return profileBookingOpenDays || 7;
+    return Math.max(BOOKING_WINDOW_MIN, Math.min(BOOKING_WINDOW_MAX, n));
+  }, [bookingWindowDraft, profileBookingOpenDays]);
+
+  const bumpBookingWindowDay = useCallback(
+    (delta: number) => {
+      const raw = parseInt(bookingWindowDraft, 10);
+      const base = Number.isFinite(raw) ? raw : profileBookingOpenDays || 7;
+      const next = Math.max(BOOKING_WINDOW_MIN, Math.min(BOOKING_WINDOW_MAX, base + delta));
+      setBookingWindowDraft(String(next));
+      if (bookingWindowLastHapticRef.current !== next) {
+        bookingWindowLastHapticRef.current = next;
+        Haptics.selectionAsync();
+      }
+    },
+    [bookingWindowDraft, profileBookingOpenDays],
+  );
 
   const openClientReminderModal = useCallback(
     (fromSwitch = false) => {
@@ -1280,7 +1355,7 @@ export default function SettingsScreen() {
         duration_minutes: parseInt(addSvcDuration, 10) || 60,
         is_active: true,
         worker_id: (user?.id as any) as any,
-        image_url: addSvcImageUrl || undefined,
+        image_url: showServiceImages ? addSvcImageUrl || undefined : undefined,
       } as any);
       if (created) {
         const nextOrder = editableServices.length;
@@ -2492,6 +2567,98 @@ export default function SettingsScreen() {
                   </View>
                 )}
 
+                {!isLoadingServices && !servicesError && (
+                  <View style={[styles.servicesModalFullWidthBlock, styles.serviceImagesPrefOuter]}>
+                    <View
+                      style={[
+                        styles.serviceImagesPrefCard,
+                        Platform.select({
+                          ios: {
+                            shadowColor: businessColors.primary,
+                            shadowOffset: { width: 0, height: 6 },
+                            shadowOpacity: 0.12,
+                            shadowRadius: 16,
+                          },
+                          android: { elevation: 5 },
+                        }),
+                      ]}
+                    >
+                      <LinearGradient
+                        colors={[`${businessColors.primary}`, `${businessColors.primary}99`]}
+                        start={{ x: 0, y: 0.5 }}
+                        end={{ x: 1, y: 0.5 }}
+                        style={styles.serviceImagesPrefAccentBar}
+                      />
+                      <View style={styles.serviceImagesPrefInner}>
+                        <View
+                          style={[
+                            styles.serviceImagesPrefIconRing,
+                            {
+                              borderColor: `${businessColors.primary}2A`,
+                              backgroundColor: `${businessColors.primary}10`,
+                            },
+                          ]}
+                        >
+                          <ImageIcon size={24} color={businessColors.primary} strokeWidth={2.2} />
+                        </View>
+                        <View style={styles.serviceImagesPrefCopy}>
+                          <View style={styles.serviceImagesPrefTitleRow}>
+                            <Text style={styles.serviceImagesPrefTitle} numberOfLines={2}>
+                              {t('settings.services.showImagesTitle', 'Service photos')}
+                            </Text>
+                            <View
+                              style={[
+                                styles.serviceImagesPrefStatusPill,
+                                {
+                                  backgroundColor: showServiceImages
+                                    ? `${businessColors.primary}18`
+                                    : 'rgba(142, 142, 147, 0.16)',
+                                },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.serviceImagesPrefStatusText,
+                                  { color: showServiceImages ? businessColors.primary : '#636366' },
+                                ]}
+                              >
+                                {showServiceImages
+                                  ? t('settings.services.showImagesOn', 'On')
+                                  : t('settings.services.showImagesOff', 'Off')}
+                              </Text>
+                            </View>
+                          </View>
+                          <Text style={styles.serviceImagesPrefSubtitle}>
+                            {t(
+                              'settings.services.showImagesSubtitle',
+                              'Off hides thumbnails here and in client booking',
+                            )}
+                          </Text>
+                        </View>
+                        <View style={styles.serviceImagesPrefSwitchCol}>
+                          {isSavingProfile ? (
+                            <ActivityIndicator size="small" color={businessColors.primary} />
+                          ) : (
+                            <Switch
+                              value={showServiceImages}
+                              onValueChange={handleShowServiceImagesToggle}
+                              trackColor={{ false: '#E8E8ED', true: `${businessColors.primary}55` }}
+                              thumbColor={
+                                showServiceImages
+                                  ? businessColors.primary
+                                  : Platform.OS === 'android'
+                                    ? '#f4f3f4'
+                                    : '#FFFFFF'
+                              }
+                              ios_backgroundColor="#E8E8ED"
+                            />
+                          )}
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                )}
+
                 {!isLoadingServices && !servicesError && editableServices.length === 0 && !isAddingService && (
                   <View style={[styles.svcEmptyState, styles.servicesModalFullWidthBlock]}>
                     <View style={[styles.svcEmptyIcon, { backgroundColor: `${businessColors.primary}15` }]}>
@@ -2583,28 +2750,30 @@ export default function SettingsScreen() {
                                 </View>
                               </View>
                             </TouchableOpacity>
-                            <View style={styles.svcListThumbOuter}>
-                              <TouchableOpacity
-                                onPress={() => handlePickServiceImage(svc.id)}
-                                activeOpacity={0.85}
-                                style={styles.svcListThumbWrap}
-                              >
-                                {svc.image_url ? (
-                                  <Image source={{ uri: svc.image_url }} style={styles.svcListThumb} resizeMode="cover" />
-                                ) : (
-                                  <View style={[styles.svcListThumbPlaceholder, { backgroundColor: `${businessColors.primary}15` }]}>
-                                    <Text style={[styles.svcListThumbPlaceholderText, { color: businessColors.primary }]}>
-                                      {(svc.name || '?').charAt(0).toUpperCase()}
-                                    </Text>
-                                  </View>
-                                )}
-                                {uploadingServiceId === svc.id && (
-                                  <View style={styles.svcListThumbUploadOverlay}>
-                                    <ActivityIndicator size="small" color="#fff" />
-                                  </View>
-                                )}
-                              </TouchableOpacity>
-                            </View>
+                            {showServiceImages ? (
+                              <View style={styles.svcListThumbOuter}>
+                                <TouchableOpacity
+                                  onPress={() => handlePickServiceImage(svc.id)}
+                                  activeOpacity={0.85}
+                                  style={styles.svcListThumbWrap}
+                                >
+                                  {svc.image_url ? (
+                                    <Image source={{ uri: svc.image_url }} style={styles.svcListThumb} resizeMode="cover" />
+                                  ) : (
+                                    <View style={[styles.svcListThumbPlaceholder, { backgroundColor: `${businessColors.primary}15` }]}>
+                                      <Text style={[styles.svcListThumbPlaceholderText, { color: businessColors.primary }]}>
+                                        {(svc.name || '?').charAt(0).toUpperCase()}
+                                      </Text>
+                                    </View>
+                                  )}
+                                  {uploadingServiceId === svc.id && (
+                                    <View style={styles.svcListThumbUploadOverlay}>
+                                      <ActivityIndicator size="small" color="#fff" />
+                                    </View>
+                                  )}
+                                </TouchableOpacity>
+                              </View>
+                            ) : null}
                           </View>
                         ) : (
                           <>
@@ -2627,38 +2796,40 @@ export default function SettingsScreen() {
                               </TouchableOpacity>
                             </View>
 
-                            <View style={[styles.svcAddImageBandArea, { backgroundColor: `${businessColors.primary}08` }]}>
-                              <TouchableOpacity
-                                style={styles.svcAddImageCircleBtn}
-                                onPress={() => handlePickServiceImage(svc.id)}
-                                activeOpacity={0.85}
-                                disabled={uploadingServiceId === svc.id}
-                              >
-                                {svc.image_url ? (
-                                  <>
-                                    <Image source={{ uri: svc.image_url }} style={styles.svcAddImageCircleFull} resizeMode="cover" />
-                                    <View style={styles.svcAddImageChangeOverlay}>
-                                      <Ionicons name="camera-outline" size={22} color="#fff" />
+                            {showServiceImages ? (
+                              <View style={[styles.svcAddImageBandArea, { backgroundColor: `${businessColors.primary}08` }]}>
+                                <TouchableOpacity
+                                  style={styles.svcAddImageCircleBtn}
+                                  onPress={() => handlePickServiceImage(svc.id)}
+                                  activeOpacity={0.85}
+                                  disabled={uploadingServiceId === svc.id}
+                                >
+                                  {svc.image_url ? (
+                                    <>
+                                      <Image source={{ uri: svc.image_url }} style={styles.svcAddImageCircleFull} resizeMode="cover" />
+                                      <View style={styles.svcAddImageChangeOverlay}>
+                                        <Ionicons name="camera-outline" size={22} color="#fff" />
+                                      </View>
+                                    </>
+                                  ) : (
+                                    <View style={[styles.svcAddImageCirclePlaceholder, { borderColor: `${businessColors.primary}40` }]}>
+                                      {uploadingServiceId === svc.id ? (
+                                        <ActivityIndicator size="large" color={businessColors.primary} />
+                                      ) : (
+                                        <>
+                                          <View style={[styles.svcAddImageIconWrap, { backgroundColor: `${businessColors.primary}20` }]}>
+                                            <Ionicons name="camera-outline" size={28} color={businessColors.primary} />
+                                          </View>
+                                          <Text style={[styles.svcAddImageDashedLabel, { color: businessColors.primary, marginTop: 8 }]}>
+                                            {t('settings.services.changeImage','החלף תמונה')}
+                                          </Text>
+                                        </>
+                                      )}
                                     </View>
-                                  </>
-                                ) : (
-                                  <View style={[styles.svcAddImageCirclePlaceholder, { borderColor: `${businessColors.primary}40` }]}>
-                                    {uploadingServiceId === svc.id ? (
-                                      <ActivityIndicator size="large" color={businessColors.primary} />
-                                    ) : (
-                                      <>
-                                        <View style={[styles.svcAddImageIconWrap, { backgroundColor: `${businessColors.primary}20` }]}>
-                                          <Ionicons name="camera-outline" size={28} color={businessColors.primary} />
-                                        </View>
-                                        <Text style={[styles.svcAddImageDashedLabel, { color: businessColors.primary, marginTop: 8 }]}>
-                                          {t('settings.services.changeImage','החלף תמונה')}
-                                        </Text>
-                                      </>
-                                    )}
-                                  </View>
-                                )}
-                              </TouchableOpacity>
-                            </View>
+                                  )}
+                                </TouchableOpacity>
+                              </View>
+                            ) : null}
 
                             <View style={styles.svcAddFieldsArea}>
                               <View style={[styles.formGroup, { marginBottom: 10 }]}>
@@ -3983,71 +4154,187 @@ export default function SettingsScreen() {
         </TouchableWithoutFeedback>
       </Modal>
 
-      {/* Booking horizon (per staff) — sheet with explainer + days input */}
+      {/* Booking horizon (per staff) — redesigned sheet: explainer, stepper, scrubber, presets */}
       <Modal
         visible={showBookingWindowModal}
         animationType="slide"
         presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
         onRequestClose={() => setShowBookingWindowModal(false)}
       >
-        <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#F2F2F7' }]}>
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: SETTINGS_GROUPED_BG }]} edges={['top']}>
           <KeyboardAvoidingView
             style={{ flex: 1 }}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
           >
-            <View style={styles.modalHeader}>
+            <View style={[styles.modalHeader, styles.bookingWindowModalHeader]}>
               <TouchableOpacity
                 style={styles.cancellationModalCloseButton}
                 onPress={() => setShowBookingWindowModal(false)}
                 accessibilityRole="button"
                 accessibilityLabel={t('cancel', 'Cancel')}
               >
-                <X size={20} color={Colors.text} />
+                <X size={22} color={Colors.text} strokeWidth={2} />
               </TouchableOpacity>
-              <Text style={[styles.modalTitle, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>
+              <Text style={[styles.modalTitle, styles.bookingWindowModalTitle]} numberOfLines={2}>
                 {t('settings.profile.bookingWindowModalTitle', 'Your booking range')}
               </Text>
-              <TouchableOpacity
-                style={[
-                  styles.modalSendButton,
-                  { backgroundColor: businessColors.primary },
-                  isSavingProfile && styles.modalSendButtonDisabled,
-                ]}
-                onPress={confirmBookingWindowModal}
-                disabled={isSavingProfile}
-              >
-                <Text style={[styles.modalSendText, { color: Colors.white }, isSavingProfile && styles.modalSendTextDisabled]}>
-                  {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.bookingWindowHeaderSpacer} />
             </View>
+
             <ScrollView
               style={{ flex: 1 }}
-              contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: insets.bottom + 28 }}
+              contentContainerStyle={{
+                paddingHorizontal: 20,
+                paddingTop: 8,
+                paddingBottom: insets.bottom + 120,
+              }}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
               <LinearGradient
-                colors={[`${businessColors.primary}22`, `${businessColors.primary}0D`]}
+                colors={[`${businessColors.primary}18`, `${businessColors.primary}08`, 'transparent']}
+                locations={[0, 0.55, 1]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={{
-                  borderRadius: 16,
-                  padding: 18,
-                  marginBottom: 24,
-                  borderWidth: StyleSheet.hairlineWidth,
-                  borderColor: `${businessColors.primary}40`,
-                }}
+                style={styles.bookingWindowExplainer}
               >
-                <Text style={[styles.previewNotificationContent, { lineHeight: 22, color: Colors.text }]}>
-                  {t('settings.profile.bookingWindowModalBody')}
-                </Text>
+                <View style={[styles.bookingWindowExplainerIcon, { backgroundColor: `${businessColors.primary}20` }]}>
+                  <Calendar size={22} color={businessColors.primary} strokeWidth={2} />
+                </View>
+                <Text style={styles.bookingWindowExplainerText}>{t('settings.profile.bookingWindowModalBody')}</Text>
               </LinearGradient>
-              <View style={[styles.groupCard, { marginBottom: 0 }]}>
-                <Text style={styles.inputLabelLTR}>{t('settings.profile.bookingWindowModalDaysLabel', 'Days open for booking')}</Text>
+
+              <View style={styles.bookingWindowHeroCard}>
+                <Text style={styles.bookingWindowFieldLabel}>
+                  {t('settings.profile.bookingWindowModalDaysLabel', 'Days open for booking')}
+                </Text>
+
+                <View style={styles.bookingWindowControlsLtr}>
+                  <View style={styles.bookingWindowStepper}>
+                    <TouchableOpacity
+                      style={[
+                        styles.bookingWindowStepperBtn,
+                        bookingWindowHeroDay <= BOOKING_WINDOW_MIN && styles.bookingWindowStepperBtnDisabled,
+                      ]}
+                      onPress={() => bumpBookingWindowDay(-1)}
+                      disabled={bookingWindowHeroDay <= BOOKING_WINDOW_MIN}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('settings.profile.bookingWindowA11yDecrease', 'Decrease days')}
+                    >
+                      <Minus
+                        size={24}
+                        color={bookingWindowHeroDay <= BOOKING_WINDOW_MIN ? Colors.subtext : businessColors.primary}
+                        strokeWidth={2.5}
+                      />
+                    </TouchableOpacity>
+
+                    <View style={styles.bookingWindowHeroNumberWrap}>
+                      <Text style={[styles.bookingWindowHeroNumber, { color: businessColors.primary }]}>{bookingWindowHeroDay}</Text>
+                      <Text style={styles.bookingWindowHeroSuffix}>
+                        {t('settings.profile.bookingWindowModalDaysUnit', 'days')}
+                      </Text>
+                    </View>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.bookingWindowStepperBtn,
+                        bookingWindowHeroDay >= BOOKING_WINDOW_MAX && styles.bookingWindowStepperBtnDisabled,
+                      ]}
+                      onPress={() => bumpBookingWindowDay(1)}
+                      disabled={bookingWindowHeroDay >= BOOKING_WINDOW_MAX}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('settings.profile.bookingWindowA11yIncrease', 'Increase days')}
+                    >
+                      <Plus
+                        size={24}
+                        color={bookingWindowHeroDay >= BOOKING_WINDOW_MAX ? Colors.subtext : businessColors.primary}
+                        strokeWidth={2.5}
+                      />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.bookingWindowTrackSection}>
+                    <View style={styles.bookingWindowTrackLabelsRow}>
+                      <Text style={styles.bookingWindowTrackEdge}>{BOOKING_WINDOW_MIN}</Text>
+                      <Text style={styles.bookingWindowTrackEdge}>{BOOKING_WINDOW_MAX}</Text>
+                    </View>
+                    <View
+                      style={styles.bookingWindowTrackHit}
+                      onLayout={(e) => {
+                        bookingWindowTrackWidthRef.current = e.nativeEvent.layout.width;
+                      }}
+                      {...bookingWindowTrackPan.panHandlers}
+                    >
+                      <View style={styles.bookingWindowTrackBg}>
+                        <View
+                          style={[
+                            styles.bookingWindowTrackFill,
+                            {
+                              width: `${((bookingWindowHeroDay - BOOKING_WINDOW_MIN) / (BOOKING_WINDOW_MAX - BOOKING_WINDOW_MIN)) * 100}%`,
+                              backgroundColor: businessColors.primary,
+                            },
+                          ]}
+                        />
+                      </View>
+                      <View
+                        style={[
+                          styles.bookingWindowTrackThumb,
+                          {
+                            backgroundColor: Colors.white,
+                            borderColor: businessColors.primary,
+                            left: `${((bookingWindowHeroDay - BOOKING_WINDOW_MIN) / (BOOKING_WINDOW_MAX - BOOKING_WINDOW_MIN)) * 100}%`,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.bookingWindowTrackHint}>
+                      {t('settings.profile.bookingWindowModalScrubberHint', 'Slide or tap the bar to set')}
+                    </Text>
+                  </View>
+
+                  <Text style={styles.bookingWindowPresetsLabel}>
+                    {t('settings.profile.bookingWindowModalPresets', 'Quick picks')}
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.bookingWindowChipsRow}
+                  >
+                    {BOOKING_WINDOW_PRESETS.map((p) => {
+                      const selected = bookingWindowHeroDay === p;
+                      return (
+                        <TouchableOpacity
+                          key={p}
+                          style={[
+                            styles.bookingWindowChip,
+                            selected && {
+                              backgroundColor: businessColors.primary,
+                              borderColor: businessColors.primary,
+                            },
+                          ]}
+                          onPress={() => {
+                            setBookingWindowDraft(String(p));
+                            if (bookingWindowLastHapticRef.current !== p) {
+                              bookingWindowLastHapticRef.current = p;
+                              Haptics.selectionAsync();
+                            }
+                          }}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected }}
+                        >
+                          <Text style={[styles.bookingWindowChipText, selected && { color: Colors.white }]}>{p}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+
+                <Text style={styles.bookingWindowManualLabel}>
+                  {t('settings.profile.bookingWindowModalManual', 'Or enter a number')}
+                </Text>
                 <TextInput
-                  style={[styles.textInput, { marginTop: 10, fontSize: 28, fontWeight: '700', textAlign: 'center', letterSpacing: 1 }]}
+                  style={styles.bookingWindowManualInput}
                   value={bookingWindowDraft}
                   onChangeText={setBookingWindowDraft}
                   placeholder={t('settings.profile.bookingWindowPlaceholder', '7')}
@@ -4056,11 +4343,28 @@ export default function SettingsScreen() {
                   maxLength={2}
                   selectTextOnFocus
                 />
-                <Text style={{ marginTop: 12, fontSize: 13, color: Colors.subtext, textAlign: 'center' }}>
+                <Text style={styles.bookingWindowRangeFoot}>
                   {t('settings.profile.bookingWindowModalRange', 'From 1 to 60 days')}
                 </Text>
               </View>
             </ScrollView>
+
+            <View style={[styles.bookingWindowFooter, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+              <TouchableOpacity
+                style={[
+                  styles.bookingWindowFooterBtn,
+                  { backgroundColor: businessColors.primary },
+                  isSavingProfile && styles.bookingWindowFooterBtnDisabled,
+                ]}
+                onPress={confirmBookingWindowModal}
+                disabled={isSavingProfile}
+                activeOpacity={0.88}
+              >
+                <Text style={[styles.bookingWindowFooterBtnText, isSavingProfile && { opacity: 0.85 }]}>
+                  {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
@@ -4550,50 +4854,52 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Image picker — centered in the header band */}
-              <View style={[styles.svcAddImageBandArea, { backgroundColor: `${businessColors.primary}08` }]}>
-                <TouchableOpacity
-                  style={styles.svcAddImageCircleBtn}
-                  onPress={async () => {
-                    try {
-                      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-                      if (status !== 'granted') { Alert.alert(t('permission.required','Permission Required'), t('settings.common.galleryPermissionImage','Please allow gallery access')); return; }
-                      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', allowsMultipleSelection: false, quality: 0.9, base64: true });
-                      if (result.canceled || !result.assets?.length) return;
-                      const a: any = result.assets[0];
-                      setAddSvcUploadingImage(true);
-                      const uploadedUrl = await uploadServiceImage({ uri: a.uri, base64: a.base64 ?? null, mimeType: a.mimeType ?? null, fileName: a.fileName ?? null });
-                      if (uploadedUrl) setAddSvcImageUrl(uploadedUrl);
-                    } catch { } finally { setAddSvcUploadingImage(false); }
-                  }}
-                  activeOpacity={0.85}
-                  disabled={addSvcUploadingImage}
-                >
-                  {addSvcImageUrl ? (
-                    <>
-                      <Image source={{ uri: addSvcImageUrl }} style={styles.svcAddImageCircleFull} resizeMode="cover" />
-                      <View style={styles.svcAddImageChangeOverlay}>
-                        <Ionicons name="camera-outline" size={22} color="#fff" />
+              {/* Image picker — only when business shows service images */}
+              {showServiceImages ? (
+                <View style={[styles.svcAddImageBandArea, { backgroundColor: `${businessColors.primary}08` }]}>
+                  <TouchableOpacity
+                    style={styles.svcAddImageCircleBtn}
+                    onPress={async () => {
+                      try {
+                        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                        if (status !== 'granted') { Alert.alert(t('permission.required','Permission Required'), t('settings.common.galleryPermissionImage','Please allow gallery access')); return; }
+                        const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', allowsMultipleSelection: false, quality: 0.9, base64: true });
+                        if (result.canceled || !result.assets?.length) return;
+                        const a: any = result.assets[0];
+                        setAddSvcUploadingImage(true);
+                        const uploadedUrl = await uploadServiceImage({ uri: a.uri, base64: a.base64 ?? null, mimeType: a.mimeType ?? null, fileName: a.fileName ?? null });
+                        if (uploadedUrl) setAddSvcImageUrl(uploadedUrl);
+                      } catch { } finally { setAddSvcUploadingImage(false); }
+                    }}
+                    activeOpacity={0.85}
+                    disabled={addSvcUploadingImage}
+                  >
+                    {addSvcImageUrl ? (
+                      <>
+                        <Image source={{ uri: addSvcImageUrl }} style={styles.svcAddImageCircleFull} resizeMode="cover" />
+                        <View style={styles.svcAddImageChangeOverlay}>
+                          <Ionicons name="camera-outline" size={22} color="#fff" />
+                        </View>
+                      </>
+                    ) : (
+                      <View style={[styles.svcAddImageCirclePlaceholder, { borderColor: `${businessColors.primary}40` }]}>
+                        {addSvcUploadingImage ? (
+                          <ActivityIndicator size="large" color={businessColors.primary} />
+                        ) : (
+                          <>
+                            <View style={[styles.svcAddImageIconWrap, { backgroundColor: `${businessColors.primary}20` }]}>
+                              <Ionicons name="camera-outline" size={28} color={businessColors.primary} />
+                            </View>
+                            <Text style={[styles.svcAddImageDashedLabel, { color: businessColors.primary, marginTop: 8 }]}>
+                              {t('settings.services.uploadImage','העלה תמונה')}
+                            </Text>
+                          </>
+                        )}
                       </View>
-                    </>
-                  ) : (
-                    <View style={[styles.svcAddImageCirclePlaceholder, { borderColor: `${businessColors.primary}40` }]}>
-                      {addSvcUploadingImage ? (
-                        <ActivityIndicator size="large" color={businessColors.primary} />
-                      ) : (
-                        <>
-                          <View style={[styles.svcAddImageIconWrap, { backgroundColor: `${businessColors.primary}20` }]}>
-                            <Ionicons name="camera-outline" size={28} color={businessColors.primary} />
-                          </View>
-                          <Text style={[styles.svcAddImageDashedLabel, { color: businessColors.primary, marginTop: 8 }]}>
-                            {t('settings.services.uploadImage','העלה תמונה')}
-                          </Text>
-                        </>
-                      )}
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </View>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              ) : null}
 
               {/* Fields area */}
               <View style={styles.svcAddFieldsArea}>
@@ -5710,6 +6016,262 @@ const styles = StyleSheet.create({
   },
   modalSendTextDisabled: {
     color: Colors.subtext,
+  },
+  bookingWindowModalHeader: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(60,60,67,0.1)',
+  },
+  bookingWindowModalTitle: {
+    position: 'absolute',
+    left: 52,
+    right: 52,
+    textAlign: 'center',
+    zIndex: 0,
+    fontSize: 17,
+    fontWeight: '700',
+    lineHeight: 22,
+  },
+  bookingWindowHeaderSpacer: {
+    width: 44,
+    height: 44,
+  },
+  bookingWindowExplainer: {
+    borderRadius: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginBottom: 20,
+    flexDirection: 'row-reverse',
+    alignItems: 'flex-start',
+    gap: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.08)',
+    overflow: 'hidden',
+  },
+  bookingWindowExplainerIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  bookingWindowExplainerText: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 22,
+    color: Colors.text,
+    textAlign: 'left',
+    fontWeight: '500',
+  },
+  bookingWindowHeroCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.08)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.07,
+        shadowRadius: 14,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  bookingWindowFieldLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.subtext,
+    textAlign: 'left',
+    letterSpacing: 0.15,
+  },
+  bookingWindowControlsLtr: {
+    direction: 'ltr',
+    marginTop: 16,
+  },
+  bookingWindowStepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  bookingWindowStepperBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(60,60,67,0.06)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.08)',
+  },
+  bookingWindowStepperBtnDisabled: {
+    opacity: 0.45,
+  },
+  bookingWindowHeroNumberWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 120,
+    paddingHorizontal: 8,
+  },
+  bookingWindowHeroNumber: {
+    fontSize: 52,
+    fontWeight: '800',
+    letterSpacing: -1.5,
+    fontVariant: ['tabular-nums'],
+  },
+  bookingWindowHeroSuffix: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.subtext,
+    marginTop: 4,
+  },
+  bookingWindowTrackSection: {
+    marginTop: 12,
+  },
+  bookingWindowTrackLabelsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingHorizontal: 2,
+  },
+  bookingWindowTrackEdge: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.subtext,
+    fontVariant: ['tabular-nums'],
+  },
+  bookingWindowTrackHit: {
+    paddingVertical: 16,
+    justifyContent: 'center',
+  },
+  bookingWindowTrackBg: {
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: 'rgba(60,60,67,0.12)',
+    overflow: 'hidden',
+  },
+  bookingWindowTrackFill: {
+    height: '100%',
+    borderRadius: 5,
+  },
+  bookingWindowTrackThumb: {
+    position: 'absolute',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    top: '50%',
+    marginTop: -14,
+    marginLeft: -14,
+    borderWidth: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.14,
+        shadowRadius: 5,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  bookingWindowTrackHint: {
+    marginTop: 8,
+    fontSize: 12,
+    color: Colors.subtext,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  bookingWindowPresetsLabel: {
+    marginTop: 20,
+    marginBottom: 10,
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.subtext,
+    textAlign: 'left',
+  },
+  bookingWindowChipsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingVertical: 2,
+    paddingEnd: 4,
+  },
+  bookingWindowChip: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    backgroundColor: 'rgba(60,60,67,0.06)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.12)',
+  },
+  bookingWindowChipText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.text,
+    fontVariant: ['tabular-nums'],
+  },
+  bookingWindowManualLabel: {
+    marginTop: 22,
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.subtext,
+    textAlign: 'left',
+  },
+  bookingWindowManualInput: {
+    marginTop: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.18)',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+    color: Colors.text,
+    backgroundColor: 'rgba(60,60,67,0.04)',
+    fontVariant: ['tabular-nums'],
+  },
+  bookingWindowRangeFoot: {
+    marginTop: 10,
+    fontSize: 12,
+    color: Colors.subtext,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  bookingWindowFooter: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    backgroundColor: SETTINGS_GROUPED_BG,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(60,60,67,0.1)',
+  },
+  bookingWindowFooterBtn: {
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  bookingWindowFooterBtnDisabled: {
+    opacity: 0.55,
+  },
+  bookingWindowFooterBtnText: {
+    color: Colors.white,
+    fontSize: 17,
+    fontWeight: '700',
   },
   modalContent: {
     flex: 1,

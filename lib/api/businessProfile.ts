@@ -11,6 +11,11 @@ export function isClientApprovalRequired(profile: BusinessProfile | null | undef
   return profile?.require_client_approval !== false;
 }
 
+/** True when service thumbnails should show; missing column / null treated as shown. */
+export function isShowServiceImages(profile: BusinessProfile | null | undefined): boolean {
+  return profile?.show_service_images !== false;
+}
+
 export const businessProfileApi = {
   async getProfile(): Promise<BusinessProfile | null> {
     try {
@@ -72,6 +77,7 @@ export const businessProfileApi = {
         booking_open_days: 7,
         client_swap_enabled: true,
         require_client_approval: true,
+        show_service_images: true,
       };
 
       const { data, error } = await supabase
@@ -121,6 +127,7 @@ export const businessProfileApi = {
             accountant_report_time: (updates as any).accountant_report_time,
             client_swap_enabled: (updates as any).client_swap_enabled,
             require_client_approval: (updates as any).require_client_approval,
+            show_service_images: (updates as any).show_service_images,
           })
           .eq('id', businessId)
           .select('*')
@@ -157,6 +164,7 @@ export const businessProfileApi = {
           accountant_report_time: (updates as any).accountant_report_time,
           client_swap_enabled: (updates as any).client_swap_enabled ?? true,
           require_client_approval: (updates as any).require_client_approval ?? true,
+          show_service_images: (updates as any).show_service_images ?? true,
         })
         .select('*')
         .single();
@@ -171,7 +179,29 @@ export const businessProfileApi = {
       return null;
     }
   },
-  
+
+  /** Updates only `show_service_images` (admin service thumbnails + client booking). */
+  async setShowServiceImages(show: boolean): Promise<BusinessProfile | null> {
+    try {
+      const businessId = getBusinessId();
+      const { data, error } = await supabase
+        .from('business_profile')
+        .update({ show_service_images: show })
+        .eq('id', businessId)
+        .select('*')
+        .single();
+
+      if (error) {
+        console.error('Error updating show_service_images:', error);
+        return null;
+      }
+      return (data as BusinessProfile) || null;
+    } catch (e) {
+      console.error('Error in setShowServiceImages:', e);
+      return null;
+    }
+  },
+
   async getBreakMinutesForUser(userId?: string | null): Promise<number> {
     try {
       const businessId = getBusinessId();

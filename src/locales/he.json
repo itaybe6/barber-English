@@ -676,7 +676,10 @@
       "saveSuccess": "השירות נשמר בהצלחה",
       "orderSaveFailed": "לא ניתן לשמור את סדר השירות. נסה/י שוב.",
       "reorderHint": "גרור את ≡ כדי לשנות את סדר השירותים",
-      "fabAddHint": "לחיצה ארוכה על שורה לסידור · + למטה להוספה"
+      "fabAddHint": "לחיצה ארוכה על שורה לסידור · + למטה להוספה",
+      "showImagesTitle": "תמונות ליד שירותים",
+      "showImagesSubtitle": "כבוי מסתיר תמונות כאן ובמסך קביעת תור אצל הלקוח",
+      "showImagesSaveFailed": "לא ניתן לשמור את הגדרת התצוגה"
     },
     "broadcastTemplates": {
       "promotion": { "title": "מבצע חדש! 🎉", "description": "הודעה על מבצע או הנחה" },
@@ -741,6 +744,12 @@
       "bookingWindowModalBody": "לקוחות יראו תאריכים זמינים להזמנה רק בתוך מספר הימים הזה מהיום. ההגדרה חלה רק עליך; לכל עובד אחר יש ערך נפרד תחת «ניהול עובדים».",
       "bookingWindowModalDaysLabel": "מספר ימים פתוחים להזמנה",
       "bookingWindowModalRange": "אפשר לבחור בין 1 ל־60 ימים.",
+      "bookingWindowModalDaysUnit": "ימים",
+      "bookingWindowModalScrubberHint": "גררו על הסרגל או הקישו עליו כדי לקבוע",
+      "bookingWindowModalPresets": "בחירה מהירה",
+      "bookingWindowModalManual": "או הקלידו מספר",
+      "bookingWindowA11yDecrease": "פחות ימים",
+      "bookingWindowA11yIncrease": "יותר ימים",
       "bookingWindowInvalid": "הזינו מספר שלם בין 1 ל־60.",
       "bookingWindowSelfHint": "חל רק על הלוח שלך. לעובדים אחרים — «ניהול עובדים».",
       "bookingWindowNeedUser": "התחברו כדי לשמור את חלון ההזמנות.",

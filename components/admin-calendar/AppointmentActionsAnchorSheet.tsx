@@ -55,21 +55,6 @@ function anchorToShared(anchor: AnchorRect) {
   };
 }
 
-/**
- * When the tap is on the physical right side of the screen (e.g. Sunday column
- * in RTL week view), the sheet can look slightly too far right; nudge the open
- * resting position left. Values are in physical px; `winW` is window width.
- */
-function computeOpenedCenterOffsetX(cx: number, winW: number): number {
-  if (winW <= 0) return 0;
-  const r = cx / winW;
-  // Strong right (rightmost day column)
-  if (r > 0.62) return -Math.min(36, winW * 0.085);
-  // Moderate right
-  if (r > 0.52) return -Math.min(22, winW * 0.048);
-  return 0;
-}
-
 type Props = {
   open: boolean;
   anchor: AnchorRect;
@@ -95,8 +80,6 @@ export function AppointmentActionsAnchorSheet({
   const cy0 = useSharedValue(init.cy);
   const w0 = useSharedValue(init.w);
   const h0 = useSharedValue(init.h);
-  /** Extra horizontal offset for the *opened* position (interpolated target), not the anchor */
-  const openedCenterOffsetX = useSharedValue(computeOpenedCenterOffsetX(init.cx, winW));
 
   const closingRef = useRef(false);
   const onDismissedRef = useRef(onDismissed);
@@ -107,19 +90,18 @@ export function AppointmentActionsAnchorSheet({
   }, []);
 
   const syncAnchor = useCallback(
-    (a: AnchorRect, width: number) => {
+    (a: AnchorRect) => {
       const o = anchorToShared(a);
       cx0.value = o.cx;
       cy0.value = o.cy;
       w0.value = o.w;
       h0.value = o.h;
-      openedCenterOffsetX.value = computeOpenedCenterOffsetX(o.cx, width);
     },
-    [cx0, cy0, w0, h0, openedCenterOffsetX]
+    [cx0, cy0, w0, h0]
   );
 
   useLayoutEffect(() => {
-    syncAnchor(anchor, winW);
+    syncAnchor(anchor);
     if (!open) return;
     closingRef.current = false;
     progress.value = 0;
@@ -130,7 +112,7 @@ export function AppointmentActionsAnchorSheet({
       });
     });
     return () => cancelAnimationFrame(id);
-  }, [anchor, open, duration, progress, syncAnchor, winW]);
+  }, [anchor, open, duration, progress, syncAnchor]);
 
   useEffect(() => {
     if (open) {
@@ -165,13 +147,19 @@ export function AppointmentActionsAnchorSheet({
    */
   const panelStyle = useAnimatedStyle(() => {
     const finalW = Math.min(winW * 0.88, 420);
-    const targetCX = winW / 2 + openedCenterOffsetX.value;
+    /** Always rest at horizontal screen center (physical px); clamp keeps edges on-screen during resize animation. */
+    const targetCX = winW / 2;
     const targetCY = winH * 0.40;
     const p = progress.value;
-    const cx = interpolate(p, [0, 1], [cx0.value, targetCX], Extrapolation.CLAMP);
+    let cx = interpolate(p, [0, 1], [cx0.value, targetCX], Extrapolation.CLAMP);
     const cy = interpolate(p, [0, 1], [cy0.value, targetCY], Extrapolation.CLAMP);
     const w = interpolate(p, [0, 1], [w0.value, finalW], Extrapolation.CLAMP);
     const h = interpolate(p, [0, 1], [h0.value, finalH], Extrapolation.CLAMP);
+    const halfW = w / 2;
+    const padX = 12;
+    if (winW > 0) {
+      cx = Math.max(halfW + padX, Math.min(winW - halfW - padX, cx));
+    }
     const borderRadius = interpolate(p, [0, 1], [10, 22], Extrapolation.CLAMP);
     return {
       position: 'absolute' as const,

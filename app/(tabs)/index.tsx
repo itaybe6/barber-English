@@ -1,6 +1,23 @@
 import * as React from 'react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Platform, Modal, ActivityIndicator, TextInput, FlatList, Alert, Linking, RefreshControl, Dimensions, I18nManager } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  TouchableOpacity,
+  Image,
+  Platform,
+  Modal,
+  ActivityIndicator,
+  TextInput,
+  FlatList,
+  Alert,
+  Linking,
+  RefreshControl,
+  Dimensions,
+  I18nManager,
+} from 'react-native';
 import Animated, { useSharedValue, useAnimatedScrollHandler, runOnJS } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -360,6 +377,7 @@ export default function HomeScreen() {
   const [clientStatsMap, setClientStatsMap] = useState<
     Record<string, { totalAppointments: number; avgMonthlySpend: number | null }>
   >({});
+  const clientsModalOpenTsRef = useRef(0);
   const [pendingApprovalsOpenNonce, setPendingApprovalsOpenNonce] = useState(0);
   const [pendingClientsCount, setPendingClientsCount] = useState(0);
   const pendingCardRef = React.useRef<PendingClientApprovalsCardHandle>(null);
@@ -741,10 +759,11 @@ export default function HomeScreen() {
     }
   };
 
-  const closeClientsModal = () => {
+  const closeClientsModal = useCallback(() => {
+    if (Date.now() - clientsModalOpenTsRef.current < 400) return;
     setShowClientsModal(false);
     setClientsListMode('all');
-  };
+  }, []);
 
   // Filter clients based on search query
   useEffect(() => {
@@ -1029,6 +1048,7 @@ export default function HomeScreen() {
         style={{ flex: 1, zIndex: 3, backgroundColor: 'transparent' }}
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled
+        keyboardShouldPersistTaps="handled"
         bounces={false}
         overScrollMode="never"
         pointerEvents="box-none"
@@ -1065,6 +1085,7 @@ export default function HomeScreen() {
           <ScrollView
             ref={innerScrollRef}
             nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
             scrollEnabled={innerScrollEnabled}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
@@ -1125,6 +1146,7 @@ export default function HomeScreen() {
                   setClientsListMode('all');
                   setSearchQuery('');
                   setBlockedFilter('all');
+                  clientsModalOpenTsRef.current = Date.now();
                   setShowClientsModal(true);
                   void fetchClients();
                 }}
@@ -1234,6 +1256,7 @@ export default function HomeScreen() {
               setClientsListMode('newThisMonth');
               setSearchQuery('');
               setBlockedFilter('all');
+              clientsModalOpenTsRef.current = Date.now();
               setShowClientsModal(true);
               void fetchNewClientsThisMonth();
             }}

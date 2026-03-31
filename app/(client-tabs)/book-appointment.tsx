@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Image, Modal, RefreshControl, Linking, Platform, Dimensions, FlatList, PanResponder } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { BlurView } from 'expo-blur';
@@ -24,7 +24,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
 import { isRtlLanguage, toBcp47Locale } from '@/lib/i18nLocale';
 import { notificationsApi } from '@/lib/api/notifications';
-import { businessProfileApi } from '@/lib/api/businessProfile';
+import { businessProfileApi, isShowServiceImages } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
 import { User } from '@/lib/supabase';
 import Animated, { useSharedValue, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, Easing, FadeIn } from 'react-native-reanimated';
@@ -569,6 +569,24 @@ export default function BookAppointment() {
   }, [selectedBarber?.id]);
 
   const [bookingOpenDays, setBookingOpenDays] = useState<number>(7);
+  const [showServiceImagesBooking, setShowServiceImagesBooking] = useState(true);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      (async () => {
+        try {
+          const p = await businessProfileApi.getProfile();
+          if (!cancelled && p) setShowServiceImagesBooking(isShowServiceImages(p));
+        } catch {
+          if (!cancelled) setShowServiceImagesBooking(true);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
+
   useEffect(() => {
     let isMounted = true;
     const loadBookingDays = async () => {
@@ -1618,15 +1636,28 @@ export default function BookAppointment() {
             return <DynamicBackground uri={barberUri} safeTop={safeAreaInsets.top} safeBottom={safeAreaInsets.bottom} />;
           }
           if (currentStep === 2) {
-            const svcUri = selectedServices.length > 0
-              ? ((selectedServices[0] as any)?.image_url || (selectedServices[0] as any)?.cover_url || (selectedServices[0] as any)?.image || null)
-              : null;
-            return <DynamicBackground uri={svcUri} safeTop={safeAreaInsets.top} safeBottom={safeAreaInsets.bottom} />;
+            const barberUri = (selectedBarber as any)?.image_url || null;
+            const svcUri =
+              showServiceImagesBooking && selectedServices.length > 0
+                ? ((selectedServices[0] as any)?.image_url ||
+                    (selectedServices[0] as any)?.cover_url ||
+                    (selectedServices[0] as any)?.image ||
+                    null)
+                : null;
+            return (
+              <DynamicBackground
+                uri={svcUri || barberUri}
+                safeTop={safeAreaInsets.top}
+                safeBottom={safeAreaInsets.bottom}
+              />
+            );
           }
           const uri =
-            (selectedService as any)?.image_url ||
-            (selectedService as any)?.cover_url ||
-            (selectedService as any)?.image ||
+            (showServiceImagesBooking
+              ? (selectedService as any)?.image_url ||
+                (selectedService as any)?.cover_url ||
+                (selectedService as any)?.image
+              : null) ||
             (selectedBarber as any)?.image_url ||
             null;
           return <DynamicBackground uri={uri} safeTop={safeAreaInsets.top} safeBottom={safeAreaInsets.bottom} />;
@@ -1728,6 +1759,7 @@ export default function BookAppointment() {
           services={filteredServices}
           selectedServiceIds={selectedServices.map((s: any) => String(s.id))}
           externalScrollX={serviceBgScrollX}
+          showServiceImages={showServiceImagesBooking}
           t={t}
           onSelectService={(service) => {
             setSelectedServices(prev => {

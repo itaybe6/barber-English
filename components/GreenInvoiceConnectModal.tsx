@@ -10,12 +10,15 @@ import {
   ActivityIndicator,
   Linking,
   Alert,
+  KeyboardAvoidingView,
+  type ScrollView,
 } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { useTranslation } from 'react-i18next';
 import { X, ExternalLink, KeyRound } from 'lucide-react-native';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
-import { parseGreenInvoiceCredentialPaste } from '@/lib/greenInvoicePaste';
+import { greenInvoiceConnectApi } from '@/lib/api/greenInvoiceConnect';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const GI_SIGNIN = 'https://auth.greeninvoice.co.il/signin';
 const GI_API_KEYS = 'https://app.greeninvoice.co.il/settings/developers/api';
@@ -68,14 +71,33 @@ export function GreenInvoiceConnectModal({
   onDisconnect,
 }: Props) {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const webRef = useRef<WebView>(null);
-  const [pasteBlob, setPasteBlob] = useState('');
+  const kbdScrollRef = useRef<ScrollView | null>(null);
+  const [apiKeyId, setApiKeyId] = useState('');
+  const [apiSecret, setApiSecret] = useState('');
+  const [verifying, setVerifying] = useState(false);
   const [webExpanded, setWebExpanded] = useState(false);
   const [webResetKey, setWebResetKey] = useState(0);
 
+  const giErrorMessage = useCallback(
+    (code: string, serverMessage?: string) => {
+      if (serverMessage && code === 'greeninvoice_auth_failed') return serverMessage;
+      const key = `finance.greenInvoice.errors.${code}` as const;
+      const translated = t(key);
+      const base = translated !== key ? translated : t('finance.greenInvoice.errors.unknown');
+      if (code === 'invoke_network' && serverMessage) {
+        return `${base}\n\n${serverMessage}`;
+      }
+      return base;
+    },
+    [t],
+  );
+
   useEffect(() => {
     if (visible && !connected) {
-      setPasteBlob('');
+      setApiKeyId('');
+      setApiSecret('');
       setWebExpanded(false);
       setWebResetKey((k) => k + 1);
     }
@@ -91,7 +113,8 @@ export function GreenInvoiceConnectModal({
         const id = vals.find((v) => uuidRe.test(v));
         const secret = vals.find((v) => v !== id && v.length >= 16);
         if (id && secret) {
-          setPasteBlob(`${id}\n${secret}`);
+          setApiKeyId(id);
+          setApiSecret(secret);
         }
       } catch {
         /* ignore */
@@ -100,23 +123,64 @@ export function GreenInvoiceConnectModal({
     [],
   );
 
-  const handleConnectParsed = async () => {
-    const parsed = parseGreenInvoiceCredentialPaste(pasteBlob);
-    if (!parsed) {
-      Alert.alert('', t('finance.greenInvoice.pasteInvalid'));
+  const trimmedKeyId = apiKeyId.trim();
+  const trimmedSecret = apiSecret.trim();
+
+  const handleTestConnection = async () => {
+    if (!trimmedKeyId || !trimmedSecret) {
+      Alert.alert('', t('finance.greenInvoice.errors.missing_credentials'));
       return;
     }
-    await onSubmitCredentials(parsed.apiKeyId, parsed.apiSecret);
+    setVerifying(true);
+    try {
+      const res = await greenInvoiceConnectApi.verify({ apiKeyId: trimmedKeyId, apiSecret: trimmedSecret });
+      if (res.ok) {
+        Alert.alert('', t('finance.greenInvoice.connectionVerified'));
+      } else {
+        Alert.alert(t('finance.greenInvoice.testFailedTitle'), giErrorMessage(res.error, res.message));
+      }
+    } finally {
+      setVerifying(false);
+    }
   };
+
+  const handleSaveConnect = async () => {
+    if (!trimmedKeyId || !trimmedSecret) {
+      Alert.alert('', t('finance.greenInvoice.errors.missing_credentials'));
+      return;
+    }
+    await onSubmitCredentials(trimmedKeyId, trimmedSecret);
+  };
+
+  const scrollCredentialsIntoView = useCallback(() => {
+    const scroll = () => kbdScrollRef.current?.scrollToEnd({ animated: true });
+    requestAnimationFrame(scroll);
+    setTimeout(scroll, 160);
+  }, []);
 
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
-      <View style={styles.modalOverlay}>
-        <KeyboardAwareScreenScroll
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
-        >
+      <KeyboardAvoidingView
+        style={styles.kbdRoot}
+        behavior={Platform.OS === 'web' ? undefined : 'padding'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? Math.max(insets.top, 12) : 0}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAwareScreenScroll
+            ref={kbdScrollRef}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator
+            enableOnAndroid
+            extraScrollHeight={Platform.OS === 'ios' ? 180 : 220}
+            extraHeight={28}
+            keyboardOpeningTime={Platform.OS === 'ios' ? 0 : 250}
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            style={styles.kbdScroll}
+            contentContainerStyle={[
+              styles.kbdScrollContent,
+              { paddingBottom: Math.max(insets.bottom, 20) },
+            ]}
+          >
           <View style={[styles.modalSheet, { backgroundColor: theme.surface }]}>
             <View style={styles.modalHandle} />
             <View style={styles.modalTopRow}>
@@ -205,25 +269,49 @@ export function GreenInvoiceConnectModal({
                   </Text>
                 </TouchableOpacity>
 
-                <Text style={[styles.sectionLabel, { color: theme.text }]}>{t('finance.greenInvoice.pasteBlockLabel')}</Text>
+                <Text style={[styles.sectionLabel, { color: theme.text }]}>{t('finance.greenInvoice.credentialsSection')}</Text>
+                <Text style={[styles.label, { color: theme.textSecondary, marginBottom: 6 }]}>{t('finance.greenInvoice.keyIdLabel')}</Text>
                 <TextInput
-                  style={[styles.pasteArea, { borderColor: `${theme.border}55`, color: theme.text, backgroundColor: '#FAFBFD' }]}
-                  value={pasteBlob}
-                  onChangeText={setPasteBlob}
-                  placeholder={t('finance.greenInvoice.pastePlaceholder')}
+                  style={[styles.credentialInput, { borderColor: `${theme.border}55`, color: theme.text, backgroundColor: '#FAFBFD' }]}
+                  value={apiKeyId}
+                  onChangeText={setApiKeyId}
+                  onFocus={scrollCredentialsIntoView}
+                  placeholder={t('finance.greenInvoice.keyIdPlaceholder')}
                   placeholderTextColor="#9CA3AF"
                   textAlign="right"
-                  textAlignVertical="top"
-                  multiline
-                  numberOfLines={4}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <Text style={[styles.label, { color: theme.textSecondary, marginBottom: 6, marginTop: 12 }]}>{t('finance.greenInvoice.secretLabel')}</Text>
+                <TextInput
+                  style={[styles.credentialInput, { borderColor: `${theme.border}55`, color: theme.text, backgroundColor: '#FAFBFD' }]}
+                  value={apiSecret}
+                  onChangeText={setApiSecret}
+                  onFocus={scrollCredentialsIntoView}
+                  placeholder={t('finance.greenInvoice.secretPlaceholder')}
+                  placeholderTextColor="#9CA3AF"
+                  textAlign="right"
+                  secureTextEntry
                   autoCapitalize="none"
                   autoCorrect={false}
                 />
 
                 <TouchableOpacity
+                  style={[styles.secondaryBtn, { borderColor: `${accentColor}99` }]}
+                  onPress={handleTestConnection}
+                  disabled={saving || verifying}
+                >
+                  {verifying ? (
+                    <ActivityIndicator size="small" color={accentColor} />
+                  ) : (
+                    <Text style={[styles.secondaryBtnText, { color: accentColor }]}>{t('finance.greenInvoice.testConnection')}</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
                   style={[styles.primaryBtn, { backgroundColor: accentColor }]}
-                  onPress={handleConnectParsed}
-                  disabled={saving}
+                  onPress={handleSaveConnect}
+                  disabled={saving || verifying}
                 >
                   {saving ? (
                     <ActivityIndicator size="small" color="#fff" />
@@ -244,15 +332,28 @@ export function GreenInvoiceConnectModal({
             )}
           </View>
         </KeyboardAwareScreenScroll>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  kbdRoot: {
+    flex: 1,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  kbdScroll: {
+    flex: 1,
+    width: '100%',
+    maxHeight: '100%',
+  },
+  kbdScrollContent: {
+    flexGrow: 1,
     justifyContent: 'flex-end',
   },
   modalSheet: {
@@ -354,14 +455,29 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginBottom: 8,
   },
-  pasteArea: {
-    minHeight: 100,
+  credentialInput: {
+    minHeight: 48,
     borderWidth: 1.5,
     borderRadius: 14,
-    padding: 14,
-    fontSize: 14,
-    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    marginBottom: 0,
     textAlign: 'right',
+  },
+  secondaryBtn: {
+    height: 48,
+    borderRadius: 16,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    marginBottom: 10,
+    backgroundColor: 'transparent',
+  },
+  secondaryBtnText: {
+    fontSize: 16,
+    fontWeight: '800',
   },
   primaryBtn: {
     height: 52,

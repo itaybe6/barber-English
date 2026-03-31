@@ -1416,6 +1416,11 @@
       "shrinkBrowser": "Shrink window",
       "tryReadFromPage": "Try read from page",
       "pasteBlockLabel": "Paste key details",
+      "credentialsSection": "API key details",
+      "keyIdPlaceholder": "Key ID (UUID)",
+      "testConnection": "Test connection",
+      "connectionVerified": "Connection OK — Green Invoice accepted these credentials.",
+      "testFailedTitle": "Connection test failed",
       "pastePlaceholder": "Line 1: key ID (UUID)\nLine 2: secret key",
       "pasteInvalid": "Could not parse two values. Paste ID on the first line and secret on the second, or two tab-separated values.",
       "finishConnect": "Finish and connect",
@@ -1431,11 +1436,14 @@
       "saveFailed": "Could not save connection",
       "comingSoon": "Next: issue client receipts from the app.",
       "errors": {
+        "edge_function_not_deployed": "The greeninvoice-connect Edge Function is not deployed to this Supabase project (404). Deploy it with: supabase functions deploy greeninvoice-connect (or from the Supabase Dashboard → Edge Functions).",
         "invoke_network": "Could not reach the server. Try again.",
         "invalid_session": "Please sign in again.",
         "forbidden_not_admin": "Only the business admin can connect Green Invoice.",
         "greeninvoice_auth_failed": "Green Invoice rejected these credentials.",
         "missing_credentials": "API key ID and secret are required.",
+        "missing_caller_context": "No logged-in user detected. Sign out and sign in again.",
+        "forbidden_wrong_business": "User does not belong to this business. Sign in again.",
         "unknown": "Something went wrong. Try again."
       }
     }

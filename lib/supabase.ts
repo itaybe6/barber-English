@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getExpoExtra } from '@/lib/getExtra';
 
 const extra = getExpoExtra();
@@ -37,15 +39,26 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('[supabase] Please set these environment variables in your .env file');
 }
 
+/** Native: persist Supabase session in AsyncStorage. Web: use supabase-js default (localStorage) so keys stay compatible. */
+const supabaseAuthOptions =
+  Platform.OS === 'web'
+    ? {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false,
+      }
+    : {
+        storage: AsyncStorage,
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false,
+      };
+
 export const supabase = createClient(
   (supabaseUrl as string) || 'https://example.invalid',
   (supabaseAnonKey as string) || 'anon-key-missing',
   {
-    auth: {
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false,
-    },
+    auth: supabaseAuthOptions,
   }
 );
 

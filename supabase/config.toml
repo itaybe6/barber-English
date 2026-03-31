@@ -34,9 +34,9 @@ verify_jwt = false
 [functions.pulseem-credit-transfer]
 verify_jwt = false
 
-# Green Invoice (חשבונית ירוקה): admin JWT — save encrypted API secret on business_profile
+# Green Invoice (חשבונית ירוקה): app uses custom auth (no Supabase Auth session). Auth in function: caller_user_id + business_id vs users table (service role).
 [functions.greeninvoice-connect]
-verify_jwt = true
+verify_jwt = false
 
 # Database Webhook on notifications INSERT — Authorization: Bearer <SERVICE_ROLE_KEY>
 [functions.notification-push-sms]

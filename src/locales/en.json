@@ -430,6 +430,8 @@
   "profile.language.title": "Language",
   "profile.language.english": "English",
   "profile.language.hebrew": "Hebrew",
+  "profile.language.arabic": "Arabic",
+  "profile.language.russian": "Russian",
   "profile.language.restartNote": "Direction changes may require app restart",
   "tabs": { "home": "Home", "gallery": "Gallery", "book": "Book", "profile": "Profile", "booking": "Booking" },
   "gallery": {
@@ -1281,11 +1283,12 @@
       "emptySubtitle": "No clients are waiting for this day",
       "subtitleDay": "Daily — pick a day",
       "subtitleWeek": "Weekly — all days in this week",
-      "subtitleMonth": "Monthly — tap a day, list below",
+      "subtitleMonth": "Monthly — tap a day to open the list",
       "emptyWeekTitle": "No waitlist this week",
       "emptyWeekSubtitle": "No clients are waiting in this date range",
-      "monthCalendarHint": "Numbers show how many clients are on the waitlist that day. Tap a day to see them below.",
+      "monthCalendarHint": "Numbers show how many clients are on the waitlist that day. Tap a day to open the list.",
       "monthSelectedDay": "Selected: {{date}}",
+      "monthModalTitle": "Waitlist — {{date}}",
       "countPillSingle": "1 on waitlist",
       "countPill": "{{count}} on waitlist"
     }

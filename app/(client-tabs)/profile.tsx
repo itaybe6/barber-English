@@ -15,6 +15,7 @@ import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
  
 import { supabase } from '@/lib/supabase';
 import { usersApi } from '@/lib/api/users';
+import { normalizeAppLanguage } from '@/lib/i18nLocale';
 import { notificationsApi } from '@/lib/api/notifications';
 import Reanimated, {
   Extrapolation,
@@ -246,7 +247,18 @@ export default function ClientProfileScreen() {
       id: 'language',
       icon: 'globe-outline',
       title: t('profile.language.title', 'Language'),
-      subtitle: i18n.language?.startsWith('he') ? t('profile.language.hebrew','Hebrew') : t('profile.language.english','English'),
+      subtitle: (() => {
+        switch (normalizeAppLanguage(i18n.language)) {
+          case 'he':
+            return t('profile.language.hebrew', 'Hebrew');
+          case 'ar':
+            return t('profile.language.arabic', 'Arabic');
+          case 'ru':
+            return t('profile.language.russian', 'Russian');
+          default:
+            return t('profile.language.english', 'English');
+        }
+      })(),
       onPress: () => setIsLanguageOpen(true),
     },
     {
@@ -523,7 +535,7 @@ export default function ClientProfileScreen() {
                     const updated = await usersApi.updateUser(user.id, {
                       name: editName.trim(),
                       phone: editPhone.trim(),
-                      language: i18n.language?.startsWith('he') ? 'he' : 'en',
+                      language: normalizeAppLanguage(i18n.language),
                       ...(editPassword.trim() ? { password: editPassword.trim() } : {}),
                     } as any);
                     if (updated) {
@@ -597,6 +609,42 @@ export default function ClientProfileScreen() {
               >
                 <Text style={styles.languageOptionText}>{t('profile.language.hebrew','Hebrew')}</Text>
                 {i18n.language?.startsWith('he') && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.languageOption}
+                onPress={async () => {
+                  try {
+                    await i18n.changeLanguage('ar');
+                    if (user?.id) {
+                      const updated = await usersApi.updateUser(user.id, { language: 'ar' } as any);
+                      if (updated) updateUserProfile({ language: 'ar' } as any);
+                    }
+                  } finally {
+                    setIsLanguageOpen(false);
+                  }
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.languageOptionText}>{t('profile.language.arabic','Arabic')}</Text>
+                {i18n.language?.startsWith('ar') && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.languageOption}
+                onPress={async () => {
+                  try {
+                    await i18n.changeLanguage('ru');
+                    if (user?.id) {
+                      const updated = await usersApi.updateUser(user.id, { language: 'ru' } as any);
+                      if (updated) updateUserProfile({ language: 'ru' } as any);
+                    }
+                  } finally {
+                    setIsLanguageOpen(false);
+                  }
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.languageOptionText}>{t('profile.language.russian','Russian')}</Text>
+                {i18n.language?.startsWith('ru') && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
               </TouchableOpacity>
               <Text style={styles.helperNote}>{t('profile.language.restartNote','Direction changes may require app restart')}</Text>
             </View>

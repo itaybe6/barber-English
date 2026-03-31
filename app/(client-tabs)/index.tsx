@@ -30,6 +30,7 @@ import { manicureImages } from '@/src/constants/manicureImages';
 import { ManicureMarqueeTile } from '@/components/ManicureMarqueeTile';
 import SwapOpportunities from '@/components/SwapOpportunities';
 import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
+import { toBcp47Locale } from '@/lib/i18nLocale';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_SPACING = Platform.OS === 'web' ? 12 : 8;
@@ -708,7 +709,7 @@ export default function ClientHomeScreen() {
 
   // Show all services in a horizontal scroll
   
-  const appLocale = i18n?.language === 'he' ? 'he-IL' : 'en-US';
+  const appLocale = toBcp47Locale(i18n?.language);
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString(appLocale as any, {

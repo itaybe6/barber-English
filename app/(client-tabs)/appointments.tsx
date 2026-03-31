@@ -17,6 +17,7 @@ import { servicesApi } from '@/lib/api/services';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import SwapRequestModal from '@/components/SwapRequestModal';
+import { toBcp47Locale } from '@/lib/i18nLocale';
 
 type TabType = 'upcoming' | 'past';
 
@@ -402,7 +403,7 @@ export default function ClientAppointmentsScreen() {
     loadUserAppointments(true);
   }, [loadUserAppointments]);
 
-  const appLocale = i18n?.language === 'he' ? 'he-IL' : 'en-US';
+  const appLocale = toBcp47Locale(i18n?.language);
   const formatDate = React.useCallback((dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString(appLocale as any, { 

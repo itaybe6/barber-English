@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useColors } from '@/src/theme/ThemeProvider';
+import { normalizeAppLanguage, toBcp47Locale } from '@/lib/i18nLocale';
 
 /** רוחב תא במצב גלילה (חודש / יותר מ־7 ימים) */
 const DAY_CELL_WIDTH = 54;
@@ -164,10 +165,16 @@ export default function DaySelector({
   };
 
   const getDayName = (date: Date) => {
-    const daysEn = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const daysHe = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
-    const list = i18n?.language?.startsWith('he') ? daysHe : daysEn;
-    return list[date.getDay()];
+    if (normalizeAppLanguage(i18n?.language) === 'he') {
+      const daysHe = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
+      return daysHe[date.getDay()];
+    }
+    try {
+      return date.toLocaleDateString(toBcp47Locale(i18n?.language), { weekday: 'short' });
+    } catch {
+      const daysEn = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      return daysEn[date.getDay()];
+    }
   };
 
   const scrollToSelected = (animated: boolean) => {

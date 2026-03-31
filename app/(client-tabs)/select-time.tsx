@@ -15,6 +15,7 @@ import { notificationsApi } from '@/lib/api/notifications';
 import { usersApi } from '@/lib/api/users';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
+import { toBcp47Locale } from '@/lib/i18nLocale';
 
 export default function SelectTimeScreen() {
   const router = useRouter();
@@ -621,7 +622,7 @@ export default function SelectTimeScreen() {
               <Text style={styles.modalTitle}>{t('selectTime.existingTitle', 'You have an existing appointment')}</Text>
               <Text style={styles.modalMessage} numberOfLines={0} allowFontScaling={false}>
                 {t('selectTime.existingMessage', 'You have an existing appointment on {{date}} at {{time}} for {{service}}.\n\nWould you like to replace the existing appointment with the new one at {{newTime}} or book an additional appointment?', {
-                  date: existingAppointment?.slot_date ? new Date(existingAppointment.slot_date).toLocaleDateString(i18n?.language === 'he' ? 'he-IL' : 'en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : t('booking.unknown', 'unknown date'),
+                  date: existingAppointment?.slot_date ? new Date(existingAppointment.slot_date).toLocaleDateString(toBcp47Locale(i18n?.language), { weekday: 'long', month: 'long', day: 'numeric' }) : t('booking.unknown', 'unknown date'),
                   time: existingAppointment?.slot_time ? formatTime12Hour(existingAppointment.slot_time) : t('booking.unknown', 'unknown time'),
                   service: existingAppointment?.service_name || t('booking.undefined', 'unknown service'),
                   newTime: selectedTime ? formatTime12Hour(selectedTime) : t('booking.unknown', 'unknown time')
@@ -683,7 +684,7 @@ export default function SelectTimeScreen() {
                 {selectedDate ? (
                   <View style={styles.chip}>
                     <Ionicons name="calendar" size={14} color={colors.primary} style={styles.chipIcon} />
-                    <Text style={styles.chipText}>{new Date(selectedDate).toLocaleDateString(i18n?.language === 'he' ? 'he-IL' : 'en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</Text>
+                    <Text style={styles.chipText}>{new Date(selectedDate).toLocaleDateString(toBcp47Locale(i18n?.language), { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</Text>
                   </View>
                 ) : null}
                 {selectedTime ? (

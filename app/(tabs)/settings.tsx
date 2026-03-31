@@ -1280,7 +1280,12 @@ export default function SettingsScreen() {
         Alert.alert(t('error.generic','Error'), t('settings.profile.uploadFailed','Image upload failed'));
         return;
       }
-      updateLocalServiceField(serviceId, 'image_url', uploadedUrl as any);
+      const persisted = await updateService(serviceId, { image_url: uploadedUrl } as any);
+      if (!persisted) {
+        Alert.alert(t('error.generic','Error'), t('settings.services.saveFailed','Failed to save service'));
+        return;
+      }
+      setEditableServices((prev) => prev.map((s) => (s.id === serviceId ? persisted : s)));
     } catch (e) {
       Alert.alert(t('error.generic','Error'), t('settings.profile.uploadFailed','Image upload failed'));
     } finally {

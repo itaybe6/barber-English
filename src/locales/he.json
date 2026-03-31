@@ -432,6 +432,8 @@
   "profile.language.title": "שפה",
   "profile.language.english": "אנגלית",
   "profile.language.hebrew": "עברית",
+  "profile.language.arabic": "ערבית",
+  "profile.language.russian": "רוסית",
   "profile.language.restartNote": "שינוי כיוון עשוי לדרוש הפעלת אפליקציה מחדש",
   "tabs": { "home": "בית", "gallery": "גלריה", "book": "קביעת תור", "profile": "פרופיל", "booking": "תורים" },
   "gallery": {
@@ -1282,11 +1284,12 @@
       "emptySubtitle": "אין לקוחות שממתינים ליום זה",
       "subtitleDay": "יומי — בחרו יום בשורה",
       "subtitleWeek": "שבועי — כל הימים בשבוע הנבחר",
-      "subtitleMonth": "חודשי — הקישו על יום, הרשימה למטה",
+      "subtitleMonth": "חודשי — הקישו על יום לפתיחת הרשימה",
       "emptyWeekTitle": "אין רשומות לרשימת ההמתנה השבוע",
       "emptyWeekSubtitle": "אין לקוחות ממתינים בטווח התאריכים הזה",
-      "monthCalendarHint": "המספרים מציגים כמה לקוחות ברשימת ההמתנה באותו יום. הקישו על יום כדי לראות אותם למטה.",
+      "monthCalendarHint": "המספרים מציגים כמה לקוחות ברשימת ההמתנה באותו יום. הקישו על יום כדי לפתוח את הרשימה בחלון.",
       "monthSelectedDay": "נבחר: {{date}}",
+      "monthModalTitle": "רשימת המתנה — {{date}}",
       "countPillSingle": "אחד ברשימה",
       "countPill": "{{count}} ברשימה"
     }

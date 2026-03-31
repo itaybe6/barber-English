@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, Children, cloneElement, isValidElement, memo } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,15 +8,7 @@ import {
   RefreshControl,
   StatusBar,
   FlatList,
-  type ViewStyle,
 } from 'react-native';
-import Animated, {
-  interpolate,
-  useAnimatedScrollHandler,
-  useAnimatedStyle,
-  useSharedValue,
-  type SharedValue,
-} from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -28,10 +20,6 @@ import { Notification } from '@/lib/supabase';
 import { Bell, Clock, CheckCircle, AlertCircle, Calendar, XCircle, User } from 'lucide-react-native';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { formatTimeFromDate } from '@/lib/utils/timeFormat';
-
-const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Notification>);
-
-const SCROLL_ROW_OFFSET = 0;
 
 /** First valid YYYY-MM-DD in title/content (e.g. admin "new appointment" body). */
 function extractYyyyMmDdFromNotification(n: Pick<Notification, 'title' | 'content'>): string | null {
@@ -103,10 +91,6 @@ type ParsedNotification = ReturnType<typeof parseNotificationContentStatic>;
 
 interface NotificationListRowProps {
   notification: Notification;
-  index: number;
-  scrollY: SharedValue<number>;
-  itemY?: SharedValue<number>;
-  itemHeight?: SharedValue<number>;
   pressable: boolean;
   onPress: (n: Notification) => void;
   isAdminReminder: (n: Notification) => boolean;
@@ -125,49 +109,12 @@ interface NotificationListRowProps {
 
 const NotificationListRow = memo(function NotificationListRow({
   notification,
-  index,
-  scrollY,
-  itemY,
-  itemHeight,
   pressable,
   onPress,
   isAdminReminder,
   getTitleStatusIcon,
   ios,
 }: NotificationListRowProps) {
-  const fallbackY = useSharedValue(0);
-  const fallbackH = useSharedValue(0);
-  const itemY_sv = itemY ?? fallbackY;
-  const itemH_sv = itemHeight ?? fallbackH;
-
-  const stylez = useAnimatedStyle(() => {
-    const h = itemH_sv.value;
-    const y = itemY_sv.value;
-    if (h === 0) {
-      return {
-        opacity: 1,
-        transform: [{ perspective: 1 }, { translateY: 0 }, { scale: 1 }] as ViewStyle['transform'],
-      };
-    }
-
-    return {
-      opacity: interpolate(scrollY.value, [y - 1, y, y + h], [1, 1, 0]),
-      transform: [
-        { perspective: h * 4 },
-        {
-          translateY: interpolate(
-            scrollY.value,
-            [y - index * SCROLL_ROW_OFFSET - 1, y - index * SCROLL_ROW_OFFSET, y - index * SCROLL_ROW_OFFSET + 1],
-            [0, 0, 1]
-          ),
-        },
-        {
-          scale: interpolate(scrollY.value, [y - 1, y, y + h], [1, 1, 0]),
-        },
-      ] as ViewStyle['transform'],
-    };
-  });
-
   const parsed: ParsedNotification = parseNotificationContentStatic(notification.title, notification.content);
 
   const cardStyles = [
@@ -225,7 +172,7 @@ const NotificationListRow = memo(function NotificationListRow({
   );
 
   return (
-    <Animated.View style={[styles.notificationRowWrap, stylez]}>
+    <View style={styles.notificationRowWrap}>
       {pressable ? (
         <TouchableOpacity style={cardStyles} onPress={() => onPress(notification)} activeOpacity={0.7}>
           {cardBody}
@@ -233,30 +180,6 @@ const NotificationListRow = memo(function NotificationListRow({
       ) : (
         <View style={cardStyles}>{cardBody}</View>
       )}
-    </Animated.View>
-  );
-});
-
-const NotificationsCellRenderer = memo(function NotificationsCellRenderer({
-  children,
-  ...props
-}: React.ComponentProps<typeof View> & { children: React.ReactNode }) {
-  const itemY = useSharedValue(0);
-  const itemHeight = useSharedValue(0);
-  return (
-    <View
-      {...props}
-      onLayout={(ev) => {
-        itemY.value = ev.nativeEvent.layout.y;
-        itemHeight.value = ev.nativeEvent.layout.height;
-      }}
-    >
-      {Children.map(children, (child) => {
-        if (isValidElement(child)) {
-          return cloneElement(child, { itemY, itemHeight } as Partial<NotificationListRowProps>);
-        }
-        return child;
-      })}
     </View>
   );
 });
@@ -565,11 +488,6 @@ export default function ClientNotificationsScreen() {
     }
   });
 
-  const scrollY = useSharedValue(0);
-  const onNotificationsScroll = useAnimatedScrollHandler((ev) => {
-    scrollY.value = ev.contentOffset.y;
-  });
-
   if (loading) {
     return (
       <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: ios.background }}>
@@ -627,17 +545,12 @@ export default function ClientNotificationsScreen() {
           </ScrollView>
         )}
 
-          <AnimatedFlatList
+          <FlatList
             data={filteredNotifications}
             keyExtractor={(item) => item.id}
-            onScroll={onNotificationsScroll}
-            scrollEventThrottle={16}
-            CellRendererComponent={NotificationsCellRenderer}
-            renderItem={({ item, index }) => (
+            renderItem={({ item }) => (
               <NotificationListRow
                 notification={item}
-                index={index}
-                scrollY={scrollY}
                 pressable={!isCancellationNotification(item)}
                 onPress={handleNotificationPress}
                 isAdminReminder={isAdminReminder}

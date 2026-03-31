@@ -8,24 +8,32 @@ import { I18nManager } from 'react-native';
 const en = require('../locales/en.json');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const he = require('../locales/he.json');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const ar = require('../locales/ar.json');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const ru = require('../locales/ru.json');
 
 const resources = {
   en: { translation: en },
   he: { translation: he },
+  ar: { translation: ar },
+  ru: { translation: ru },
 } as const;
 
-function getInitialLanguage(): 'en' | 'he' {
+function getInitialLanguage(): 'en' | 'he' | 'ar' | 'ru' {
   try {
     const locales = Localization.getLocales?.();
     const primary = Array.isArray(locales) && locales.length > 0 ? locales[0] : undefined;
     const code = (primary?.languageCode || '').toLowerCase();
     if (code === 'he') return 'he';
+    if (code === 'ar') return 'ar';
+    if (code === 'ru') return 'ru';
   } catch {}
   return 'en';
 }
 
 function ensureLayoutDirection(language: string) {
-  const shouldBeRtl = language.startsWith('he');
+  const shouldBeRtl = language.startsWith('he') || language.startsWith('ar');
   try {
     if (I18nManager.isRTL !== shouldBeRtl) {
       I18nManager.allowRTL(shouldBeRtl);
@@ -51,6 +59,10 @@ i18n
     returnNull: false,
   })
   .catch(() => {});
+
+i18n.on('languageChanged', (lng) => {
+  ensureLayoutDirection(lng);
+});
 
 export default i18n;
 

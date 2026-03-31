@@ -22,6 +22,7 @@ import BookingSuccessAnimatedOverlay, {
 } from '@/components/book-appointment/BookingSuccessAnimatedOverlay';
 import TimePeriodSelector, { TimePeriod } from '@/components/TimePeriodSelector';
 import { useWaitlistStore } from '@/stores/waitlistStore';
+import { isRtlLanguage, toBcp47Locale } from '@/lib/i18nLocale';
 import { useAuthStore } from '@/stores/authStore';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { getScrollContentPaddingBottomForFloatingClientTabBar } from '@/constants/clientTabBarInsets';
@@ -51,7 +52,7 @@ export default function WaitlistScreen() {
   const formatDate = useCallback(
     (dateString: string) => {
       const date = new Date(dateString);
-      return date.toLocaleDateString(i18n?.language === 'he' ? 'he-IL' : 'en-US', {
+      return date.toLocaleDateString(toBcp47Locale(i18n?.language), {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
@@ -340,7 +341,7 @@ export default function WaitlistScreen() {
             <BookingSuccessAnimatedOverlay
               key={waitlistSuccessAnimKey}
               lines={waitlistSuccessLines}
-              rtl={(i18n?.language || 'he').startsWith('he')}
+              rtl={isRtlLanguage(i18n?.language)}
               accentColor={colors.primary}
               onDismiss={dismissWaitlistSuccess}
               gotItLabel={t('booking.gotIt', 'Got it')}

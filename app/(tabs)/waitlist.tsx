@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
-  TouchableOpacity,
   ScrollView,
   StatusBar,
   Alert,
@@ -13,9 +12,10 @@ import {
   Platform,
   Pressable,
   RefreshControl,
+  Modal,
 } from 'react-native';
 import Colors from '@/constants/colors';
-import { Phone, Trash2, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { Phone, Trash2, ChevronLeft, ChevronRight, X } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import WaitlistClientCard from '@/components/WaitlistClientCard';
@@ -23,7 +23,7 @@ import { supabase, WaitlistEntry } from '@/lib/supabase';
 import DaySelector from '@/components/DaySelector';
 import AdminVerticalMonthCalendar from '@/components/book-appointment/games-calendar/AdminVerticalMonthCalendar';
 import { useAuthStore } from '@/stores/authStore';
-import { useColors } from '@/src/theme/ThemeProvider';
+import { useColors, usePrimaryContrast } from '@/src/theme/ThemeProvider';
 import { useTranslation } from 'react-i18next';
 import { formatTimeFromDate } from '@/lib/utils/timeFormat';
 import i18n from '@/src/config/i18n';
@@ -32,6 +32,12 @@ import { useAdminWaitlistCalendarView } from '@/contexts/AdminWaitlistCalendarVi
 const GC_HEADER_CHROME = '#F0F3F7';
 const GC_SURFACE = '#FFFFFF';
 const GC_PAGE_BG = '#F8F9FA';
+
+function separatorLineColor(borderColor: string): string {
+  const b = borderColor.trim();
+  if (/^#[0-9A-Fa-f]{6}$/.test(b)) return `${b}33`;
+  return 'rgba(60, 60, 67, 0.12)';
+}
 
 function formatDateToLocalString(date: Date): string {
   const year = date.getFullYear();
@@ -216,6 +222,7 @@ export default function WaitlistScreen() {
   const [phoneToImage, setPhoneToImage] = useState<Record<string, string>>({});
   const { user } = useAuthStore();
   const colors = useColors();
+  const { onPrimary } = usePrimaryContrast();
   const { t, i18n } = useTranslation();
   const { waitlistCalendarView } = useAdminWaitlistCalendarView();
   const isRtl = I18nManager.isRTL;
@@ -231,7 +238,36 @@ export default function WaitlistScreen() {
     return { y: n.getFullYear(), m: n.getMonth() };
   });
 
+  const [monthDaySheetOpen, setMonthDaySheetOpen] = useState(false);
+  const [monthSheetAnchorDate, setMonthSheetAnchorDate] = useState<Date | null>(null);
+
   const selectedDateKey = useMemo(() => formatDateToLocalString(selectedDate), [selectedDate]);
+
+  const monthSheetKey = useMemo(
+    () => (monthSheetAnchorDate ? formatDateToLocalString(monthSheetAnchorDate) : ''),
+    [monthSheetAnchorDate]
+  );
+
+  const monthModalTitleLabel = useMemo(() => {
+    if (!monthSheetAnchorDate) return '';
+    const loc = i18n.language?.startsWith('he') ? 'he-IL-u-ca-gregory' : 'en-US';
+    try {
+      return monthSheetAnchorDate.toLocaleDateString(loc, {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+    } catch {
+      return monthSheetKey;
+    }
+  }, [monthSheetAnchorDate, i18n.language, monthSheetKey]);
+
+  useEffect(() => {
+    if (waitlistCalendarView !== 'month') {
+      setMonthDaySheetOpen(false);
+    }
+  }, [waitlistCalendarView]);
 
   const { rangeStart, rangeEnd } = useMemo(() => {
     if (waitlistCalendarView === 'month') {
@@ -331,6 +367,11 @@ export default function WaitlistScreen() {
     return map;
   }, [waitlist]);
 
+  const monthSheetEntries = useMemo(
+    () => (monthSheetKey ? waitlistByDate[monthSheetKey] ?? [] : []),
+    [monthSheetKey, waitlistByDate]
+  );
+
   const markedDates = useMemo(() => new Set(Object.keys(waitlistByDate)), [waitlistByDate]);
 
   const waitlistCountsByDate = useMemo(() => {
@@ -351,7 +392,7 @@ export default function WaitlistScreen() {
   const headerSubtitle = useMemo(() => {
     if (waitlistCalendarView === 'day') return t('admin.waitlist.subtitleDay', 'Daily — pick a day');
     if (waitlistCalendarView === 'week') return t('admin.waitlist.subtitleWeek', 'Weekly — all days in this week');
-    return t('admin.waitlist.subtitleMonth', 'Monthly — tap a day, list below');
+    return t('admin.waitlist.subtitleMonth', 'Monthly — tap a day to open the list');
   }, [waitlistCalendarView, t]);
 
   const headerBadgeText = useMemo(() => {
@@ -365,19 +406,6 @@ export default function WaitlistScreen() {
     }
     return selectedDate.toLocaleDateString(loc, { month: 'long', year: 'numeric' });
   }, [waitlistCalendarView, visibleMonth, selectedDate, i18n.language]);
-
-  const selectedDateLineLabel = useMemo(() => {
-    const loc = i18n.language?.startsWith('he') ? 'he-IL-u-ca-gregory' : 'en-US';
-    try {
-      return selectedDate.toLocaleDateString(loc, {
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short',
-      });
-    } catch {
-      return selectedDateKey;
-    }
-  }, [selectedDate, selectedDateKey, i18n.language]);
 
   const calendarPrimary = colors.primary || '#1A73E8';
   const calendarRipple = `${calendarPrimary}2A`;
@@ -401,6 +429,8 @@ export default function WaitlistScreen() {
     const d = new Date(date);
     d.setHours(0, 0, 0, 0);
     setSelectedDate(d);
+    setMonthSheetAnchorDate(d);
+    setMonthDaySheetOpen(true);
   }, []);
 
   const onJumpToDate = useCallback((date: Date) => {
@@ -408,6 +438,10 @@ export default function WaitlistScreen() {
     d.setHours(0, 0, 0, 0);
     setSelectedDate(d);
     setVisibleMonth({ y: d.getFullYear(), m: d.getMonth() });
+  }, []);
+
+  const closeMonthSheet = useCallback(() => {
+    setMonthDaySheetOpen(false);
   }, []);
 
   const formatCountBadge = useCallback(
@@ -419,30 +453,74 @@ export default function WaitlistScreen() {
   );
 
   const renderEntryCard = (entry: WaitlistEntry) => {
-    const baseTime = entry.created_at ? formatTimeFromDate(new Date(entry.created_at)) : '--:--';
+    const registeredAtLabel = entry.created_at ? formatTimeFromDate(new Date(entry.created_at)) : '--:--';
     const pref = formatTimePreference(entry.time_period);
-    const time = pref ? `${baseTime} | ${pref}` : baseTime;
+    const timePreferenceLabel = pref || undefined;
     return (
-      <View style={styles.waitlistCard}>
-        <WaitlistClientCard
-          name={entry.client_name}
-          image={phoneToImage[entry.client_phone] || ''}
-          time={time}
-          type={entry.service_name}
-          tag={t('admin.waitlist.waiting', 'Waiting')}
+      <View
+        style={[
+          styles.waitlistCard,
+          {
+            borderColor: colors.border,
+            ...Platform.select({
+              ios: {
+                shadowColor: colors.text,
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.07,
+                shadowRadius: 20,
+              },
+              android: { elevation: 4 },
+            }),
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.cardAccent,
+            { backgroundColor: colors.primary },
+            I18nManager.isRTL ? { right: 0 } : { left: 0 },
+          ]}
         />
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.callButton, { borderColor: colors.primary }]}
+        <View style={styles.cardInner}>
+          <WaitlistClientCard
+            name={entry.client_name}
+            image={phoneToImage[entry.client_phone] || ''}
+            serviceName={entry.service_name}
+            registeredAtLabel={registeredAtLabel}
+            timePreferenceLabel={timePreferenceLabel}
+            statusLabel={t('admin.waitlist.waiting', 'Waiting')}
+          />
+        </View>
+        <View style={[styles.actionButtons, { borderTopColor: separatorLineColor(colors.border) }]}>
+          <Pressable
+            accessibilityRole="button"
             onPress={() => handleCallClient(entry.client_phone)}
+            style={({ pressed }) => [
+              styles.actionButtonPrimary,
+              { backgroundColor: colors.primary, opacity: pressed ? 0.92 : 1 },
+              Platform.OS === 'ios' && styles.actionButtonPrimaryIos,
+              Platform.OS === 'android' && styles.actionButtonPrimaryAndroid,
+            ]}
           >
-            <Phone size={16} color={colors.primary} />
-            <Text style={[styles.actionButtonText, { color: colors.primary }]}>{t('admin.waitlist.contact', 'Contact')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionButton, styles.deleteButton]} onPress={() => handleDelete(entry.id)}>
-            <Trash2 size={16} color="#FF3B30" />
-            <Text style={[styles.actionButtonText, { color: '#FF3B30' }]}>{t('settings.services.delete', 'Delete')}</Text>
-          </TouchableOpacity>
+            <Phone size={18} color={onPrimary} strokeWidth={2.25} />
+            <Text style={[styles.actionButtonPrimaryLabel, { color: onPrimary }]}>
+              {t('admin.waitlist.contact', 'Contact')}
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => handleDelete(entry.id)}
+            style={({ pressed }) => [
+              styles.actionButtonGhost,
+              { backgroundColor: pressed ? 'rgba(255, 59, 48, 0.08)' : colors.surface },
+              { borderColor: separatorLineColor(colors.error) },
+            ]}
+          >
+            <Trash2 size={17} color={colors.error} strokeWidth={2.2} />
+            <Text style={[styles.actionButtonGhostLabel, { color: colors.error }]}>
+              {t('settings.services.delete', 'Delete')}
+            </Text>
+          </Pressable>
         </View>
       </View>
     );
@@ -513,13 +591,26 @@ export default function WaitlistScreen() {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[calendarPrimary]} tintColor={calendarPrimary} />
       }
     >
-      {waitlistCalendarView === 'month' && !loading ? (
-        <Text style={styles.monthListHint}>
-          {t('admin.waitlist.monthSelectedDay', 'Selected: {{date}}', { date: selectedDateLineLabel })}
-        </Text>
-      ) : null}
       {listBody}
     </ScrollView>
+  );
+
+  const monthModalListSection = loading ? (
+    <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+  ) : monthSheetEntries.length > 0 ? (
+    <View style={styles.cardsContainer}>
+      {monthSheetEntries.map((e) => (
+        <React.Fragment key={e.id}>{renderEntryCard(e)}</React.Fragment>
+      ))}
+    </View>
+  ) : (
+    <View style={styles.emptyState}>
+      <View style={styles.emptyIconCircle}>
+        <Ionicons name="hourglass-outline" size={22} color={colors.primary} />
+      </View>
+      <Text style={styles.emptyTitle}>{t('admin.waitlist.emptyTitle', 'No waitlist entries for this day')}</Text>
+      <Text style={styles.emptySubtitle}>{t('admin.waitlist.emptySubtitle', 'No clients are waiting for this day')}</Text>
+    </View>
   );
 
   return (
@@ -604,8 +695,8 @@ export default function WaitlistScreen() {
       ) : null}
 
       {waitlistCalendarView === 'month' ? (
-        <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
-          <View style={{ flex: 1, minHeight: 200 }}>
+        <>
+          <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
             <AdminVerticalMonthCalendar
               dayAvailability={waitlistCountsByDate}
               selectedDate={selectedDate}
@@ -618,13 +709,53 @@ export default function WaitlistScreen() {
               refreshing={refreshing}
               onRefresh={onRefresh}
               todayLabel={t('admin.calendar.today', 'Today')}
-              monthHint={t('admin.waitlist.monthCalendarHint', 'Numbers show how many clients are on the waitlist that day. Tap a day to see them below.')}
+              monthHint={t(
+                'admin.waitlist.monthCalendarHint',
+                'Numbers show how many clients are on the waitlist that day. Tap a day to open the list.'
+              )}
               formatCountBadge={formatCountBadge}
               showTodayPill={false}
             />
           </View>
-          <View style={[styles.waitlistBg, styles.waitlistBgMonthSplit]}>{listScroll}</View>
-        </View>
+          <Modal
+            visible={monthDaySheetOpen}
+            animationType="slide"
+            onRequestClose={closeMonthSheet}
+            presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
+          >
+            <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.monthModalSafe}>
+              <View style={[styles.monthModalHeader, { borderBottomColor: colors.border }]}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={String(t('close', 'Close'))}
+                  onPress={closeMonthSheet}
+                  hitSlop={12}
+                  style={styles.monthModalCloseBtn}
+                >
+                  <X size={24} color={colors.text} strokeWidth={2.4} />
+                </Pressable>
+                <Text style={[styles.monthModalTitle, { color: colors.text }]} numberOfLines={2}>
+                  {t('admin.waitlist.monthModalTitle', 'Waitlist — {{date}}', { date: monthModalTitleLabel })}
+                </Text>
+                <View style={styles.monthModalHeaderSpacer} />
+              </View>
+              <ScrollView
+                contentContainerStyle={[styles.monthModalScroll, { paddingBottom: 28 }]}
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    colors={[calendarPrimary]}
+                    tintColor={calendarPrimary}
+                  />
+                }
+              >
+                {monthModalListSection}
+              </ScrollView>
+            </SafeAreaView>
+          </Modal>
+        </>
       ) : (
         <View style={[styles.waitlistBg, { marginTop: 0, paddingTop: 12 }]}>{listScroll}</View>
       )}
@@ -755,14 +886,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     position: 'relative',
   },
-  waitlistBgMonthSplit: {
-    marginTop: 0,
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(60, 60, 67, 0.12)',
-    minHeight: 200,
-  },
   scrollContent: {
     paddingBottom: 100,
   },
@@ -780,59 +903,112 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     writingDirection: 'rtl',
   },
-  monthListHint: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#3C3C43',
-    marginBottom: 12,
-    writingDirection: 'rtl',
+  monthModalSafe: {
+    flex: 1,
+    backgroundColor: GC_PAGE_BG,
+  },
+  monthModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    backgroundColor: GC_SURFACE,
+  },
+  monthModalCloseBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  monthModalTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '800',
+    textAlign: 'center',
+    lineHeight: 22,
+    paddingHorizontal: 4,
+  },
+  monthModalHeaderSpacer: {
+    width: 44,
+    height: 44,
+  },
+  monthModalScroll: {
+    padding: 16,
+    paddingTop: 16,
   },
   waitlistCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#ECECEC',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 1,
+    backgroundColor: GC_SURFACE,
+    borderRadius: 22,
+    marginBottom: 0,
+    borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
+    position: 'relative',
+  },
+  cardAccent: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 4,
+    borderRadius: 0,
+    opacity: 0.88,
+  },
+  cardInner: {
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 16,
   },
   actionButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 12,
+    alignItems: 'stretch',
+    gap: 10,
+    paddingHorizontal: 14,
     paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+    paddingBottom: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(248, 249, 250, 0.96)',
   },
-  actionButton: {
+  actionButtonPrimary: {
+    flex: 1.35,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    flex: 1,
-    marginHorizontal: 4,
     justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 15,
+    minHeight: 50,
   },
-  callButton: {
-    backgroundColor: '#F0F8FF',
-    borderWidth: 1,
-    borderColor: '#D6EBFF',
+  actionButtonPrimaryIos: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
   },
-  deleteButton: {
-    backgroundColor: '#FFF5F5',
-    borderWidth: 1,
-    borderColor: '#FFD6D6',
+  actionButtonPrimaryAndroid: {
+    elevation: 3,
   },
-  actionButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 4,
+  actionButtonPrimaryLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  actionButtonGhost: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 15,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    minHeight: 50,
+  },
+  actionButtonGhostLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: -0.15,
   },
   emptyState: {
     justifyContent: 'center',

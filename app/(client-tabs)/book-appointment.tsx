@@ -22,6 +22,7 @@ import { servicesApi, filterServicesForBookingBarber } from '@/lib/api/services'
 import { supabase, getBusinessId, Appointment } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
+import { isRtlLanguage, toBcp47Locale } from '@/lib/i18nLocale';
 import { notificationsApi } from '@/lib/api/notifications';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
@@ -1537,7 +1538,7 @@ export default function BookAppointment() {
       return [];
     }
     const allNames = selectedServices.map((s) => s.name).join(' + ');
-    const loc = (i18n?.language || 'he').startsWith('he') ? 'he-IL' : 'en-US';
+    const loc = toBcp47Locale(i18n?.language);
     const dateFormatted = selectedDate
       ? new Date(selectedDate).toLocaleDateString(loc, {
           weekday: 'long',
@@ -1863,7 +1864,7 @@ export default function BookAppointment() {
                       {selectedDay !== null ? (() => {
                         const date = days[selectedDay].fullDate;
                         const dayName = days[selectedDay].dayName;
-                        const formattedDate = date.toLocaleDateString(i18n?.language === 'he' ? 'he-IL' : 'en-US', {
+                        const formattedDate = date.toLocaleDateString(toBcp47Locale(i18n?.language), {
                           day: 'numeric',
                           month: 'long',
                           year: 'numeric'
@@ -1923,7 +1924,7 @@ export default function BookAppointment() {
               <Text style={styles.modalTitle}>{t('booking.existingTitle', 'Existing Appointment')}</Text>
               <Text style={styles.modalMessage} numberOfLines={0} allowFontScaling={false}>
                 {t('booking.existingMessage', 'You have an existing appointment on {{date}} at {{time}} for {{service}}.\n\nDo you want to cancel the existing appointment and book a new one on {{newDate}} at {{newTime}}?', {
-                  date: existingAppointment?.slot_date ? new Date(existingAppointment.slot_date).toLocaleDateString(i18n?.language === 'he' ? 'he-IL' : 'en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : t('booking.unknown', 'Unknown'),
+                  date: existingAppointment?.slot_date ? new Date(existingAppointment.slot_date).toLocaleDateString(toBcp47Locale(i18n?.language), { weekday: 'long', month: 'long', day: 'numeric' }) : t('booking.unknown', 'Unknown'),
                   time: existingAppointment?.slot_time || t('booking.unknown', 'Unknown'),
                   service: existingAppointment?.service_name || t('booking.undefined', 'Undefined'),
                   newDate: selectedDay !== null ? `${days[selectedDay].dayName} ${days[selectedDay].date}` : '',
@@ -1975,7 +1976,7 @@ export default function BookAppointment() {
           <BookingSuccessAnimatedOverlay
             key={successAnimKey}
             lines={bookingSuccessLines}
-            rtl={(i18n?.language || 'he').startsWith('he')}
+            rtl={isRtlLanguage(i18n?.language)}
             accentColor={colors.primary}
             onDismiss={() => {
               setShowSuccessModal(false);

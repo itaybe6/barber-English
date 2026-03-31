@@ -4,6 +4,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 import { Text, View } from 'react-native';
 import i18n from '@/src/config/i18n';
+import { normalizeAppLanguage } from '@/lib/i18nLocale';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -16,7 +17,7 @@ import { ColorUpdateProvider } from '@/lib/contexts/ColorUpdateContext';
 import { BusinessColorsProvider } from '@/lib/contexts/BusinessColorsContext';
 import { StatusBar } from 'expo-status-bar';
 
-// RTL is configured by i18n.ensureLayoutDirection() based on language (he → RTL)
+// RTL is configured in i18n (Hebrew + Arabic → RTL)
 
 export const unstable_settings = {
   // Remove initialRouteName to let the navigation logic handle routing
@@ -111,7 +112,7 @@ export default function RootLayout() {
     try {
       const userLang: unknown = (user as any)?.language;
       if (typeof userLang === 'string' && userLang.length > 0) {
-        const normalized = userLang.startsWith('he') ? 'he' : 'en';
+        const normalized = normalizeAppLanguage(userLang);
         if (i18n.language !== normalized) {
           i18n.changeLanguage(normalized).catch(() => {});
         }

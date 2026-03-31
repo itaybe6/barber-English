@@ -202,13 +202,13 @@ const NotificationListRow = memo(function NotificationListRow({
       <View style={styles.cardContent}>
         {/* Top row: title + time */}
         <View style={styles.cardTopRow}>
+          <Text style={styles.cardTitle} numberOfLines={2}>
+            {notification.title}
+          </Text>
           <View style={styles.cardMeta}>
             {isUnread && <View style={[styles.unreadDot, { backgroundColor: cfg.color }]} />}
             {timeAgo ? <Text style={styles.cardTime}>{timeAgo}</Text> : null}
           </View>
-          <Text style={styles.cardTitle} numberOfLines={2}>
-            {notification.title}
-          </Text>
         </View>
 
         {/* Body text */}
@@ -591,8 +591,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1C1C1E',
     letterSpacing: -0.5,
-    textAlign: 'right',
-    writingDirection: 'rtl',
   },
   headerBadge: {
     backgroundColor: '#FF3B30',
@@ -679,7 +677,7 @@ const styles = StyleSheet.create({
   cardTopRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
     gap: 8,
     marginBottom: 4,
   },
@@ -689,8 +687,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1C1C1E',
     lineHeight: 20,
-    textAlign: 'right',
-    writingDirection: 'rtl',
   },
   cardMeta: {
     flexDirection: 'row',
@@ -786,16 +782,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1C1C1E',
     marginBottom: 8,
-    textAlign: 'right',
-    alignSelf: 'stretch',
-    writingDirection: 'rtl',
+    textAlign: 'center',
   },
   emptySubtitle: {
     fontSize: 15,
     color: '#8E8E93',
-    textAlign: 'right',
-    alignSelf: 'stretch',
+    textAlign: 'center',
     lineHeight: 22,
-    writingDirection: 'rtl',
   },
 });

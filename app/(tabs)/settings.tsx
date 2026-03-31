@@ -115,8 +115,7 @@ export default function SettingsScreen() {
   
   // Title dropdown states (removed)
 
-  // Services edit modal state
-  const [showServicesModal, setShowServicesModal] = useState(false);
+  // Services editor (inline on Services tab)
   const [editableServices, setEditableServices] = useState<Service[]>([]);
   const [isLoadingServices, setIsLoadingServices] = useState(false);
   const [savingServiceId, setSavingServiceId] = useState<string | null>(null);
@@ -207,6 +206,8 @@ export default function SettingsScreen() {
   const dragY = useRef(new Animated.Value(0)).current; // additional drag delta
   const combinedTranslateY = Animated.add(sheetTranslateY as any, dragY as any);
   const overlayOpacity = sheetAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
+  /** `panResponder` is created before `showManageRecurringModal` state — dismiss via ref */
+  const closeManageRecurringSheetRef = useRef<() => void>(() => {});
 
   const animateOpenSheet = () => {
     dragY.setValue(0);
@@ -996,9 +997,7 @@ export default function SettingsScreen() {
       onPanResponderRelease: (_: GestureResponderEvent, g: PanResponderGestureState) => {
         const shouldClose = g.dy > 140 || g.vy > 0.9;
         if (shouldClose) {
-          if (showServicesModal) {
-            animateCloseSheet(() => setShowServicesModal(false));
-          }
+          animateCloseSheet(() => closeManageRecurringSheetRef.current());
         } else {
           Animated.timing(dragY, {
             toValue: 0,
@@ -1028,33 +1027,6 @@ export default function SettingsScreen() {
     logout();
     router.replace('/login');
   };
-
-  const openServicesModal = async () => {
-    setShowServicesModal(true);
-    setIsLoadingServices(true);
-    setServicesError(null);
-    setIsAddingService(false);
-    setExpandedServiceId(null);
-    setServicesReorderMode(false);
-    try {
-      const data = await servicesApi.getAllServices();
-      // Filter to only services belonging to the logged-in worker
-      const myServices = (data || []).filter((s: any) => String(s?.worker_id || '') === String(user?.id || ''));
-      setEditableServices(sortServicesLikeClientBooking(myServices || []));
-    } catch (e) {
-      setServicesError(t('settings.services.loadFailed','Error loading services'));
-    } finally {
-      setIsLoadingServices(false);
-    }
-  };
-
-  const closeServicesModal = () => {
-    setShowServicesModal(false);
-    setServicesReorderMode(false);
-    setExpandedServiceId(null);
-    setIsAddingService(false);
-  };
-
 
   const updateLocalServiceField = <K extends keyof Service>(id: string, key: K, value: Service[K]) => {
     setEditableServices(prev => prev.map(s => (s.id === id ? { ...s, [key]: value } : s)));
@@ -1476,6 +1448,7 @@ export default function SettingsScreen() {
   const [showRecurringModal, setShowRecurringModal] = useState(false);
   const [isSubmittingRecurring, setIsSubmittingRecurring] = useState(false);
   const [showManageRecurringModal, setShowManageRecurringModal] = useState(false);
+
   const [isLoadingRecurring, setIsLoadingRecurring] = useState(false);
   const [recurringList, setRecurringList] = useState<any[]>([]);
   const [clientSearch, setClientSearch] = useState('');
@@ -1503,6 +1476,41 @@ export default function SettingsScreen() {
   const initialRecViewportWidth = Math.max(1, (Dimensions.get('window')?.width || 0) - 40);
   const [recViewportWidth, setRecViewportWidth] = useState<number>(initialRecViewportWidth);
   const [recRenderKey, setRecRenderKey] = useState<number>(0);
+
+  useEffect(() => {
+    closeManageRecurringSheetRef.current = () => setShowManageRecurringModal(false);
+  }, []);
+
+  useEffect(() => {
+    if (activeSettingsTab !== 'services') {
+      setServicesReorderMode(false);
+      setExpandedServiceId(null);
+      setIsAddingService(false);
+      setShowDurationPicker(false);
+      setEditingServiceDurationId(null);
+      return;
+    }
+    let cancelled = false;
+    setIsLoadingServices(true);
+    setServicesError(null);
+    setIsAddingService(false);
+    setExpandedServiceId(null);
+    setServicesReorderMode(false);
+    void (async () => {
+      try {
+        const data = await servicesApi.getAllServices();
+        const myServices = (data || []).filter((s: any) => String(s?.worker_id || '') === String(user?.id || ''));
+        if (!cancelled) setEditableServices(sortServicesLikeClientBooking(myServices || []));
+      } catch {
+        if (!cancelled) setServicesError(t('settings.services.loadFailed', 'Error loading services'));
+      } finally {
+        if (!cancelled) setIsLoadingServices(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSettingsTab, user?.id, sortServicesLikeClientBooking, t]);
 
   const goToRecStep = (next: number, animate: boolean = true) => {
     const maxStep = 4;
@@ -2431,16 +2439,369 @@ export default function SettingsScreen() {
         )}
 
         {activeSettingsTab === 'services' && (
-        <View style={styles.settingsTabPanel}>
-          <View style={styles.settingsAccordionBody}>
-            {renderSettingItem(
-              <Pencil size={20} color={businessColors.primary} />,
-              t('settings.services.edit', 'Edit services'),
-              t('settings.services.editSubtitle', 'Update prices and durations'),
-              undefined,
-              openServicesModal
-            )}
-          </View>
+        <View style={[styles.settingsTabPanel, styles.settingsTabPanelServices]}>
+            <View style={styles.servicesModalTitleBar}>
+              <Text style={styles.servicesModalTitlePlain}>
+                {t('settings.services.edit', 'עריכת שירותים')}
+              </Text>
+              {!isLoadingServices && editableServices.length > 0 && (
+                <Text style={styles.servicesModalTitleCount}>
+                  {editableServices.length} {t('settings.services.servicesCount', 'שירותים')}
+                </Text>
+              )}
+            </View>
+            <View style={styles.servicesModalBodyColumn}>
+              <GestureHandlerRootView style={{ flex: 1 }}>
+              <DraggableFlatList<Service>
+                style={{ flex: 1 }}
+                containerStyle={{ flex: 1 }}
+                contentContainerStyle={[
+                  styles.modalContentContainer,
+                  styles.servicesModalScrollContent,
+                  { paddingBottom: insets.bottom + 88 },
+                ]}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="interactive"
+                automaticallyAdjustKeyboardInsets
+                data={editableServices}
+                keyExtractor={(item) => item.id}
+                activationDistance={10}
+                onDragBegin={() => {
+                  try {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  } catch {
+                    /* no-op */
+                  }
+                }}
+                onDragEnd={handleServicesDragEnd}
+                ListHeaderComponent={
+                <>
+                {isLoadingServices && (
+                  <View style={styles.servicesModalFullWidthBlock}>
+                    <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+                      <ActivityIndicator size="large" color={businessColors.primary} />
+                      <Text style={{ marginTop: 12, color: Colors.subtext, fontSize: 14 }}>{t('settings.services.loading','Loading services...')}</Text>
+                    </View>
+                  </View>
+                )}
+
+                {servicesError && (
+                  <View style={styles.servicesModalFullWidthBlock}>
+                    <Text style={{ color: 'red', textAlign: 'center', marginVertical: 12 }}>{servicesError}</Text>
+                  </View>
+                )}
+
+                {servicesReorderMode && !isLoadingServices && (
+                  <View style={styles.svcReorderHint}>
+                    <Text style={styles.svcReorderHintText}>
+                      {t('settings.services.reorderHint', 'גרור את ≡ כדי לשנות את סדר השירותים')}
+                    </Text>
+                  </View>
+                )}
+
+                {!isLoadingServices && !servicesError && editableServices.length === 0 && !isAddingService && (
+                  <View style={[styles.svcEmptyState, styles.servicesModalFullWidthBlock]}>
+                    <View style={[styles.svcEmptyIcon, { backgroundColor: `${businessColors.primary}15` }]}>
+                      <Ionicons name="cut-outline" size={32} color={businessColors.primary} />
+                    </View>
+                    <Text style={styles.svcEmptyTitle}>{t('settings.services.emptyTitle','No services yet')}</Text>
+                    <Text style={styles.svcEmptySubtitle}>{t('settings.services.emptySubtitle','Add your first service to get started')}</Text>
+                    <TouchableOpacity
+                      style={[styles.svcSaveButton, { backgroundColor: businessColors.primary, marginTop: 16 }]}
+                      onPress={handleOpenAddService}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.svcSaveButtonText}>+ {t('settings.services.add','Add service')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                </>
+                }
+                renderItem={({ item: svc, drag, isActive }) => {
+                  const isExpanded = !servicesReorderMode && expandedServiceId === svc.id;
+                  const isSaving = savingServiceId === svc.id;
+                  const justSaved = savedServiceId === svc.id;
+                  return (
+                    <ScaleDecorator activeScale={1.03}>
+                    <View style={styles.svcListCell}>
+                    <Pressable
+                      onLongPress={servicesReorderMode ? drag : undefined}
+                      delayLongPress={200}
+                      disabled={isActive}
+                      style={({ pressed }) => (pressed && servicesReorderMode ? { opacity: 0.95 } : undefined)}
+                    >
+                    <Swipeable
+                      enabled={!servicesReorderMode}
+                      friction={2}
+                      rightThreshold={40}
+                      renderRightActions={() => (
+                        <TouchableOpacity
+                          style={styles.swipeDeleteAction}
+                          activeOpacity={0.85}
+                          onPress={() => handleDeleteService(svc.id)}
+                        >
+                          <Trash2 size={20} color={'#fff'} />
+                          <Text style={styles.swipeDeleteText}>{t('settings.services.delete','Delete')}</Text>
+                        </TouchableOpacity>
+                      )}
+                    >
+                      <View style={[styles.svcCard, styles.svcListCard, justSaved && styles.svcCardSaved, isActive && styles.svcListCardDragging]}>
+                        <View style={[styles.svcCardAccent, { backgroundColor: businessColors.primary }]} />
+                        {!isExpanded ? (
+                          <View style={styles.svcListCollapsedRow}>
+                            {servicesReorderMode ? (
+                              <Pressable
+                                onPressIn={drag}
+                                style={styles.svcDragHandle}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              >
+                                <View style={styles.svcDragLine} />
+                                <View style={styles.svcDragLine} />
+                                <View style={styles.svcDragLine} />
+                              </Pressable>
+                            ) : (
+                              <TouchableOpacity
+                                style={styles.svcListChevronHit}
+                                activeOpacity={0.85}
+                                onPress={() => setExpandedServiceId(prev => (prev === svc.id ? null : svc.id))}
+                              >
+                                {justSaved ? (
+                                  <View style={[styles.svcSavedBadge, { backgroundColor: `${businessColors.primary}15` }]}>
+                                    <Check size={14} color={businessColors.primary} />
+                                    <Text style={[styles.svcSavedText, { color: businessColors.primary }]}>
+                                      {t('saved','Saved')}
+                                    </Text>
+                                  </View>
+                                ) : (
+                                  <ChevronDown size={18} color={Colors.subtext} />
+                                )}
+                              </TouchableOpacity>
+                            )}
+                            <TouchableOpacity
+                              style={styles.svcListCollapsedMain}
+                              activeOpacity={0.85}
+                              disabled={servicesReorderMode}
+                              onPress={() => !servicesReorderMode && setExpandedServiceId(prev => (prev === svc.id ? null : svc.id))}
+                            >
+                              <View style={styles.svcListCollapsedTextCol}>
+                                <View style={styles.svcCardInfo}>
+                                  <Text style={styles.svcCardName} numberOfLines={1}>
+                                    {svc.name || t('common.noName','No name')}
+                                  </Text>
+                                  <View style={styles.svcMetaRow}>
+                                    {svc.duration_minutes ? (
+                                      <View style={styles.svcMetaChipDuration}>
+                                        <Text style={styles.svcMetaChipDurationText}>
+                                          {svc.duration_minutes} {t('settings.services.minShort','דק׳')}
+                                        </Text>
+                                      </View>
+                                    ) : null}
+                                    {typeof svc.price === 'number' && (
+                                      <View style={[styles.svcMetaChip, { backgroundColor: `${businessColors.primary}14` }]}>
+                                        <Text style={[styles.svcMetaChipText, { color: businessColors.primary }]}>
+                                          ₪{svc.price}
+                                        </Text>
+                                      </View>
+                                    )}
+                                  </View>
+                                </View>
+                              </View>
+                            </TouchableOpacity>
+                            <View style={styles.svcListThumbOuter}>
+                              {servicesReorderMode && (
+                                <TouchableOpacity
+                                  style={styles.svcDeleteBadge}
+                                  onPress={() => handleDeleteService(svc.id)}
+                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                  activeOpacity={0.8}
+                                >
+                                  <Trash2 size={13} color="#fff" />
+                                </TouchableOpacity>
+                              )}
+                              <TouchableOpacity
+                                onPress={() => !servicesReorderMode && handlePickServiceImage(svc.id)}
+                                activeOpacity={0.85}
+                                style={styles.svcListThumbWrap}
+                                disabled={servicesReorderMode}
+                              >
+                                {svc.image_url ? (
+                                  <Image source={{ uri: svc.image_url }} style={styles.svcListThumb} resizeMode="cover" />
+                                ) : (
+                                  <View style={[styles.svcListThumbPlaceholder, { backgroundColor: `${businessColors.primary}15` }]}>
+                                    <Text style={[styles.svcListThumbPlaceholderText, { color: businessColors.primary }]}>
+                                      {(svc.name || '?').charAt(0).toUpperCase()}
+                                    </Text>
+                                  </View>
+                                )}
+                                {uploadingServiceId === svc.id && (
+                                  <View style={styles.svcListThumbUploadOverlay}>
+                                    <ActivityIndicator size="small" color="#fff" />
+                                  </View>
+                                )}
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        ) : (
+                          <>
+                            <View style={[styles.svcAddCardHeaderBand, { backgroundColor: `${businessColors.primary}12` }]}>
+                              <Text style={styles.svcAddCardTitle} numberOfLines={1}>
+                                {svc.name || t('common.noName','No name')}
+                              </Text>
+                              <TouchableOpacity
+                                onPress={() => setExpandedServiceId(null)}
+                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                              >
+                                {justSaved ? (
+                                  <View style={[styles.svcSavedBadge, { backgroundColor: `${businessColors.primary}20` }]}>
+                                    <Check size={13} color={businessColors.primary} />
+                                    <Text style={[styles.svcSavedText, { color: businessColors.primary }]}>{t('saved','נשמר')}</Text>
+                                  </View>
+                                ) : (
+                                  <ChevronUp size={18} color={Colors.subtext} />
+                                )}
+                              </TouchableOpacity>
+                            </View>
+
+                            <View style={[styles.svcAddImageBandArea, { backgroundColor: `${businessColors.primary}08` }]}>
+                              <TouchableOpacity
+                                style={styles.svcAddImageCircleBtn}
+                                onPress={() => handlePickServiceImage(svc.id)}
+                                activeOpacity={0.85}
+                                disabled={uploadingServiceId === svc.id}
+                              >
+                                {svc.image_url ? (
+                                  <>
+                                    <Image source={{ uri: svc.image_url }} style={styles.svcAddImageCircleFull} resizeMode="cover" />
+                                    <View style={styles.svcAddImageChangeOverlay}>
+                                      <Ionicons name="camera-outline" size={22} color="#fff" />
+                                    </View>
+                                  </>
+                                ) : (
+                                  <View style={[styles.svcAddImageCirclePlaceholder, { borderColor: `${businessColors.primary}40` }]}>
+                                    {uploadingServiceId === svc.id ? (
+                                      <ActivityIndicator size="large" color={businessColors.primary} />
+                                    ) : (
+                                      <>
+                                        <View style={[styles.svcAddImageIconWrap, { backgroundColor: `${businessColors.primary}20` }]}>
+                                          <Ionicons name="camera-outline" size={28} color={businessColors.primary} />
+                                        </View>
+                                        <Text style={[styles.svcAddImageDashedLabel, { color: businessColors.primary, marginTop: 8 }]}>
+                                          {t('settings.services.changeImage','החלף תמונה')}
+                                        </Text>
+                                      </>
+                                    )}
+                                  </View>
+                                )}
+                              </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.svcAddFieldsArea}>
+                              <View style={[styles.formGroup, { marginBottom: 10 }]}>
+                                <Text style={styles.formLabel}>{t('settings.services.name','שם השירות')}</Text>
+                                <TextInput
+                                  style={[styles.formInput, styles.svcAddNameInput]}
+                                  value={svc.name}
+                                  onChangeText={(v) => updateLocalServiceField(svc.id, 'name', v)}
+                                  textAlign="right"
+                                />
+                              </View>
+
+                              <View style={[styles.twoColumnRow, { flexDirection: 'row', marginBottom: 4 }]}>
+                                <View style={[styles.formGroup, styles.twoColumnItem, { marginBottom: 0 }]}>
+                                  <Text style={styles.formLabel}>{t('settings.services.price','מחיר (₪)')}</Text>
+                                  <TextInput
+                                    style={styles.formInput}
+                                    value={String(svc.price ?? '')}
+                                    onChangeText={(v) => {
+                                      const num = parseFloat(v.replace(/[^0-9.]/g, ''));
+                                      updateLocalServiceField(svc.id, 'price', isNaN(num) ? 0 : num);
+                                    }}
+                                    keyboardType="numeric"
+                                    textAlign="right"
+                                  />
+                                </View>
+                                <View style={[styles.formGroup, styles.twoColumnItem, { marginBottom: 0 }]}>
+                                  <Text style={styles.formLabel}>{t('settings.services.duration','משך')}</Text>
+                                  <TouchableOpacity
+                                    style={styles.svcDurationPickerBtn}
+                                    onPress={() => { setEditingServiceDurationId(svc.id); setShowDurationPicker(true); }}
+                                    activeOpacity={0.8}
+                                  >
+                                    <Text style={styles.svcDurationPickerBtnText}>
+                                      {svc.duration_minutes
+                                        ? `${svc.duration_minutes} ${t('settings.services.minShort','דק׳')}`
+                                        : t('settings.services.selectDuration','בחר...')}
+                                    </Text>
+                                    <ChevronDown size={16} color={Colors.subtext} />
+                                  </TouchableOpacity>
+                                </View>
+                              </View>
+
+                              <View style={[styles.svcAddActions, { marginTop: 14 }]}>
+                                <TouchableOpacity
+                                  style={styles.svcDeleteButton}
+                                  onPress={() => handleDeleteService(svc.id)}
+                                  activeOpacity={0.85}
+                                >
+                                  <Trash2 size={16} color="#FF3B30" />
+                                  <Text style={styles.svcDeleteButtonText}>{t('settings.services.delete','מחק')}</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={[styles.svcSaveButton, { backgroundColor: businessColors.primary, opacity: isSaving ? 0.7 : 1, flex: 1 }]}
+                                  onPress={() => handleSaveService(svc)}
+                                  disabled={isSaving}
+                                  activeOpacity={0.85}
+                                >
+                                  <Text style={styles.svcSaveButtonText}>
+                                    {isSaving ? t('settings.common.saving','שומר...') : t('settings.services.saveChanges','שמירת שינויים')}
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          </>
+                        )}
+                      </View>
+                    </Swipeable>
+                    </Pressable>
+                    </View>
+                    </ScaleDecorator>
+                  );
+                }}
+              />
+
+              </GestureHandlerRootView>
+
+              <View style={[styles.servicesModalTabBarRoot, { bottom: insets.bottom + 24 }]} pointerEvents="box-none">
+                <View style={[styles.servicesModalTabBarInner, styles.servicesModalTabBarRowLtr]}>
+                  <View style={[styles.servicesModalTabPill, styles.servicesModalTabPillRow, styles.servicesModalTabBorder, styles.servicesModalTabShadow]}>
+                    <TabButton
+                      focused={false}
+                      activeColor={businessColors.primary}
+                      onPress={handleOpenAddService}
+                    >
+                      <Plus size={22} color="#8a8a8a" />
+                    </TabButton>
+                    <TabButton
+                      focused={servicesReorderMode}
+                      activeColor={businessColors.primary}
+                      onPress={() =>
+                        setServicesReorderMode((v) => {
+                          const next = !v;
+                          if (next) setExpandedServiceId(null);
+                          return next;
+                        })
+                      }
+                    >
+                      <Pencil
+                        size={22}
+                        color={servicesReorderMode ? '#ffffff' : '#8a8a8a'}
+                      />
+                    </TabButton>
+                  </View>
+                </View>
+              </View>
+            </View>
         </View>
         )}
 

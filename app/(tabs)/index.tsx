@@ -1071,6 +1071,26 @@ export default function HomeScreen() {
               <TouchableOpacity
                 style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
                 activeOpacity={0.82}
+                onPress={() => {
+                  setSearchQuery('');
+                  setBlockedFilter('all');
+                  setShowClientsModal(true);
+                  void fetchClients();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={t('admin.home.clients')}
+              >
+                <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
+                  <Ionicons name="people-outline" size={24} color={primaryOnSurface} />
+                </View>
+                <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
+                  {t('admin.home.clients')}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
+                activeOpacity={0.82}
                 onPress={() => void onPressBroadcastTile()}
                 accessibilityRole="button"
               >
@@ -1548,6 +1568,7 @@ export default function HomeScreen() {
              </View>
 
              {/* Clients List */}
+             <View style={styles.clientsListSheet}>
              {loadingClients ? (
                <View style={styles.loadingContainer}>
                  <ActivityIndicator size="large" color={primaryOnSurface} />
@@ -1555,95 +1576,139 @@ export default function HomeScreen() {
                </View>
               ) : (
                  <FlatList
-                  style={{ flex: 1 }}
+                  style={styles.clientsFlatList}
                   data={filteredClients}
                   keyExtractor={(item) => item.id}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={true}
+                  ListEmptyComponent={
+                    <View style={styles.clientsEmptyWrap}>
+                      <View style={[styles.clientsEmptyIcon, { backgroundColor: `${colors.primary}14` }]}>
+                        <Ionicons name="people-outline" size={40} color={primaryOnSurface} />
+                      </View>
+                      <Text style={[styles.clientsEmptyTitle, { color: colors.text }]}>
+                        {t('clients.listEmpty')}
+                      </Text>
+                    </View>
+                  }
                   renderItem={({ item }) => {
                     const stats = clientStatsMap[item.id];
                     const totalAppts = stats?.totalAppointments ?? 0;
                     const avgMo = stats?.avgMonthlySpend;
+                    const initial = (item.name || '?').trim().charAt(0).toUpperCase() || '?';
+                    const a11y = t('clients.stats.a11yCard', '{{name}}: {{visits}} visits, {{spend}}', {
+                      name: item.name || '',
+                      visits: totalAppts,
+                      spend:
+                        avgMo != null
+                          ? formatClientMoney(avgMo)
+                          : t('clients.stats.noSpendShort', 'No data'),
+                    });
                     return (
-                   <View style={styles.clientItem}>
-                     <View style={styles.clientInfo}>
-                       <Text style={styles.modalClientName} numberOfLines={1} ellipsizeMode="tail">
-                         {item.name}
-                       </Text>
-                       {item.phone ? (
-                         <Text style={styles.clientPhone} numberOfLines={1} ellipsizeMode="tail">
-                           {item.phone}
-                         </Text>
-                       ) : null}
-                       <View
-                         style={styles.clientStatsPanel}
-                         accessibilityLabel={t('clients.stats.a11yCard', '{{name}}: {{visits}} visits, {{spend}}', {
-                           name: item.name || '',
-                           visits: totalAppts,
-                           spend:
-                             avgMo != null
-                               ? formatClientMoney(avgMo)
-                               : t('clients.stats.noSpendShort', 'No data'),
-                         })}
-                       >
-                         <View style={styles.statBox}>
-                           <View style={[styles.statIconCircle, { backgroundColor: `${colors.primary}18` }]}>
-                             <Ionicons name="calendar-outline" size={18} color={primaryOnSurface} />
-                           </View>
-                           <Text style={styles.statBoxValue}>{totalAppts}</Text>
-                           <Text style={styles.statBoxLabel}>
-                             {t('clients.stats.visitsShort', 'Visits')}
-                           </Text>
-                         </View>
-                         <View style={styles.statBoxDivider} />
-                         <View style={styles.statBox}>
-                           <View style={[styles.statIconCircle, { backgroundColor: `${colors.primary}18` }]}>
-                             <Ionicons name="wallet-outline" size={18} color={primaryOnSurface} />
-                           </View>
-                           <Text
-                             style={[styles.statBoxValue, avgMo == null && styles.statBoxValueMuted]}
-                             numberOfLines={1}
-                           >
-                             {avgMo != null ? formatClientMoney(avgMo) : '—'}
-                           </Text>
-                           <Text style={styles.statBoxLabel}>
-                             {t('clients.stats.avgMonthShort', 'Avg / month')}
-                           </Text>
-                         </View>
-                       </View>
-                     </View>
-                     <View style={styles.clientActionsRow}>
-                       <TouchableOpacity
-                         style={styles.phoneButton}
-                         onPress={() => handlePhoneCall(item.phone)}
-                         accessibilityRole="button"
-                         accessibilityLabel={t('clients.call.title', 'Call')}
-                       >
-                         <Ionicons name="call" size={20} color={primaryOnSurface} />
-                       </TouchableOpacity>
-                       <TouchableOpacity
-                         style={styles.blockButton}
-                         onPress={() => (item.block ? handleUnblockClient(item) : handleBlockClient(item))}
-                         activeOpacity={0.85}
-                         accessibilityRole="button"
-                         accessibilityLabel={
-                           item.block
-                             ? t('clients.unblock.title', 'Unblock Client')
-                             : t('clients.block.title', 'Block Client')
-                         }
-                       >
-                         <Text style={styles.blockButtonText}>
-                           {item.block
-                             ? t('clients.actions.unblock', 'Unblock')
-                             : t('clients.actions.block', 'Block')}
-                         </Text>
-                       </TouchableOpacity>
-                     </View>
-                   </View>
+                      <View
+                        style={[
+                          styles.clientCard,
+                          item.block && [
+                            styles.clientCardBlocked,
+                            { borderStartColor: '#EF4444' },
+                          ],
+                        ]}
+                        accessibilityLabel={a11y}
+                      >
+                        <View style={styles.clientCardHeader}>
+                          <View style={styles.clientCardLead}>
+                            <View style={[styles.clientAvatar, { backgroundColor: `${colors.primary}22` }]}>
+                              <Text style={[styles.clientAvatarLetter, { color: primaryOnSurface }]}>
+                                {initial}
+                              </Text>
+                            </View>
+                            <View style={styles.clientCardTextCol}>
+                              <View style={styles.clientNameRow}>
+                                <Text style={[styles.modalClientName, { color: colors.text }]} numberOfLines={1}>
+                                  {item.name || t('common.client', 'Client')}
+                                </Text>
+                                {item.block ? (
+                                  <View style={styles.clientBlockedBadge}>
+                                    <Text style={styles.clientBlockedBadgeText}>{t('clients.statusBlocked')}</Text>
+                                  </View>
+                                ) : null}
+                              </View>
+                            </View>
+                          </View>
+                          <View style={styles.clientCardActions}>
+                            <TouchableOpacity
+                              style={[styles.clientCallPill, { backgroundColor: `${colors.primary}14`, borderColor: `${colors.primary}35` }]}
+                              onPress={() => handlePhoneCall(item.phone)}
+                              accessibilityRole="button"
+                              accessibilityLabel={t('clients.call.title', 'Call')}
+                            >
+                              <Ionicons name="call" size={20} color={primaryOnSurface} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={item.block ? styles.clientUnblockPill : styles.clientBlockPill}
+                              onPress={() => (item.block ? handleUnblockClient(item) : handleBlockClient(item))}
+                              activeOpacity={0.85}
+                              accessibilityRole="button"
+                              accessibilityLabel={
+                                item.block
+                                  ? t('clients.unblock.title', 'Unblock Client')
+                                  : t('clients.block.title', 'Block Client')
+                              }
+                            >
+                              <Text style={item.block ? styles.clientUnblockPillText : styles.clientBlockPillText}>
+                                {item.block
+                                  ? t('clients.actions.unblock', 'Unblock')
+                                  : t('clients.actions.block', 'Block')}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+
+                        <View style={[styles.clientStatsStrip, { backgroundColor: `${colors.primary}10` }]}>
+                          <View style={styles.clientStatCell}>
+                            <View style={[styles.clientStatIconWrap, { backgroundColor: `${colors.primary}1E` }]}>
+                              <Ionicons name="calendar-outline" size={20} color={primaryOnSurface} />
+                            </View>
+                            <View style={styles.clientStatTextCol}>
+                              <Text style={[styles.clientStatValue, { color: colors.text }]}>{totalAppts}</Text>
+                              <Text style={[styles.clientStatCaption, { color: colors.textSecondary }]}>
+                                {t('clients.stats.visitsShort', 'Visits')}
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={[styles.clientStatVRule, { backgroundColor: colors.border }]} />
+                          <View style={styles.clientStatCell}>
+                            <View style={[styles.clientStatIconWrap, { backgroundColor: `${colors.primary}1E` }]}>
+                              <Ionicons name="wallet-outline" size={20} color={primaryOnSurface} />
+                            </View>
+                            <View style={styles.clientStatTextCol}>
+                              <Text
+                                style={[
+                                  styles.clientStatValue,
+                                  { color: colors.text },
+                                  avgMo == null && { color: colors.textSecondary },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {avgMo != null ? formatClientMoney(avgMo) : '—'}
+                              </Text>
+                              <Text style={[styles.clientStatCaption, { color: colors.textSecondary }]}>
+                                {t('clients.stats.avgMonthShort', 'Avg / month')}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      </View>
                     );
                   }}
-                   showsVerticalScrollIndicator={true}
-                   contentContainerStyle={[styles.clientsList, { paddingBottom: insets.bottom + 24 }]}
+                   contentContainerStyle={[
+                     styles.clientsListContent,
+                     { paddingBottom: insets.bottom + 24 },
+                     filteredClients.length === 0 && styles.clientsListContentEmpty,
+                   ]}
                 />
              )}
+             </View>
            </View>
          </View>
        </Modal>
@@ -2842,6 +2907,7 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     height: '88%',
     width: '95%',
     alignSelf: 'center',
+    overflow: 'hidden',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -2874,12 +2940,14 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     flexDirection: 'row', // LTR
     alignItems: 'center',
     backgroundColor: '#f2f2f7',
-    borderRadius: 12,
+    borderRadius: 16,
     marginHorizontal: 20,
     marginTop: 10,
     marginBottom: 10,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 13,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E8E8ED',
   },
   searchIcon: {
     marginRight: 12, // LTR - icon should be on the left in LTR layout
@@ -2894,6 +2962,7 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    minHeight: 200,
   },
   loadingText: {
     fontSize: 16,
@@ -2901,8 +2970,45 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     marginTop: 16,
     textAlign: 'center',
   },
-  clientsList: {
-    paddingTop: 10,
+  clientsListSheet: {
+    flex: 1,
+    backgroundColor: '#F2F4F8',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    minHeight: 120,
+  },
+  clientsFlatList: {
+    flex: 1,
+  },
+  clientsListContent: {
+    paddingTop: 12,
+    paddingHorizontal: 16,
+    flexGrow: 1,
+  },
+  clientsListContentEmpty: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  clientsEmptyWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+    paddingHorizontal: 24,
+  },
+  clientsEmptyIcon: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  clientsEmptyTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 22,
+    letterSpacing: -0.2,
   },
   filterRow: {
     flexDirection: 'row', // LTR
@@ -2933,110 +3039,181 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     color: primaryOnSurface,
     fontWeight: '600',
   },
-  clientItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    marginBottom: 10,
-    marginHorizontal: 20,
+  clientCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E8E8ED',
+    borderColor: '#E8EAEF',
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 10,
+        shadowColor: '#1e293b',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.07,
+        shadowRadius: 14,
       },
       android: {
-        elevation: 2,
+        elevation: 3,
       },
     }),
   },
-  // Renamed to avoid duplicate key in StyleSheet
-  modalClientName: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: colors.text,
-    textAlign: 'left',
-    letterSpacing: -0.2,
+  clientCardBlocked: {
+    borderStartWidth: 3,
   },
-  clientInfo: {
+  clientCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 14,
+  },
+  clientCardLead: {
+    flexDirection: 'row',
+    alignItems: 'center',
     flex: 1,
     minWidth: 0,
-    alignItems: 'stretch',
+    gap: 12,
   },
-  clientPhone: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    textAlign: 'left',
-    marginTop: 4,
+  clientAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
-  clientStatsPanel: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    marginTop: 12,
-    borderRadius: 14,
-    overflow: 'hidden',
-    backgroundColor: `${colors.primary}0D`,
+  clientAvatarLetter: {
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
-  statBox: {
+  clientCardTextCol: {
     flex: 1,
-    alignItems: 'center',
+    minWidth: 0,
     justifyContent: 'center',
-    paddingVertical: 12,
+  },
+  clientNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  clientBlockedBadge: {
+    backgroundColor: '#FEE2E2',
     paddingHorizontal: 8,
-    gap: 4,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
-  statIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 2,
-  },
-  statBoxValue: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: colors.text,
-    letterSpacing: -0.3,
-  },
-  statBoxValueMuted: {
-    color: colors.textSecondary,
-    fontWeight: '600',
-  },
-  statBoxLabel: {
+  clientBlockedBadgeText: {
+    color: '#B91C1C',
     fontSize: 11,
-    color: colors.textSecondary,
-    fontWeight: '500',
-    textAlign: 'center',
+    fontWeight: '700',
+    letterSpacing: -0.1,
   },
-  statBoxDivider: {
-    width: StyleSheet.hairlineWidth,
-    alignSelf: 'stretch',
-    marginVertical: 10,
-    backgroundColor: colors.border,
+  modalClientName: {
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.35,
+    flexShrink: 1,
   },
-  clientActionsRow: {
-    flexDirection: 'column',
+  clientCardActions: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
+    gap: 8,
+    flexShrink: 0,
     paddingTop: 2,
   },
-  phoneButton: {
+  clientCallPill: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  clientBlockPill: {
+    backgroundColor: '#FEE2E2',
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    minWidth: 78,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  clientBlockPillText: {
+    color: '#DC2626',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
+  clientUnblockPill: {
+    backgroundColor: '#D1FAE5',
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    minWidth: 78,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  clientUnblockPillText: {
+    color: '#047857',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
+  clientStatsStrip: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    gap: 4,
+  },
+  clientStatCell: {
+    flex: 1,
+    /** Icon on visual right, numbers/labels on visual left (RTL + LTR) */
+    flexDirection: I18nManager.isRTL ? 'row' : 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+    minWidth: 0,
+  },
+  clientStatIconWrap: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#f2f2f7',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
+  },
+  clientStatTextCol: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+    alignItems: I18nManager.isRTL ? 'flex-end' : 'flex-start',
+  },
+  clientStatValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.6,
+    marginBottom: 2,
+    textAlign: I18nManager.isRTL ? 'right' : 'left',
+  },
+  clientStatCaption: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: -0.05,
+    textAlign: I18nManager.isRTL ? 'right' : 'left',
+  },
+  clientStatVRule: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: 'stretch',
+    marginVertical: 4,
+    opacity: 0.85,
   },
   iconCircleButton: {
     width: 36,
@@ -3047,22 +3224,6 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#E5E5EA',
-  },
-  blockButton: {
-    backgroundColor: '#FEE2E2',
-    borderColor: '#FEE2E2',
-    borderWidth: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    minWidth: 92,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  blockButtonText: {
-    color: '#EF4444',
-    fontSize: 14,
-    fontWeight: '600',
   },
   closeButton: {
     width: 36,

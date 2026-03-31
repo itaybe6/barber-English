@@ -1363,7 +1363,7 @@ export default function SettingsScreen() {
   const handleCallSupport = async () => {
     const email = 'we.toriaapps@gmail.com';
     const subject = 'Support Request';
-    const body = 'Hello Slotlys Support Team,\n\nI need assistance with:\n\n';
+    const body = 'Hello Tori Support Team,\n\nI need assistance with:\n\n';
     const url = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     try {
       const supported = await Linking.canOpenURL(url);
@@ -2742,7 +2742,7 @@ export default function SettingsScreen() {
                   {
                     backgroundColor: businessColors.primary,
                     bottom: insets.bottom + 20,
-                    left: Math.max(16, insets.left + 8),
+                    right: Math.max(16, insets.right + 8),
                   },
                 ]}
                 onPress={handleOpenAddService}
@@ -3027,7 +3027,7 @@ export default function SettingsScreen() {
                   {
                     backgroundColor: businessColors.primary,
                     bottom: insets.bottom + 20,
-                    left: Math.max(16, insets.left + 8),
+                    right: Math.max(16, insets.right + 8),
                   },
                 ]}
                 onPress={() => setShowAddAdminModal(true)}
@@ -3050,7 +3050,7 @@ export default function SettingsScreen() {
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.groupCard}>
-              <Text style={styles.previewNotificationTitle}>{t('settings.support.header', 'Need help? Contact Slotlys support team')}</Text>
+              <Text style={styles.previewNotificationTitle}>{t('settings.support.header', "Need help? Contact Tori's support team")}</Text>
               <Text style={[styles.previewNotificationContent, { marginTop: 12 }]}>
                 {t(
                   'settings.support.description',

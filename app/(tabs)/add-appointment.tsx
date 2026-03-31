@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,14 @@ import {
   ActivityIndicator,
   DeviceEventEmitter,
   I18nManager,
+  Modal,
+  Alert,
 } from 'react-native';
+import * as Calendar from 'expo-calendar';
+import BookingSuccessAnimatedOverlay, {
+  type SuccessLine,
+} from '@/components/book-appointment/BookingSuccessAnimatedOverlay';
+import { isRtlLanguage, toBcp47Locale } from '@/lib/i18nLocale';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -35,6 +42,8 @@ import {
   useAdminAddAppointmentForm,
   formatDateToLocalString,
   formatTimeToAMPM,
+  parseDateKeyToLocalDate,
+  type AdminBookingSaveSuccessPayload,
 } from '@/lib/hooks/useAdminAddAppointmentForm';
 import type { Service } from '@/lib/supabase';
 import { ADMIN_CALENDAR_APPOINTMENTS_CHANGED } from '@/constants/adminCalendarEvents';
@@ -95,8 +104,19 @@ export default function AddAppointmentScreen() {
     router.back();
   }, []);
 
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successAnimKey, setSuccessAnimKey] = useState(0);
+  const [successSnapshot, setSuccessSnapshot] = useState<AdminBookingSaveSuccessPayload | null>(null);
+
+  const onSaveSuccess = useCallback((payload: AdminBookingSaveSuccessPayload) => {
+    setSuccessSnapshot(payload);
+    setSuccessAnimKey((k) => k + 1);
+    setShowSuccessModal(true);
+  }, []);
+
   const form = useAdminAddAppointmentForm({
     initialDateKey,
+    onSaveSuccess,
     onSuccess: onBookedSuccess,
   });
 
@@ -154,6 +174,51 @@ export default function AddAppointmentScreen() {
         : {},
     [useLightFg],
   );
+
+  const adminBookingSuccessLines = useMemo((): SuccessLine[] => {
+    if (!showSuccessModal || !successSnapshot) return [];
+    const { client, service, date, time } = successSnapshot;
+    const loc = toBcp47Locale(i18n?.language);
+    const dateFormatted = date.toLocaleDateString(loc, {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+    const durationM =
+      service.duration_minutes && service.duration_minutes > 0 ? service.duration_minutes : 60;
+
+    const lines: SuccessLine[] = [
+      {
+        variant: 'headline',
+        text: t('booking.successAnimatedHeadline', 'התור נקבע בהצלחה'),
+      },
+      {
+        variant: 'accent',
+        text: `${t('booking.field.service', 'שירות')}: ${service.name}`,
+      },
+      {
+        variant: 'body',
+        text: `${t('admin.appointmentsAdmin.client', 'Client')}: ${client.name} (${client.phone})`,
+      },
+      {
+        variant: 'body',
+        text: `${t('booking.field.date', 'תאריך')}: ${dateFormatted}`,
+      },
+      {
+        variant: 'body',
+        text: `${t('booking.field.time', 'שעה')}: ${formatTimeToAMPM(time)}`,
+      },
+    ];
+    lines.push({
+      variant: 'body',
+      text:
+        (service.price ?? 0) > 0
+          ? `${durationM} ${t('booking.min', 'דק׳')} · ₪${service.price}`
+          : `${durationM} ${t('booking.min', 'דק׳')}`,
+    });
+    return lines;
+  }, [showSuccessModal, successSnapshot, i18n?.language, t]);
 
   const calendarTheme = useMemo(
     () => ({
@@ -593,8 +658,8 @@ export default function AddAppointmentScreen() {
                 current={form.selectedDate ? formatDateToLocalString(form.selectedDate) : undefined}
                 minDate={formatDateToLocalString(new Date())}
                 onDayPress={(day: { dateString: string }) => {
-                  const date = new Date(day.dateString);
-                  form.onPickDate(date);
+                  const date = parseDateKeyToLocalDate(day.dateString);
+                  if (date) form.onPickDate(date);
                 }}
                 markedDates={
                   form.selectedDate
@@ -829,6 +894,86 @@ export default function AddAppointmentScreen() {
           )}
         </Pressable>
       </KeyboardAwareScreenScroll>
+
+      {showSuccessModal ? (
+        <Modal
+          visible={showSuccessModal}
+          animationType="fade"
+          transparent
+          statusBarTranslucent
+          onRequestClose={() => {
+            setShowSuccessModal(false);
+            setSuccessSnapshot(null);
+            onBookedSuccess();
+          }}
+        >
+          <BookingSuccessAnimatedOverlay
+            key={successAnimKey}
+            lines={adminBookingSuccessLines}
+            rtl={isRtlLanguage(i18n?.language)}
+            accentColor={primary}
+            onDismiss={() => {
+              setShowSuccessModal(false);
+              setSuccessSnapshot(null);
+              onBookedSuccess();
+            }}
+            onAddToCalendar={async () => {
+              if (!successSnapshot) return;
+              try {
+                const { date, time, service, client } = successSnapshot;
+                const duration =
+                  service.duration_minutes && service.duration_minutes > 0 ? service.duration_minutes : 60;
+                const dateStr = formatDateToLocalString(date);
+                const timeStr = time || '00:00';
+                const start = new Date(`${dateStr}T${timeStr}:00`);
+                const end = new Date(start.getTime() + duration * 60000);
+
+                const perm = await Calendar.requestCalendarPermissionsAsync();
+                if (perm.status !== 'granted') {
+                  Alert.alert(
+                    t('booking.permissionsRequired', 'נדרש אישור'),
+                    t('booking.calendarPermissionMessage', 'נדרש אישור גישה ליומן כדי להוסיף אירוע.')
+                  );
+                  return;
+                }
+
+                let calendarId: string | undefined;
+                if (Platform.OS === 'ios') {
+                  const defCal = await Calendar.getDefaultCalendarAsync();
+                  calendarId = defCal?.id;
+                } else {
+                  const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+                  calendarId =
+                    cals.find(
+                      (c) => c.allowsModifications || c.accessLevel === Calendar.CalendarAccessLevel.OWNER
+                    )?.id || cals[0]?.id;
+                }
+
+                if (!calendarId) {
+                  Alert.alert(t('error.generic', 'שגיאה'), t('booking.noCalendar', 'לא נמצא יומן שניתן לכתוב אליו.'));
+                  return;
+                }
+
+                await Calendar.createEventAsync(calendarId, {
+                  title: `${service.name} · ${client.name}`,
+                  startDate: start,
+                  endDate: end,
+                  notes: t('booking.calendarNotes', 'Booked via the app'),
+                });
+
+                Alert.alert(t('booking.added', 'נוסף'), t('booking.eventAdded', 'האירוע נוסף ליומן שלך.'));
+              } catch {
+                Alert.alert(
+                  t('error.generic', 'שגיאה'),
+                  t('booking.eventAddFailed', 'לא ניתן להוסיף את האירוע ליומן.')
+                );
+              }
+            }}
+            addToCalendarLabel={t('booking.addToCalendar', 'Add to Calendar')}
+            gotItLabel={t('booking.gotIt', 'Got it')}
+          />
+        </Modal>
+      ) : null}
     </View>
   );
 }

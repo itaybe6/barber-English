@@ -793,7 +793,9 @@
       "fabAddHint": "اضغط مطولاً على صف لإعادة الترتيب · + في الأسفل للإضافة",
       "showImagesTitle": "صور الخدمات",
       "showImagesSubtitle": "عند الإيقاف تُخفى الصور هنا وعند حجز العميل",
-      "showImagesSaveFailed": "تعذّر حفظ إعداد العرض"
+      "showImagesSaveFailed": "تعذّر حفظ إعداد العرض",
+      "showImagesOn": "ظاهر",
+      "showImagesOff": "مخفي"
     },
     "broadcastTemplates": {
       "promotion": {

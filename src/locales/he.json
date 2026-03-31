@@ -679,7 +679,9 @@
       "fabAddHint": "לחיצה ארוכה על שורה לסידור · + למטה להוספה",
       "showImagesTitle": "תמונות ליד שירותים",
       "showImagesSubtitle": "כבוי מסתיר תמונות כאן ובמסך קביעת תור אצל הלקוח",
-      "showImagesSaveFailed": "לא ניתן לשמור את הגדרת התצוגה"
+      "showImagesSaveFailed": "לא ניתן לשמור את הגדרת התצוגה",
+      "showImagesOn": "מוצג",
+      "showImagesOff": "מוסתר"
     },
     "broadcastTemplates": {
       "promotion": { "title": "מבצע חדש! 🎉", "description": "הודעה על מבצע או הנחה" },

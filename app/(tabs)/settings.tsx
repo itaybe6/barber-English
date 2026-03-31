@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking, Dimensions, Switch, I18nManager, type LayoutChangeEvent } from 'react-native';
 import Constants from 'expo-constants';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
@@ -35,7 +35,6 @@ import {
   User,
   Repeat,
   Plus,
-  Minus,
   Bell,
 } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -55,6 +54,7 @@ import { normalizeAppLanguage, isRtlLanguage, toBcp47Locale } from '@/lib/i18nLo
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import { SettingsScreenTabs } from '@/components/settings/SettingsScreenTabs';
 import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
+import { BookingDaysRuler, type BookingDaysRulerHandle } from '@/components/BookingDaysRuler';
 
 // Helper for shadow style
 const shadowStyle = Platform.select({
@@ -74,7 +74,6 @@ const SETTINGS_GROUPED_BG = '#F2F2F7';
 
 const BOOKING_WINDOW_MIN = 1;
 const BOOKING_WINDOW_MAX = 60;
-const BOOKING_WINDOW_PRESETS = [7, 14, 21, 30, 45, 60] as const;
 
 export default function SettingsScreen() {
   const logout = useAuthStore((state) => state.logout);
@@ -145,18 +144,7 @@ export default function SettingsScreen() {
   const [showEditCancellationModal, setShowEditCancellationModal] = useState(false);
   const [showBookingWindowModal, setShowBookingWindowModal] = useState(false);
   const [bookingWindowDraft, setBookingWindowDraft] = useState('7');
-  const bookingWindowTrackWidthRef = useRef(0);
-  const bookingWindowLastHapticRef = useRef<number | null>(null);
-  const bookingWindowFromTrackXRef = useRef<(x: number) => void>(() => {});
-  const bookingWindowTrackPan = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, g) =>
-        Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 4,
-      onPanResponderGrant: (e) => bookingWindowFromTrackXRef.current(e.nativeEvent.locationX),
-      onPanResponderMove: (e) => bookingWindowFromTrackXRef.current(e.nativeEvent.locationX),
-    }),
-  ).current;
+  const bookingDaysRulerRef = useRef<BookingDaysRulerHandle>(null);
   const [showCancellationDropdown, setShowCancellationDropdown] = useState(false);
   const [cancellationDropdownDirection, setCancellationDropdownDirection] = useState<'up' | 'down'>('down');
   // Address bottom sheet animation
@@ -335,24 +323,17 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (showBookingWindowModal) {
       setBookingWindowDraft(String(profileBookingOpenDays || 7));
-      bookingWindowLastHapticRef.current = null;
     }
   }, [showBookingWindowModal, profileBookingOpenDays]);
 
-  bookingWindowFromTrackXRef.current = (x: number) => {
-    const w = bookingWindowTrackWidthRef.current;
-    if (!(w > 0)) return;
-    const ratio = Math.max(0, Math.min(1, x / w));
-    const day =
-      BOOKING_WINDOW_MIN +
-      Math.round(ratio * (BOOKING_WINDOW_MAX - BOOKING_WINDOW_MIN));
-    const d = Math.max(BOOKING_WINDOW_MIN, Math.min(BOOKING_WINDOW_MAX, day));
-    setBookingWindowDraft(String(d));
-    if (bookingWindowLastHapticRef.current !== d) {
-      bookingWindowLastHapticRef.current = d;
-      Haptics.selectionAsync();
-    }
-  };
+  useLayoutEffect(() => {
+    if (!showBookingWindowModal) return;
+    const day = profileBookingOpenDays || 7;
+    const id = requestAnimationFrame(() => {
+      bookingDaysRulerRef.current?.scrollToDay(day);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [showBookingWindowModal, profileBookingOpenDays]);
 
   const handleSaveBusinessProfile = async () => {
     setIsSavingProfile(true);
@@ -582,27 +563,18 @@ export default function SettingsScreen() {
     }
   };
 
-  const bookingWindowHeroDay = useMemo(() => {
-    const trimmed = bookingWindowDraft.trim();
-    if (trimmed === '') return profileBookingOpenDays || 7;
-    const n = parseInt(trimmed, 10);
-    if (!Number.isFinite(n)) return profileBookingOpenDays || 7;
-    return Math.max(BOOKING_WINDOW_MIN, Math.min(BOOKING_WINDOW_MAX, n));
-  }, [bookingWindowDraft, profileBookingOpenDays]);
+  const onBookingWindowRulerDay = useCallback((day: number) => {
+    setBookingWindowDraft(String(day));
+  }, []);
 
-  const bumpBookingWindowDay = useCallback(
-    (delta: number) => {
-      const raw = parseInt(bookingWindowDraft, 10);
-      const base = Number.isFinite(raw) ? raw : profileBookingOpenDays || 7;
-      const next = Math.max(BOOKING_WINDOW_MIN, Math.min(BOOKING_WINDOW_MAX, base + delta));
-      setBookingWindowDraft(String(next));
-      if (bookingWindowLastHapticRef.current !== next) {
-        bookingWindowLastHapticRef.current = next;
-        Haptics.selectionAsync();
-      }
-    },
-    [bookingWindowDraft, profileBookingOpenDays],
-  );
+  const onBookingWindowTextChange = useCallback((text: string) => {
+    setBookingWindowDraft(text);
+    const digits = text.replace(/\D/g, '');
+    const n = parseInt(digits, 10);
+    if (Number.isFinite(n) && n >= BOOKING_WINDOW_MIN && n <= BOOKING_WINDOW_MAX) {
+      bookingDaysRulerRef.current?.scrollToDay(n);
+    }
+  }, []);
 
   const openClientReminderModal = useCallback(
     (fromSwitch = false) => {
@@ -4154,7 +4126,7 @@ export default function SettingsScreen() {
         </TouchableWithoutFeedback>
       </Modal>
 
-      {/* Booking horizon (per staff) — redesigned sheet: explainer, stepper, scrubber, presets */}
+      {/* Booking horizon (per staff) — explainer + Reanimated ruler + manual entry */}
       <Modal
         visible={showBookingWindowModal}
         animationType="slide"
@@ -4191,6 +4163,7 @@ export default function SettingsScreen() {
               }}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
             >
               <LinearGradient
                 colors={[`${businessColors.primary}18`, `${businessColors.primary}08`, 'transparent']}
@@ -4210,124 +4183,17 @@ export default function SettingsScreen() {
                   {t('settings.profile.bookingWindowModalDaysLabel', 'Days open for booking')}
                 </Text>
 
-                <View style={styles.bookingWindowControlsLtr}>
-                  <View style={styles.bookingWindowStepper}>
-                    <TouchableOpacity
-                      style={[
-                        styles.bookingWindowStepperBtn,
-                        bookingWindowHeroDay <= BOOKING_WINDOW_MIN && styles.bookingWindowStepperBtnDisabled,
-                      ]}
-                      onPress={() => bumpBookingWindowDay(-1)}
-                      disabled={bookingWindowHeroDay <= BOOKING_WINDOW_MIN}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('settings.profile.bookingWindowA11yDecrease', 'Decrease days')}
-                    >
-                      <Minus
-                        size={24}
-                        color={bookingWindowHeroDay <= BOOKING_WINDOW_MIN ? Colors.subtext : businessColors.primary}
-                        strokeWidth={2.5}
-                      />
-                    </TouchableOpacity>
-
-                    <View style={styles.bookingWindowHeroNumberWrap}>
-                      <Text style={[styles.bookingWindowHeroNumber, { color: businessColors.primary }]}>{bookingWindowHeroDay}</Text>
-                      <Text style={styles.bookingWindowHeroSuffix}>
-                        {t('settings.profile.bookingWindowModalDaysUnit', 'days')}
-                      </Text>
-                    </View>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.bookingWindowStepperBtn,
-                        bookingWindowHeroDay >= BOOKING_WINDOW_MAX && styles.bookingWindowStepperBtnDisabled,
-                      ]}
-                      onPress={() => bumpBookingWindowDay(1)}
-                      disabled={bookingWindowHeroDay >= BOOKING_WINDOW_MAX}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('settings.profile.bookingWindowA11yIncrease', 'Increase days')}
-                    >
-                      <Plus
-                        size={24}
-                        color={bookingWindowHeroDay >= BOOKING_WINDOW_MAX ? Colors.subtext : businessColors.primary}
-                        strokeWidth={2.5}
-                      />
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.bookingWindowTrackSection}>
-                    <View style={styles.bookingWindowTrackLabelsRow}>
-                      <Text style={styles.bookingWindowTrackEdge}>{BOOKING_WINDOW_MIN}</Text>
-                      <Text style={styles.bookingWindowTrackEdge}>{BOOKING_WINDOW_MAX}</Text>
-                    </View>
-                    <View
-                      style={styles.bookingWindowTrackHit}
-                      onLayout={(e) => {
-                        bookingWindowTrackWidthRef.current = e.nativeEvent.layout.width;
-                      }}
-                      {...bookingWindowTrackPan.panHandlers}
-                    >
-                      <View style={styles.bookingWindowTrackBg}>
-                        <View
-                          style={[
-                            styles.bookingWindowTrackFill,
-                            {
-                              width: `${((bookingWindowHeroDay - BOOKING_WINDOW_MIN) / (BOOKING_WINDOW_MAX - BOOKING_WINDOW_MIN)) * 100}%`,
-                              backgroundColor: businessColors.primary,
-                            },
-                          ]}
-                        />
-                      </View>
-                      <View
-                        style={[
-                          styles.bookingWindowTrackThumb,
-                          {
-                            backgroundColor: Colors.white,
-                            borderColor: businessColors.primary,
-                            left: `${((bookingWindowHeroDay - BOOKING_WINDOW_MIN) / (BOOKING_WINDOW_MAX - BOOKING_WINDOW_MIN)) * 100}%`,
-                          },
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.bookingWindowTrackHint}>
-                      {t('settings.profile.bookingWindowModalScrubberHint', 'Slide or tap the bar to set')}
-                    </Text>
-                  </View>
-
-                  <Text style={styles.bookingWindowPresetsLabel}>
-                    {t('settings.profile.bookingWindowModalPresets', 'Quick picks')}
-                  </Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.bookingWindowChipsRow}
-                  >
-                    {BOOKING_WINDOW_PRESETS.map((p) => {
-                      const selected = bookingWindowHeroDay === p;
-                      return (
-                        <TouchableOpacity
-                          key={p}
-                          style={[
-                            styles.bookingWindowChip,
-                            selected && {
-                              backgroundColor: businessColors.primary,
-                              borderColor: businessColors.primary,
-                            },
-                          ]}
-                          onPress={() => {
-                            setBookingWindowDraft(String(p));
-                            if (bookingWindowLastHapticRef.current !== p) {
-                              bookingWindowLastHapticRef.current = p;
-                              Haptics.selectionAsync();
-                            }
-                          }}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected }}
-                        >
-                          <Text style={[styles.bookingWindowChipText, selected && { color: Colors.white }]}>{p}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
+                <View style={styles.bookingWindowRulerLtr}>
+                  <BookingDaysRuler
+                    ref={bookingDaysRulerRef}
+                    minDay={BOOKING_WINDOW_MIN}
+                    maxDay={BOOKING_WINDOW_MAX}
+                    fadeColor={Colors.white}
+                    tickColor={Colors.text}
+                    indicatorColor={businessColors.primary}
+                    unitLabel={t('settings.profile.bookingWindowModalDaysUnit', 'days')}
+                    onDayChange={onBookingWindowRulerDay}
+                  />
                 </View>
 
                 <Text style={styles.bookingWindowManualLabel}>
@@ -4336,7 +4202,7 @@ export default function SettingsScreen() {
                 <TextInput
                   style={styles.bookingWindowManualInput}
                   value={bookingWindowDraft}
-                  onChangeText={setBookingWindowDraft}
+                  onChangeText={onBookingWindowTextChange}
                   placeholder={t('settings.profile.bookingWindowPlaceholder', '7')}
                   placeholderTextColor={Colors.subtext}
                   keyboardType="number-pad"
@@ -6086,130 +5952,9 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     letterSpacing: 0.15,
   },
-  bookingWindowControlsLtr: {
+  bookingWindowRulerLtr: {
     direction: 'ltr',
-    marginTop: 16,
-  },
-  bookingWindowStepper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  bookingWindowStepperBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(60,60,67,0.06)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(60,60,67,0.08)',
-  },
-  bookingWindowStepperBtnDisabled: {
-    opacity: 0.45,
-  },
-  bookingWindowHeroNumberWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 120,
-    paddingHorizontal: 8,
-  },
-  bookingWindowHeroNumber: {
-    fontSize: 52,
-    fontWeight: '800',
-    letterSpacing: -1.5,
-    fontVariant: ['tabular-nums'],
-  },
-  bookingWindowHeroSuffix: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.subtext,
     marginTop: 4,
-  },
-  bookingWindowTrackSection: {
-    marginTop: 12,
-  },
-  bookingWindowTrackLabelsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-    paddingHorizontal: 2,
-  },
-  bookingWindowTrackEdge: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.subtext,
-    fontVariant: ['tabular-nums'],
-  },
-  bookingWindowTrackHit: {
-    paddingVertical: 16,
-    justifyContent: 'center',
-  },
-  bookingWindowTrackBg: {
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: 'rgba(60,60,67,0.12)',
-    overflow: 'hidden',
-  },
-  bookingWindowTrackFill: {
-    height: '100%',
-    borderRadius: 5,
-  },
-  bookingWindowTrackThumb: {
-    position: 'absolute',
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    top: '50%',
-    marginTop: -14,
-    marginLeft: -14,
-    borderWidth: 3,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.14,
-        shadowRadius: 5,
-      },
-      android: { elevation: 4 },
-    }),
-  },
-  bookingWindowTrackHint: {
-    marginTop: 8,
-    fontSize: 12,
-    color: Colors.subtext,
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  bookingWindowPresetsLabel: {
-    marginTop: 20,
-    marginBottom: 10,
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.subtext,
-    textAlign: 'left',
-  },
-  bookingWindowChipsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingVertical: 2,
-    paddingEnd: 4,
-  },
-  bookingWindowChip: {
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 999,
-    backgroundColor: 'rgba(60,60,67,0.06)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(60,60,67,0.12)',
-  },
-  bookingWindowChipText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.text,
-    fontVariant: ['tabular-nums'],
   },
   bookingWindowManualLabel: {
     marginTop: 22,
@@ -6470,6 +6215,78 @@ const styles = StyleSheet.create({
   },
   servicesModalFullWidthBlock: {
     width: '100%',
+  },
+  serviceImagesPrefOuter: {
+    paddingHorizontal: 2,
+    marginBottom: 14,
+  },
+  serviceImagesPrefCard: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60, 60, 67, 0.10)',
+  },
+  serviceImagesPrefAccentBar: {
+    width: '100%',
+    height: 4,
+  },
+  serviceImagesPrefInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    paddingTop: 17,
+  },
+  serviceImagesPrefIconRing: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+  },
+  serviceImagesPrefCopy: {
+    flex: 1,
+    minWidth: 0,
+    marginHorizontal: 14,
+  },
+  serviceImagesPrefTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 6,
+    gap: 8,
+  },
+  serviceImagesPrefTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: Colors.text,
+    letterSpacing: -0.35,
+    lineHeight: 22,
+    flexShrink: 1,
+  },
+  serviceImagesPrefStatusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  serviceImagesPrefStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.15,
+  },
+  serviceImagesPrefSubtitle: {
+    fontSize: 13,
+    color: '#636366',
+    lineHeight: 19,
+    letterSpacing: -0.08,
+  },
+  serviceImagesPrefSwitchCol: {
+    minWidth: 51,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   svcListCell: {
     width: '100%',

@@ -656,7 +656,9 @@
       "fabAddHint": "Long-press a row to reorder · + below to add",
       "showImagesTitle": "Service photos",
       "showImagesSubtitle": "Off hides thumbnails here and when clients book",
-      "showImagesSaveFailed": "Could not save display setting"
+      "showImagesSaveFailed": "Could not save display setting",
+      "showImagesOn": "On",
+      "showImagesOff": "Off"
     },
     "broadcastTemplates": {
       "promotion": { "title": "New Promotion! 🎉", "description": "Message about promotion or discount" },

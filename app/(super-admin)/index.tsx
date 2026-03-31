@@ -22,7 +22,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '@/stores/authStore';
-import { superAdminApi, BusinessOverview } from '@/lib/api/superAdmin';
+import { superAdminApi, BusinessOverview, DeleteBusinessResult } from '@/lib/api/superAdmin';
 import { getExpoExtra } from '@/lib/getExtra';
 import { PulseemBusinessModal } from '@/components/superAdmin/PulseemBusinessModal';
 
@@ -103,14 +103,33 @@ export default function SuperAdminDashboard() {
     );
   }, [businesses, searchQuery]);
 
-  const buildDeleteSuccessMessage = (item: BusinessOverview) => {
+  const buildDeleteSuccessMessage = (item: BusinessOverview, pulseem?: DeleteBusinessResult['pulseem']) => {
     const folder = item.branding_client_name?.trim();
     const storageLine =
       'מ־Storage נמחקו גם ברנדינג, גלריה, באנר בית, תמונות פרופיל וקבלות הוצאות (ככל שנשמרו ב-Supabase).';
+    let body: string;
     if (!folder) {
-      return `האפליקציה נמחקה מהשרת.\n${storageLine}\n\nלא נשמר שם תיקיית ברנדינג — אם יש תיקייה מקומית ב־branding/, מחק אותה ידנית.`;
+      body = `האפליקציה נמחקה מהשרת.\n${storageLine}\n\nלא נשמר שם תיקיית ברנדינג — אם יש תיקייה מקומית ב־branding/, מחק אותה ידנית.`;
+    } else {
+      body = `האפליקציה נמחקה מהשרת.\n${storageLine}\n\nכדי למחוק גם את התיקייה המקומית בפרויקט (branding/${folder}), הרץ בטרמינל בשורש הפרויקט:\n\nnode scripts/delete-branding.mjs ${folder}`;
     }
-    return `האפליקציה נמחקה מהשרת.\n${storageLine}\n\nכדי למחוק גם את התיקייה המקומית בפרויקט (branding/${folder}), הרץ בטרמינל בשורש הפרויקט:\n\nnode scripts/delete-branding.mjs ${folder}`;
+    if (pulseem?.deleted) {
+      body += '\n\n✅ חשבון פולסים (תת-חשבון Direct) הוסר בפלטפורמת Pulseem.';
+    }
+    if (pulseem?.error) {
+      body += `\n\n⚠️ פולסים: ${pulseem.error}\nהנתונים נמחקו מהמערכת שלנו — אם תת-החשבון עדיין קיים ב־Pulseem, הסר אותו ידנית או פנה לתמיכת פולסים.`;
+    }
+    if (pulseem?.skipped && pulseem.reason) {
+      const r = pulseem.reason;
+      if (r === 'no_pulseem_direct_api_key') {
+        body += '\n\nℹ️ לפרופיל לא היה מפתח API Direct של פולסים — לא בוצעה מחיקה בפלטפורמת Pulseem.';
+      } else if (r === 'no_PULSEEM_MAIN_API_KEY') {
+        body += '\n\nℹ️ ב-Supabase Secrets אין PULSEEM_MAIN_API_KEY — מחיקת תת-חשבון בפולסים לא בוצעה.';
+      } else if (r === 'no_service_role_in_app') {
+        body += '\n\nℹ️ באפליקציה לא הוגדר EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY — לא נשלחה בקשה למחוק בפולסים.';
+      }
+    }
+    return body;
   };
 
   const loadBusinesses = useCallback(async () => {
@@ -234,12 +253,12 @@ export default function SuperAdminDashboard() {
     const snapshot = item;
     setDeleteInProgress(true);
     setLoading(true);
-    const success = await superAdminApi.deleteBusiness(snapshot.id);
+    const result = await superAdminApi.deleteBusiness(snapshot.id);
     setDeleteInProgress(false);
     setDeleteConfirmBiz(null);
     setLoading(false);
-    if (success) {
-      setFeedbackDialog({ title: 'נמחק', message: buildDeleteSuccessMessage(snapshot) });
+    if (result.success) {
+      setFeedbackDialog({ title: 'נמחק', message: buildDeleteSuccessMessage(snapshot, result.pulseem) });
       await loadBusinesses();
     } else {
       setFeedbackDialog({ title: 'שגיאה', message: 'מחיקת האפליקציה נכשלה.' });
@@ -740,7 +759,7 @@ export default function SuperAdminDashboard() {
   ];
 
   const deleteDialogMessage = deleteConfirmBiz
-    ? `בטוח שברצונך למחוק את "${deleteConfirmBiz.display_name || 'עסק ללא שם'}"?\n\nפעולה זו תמחק את כל הנתונים: משתמשים, תורים, שירותים, וקבצי ברנדינג.\n\nלא ניתן לבטל פעולה זו!`
+    ? `בטוח שברצונך למחוק את "${deleteConfirmBiz.display_name || 'עסק ללא שם'}"?\n\nפעולה זו תמחק את כל הנתונים: משתמשים, תורים, שירותים, וקבצי ברנדינג.\n\nאם מוגדר פולסים עם מפתח Direct, המערכת תנסה להסיר גם את תת-החשבון ב-Pulseem (דורש פריסת pulseem-delete-subaccount ומפתח ראשי בשרת).\n\nלא ניתן לבטל פעולה זו!`
     : '';
 
   return (

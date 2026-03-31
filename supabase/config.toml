@@ -34,6 +34,10 @@ verify_jwt = false
 [functions.pulseem-credit-transfer]
 verify_jwt = false
 
+# Pulseem: best-effort remove Direct sub-account (super-admin delete org); optional PULSEEM_DELETE_SUBACCOUNT_PATH
+[functions.pulseem-delete-subaccount]
+verify_jwt = false
+
 # Green Invoice (חשבונית ירוקה): app uses custom auth (no Supabase Auth session). Auth in function: caller_user_id + business_id vs users table (service role).
 [functions.greeninvoice-connect]
 verify_jwt = false

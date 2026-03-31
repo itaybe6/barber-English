@@ -1,7 +1,8 @@
 // @ts-nocheck
 /**
  * Admin-only: validate Green Invoice API credentials and store encrypted secret on business_profile.
- * Auth: end-user JWT (Supabase Auth). User must be user_type = admin for the same business_id as profile.
+ * Auth: verify_jwt=false — body must include business_id + caller_user_id; service role checks users row (admin, same tenant).
+ * (App login is phone/OTP + Zustand, not Supabase Auth — no user JWT for functions.invoke.)
  * Encryption: PULSEEM_FIELD_ENCRYPTION_KEY (same as Pulseem fields).
  *
  * Green Invoice token: POST {base}/v1/account/token with JSON { id, secret }; JWT in X-Authorization-Bearer.
@@ -72,40 +73,6 @@ serve(async (req) => {
     return json({ ok: false, error: "method_not_allowed" }, 405);
   }
 
-  const authHeader = (req.headers.get("Authorization") ?? "").trim();
-  const jwt = authHeader.replace(/^Bearer\s+/i, "").trim();
-  if (!jwt) {
-    return json({ ok: false, error: "missing_authorization" }, 401);
-  }
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const encKey = (Deno.env.get("PULSEEM_FIELD_ENCRYPTION_KEY") ?? "").trim();
-
-  const authClient = createClient(supabaseUrl, anonKey);
-  const { data: userData, error: userErr } = await authClient.auth.getUser(jwt);
-  if (userErr || !userData?.user?.id) {
-    return json({ ok: false, error: "invalid_session" }, 401);
-  }
-  const userId = userData.user.id;
-
-  const admin = createClient(supabaseUrl, serviceRole);
-  const { data: urow, error: selErr } = await admin
-    .from("users")
-    .select("business_id, user_type")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (selErr || !urow?.business_id) {
-    return json({ ok: false, error: "user_not_found" }, 403);
-  }
-  if (String(urow.user_type) !== "admin") {
-    return json({ ok: false, error: "forbidden_not_admin" }, 403);
-  }
-
-  const businessId = String(urow.business_id).trim();
-
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -113,7 +80,49 @@ serve(async (req) => {
     return json({ ok: false, error: "invalid_json" }, 400);
   }
 
+  const businessIdRaw = String(body.business_id ?? "").trim();
+  const callerUserId = String(body.caller_user_id ?? "").trim();
+  if (!businessIdRaw || !callerUserId) {
+    return json({ ok: false, error: "missing_caller_context" }, 400);
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const encKey = (Deno.env.get("PULSEEM_FIELD_ENCRYPTION_KEY") ?? "").trim();
+
+  const admin = createClient(supabaseUrl, serviceRole);
+  const { data: urow, error: selErr } = await admin
+    .from("users")
+    .select("business_id, user_type")
+    .eq("id", callerUserId)
+    .maybeSingle();
+
+  if (selErr || !urow?.business_id) {
+    return json({ ok: false, error: "user_not_found" }, 403);
+  }
+  if (String(urow.business_id).trim() !== businessIdRaw) {
+    return json({ ok: false, error: "forbidden_wrong_business" }, 403);
+  }
+  if (String(urow.user_type) !== "admin") {
+    return json({ ok: false, error: "forbidden_not_admin" }, 403);
+  }
+
+  const businessId = businessIdRaw;
+
   const action = String(body.action ?? "");
+
+  if (action === "verify") {
+    const apiKeyId = String(body.api_key_id ?? "").trim();
+    const apiSecret = String(body.api_secret ?? "").trim();
+    if (!apiKeyId || !apiSecret) {
+      return json({ ok: false, error: "missing_credentials" }, 400);
+    }
+    const gi = await fetchGreenInvoiceJwt(apiKeyId, apiSecret);
+    if (!gi.ok) {
+      return json({ ok: false, error: "greeninvoice_auth_failed", message: gi.message }, 400);
+    }
+    return json({ ok: true });
+  }
 
   if (action === "disconnect") {
     const { error: updErr } = await admin

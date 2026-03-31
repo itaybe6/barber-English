@@ -1562,6 +1562,11 @@
       "shrinkBrowser": "تقليص النافذة",
       "tryReadFromPage": "حاول القراءة من الصفحة",
       "pasteBlockLabel": "لصق التفاصيل الرئيسية",
+      "credentialsSection": "تفاصيل مفتاح API",
+      "keyIdPlaceholder": "معرف المفتاح (UUID)",
+      "testConnection": "اختبار الاتصال",
+      "connectionVerified": "الاتصال سليم — وافقت الفاتورة الخضراء على بيانات الاعتماد.",
+      "testFailedTitle": "فشل اختبار الاتصال",
       "pastePlaceholder": "السطر 1: معرف المفتاح (UUID)\nالسطر الثاني: المفتاح السري",
       "pasteInvalid": "لا يمكن تحليل قيمتين. الصق المعرف في السطر الأول والسر في السطر الثاني، أو قيمتين مفصولتين بعلامات جدولة.",
       "finishConnect": "الانتهاء والاتصال",
@@ -1577,11 +1582,14 @@
       "saveFailed": "لا يمكن حفظ الاتصال",
       "comingSoon": "التالي: إصدار إيصالات العميل من التطبيق.",
       "errors": {
+        "edge_function_not_deployed": "دالة greeninvoice-connect غير منشورة على مشروع Supabase هذا (404). انشرها بـ: supabase functions deploy greeninvoice-connect أو من لوحة Supabase → Edge Functions.",
         "invoke_network": "لا يمكن الوصول إلى الخادم. حاول ثانية.",
         "invalid_session": "الرجاء تسجيل الدخول مرة أخرى.",
         "forbidden_not_admin": "يمكن لمسؤول الأعمال فقط توصيل الفاتورة الخضراء.",
         "greeninvoice_auth_failed": "رفضت الفاتورة الخضراء أوراق الاعتماد هذه.",
         "missing_credentials": "معرف مفتاح API والسر مطلوبان.",
+        "missing_caller_context": "لم يتم اكتشاف مستخدم مسجل. سجّل الخروج ثم الدخول مرة أخرى.",
+        "forbidden_wrong_business": "المستخدم لا ينتمي إلى هذا العمل. سجّل الدخول مرة أخرى.",
         "unknown": "حدث خطأ ما. حاول ثانية."
       }
     }

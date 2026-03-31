@@ -1350,6 +1350,11 @@
       "shrinkBrowser": "הקטן חלון",
       "tryReadFromPage": "נסה לקרוא מהדף",
       "pasteBlockLabel": "הדבקת פרטי המפתח",
+      "credentialsSection": "פרטי מפתח API",
+      "keyIdPlaceholder": "מזהה המפתח (UUID)",
+      "testConnection": "בדיקת חיבור",
+      "connectionVerified": "החיבור תקין — חשבונית ירוקה אישרה את המפתחות.",
+      "testFailedTitle": "בדיקת החיבור נכשלה",
       "pastePlaceholder": "שורה 1: מזהה המפתח (UUID)\nשורה 2: המפתח הסודי",
       "pasteInvalid": "לא זוהו שני ערכים. הדבק שורת מזהה ואז שורת סוד, או שני ערכים מופרדים בטאב.",
       "finishConnect": "סיים וחבר לאפליקציה",
@@ -1365,11 +1370,14 @@
       "saveFailed": "שמירת החיבור נכשלה",
       "comingSoon": "המשך מתוכנן: הפקת קבלות ללקוחות דרך האפליקציה.",
       "errors": {
+        "edge_function_not_deployed": "פונקציית הענן greeninvoice-connect לא נפרסה בפרויקט Supabase (שגיאת 404). יש לפרוס: supabase functions deploy greeninvoice-connect (או דרך לוח הבקרה של Supabase → Edge Functions).",
         "invoke_network": "אין חיבור לשרת. נסה שוב.",
         "invalid_session": "יש להתחבר מחדש.",
         "forbidden_not_admin": "רק מנהל העסק יכול לחבר את חשבונית ירוקה.",
         "greeninvoice_auth_failed": "המפתחות נדחו על ידי חשבונית ירוקה. בדוק את המזהה והסוד.",
         "missing_credentials": "חסר מזהה מפתח או מפתח סודי.",
+        "missing_caller_context": "לא זוהה משתמש מחובר. נסה לצאת ולהתחבר שוב.",
+        "forbidden_wrong_business": "הזהות לא תואמת לעסק. נסה להתחבר מחדש.",
         "unknown": "אירעה שגיאה. נסה שוב."
       }
     }

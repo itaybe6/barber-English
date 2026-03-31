@@ -1559,6 +1559,11 @@
       "shrinkBrowser": "Сжать окно",
       "tryReadFromPage": "Попробуйте прочитать со страницы",
       "pasteBlockLabel": "Вставьте ключевые данные",
+      "credentialsSection": "Данные ключа API",
+      "keyIdPlaceholder": "Идентификатор ключа (UUID)",
+      "testConnection": "Проверить подключение",
+      "connectionVerified": "Подключение в порядке — Green Invoice принял эти учётные данные.",
+      "testFailedTitle": "Проверка подключения не удалась",
       "pastePlaceholder": "Строка 1: идентификатор ключа (UUID)\nСтрока 2: секретный ключ",
       "pasteInvalid": "Не удалось проанализировать два значения. Вставьте идентификатор в первую строку и секрет во вторую или два значения, разделенных табуляцией.",
       "finishConnect": "Завершить и подключить",
@@ -1574,11 +1579,14 @@
       "saveFailed": "Не удалось сохранить соединение",
       "comingSoon": "Далее: выдавать клиентам чеки из приложения.",
       "errors": {
+        "edge_function_not_deployed": "Edge-функция greeninvoice-connect не развёрнута в этом проекте Supabase (404). Выполните: supabase functions deploy greeninvoice-connect или разверните через Dashboard → Edge Functions.",
         "invoke_network": "Не удалось связаться с сервером. Попробуйте еще раз.",
         "invalid_session": "Пожалуйста, войдите снова.",
         "forbidden_not_admin": "Подключить Green Invoice может только бизнес-администратор.",
         "greeninvoice_auth_failed": "Компания Green Invoice отклонила эти учетные данные.",
         "missing_credentials": "Требуется идентификатор и секрет ключа API.",
+        "missing_caller_context": "Вход не обнаружен. Выйдите и войдите снова.",
+        "forbidden_wrong_business": "Пользователь не относится к этому бизнесу. Войдите снова.",
         "unknown": "Что-то пошло не так. Попробуйте еще раз."
       }
     }

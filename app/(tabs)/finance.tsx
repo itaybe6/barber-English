@@ -244,7 +244,11 @@ export default function FinanceScreen() {
     if (serverMessage && code === 'greeninvoice_auth_failed') return serverMessage;
     const key = `finance.greenInvoice.errors.${code}` as const;
     const translated = t(key);
-    return translated !== key ? translated : t('finance.greenInvoice.errors.unknown');
+    const base = translated !== key ? translated : t('finance.greenInvoice.errors.unknown');
+    if (code === 'invoke_network' && serverMessage) {
+      return `${base}\n\n${serverMessage}`;
+    }
+    return base;
   };
 
   const handleGreenInvoiceSubmitCredentials = async (apiKeyId: string, apiSecret: string) => {

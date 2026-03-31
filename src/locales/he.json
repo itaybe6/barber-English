@@ -670,7 +670,8 @@
       "saveFailed": "שמירת השירות נכשלה",
       "saveSuccess": "השירות נשמר בהצלחה",
       "orderSaveFailed": "לא ניתן לשמור את סדר השירות. נסה/י שוב.",
-      "reorderHint": "גרור את ≡ כדי לשנות את סדר השירותים"
+      "reorderHint": "גרור את ≡ כדי לשנות את סדר השירותים",
+      "fabAddHint": "לחיצה ארוכה על שורה לסידור · + למטה להוספה"
     },
     "broadcastTemplates": {
       "promotion": { "title": "מבצע חדש! 🎉", "description": "הודעה על מבצע או הנחה" },

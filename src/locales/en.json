@@ -647,7 +647,8 @@
       "saveFailed": "Failed to save service",
       "saveSuccess": "Service saved successfully",
       "orderSaveFailed": "Could not save service order. Try again.",
-      "reorderHint": "Drag ≡ to reorder services"
+      "reorderHint": "Drag ≡ to reorder services",
+      "fabAddHint": "Long-press a row to reorder · + below to add"
     },
     "broadcastTemplates": {
       "promotion": { "title": "New Promotion! 🎉", "description": "Message about promotion or discount" },

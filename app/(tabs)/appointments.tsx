@@ -61,7 +61,7 @@ import ConstraintEditModal from '@/components/ConstraintEditModal';
 import CalendarReminderEditorModal from '@/components/CalendarReminderEditorModal';
 import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from 'react-i18next';
-import dayjs from 'dayjs';
+import dayjs, { type Dayjs } from 'dayjs';
 import { FlashList, FlashListProps } from '@shopify/flash-list';
 import Animated, {
   setNativeProps,
@@ -184,8 +184,9 @@ const _baseDaySize = _screenWidth / (_daysInWeekToDisplay + 1);
 const _daySize = Math.max(_baseDaySize, 64);
 const _hourSize = Math.max(_daySize * 1.35, 78);
 const _extraPaddingBottom = _hourSize;
-const _startOfDay = dayjs().startOf('day').set('hour', 0).set('minute', 0);
-const _hourBlocks = [...Array(25).keys()].map((hour) => _startOfDay.add(hour, 'hour'));
+/** תצוגת יומן שבועית (אדמין): חלון שעות קבוע, בנפרד משעות העסק של התצוגה היומית */
+const WEEK_GRID_VIEW_START = '07:00';
+const WEEK_GRID_VIEW_END = '22:00';
 
 Animated.addWhitelistedNativeProps?.({
   contentOffset: true,
@@ -245,20 +246,29 @@ function _isFullDayConstraint(c: BusinessConstraint, mf: (t?: string | null) => 
 function layoutConstraintOnWeekColumn(
   c: BusinessConstraint,
   hourRowHeight: number,
-  mf: (t?: string | null) => number
+  mf: (t?: string | null) => number,
+  gridStartMin: number,
+  gridHourCount: number
 ): { top: number; height: number } {
+  const gridHeightPx = gridHourCount * hourRowHeight;
   if (_isFullDayConstraint(c, mf)) {
-    return { top: 2, height: 24 * hourRowHeight - 4 };
+    return { top: 2, height: gridHeightPx - 4 };
   }
   const startM = mf(c.start_time);
   let endM = mf(c.end_time);
   if (endM <= startM) endM = startM + 30;
-  const top = (startM / 60) * hourRowHeight + 2;
-  const rawH = ((endM - startM) / 60) * hourRowHeight;
+  const gridEndMin = gridStartMin + gridHourCount * 60;
+  const visStart = Math.max(startM, gridStartMin);
+  const visEnd = Math.min(endM, gridEndMin);
+  if (visEnd <= gridStartMin || visStart >= gridEndMin) {
+    return { top: 0, height: 0 };
+  }
+  const top = ((visStart - gridStartMin) / 60) * hourRowHeight + 2;
+  const rawH = ((visEnd - visStart) / 60) * hourRowHeight;
   const height = Math.max(34, rawH - 4);
-  const maxTop = 24 * hourRowHeight - 6;
+  const maxTop = gridHeightPx - 6;
   const clampedTop = Math.min(Math.max(0, top), maxTop);
-  const clampedH = Math.min(height, 24 * hourRowHeight - clampedTop - 2);
+  const clampedH = Math.min(height, gridHeightPx - clampedTop - 2);
   return { top: clampedTop, height: Math.max(32, clampedH) };
 }
 
@@ -652,6 +662,9 @@ const WeekDayColumn = memo(
     reminders,
     columnWidth,
     hourRowHeight,
+    weekHourBlocks,
+    weekGridStartMin,
+    weekGridHourCount,
     primaryColor,
     onOpenAppointment,
     onPressReminder,
@@ -665,6 +678,9 @@ const WeekDayColumn = memo(
     reminders: CalendarReminder[];
     columnWidth: number;
     hourRowHeight: number;
+    weekHourBlocks: Dayjs[];
+    weekGridStartMin: number;
+    weekGridHourCount: number;
     primaryColor: string;
     onOpenAppointment: (apt: AvailableTimeSlot, anchor?: AnchorRect) => void;
     onPressReminder: (r: CalendarReminder) => void;
@@ -722,8 +738,14 @@ const WeekDayColumn = memo(
           weekStyles.borderRight,
         ]}
       >
-        <View style={{ height: hourRowHeight * 24, position: 'relative' }}>
-          {_hourBlocks.map((hourBlock, i) => {
+        <View
+          style={{
+            height: hourRowHeight * weekGridHourCount,
+            position: 'relative',
+            overflow: 'hidden',
+          }}
+        >
+          {weekHourBlocks.map((hourBlock, i) => {
             const hourDate = hourBlock.toDate();
             return (
               <View
@@ -746,7 +768,14 @@ const WeekDayColumn = memo(
           })}
 
           {constraints.map((c) => {
-            const { top, height } = layoutConstraintOnWeekColumn(c, hourRowHeight, minutesFromMidnight);
+            const { top, height } = layoutConstraintOnWeekColumn(
+              c,
+              hourRowHeight,
+              minutesFromMidnight,
+              weekGridStartMin,
+              weekGridHourCount
+            );
+            if (height < 1) return null;
             const startLbl = formatTime12Hour(String(c.start_time || '').slice(0, 5));
             const endLbl = formatTime12Hour(String(c.end_time || '').slice(0, 5));
             return (
@@ -784,8 +813,13 @@ const WeekDayColumn = memo(
           {reminders.map((r) => {
             const startM = minutesFromMidnight(r.start_time);
             const durationMinutes = r.duration_minutes || 30;
-            const top = (startM / 60) * hourRowHeight;
-            const height = (durationMinutes / 60) * hourRowHeight;
+            const endM = startM + durationMinutes;
+            const gridEndMin = weekGridStartMin + weekGridHourCount * 60;
+            if (endM <= weekGridStartMin || startM >= gridEndMin) return null;
+            const visStart = Math.max(startM, weekGridStartMin);
+            const visEnd = Math.min(endM, gridEndMin);
+            const top = ((visStart - weekGridStartMin) / 60) * hourRowHeight;
+            const height = ((visEnd - visStart) / 60) * hourRowHeight;
             const pal = reminderPalette(r.color_key);
             const splitWithAppt = reminderIdsOverlappingAppt.has(r.id);
             return (
@@ -820,8 +854,13 @@ const WeekDayColumn = memo(
           {appts.map((apt) => {
             const aptMinutes = minutesFromMidnight(apt.slot_time);
             const durationMinutes = apt.duration_minutes || 30;
-            const top = Math.max(0, (aptMinutes / 60) * hourRowHeight + 2);
-            const height = (durationMinutes / 60) * hourRowHeight;
+            const aptEnd = aptMinutes + durationMinutes;
+            const gridEndMin = weekGridStartMin + weekGridHourCount * 60;
+            if (aptEnd <= weekGridStartMin || aptMinutes >= gridEndMin) return null;
+            const visStart = Math.max(aptMinutes, weekGridStartMin);
+            const visEnd = Math.min(aptEnd, gridEndMin);
+            const top = ((visStart - weekGridStartMin) / 60) * hourRowHeight + 2;
+            const height = ((visEnd - visStart) / 60) * hourRowHeight;
             const clientName = apt.client_name || 'לקוח';
             const serviceName = apt.service_name || 'שירות';
             const hasPhone = !!apt.client_phone;
@@ -1480,6 +1519,23 @@ export default function AdminAppointmentsScreen() {
     return labels;
   }, [dayStart, dayEnd]);
 
+  /** Week grid: 07:00–22:00, one row per hour (not tied to business-hours day strip). */
+  const weekTimeline = useMemo(() => {
+    const [sh, smin] = WEEK_GRID_VIEW_START.split(':').map((x) => parseInt(x, 10));
+    const [eh, emin] = WEEK_GRID_VIEW_END.split(':').map((x) => parseInt(x, 10));
+    const startMin = (sh || 0) * 60 + (smin || 0);
+    const endMin = (eh || 0) * 60 + (emin || 0);
+    const spanMin = Math.max(60, endMin - startMin);
+    const hourCount = spanMin / 60;
+    const labelBlocks = Array.from({ length: hourCount }, (_, i) => {
+      const m = startMin + i * 60;
+      const hh = Math.floor(m / 60);
+      const mm = m % 60;
+      return dayjs().startOf('day').hour(hh).minute(mm).second(0).millisecond(0);
+    });
+    return { startMin, endMin, hourCount, labelBlocks };
+  }, []);
+
   const displayDayConstraints = useMemo(
     () => mergeConstraintsForDisplay(dayConstraints),
     [dayConstraints]
@@ -2131,14 +2187,11 @@ export default function AdminAppointmentsScreen() {
                   scrollEnabled={false}
                   showsVerticalScrollIndicator={false}
                 >
-                  {_hourBlocks.map((hourBlock, idx) => {
+                  {weekTimeline.labelBlocks.map((hourBlock, idx) => {
                     const hourDate = hourBlock.toDate();
-                    const h = hourDate.getHours();
                     return (
                       <View key={`wk-hour-${idx}`} style={[weekStyles.hourRow, { height: gridDims.hourSize }]}>
-                        <Text style={[weekStyles.hourText, h === 0 && { opacity: 0 }]}>
-                          {_formatHebrewTimeLabel(hourDate)}
-                        </Text>
+                        <Text style={weekStyles.hourText}>{_formatHebrewTimeLabel(hourDate)}</Text>
                       </View>
                     );
                   })}
@@ -2188,6 +2241,9 @@ export default function AdminAppointmentsScreen() {
                           index={index}
                           columnWidth={gridDims.daySize}
                           hourRowHeight={gridDims.hourSize}
+                          weekHourBlocks={weekTimeline.labelBlocks}
+                          weekGridStartMin={weekTimeline.startMin}
+                          weekGridHourCount={weekTimeline.hourCount}
                           primaryColor={calendarPrimary}
                           appts={rangeAppointments.get(item.formatted) ?? []}
                           constraints={mergeConstraintsForDisplay(rangeConstraints.get(item.formatted) ?? [])}

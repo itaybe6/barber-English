@@ -615,19 +615,21 @@ export default function WaitlistScreen() {
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: '#fff' }}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      <View style={styles.headerLikeAppointments}>
-        <View style={styles.headerTopRow}>
-          <View style={styles.headerTitleColumn}>
-            <Text style={[styles.headerTitle, { color: colors.primary }]}>{t('admin.waitlist.title', 'Waitlist')}</Text>
-            <Text style={styles.headerSubtitle}>{headerSubtitle}</Text>
-          </View>
-          <View style={styles.monthBadge}>
-            <Text style={styles.monthText} numberOfLines={2}>
-              {headerBadgeText}
-            </Text>
+      {waitlistCalendarView !== 'week' ? (
+        <View style={styles.headerLikeAppointments}>
+          <View style={styles.headerTopRow}>
+            <View style={styles.headerTitleColumn}>
+              <Text style={[styles.headerTitle, { color: colors.primary }]}>{t('admin.waitlist.title', 'Waitlist')}</Text>
+              <Text style={styles.headerSubtitle}>{headerSubtitle}</Text>
+            </View>
+            <View style={styles.monthBadge}>
+              <Text style={styles.monthText} numberOfLines={2}>
+                {headerBadgeText}
+              </Text>
+            </View>
           </View>
         </View>
-      </View>
+      ) : null}
 
       {waitlistCalendarView === 'day' ? (
         <View style={{ backgroundColor: GC_SURFACE }}>

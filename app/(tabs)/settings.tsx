@@ -17,10 +17,8 @@ import { supabase, getBusinessId } from '@/lib/supabase';
 import { businessProfileApi, isClientApprovalRequired, isClientSwapEnabled } from '@/lib/api/businessProfile';
 import type { BusinessProfile } from '@/lib/supabase';
 import { 
-  HelpCircle, 
   LogOut, 
   ChevronLeft,
-  ChevronRight,
   ChevronDown,
   ChevronUp,
   Pencil,
@@ -39,7 +37,6 @@ import {
   Plus,
   Bell,
 } from 'lucide-react-native';
-import { Users } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -49,7 +46,6 @@ import InlineEditableRow from '@/components/InlineEditableRow';
 import { ColorPicker } from '@/components/ColorPicker';
 import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
-import { TabButton } from '@/components/shopify-tab-bar/tab-button';
 import AddAdminModal from '@/components/AddAdminModal';
 import DeleteAccountModal from '@/components/DeleteAccountModal';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
@@ -103,8 +99,6 @@ export default function SettingsScreen() {
   }, [i18n.language]);
 
   // Notification modal states
-  const [showSupportModal, setShowSupportModal] = useState(false);
-  
   // Add admin modal state
   const [showAddAdminModal, setShowAddAdminModal] = useState(false);
   
@@ -123,7 +117,6 @@ export default function SettingsScreen() {
   const [servicesError, setServicesError] = useState<string | null>(null);
   const [expandedServiceId, setExpandedServiceId] = useState<string | null>(null);
   const [isAddingService, setIsAddingService] = useState(false);
-  const [servicesReorderMode, setServicesReorderMode] = useState(false);
 
   // Business profile state
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
@@ -1267,7 +1260,6 @@ export default function SettingsScreen() {
   };
 
   const handleOpenAddService = () => {
-    setServicesReorderMode(false);
     setAddSvcName('');
     setAddSvcPrice('0');
     setAddSvcDuration('60');
@@ -1369,7 +1361,7 @@ export default function SettingsScreen() {
   // handleSendNotification removed (handled by AdminBroadcastComposer)
 
   const handleCallSupport = async () => {
-    const email = 'slotlysapp@gmail.com';
+    const email = 'we.toriaapps@gmail.com';
     const subject = 'Support Request';
     const body = 'Hello Slotlys Support Team,\n\nI need assistance with:\n\n';
     const url = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
@@ -1483,7 +1475,6 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     if (activeSettingsTab !== 'services') {
-      setServicesReorderMode(false);
       setExpandedServiceId(null);
       setIsAddingService(false);
       setShowDurationPicker(false);
@@ -1495,7 +1486,6 @@ export default function SettingsScreen() {
     setServicesError(null);
     setIsAddingService(false);
     setExpandedServiceId(null);
-    setServicesReorderMode(false);
     void (async () => {
       try {
         const data = await servicesApi.getAllServices();
@@ -1538,24 +1528,44 @@ export default function SettingsScreen() {
   const goNextRec = () => goToRecStep(recStep + 1);
   const goBackRec = () => goToRecStep(recStep - 1);
 
-  // Employees management modal state
-  const [showManageEmployeesModal, setShowManageEmployeesModal] = useState(false);
+  // Employees tab (inline list + FAB)
   const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
-  const [manageEmpSearch, setManageEmpSearch] = useState('');
   const [bookingOpenDaysByUser, setBookingOpenDaysByUser] = useState<Record<string, number>>({});
   const [expandedEmployeeId, setExpandedEmployeeId] = useState<string | null>(null);
   const [savingBookingDaysForUser, setSavingBookingDaysForUser] = useState<string | null>(null);
-  
-  const filteredAdmins = useMemo(() => {
-    const q = (manageEmpSearch || '').trim().toLowerCase();
-    if (!q) return adminUsers;
-    return (adminUsers || []).filter((u: any) => {
-      const name = String(u?.name || '').toLowerCase();
-      const phone = String(u?.phone || '').toLowerCase();
-      return name.includes(q) || phone.includes(q);
-    });
-  }, [adminUsers, manageEmpSearch]);
+
+  const loadAdminEmployeesForTab = useCallback(async () => {
+    setIsLoadingEmployees(true);
+    try {
+      const list = await usersApi.getAdminUsers();
+      const filtered = (list || []).filter((u: any) => u.id !== (user as any)?.id);
+      setAdminUsers(filtered);
+      const daysMap: Record<string, number> = {};
+      for (const emp of filtered) {
+        try {
+          const days = await businessProfileApi.getBookingOpenDaysForUser(emp.id);
+          daysMap[emp.id] = days;
+        } catch (e) {
+          console.error('Error loading booking days for user:', emp.id, e);
+          daysMap[emp.id] = 7;
+        }
+      }
+      setBookingOpenDaysByUser(daysMap);
+    } catch {
+      setAdminUsers([]);
+    } finally {
+      setIsLoadingEmployees(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (activeSettingsTab !== 'employees' || !canSeeAddEmployee) {
+      setExpandedEmployeeId(null);
+      return;
+    }
+    void loadAdminEmployeesForTab();
+  }, [activeSettingsTab, canSeeAddEmployee, loadAdminEmployeesForTab]);
 
   const handleSaveBookingDaysForUser = async (userId: string, days: number) => {
     setSavingBookingDaysForUser(userId);
@@ -2440,17 +2450,7 @@ export default function SettingsScreen() {
 
         {activeSettingsTab === 'services' && (
         <View style={[styles.settingsTabPanel, styles.settingsTabPanelServices]}>
-            <View style={styles.servicesModalTitleBar}>
-              <Text style={styles.servicesModalTitlePlain}>
-                {t('settings.services.edit', 'עריכת שירותים')}
-              </Text>
-              {!isLoadingServices && editableServices.length > 0 && (
-                <Text style={styles.servicesModalTitleCount}>
-                  {editableServices.length} {t('settings.services.servicesCount', 'שירותים')}
-                </Text>
-              )}
-            </View>
-            <View style={styles.servicesModalBodyColumn}>
+            <View style={[styles.servicesModalBodyColumn, styles.servicesModalBodyGrouped]}>
               <GestureHandlerRootView style={{ flex: 1 }}>
               <DraggableFlatList<Service>
                 style={{ flex: 1 }}
@@ -2458,7 +2458,7 @@ export default function SettingsScreen() {
                 contentContainerStyle={[
                   styles.modalContentContainer,
                   styles.servicesModalScrollContent,
-                  { paddingBottom: insets.bottom + 88 },
+                  { paddingTop: 10, paddingBottom: insets.bottom + 80 },
                 ]}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
@@ -2492,14 +2492,6 @@ export default function SettingsScreen() {
                   </View>
                 )}
 
-                {servicesReorderMode && !isLoadingServices && (
-                  <View style={styles.svcReorderHint}>
-                    <Text style={styles.svcReorderHintText}>
-                      {t('settings.services.reorderHint', 'גרור את ≡ כדי לשנות את סדר השירותים')}
-                    </Text>
-                  </View>
-                )}
-
                 {!isLoadingServices && !servicesError && editableServices.length === 0 && !isAddingService && (
                   <View style={[styles.svcEmptyState, styles.servicesModalFullWidthBlock]}>
                     <View style={[styles.svcEmptyIcon, { backgroundColor: `${businessColors.primary}15` }]}>
@@ -2507,32 +2499,28 @@ export default function SettingsScreen() {
                     </View>
                     <Text style={styles.svcEmptyTitle}>{t('settings.services.emptyTitle','No services yet')}</Text>
                     <Text style={styles.svcEmptySubtitle}>{t('settings.services.emptySubtitle','Add your first service to get started')}</Text>
-                    <TouchableOpacity
-                      style={[styles.svcSaveButton, { backgroundColor: businessColors.primary, marginTop: 16 }]}
-                      onPress={handleOpenAddService}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={styles.svcSaveButtonText}>+ {t('settings.services.add','Add service')}</Text>
-                    </TouchableOpacity>
+                    <Text style={[styles.svcEmptySubtitle, { marginTop: 10, textAlign: 'center' }]}>
+                      {t('settings.services.fabAddHint', 'Long-press a row to reorder · + below to add')}
+                    </Text>
                   </View>
                 )}
                 </>
                 }
                 renderItem={({ item: svc, drag, isActive }) => {
-                  const isExpanded = !servicesReorderMode && expandedServiceId === svc.id;
+                  const isExpanded = expandedServiceId === svc.id;
                   const isSaving = savingServiceId === svc.id;
                   const justSaved = savedServiceId === svc.id;
                   return (
                     <ScaleDecorator activeScale={1.03}>
                     <View style={styles.svcListCell}>
                     <Pressable
-                      onLongPress={servicesReorderMode ? drag : undefined}
-                      delayLongPress={200}
+                      onLongPress={!isExpanded ? drag : undefined}
+                      delayLongPress={280}
                       disabled={isActive}
-                      style={({ pressed }) => (pressed && servicesReorderMode ? { opacity: 0.95 } : undefined)}
+                      style={({ pressed }) => (pressed && isActive ? { opacity: 0.95 } : undefined)}
                     >
                     <Swipeable
-                      enabled={!servicesReorderMode}
+                      enabled
                       friction={2}
                       rightThreshold={40}
                       renderRightActions={() => (
@@ -2550,39 +2538,26 @@ export default function SettingsScreen() {
                         <View style={[styles.svcCardAccent, { backgroundColor: businessColors.primary }]} />
                         {!isExpanded ? (
                           <View style={styles.svcListCollapsedRow}>
-                            {servicesReorderMode ? (
-                              <Pressable
-                                onPressIn={drag}
-                                style={styles.svcDragHandle}
-                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                              >
-                                <View style={styles.svcDragLine} />
-                                <View style={styles.svcDragLine} />
-                                <View style={styles.svcDragLine} />
-                              </Pressable>
-                            ) : (
-                              <TouchableOpacity
-                                style={styles.svcListChevronHit}
-                                activeOpacity={0.85}
-                                onPress={() => setExpandedServiceId(prev => (prev === svc.id ? null : svc.id))}
-                              >
-                                {justSaved ? (
-                                  <View style={[styles.svcSavedBadge, { backgroundColor: `${businessColors.primary}15` }]}>
-                                    <Check size={14} color={businessColors.primary} />
-                                    <Text style={[styles.svcSavedText, { color: businessColors.primary }]}>
-                                      {t('saved','Saved')}
-                                    </Text>
-                                  </View>
-                                ) : (
-                                  <ChevronDown size={18} color={Colors.subtext} />
-                                )}
-                              </TouchableOpacity>
-                            )}
+                            <TouchableOpacity
+                              style={styles.svcListChevronHit}
+                              activeOpacity={0.85}
+                              onPress={() => setExpandedServiceId(prev => (prev === svc.id ? null : svc.id))}
+                            >
+                              {justSaved ? (
+                                <View style={[styles.svcSavedBadge, { backgroundColor: `${businessColors.primary}15` }]}>
+                                  <Check size={14} color={businessColors.primary} />
+                                  <Text style={[styles.svcSavedText, { color: businessColors.primary }]}>
+                                    {t('saved','Saved')}
+                                  </Text>
+                                </View>
+                              ) : (
+                                <ChevronDown size={18} color={Colors.subtext} />
+                              )}
+                            </TouchableOpacity>
                             <TouchableOpacity
                               style={styles.svcListCollapsedMain}
                               activeOpacity={0.85}
-                              disabled={servicesReorderMode}
-                              onPress={() => !servicesReorderMode && setExpandedServiceId(prev => (prev === svc.id ? null : svc.id))}
+                              onPress={() => setExpandedServiceId(prev => (prev === svc.id ? null : svc.id))}
                             >
                               <View style={styles.svcListCollapsedTextCol}>
                                 <View style={styles.svcCardInfo}>
@@ -2609,21 +2584,10 @@ export default function SettingsScreen() {
                               </View>
                             </TouchableOpacity>
                             <View style={styles.svcListThumbOuter}>
-                              {servicesReorderMode && (
-                                <TouchableOpacity
-                                  style={styles.svcDeleteBadge}
-                                  onPress={() => handleDeleteService(svc.id)}
-                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                  activeOpacity={0.8}
-                                >
-                                  <Trash2 size={13} color="#fff" />
-                                </TouchableOpacity>
-                              )}
                               <TouchableOpacity
-                                onPress={() => !servicesReorderMode && handlePickServiceImage(svc.id)}
+                                onPress={() => handlePickServiceImage(svc.id)}
                                 activeOpacity={0.85}
                                 style={styles.svcListThumbWrap}
-                                disabled={servicesReorderMode}
                               >
                                 {svc.image_url ? (
                                   <Image source={{ uri: svc.image_url }} style={styles.svcListThumb} resizeMode="cover" />
@@ -2772,35 +2736,22 @@ export default function SettingsScreen() {
 
               </GestureHandlerRootView>
 
-              <View style={[styles.servicesModalTabBarRoot, { bottom: insets.bottom + 24 }]} pointerEvents="box-none">
-                <View style={[styles.servicesModalTabBarInner, styles.servicesModalTabBarRowLtr]}>
-                  <View style={[styles.servicesModalTabPill, styles.servicesModalTabPillRow, styles.servicesModalTabBorder, styles.servicesModalTabShadow]}>
-                    <TabButton
-                      focused={false}
-                      activeColor={businessColors.primary}
-                      onPress={handleOpenAddService}
-                    >
-                      <Plus size={22} color="#8a8a8a" />
-                    </TabButton>
-                    <TabButton
-                      focused={servicesReorderMode}
-                      activeColor={businessColors.primary}
-                      onPress={() =>
-                        setServicesReorderMode((v) => {
-                          const next = !v;
-                          if (next) setExpandedServiceId(null);
-                          return next;
-                        })
-                      }
-                    >
-                      <Pencil
-                        size={22}
-                        color={servicesReorderMode ? '#ffffff' : '#8a8a8a'}
-                      />
-                    </TabButton>
-                  </View>
-                </View>
-              </View>
+              <TouchableOpacity
+                style={[
+                  styles.servicesAddFab,
+                  {
+                    backgroundColor: businessColors.primary,
+                    bottom: insets.bottom + 20,
+                    left: Math.max(16, insets.left + 8),
+                  },
+                ]}
+                onPress={handleOpenAddService}
+                activeOpacity={0.88}
+                accessibilityRole="button"
+                accessibilityLabel={t('settings.services.add', 'הוספת שירות')}
+              >
+                <Plus size={28} color="#FFFFFF" strokeWidth={2.5} />
+              </TouchableOpacity>
             </View>
         </View>
         )}
@@ -2884,58 +2835,241 @@ export default function SettingsScreen() {
         )}
 
         {canSeeAddEmployee && activeSettingsTab === 'employees' && (
-        <View style={styles.settingsTabPanel}>
-          <View style={styles.settingsAccordionBody}>
-              {renderSettingItem(
-                <User size={20} color={businessColors.primary} />,
-                t('settings.admin.addEmployee', 'Add employee user'),
-                t('settings.admin.addEmployeeSubtitle', 'Add another employee to the system'),
-                undefined,
-                () => setShowAddAdminModal(true)
-              )}
-              {renderSettingItem(
-                <Users size={20} color={businessColors.primary} />,
-                t('settings.admin.manageEmployees', 'Manage employees'),
-                t('settings.admin.manageEmployeesSubtitle', 'Remove employees from this business'),
-                undefined,
-                async () => {
-                  setShowManageEmployeesModal(true);
-                  setIsLoadingEmployees(true);
-                  try {
-                    const list = await usersApi.getAdminUsers();
-                    const filtered = (list || []).filter((u: any) => u.id !== (user as any)?.id);
-                    setAdminUsers(filtered);
-                    const daysMap: Record<string, number> = {};
-                    for (const emp of filtered) {
-                      try {
-                        const days = await businessProfileApi.getBookingOpenDaysForUser(emp.id);
-                        daysMap[emp.id] = days;
-                      } catch (e) {
-                        console.error('Error loading booking days for user:', emp.id, e);
-                        daysMap[emp.id] = 7;
-                      }
-                    }
-                    setBookingOpenDaysByUser(daysMap);
-                  } finally {
-                    setIsLoadingEmployees(false);
-                  }
-                }
-              )}
-          </View>
+        <View style={[styles.settingsTabPanel, styles.settingsTabPanelServices]}>
+            <View style={[styles.servicesModalBodyColumn, styles.servicesModalBodyGrouped]}>
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={[styles.modalContentContainer, { paddingTop: 8, paddingBottom: insets.bottom + 80 }]}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
+                {isLoadingEmployees ? (
+                  <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                    <ActivityIndicator size="large" color={businessColors.primary} />
+                    <Text style={{ marginTop: 12, color: Colors.subtext }}>{t('common.loading', 'Loading...')}</Text>
+                  </View>
+                ) : (
+                  <View style={{ marginTop: 0 }}>
+                    {adminUsers.length === 0 ? (
+                      <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                        <Ionicons name="people-outline" size={36} color={Colors.subtext} />
+                        <Text style={{ marginTop: 8, color: Colors.subtext, textAlign: 'center' }}>
+                          {t('settings.admin.noEmployees', 'No employees found')}
+                        </Text>
+                      </View>
+                    ) : (
+                      adminUsers.map((adm: any) => {
+                        const isExpanded = expandedEmployeeId === adm.id;
+                        const currentBookingDays = bookingOpenDaysByUser[adm.id] ?? 7;
+                        const isSaving = savingBookingDaysForUser === adm.id;
+                        return (
+                          <View key={adm.id} style={{ marginBottom: 10 }}>
+                            <Swipeable
+                              friction={2}
+                              rightThreshold={28}
+                              renderRightActions={() => (
+                                <TouchableOpacity
+                                  style={styles.swipeDeleteAction}
+                                  activeOpacity={0.85}
+                                  onPress={() => {
+                                    if (adm.id === user?.id) {
+                                      Alert.alert(t('settings.admin.actionNotAllowed', 'Action not allowed'), t('settings.admin.cannotRemoveSelf', 'You cannot remove yourself.'));
+                                      return;
+                                    }
+                                    Alert.alert(
+                                      t('settings.admin.removeEmployeeTitle', 'Remove employee'),
+                                      `${t('settings.admin.removeEmployeeConfirm', 'Are you sure you want to remove')} ${adm.name || t('settings.admin.thisEmployee', 'this employee')}?`,
+                                      [
+                                        { text: t('cancel', 'Cancel'), style: 'cancel' },
+                                        {
+                                          text: t('settings.admin.remove', 'Remove'),
+                                          style: 'destructive',
+                                          onPress: async () => {
+                                            const ok = await usersApi.deleteUserAndAllDataById(adm.id);
+                                            if (ok) {
+                                              setAdminUsers((prev) => prev.filter((u) => u.id !== adm.id));
+                                              Alert.alert(t('success.generic', 'Success'), t('settings.admin.removeSuccess', 'Employee deleted successfully'));
+                                            } else {
+                                              Alert.alert(t('error.generic', 'Error'), t('settings.admin.removeFailed', 'Failed to remove employee'));
+                                            }
+                                          },
+                                        },
+                                      ],
+                                    );
+                                  }}
+                                  accessibilityRole="button"
+                                  accessibilityLabel={t('settings.services.a11yDelete', 'Delete service')}
+                                >
+                                  <Trash2 size={20} color={'#fff'} />
+                                  <Text style={styles.swipeDeleteText}>{t('settings.services.delete', 'Delete')}</Text>
+                                </TouchableOpacity>
+                              )}
+                            >
+                              <View style={styles.iosCard}>
+                                <TouchableOpacity
+                                  style={{ flexDirection: 'row', alignItems: 'center' }}
+                                  onPress={() => setExpandedEmployeeId(isExpanded ? null : adm.id)}
+                                  activeOpacity={0.7}
+                                >
+                                  {adm.image_url ? (
+                                    <Image source={{ uri: adm.image_url }} style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12 }} resizeMode="cover" />
+                                  ) : (
+                                    <View style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12, backgroundColor: '#F2F2F7', alignItems: 'center', justifyContent: 'center' }}>
+                                      <User size={22} color={Colors.subtext} strokeWidth={1.75} />
+                                    </View>
+                                  )}
+                                  <View style={{ alignItems: 'flex-start', flex: 1 }}>
+                                    <Text style={styles.previewNotificationTitle}>{adm.name || 'Admin'}</Text>
+                                    {!!adm.phone && <Text style={styles.previewNotificationContent}>{adm.phone}</Text>}
+                                  </View>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                    {isExpanded ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
+                                    <TouchableOpacity
+                                      style={[styles.iconActionButton, { backgroundColor: '#FFECEC', borderColor: '#FFD1D1' }]}
+                                      onPress={() => {
+                                        if (adm.id === user?.id) {
+                                          Alert.alert(t('settings.admin.actionNotAllowed', 'Action not allowed'), t('settings.admin.cannotRemoveSelf', 'You cannot remove yourself.'));
+                                          return;
+                                        }
+                                        Alert.alert(
+                                          t('settings.admin.removeEmployeeTitle', 'Remove employee'),
+                                          `${t('settings.admin.removeEmployeeConfirm', 'Are you sure you want to remove')} ${adm.name || t('settings.admin.thisEmployee', 'this employee')}?`,
+                                          [
+                                            { text: t('cancel', 'Cancel'), style: 'cancel' },
+                                            {
+                                              text: t('settings.admin.remove', 'Remove'),
+                                              style: 'destructive',
+                                              onPress: async () => {
+                                                const ok = await usersApi.deleteUserAndAllDataById(adm.id);
+                                                if (ok) {
+                                                  setAdminUsers((prev) => prev.filter((u) => u.id !== adm.id));
+                                                  Alert.alert(t('success.generic', 'Success'), t('settings.admin.removeSuccess', 'Employee deleted successfully'));
+                                                } else {
+                                                  Alert.alert(t('error.generic', 'Error'), t('settings.admin.removeFailed', 'Failed to remove employee'));
+                                                }
+                                              },
+                                            },
+                                          ],
+                                        );
+                                      }}
+                                      accessibilityRole="button"
+                                      accessibilityLabel={t('settings.recurring.a11yDelete', 'Delete')}
+                                    >
+                                      <Trash2 size={20} color="#FF3B30" />
+                                    </TouchableOpacity>
+                                  </View>
+                                </TouchableOpacity>
+                                {isExpanded && (
+                                  <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: Colors.border }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                                      <Calendar size={18} color={businessColors.primary} style={{ marginRight: 8 }} />
+                                      <Text style={{ fontSize: 15, color: Colors.text, fontWeight: '500' }}>
+                                        {t('settings.profile.bookingWindow', 'Booking window (days)')}
+                                      </Text>
+                                    </View>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                      <TextInput
+                                        style={{
+                                          flex: 1,
+                                          borderWidth: 1,
+                                          borderColor: Colors.border,
+                                          borderRadius: 8,
+                                          paddingHorizontal: 12,
+                                          paddingVertical: 10,
+                                          fontSize: 15,
+                                          color: Colors.text,
+                                          backgroundColor: Colors.white,
+                                        }}
+                                        value={String(currentBookingDays)}
+                                        onChangeText={(text) => {
+                                          const num = Math.max(1, Math.min(60, Math.floor(Number(text) || 7)));
+                                          setBookingOpenDaysByUser((prev) => ({ ...prev, [adm.id]: num }));
+                                        }}
+                                        placeholder="7"
+                                        keyboardType="number-pad"
+                                        placeholderTextColor={Colors.subtext}
+                                      />
+                                      <TouchableOpacity
+                                        style={{
+                                          backgroundColor: businessColors.primary,
+                                          paddingHorizontal: 20,
+                                          paddingVertical: 10,
+                                          borderRadius: 8,
+                                          opacity: isSaving ? 0.6 : 1,
+                                        }}
+                                        onPress={() => handleSaveBookingDaysForUser(adm.id, currentBookingDays)}
+                                        disabled={isSaving}
+                                      >
+                                        {isSaving ? (
+                                          <ActivityIndicator size="small" color="#FFFFFF" />
+                                        ) : (
+                                          <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '600' }}>{t('save', 'Save')}</Text>
+                                        )}
+                                      </TouchableOpacity>
+                                    </View>
+                                    <Text style={{ fontSize: 12, color: Colors.subtext, marginTop: 8, textAlign: isRtlLanguage(i18n.language) ? 'right' : 'left' }}>
+                                      {t('settings.profile.bookingWindowHint', 'How many days ahead can clients book appointments with this employee?')}
+                                    </Text>
+                                  </View>
+                                )}
+                              </View>
+                            </Swipeable>
+                          </View>
+                        );
+                      })
+                    )}
+                  </View>
+                )}
+              </ScrollView>
+              <TouchableOpacity
+                style={[
+                  styles.servicesAddFab,
+                  {
+                    backgroundColor: businessColors.primary,
+                    bottom: insets.bottom + 20,
+                    left: Math.max(16, insets.left + 8),
+                  },
+                ]}
+                onPress={() => setShowAddAdminModal(true)}
+                activeOpacity={0.88}
+                accessibilityRole="button"
+                accessibilityLabel={t('settings.admin.addEmployee', 'Add employee user')}
+              >
+                <Plus size={28} color="#FFFFFF" strokeWidth={2.5} />
+              </TouchableOpacity>
+            </View>
         </View>
         )}
 
         {activeSettingsTab === 'security' && (
-        <View style={styles.settingsTabPanel}>
-          <View style={styles.settingsAccordionBody}>
-            {renderSettingItem(
-              <HelpCircle size={20} color={businessColors.primary} />,
-              t('settings.support.title', 'Support and help'),
-              t('settings.support.common', 'Common questions and contact'),
-              undefined,
-              () => setShowSupportModal(true)
-            )}
-          </View>
+        <View style={[styles.settingsTabPanel, styles.settingsTabPanelServices]}>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={[styles.modalContentContainer, { paddingTop: 12, paddingBottom: insets.bottom + 24 }]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.groupCard}>
+              <Text style={styles.previewNotificationTitle}>{t('settings.support.header', 'Need help? Contact Slotlys support team')}</Text>
+              <Text style={[styles.previewNotificationContent, { marginTop: 12 }]}>
+                {t(
+                  'settings.support.description',
+                  "Our dedicated support team is here to assist you with any questions or issues you may have. Whether you need help with appointments, account settings, or technical support, we're ready to help. Please use the contact button below to reach out to us directly.",
+                )}
+              </Text>
+              <View style={{ marginTop: 20, alignItems: 'center' }}>
+                <TouchableOpacity
+                  style={[styles.modalSendButton, { backgroundColor: businessColors.primary }]}
+                  onPress={handleCallSupport}
+                  activeOpacity={0.88}
+                >
+                  <Text style={[styles.modalSendText, { color: Colors.white }]}>
+                    {t('settings.support.contactNow', 'Contact us now')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
         </View>
         )}
 
@@ -3013,42 +3147,6 @@ export default function SettingsScreen() {
             </View>
           </Pressable>
         </Pressable>
-      </Modal>
-
-      {/* Support Modal */}
-      <Modal
-        visible={showSupportModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowSupportModal(false)}
-      >
-        <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#F2F2F7' }]}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity 
-              style={styles.cancellationModalCloseButton}
-              onPress={() => setShowSupportModal(false)}
-            >
-              <X size={20} color={Colors.text} />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>{t('settings.support.title','Support and help')}</Text>
-            <View style={{ width: 44 }} />
-          </View>
-          <ScrollView style={[styles.modalContent, { padding: 20 }]} showsVerticalScrollIndicator={false}>
-            <View style={styles.groupCard}>
-              <Text style={styles.previewNotificationTitle}>
-                {t('settings.support.header','Need help? Contact Slotlys support team')}
-              </Text>
-              <Text style={styles.previewNotificationContent}>
-                {t('settings.support.description',"Our dedicated support team is here to assist you with any questions or issues you may have. Whether you need help with appointments, account settings, or technical support, we're ready to help. Please use the contact button below to reach out to us directly.")}
-              </Text>
-              <View style={{ marginTop: 16, alignItems: 'center' }}>
-                <TouchableOpacity style={[styles.modalSendButton, { backgroundColor: businessColors.primary }]} onPress={handleCallSupport}>
-                  <Text style={[styles.modalSendText, { color: Colors.white }]}>{t('settings.support.contactNow','Contact us now')}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </ScrollView>
-        </SafeAreaView>
       </Modal>
 
       {/* Edit Display Name Modal */}
@@ -4058,228 +4156,6 @@ export default function SettingsScreen() {
           </Animated.View>
         </View>
       </Modal>
-      {/* Manage Employees Modal */}
-      <Modal
-        visible={showManageEmployeesModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowManageEmployeesModal(false)}
-      >
-        <SafeAreaView edges={['top']} style={[styles.modalContainer, { backgroundColor: Colors.white }]}> 
-          <View style={styles.modalHeader}>
-            <TouchableOpacity 
-              style={[styles.cancellationModalCloseButton, { marginLeft: -10 }]}
-              onPress={() => setShowManageEmployeesModal(false)}
-            >
-              <X size={20} color={Colors.text} />
-            </TouchableOpacity>
-            <Text style={[styles.modalTitle, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>{t('settings.admin.manageEmployees','Manage employees')}</Text>
-            <View style={{ width: 44 }} />
-          </View>
-          <View style={styles.modalBodyRounded}>
-          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-            <View style={styles.recurringCard}>
-              {/* Title and subtitle removed as requested */}
-              <View style={[styles.inputContainer, { marginTop: 8 }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white, borderRadius: 12, borderWidth: 0, paddingHorizontal: 12, paddingVertical: 10 }}>
-                  <Ionicons name="search-outline" size={18} color={Colors.subtext} style={{ marginRight: 8 }} />
-                  <TextInput
-                    style={[styles.textInput, { borderWidth: 0, backgroundColor: 'transparent', paddingVertical: 0, flex: 1 }]}
-                    value={manageEmpSearch}
-                    onChangeText={setManageEmpSearch}
-                    placeholder={t('common.searchByNamePhoneEmail','Search by name, phone, or email')}
-                    placeholderTextColor={Colors.subtext}
-                    textAlign="left"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    underlineColorAndroid="transparent"
-                  />
-                </View>
-              </View>
-              {isLoadingEmployees ? (
-                <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-                  <ActivityIndicator size="large" color={businessColors.primary} />
-                  <Text style={{ marginTop: 12, color: Colors.subtext }}>{t('common.loading','Loading...')}</Text>
-                </View>
-              ) : (
-                <View>
-                  {filteredAdmins.length === 0 ? (
-                    <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-                      <Ionicons name="people-outline" size={36} color={Colors.subtext} />
-                      <Text style={{ marginTop: 8, color: Colors.subtext }}>{t('settings.admin.noEmployees','No employees found')}</Text>
-                    </View>
-                  ) : (
-                    filteredAdmins.map((adm: any) => {
-                      const isExpanded = expandedEmployeeId === adm.id;
-                      const currentBookingDays = bookingOpenDaysByUser[adm.id] ?? 7;
-                      const isSaving = savingBookingDaysForUser === adm.id;
-                      
-                      return (
-                        <View key={adm.id}>
-                          <Swipeable
-                            friction={2}
-                            rightThreshold={28}
-                            renderRightActions={() => (
-                              <TouchableOpacity
-                                style={styles.swipeDeleteAction}
-                                activeOpacity={0.85}
-                                onPress={() => {
-                                  if (adm.id === user?.id) {
-                                    Alert.alert(t('settings.admin.actionNotAllowed','Action not allowed'), t('settings.admin.cannotRemoveSelf','You cannot remove yourself.'));
-                                    return;
-                                  }
-                                  Alert.alert(
-                                    t('settings.admin.removeEmployeeTitle','Remove employee'),
-                                    `${t('settings.admin.removeEmployeeConfirm','Are you sure you want to remove')} ${adm.name || t('settings.admin.thisEmployee','this employee')}?`,
-                                    [
-                                      { text: t('cancel','Cancel'), style: 'cancel' },
-                                      {
-                                        text: t('settings.admin.remove','Remove'),
-                                        style: 'destructive',
-                                        onPress: async () => {
-                                          const ok = await usersApi.deleteUserAndAllDataById(adm.id);
-                                          if (ok) {
-                                            setAdminUsers((prev) => prev.filter((u) => u.id !== adm.id));
-                                            Alert.alert(t('success.generic','Success'), t('settings.admin.removeSuccess','Employee deleted successfully'));
-                                          } else {
-                                            Alert.alert(t('error.generic','Error'), t('settings.admin.removeFailed','Failed to remove employee'));
-                                          }
-                                        }
-                                      }
-                                    ]
-                                  );
-                                }}
-                                accessibilityRole="button"
-                                accessibilityLabel={t('settings.services.a11yDelete','Delete service')}
-                              >
-                                <Trash2 size={20} color={'#fff'} />
-                                <Text style={styles.swipeDeleteText}>{t('settings.services.delete','Delete')}</Text>
-                              </TouchableOpacity>
-                            )}
-                          >
-                            <View style={styles.iosCard}>
-                              <TouchableOpacity 
-                                style={{ flexDirection: 'row', alignItems: 'center' }}
-                                onPress={() => setExpandedEmployeeId(isExpanded ? null : adm.id)}
-                                activeOpacity={0.7}
-                              >
-                                {adm.image_url ? (
-                                  <Image source={{ uri: adm.image_url }} style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12 }} resizeMode="cover" />
-                                ) : (
-                                  <View style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12, backgroundColor: '#F2F2F7', alignItems: 'center', justifyContent: 'center' }}>
-                                    <User size={22} color={Colors.subtext} strokeWidth={1.75} />
-                                  </View>
-                                )}
-                                <View style={{ alignItems: 'flex-start', flex: 1 }}>
-                                  <Text style={styles.previewNotificationTitle}>{adm.name || 'Admin'}</Text>
-                                  {!!adm.phone && <Text style={styles.previewNotificationContent}>{adm.phone}</Text>}
-                                </View>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                  {isExpanded ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
-                                  <TouchableOpacity
-                                    style={[styles.iconActionButton, { backgroundColor: '#FFECEC', borderColor: '#FFD1D1' }]}
-                                    onPress={() => {
-                                      if (adm.id === user?.id) {
-                                        Alert.alert(t('settings.admin.actionNotAllowed','Action not allowed'), t('settings.admin.cannotRemoveSelf','You cannot remove yourself.'));
-                                        return;
-                                      }
-                                      Alert.alert(
-                                        t('settings.admin.removeEmployeeTitle','Remove employee'),
-                                        `${t('settings.admin.removeEmployeeConfirm','Are you sure you want to remove')} ${adm.name || t('settings.admin.thisEmployee','this employee')}?`,
-                                        [
-                                          { text: t('cancel','Cancel'), style: 'cancel' },
-                                          {
-                                            text: t('settings.admin.remove','Remove'),
-                                            style: 'destructive',
-                                            onPress: async () => {
-                                              const ok = await usersApi.deleteUserAndAllDataById(adm.id);
-                                              if (ok) {
-                                                setAdminUsers((prev) => prev.filter((u) => u.id !== adm.id));
-                                                Alert.alert(t('success.generic','Success'), t('settings.admin.removeSuccess','Employee deleted successfully'));
-                                              } else {
-                                                Alert.alert(t('error.generic','Error'), t('settings.admin.removeFailed','Failed to remove employee'));
-                                              }
-                                            }
-                                          }
-                                        ]
-                                      );
-                                    }}
-                                    accessibilityRole="button"
-                                    accessibilityLabel={t('settings.recurring.a11yDelete','Delete')}
-                                  >
-                                    <Trash2 size={20} color="#FF3B30" />
-                                  </TouchableOpacity>
-                                </View>
-                              </TouchableOpacity>
-                              
-                              {isExpanded && (
-                                <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: Colors.border }}>
-                                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                                    <Calendar size={18} color={businessColors.primary} style={{ marginRight: 8 }} />
-                                    <Text style={{ fontSize: 15, color: Colors.text, fontWeight: '500' }}>
-                                      {t('settings.profile.bookingWindow','Booking window (days)')}
-                                    </Text>
-                                  </View>
-                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                                    <TextInput
-                                      style={{ 
-                                        flex: 1,
-                                        borderWidth: 1, 
-                                        borderColor: Colors.border, 
-                                        borderRadius: 8, 
-                                        paddingHorizontal: 12, 
-                                        paddingVertical: 10,
-                                        fontSize: 15,
-                                        color: Colors.text,
-                                        backgroundColor: Colors.white
-                                      }}
-                                      value={String(currentBookingDays)}
-                                      onChangeText={(text) => {
-                                        const num = Math.max(1, Math.min(60, Math.floor(Number(text) || 7)));
-                                        setBookingOpenDaysByUser((prev) => ({ ...prev, [adm.id]: num }));
-                                      }}
-                                      placeholder="7"
-                                      keyboardType="number-pad"
-                                      placeholderTextColor={Colors.subtext}
-                                    />
-                                    <TouchableOpacity
-                                      style={{
-                                        backgroundColor: businessColors.primary,
-                                        paddingHorizontal: 20,
-                                        paddingVertical: 10,
-                                        borderRadius: 8,
-                                        opacity: isSaving ? 0.6 : 1
-                                      }}
-                                      onPress={() => handleSaveBookingDaysForUser(adm.id, currentBookingDays)}
-                                      disabled={isSaving}
-                                    >
-                                      {isSaving ? (
-                                        <ActivityIndicator size="small" color="#FFFFFF" />
-                                      ) : (
-                                        <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '600' }}>
-                                          {t('save','Save')}
-                                        </Text>
-                                      )}
-                                    </TouchableOpacity>
-                                  </View>
-                                  <Text style={{ fontSize: 12, color: Colors.subtext, marginTop: 8, textAlign: isRtlLanguage(i18n.language) ? 'right' : 'left' }}>
-                                    {t('settings.profile.bookingWindowHint','How many days ahead can clients book appointments with this employee?')}
-                                  </Text>
-                                </View>
-                              )}
-                            </View>
-                          </Swipeable>
-                        </View>
-                      );
-                    })
-                  )}
-                </View>
-              )}
-            </View>
-          </ScrollView>
-          </View>
-        </SafeAreaView>
-      </Modal>
       {/* Recurring Appointment Modal */}
       <Modal
         visible={showRecurringModal}
@@ -4607,399 +4483,10 @@ export default function SettingsScreen() {
           </View>
         </SafeAreaView>
       </Modal>
-      {/* Services Edit Modal */}
-      <Modal
-        visible={showServicesModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={closeServicesModal}
-      >
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#F5F5F7' }} edges={['top', 'left', 'right']}>
-            <View style={styles.servicesModalTitleBar}>
-              <Text style={styles.servicesModalTitlePlain}>
-                {t('settings.services.edit', 'עריכת שירותים')}
-              </Text>
-              {!isLoadingServices && editableServices.length > 0 && (
-                <Text style={styles.servicesModalTitleCount}>
-                  {editableServices.length} {t('settings.services.servicesCount', 'שירותים')}
-                </Text>
-              )}
-            </View>
-            <View style={styles.servicesModalBodyColumn}>
-              <GestureHandlerRootView style={{ flex: 1 }}>
-              <DraggableFlatList<Service>
-                style={{ flex: 1 }}
-                containerStyle={{ flex: 1 }}
-                contentContainerStyle={[
-                  styles.modalContentContainer,
-                  styles.servicesModalScrollContent,
-                  { paddingBottom: insets.bottom + 88 },
-                ]}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode="interactive"
-                automaticallyAdjustKeyboardInsets
-                data={editableServices}
-                keyExtractor={(item) => item.id}
-                activationDistance={10}
-                onDragBegin={() => {
-                  try {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  } catch {
-                    /* no-op */
-                  }
-                }}
-                onDragEnd={handleServicesDragEnd}
-                ListHeaderComponent={
-                <>
-                {isLoadingServices && (
-                  <View style={styles.servicesModalFullWidthBlock}>
-                    <View style={{ paddingVertical: 32, alignItems: 'center' }}>
-                      <ActivityIndicator size="large" color={businessColors.primary} />
-                      <Text style={{ marginTop: 12, color: Colors.subtext, fontSize: 14 }}>{t('settings.services.loading','Loading services...')}</Text>
-                    </View>
-                  </View>
-                )}
 
-                {servicesError && (
-                  <View style={styles.servicesModalFullWidthBlock}>
-                    <Text style={{ color: 'red', textAlign: 'center', marginVertical: 12 }}>{servicesError}</Text>
-                  </View>
-                )}
-
-                {/* Reorder mode hint banner */}
-                {servicesReorderMode && !isLoadingServices && (
-                  <View style={styles.svcReorderHint}>
-                    <Text style={styles.svcReorderHintText}>
-                      {t('settings.services.reorderHint', 'גרור את ≡ כדי לשנות את סדר השירותים')}
-                    </Text>
-                  </View>
-                )}
-
-
-                {/* Empty state */}
-                {!isLoadingServices && !servicesError && editableServices.length === 0 && !isAddingService && (
-                  <View style={[styles.svcEmptyState, styles.servicesModalFullWidthBlock]}>
-                    <View style={[styles.svcEmptyIcon, { backgroundColor: `${businessColors.primary}15` }]}>
-                      <Ionicons name="cut-outline" size={32} color={businessColors.primary} />
-                    </View>
-                    <Text style={styles.svcEmptyTitle}>{t('settings.services.emptyTitle','No services yet')}</Text>
-                    <Text style={styles.svcEmptySubtitle}>{t('settings.services.emptySubtitle','Add your first service to get started')}</Text>
-                    <TouchableOpacity
-                      style={[styles.svcSaveButton, { backgroundColor: businessColors.primary, marginTop: 16 }]}
-                      onPress={handleOpenAddService}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={styles.svcSaveButtonText}>+ {t('settings.services.add','Add service')}</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-                </>
-                }
-                renderItem={({ item: svc, drag, isActive }) => {
-                  const isExpanded = !servicesReorderMode && expandedServiceId === svc.id;
-                  const isSaving = savingServiceId === svc.id;
-                  const justSaved = savedServiceId === svc.id;
-                  return (
-                    <ScaleDecorator activeScale={1.03}>
-                    <View style={styles.svcListCell}>
-                    <Pressable
-                      onLongPress={servicesReorderMode ? drag : undefined}
-                      delayLongPress={200}
-                      disabled={isActive}
-                      style={({ pressed }) => (pressed && servicesReorderMode ? { opacity: 0.95 } : undefined)}
-                    >
-                    <Swipeable
-                      enabled={!servicesReorderMode}
-                      friction={2}
-                      rightThreshold={40}
-                      renderRightActions={() => (
-                        <TouchableOpacity
-                          style={styles.swipeDeleteAction}
-                          activeOpacity={0.85}
-                          onPress={() => handleDeleteService(svc.id)}
-                        >
-                          <Trash2 size={20} color={'#fff'} />
-                          <Text style={styles.swipeDeleteText}>{t('settings.services.delete','Delete')}</Text>
-                        </TouchableOpacity>
-                      )}
-                    >
-                      <View style={[styles.svcCard, styles.svcListCard, justSaved && styles.svcCardSaved, isActive && styles.svcListCardDragging]}>
-                        {/* LTR row: chevron left | text (title+chips) | thumb right — matches mockup regardless of app RTL */}
-                        <View style={[styles.svcCardAccent, { backgroundColor: businessColors.primary }]} />
-                        {!isExpanded ? (
-                          <View style={styles.svcListCollapsedRow}>
-                            {/* 1 — Chevron / drag (physical left) */}
-                            {servicesReorderMode ? (
-                              <Pressable
-                                onPressIn={drag}
-                                style={styles.svcDragHandle}
-                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                              >
-                                <View style={styles.svcDragLine} />
-                                <View style={styles.svcDragLine} />
-                                <View style={styles.svcDragLine} />
-                              </Pressable>
-                            ) : (
-                              <TouchableOpacity
-                                style={styles.svcListChevronHit}
-                                activeOpacity={0.85}
-                                onPress={() => setExpandedServiceId(prev => (prev === svc.id ? null : svc.id))}
-                              >
-                                {justSaved ? (
-                                  <View style={[styles.svcSavedBadge, { backgroundColor: `${businessColors.primary}15` }]}>
-                                    <Check size={14} color={businessColors.primary} />
-                                    <Text style={[styles.svcSavedText, { color: businessColors.primary }]}>
-                                      {t('saved','Saved')}
-                                    </Text>
-                                  </View>
-                                ) : (
-                                  <ChevronDown size={18} color={Colors.subtext} />
-                                )}
-                              </TouchableOpacity>
-                            )}
-                            {/* 2 — Title + badges (grows; align content toward thumb on the right) */}
-                            <TouchableOpacity
-                              style={styles.svcListCollapsedMain}
-                              activeOpacity={0.85}
-                              disabled={servicesReorderMode}
-                              onPress={() => !servicesReorderMode && setExpandedServiceId(prev => (prev === svc.id ? null : svc.id))}
-                            >
-                              {/* Fixed height = thumb (70); centers title+chips vertically — TouchableOpacity does not stretch reliably */}
-                              <View style={styles.svcListCollapsedTextCol}>
-                                <View style={styles.svcCardInfo}>
-                                  <Text style={styles.svcCardName} numberOfLines={1}>
-                                    {svc.name || t('common.noName','No name')}
-                                  </Text>
-                                  <View style={styles.svcMetaRow}>
-                                    {svc.duration_minutes ? (
-                                      <View style={styles.svcMetaChipDuration}>
-                                        <Text style={styles.svcMetaChipDurationText}>
-                                          {svc.duration_minutes} {t('settings.services.minShort','דק׳')}
-                                        </Text>
-                                      </View>
-                                    ) : null}
-                                    {typeof svc.price === 'number' && (
-                                      <View style={[styles.svcMetaChip, { backgroundColor: `${businessColors.primary}14` }]}>
-                                        <Text style={[styles.svcMetaChipText, { color: businessColors.primary }]}>
-                                          ₪{svc.price}
-                                        </Text>
-                                      </View>
-                                    )}
-                                  </View>
-                                </View>
-                              </View>
-                            </TouchableOpacity>
-                            {/* 3 — Thumbnail (physical right, next to orange accent) */}
-                            <View style={styles.svcListThumbOuter}>
-                              {servicesReorderMode && (
-                                <TouchableOpacity
-                                  style={styles.svcDeleteBadge}
-                                  onPress={() => handleDeleteService(svc.id)}
-                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                  activeOpacity={0.8}
-                                >
-                                  <Trash2 size={13} color="#fff" />
-                                </TouchableOpacity>
-                              )}
-                              <TouchableOpacity
-                                onPress={() => !servicesReorderMode && handlePickServiceImage(svc.id)}
-                                activeOpacity={0.85}
-                                style={styles.svcListThumbWrap}
-                                disabled={servicesReorderMode}
-                              >
-                                {svc.image_url ? (
-                                  <Image source={{ uri: svc.image_url }} style={styles.svcListThumb} resizeMode="cover" />
-                                ) : (
-                                  <View style={[styles.svcListThumbPlaceholder, { backgroundColor: `${businessColors.primary}15` }]}>
-                                    <Text style={[styles.svcListThumbPlaceholderText, { color: businessColors.primary }]}>
-                                      {(svc.name || '?').charAt(0).toUpperCase()}
-                                    </Text>
-                                  </View>
-                                )}
-                                {uploadingServiceId === svc.id && (
-                                  <View style={styles.svcListThumbUploadOverlay}>
-                                    <ActivityIndicator size="small" color="#fff" />
-                                  </View>
-                                )}
-                              </TouchableOpacity>
-                            </View>
-                          </View>
-                        ) : (
-                          /* ── Expanded edit form – same look as Add Service ── */
-                          <>
-                            {/* Colored header band */}
-                            <View style={[styles.svcAddCardHeaderBand, { backgroundColor: `${businessColors.primary}12` }]}>
-                              <Text style={styles.svcAddCardTitle} numberOfLines={1}>
-                                {svc.name || t('common.noName','No name')}
-                              </Text>
-                              <TouchableOpacity
-                                onPress={() => setExpandedServiceId(null)}
-                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                              >
-                                {justSaved ? (
-                                  <View style={[styles.svcSavedBadge, { backgroundColor: `${businessColors.primary}20` }]}>
-                                    <Check size={13} color={businessColors.primary} />
-                                    <Text style={[styles.svcSavedText, { color: businessColors.primary }]}>{t('saved','נשמר')}</Text>
-                                  </View>
-                                ) : (
-                                  <ChevronUp size={18} color={Colors.subtext} />
-                                )}
-                              </TouchableOpacity>
-                            </View>
-
-                            {/* Circular image picker area */}
-                            <View style={[styles.svcAddImageBandArea, { backgroundColor: `${businessColors.primary}08` }]}>
-                              <TouchableOpacity
-                                style={styles.svcAddImageCircleBtn}
-                                onPress={() => handlePickServiceImage(svc.id)}
-                                activeOpacity={0.85}
-                                disabled={uploadingServiceId === svc.id}
-                              >
-                                {svc.image_url ? (
-                                  <>
-                                    <Image source={{ uri: svc.image_url }} style={styles.svcAddImageCircleFull} resizeMode="cover" />
-                                    <View style={styles.svcAddImageChangeOverlay}>
-                                      <Ionicons name="camera-outline" size={22} color="#fff" />
-                                    </View>
-                                  </>
-                                ) : (
-                                  <View style={[styles.svcAddImageCirclePlaceholder, { borderColor: `${businessColors.primary}40` }]}>
-                                    {uploadingServiceId === svc.id ? (
-                                      <ActivityIndicator size="large" color={businessColors.primary} />
-                                    ) : (
-                                      <>
-                                        <View style={[styles.svcAddImageIconWrap, { backgroundColor: `${businessColors.primary}20` }]}>
-                                          <Ionicons name="camera-outline" size={28} color={businessColors.primary} />
-                                        </View>
-                                        <Text style={[styles.svcAddImageDashedLabel, { color: businessColors.primary, marginTop: 8 }]}>
-                                          {t('settings.services.changeImage','החלף תמונה')}
-                                        </Text>
-                                      </>
-                                    )}
-                                  </View>
-                                )}
-                              </TouchableOpacity>
-                            </View>
-
-                            {/* Fields */}
-                            <View style={styles.svcAddFieldsArea}>
-                              <View style={[styles.formGroup, { marginBottom: 10 }]}>
-                                <Text style={styles.formLabel}>{t('settings.services.name','שם השירות')}</Text>
-                                <TextInput
-                                  style={[styles.formInput, styles.svcAddNameInput]}
-                                  value={svc.name}
-                                  onChangeText={(v) => updateLocalServiceField(svc.id, 'name', v)}
-                                  textAlign="right"
-                                />
-                              </View>
-
-                              <View style={[styles.twoColumnRow, { flexDirection: 'row', marginBottom: 4 }]}>
-                                <View style={[styles.formGroup, styles.twoColumnItem, { marginBottom: 0 }]}>
-                                  <Text style={styles.formLabel}>{t('settings.services.price','מחיר (₪)')}</Text>
-                                  <TextInput
-                                    style={styles.formInput}
-                                    value={String(svc.price ?? '')}
-                                    onChangeText={(v) => {
-                                      const num = parseFloat(v.replace(/[^0-9.]/g, ''));
-                                      updateLocalServiceField(svc.id, 'price', isNaN(num) ? 0 : num);
-                                    }}
-                                    keyboardType="numeric"
-                                    textAlign="right"
-                                  />
-                                </View>
-                                <View style={[styles.formGroup, styles.twoColumnItem, { marginBottom: 0 }]}>
-                                  <Text style={styles.formLabel}>{t('settings.services.duration','משך')}</Text>
-                                  <TouchableOpacity
-                                    style={styles.svcDurationPickerBtn}
-                                    onPress={() => { setEditingServiceDurationId(svc.id); setShowDurationPicker(true); }}
-                                    activeOpacity={0.8}
-                                  >
-                                    <Text style={styles.svcDurationPickerBtnText}>
-                                      {svc.duration_minutes
-                                        ? `${svc.duration_minutes} ${t('settings.services.minShort','דק׳')}`
-                                        : t('settings.services.selectDuration','בחר...')}
-                                    </Text>
-                                    <ChevronDown size={16} color={Colors.subtext} />
-                                  </TouchableOpacity>
-                                </View>
-                              </View>
-
-                              <View style={[styles.svcAddActions, { marginTop: 14 }]}>
-                                <TouchableOpacity
-                                  style={styles.svcDeleteButton}
-                                  onPress={() => handleDeleteService(svc.id)}
-                                  activeOpacity={0.85}
-                                >
-                                  <Trash2 size={16} color="#FF3B30" />
-                                  <Text style={styles.svcDeleteButtonText}>{t('settings.services.delete','מחק')}</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                  style={[styles.svcSaveButton, { backgroundColor: businessColors.primary, opacity: isSaving ? 0.7 : 1, flex: 1 }]}
-                                  onPress={() => handleSaveService(svc)}
-                                  disabled={isSaving}
-                                  activeOpacity={0.85}
-                                >
-                                  <Text style={styles.svcSaveButtonText}>
-                                    {isSaving ? t('settings.common.saving','שומר...') : t('settings.services.saveChanges','שמירת שינויים')}
-                                  </Text>
-                                </TouchableOpacity>
-                              </View>
-                            </View>
-                          </>
-                        )}
-                      </View>
-                    </Swipeable>
-                    </Pressable>
-                    </View>
-                    </ScaleDecorator>
-                  );
-                }}
-              />
-
-              </GestureHandlerRootView>
-
-              <View style={[styles.servicesModalTabBarRoot, { bottom: insets.bottom + 24 }]} pointerEvents="box-none">
-                {/* LTR row so layout matches design: [ + | pencil ] pill, then chevron — same in Hebrew RTL */}
-                <View style={[styles.servicesModalTabBarInner, styles.servicesModalTabBarRowLtr]}>
-                  <View style={[styles.servicesModalTabPill, styles.servicesModalTabPillRow, styles.servicesModalTabBorder, styles.servicesModalTabShadow]}>
-                    <TabButton
-                      focused={false}
-                      activeColor={businessColors.primary}
-                      onPress={handleOpenAddService}
-                    >
-                      <Plus size={22} color="#8a8a8a" />
-                    </TabButton>
-                    <TabButton
-                      focused={servicesReorderMode}
-                      activeColor={businessColors.primary}
-                      onPress={() =>
-                        setServicesReorderMode((v) => {
-                          const next = !v;
-                          if (next) setExpandedServiceId(null);
-                          return next;
-                        })
-                      }
-                    >
-                      <Pencil
-                        size={22}
-                        color={servicesReorderMode ? '#ffffff' : '#8a8a8a'}
-                      />
-                    </TabButton>
-                  </View>
-                  <View style={[styles.servicesModalTabPill, styles.servicesModalTabBorder, styles.servicesModalTabShadow]}>
-                    <TabButton
-                      focused={false}
-                      activeColor={businessColors.primary}
-                      onPress={closeServicesModal}
-                    >
-                      <ChevronRight size={22} color="#8a8a8a" />
-                    </TabButton>
-                  </View>
-                </View>
-              </View>
-            </View>
-        {/* Duration picker overlay — inside Services Modal so it renders on top correctly on iOS */}
+      {activeSettingsTab === 'services' && (
+      <>
+        {/* Duration / add-service overlays (full screen; only on Services tab) */}
         {showDurationPicker && (
           <Pressable
             style={styles.durationPickerOverlay}
@@ -5176,15 +4663,15 @@ export default function SettingsScreen() {
             </View>
           </View>
         )}
-        </SafeAreaView>
-      </Modal>
-
+      </>
+      )}
 
       {/* Add Admin Modal */}
       <AddAdminModal
         visible={showAddAdminModal}
         onClose={() => setShowAddAdminModal(false)}
         onSuccess={() => {
+          void loadAdminEmployeesForTab();
         }}
       />
 
@@ -5585,6 +5072,40 @@ const styles = StyleSheet.create({
         shadowRadius: 10,
       },
       android: { elevation: 4 },
+    }),
+  },
+  /** Services / Employees inline lists: same background as settings page (no white card) */
+  settingsTabPanelServices: {
+    flex: 1,
+    minHeight: 320,
+    marginBottom: 8,
+    backgroundColor: SETTINGS_GROUPED_BG,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0,
+  },
+  servicesModalBodyGrouped: {
+    backgroundColor: SETTINGS_GROUPED_BG,
+  },
+  servicesAddFab: {
+    position: 'absolute',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.22,
+        shadowRadius: 8,
+      },
+      android: { elevation: 8 },
     }),
   },
   settingsAppointmentsSubsectionTitle: {

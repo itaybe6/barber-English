@@ -784,7 +784,8 @@
       "saveFailed": "فشل حفظ الخدمة",
       "saveSuccess": "تم حفظ الخدمة بنجاح",
       "orderSaveFailed": "لا يمكن حفظ أمر الخدمة. حاول ثانية.",
-      "reorderHint": "اسحب ≡ لإعادة طلب الخدمات"
+      "reorderHint": "اسحب ≡ لإعادة طلب الخدمات",
+      "fabAddHint": "اضغط مطولاً على صف لإعادة الترتيب · + في الأسفل للإضافة"
     },
     "broadcastTemplates": {
       "promotion": {

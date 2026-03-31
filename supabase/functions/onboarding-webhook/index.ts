@@ -53,6 +53,13 @@
  *
  * פולסים: pulseemFromNumber, pulseem_from_number (ברירת מחדל clientName), pulseemSubPassword
  *
+ * SMS לבעל המערכת אחרי onboarding מוצלח (חשבון Pulseem ראשי — PULSEEM_MAIN_API_KEY):
+ *   ONBOARDING_NOTIFY_SMS_PHONE — יעד (ברירת מחדל 0502307500 אם לא מוגדר)
+ *   ONBOARDING_WEBHOOK_FROM_NUMBER — Secret: שולח SMS ייעודי לפונקציה זו (למשל 0508085737); עדיפות ראשונה
+ *   ONBOARDING_NOTIFY_SMS_FROM — שולח חלופי; אחרת PULSEEM_REST_FROM_NUMBER / PULSEEM_FROM_NUMBER / PULSEEM_OTP_FROM_NUMBER
+ *   אם אף אחד לא מוגדר — ברירת מחדל קודית לשולח: 0508085737
+ *   ONBOARDING_NOTIFY_SMS_DISABLED=1 — לכבות שליחה
+ *
  * מבנה לובאל (דוגמה):
  *   { "event": "new_business_onboarded", "timestamp": "...", "data": { "business": { ... }, "services": [...] } }
  *   business: business_name_he, business_name_en, app_name_en, address, manager_name, phone,
@@ -241,6 +248,7 @@ function collectHeroSourceStrings(p: Record<string, unknown>): string[] {
   const single = pickImageField(p, [
     "managerPhoto",
     "manager_photo",
+    "manager_photo_url",
     "admin_photo",
     "manager_image",
     "managerImage",
@@ -343,18 +351,20 @@ function pickServiceImageInput(o: Record<string, unknown>): string {
   return pickImageField(o, ["image_base64", "imageBase64"]);
 }
 
-/** טיוטות שירותים — ללא הגבלת כמות; תמונה אופציונלית לכל שורה. */
+/** טיוטות שירותים — ללא הגבלת כמות; תמונה אופציונלית; sort_order → order_index. */
 function buildServiceDrafts(p: Record<string, unknown>): Array<{
   name: string;
   price: number;
   duration_minutes: number;
   imageInput?: string;
+  order_index?: number;
 }> {
   const defaults: Array<{
     name: string;
     price: number;
     duration_minutes: number;
     imageInput?: string;
+    order_index?: number;
   }> = [
     { name: "שירות 1", price: 150, duration_minutes: 60 },
     { name: "שירות 2", price: 50, duration_minutes: 30 },
@@ -370,6 +380,7 @@ function buildServiceDrafts(p: Record<string, unknown>): Array<{
     price: number;
     duration_minutes: number;
     imageInput?: string;
+    order_index?: number;
   }> = [];
 
   for (const item of rawList) {
@@ -400,15 +411,22 @@ function buildServiceDrafts(p: Record<string, unknown>): Array<{
     );
     dur = Math.max(5, Math.min(480, dur || 30));
     const imageInput = pickServiceImageInput(o);
+    const sortOrder = pickNumber(o, ["sort_order", "order_index", "order"], -1);
     const row: (typeof rows)[0] = {
       name,
       price,
       duration_minutes: dur,
     };
     if (imageInput) row.imageInput = imageInput;
+    if (sortOrder >= 0) row.order_index = Math.floor(sortOrder);
     rows.push(row);
   }
-  return rows.length ? rows : defaults;
+  const sorted = rows.length
+    ? [...rows].sort((a, b) =>
+      (a.order_index ?? 1e6) - (b.order_index ?? 1e6)
+    )
+    : defaults;
+  return sorted.length ? sorted : defaults;
 }
 
 function verifyOnboardingSecret(req: Request): boolean {
@@ -482,6 +500,198 @@ async function invokeProvision(
   return { ok: true, envPlaintext };
 }
 
+const PULSEEM_REST_SEND = "https://api.pulseem.com/api/v1/SmsApi/SendSms";
+const ONBOARDING_OWNER_SMS_TEXT = "מזל טוב ! יש לך לקוח חדש";
+
+function phoneDigitsSms(raw: string): string {
+  return String(raw || "").replace(/\D/g, "");
+}
+
+function normalizeSmsDestination(raw: string): string {
+  const d = phoneDigitsSms(raw);
+  if (d.startsWith("972")) return d;
+  if (d.startsWith("0") && d.length >= 9 && d.length <= 11) return "972" + d.slice(1);
+  if (d.length === 9 && /^5\d{8}$/.test(d)) return "972" + d;
+  return d;
+}
+
+function classifyPulseemRestJson(
+  payload: Record<string, unknown>,
+): "success" | "failure" | "unknown" {
+  const errs = payload.errors ?? payload.Errors;
+  if (Array.isArray(errs) && errs.length > 0) return "failure";
+
+  const errMsg = String(
+    payload.errorMessage ?? payload.ErrorMessage ?? payload.errorDescription ?? "",
+  ).trim();
+  if (errMsg && !/^null$/i.test(errMsg)) return "failure";
+
+  const st = String(payload.status ?? payload.Status ?? "").toLowerCase();
+  if (st === "error" || st === "failed" || st === "failure") return "failure";
+  if (st === "success" || st === "ok" || st === "succeeded") return "success";
+
+  const boolKeys = [
+    payload.success,
+    payload.Success,
+    payload.isSuccess,
+    payload.IsSuccess,
+    payload.isSucceeded,
+    payload.IsSucceeded,
+    payload.succeeded,
+    payload.Succeeded,
+  ];
+  if (boolKeys.some((v) => v === true)) return "success";
+  if (boolKeys.some((v) => v === false)) return "failure";
+
+  const failN =
+    typeof payload.failure === "number"
+      ? payload.failure
+      : typeof payload.Failure === "number"
+        ? payload.Failure
+        : null;
+  const succN =
+    typeof payload.success === "number"
+      ? payload.success
+      : typeof payload.Success === "number"
+        ? payload.Success
+        : null;
+  if (failN !== null && failN > 0) return "failure";
+  if (succN !== null && succN > 0) return "success";
+
+  const ec = payload.errorCode ?? payload.ErrorCode ?? payload.code ?? payload.Code;
+  if (typeof ec === "number" && ec !== 0 && ec !== 200) return "failure";
+
+  const nested = payload.data ?? payload.Data ?? payload.result ?? payload.Result;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    return classifyPulseemRestJson(nested as Record<string, unknown>);
+  }
+
+  const failCount =
+    (typeof payload.failedCount === "number" ? payload.failedCount : null) ??
+    (typeof payload.FailedCount === "number" ? payload.FailedCount : null) ??
+    (typeof payload.failedSmsCount === "number" ? payload.failedSmsCount : null);
+  if (typeof failCount === "number" && failCount > 0) return "failure";
+
+  const sentOk =
+    (typeof payload.sentSmsCount === "number" ? payload.sentSmsCount : null) ??
+    (typeof payload.SentSmsCount === "number" ? payload.SentSmsCount : null) ??
+    (typeof payload.successSmsCount === "number" ? payload.successSmsCount : null) ??
+    (typeof payload.validSmsCount === "number" ? payload.validSmsCount : null);
+  if (typeof sentOk === "number" && sentOk > 0) return "success";
+
+  return "unknown";
+}
+
+/** לא זורק על unknown — שליחת עדכון לבעלים היא best-effort */
+function assertPulseemRestJsonLenient(responseText: string): void {
+  const trimmed = responseText.trim();
+  if (!trimmed) throw new Error("pulseem_rest_empty_response");
+  if (!trimmed.startsWith("{")) {
+    const low = trimmed.toLowerCase();
+    if (low === "true" || low === '"true"') return;
+    if (low === "false" || low === '"false"') {
+      throw new Error("pulseem_rest_rejected");
+    }
+    throw new Error("pulseem_rest_non_json_body");
+  }
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(trimmed) as Record<string, unknown>;
+  } catch {
+    throw new Error("pulseem_rest_invalid_json");
+  }
+  const c = classifyPulseemRestJson(payload);
+  if (c === "failure") {
+    const msg = String(
+      payload.message ??
+        payload.Message ??
+        payload.errorMessage ??
+        payload.ErrorMessage ??
+        "pulseem_rest_rejected",
+    ).trim();
+    throw new Error(msg || "pulseem_rest_rejected");
+  }
+  if (c === "unknown") {
+    console.warn(
+      "[onboarding-webhook] Pulseem REST ambiguous response:",
+      trimmed.slice(0, 500),
+    );
+  }
+}
+
+function pulseemRestIsAsyncOnboarding(): boolean {
+  const v = String(Deno.env.get("PULSEEM_REST_IS_ASYNC") ?? "true").trim()
+    .toLowerCase();
+  return !/^(0|false|no|off)$/.test(v);
+}
+
+/**
+ * הודעה לבעל הפלטפורמה כשלקוח חדש סיים onboarding (חשבון Pulseem ראשי).
+ * לא מפילה את ה-webhook — רק לוגים בשגיאה.
+ */
+async function sendOwnerNewClientSmsBestEffort(): Promise<{
+  sent: boolean;
+  skipReason?: string;
+}> {
+  if (/^(1|true|yes)$/i.test(
+    String(Deno.env.get("ONBOARDING_NOTIFY_SMS_DISABLED") ?? "").trim(),
+  )) {
+    return { sent: false, skipReason: "disabled" };
+  }
+
+  const mainKey = (Deno.env.get("PULSEEM_MAIN_API_KEY") ?? "").trim();
+  if (!mainKey) {
+    return { sent: false, skipReason: "missing_PULSEEM_MAIN_API_KEY" };
+  }
+
+  const rawPhone =
+    (Deno.env.get("ONBOARDING_NOTIFY_SMS_PHONE") ?? "").trim() ||
+    "0502307500";
+  const toNum = normalizeSmsDestination(rawPhone);
+  if (toNum.length < 11) {
+    return { sent: false, skipReason: "invalid_phone" };
+  }
+
+  const fromNum = (
+    (Deno.env.get("ONBOARDING_WEBHOOK_FROM_NUMBER") ?? "").trim() ||
+    (Deno.env.get("ONBOARDING_NOTIFY_SMS_FROM") ?? "").trim() ||
+    (Deno.env.get("PULSEEM_REST_FROM_NUMBER") ?? "").trim() ||
+    (Deno.env.get("PULSEEM_FROM_NUMBER") ?? "").trim() ||
+    (Deno.env.get("PULSEEM_OTP_FROM_NUMBER") ?? "").trim() ||
+    "0508085737"
+  );
+
+  const ref = crypto.randomUUID().replace(/-/g, "").slice(0, 20);
+  const body = {
+    sendId: ref,
+    isAsync: pulseemRestIsAsyncOnboarding(),
+    smsSendData: {
+      fromNumber: fromNum,
+      toNumberList: [toNum],
+      referenceList: [ref],
+      textList: [ONBOARDING_OWNER_SMS_TEXT],
+      isAutomaticUnsubscribeLink: false,
+    },
+  };
+
+  const res = await fetch(PULSEEM_REST_SEND, {
+    method: "POST",
+    headers: {
+      APIKEY: mainKey,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const responseText = await res.text();
+  if (!res.ok) {
+    throw new Error(`Pulseem REST ${res.status}: ${responseText.slice(0, 240)}`);
+  }
+  assertPulseemRestJsonLenient(responseText);
+  console.log("[onboarding-webhook] owner notify SMS ok, to=", toNum);
+  return { sent: true };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: cors });
@@ -514,9 +724,9 @@ serve(async (req) => {
   const p = mergePayload(raw);
 
   const nameHe = pickStr(p, [
+    "business_name_he",
     "business_name_hebrew",
     "businessNameHebrew",
-    "business_name_he",
     "name_he",
     "name_hebrew",
     "shop_name_he",
@@ -543,6 +753,7 @@ serve(async (req) => {
     ]);
 
   let clientName = pickStr(p, [
+    "app_name_en",
     "clientName",
     "app_name",
     "appName",
@@ -559,6 +770,7 @@ serve(async (req) => {
   const adminName = pickStr(p, [
     "adminName",
     "manager_name",
+    "managerName",
     "admin_name",
     "owner_name",
     "full_name",
@@ -662,7 +874,16 @@ serve(async (req) => {
     return json({ error: "server_misconfigured" }, 503);
   }
 
-  const businessId = crypto.randomUUID();
+  const externalBusinessId = pickStr(p, [
+    "id",
+    "business_id",
+    "tenant_id",
+    "onboarding_business_id",
+  ]);
+  let businessId = crypto.randomUUID();
+  if (externalBusinessId && isValidUuid(externalBusinessId)) {
+    businessId = externalBusinessId.trim().toLowerCase();
+  }
   const slug = clientName.toLowerCase();
   const color = primaryColor;
   const pulseFrom = pulseemFromNumber || clientName;
@@ -686,6 +907,14 @@ serve(async (req) => {
 
   if (profileError) {
     console.error("[onboarding-webhook] business_profile", profileError);
+    if (profileError.code === "23505") {
+      return json({
+        ok: true,
+        duplicate: true,
+        businessId,
+        message: "Business already onboarded (same id)",
+      });
+    }
     return json({ error: "db_error", detail: profileError.message }, 500);
   }
 
@@ -730,6 +959,7 @@ serve(async (req) => {
     business_id: string;
     worker_id: string;
     image_url?: string;
+    order_index?: number;
   }> = [];
 
   let svcSeq = 0;
@@ -756,6 +986,7 @@ serve(async (req) => {
       worker_id: adminUserId,
     };
     if (image_url) row.image_url = image_url;
+    if (typeof d.order_index === "number") row.order_index = d.order_index;
     serviceRows.push(row);
   }
 
@@ -966,6 +1197,17 @@ serve(async (req) => {
   const settled = await Promise.all(uploads);
   const uploadErrors = settled.filter((s) => s.err).map((s) => `${s.path}: ${s.err}`);
 
+  let ownerNotifySms: { sent: boolean; skipReason?: string; error?: string } = {
+    sent: false,
+  };
+  try {
+    ownerNotifySms = await sendOwnerNewClientSmsBestEffort();
+  } catch (e) {
+    const msg = String((e as Error)?.message ?? e).slice(0, 300);
+    console.warn("[onboarding-webhook] owner SMS failed:", msg);
+    ownerNotifySms = { sent: false, error: msg };
+  }
+
   return json({
     ok: true,
     businessId,
@@ -976,5 +1218,6 @@ serve(async (req) => {
     pulseemProvisioned: pulseemOk,
     pulseemError: pulseemError ?? null,
     uploadWarnings: uploadErrors.length ? uploadErrors : undefined,
+    ownerNotifySms,
   });
 });

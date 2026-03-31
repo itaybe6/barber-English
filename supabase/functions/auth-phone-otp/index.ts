@@ -8,8 +8,9 @@
  * Sender resolution (first match wins):
  *   PULSEEM_OTP_FROM_NUMBER — actual from string for OTP (and notification-push-sms if set).
  *   PULSEEM_FROM_NUMBER — overrides business_profile.pulseem_from_number.
- *   If pulseem_from_number is alphanumeric and no env override: business phone → 972…
- *   Else business_profile.pulseem_from_number
+ *   Else business_profile.pulseem_from_number as stored (Pulseem-registered sender / number).
+ *   Legacy opt-in: PULSEEM_OTP_ALPHANUMERIC_FALLBACK_BUSINESS_PHONE=1 — if pulseem_from_number
+ *   contains letters and no env override, fall back to business_profile.phone in 972… format.
  *
  * ASMX-only override:
  *   PULSEEM_ASMX_FROM_NUMBER
@@ -148,8 +149,7 @@ function normalizeSmsDestination(raw: string): string {
 /**
  * Resolve the effective Pulseem sender (fromNumber).
  * Priority: env PULSEEM_OTP_FROM_NUMBER → PULSEEM_FROM_NUMBER → DB pulseem_from_number.
- * If DB value is alphanumeric (brand name) and no env override → fall back to business phone
- * in 972… format, because Pulseem ASMX/REST may not accept unregistered alphanumeric senders.
+ * The DB value is always used as-is unless legacy fallback is enabled (see file header).
  */
 function pulseemEffectiveFromNumber(
   fromDb: string,
@@ -161,7 +161,10 @@ function pulseemEffectiveFromNumber(
   if (envFrom) return envFrom;
   const db = String(fromDb ?? "").trim();
   if (!db) return "";
-  if (/[a-zA-Z]/.test(db)) {
+  const legacyAlphanumFallback = /^(1|true|yes)$/i.test(
+    String(Deno.env.get("PULSEEM_OTP_ALPHANUMERIC_FALLBACK_BUSINESS_PHONE") ?? "").trim(),
+  );
+  if (legacyAlphanumFallback && /[a-zA-Z]/.test(db)) {
     const p = String(businessPhone ?? "").trim();
     if (p) {
       const d = normalizeSmsDestination(p);

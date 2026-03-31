@@ -10,7 +10,8 @@
  * (do not enable both, or deliveries duplicate).
  * Requires same secrets as auth-phone-otp: SUPABASE_*, PULSEEM_FIELD_ENCRYPTION_KEY (if Pulseem fields encrypted).
  * Sender secrets: PULSEEM_OTP_FROM_NUMBER, PULSEEM_FROM_NUMBER, PULSEEM_REST_FROM_NUMBER, PULSEEM_ASMX_FROM_NUMBER
- * (same precedence / fallback as auth-phone-otp).
+ * (same precedence as auth-phone-otp). DB pulseem_from_number is used as-is unless
+ * PULSEEM_OTP_ALPHANUMERIC_FALLBACK_BUSINESS_PHONE=1 (legacy).
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -58,7 +59,10 @@ function pulseemEffectiveFromNumber(
   if (envFrom) return envFrom;
   const db = String(fromDb ?? "").trim();
   if (!db) return "";
-  if (/[a-zA-Z]/.test(db)) {
+  const legacyAlphanumFallback = /^(1|true|yes)$/i.test(
+    String(Deno.env.get("PULSEEM_OTP_ALPHANUMERIC_FALLBACK_BUSINESS_PHONE") ?? "").trim(),
+  );
+  if (legacyAlphanumFallback && /[a-zA-Z]/.test(db)) {
     const p = String(businessPhone ?? "").trim();
     if (p) {
       const d = normalizeSmsDestination(p);

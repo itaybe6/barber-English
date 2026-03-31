@@ -512,9 +512,9 @@ export default function HomeScreen() {
         .gt('slot_time', currentTime) // After current time
         .order('slot_time');
 
-      // Filter by current user - only appointments assigned to this barber
+      // Same scope as calendar / insights: slot may use barber_id and/or user_id (legacy schedule rows)
       if (user?.id) {
-        query = query.eq('barber_id', user.id);
+        query = query.or(`barber_id.eq.${user.id},user_id.eq.${user.id}`);
       }
 
       const { data, error } = await query;
@@ -550,9 +550,9 @@ export default function HomeScreen() {
         .eq('slot_date', today)
         .eq('is_available', false); // Only booked appointments
 
-      // סינון לפי המשתמש הנוכחי - רק תורים שמוקצים לספר הזה
+      // סינון לפי המשתמש הנוכחי — תורים של הספר (barber_id או user_id כמו בייצור משבצות)
       if (user?.id) {
-        query = query.eq('barber_id', user.id);
+        query = query.or(`barber_id.eq.${user.id},user_id.eq.${user.id}`);
       }
 
       const { data, error } = await query;
@@ -578,8 +578,12 @@ export default function HomeScreen() {
       const { getBusinessId } = await import('@/lib/supabase');
       const businessId = getBusinessId();
       const now = new Date();
-      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-      const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+      // slot_date is a calendar day in local business time — avoid UTC drift from toISOString()
+      const pad2 = (n: number) => String(n).padStart(2, '0');
+      const toLocalYmd = (d: Date) =>
+        `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+      const firstDayOfMonth = toLocalYmd(new Date(now.getFullYear(), now.getMonth(), 1));
+      const lastDayOfMonth = toLocalYmd(new Date(now.getFullYear(), now.getMonth() + 1, 0));
       const monthStartIso = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
       const monthEndExclusiveIso = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
       let monthApptQuery = supabase
@@ -599,11 +603,11 @@ export default function HomeScreen() {
         .gte('slot_date', firstDayOfMonth)
         .lte('slot_date', lastDayOfMonth);
 
-      // Super admin: business-wide. Barber admin: own slots + legacy rows with no barber_id (client booking without barber).
+      // Super admin: business-wide. Barber admin: rows tied to this worker (matches admin calendar / slot generation).
       if (!isSuperAdmin && user?.id) {
-        const barberOrUnassigned = `barber_id.eq.${user.id},barber_id.is.null`;
-        monthApptQuery = monthApptQuery.or(barberOrUnassigned);
-        cancelledMonthQuery = cancelledMonthQuery.or(barberOrUnassigned);
+        const barberScope = `barber_id.eq.${user.id},user_id.eq.${user.id}`;
+        monthApptQuery = monthApptQuery.or(barberScope);
+        cancelledMonthQuery = cancelledMonthQuery.or(barberScope);
       }
 
       const [monthApptRes, cancelledMonthRes, newClientsRes] = await Promise.all([

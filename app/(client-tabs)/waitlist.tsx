@@ -1,43 +1,77 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  ScrollView,
+  Platform,
+  Pressable,
+  I18nManager,
+  ActivityIndicator,
+  Modal,
+} from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { useLocalSearchParams } from 'expo-router';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Colors from '@/constants/colors';
+import BookingSuccessAnimatedOverlay, {
+  type SuccessLine,
+} from '@/components/book-appointment/BookingSuccessAnimatedOverlay';
 import TimePeriodSelector, { TimePeriod } from '@/components/TimePeriodSelector';
 import { useWaitlistStore } from '@/stores/waitlistStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
- 
+import { getScrollContentPaddingBottomForFloatingClientTabBar } from '@/constants/clientTabBarInsets';
 
 export default function WaitlistScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const params = useLocalSearchParams();
-  const { serviceName = 'General service', selectedDate = '', barberId = '' } = params as { serviceName: string; selectedDate: string; barberId: string };
-  
-  const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod | null>(null);
-  const { user } = useAuthStore();
-  const { addToWaitlist, isLoading, error, clearError } = useWaitlistStore();
-  const { colors } = useBusinessColors();
+  const { serviceName = 'General service', selectedDate = '', barberId = '' } = params as {
+    serviceName: string;
+    selectedDate: string;
+    barberId: string;
+  };
 
-  // Validate selectedDate
-  const isValidDate = selectedDate && selectedDate !== '';
+  const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod | null>(null);
+  const [showWaitlistSuccessModal, setShowWaitlistSuccessModal] = useState(false);
+  const [waitlistSuccessAnimKey, setWaitlistSuccessAnimKey] = useState(0);
+  const { user } = useAuthStore();
+  const { addToWaitlist, isLoading, error } = useWaitlistStore();
+  const { colors } = useBusinessColors();
+  const safeInsets = useSafeAreaInsets();
+  const scrollBottomPad = getScrollContentPaddingBottomForFloatingClientTabBar(safeInsets.bottom);
+
+  const isValidDate = Boolean(selectedDate && selectedDate !== '');
   const displayDate = isValidDate ? selectedDate : new Date().toISOString().split('T')[0];
 
+  const formatDate = useCallback(
+    (dateString: string) => {
+      const date = new Date(dateString);
+      return date.toLocaleDateString(i18n?.language === 'he' ? 'he-IL' : 'en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    },
+    [i18n?.language]
+  );
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString(i18n?.language === 'he' ? 'he-IL' : 'en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  };
+  const gradientTop = useMemo(
+    () => [colors.surface, `${colors.primary}10`, `${colors.primary}06`] as const,
+    [colors.primary, colors.surface]
+  );
+
+  const sheetTint = useMemo(
+    () => [colors.surface, `${colors.primary}05`] as const,
+    [colors.primary, colors.surface]
+  );
+
+  const backIcon = I18nManager.isRTL ? 'chevron-forward' : 'chevron-back';
 
   const handleAddToWaitlist = async () => {
     if (!selectedPeriod) {
@@ -66,125 +100,254 @@ export default function WaitlistScreen() {
       );
 
       if (success) {
-        Alert.alert(
-          t('waitlist.addedTitle', 'Added to waitlist'),
-          t('waitlist.addedMessage', "Successfully added to the waitlist for {{date}}. We'll notify you when a slot opens!", { date: formatDate(selectedDate) }),
-          [
-            {
-              text: t('ok', 'OK'),
-              onPress: () => {
-                router.push('/(client-tabs)/book-appointment');
-              },
-            },
-          ]
-        );
+        setWaitlistSuccessAnimKey((k) => k + 1);
+        setShowWaitlistSuccessModal(true);
       } else {
         Alert.alert(t('error.generic', 'Error'), error || t('waitlist.addError', 'An error occurred while adding to the waitlist'));
       }
-    } catch (error) {
+    } catch {
       Alert.alert(t('error.generic', 'Error'), t('waitlist.addError', 'An error occurred while adding to the waitlist'));
     }
   };
 
+  const subtitleText =
+    serviceName === 'General service'
+      ? t('waitlist.noAppointmentsOnDate', 'No appointments available\non this date')
+      : t('waitlist.noAppointmentsForServiceOnDate', 'No appointments available\nfor {{service}} on this date', {
+          service: serviceName,
+        });
+
+  const serviceDisplay =
+    serviceName === 'General service' ? t('waitlist.anyService', 'Any available service') : serviceName;
+
+  const periodLabelKey =
+    selectedPeriod === 'morning'
+      ? 'time_period.morning'
+      : selectedPeriod === 'afternoon'
+        ? 'time_period.afternoon'
+        : selectedPeriod === 'evening'
+          ? 'time_period.evening'
+          : selectedPeriod === 'any'
+            ? 'time_period.any'
+            : '';
+
+  const waitlistSuccessLines = useMemo((): SuccessLine[] => {
+    if (!showWaitlistSuccessModal || !selectedDate || !selectedPeriod || !periodLabelKey) {
+      return [];
+    }
+    const svc =
+      serviceName === 'General service' ? t('waitlist.anyService', 'Any available service') : serviceName;
+    return [
+      {
+        variant: 'headline',
+        text: t('waitlist.successAnimatedHeadline', "You're on the waitlist"),
+      },
+      {
+        variant: 'accent',
+        text: `${t('booking.field.service', 'Service')}: ${svc}`,
+      },
+      {
+        variant: 'body',
+        text: `${t('booking.field.date', 'Date')}: ${formatDate(selectedDate)}`,
+      },
+      {
+        variant: 'body',
+        text: `${t('waitlist.preferredWindow', 'Preferred time')}: ${t(periodLabelKey as never)}`,
+      },
+      {
+        variant: 'body',
+        text: t('waitlist.successAnimatedNotify', "We'll notify you when a slot opens in your preferred window."),
+      },
+    ];
+  }, [
+    showWaitlistSuccessModal,
+    selectedDate,
+    selectedPeriod,
+    periodLabelKey,
+    serviceName,
+    t,
+    formatDate,
+  ]);
+
+  const dismissWaitlistSuccess = () => {
+    setShowWaitlistSuccessModal(false);
+    router.push('/(client-tabs)/book-appointment');
+  };
+
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <LinearGradient
-        colors={['#FFFFFF', '#F8F9FA']}
-        style={styles.gradient}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <TouchableOpacity 
-              style={styles.backButton}
-              onPress={() => router.push('/(client-tabs)/book-appointment')}
-            >
-              <Ionicons name="arrow-back" size={24} color={Colors.text} />
-            </TouchableOpacity>
-            <View style={{ alignItems: 'center', flexShrink: 1 }}>
-              <Text style={styles.headerTitle}>{t('waitlist.title', 'Waitlist')}</Text>
-              <Text style={styles.headerSubtitle} numberOfLines={2} ellipsizeMode="tail">
-                {serviceName === 'General service'
-                  ? t('waitlist.noAppointmentsOnDate', 'No appointments available\non this date')
-                  : t('waitlist.noAppointmentsForServiceOnDate', 'No appointments available\nfor {{service}} on this date', { service: serviceName })}
-              </Text>
-            </View>
-            <View style={{ width: 40 }} />
-          </View>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.surface }]} edges={['top', 'bottom']}>
+      <LinearGradient colors={[...gradientTop]} locations={[0, 0.45, 1]} style={styles.gradient}>
+        {/* Decorative orbs */}
+        <View pointerEvents="none" style={styles.decorWrap}>
+          <View style={[styles.decorBlob, styles.decorBlobA, { backgroundColor: `${colors.primary}14` }]} />
+          <View style={[styles.decorBlob, styles.decorBlobB, { backgroundColor: `${colors.primary}0C` }]} />
         </View>
 
-        <View style={styles.contentWrapper}>
-          <ScrollView 
-            style={styles.content} 
-            contentContainerStyle={styles.scrollContent}
+        <View style={styles.hero}>
+          <View style={styles.heroTopRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push('/(client-tabs)/book-appointment')}
+              style={({ pressed }) => [
+                styles.backButton,
+                {
+                  backgroundColor: pressed ? `${colors.text}10` : `${colors.text}08`,
+                  borderColor: `${colors.text}12`,
+                },
+              ]}
+            >
+              <Ionicons name={backIcon} size={22} color={colors.text} />
+            </Pressable>
+            <View style={styles.heroTopSpacer} />
+          </View>
+
+          <View style={styles.heroIconOuter}>
+            <LinearGradient
+              colors={[`${colors.primary}35`, `${colors.primary}12`]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.heroIconGradient}
+            >
+              <Ionicons name="notifications-outline" size={34} color={colors.primary} />
+            </LinearGradient>
+          </View>
+
+          <Text style={[styles.headerTitle, { color: colors.text }]}>{t('waitlist.title', 'Waitlist')}</Text>
+          <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]} numberOfLines={3}>
+            {subtitleText}
+          </Text>
+        </View>
+
+        <LinearGradient colors={[...sheetTint]} style={styles.sheet}>
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollBottomPad }]}
             showsVerticalScrollIndicator={false}
           >
-          {/* Service and Date Info Card */}
-          <View style={styles.infoCard}>
-            <View style={styles.infoHeader}>
-              <Ionicons name="information-circle" size={24} color={Colors.primary} />
-              <Text style={styles.infoTitle}>{t('waitlist.requestDetails', 'Request details')}</Text>
-            </View>
-            
-            <View style={styles.infoRow}>
-              <View style={styles.infoIcon}>
-                <Ionicons name="calendar" size={20} color={Colors.primary} />
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>{t('booking.field.date', 'Date')}</Text>
-                <Text style={styles.infoValue}>{formatDate(displayDate)}</Text>
-              </View>
-            </View>
-            
-            <View style={styles.infoRow}>
-              <View style={styles.infoIcon}>
-                <Ionicons name="apps" size={20} color={Colors.primary} />
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>{t('booking.field.service', 'Service')}</Text>
-                <Text style={styles.infoValue}>
-                  {serviceName === 'General service' ? t('waitlist.anyService', 'Any available service') : serviceName}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Time Period Selector */}
-          <TimePeriodSelector
-            selectedPeriod={selectedPeriod}
-            onSelectPeriod={setSelectedPeriod}
-            disabled={isLoading}
-          />
-
-          {/* Action Buttons */}
-          <View style={styles.footer}>
-            <TouchableOpacity
+            <View
               style={[
-                styles.confirmButton,
-                { backgroundColor: colors.primary, borderColor: colors.primary },
-                (!selectedPeriod || isLoading) && styles.disabledButton,
+                styles.infoCard,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: `${colors.primary}18`,
+                  shadowColor: colors.primary,
+                },
               ]}
-              onPress={handleAddToWaitlist}
-              disabled={!selectedPeriod || isLoading}
             >
-              {isLoading ? (
-                <View style={styles.loadingContainer}>
-                  <Ionicons name="hourglass" size={20} color="#FFFFFF" />
-                  <Text style={styles.confirmButtonText}>{t('waitlist.adding', 'Adding to waitlist...')}</Text>
+              <View style={styles.infoHeaderRow}>
+                <LinearGradient
+                  colors={[`${colors.primary}28`, `${colors.primary}0D`]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.infoHeaderIcon}
+                >
+                  <Ionicons name="document-text-outline" size={22} color={colors.primary} />
+                </LinearGradient>
+                <Text style={[styles.infoTitle, { color: colors.text }]}>{t('waitlist.requestDetails', 'Request details')}</Text>
+              </View>
+
+              <View style={[styles.divider, { backgroundColor: `${colors.text}0D` }]} />
+
+              <View style={styles.infoRow}>
+                <View style={[styles.infoIcon, { backgroundColor: `${colors.primary}12` }]}>
+                  <Ionicons name="calendar-outline" size={20} color={colors.primary} />
                 </View>
-              ) : (
-                <View style={styles.buttonContent}>
-                  <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
-                  <Text style={styles.confirmButtonText}>
-                    {selectedPeriod ? t('waitlist.confirmAndSave', 'Confirm and save') : t('waitlist.selectPeriodFirst', 'Select a time period first')}
+                <View style={styles.infoContent}>
+                  <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>{t('booking.field.date', 'Date')}</Text>
+                  <Text style={[styles.infoValue, { color: colors.text }]}>{formatDate(displayDate)}</Text>
+                </View>
+              </View>
+
+              <View style={[styles.divider, { backgroundColor: `${colors.text}0D` }]} />
+
+              <View style={styles.infoRow}>
+                <View style={[styles.infoIcon, { backgroundColor: `${colors.primary}12` }]}>
+                  <Ionicons name="cut-outline" size={20} color={colors.primary} />
+                </View>
+                <View style={styles.infoContent}>
+                  <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>{t('booking.field.service', 'Service')}</Text>
+                  <Text style={[styles.infoValue, { color: colors.text }]} numberOfLines={2}>
+                    {serviceDisplay}
                   </Text>
                 </View>
-              )}
-            </TouchableOpacity>
-          </View>
+              </View>
+            </View>
+
+            <TimePeriodSelector selectedPeriod={selectedPeriod} onSelectPeriod={setSelectedPeriod} disabled={isLoading} />
+
+            <View style={styles.footer}>
+              <TouchableOpacity
+                activeOpacity={0.92}
+                onPress={handleAddToWaitlist}
+                disabled={!selectedPeriod || isLoading}
+                style={styles.ctaTouchable}
+              >
+                {isLoading && selectedPeriod ? (
+                  <LinearGradient
+                    colors={[colors.primary, colors.secondary]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={[styles.confirmButton, styles.confirmButtonActive]}
+                  >
+                    <View style={styles.buttonContent}>
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                      <Text style={styles.confirmButtonText}>{t('waitlist.adding', 'Adding to waitlist...')}</Text>
+                    </View>
+                  </LinearGradient>
+                ) : selectedPeriod ? (
+                  <LinearGradient
+                    colors={[colors.primary, colors.secondary]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={[styles.confirmButton, styles.confirmButtonActive]}
+                  >
+                    <View style={styles.buttonContent}>
+                      <Ionicons name="checkmark-circle" size={22} color="#FFFFFF" />
+                      <Text style={styles.confirmButtonText}>{t('waitlist.confirmAndSave', 'Confirm and save')}</Text>
+                    </View>
+                  </LinearGradient>
+                ) : (
+                  <View
+                    style={[
+                      styles.confirmButton,
+                      styles.confirmButtonIdle,
+                      { backgroundColor: `${colors.text}14`, borderColor: `${colors.text}10` },
+                    ]}
+                  >
+                    <View style={styles.buttonContent}>
+                      <Ionicons name="time-outline" size={22} color={colors.textSecondary} />
+                      <Text style={[styles.confirmButtonTextMuted, { color: colors.textSecondary }]}>
+                        {t('waitlist.selectPeriodFirst', 'Select a time period first')}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
           </ScrollView>
-        </View>
+        </LinearGradient>
       </LinearGradient>
+
+      {showWaitlistSuccessModal ? (
+        <Modal
+          visible={showWaitlistSuccessModal}
+          animationType="fade"
+          transparent
+          statusBarTranslucent
+          onRequestClose={dismissWaitlistSuccess}
+        >
+          <View style={{ flex: 1 }}>
+            <BookingSuccessAnimatedOverlay
+              key={waitlistSuccessAnimKey}
+              lines={waitlistSuccessLines}
+              rtl={(i18n?.language || 'he').startsWith('he')}
+              accentColor={colors.primary}
+              onDismiss={dismissWaitlistSuccess}
+              gotItLabel={t('booking.gotIt', 'Got it')}
+            />
+          </View>
+        </Modal>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -192,157 +355,223 @@ export default function WaitlistScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
     writingDirection: 'ltr',
   },
   gradient: {
     flex: 1,
   },
-  header: {
-    height: 104,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 16,
-    backgroundColor: Colors.white,
+  decorWrap: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  decorBlob: {
+    position: 'absolute',
+    borderRadius: 999,
+  },
+  decorBlobA: {
+    width: 220,
+    height: 220,
+    top: -40,
+    end: -50,
+  },
+  decorBlobB: {
+    width: 160,
+    height: 160,
+    top: 120,
+    start: -60,
+  },
+  hero: {
+    paddingHorizontal: 22,
+    paddingBottom: 8,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(142, 142, 147, 0.12)',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    borderWidth: 1,
   },
-  headerContent: {
+  heroTopSpacer: {
     flex: 1,
-    flexDirection: 'row',
+  },
+  heroIconOuter: {
+    alignSelf: 'center',
+    marginBottom: 14,
+    marginTop: 4,
+  },
+  heroIconGradient: {
+    width: 76,
+    height: 76,
+    borderRadius: 26,
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerText: {
-    flex: 1,
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.08,
+        shadowRadius: 20,
+      },
+      android: { elevation: 4 },
+    }),
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.text,
+    fontSize: 26,
+    fontWeight: '800',
     textAlign: 'center',
+    letterSpacing: -0.6,
+    lineHeight: 32,
   },
   headerSubtitle: {
-    fontSize: 12,
-    color: Colors.subtext,
-    marginTop: 6,
+    fontSize: 14,
     textAlign: 'center',
-    maxWidth: 260,
+    marginTop: 10,
+    lineHeight: 21,
+    paddingHorizontal: 12,
+    maxWidth: 320,
+    alignSelf: 'center',
+    opacity: 0.92,
   },
-  content: {
+  sheet: {
+    flex: 1,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    marginTop: 12,
+    paddingTop: 6,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 16,
+      },
+      android: { elevation: 8 },
+    }),
+  },
+  scroll: {
     flex: 1,
     paddingHorizontal: 20,
   },
-  contentWrapper: {
-    flex: 1,
-    backgroundColor: '#F2F2F7',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 8,
-  },
   scrollContent: {
-    paddingBottom: 20, // Small spacing at the bottom
+    flexGrow: 1,
   },
   infoCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 22,
     padding: 20,
-    marginTop: 24,
-    marginBottom: 24,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 6,
+    marginTop: 18,
+    marginBottom: 8,
+    borderWidth: 1,
+    ...Platform.select({
+      ios: {
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.08,
+        shadowRadius: 24,
+      },
+      android: { elevation: 4 },
+    }),
   },
-  infoHeader: {
+  infoHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 4,
+  },
+  infoHeaderIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginEnd: 14,
   },
   infoTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1C1C1E',
-    marginLeft: 12,
-    textAlign: 'left',
+    flex: 1,
+    letterSpacing: -0.2,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginVertical: 14,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
   },
   infoIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.primary + '15',
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginEnd: 14,
   },
   infoContent: {
     flex: 1,
+    minWidth: 0,
   },
   infoLabel: {
-    fontSize: 14,
-    color: '#8E8E93',
+    fontSize: 13,
+    fontWeight: '500',
     marginBottom: 4,
     textAlign: 'left',
+    opacity: 0.9,
   },
   infoValue: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1C1C1E',
     textAlign: 'left',
+    lineHeight: 22,
   },
-
   footer: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    marginTop:0,
-    marginBottom: 40,
+    marginTop: 12,
+    paddingTop: 8,
+  },
+  ctaTouchable: {
+    borderRadius: 18,
+    overflow: 'hidden',
   },
   confirmButton: {
-    backgroundColor: '#1C1C1E',
-    borderRadius: 16,
+    borderRadius: 18,
     paddingVertical: 18,
+    paddingHorizontal: 20,
     alignItems: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-    borderWidth: 2,
-    borderColor: '#1C1C1E',
-    minHeight: 56,
+    justifyContent: 'center',
+    minHeight: 58,
+    borderWidth: 1,
   },
-  disabledButton: {
-    backgroundColor: '#C7C7CC',
-    shadowOpacity: 0,
+  confirmButtonActive: {
+    borderColor: 'transparent',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.2,
+        shadowRadius: 16,
+      },
+      android: { elevation: 6 },
+    }),
   },
-  loadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
+  confirmButtonIdle: {},
   buttonContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   confirmButtonText: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     letterSpacing: -0.2,
   },
-
-}); 
+  confirmButtonTextMuted: {
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+  },
+});

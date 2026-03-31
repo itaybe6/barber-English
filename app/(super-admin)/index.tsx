@@ -563,13 +563,15 @@ export default function SuperAdminDashboard() {
               textAlign="right"
             />
 
-            <Text style={styles.fieldLabel}>מספר שולח SMS — From (מומלץ)</Text>
+            <Text style={styles.fieldLabel}>שם / מספר שולח SMS — From</Text>
             <Text style={styles.brandHint}>
-              לרוב חובה מספר שולח מאושר בפולסים (ללא אותיות באנגלית). אם ריק — תגדיר אחר כך ב«פולסים SMS» או ב-Supabase.
+              אם ריק — נשמר אוטומטית{' '}
+              <Text style={{ fontWeight: '700' }}>שם האפליקציה באנגלית</Text> בעמודה pulseem_from_number (כשם מאושר בפולסים).
+              אפשר למלא מספר או שם אחר אם שונה מזה.
             </Text>
             <TextInput
               style={styles.input}
-              placeholder="למשל: 0501234567 או מספר וירטואלי מפולסים"
+              placeholder="ריק = שם האפליקציה באנגלית, או מספר/שם מאושר אחר"
               placeholderTextColor={TEXT_MUTED}
               value={newPulseemFromNumber}
               onChangeText={setNewPulseemFromNumber}
@@ -620,10 +622,13 @@ export default function SuperAdminDashboard() {
               secureTextEntry
               textAlign="right"
             />
-            <Text style={styles.fieldLabel}>מספר / שם שולח SMS — From</Text>
+            <Text style={styles.fieldLabel}>שם / מספר שולח SMS — From</Text>
+            <Text style={[styles.brandHint, { marginBottom: 8 }]}>
+              אם ריק — נשמר שם האפליקציה באנגלית ב־pulseem_from_number.
+            </Text>
             <TextInput
               style={styles.input}
-              placeholder="מספר מאושר בפולסים (לעיתים שם באנגלית רק אחרי אימות אצלם)"
+              placeholder="ריק = שם האפליקציה באנגלית, או מספר/שם מאושר בפולסים"
               placeholderTextColor={TEXT_MUTED}
               value={newPulseemFromNumber}
               onChangeText={setNewPulseemFromNumber}

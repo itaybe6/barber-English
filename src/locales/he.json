@@ -37,7 +37,11 @@
   "time_period.morning": "בוקר",
   "time_period.afternoon": "צהריים",
   "time_period.evening": "ערב",
-  "time_period.any": "כל זמן"
+  "time_period.any": "כל זמן",
+  "time_period.range.morning": "8:00 – 12:00",
+  "time_period.range.afternoon": "12:00 – 16:00",
+  "time_period.range.evening": "16:00 – 20:00",
+  "time_period.flexible": "גמישות בשעות"
   ,
   "booking.title": "קביעת תור",
   "booking.subtitle": "בחר/י שירות, יום ושעה",
@@ -303,11 +307,15 @@
   "admin.waitlist.title": "רשימת המתנה",
   "admin.waitlist.viewAndManage": "צפייה וניהול לקוחות ממתינים",
   "admin.waitlist.waitingLabel": "ממתינים",
+  "admin.notify.waitlistJoinTitle": "לקוח חדש ברשימת ההמתנה",
+  "admin.notify.waitlistJoinBody": "{{clientName}} ({{clientPhone}}) נוסף/ה לרשימת ההמתנה לשירות \"{{serviceName}}\" · תאריך {{dateFormatted}} · חלון מועדף: {{periodLabel}}.",
   "waitlist.noAppointmentsOnDate": "אין תורים זמינים\nבתאריך זה",
   "waitlist.noAppointmentsForServiceOnDate": "אין תורים זמינים\nל־{{service}} בתאריך זה",
   "waitlist.requestDetails": "פרטי הבקשה",
   "waitlist.anyService": "כל שירות זמין",
   "waitlist.selectPeriod": "אנא בחר/י חלון זמן מועדף",
+  "waitlist.selectPeriodSubtitle": "נעדכן אותך ברגע שיתפנה תור בחלון שבחרת.",
+  "waitlist.preferredWindow": "חלון זמן מועדף",
   "waitlist.userInfoMissing": "מידע המשתמש חסר",
   "waitlist.noDate": "לא נבחר תאריך",
   "waitlist.addedTitle": "נוסף לרשימת ההמתנה",
@@ -315,8 +323,9 @@
   "waitlist.addError": "אירעה שגיאה בעת ההוספה לרשימת ההמתנה",
   "waitlist.adding": "מוסיף לרשימת ההמתנה...",
   "waitlist.confirmAndSave": "אישור ושמירה",
-  "waitlist.selectPeriodFirst": "בחר/י חלון זמן קודם"
-  ,
+  "waitlist.selectPeriodFirst": "בחר/י חלון זמן קודם",
+  "waitlist.successAnimatedHeadline": "נרשמת לרשימת ההמתנה",
+  "waitlist.successAnimatedNotify": "נעדכן אותך מיד כשיתפנה תור בחלון שבחרת.",
   "gallery.title": "גלריה",
   "gallery.subtitle": "גלה/י את העיצובים והמוצרים שלנו",
   "gallery.designs": "עיצובים",
@@ -1266,7 +1275,16 @@
       "deleteFailed": "אירעה שגיאה במחיקת הרשומה",
       "waiting": "ממתין/ה",
       "emptyTitle": "אין רשומות לרשימת ההמתנה ביום זה",
-      "emptySubtitle": "אין לקוחות שממתינים ליום זה"
+      "emptySubtitle": "אין לקוחות שממתינים ליום זה",
+      "subtitleDay": "יומי — בחרו יום בשורה",
+      "subtitleWeek": "שבועי — כל הימים בשבוע הנבחר",
+      "subtitleMonth": "חודשי — הקישו על יום, הרשימה למטה",
+      "emptyWeekTitle": "אין רשומות לרשימת ההמתנה השבוע",
+      "emptyWeekSubtitle": "אין לקוחות ממתינים בטווח התאריכים הזה",
+      "monthCalendarHint": "המספרים מציגים כמה לקוחות ברשימת ההמתנה באותו יום. הקישו על יום כדי לראות אותם למטה.",
+      "monthSelectedDay": "נבחר: {{date}}",
+      "countPillSingle": "אחד ברשימה",
+      "countPill": "{{count}} ברשימה"
     }
   },
   "swap": {

@@ -5,6 +5,7 @@ import { MenuProvider } from "@/components/shopify-tab-bar/menu-provider";
 import { AnimatedTabsContainer } from "@/components/shopify-tab-bar/animated-tabs-container";
 import { AdminFloatingTabBar } from "@/components/shopify-tab-bar/admin-floating-tab-bar";
 import { AdminCalendarViewProvider } from "@/contexts/AdminCalendarViewContext";
+import { AdminWaitlistCalendarViewProvider } from "@/contexts/AdminWaitlistCalendarViewContext";
 import { AdminCalendarReminderFabProvider } from "@/contexts/AdminCalendarReminderFabContext";
 import { EditGalleryTabBarProvider } from "@/contexts/EditGalleryTabBarContext";
 import { EditProductsTabBarProvider } from "@/contexts/EditProductsTabBarContext";
@@ -15,6 +16,7 @@ export default function TabsLayout() {
     <MenuProvider>
       <PickPrimaryColorTabBarProvider>
       <AdminCalendarViewProvider>
+        <AdminWaitlistCalendarViewProvider>
         <AdminCalendarReminderFabProvider>
           <EditGalleryTabBarProvider>
           <EditProductsTabBarProvider>
@@ -50,6 +52,7 @@ export default function TabsLayout() {
           </EditProductsTabBarProvider>
           </EditGalleryTabBarProvider>
         </AdminCalendarReminderFabProvider>
+        </AdminWaitlistCalendarViewProvider>
       </AdminCalendarViewProvider>
       </PickPrimaryColorTabBarProvider>
     </MenuProvider>

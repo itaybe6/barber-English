@@ -906,7 +906,7 @@ export const superAdminApi = {
     splashBase64?: string;
     /** מפתח API מעמוד «הגדרות API» בפולסים (חשבון משנה) — אם סופק ידנית */
     pulseemApiKey?: string;
-    /** מספר/שם שולח SMS מאושר בפולסים */
+    /** מספר/שם שולח SMS מאושר בפולסים. אם לא מועבר — נשמר שם האפליקציה באנגלית (clientName) */
     pulseemFromNumber?: string;
     /** מזהה משתמש Web Service (pulseemsendservices) */
     pulseemWsUserId?: string;
@@ -928,8 +928,8 @@ export const superAdminApi = {
       const mainPulseemApiKey = getPulseemMainApiKey();
       console.log('[createBusiness] pulseemMainApiKey length=', mainPulseemApiKey.length, 'empty?', !mainPulseemApiKey);
       let pulseApiKey = params.pulseemApiKey?.trim() || '';
-      // Never default From to clientName — Pulseem often allows only numeric senders for new sub-accounts.
-      let pulseFrom = params.pulseemFromNumber?.trim() || '';
+      /** שם שולח ב-SMS: ערך מהטופס, או ברירת מחדל שם האפליקציה באנגלית (כמו בפולסים אחרי אישור שם) */
+      let pulseFrom = params.pulseemFromNumber?.trim() || clientName;
       let pulseWsUser = params.pulseemWsUserId?.trim() || '';
       let pulseWsPass = params.pulseemWsPassword?.trim() || '';
       let pulseemCreated = false;

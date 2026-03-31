@@ -21,6 +21,7 @@ import {
 import { TabButton } from "./tab-button";
 import { useColors, usePrimaryContrast } from "@/src/theme/ThemeProvider";
 import { useAdminCalendarView } from "@/contexts/AdminCalendarViewContext";
+import { useAdminWaitlistCalendarView } from "@/contexts/AdminWaitlistCalendarViewContext";
 import type { CalendarViewMode } from "@/components/admin-calendar/calendarViewMode";
 
 /** ברירות מחדל — אם המפתח ב־JSON לא נטען (cache / Metro), עדיין יוצג טקסט תקין */
@@ -56,6 +57,7 @@ export const AdminFloatingTabBar: React.FC = () => {
   const { primary } = useColors();
   const { onPrimary } = usePrimaryContrast();
   const { calendarView, setCalendarView } = useAdminCalendarView();
+  const { waitlistCalendarView, setWaitlistCalendarView } = useAdminWaitlistCalendarView();
   const reminderFab = useAdminCalendarReminderFab();
   const setPlusAnchorWindow = useAdminCalendarSetPlusAnchorWindow();
   const plusPillRef = useRef<View>(null);
@@ -139,6 +141,67 @@ export const AdminFloatingTabBar: React.FC = () => {
                   focused={focused}
                   activeColor={primary}
                   onPress={() => setCalendarView(mode)}
+                  accessibilityLabel={label}
+                  accessibilityRole="button"
+                >
+                  <CalendarViewModeIcon mode={mode} color={fg} iconSize={22} />
+                </TabButton>
+              );
+            })}
+          </View>
+
+          <View style={[styles.pill, styles.border, styles.shadow]}>
+            <TabButton
+              focused={isActive("index")}
+              activeColor={primary}
+              onPress={() => router.push("/(tabs)")}
+            >
+              <Home size={22} color={iconColor("index")} />
+            </TabButton>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  if (isActive("waitlist")) {
+    return (
+      <View
+        style={[styles.root, { bottom: insets.bottom + 12 }]}
+        pointerEvents="box-none"
+      >
+        <View style={[styles.inner, styles.innerCalendarBar]}>
+          <View
+            style={[styles.pill, styles.border, styles.shadow, styles.waitlistBarSpacer]}
+            pointerEvents="none"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          />
+
+          <View
+            style={[
+              styles.pill,
+              styles.center,
+              styles.border,
+              styles.shadow,
+            ]}
+          >
+            {CALENDAR_VIEW_ORDER.map((mode) => {
+              const focused = waitlistCalendarView === mode;
+              const fg = focused ? onPrimary : INACTIVE;
+              const lng = typeof i18n.language === "string" ? i18n.language : "";
+              const fallback = lng.startsWith("he")
+                ? CALENDAR_MODE_LABEL_HE[mode]
+                : CALENDAR_MODE_LABEL_EN[mode];
+              const label = String(
+                t(`admin.calendarViewMode.${mode}`, { defaultValue: fallback })
+              );
+              return (
+                <TabButton
+                  key={mode}
+                  focused={focused}
+                  activeColor={primary}
+                  onPress={() => setWaitlistCalendarView(mode)}
                   accessibilityLabel={label}
                   accessibilityRole="button"
                 >
@@ -611,5 +674,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 4,
+  },
+  /** Aligns with the appointments + pill so day/week/month stay centered */
+  waitlistBarSpacer: {
+    width: 52,
+    minHeight: 48,
+    padding: 2,
   },
 });

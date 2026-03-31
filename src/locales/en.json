@@ -36,7 +36,11 @@
   "time_period.morning": "Morning",
   "time_period.afternoon": "Afternoon",
   "time_period.evening": "Evening",
-  "time_period.any": "Any time"
+  "time_period.any": "Any time",
+  "time_period.range.morning": "8:00 – 12:00",
+  "time_period.range.afternoon": "12:00 – 16:00",
+  "time_period.range.evening": "16:00 – 20:00",
+  "time_period.flexible": "Flexible timing"
   ,
   "booking.title": "Appointment Booking",
   "booking.subtitle": "Select a service, day, and time",
@@ -301,11 +305,15 @@
   "admin.waitlist.title": "Waitlist",
   "admin.waitlist.viewAndManage": "View and manage waiting clients",
   "admin.waitlist.waitingLabel": "Waiting",
+  "admin.notify.waitlistJoinTitle": "New client joined the waitlist",
+  "admin.notify.waitlistJoinBody": "{{clientName}} ({{clientPhone}}) joined the waitlist for \"{{serviceName}}\" on {{dateFormatted}} · preferred window: {{periodLabel}}.",
   "waitlist.noAppointmentsOnDate": "No appointments available\non this date",
   "waitlist.noAppointmentsForServiceOnDate": "No appointments available\nfor {{service}} on this date",
   "waitlist.requestDetails": "Request details",
   "waitlist.anyService": "Any available service",
   "waitlist.selectPeriod": "Please select a preferred time period",
+  "waitlist.selectPeriodSubtitle": "We'll notify you as soon as a slot opens in the window you choose.",
+  "waitlist.preferredWindow": "Preferred time",
   "waitlist.userInfoMissing": "User info is missing",
   "waitlist.noDate": "No date selected",
   "waitlist.addedTitle": "Added to waitlist",
@@ -313,8 +321,9 @@
   "waitlist.addError": "An error occurred while adding to the waitlist",
   "waitlist.adding": "Adding to waitlist...",
   "waitlist.confirmAndSave": "Confirm and save",
-  "waitlist.selectPeriodFirst": "Select a time period first"
-  ,
+  "waitlist.selectPeriodFirst": "Select a time period first",
+  "waitlist.successAnimatedHeadline": "You're on the waitlist",
+  "waitlist.successAnimatedNotify": "We'll let you know as soon as a slot opens in the time you chose.",
   "gallery.title": "Gallery",
   "gallery.subtitle": "Discover our designs and products",
   "gallery.designs": "Designs",
@@ -1265,7 +1274,16 @@
       "deleteFailed": "An error occurred while deleting the entry",
       "waiting": "Waiting",
       "emptyTitle": "No waitlist entries for this day",
-      "emptySubtitle": "No clients are waiting for this day"
+      "emptySubtitle": "No clients are waiting for this day",
+      "subtitleDay": "Daily — pick a day",
+      "subtitleWeek": "Weekly — all days in this week",
+      "subtitleMonth": "Monthly — tap a day, list below",
+      "emptyWeekTitle": "No waitlist this week",
+      "emptyWeekSubtitle": "No clients are waiting in this date range",
+      "monthCalendarHint": "Numbers show how many clients are on the waitlist that day. Tap a day to see them below.",
+      "monthSelectedDay": "Selected: {{date}}",
+      "countPillSingle": "1 on waitlist",
+      "countPill": "{{count}} on waitlist"
     }
   },
   "swap": {

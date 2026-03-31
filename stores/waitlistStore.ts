@@ -1,6 +1,31 @@
 import { create } from 'zustand/react';
 import { WaitlistEntry, supabase, getBusinessId } from '@/lib/supabase';
 import { notificationsApi } from '@/lib/api/notifications';
+import i18n from '@/src/config/i18n';
+
+function formatWaitlistAdminNotifyDate(isoDate: string): string {
+  const d = new Date(isoDate);
+  if (Number.isNaN(d.getTime())) return isoDate;
+  const lang = i18n.language || 'en';
+  return d.toLocaleDateString(lang.startsWith('he') ? 'he-IL' : 'en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
+function waitlistTimePeriodLabel(period: 'morning' | 'afternoon' | 'evening' | 'any'): string {
+  const key =
+    period === 'morning'
+      ? 'time_period.morning'
+      : period === 'afternoon'
+        ? 'time_period.afternoon'
+        : period === 'evening'
+          ? 'time_period.evening'
+          : 'time_period.any';
+  return i18n.t(key);
+}
 
 interface WaitlistStore {
   // State
@@ -86,14 +111,18 @@ export const useWaitlistStore = create<WaitlistStore>((set, get) => ({
           isLoading: false,
         }));
         try {
-          const periodLabel: Record<'morning' | 'afternoon' | 'evening' | 'any', string> = {
-            morning: 'Morning',
-            afternoon: 'Afternoon',
-            evening: 'Evening',
-            any: 'Any time',
-          };
-          const title = 'New client joined the waitlist';
-          const content = `${clientName} (${clientPhone}) joined the waitlist for "${serviceName}" on ${requestedDate} for ${periodLabel[timePeriod]} period.`;
+          const displayService =
+            serviceName === 'General service'
+              ? i18n.t('waitlist.anyService', 'Any available service')
+              : serviceName;
+          const title = i18n.t('admin.notify.waitlistJoinTitle', 'New client joined the waitlist');
+          const content = i18n.t('admin.notify.waitlistJoinBody', {
+            clientName,
+            clientPhone,
+            serviceName: displayService,
+            dateFormatted: formatWaitlistAdminNotifyDate(requestedDate),
+            periodLabel: waitlistTimePeriodLabel(timePeriod),
+          });
           if (userId) {
             notificationsApi
               .createAdminNotificationForUserId(userId, title, content, 'system')

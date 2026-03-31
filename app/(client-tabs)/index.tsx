@@ -15,7 +15,7 @@ import LoginRequiredModal from '@/components/LoginRequiredModal';
 import { Appointment as AvailableTimeSlot } from '@/lib/supabase';
 import { notificationsApi } from '@/lib/api/notifications';
 import { businessProfileApi } from '@/lib/api/businessProfile';
-import type { BusinessProfile } from '@/lib/supabase';
+import type { BusinessProfile, WaitlistEntry } from '@/lib/supabase';
 import DesignCarousel from '@/components/DesignCarousel';
 import ProductCarousel from '@/components/ProductCarousel';
 import { useDesignsStore } from '@/stores/designsStore';
@@ -173,7 +173,7 @@ const clientHomeApi = {
   },
 
   // Get user waitlist entries
-  async getUserWaitlistEntries(userPhone: string): Promise<any[]> {
+  async getUserWaitlistEntries(userPhone: string): Promise<WaitlistEntry[]> {
     try {
       const businessId = getBusinessId();
       const today = new Date();
@@ -257,7 +257,7 @@ export default function ClientHomeScreen() {
   
   const [nextAppointment, setNextAppointment] = useState<AvailableTimeSlot | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [waitlistEntries, setWaitlistEntries] = useState<any[]>([]);
+  const [waitlistEntries, setWaitlistEntries] = useState<WaitlistEntry[]>([]);
   const [isLoadingWaitlist, setIsLoadingWaitlist] = useState(false);
   const [isRemovingFromWaitlist, setIsRemovingFromWaitlist] = useState(false);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
@@ -845,25 +845,37 @@ export default function ClientHomeScreen() {
                       : t('waitlist.waitingForMany', { count: waitlistEntries.length })
                     }
                   </Text>
-                  <View style={styles.waitlistTimePeriodContainer}>
-                    {waitlistEntries.slice(0, 3).map((entry, index) => (
-                      <View key={entry.id} style={styles.waitlistTimePeriodItem}>
-                        <Ionicons 
-                          name={
-                            entry.time_period === 'morning' ? 'sunny' :
-                            entry.time_period === 'afternoon' ? 'partly-sunny' :
-                            entry.time_period === 'evening' ? 'moon' : 'time'
-                          } 
-                          size={16} 
-                          color="rgba(255, 255, 255, 0.9)" 
-                        />
-                        <Text style={styles.waitlistTimePeriodText}>
-                          {entry.time_period === 'morning' ? t('time_period.morning') :
-                           entry.time_period === 'afternoon' ? t('time_period.afternoon') :
-                           entry.time_period === 'evening' ? t('time_period.evening') : t('time_period.any')}
-                        </Text>
-                      </View>
-                    ))}
+                  <View style={styles.waitlistEntriesMeta}>
+                    {waitlistEntries.slice(0, 3).map((entry) => {
+                      const periodIcon =
+                        entry.time_period === 'morning'
+                          ? 'sunny'
+                          : entry.time_period === 'afternoon'
+                            ? 'partly-sunny'
+                            : entry.time_period === 'evening'
+                              ? 'moon'
+                              : 'time';
+                      const timeLine =
+                        entry.time_period === 'any'
+                          ? `${t('time_period.any')} — ${t('time_period.flexible')}`
+                          : `${t(`time_period.${entry.time_period}`)} · ${t(`time_period.range.${entry.time_period}` as never)}`;
+                      return (
+                        <View key={entry.id} style={styles.waitlistEntryBlock}>
+                          <View style={styles.waitlistEntryMetaRow}>
+                            <Ionicons name="calendar-outline" size={16} color="rgba(255, 255, 255, 0.92)" />
+                            <Text style={styles.waitlistEntryMetaText} numberOfLines={2}>
+                              {formatWaitlistDate(entry.requested_date)}
+                            </Text>
+                          </View>
+                          <View style={styles.waitlistEntryMetaRow}>
+                            <Ionicons name={periodIcon} size={16} color="rgba(255, 255, 255, 0.92)" />
+                            <Text style={styles.waitlistEntryMetaText} numberOfLines={2}>
+                              {timeLine}
+                            </Text>
+                          </View>
+                        </View>
+                      );
+                    })}
                     {waitlistEntries.length > 3 && (
                       <View style={styles.waitlistTimePeriodItem}>
                         <Text style={styles.waitlistTimePeriodText}>
@@ -2119,12 +2131,29 @@ const styles = StyleSheet.create<any>({
     fontWeight: '500',
     textAlign: 'left',
   },
-  waitlistTimePeriodContainer: {
+  waitlistEntriesMeta: {
+    marginTop: 10,
+    gap: 12,
+    alignSelf: 'stretch',
+  },
+  waitlistEntryBlock: {
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    borderRadius: 12,
+  },
+  waitlistEntryMetaRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
-    flexWrap: 'wrap',
+    alignItems: 'center',
     gap: 8,
-    marginTop: 8,
+  },
+  waitlistEntryMetaText: {
+    flex: 1,
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.92)',
+    fontWeight: '600',
+    textAlign: 'left',
   },
   waitlistTimePeriodItem: {
     flexDirection: 'row',
@@ -2134,6 +2163,7 @@ const styles = StyleSheet.create<any>({
     borderRadius: 12,
     paddingVertical: 4,
     paddingHorizontal: 8,
+    alignSelf: 'flex-start',
   },
   waitlistTimePeriodText: {
     fontSize: 12,

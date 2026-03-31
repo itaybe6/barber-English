@@ -41,6 +41,8 @@ export type AdminVerticalMonthCalendarProps = {
   monthHint?: string;
   /** Scroll to today and set selection (does not open day modal). */
   onJumpToDate?: (date: Date) => void;
+  /** Override pill text under day cells when `displayMode` is count (e.g. waitlist vs appointments). */
+  formatCountBadge?: (count: number) => string;
 };
 
 function formatMonthLong(date: Date, language: string): string {
@@ -90,6 +92,7 @@ export default function AdminVerticalMonthCalendar({
   todayLabel = 'היום',
   monthHint,
   onJumpToDate,
+  formatCountBadge: formatCountBadgeProp,
 }: AdminVerticalMonthCalendarProps) {
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -97,10 +100,12 @@ export default function AdminVerticalMonthCalendar({
 
   const formatAppointmentBadge = useCallback(
     (c: number) =>
-      c === 1
-        ? String(t('admin.calendar.appointmentPillSingle'))
-        : String(t('admin.calendar.appointmentPill', { count: c })),
-    [t]
+      formatCountBadgeProp
+        ? formatCountBadgeProp(c)
+        : c === 1
+          ? String(t('admin.calendar.appointmentPillSingle'))
+          : String(t('admin.calendar.appointmentPill', { count: c })),
+    [t, formatCountBadgeProp]
   );
   const scrollRef = useRef<ScrollView>(null);
   const monthYRef = useRef<Record<number, number>>({});

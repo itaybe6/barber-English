@@ -147,10 +147,13 @@ export default function SettingsScreen() {
   const [showEditTiktokModal, setShowEditTiktokModal] = useState(false);
   const [showEditCancellationModal, setShowEditCancellationModal] = useState(false);
   const [showBookingWindowModal, setShowBookingWindowModal] = useState(false);
+  const [bookingSaveSuccessDialog, setBookingSaveSuccessDialog] = useState<{
+    title: string;
+    message: string;
+  } | null>(null);
   const [bookingWindowDraft, setBookingWindowDraft] = useState('7');
   const bookingDaysRulerRef = useRef<BookingDaysRulerHandle>(null);
   const [showCancellationDropdown, setShowCancellationDropdown] = useState(false);
-  const [cancellationDropdownDirection, setCancellationDropdownDirection] = useState<'up' | 'down'>('down');
   // Address bottom sheet animation
   const addressSheetAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
   const addressOverlayOpacity = addressSheetAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
@@ -326,13 +329,13 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     if (showBookingWindowModal) {
-      setBookingWindowDraft(String(profileBookingOpenDays || 7));
+      setBookingWindowDraft(String(profileBookingOpenDays ?? 7));
     }
   }, [showBookingWindowModal, profileBookingOpenDays]);
 
   useLayoutEffect(() => {
     if (!showBookingWindowModal) return;
-    const day = profileBookingOpenDays || 7;
+    const day = profileBookingOpenDays ?? 7;
     const id = requestAnimationFrame(() => {
       bookingDaysRulerRef.current?.scrollToDay(day);
     });
@@ -563,8 +566,11 @@ export default function SettingsScreen() {
   const confirmBookingWindowModal = async () => {
     const ok = await persistBookingOpenDays(bookingWindowDraft);
     if (ok) {
-      Alert.alert(t('success.generic', 'Success'), t('settings.profile.bookingWindowSaved', 'Booking window updated successfully'));
       setShowBookingWindowModal(false);
+      setBookingSaveSuccessDialog({
+        title: t('success.generic', 'Success'),
+        message: t('settings.profile.bookingWindowSaved', 'Booking window updated successfully'),
+      });
     }
   };
 
@@ -1593,7 +1599,10 @@ export default function SettingsScreen() {
     try {
       await businessProfileApi.setBookingOpenDaysForUser(userId, days);
       setBookingOpenDaysByUser((prev) => ({ ...prev, [userId]: days }));
-      Alert.alert(t('success.generic','Success'), t('settings.profile.bookingWindowSaved','Booking window updated successfully'));
+      setBookingSaveSuccessDialog({
+        title: t('success.generic', 'Success'),
+        message: t('settings.profile.bookingWindowSaved', 'Booking window updated successfully'),
+      });
     } catch (error) {
       console.error('Error saving booking days for user:', error);
       Alert.alert(t('error.generic','Error'), t('settings.profile.bookingWindowSaveFailed','Failed to save booking window'));
@@ -1842,7 +1851,7 @@ export default function SettingsScreen() {
               ? renderSettingItemLTR(
                   <Calendar size={20} color={businessColors.primary} />,
                   t('settings.profile.bookingWindowRowTitle', 'How far ahead clients can book you'),
-                  t('settings.profile.bookingWindowRowSubtitle', { count: profileBookingOpenDays || 7 }),
+                  t('settings.profile.bookingWindowRowSubtitle', { count: profileBookingOpenDays ?? 7 }),
                   undefined,
                   () => setShowBookingWindowModal(true)
                 )
@@ -2729,7 +2738,11 @@ export default function SettingsScreen() {
                                         }}
                                         value={String(currentBookingDays)}
                                         onChangeText={(text) => {
-                                          const num = Math.max(1, Math.min(60, Math.floor(Number(text) || 7)));
+                                          const digits = text.replace(/\D/g, '');
+                                          const parsed = parseInt(digits, 10);
+                                          const num = Number.isFinite(parsed)
+                                            ? Math.max(0, Math.min(60, parsed))
+                                            : 7;
                                           setBookingOpenDaysByUser((prev) => ({ ...prev, [adm.id]: num }));
                                         }}
                                         placeholder="7"
@@ -3581,148 +3594,260 @@ export default function SettingsScreen() {
         onRequestClose={dismissCancellationModal}
       >
         <TouchableWithoutFeedback onPress={dismissCancellationModal}>
-          <View style={styles.smallModalOverlay}>
+          <View style={styles.cancellationModalOverlay}>
+            {Platform.OS === 'ios' ? (
+              <BlurView intensity={38} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
+            ) : null}
+            <View
+              pointerEvents="none"
+              style={[
+                StyleSheet.absoluteFill,
+                {
+                  backgroundColor:
+                    Platform.OS === 'ios' ? 'rgba(0,0,0,0.28)' : 'rgba(0,0,0,0.52)',
+                },
+              ]}
+            />
             <TouchableWithoutFeedback onPress={() => {}}>
-              <View style={styles.smallModalCard}>
-                <View style={styles.modalHeader}>
-                  <TouchableOpacity style={styles.cancellationModalCloseButton} onPress={dismissCancellationModal}>
-                    <X size={20} color={Colors.text} />
+              <View style={styles.cancellationModalCard}>
+                <View style={styles.cancellationModalRtlShell}>
+                <View style={styles.cancellationModalHeader}>
+                  <TouchableOpacity
+                    style={styles.cancellationModalCloseButton}
+                    onPress={dismissCancellationModal}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('cancel', 'Cancel')}
+                  >
+                    <X size={22} color={Colors.text} strokeWidth={2} />
                   </TouchableOpacity>
-                  <Text style={styles.modalTitleLTR}>{t('settings.policies.minCancellationTitle','Appointment cancellation time')}</Text>
-                  <TouchableOpacity style={[styles.modalSendButton, { backgroundColor: businessColors.primary }, isSavingProfile && styles.modalSendButtonDisabled]} onPress={saveCancellationHours} disabled={isSavingProfile}>
-                    <Text style={[styles.modalSendText, { color: Colors.white }, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? t('settings.common.saving','Saving...') : t('save','Save')}</Text>
-                  </TouchableOpacity>
+                  <Text style={styles.cancellationModalTitle} numberOfLines={2}>
+                    {t('settings.policies.minCancellationTitle', 'Appointment cancellation time')}
+                  </Text>
+                  <View style={styles.cancellationModalHeaderSpacer} />
                 </View>
-                <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
+
+                <ScrollView
+                  style={styles.cancellationModalScroll}
+                  contentContainerStyle={styles.cancellationModalScrollContent}
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled
+                >
                   <TouchableWithoutFeedback onPress={() => setShowCancellationDropdown(false)}>
-                    <View style={styles.inputContainer}>
-                      <Text style={styles.inputLabelLTR}>{t('settings.policies.hoursBefore','Hours before appointment')}</Text>
-                      <View style={styles.dropdownContainer}>
-                        <TouchableOpacity
-                          style={styles.dropdownButton}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            // Open downward to ensure visibility
-                            setCancellationDropdownDirection('down');
-                            setShowCancellationDropdown(!showCancellationDropdown);
-                          }}
+                    <View>
+                      <LinearGradient
+                        colors={[`${businessColors.primary}18`, `${businessColors.primary}08`, 'transparent']}
+                        locations={[0, 0.55, 1]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.cancellationModalExplainer}
+                      >
+                        <Text style={styles.cancellationModalExplainerText}>
+                          {t(
+                            'settings.policies.cancellationModalHint',
+                            'Clients cannot cancel inside this window before the appointment starts. Choose how many hours ahead they must cancel by.',
+                          )}
+                        </Text>
+                        <View
+                          style={[
+                            styles.cancellationModalExplainerIcon,
+                            { backgroundColor: `${businessColors.primary}22` },
+                          ]}
                         >
-                          <Text style={styles.dropdownButtonText}>
-                            {cancellationHoursDraft === '0' 
-                              ? t('settings.policies.noRestriction','0 hours (No restriction)') 
-                              : `${cancellationHoursDraft} ${cancellationHoursDraft === '1' ? t('settings.policies.hour','hour') : t('settings.policies.hours','hours')}${parseInt(cancellationHoursDraft) >= 24 ? ` (${Math.floor(parseInt(cancellationHoursDraft) / 24)} ${Math.floor(parseInt(cancellationHoursDraft) / 24) === 1 ? t('settings.policies.day','day') : t('settings.policies.days','days')}${parseInt(cancellationHoursDraft) % 24 > 0 ? ` ${parseInt(cancellationHoursDraft) % 24} ${t('settings.policies.hours','hours')}` : ''})` : ''}`
-                            }
+                          <Clock size={22} color={businessColors.primary} strokeWidth={2} />
+                        </View>
+                      </LinearGradient>
+
+                      <View style={styles.cancellationModalHero}>
+                        <Text style={styles.cancellationModalFieldLabel}>
+                          {t('settings.policies.hoursBefore', 'Hours before appointment')}
+                        </Text>
+
+                        <TouchableOpacity
+                          style={[
+                            styles.cancellationModalPicker,
+                            showCancellationDropdown && {
+                              borderColor: businessColors.primary,
+                              backgroundColor: `${businessColors.primary}0D`,
+                            },
+                          ]}
+                          onPress={() => setShowCancellationDropdown(!showCancellationDropdown)}
+                          activeOpacity={0.92}
+                        >
+                          <Text style={styles.cancellationModalPickerText} numberOfLines={3}>
+                            {cancellationHoursDraft === '0'
+                              ? t('settings.policies.noRestriction', '0 hours (No restriction)')
+                              : `${cancellationHoursDraft} ${
+                                  cancellationHoursDraft === '1'
+                                    ? t('settings.policies.hour', 'hour')
+                                    : t('settings.policies.hours', 'hours')
+                                }${
+                                  parseInt(cancellationHoursDraft, 10) >= 24
+                                    ? ` (${Math.floor(parseInt(cancellationHoursDraft, 10) / 24)} ${
+                                        Math.floor(parseInt(cancellationHoursDraft, 10) / 24) === 1
+                                          ? t('settings.policies.day', 'day')
+                                          : t('settings.policies.days', 'days')
+                                      }${
+                                        parseInt(cancellationHoursDraft, 10) % 24 > 0
+                                          ? ` ${parseInt(cancellationHoursDraft, 10) % 24} ${t('settings.policies.hours', 'hours')}`
+                                          : ''
+                                      })`
+                                    : ''
+                                }`}
                           </Text>
                           {showCancellationDropdown ? (
-                            <Ionicons name="chevron-up" size={20} color={businessColors.primary} />
+                            <Ionicons name="chevron-up" size={22} color={businessColors.primary} />
                           ) : (
-                            <Ionicons name="chevron-down" size={20} color={businessColors.primary} />
+                            <Ionicons name="chevron-down" size={22} color={businessColors.primary} />
                           )}
                         </TouchableOpacity>
+
+                        {showCancellationDropdown ? (
+                          <View style={styles.cancellationModalDropdownPanel}>
+                            <ScrollView
+                              style={styles.cancellationModalDropdownScroll}
+                              showsVerticalScrollIndicator={false}
+                              nestedScrollEnabled
+                              keyboardShouldPersistTaps="handled"
+                            >
+                              <TouchableOpacity
+                                style={[
+                                  styles.cancellationModalDropdownRow,
+                                  cancellationHoursDraft === '0' && {
+                                    backgroundColor: `${businessColors.primary}12`,
+                                  },
+                                ]}
+                                onPress={() => {
+                                  setCancellationHoursDraft('0');
+                                  setShowCancellationDropdown(false);
+                                }}
+                              >
+                                <Text
+                                  style={[
+                                    styles.cancellationModalDropdownRowText,
+                                    cancellationHoursDraft === '0' && {
+                                      color: businessColors.primary,
+                                      fontWeight: '700',
+                                    },
+                                  ]}
+                                >
+                                  {t('settings.policies.noRestriction', '0 hours (No restriction)')}
+                                </Text>
+                              </TouchableOpacity>
+
+                              {[1, 2, 3, 6, 12, 24, 48, 72, 168].map((hour) => (
+                                <TouchableOpacity
+                                  key={hour}
+                                  style={[
+                                    styles.cancellationModalDropdownRow,
+                                    cancellationHoursDraft === hour.toString() && {
+                                      backgroundColor: `${businessColors.primary}12`,
+                                    },
+                                  ]}
+                                  onPress={() => {
+                                    setCancellationHoursDraft(hour.toString());
+                                    setShowCancellationDropdown(false);
+                                  }}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.cancellationModalDropdownRowText,
+                                      cancellationHoursDraft === hour.toString() && {
+                                        color: businessColors.primary,
+                                        fontWeight: '700',
+                                      },
+                                    ]}
+                                  >
+                                    {hour}{' '}
+                                    {hour === 1
+                                      ? t('settings.policies.hour', 'hour')
+                                      : t('settings.policies.hours', 'hours')}
+                                    {hour >= 24 ? (
+                                      <Text style={styles.cancellationModalDropdownSubtext}>
+                                        {' '}
+                                        ({Math.floor(hour / 24)}{' '}
+                                        {Math.floor(hour / 24) === 1
+                                          ? t('settings.policies.day', 'day')
+                                          : t('settings.policies.days', 'days')}
+                                        {hour % 24 > 0
+                                          ? ` ${hour % 24} ${t('settings.policies.hours', 'hours')}`
+                                          : ''}
+                                        )
+                                      </Text>
+                                    ) : null}
+                                  </Text>
+                                </TouchableOpacity>
+                              ))}
+
+                              <TouchableOpacity
+                                style={[
+                                  styles.cancellationModalDropdownRow,
+                                  styles.cancellationModalDropdownRowLast,
+                                ]}
+                                onPress={() => {
+                                  setShowCancellationDropdown(false);
+                                  Alert.prompt(
+                                    t('settings.policies.customHoursTitle', 'Custom Hours'),
+                                    t('settings.policies.customHoursMessage', 'Enter number of hours (0-168):'),
+                                    [
+                                      { text: t('cancel', 'Cancel'), style: 'cancel' },
+                                      {
+                                        text: t('ok', 'OK'),
+                                        onPress: (text) => {
+                                          const hours = parseInt(text || '0', 10);
+                                          if (hours >= 0 && hours <= 168) {
+                                            setCancellationHoursDraft(hours.toString());
+                                          } else {
+                                            Alert.alert(
+                                              t('error.generic', 'Error'),
+                                              t(
+                                                'settings.profile.cancellationInvalid',
+                                                'Please enter a valid number between 0 and 168 hours',
+                                              ),
+                                            );
+                                          }
+                                        },
+                                      },
+                                    ],
+                                    'plain-text',
+                                    cancellationHoursDraft,
+                                    'numeric',
+                                  );
+                                }}
+                              >
+                                <Text style={styles.cancellationModalDropdownRowText}>
+                                  {t('settings.policies.customHoursLabel', 'Custom hours...')}
+                                </Text>
+                              </TouchableOpacity>
+                            </ScrollView>
+                          </View>
+                        ) : null}
                       </View>
                     </View>
                   </TouchableWithoutFeedback>
                 </ScrollView>
-                
-                {/* Dropdown positioned outside of ScrollView for better visibility */}
-                {showCancellationDropdown && (
-                  <View style={[
-                    styles.cancellationDropdownOptions,
-                    cancellationDropdownDirection === 'up' 
-                      ? styles.cancellationDropdownOptionsUp 
-                      : styles.cancellationDropdownOptionsDown
-                  ]}>
-                    <ScrollView style={styles.cancellationDropdownList} showsVerticalScrollIndicator={false}>
-                      {/* 0 hours option */}
-                      <TouchableOpacity
-                          style={[
-                            styles.cancellationDropdownItem,
-                            cancellationHoursDraft === '0' && styles.cancellationDropdownItemSelected
-                          ]}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            setCancellationHoursDraft('0');
-                            setShowCancellationDropdown(false);
-                          }}
-                        >
-                          <Text style={[
-                            styles.cancellationDropdownItemText,
-                            cancellationHoursDraft === '0' && styles.cancellationDropdownItemTextSelected
-                          ]}>
-                            0 hours (No restriction)
-                          </Text>
-                        </TouchableOpacity>
-                        
-                        {/* Common options */}
-                        {[1, 2, 3, 6, 12, 24, 48, 72, 168].map((hour) => (
-                          <TouchableOpacity
-                            key={hour}
-                            style={[
-                              styles.cancellationDropdownItem,
-                              cancellationHoursDraft === hour.toString() && styles.cancellationDropdownItemSelected
-                            ]}
-                            onPress={(e) => {
-                              e.stopPropagation();
-                              setCancellationHoursDraft(hour.toString());
-                              setShowCancellationDropdown(false);
-                            }}
-                          >
-                            <Text style={[
-                              styles.cancellationDropdownItemText,
-                              cancellationHoursDraft === hour.toString() && styles.cancellationDropdownItemTextSelected
-                            ]}>
-                              {hour} {hour === 1 ? 'hour' : 'hours'}
-                              {hour >= 24 && (
-                                <Text style={styles.cancellationDropdownItemSubtext}>
-                                  {' '}({Math.floor(hour / 24)} {Math.floor(hour / 24) === 1 ? 'day' : 'days'}
-                                  {hour % 24 > 0 ? ` ${hour % 24} hours` : ''})
-                                </Text>
-                              )}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                        
-                        {/* Custom option */}
-                        <TouchableOpacity
-                          style={styles.cancellationDropdownItem}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            Alert.prompt(
-                              t('settings.policies.customHoursTitle','Custom Hours'),
-                              t('settings.policies.customHoursMessage','Enter number of hours (0-168):'),
-                              [
-                                { text: t('cancel','Cancel'), style: 'cancel' },
-                                {
-                                  text: t('ok','OK'),
-                                  onPress: (text) => {
-                                    const hours = parseInt(text || '0');
-                                    if (hours >= 0 && hours <= 168) {
-                                      setCancellationHoursDraft(hours.toString());
-                                    } else {
-                                      Alert.alert(t('error.generic','Error'), t('settings.profile.cancellationInvalid','Please enter a valid number between 0 and 168 hours'));
-                                    }
-                                  }
-                                }
-                              ],
-                              'plain-text',
-                              cancellationHoursDraft,
-                              'numeric'
-                            );
-                            setShowCancellationDropdown(false);
-                          }}
-                        >
-                          <Text style={styles.cancellationDropdownItemText}>
-                            {t('settings.policies.customHoursLabel','Custom hours...')}
-                          </Text>
-                        </TouchableOpacity>
-                    </ScrollView>
-                  </View>
-                )}
-                
-                <View style={styles.smallModalContent}>
-                  <Text style={[styles.inputLabelLTR, { fontSize: 12, color: Colors.subtext, marginTop: 8 }]}>
-                    Clients cannot cancel appointments within this time period before the appointment.
-                  </Text>
+
+                <View
+                  style={[
+                    styles.cancellationModalFooter,
+                    { paddingBottom: Math.max(insets.bottom, 12) },
+                  ]}
+                >
+                  <TouchableOpacity
+                    style={[
+                      styles.cancellationModalSaveBtn,
+                      { backgroundColor: businessColors.primary },
+                      isSavingProfile && styles.cancellationModalSaveBtnDisabled,
+                    ]}
+                    onPress={saveCancellationHours}
+                    disabled={isSavingProfile}
+                    activeOpacity={0.88}
+                  >
+                    <Text style={[styles.cancellationModalSaveBtnText, isSavingProfile && { opacity: 0.88 }]}>
+                      {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
                 </View>
               </View>
             </TouchableWithoutFeedback>
@@ -3837,6 +3962,38 @@ export default function SettingsScreen() {
             </View>
           </KeyboardAvoidingView>
         </SafeAreaView>
+      </Modal>
+
+      {/* Booking window save — LTR text block (native Alert follows RTL and misaligns Hebrew here) */}
+      <Modal
+        visible={bookingSaveSuccessDialog !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBookingSaveSuccessDialog(null)}
+      >
+        <View style={styles.bookingSaveSuccessOverlay} pointerEvents="box-none">
+          <Pressable
+            style={StyleSheet.absoluteFillObject}
+            onPress={() => setBookingSaveSuccessDialog(null)}
+            accessibilityRole="button"
+            accessibilityLabel={t('cancel', 'Close')}
+          />
+          <View style={styles.bookingSaveSuccessCard}>
+            <View style={styles.bookingSaveSuccessLtr}>
+              <Text style={styles.bookingSaveSuccessTitle}>{bookingSaveSuccessDialog?.title}</Text>
+              <Text style={styles.bookingSaveSuccessMessage}>{bookingSaveSuccessDialog?.message}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.bookingSaveSuccessOkBtn}
+              onPress={() => setBookingSaveSuccessDialog(null)}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+              accessibilityLabel={t('ok', 'OK')}
+            >
+              <Text style={styles.bookingSaveSuccessOkText}>{t('ok', 'OK')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
 
       {/* Time selection now uses inline dropdown below the field (no nested modal) */}
@@ -5032,6 +5189,210 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
+  cancellationModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    position: 'relative',
+  },
+  cancellationModalRtlShell: {
+    direction: 'rtl',
+  },
+  cancellationModalCard: {
+    width: '100%',
+    maxWidth: 520,
+    backgroundColor: Colors.white,
+    borderRadius: 22,
+    overflow: 'hidden',
+    maxHeight: '88%',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 14 },
+        shadowOpacity: 0.2,
+        shadowRadius: 26,
+      },
+      android: { elevation: 14 },
+    }),
+  },
+  cancellationModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(60,60,67,0.12)',
+    backgroundColor: Colors.white,
+  },
+  cancellationModalTitle: {
+    flex: 1,
+    minWidth: 0,
+    marginRight: 6,
+    textAlign: 'right',
+    fontSize: 17,
+    fontWeight: '700',
+    lineHeight: 22,
+    color: Colors.text,
+  },
+  cancellationModalHeaderSpacer: {
+    width: 44,
+    height: 44,
+  },
+  cancellationModalScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+    backgroundColor: SETTINGS_GROUPED_BG,
+    maxHeight: 460,
+  },
+  cancellationModalScrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 8,
+  },
+  cancellationModalExplainer: {
+    borderRadius: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginBottom: 18,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.1)',
+  },
+  cancellationModalExplainerIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancellationModalExplainerText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.text,
+    lineHeight: 21,
+    textAlign: 'right',
+  },
+  cancellationModalHero: {
+    backgroundColor: Colors.white,
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.12)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  cancellationModalFieldLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.subtext,
+    marginBottom: 10,
+    letterSpacing: 0.15,
+    textAlign: 'right',
+  },
+  cancellationModalPicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(60,60,67,0.04)',
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.18)',
+    gap: 12,
+  },
+  cancellationModalPickerText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+    lineHeight: 22,
+    textAlign: 'right',
+  },
+  cancellationModalDropdownPanel: {
+    marginTop: 10,
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.12)',
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+      },
+      android: { elevation: 3 },
+    }),
+  },
+  cancellationModalDropdownScroll: {
+    maxHeight: 228,
+  },
+  cancellationModalDropdownRow: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(60,60,67,0.08)',
+  },
+  cancellationModalDropdownRowLast: {
+    borderBottomWidth: 0,
+  },
+  cancellationModalDropdownRowText: {
+    fontSize: 16,
+    color: Colors.text,
+    fontWeight: '500',
+    textAlign: 'right',
+  },
+  cancellationModalDropdownSubtext: {
+    fontSize: 14,
+    color: Colors.subtext,
+    fontWeight: '400',
+    textAlign: 'right',
+  },
+  cancellationModalFooter: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    backgroundColor: Colors.white,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(60,60,67,0.1)',
+  },
+  cancellationModalSaveBtn: {
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  cancellationModalSaveBtnDisabled: {
+    opacity: 0.55,
+  },
+  cancellationModalSaveBtnText: {
+    color: Colors.white,
+    fontSize: 17,
+    fontWeight: '700',
+  },
   smallModalCard: {
     width: '100%',
     maxWidth: 520,
@@ -5308,6 +5669,55 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: 17,
     fontWeight: '700',
+  },
+  bookingSaveSuccessOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.48)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 28,
+  },
+  bookingSaveSuccessCard: {
+    width: '100%',
+    maxWidth: 300,
+    backgroundColor: '#2C2C2E',
+    borderRadius: 14,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+  },
+  bookingSaveSuccessLtr: {
+    direction: 'ltr',
+    width: '100%',
+    alignSelf: 'stretch',
+  },
+  bookingSaveSuccessTitle: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+    textAlign: 'left',
+    writingDirection: 'ltr',
+  },
+  bookingSaveSuccessMessage: {
+    marginTop: 8,
+    color: '#FFFFFF',
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'left',
+    writingDirection: 'ltr',
+  },
+  bookingSaveSuccessOkBtn: {
+    marginTop: 18,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bookingSaveSuccessOkText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '600',
   },
   modalContent: {
     flex: 1,
@@ -5860,57 +6270,6 @@ const styles = StyleSheet.create({
     color: Colors.text,
     flex: 1,
     textAlign: 'left',
-  },
-  cancellationDropdownOptions: {
-    position: 'absolute',
-    left: 20,
-    right: 20,
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    maxHeight: 150,
-    zIndex: 1000,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  cancellationDropdownOptionsUp: {
-    bottom: '100%',
-    marginBottom: 4,
-    shadowOffset: { width: 0, height: -2 },
-  },
-  cancellationDropdownOptionsDown: {
-    top: 160,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  cancellationDropdownList: {
-    maxHeight: 130,
-  },
-  cancellationDropdownItem: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
-  },
-  cancellationDropdownItemSelected: {
-    backgroundColor: '#F0F8FF',
-  },
-  cancellationDropdownItemText: {
-    fontSize: 16,
-    color: Colors.text,
-    textAlign: 'left',
-  },
-  cancellationDropdownItemTextSelected: {
-    color: Colors.primary,
-    fontWeight: '600',
-  },
-  cancellationDropdownItemSubtext: {
-    fontSize: 14,
-    color: Colors.subtext,
-    fontWeight: '400',
   },
   dropdownText: {
     fontSize: 16,

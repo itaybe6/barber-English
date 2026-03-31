@@ -611,6 +611,7 @@
       "cancellationLimitActiveSubtitle": "Clients can cancel up to {{count}} {{unit}} before the appointment",
       "minCancellationHoursTitle": "Minimum cancellation time (hours)",
       "hoursBefore": "Hours before appointment",
+      "cancellationModalHint": "Clients cannot cancel inside this window before the appointment starts. Choose how many hours ahead they must cancel by.",
       "customHoursTitle": "Custom Hours",
       "customHoursMessage": "Enter number of hours (0-168):",
       "customHoursLabel": "Custom hours...",

@@ -595,7 +595,7 @@ export default function BookAppointment() {
           ? await businessProfileApi.getBookingOpenDaysForUser(selectedBarber.id)
           : 7;
         if (isMounted) {
-          const validDays = Math.max(1, Math.min(60, Number(days ?? 7)));
+          const validDays = Math.max(0, Math.min(60, Number(days ?? 7)));
           setBookingOpenDays(validDays);
         }
       } catch {

@@ -348,12 +348,12 @@ export const businessProfileApi = {
       const profile = await this.getProfile();
       if (!profile) return 7;
       const globalDefault = Math.max(
-        1,
+        0,
         Math.min(60, Number((profile as any).booking_open_days ?? 7)),
       );
       const byUser = ((profile as any).booking_open_days_by_user ?? {}) as Record<string, number>;
       const values = Object.values(byUser).map((v) =>
-        Math.max(1, Math.min(60, Number(v))),
+        Math.max(0, Math.min(60, Number(v))),
       );
       if (values.length === 0) return globalDefault;
       return Math.max(globalDefault, ...values);
@@ -372,7 +372,7 @@ export const businessProfileApi = {
           p_user_id: userId,
         });
         if (!error && typeof data === 'number') {
-          return Math.max(1, Math.min(60, data));
+          return Math.max(0, Math.min(60, data));
         }
       }
       // Fallback: read profile and extract from JSON or use default
@@ -380,7 +380,7 @@ export const businessProfileApi = {
       const days = (profile as any)?.booking_open_days_by_user && userId
         ? Number((profile as any).booking_open_days_by_user?.[userId] ?? (profile as any)?.booking_open_days ?? 7)
         : Number((profile as any)?.booking_open_days ?? 7);
-      return Math.max(1, Math.min(60, days));
+      return Math.max(0, Math.min(60, days));
     } catch (e) {
       console.error('Error in getBookingOpenDaysForUser:', e);
       return 7;
@@ -388,7 +388,10 @@ export const businessProfileApi = {
   },
 
   async setBookingOpenDaysForUser(userId: string, days: number): Promise<void> {
-    const clamped = Math.max(1, Math.min(60, Math.floor(Number(days) || 7)));
+    const n = Math.floor(Number(days));
+    const clamped = !Number.isFinite(n)
+      ? 7
+      : Math.max(0, Math.min(60, n));
     const businessId = getBusinessId();
     try {
       const { error } = await supabase.rpc('set_booking_open_days_for_user', {

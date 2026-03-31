@@ -634,6 +634,7 @@
       "cancellationLimitActiveSubtitle": "ניתן לבטל עד {{count}} {{unit}} לפני מועד התור",
       "minCancellationHoursTitle": "זמן ביטול מינימלי (שעות)",
       "hoursBefore": "שעות לפני התור",
+      "cancellationModalHint": "לקוחות לא יוכלו לבטל תור בטווח הזמן הזה לפני מועד התור. בחרו כמה שעות מראש נדרש לביטול.",
       "customHoursTitle": "שעות מותאמות",
       "customHoursMessage": "הזן/י מספר שעות (0-168):",
       "customHoursLabel": "שעות מותאמות...",

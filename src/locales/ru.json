@@ -744,6 +744,7 @@
       "cancellationLimitActiveSubtitle": "Клиенты могут отменить встречу за {{count}} {{unit}} до встречи.",
       "minCancellationHoursTitle": "Минимальное время отмены (часы)",
       "hoursBefore": "За несколько часов до встречи",
+      "cancellationModalHint": "Клиенты не смогут отменить запись в выбранном окне до начала встречи. Укажите, за сколько часов нужно отменить заранее.",
       "customHoursTitle": "Пользовательские часы",
       "customHoursMessage": "Введите количество часов (0-168):",
       "customHoursLabel": "Индивидуальные часы...",

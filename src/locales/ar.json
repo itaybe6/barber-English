@@ -746,6 +746,7 @@
       "cancellationLimitActiveSubtitle": "يمكن للعملاء إلغاء ما يصل إلى {{count}} {{unit}} قبل الموعد",
       "minCancellationHoursTitle": "الحد الأدنى لوقت الإلغاء (ساعات)",
       "hoursBefore": "قبل ساعات من الموعد",
+      "cancellationModalHint": "لن يتمكن العملاء من الإلغاء خلال الفترة التي تحددها قبل بداية الموعد. اختر عدد الساعات المطلوبة للإلغاء مسبقًا.",
       "customHoursTitle": "ساعات مخصصة",
       "customHoursMessage": "أدخل عدد الساعات (0-168):",
       "customHoursLabel": "ساعات مخصصة...",

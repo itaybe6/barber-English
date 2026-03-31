@@ -29,7 +29,6 @@ import { formatTimeFromDate } from '@/lib/utils/timeFormat';
 import i18n from '@/src/config/i18n';
 import { useAdminWaitlistCalendarView } from '@/contexts/AdminWaitlistCalendarViewContext';
 
-const GC_HEADER_CHROME = '#F0F3F7';
 const GC_SURFACE = '#FFFFFF';
 const GC_PAGE_BG = '#F8F9FA';
 
@@ -631,7 +630,7 @@ export default function WaitlistScreen() {
       </View>
 
       {waitlistCalendarView === 'day' ? (
-        <View style={{ backgroundColor: GC_HEADER_CHROME }}>
+        <View style={{ backgroundColor: GC_SURFACE }}>
           <DaySelector
             selectedDate={selectedDate}
             onSelectDate={setSelectedDate}
@@ -639,7 +638,7 @@ export default function WaitlistScreen() {
             mode="week"
             startFromToday={false}
             markedDates={markedDates}
-            containerBackgroundColor={GC_HEADER_CHROME}
+            containerBackgroundColor={GC_SURFACE}
             contentPaddingTop={2}
             contentPaddingBottom={2}
           />
@@ -810,10 +809,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   gcTopChrome: {
-    backgroundColor: GC_HEADER_CHROME,
+    backgroundColor: GC_SURFACE,
   },
   gcHeader: {
-    backgroundColor: GC_HEADER_CHROME,
+    backgroundColor: GC_SURFACE,
     paddingHorizontal: 14,
     paddingTop: 4,
     paddingBottom: 8,
@@ -836,7 +835,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: 20,
-    backgroundColor: GC_HEADER_CHROME,
+    backgroundColor: GC_SURFACE,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(60, 64, 67, 0.1)',
   },

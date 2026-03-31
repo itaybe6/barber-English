@@ -1033,7 +1033,7 @@ export const superAdminApi = {
         ? 'default_hash'
         : `hash_${params.adminPassword}`;
 
-      const { error: userError } = await supabase
+      const { data: adminRow, error: userError } = await supabase
         .from('users')
         .insert({
           name: params.adminName,
@@ -1041,19 +1041,44 @@ export const superAdminApi = {
           user_type: 'admin',
           business_id: businessId,
           password_hash: hashedPassword,
-        });
+        })
+        .select('id')
+        .single();
 
-      if (userError) {
+      if (userError || !adminRow?.id) {
         console.error('Error creating admin user:', userError);
         await supabase.from('business_profile').delete().eq('id', businessId);
         return null;
       }
 
-      // 3. Create default services
+      const adminUserId = adminRow.id;
+
+      // 3. Create default services (bound to the new admin / barber)
       const defaultServices = [
-        { name: 'שירות 1', price: 150, duration_minutes: 60, is_active: true, business_id: businessId },
-        { name: 'שירות 2', price: 50, duration_minutes: 30, is_active: true, business_id: businessId },
-        { name: 'שירות 3', price: 80, duration_minutes: 45, is_active: true, business_id: businessId },
+        {
+          name: 'שירות 1',
+          price: 150,
+          duration_minutes: 60,
+          is_active: true,
+          business_id: businessId,
+          worker_id: adminUserId,
+        },
+        {
+          name: 'שירות 2',
+          price: 50,
+          duration_minutes: 30,
+          is_active: true,
+          business_id: businessId,
+          worker_id: adminUserId,
+        },
+        {
+          name: 'שירות 3',
+          price: 80,
+          duration_minutes: 45,
+          is_active: true,
+          business_id: businessId,
+          worker_id: adminUserId,
+        },
       ];
 
       const { error: servicesError } = await supabase.from('services').insert(defaultServices);

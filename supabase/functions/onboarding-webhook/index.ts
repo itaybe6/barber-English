@@ -8,7 +8,7 @@
  * Supabase Dashboard → Edge Functions → Secrets:
  *   ONBOARDING_WEBHOOK_SECRET — long random string; same value must be sent as:
  *     Authorization: Bearer <ONBOARDING_WEBHOOK_SECRET>
- *     OR header x-onboarding-secret: <ONBOARDING_WEBHOOK_SECRET>
+ *     OR x-onboarding-secret / X-Webhook-Secret (לובאל) — אותו ערך
  *
  * Optional Pulseem: same as app — set PULSEEM_MAIN_API_KEY + PULSEEM_FIELD_ENCRYPTION_KEY;
  * after insert we call pulseem-provision-subaccount (service role, internal).
@@ -52,6 +52,13 @@
  *   אם ריק — נוצרים 3 שירותי ברירת מחדל כמו בסופר־אדמין.
  *
  * פולסים: pulseemFromNumber, pulseem_from_number (ברירת מחדל clientName), pulseemSubPassword
+ *
+ * מבנה לובאל (דוגמה):
+ *   { "event": "new_business_onboarded", "timestamp": "...", "data": { "business": { ... }, "services": [...] } }
+ *   business: business_name_he, business_name_en, app_name_en, address, manager_name, phone,
+ *   manager_password, logo_url, manager_photo_url, id (UUID אופציונלי — יהיה business_profile.id),
+ *   plan, price, commitment (לא נשמרים ב-DB כרגע)
+ *   services[]: name, price, duration_minutes, sort_order → order_index
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -59,7 +66,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-onboarding-secret",
+    "authorization, x-client-info, apikey, content-type, x-onboarding-secret, x-webhook-secret",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -101,6 +108,11 @@ function mergePayload(raw: Record<string, unknown>): Record<string, unknown> {
     if (v && typeof v === "object" && !Array.isArray(v)) {
       Object.assign(out, v as Record<string, unknown>);
     }
+  }
+  // Lovable: data.business.{ ... } — משטחים לשורש ל-pickStr
+  const bizNested = out.business;
+  if (bizNested && typeof bizNested === "object" && !Array.isArray(bizNested)) {
+    Object.assign(out, bizNested as Record<string, unknown>);
   }
   return out;
 }
@@ -407,7 +419,15 @@ function verifyOnboardingSecret(req: Request): boolean {
     .trim();
   if (auth === expected) return true;
   const h = (req.headers.get("x-onboarding-secret") ?? "").trim();
-  return h === expected;
+  if (h === expected) return true;
+  const wh = (req.headers.get("x-webhook-secret") ?? "").trim();
+  return wh === expected;
+}
+
+function isValidUuid(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    s.trim(),
+  );
 }
 
 function base64ToBytes(b64: string): Uint8Array {

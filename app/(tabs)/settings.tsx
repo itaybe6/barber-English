@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking, Dimensions, Switch, I18nManager, type LayoutChangeEvent } from 'react-native';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking, Dimensions, Switch, I18nManager, DeviceEventEmitter, type LayoutChangeEvent } from 'react-native';
 import Constants from 'expo-constants';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import * as ImagePicker from 'expo-image-picker';
@@ -14,7 +14,7 @@ import { servicesApi, updateService, createService, deleteService, updateService
 import type { Service } from '@/lib/supabase';
 import { recurringAppointmentsApi } from '@/lib/api/recurringAppointments';
 import { supabase, getBusinessId } from '@/lib/supabase';
-import { businessProfileApi, isClientApprovalRequired, isClientSwapEnabled } from '@/lib/api/businessProfile';
+import { businessProfileApi, isClientApprovalRequired, isClientSwapEnabled, isShowServiceImages } from '@/lib/api/businessProfile';
 import type { BusinessProfile } from '@/lib/supabase';
 import { 
   LogOut, 
@@ -29,13 +29,13 @@ import {
   Facebook,
   MapPin,
   Calendar,
-  Image as ImageIcon,
   Home,
   Clock,
   User,
   Repeat,
   Plus,
   Bell,
+  Camera,
 } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -48,12 +48,14 @@ import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import AddAdminModal from '@/components/AddAdminModal';
 import DeleteAccountModal from '@/components/DeleteAccountModal';
-import { formatTime12Hour } from '@/lib/utils/timeFormat';
+import { formatTimeToAMPM } from '@/lib/hooks/useAdminAddAppointmentForm';
+import { ADMIN_RECURRING_APPOINTMENTS_CHANGED } from '@/constants/adminCalendarEvents';
 import { useTranslation } from 'react-i18next';
 import { normalizeAppLanguage, isRtlLanguage, toBcp47Locale } from '@/lib/i18nLocale';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import { SettingsScreenTabs } from '@/components/settings/SettingsScreenTabs';
 import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
+import { BookingDaysRuler, type BookingDaysRulerHandle } from '@/components/BookingDaysRuler';
 
 // Helper for shadow style
 const shadowStyle = Platform.select({
@@ -70,6 +72,19 @@ const shadowStyle = Platform.select({
 
 /** Grouped settings canvas — ScrollView content + screen root use this so bottom padding isn’t white */
 const SETTINGS_GROUPED_BG = '#F2F2F7';
+
+const BOOKING_WINDOW_MIN = 0;
+const BOOKING_WINDOW_MAX = 60;
+/** Ruler shows ticks 0…60; only 1…60 are saved (0 snaps to 1). */
+const BOOKING_RULER_MIN_DISPLAY = 0;
+
+const CLIENT_REMINDER_HOURS_MIN = 0;
+const CLIENT_REMINDER_HOURS_MAX = 24;
+
+const ADMIN_SELF_REMINDER_MIN_MINUTES = 5;
+const ADMIN_SELF_REMINDER_MAX_MINUTES = 60;
+
+const RECURRING_DOW_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
 export default function SettingsScreen() {
   const logout = useAuthStore((state) => state.logout);
@@ -131,6 +146,7 @@ export default function SettingsScreen() {
   const [profileBookingOpenDays, setProfileBookingOpenDays] = useState(7);
   const [clientSwapEnabled, setClientSwapEnabled] = useState(true);
   const [requireClientApproval, setRequireClientApproval] = useState(true);
+  const [showServiceImages, setShowServiceImages] = useState(true);
   const [showEditAddressModal, setShowEditAddressModal] = useState(false);
   const [showAddressSheet, setShowAddressSheet] = useState(false);
   const [showEditInstagramModal, setShowEditInstagramModal] = useState(false);
@@ -138,9 +154,15 @@ export default function SettingsScreen() {
   const [showEditTiktokModal, setShowEditTiktokModal] = useState(false);
   const [showEditCancellationModal, setShowEditCancellationModal] = useState(false);
   const [showBookingWindowModal, setShowBookingWindowModal] = useState(false);
+  const [bookingSaveSuccessDialog, setBookingSaveSuccessDialog] = useState<{
+    title: string;
+    message: string;
+  } | null>(null);
   const [bookingWindowDraft, setBookingWindowDraft] = useState('7');
+  const bookingDaysRulerRef = useRef<BookingDaysRulerHandle>(null);
+  const clientReminderHoursRulerRef = useRef<BookingDaysRulerHandle>(null);
+  const adminReminderMinutesRulerRef = useRef<BookingDaysRulerHandle>(null);
   const [showCancellationDropdown, setShowCancellationDropdown] = useState(false);
-  const [cancellationDropdownDirection, setCancellationDropdownDirection] = useState<'up' | 'down'>('down');
   // Address bottom sheet animation
   const addressSheetAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
   const addressOverlayOpacity = addressSheetAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
@@ -181,13 +203,9 @@ export default function SettingsScreen() {
   const [adminReminderMinutes, setAdminReminderMinutes] = useState<number | null>(null);
   const [adminReminderEnabled, setAdminReminderEnabled] = useState(false);
   const [clientReminderMinutes, setClientReminderMinutes] = useState<number | null>(null);
-  const [clientReminderEnabled, setClientReminderEnabled] = useState(false);
   const [showClientReminderModal, setShowClientReminderModal] = useState(false);
   const [clientReminderModalHoursDraft, setClientReminderModalHoursDraft] = useState('');
-  const [clientReminderModalMinutesDraft, setClientReminderModalMinutesDraft] = useState('');
-  const [clientReminderSwitchPending, setClientReminderSwitchPending] = useState(false);
   const [showAdminReminderModal, setShowAdminReminderModal] = useState(false);
-  const [adminReminderModalHoursDraft, setAdminReminderModalHoursDraft] = useState('');
   const [adminReminderModalMinutesDraft, setAdminReminderModalMinutesDraft] = useState('');
   /** Lets the switch show “on” while the user fills the modal after enabling */
   const [adminReminderSwitchPending, setAdminReminderSwitchPending] = useState(false);
@@ -242,6 +260,12 @@ export default function SettingsScreen() {
         }
         setClientSwapEnabled(isClientSwapEnabled(p));
         setRequireClientApproval(isClientApprovalRequired(p));
+        setShowServiceImages(isShowServiceImages(p));
+        {
+          const cr = (p as BusinessProfile)?.client_reminder_minutes;
+          const n = cr === null || cr === undefined ? NaN : Number(cr);
+          setClientReminderMinutes(Number.isFinite(n) && n > 0 ? n : null);
+        }
       }
     } catch (error) {
       console.error('Failed to load business profile:', error);
@@ -264,9 +288,6 @@ export default function SettingsScreen() {
         const adminRem = await businessProfileApi.getReminderMinutesForUser(user.id);
         setAdminReminderMinutes(adminRem);
         setAdminReminderEnabled(adminRem !== null && Number(adminRem) > 0);
-        const clientRem = await businessProfileApi.getClientReminderMinutesForUser(user.id);
-        setClientReminderMinutes(clientRem);
-        setClientReminderEnabled(clientRem !== null && Number(clientRem) > 0);
       } catch (e) {
         // silent
       }
@@ -315,9 +336,48 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     if (showBookingWindowModal) {
-      setBookingWindowDraft(String(profileBookingOpenDays || 7));
+      setBookingWindowDraft(String(profileBookingOpenDays ?? 7));
     }
   }, [showBookingWindowModal, profileBookingOpenDays]);
+
+  useLayoutEffect(() => {
+    if (!showBookingWindowModal) return;
+    const day = profileBookingOpenDays ?? 7;
+    const id = requestAnimationFrame(() => {
+      bookingDaysRulerRef.current?.scrollToDay(day);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [showBookingWindowModal, profileBookingOpenDays]);
+
+  useLayoutEffect(() => {
+    if (!showClientReminderModal) return;
+    const h =
+      clientReminderMinutes != null && clientReminderMinutes > 0
+        ? Math.min(CLIENT_REMINDER_HOURS_MAX, Math.ceil(clientReminderMinutes / 60))
+        : 0;
+    setClientReminderModalHoursDraft(String(h));
+    const id = requestAnimationFrame(() => {
+      clientReminderHoursRulerRef.current?.scrollToDay(h);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [showClientReminderModal, clientReminderMinutes]);
+
+  useLayoutEffect(() => {
+    if (!showAdminReminderModal) return;
+    const raw = adminReminderMinutes;
+    const m =
+      raw != null && raw > 0
+        ? Math.min(
+            ADMIN_SELF_REMINDER_MAX_MINUTES,
+            Math.max(ADMIN_SELF_REMINDER_MIN_MINUTES, raw),
+          )
+        : 15;
+    setAdminReminderModalMinutesDraft(String(m));
+    const id = requestAnimationFrame(() => {
+      adminReminderMinutesRulerRef.current?.scrollToDay(m);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [showAdminReminderModal, adminReminderMinutes]);
 
   const handleSaveBusinessProfile = async () => {
     setIsSavingProfile(true);
@@ -431,6 +491,25 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleShowServiceImagesToggle = async (next: boolean) => {
+    if (!canSeeAddEmployee) return;
+    const prev = showServiceImages;
+    setShowServiceImages(next);
+    setIsSavingProfile(true);
+    try {
+      const updated = await businessProfileApi.setShowServiceImages(next);
+      if (!updated) {
+        setShowServiceImages(prev);
+        Alert.alert(t('error.generic', 'Error'), t('settings.services.showImagesSaveFailed', 'Could not save display setting'));
+        return;
+      }
+      setProfile(updated);
+      setShowServiceImages(isShowServiceImages(updated));
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   const handleClientSwapToggle = async (next: boolean) => {
     if (!canSeeAddEmployee) return;
     const prev = clientSwapEnabled;
@@ -497,11 +576,11 @@ export default function SettingsScreen() {
     }
     const trimmed = (next || '').trim();
     const n = parseInt(trimmed, 10);
-    if (!Number.isFinite(n) || n < 1 || n > 60) {
-      Alert.alert(t('error.generic', 'Error'), t('settings.profile.bookingWindowInvalid', 'Enter a number between 1 and 60.'));
+    if (!Number.isFinite(n) || n < 0 || n > 60) {
+      Alert.alert(t('error.generic', 'Error'), t('settings.profile.bookingWindowInvalid', 'Enter a number between 0 and 60.'));
       return false;
     }
-    const parsed = Math.max(1, Math.min(60, Math.floor(n)));
+    const parsed = Math.max(0, Math.min(60, Math.floor(n)));
     setIsSavingProfile(true);
     try {
       await businessProfileApi.setBookingOpenDaysForUser(user.id, parsed);
@@ -524,90 +603,85 @@ export default function SettingsScreen() {
   const confirmBookingWindowModal = async () => {
     const ok = await persistBookingOpenDays(bookingWindowDraft);
     if (ok) {
-      Alert.alert(t('success.generic', 'Success'), t('settings.profile.bookingWindowSaved', 'Booking window updated successfully'));
       setShowBookingWindowModal(false);
+      setBookingSaveSuccessDialog({
+        title: t('success.generic', 'Success'),
+        message: t('settings.profile.bookingWindowSaved', 'Booking window updated successfully'),
+      });
     }
   };
 
-  const openClientReminderModal = useCallback(
-    (fromSwitch = false) => {
-      if (!user?.id) return;
-      if (fromSwitch) setClientReminderSwitchPending(true);
-      if (clientReminderMinutes != null && clientReminderMinutes > 0) {
-        setClientReminderModalHoursDraft(String(Math.floor(clientReminderMinutes / 60)));
-        setClientReminderModalMinutesDraft(String(clientReminderMinutes % 60));
-      } else {
-        setClientReminderModalHoursDraft('');
-        setClientReminderModalMinutesDraft('');
-      }
-      setShowClientReminderModal(true);
-    },
-    [user?.id, clientReminderMinutes],
-  );
+  const onBookingWindowRulerDay = useCallback((day: number) => {
+    if (day < BOOKING_WINDOW_MIN) {
+      setBookingWindowDraft(String(BOOKING_WINDOW_MIN));
+      requestAnimationFrame(() => bookingDaysRulerRef.current?.scrollToDay(BOOKING_WINDOW_MIN));
+      return;
+    }
+    const d = Math.min(BOOKING_WINDOW_MAX, day);
+    setBookingWindowDraft(String(d));
+  }, []);
+
+  const onBookingWindowTextChange = useCallback((text: string) => {
+    setBookingWindowDraft(text);
+    const digits = text.replace(/\D/g, '');
+    const n = parseInt(digits, 10);
+    if (Number.isFinite(n) && n >= BOOKING_WINDOW_MIN && n <= BOOKING_WINDOW_MAX) {
+      bookingDaysRulerRef.current?.scrollToDay(n);
+    }
+  }, []);
+
+  const openClientReminderModal = useCallback(() => {
+    if (!user?.id || !canSeeAddEmployee) return;
+    setShowClientReminderModal(true);
+  }, [user?.id, canSeeAddEmployee]);
 
   const dismissClientReminderModal = useCallback(() => {
     setShowClientReminderModal(false);
-    setClientReminderSwitchPending(false);
   }, []);
 
-  const handleClientReminderSwitch = async (on: boolean) => {
-    if (!user?.id) return;
-    if (!on) {
-      setClientReminderSwitchPending(false);
-      setShowClientReminderModal(false);
-      try {
-        setIsSavingProfile(true);
-        await businessProfileApi.setClientReminderMinutesForUser(user.id, null);
-        setClientReminderMinutes(null);
-        setClientReminderEnabled(false);
-      } finally {
-        setIsSavingProfile(false);
-      }
-      return;
-    }
-    openClientReminderModal(true);
-  };
+  const onClientReminderHoursRulerChange = useCallback((hours: number) => {
+    const d = Math.min(CLIENT_REMINDER_HOURS_MAX, Math.max(CLIENT_REMINDER_HOURS_MIN, hours));
+    setClientReminderModalHoursDraft(String(d));
+  }, []);
 
-  const clientReminderActive =
-    (clientReminderMinutes != null && clientReminderMinutes > 0) || clientReminderSwitchPending;
+  const onClientReminderHoursTextChange = useCallback((text: string) => {
+    setClientReminderModalHoursDraft(text);
+    const digits = text.replace(/\D/g, '');
+    const n = parseInt(digits, 10);
+    if (Number.isFinite(n) && n >= CLIENT_REMINDER_HOURS_MIN && n <= CLIENT_REMINDER_HOURS_MAX) {
+      clientReminderHoursRulerRef.current?.scrollToDay(n);
+    }
+  }, []);
 
   const saveClientReminderFromModal = async () => {
-    if (!user?.id) return;
+    if (!user?.id || !canSeeAddEmployee) return;
     const hRaw = clientReminderModalHoursDraft.trim();
-    const mRaw = clientReminderModalMinutesDraft.trim();
-    if ((hRaw && !/^\d+$/.test(hRaw)) || (mRaw && !/^\d+$/.test(mRaw))) {
-      Alert.alert(t('error.generic', 'Error'), t('settings.reminder.clientDialogInvalidParts'));
+    if (!hRaw || !/^\d+$/.test(hRaw)) {
+      Alert.alert(t('error.generic', 'Error'), t('settings.reminder.clientDialogInvalidHours'));
       return;
     }
-    const h = hRaw ? parseInt(hRaw, 10) : 0;
-    const m = mRaw ? parseInt(mRaw, 10) : 0;
-    if (m > 59) {
-      Alert.alert(t('error.generic', 'Error'), t('settings.reminder.clientDialogInvalidParts'));
+    const h = parseInt(hRaw, 10);
+    if (h < CLIENT_REMINDER_HOURS_MIN || h > CLIENT_REMINDER_HOURS_MAX) {
+      Alert.alert(t('error.generic', 'Error'), t('settings.reminder.clientDialogInvalidHours'));
       return;
     }
-    if (h > 24) {
-      Alert.alert(t('error.generic', 'Error'), t('settings.profile.reminderInvalid', 'Enter a valid number between 1 and 1440 minutes'));
-      return;
-    }
-    const total = h * 60 + m;
+    const total = h * 60;
     try {
       setIsSavingProfile(true);
       if (total === 0) {
-        await businessProfileApi.setClientReminderMinutesForUser(user.id, null);
+        await businessProfileApi.setClientReminderMinutes(null);
         setClientReminderMinutes(null);
-        setClientReminderEnabled(false);
-        setClientReminderSwitchPending(false);
+        setProfile((prev) => (prev ? { ...prev, client_reminder_minutes: null } : prev));
         setShowClientReminderModal(false);
         return;
       }
-      if (total < 1 || total > 1440) {
+      if (total > 1440) {
         Alert.alert(t('error.generic', 'Error'), t('settings.profile.reminderInvalid', 'Enter a valid number between 1 and 1440 minutes'));
         return;
       }
-      await businessProfileApi.setClientReminderMinutesForUser(user.id, total);
+      await businessProfileApi.setClientReminderMinutes(total);
       setClientReminderMinutes(total);
-      setClientReminderEnabled(true);
-      setClientReminderSwitchPending(false);
+      setProfile((prev) => (prev ? { ...prev, client_reminder_minutes: total } : prev));
       setShowClientReminderModal(false);
     } finally {
       setIsSavingProfile(false);
@@ -618,17 +692,31 @@ export default function SettingsScreen() {
     (fromSwitch = false) => {
       if (!user?.id) return;
       if (fromSwitch) setAdminReminderSwitchPending(true);
-      if (adminReminderMinutes != null && adminReminderMinutes > 0) {
-        setAdminReminderModalHoursDraft(String(Math.floor(adminReminderMinutes / 60)));
-        setAdminReminderModalMinutesDraft(String(adminReminderMinutes % 60));
-      } else {
-        setAdminReminderModalHoursDraft('');
-        setAdminReminderModalMinutesDraft('');
-      }
       setShowAdminReminderModal(true);
     },
-    [user?.id, adminReminderMinutes],
+    [user?.id],
   );
+
+  const onAdminReminderMinutesRulerChange = useCallback((minutes: number) => {
+    const d = Math.min(
+      ADMIN_SELF_REMINDER_MAX_MINUTES,
+      Math.max(ADMIN_SELF_REMINDER_MIN_MINUTES, minutes),
+    );
+    setAdminReminderModalMinutesDraft(String(d));
+  }, []);
+
+  const onAdminReminderMinutesTextChange = useCallback((text: string) => {
+    setAdminReminderModalMinutesDraft(text);
+    const digits = text.replace(/\D/g, '');
+    const n = parseInt(digits, 10);
+    if (
+      Number.isFinite(n) &&
+      n >= ADMIN_SELF_REMINDER_MIN_MINUTES &&
+      n <= ADMIN_SELF_REMINDER_MAX_MINUTES
+    ) {
+      adminReminderMinutesRulerRef.current?.scrollToDay(n);
+    }
+  }, []);
 
   const dismissAdminReminderModal = useCallback(() => {
     setShowAdminReminderModal(false);
@@ -637,37 +725,18 @@ export default function SettingsScreen() {
 
   const saveAdminReminderFromModal = async () => {
     if (!user?.id) return;
-    const hRaw = adminReminderModalHoursDraft.trim();
-    const mRaw = adminReminderModalMinutesDraft.trim();
-    if ((hRaw && !/^\d+$/.test(hRaw)) || (mRaw && !/^\d+$/.test(mRaw))) {
-      Alert.alert(t('error.generic', 'Error'), t('settings.reminder.clientDialogInvalidParts'));
+    const raw = adminReminderModalMinutesDraft.trim();
+    if (!raw || !/^\d+$/.test(raw)) {
+      Alert.alert(t('error.generic', 'Error'), t('settings.reminder.adminDialogInvalidMinutes'));
       return;
     }
-    const h = hRaw ? parseInt(hRaw, 10) : 0;
-    const m = mRaw ? parseInt(mRaw, 10) : 0;
-    if (m > 59) {
-      Alert.alert(t('error.generic', 'Error'), t('settings.reminder.clientDialogInvalidParts'));
+    const total = parseInt(raw, 10);
+    if (total < ADMIN_SELF_REMINDER_MIN_MINUTES || total > ADMIN_SELF_REMINDER_MAX_MINUTES) {
+      Alert.alert(t('error.generic', 'Error'), t('settings.reminder.adminDialogInvalidMinutes'));
       return;
     }
-    if (h > 24) {
-      Alert.alert(t('error.generic', 'Error'), t('settings.profile.reminderInvalid', 'Enter a valid number between 1 and 1440 minutes'));
-      return;
-    }
-    const total = h * 60 + m;
     try {
       setIsSavingProfile(true);
-      if (total === 0) {
-        await businessProfileApi.setReminderMinutesForUser(user.id, null);
-        setAdminReminderMinutes(null);
-        setAdminReminderEnabled(false);
-        setAdminReminderSwitchPending(false);
-        setShowAdminReminderModal(false);
-        return;
-      }
-      if (total < 1 || total > 1440) {
-        Alert.alert(t('error.generic', 'Error'), t('settings.profile.reminderInvalid', 'Enter a valid number between 1 and 1440 minutes'));
-        return;
-      }
       await businessProfileApi.setReminderMinutesForUser(user.id, total);
       setAdminReminderMinutes(total);
       setAdminReminderEnabled(true);
@@ -1280,7 +1349,7 @@ export default function SettingsScreen() {
         duration_minutes: parseInt(addSvcDuration, 10) || 60,
         is_active: true,
         worker_id: (user?.id as any) as any,
-        image_url: addSvcImageUrl || undefined,
+        image_url: showServiceImages ? addSvcImageUrl || undefined : undefined,
       } as any);
       if (created) {
         const nextOrder = editableServices.length;
@@ -1437,40 +1506,41 @@ export default function SettingsScreen() {
     }
   }, [settingsScreenTabs, activeSettingsTab]);
 
-  const [showRecurringModal, setShowRecurringModal] = useState(false);
-  const [isSubmittingRecurring, setIsSubmittingRecurring] = useState(false);
   const [showManageRecurringModal, setShowManageRecurringModal] = useState(false);
 
   const [isLoadingRecurring, setIsLoadingRecurring] = useState(false);
   const [recurringList, setRecurringList] = useState<any[]>([]);
-  const [clientSearch, setClientSearch] = useState('');
-  const [clientResults, setClientResults] = useState<Array<{ name: string; phone: string }>>([]);
-  const [selectedClient, setSelectedClient] = useState<{ name: string; phone: string } | null>(null);
-  const [selectedDayOfWeek, setSelectedDayOfWeek] = useState<number | null>(null);
-  const [showDayDropdown, setShowDayDropdown] = useState(false);
-  const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  const [showTimeDropdown, setShowTimeDropdown] = useState(false);
-  const [availableTimes, setAvailableTimes] = useState<string[]>([]);
-  const [isLoadingTimes, setIsLoadingTimes] = useState(false);
-  const [showTimeSheet, setShowTimeSheet] = useState(false);
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [showServiceDropdown, setShowServiceDropdown] = useState(false);
-  const [recurringServices, setRecurringServices] = useState<Service[]>([]);
-  const [showClientDropdown, setShowClientDropdown] = useState(false);
-  const [repeatWeeks, setRepeatWeeks] = useState<number>(1);
-  const [showRepeatDropdown, setShowRepeatDropdown] = useState(false);
-
-  // Stepper state for recurring appointment modal
-  const [recStep, setRecStep] = useState<number>(0); // 0: client, 1: service, 2: day, 3: time, 4: repeat
-  const recTranslateX = useRef(new Animated.Value(0)).current;
-  const recProgressAnim = useRef(new Animated.Value(0)).current;
-  // Give the steps viewport an initial width so content doesn't overflow on first render
-  const initialRecViewportWidth = Math.max(1, (Dimensions.get('window')?.width || 0) - 40);
-  const [recViewportWidth, setRecViewportWidth] = useState<number>(initialRecViewportWidth);
-  const [recRenderKey, setRecRenderKey] = useState<number>(0);
 
   useEffect(() => {
     closeManageRecurringSheetRef.current = () => setShowManageRecurringModal(false);
+  }, []);
+
+  /** No close animation — avoids the sheet flashing / jumping over the add screen when navigating away */
+  const dismissRecurringHubAndGoToAdd = useCallback(() => {
+    sheetAnim.stopAnimation();
+    dragY.stopAnimation();
+    sheetAnim.setValue(0);
+    dragY.setValue(0);
+    setShowManageRecurringModal(false);
+    requestAnimationFrame(() => {
+      router.push('/(tabs)/add-recurring-appointment');
+    });
+  }, [router]);
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(ADMIN_RECURRING_APPOINTMENTS_CHANGED, () => {
+      void (async () => {
+        try {
+          const items = await recurringAppointmentsApi.listAll();
+          setRecurringList(items);
+        } catch {
+          /* ignore */
+        }
+        setShowManageRecurringModal(true);
+        animateOpenSheet();
+      })();
+    });
+    return () => sub.remove();
   }, []);
 
   useEffect(() => {
@@ -1502,38 +1572,9 @@ export default function SettingsScreen() {
     };
   }, [activeSettingsTab, user?.id, sortServicesLikeClientBooking, t]);
 
-  const goToRecStep = (next: number, animate: boolean = true) => {
-    const maxStep = 4;
-    const clamped = Math.max(0, Math.min(maxStep, next));
-    setRecStep(clamped);
-    const widthToUse = recViewportWidth || 0;
-    if (widthToUse && animate) {
-      Animated.timing(recTranslateX, {
-        toValue: -clamped * widthToUse,
-        duration: 260,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
-      Animated.timing(recProgressAnim, {
-        toValue: clamped / maxStep,
-        duration: 260,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: false,
-      }).start();
-    } else {
-      recTranslateX.setValue(-(clamped * widthToUse));
-      recProgressAnim.setValue(clamped / maxStep);
-    }
-  };
-  const goNextRec = () => goToRecStep(recStep + 1);
-  const goBackRec = () => goToRecStep(recStep - 1);
-
   // Employees tab (inline list + FAB)
   const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
-  const [bookingOpenDaysByUser, setBookingOpenDaysByUser] = useState<Record<string, number>>({});
-  const [expandedEmployeeId, setExpandedEmployeeId] = useState<string | null>(null);
-  const [savingBookingDaysForUser, setSavingBookingDaysForUser] = useState<string | null>(null);
 
   const loadAdminEmployeesForTab = useCallback(async () => {
     setIsLoadingEmployees(true);
@@ -1541,17 +1582,6 @@ export default function SettingsScreen() {
       const list = await usersApi.getAdminUsers();
       const filtered = (list || []).filter((u: any) => u.id !== (user as any)?.id);
       setAdminUsers(filtered);
-      const daysMap: Record<string, number> = {};
-      for (const emp of filtered) {
-        try {
-          const days = await businessProfileApi.getBookingOpenDaysForUser(emp.id);
-          daysMap[emp.id] = days;
-        } catch (e) {
-          console.error('Error loading booking days for user:', emp.id, e);
-          daysMap[emp.id] = 7;
-        }
-      }
-      setBookingOpenDaysByUser(daysMap);
     } catch {
       setAdminUsers([]);
     } finally {
@@ -1561,392 +1591,10 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     if (activeSettingsTab !== 'employees' || !canSeeAddEmployee) {
-      setExpandedEmployeeId(null);
       return;
     }
     void loadAdminEmployeesForTab();
   }, [activeSettingsTab, canSeeAddEmployee, loadAdminEmployeesForTab]);
-
-  const handleSaveBookingDaysForUser = async (userId: string, days: number) => {
-    setSavingBookingDaysForUser(userId);
-    try {
-      await businessProfileApi.setBookingOpenDaysForUser(userId, days);
-      setBookingOpenDaysByUser((prev) => ({ ...prev, [userId]: days }));
-      Alert.alert(t('success.generic','Success'), t('settings.profile.bookingWindowSaved','Booking window updated successfully'));
-    } catch (error) {
-      console.error('Error saving booking days for user:', error);
-      Alert.alert(t('error.generic','Error'), t('settings.profile.bookingWindowSaveFailed','Failed to save booking window'));
-    } finally {
-      setSavingBookingDaysForUser(null);
-    }
-  };
-
-  const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  const timeOptions = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2,'0')}:00`);
-
-  // Compute next date string (YYYY-MM-DD, local) for a given dayOfWeek (0..6) from today
-  const getNextDateForDay = (dayOfWeek: number): string => {
-    const today = new Date();
-    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const currentDow = start.getDay();
-    const delta = (dayOfWeek - currentDow + 7) % 7; // 0..6
-    const target = new Date(start);
-    target.setDate(start.getDate() + delta);
-    const y = target.getFullYear();
-    const m = String(target.getMonth() + 1).padStart(2, '0');
-    const d = String(target.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  };
-
-  // Validate that the selected time is still available for the nearest occurrence of the chosen day for this barber
-  const isTimeAvailable = async (dayOfWeek: number, timeHHmm: string): Promise<boolean> => {
-    try {
-      const businessId = getBusinessId();
-      
-      // 1) Check conflicts with other recurring rules for this barber
-      let recurringQuery = supabase
-        .from('recurring_appointments')
-        .select('slot_time')
-        .eq('business_id', businessId)
-        .eq('day_of_week', dayOfWeek);
-      // Only filter by user_id if the column exists (avoid schema errors)
-      try {
-        if (user?.id) {
-          recurringQuery = recurringQuery.eq('user_id', user.id);
-        }
-      } catch {
-        // If user_id column doesn't exist, just get all recurring appointments for this day
-      }
-      const { data: recurring } = await recurringQuery;
-      const recurringTimes = new Set((recurring || []).map((r: any) => String(r.slot_time).slice(0,5)));
-      if (recurringTimes.has(timeHHmm)) return false;
-
-      // 2) Check conflicts with existing booked slots on ANY date that falls on this day of week
-      // Limit to recent dates to avoid loading too much data
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const thirtyDaysFromNow = new Date();
-      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-      
-      let bookedQuery = supabase
-        .from('appointments')
-        .select('slot_time, slot_date, is_available')
-        .eq('business_id', businessId)
-        .eq('is_available', false)
-        .gte('slot_date', thirtyDaysAgo.toISOString().split('T')[0])
-        .lte('slot_date', thirtyDaysFromNow.toISOString().split('T')[0])
-        .limit(1000); // Limit results to prevent hanging
-      if (user?.id) {
-        bookedQuery = bookedQuery.or(`user_id.eq.${user.id},user_id.is.null`);
-      } else {
-        bookedQuery = bookedQuery.is('user_id', null);
-      }
-      const { data: allBooked } = await bookedQuery;
-      
-      // Filter to only appointments that fall on the selected day of week
-      const bookedOnThisDay = (allBooked || []).filter((apt: any) => {
-        const aptDate = new Date(apt.slot_date + 'T00:00:00'); // Local date
-        return aptDate.getDay() === dayOfWeek;
-      });
-      const bookedTimes = new Set(bookedOnThisDay.map((s: any) => String(s.slot_time).slice(0,5)));
-      if (bookedTimes.has(timeHHmm)) return false;
-
-      return true;
-    } catch {
-      // If check fails for any reason, be conservative and prevent selection
-      return false;
-    }
-  };
-
-  const loadAvailableTimesForDay = async (dayOfWeek: number) => {
-    setIsLoadingTimes(true);
-    setAvailableTimes([]);
-    try {
-      const businessId = getBusinessId();
-      
-      // Add timeout to prevent hanging
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout loading times')), 10000)
-      );
-      
-      const loadPromise = (async () => {
-      
-      // Fetch business hours for day: prefer user-specific row, fallback to global (user_id IS NULL)
-      let bhRow: any | null = null;
-      try {
-        const { data: bhUser } = await supabase
-          .from('business_hours')
-          .select('*')
-          .eq('business_id', businessId)
-          .eq('day_of_week', dayOfWeek)
-          .eq('is_active', true)
-          .eq('user_id', user?.id)
-          .maybeSingle();
-        if (bhUser) bhRow = bhUser;
-      } catch {}
-      if (!bhRow) {
-        const { data: bhGlobal } = await supabase
-          .from('business_hours')
-          .select('*')
-          .eq('business_id', businessId)
-          .eq('day_of_week', dayOfWeek)
-          .eq('is_active', true)
-          .is('user_id', null)
-          .maybeSingle();
-        bhRow = bhGlobal || null;
-      }
-
-      if (!bhRow) {
-        setAvailableTimes([]);
-        return;
-      }
-
-      // Normalize to HH:mm to avoid HH:mm:ss mismatches
-      const normalize = (s: any) => String(s).slice(0, 5);
-
-      // Build windows minus breaks
-      type Window = { start: string; end: string };
-      const startTime = normalize((bhRow as any).start_time);
-      const endTime = normalize((bhRow as any).end_time);
-      const baseWindows: Window[] = [{ start: startTime, end: endTime }];
-      const brks: Array<{ start_time: string; end_time: string }> = (bhRow as any).breaks || [];
-      const singleBreak = (bhRow.break_start_time && bhRow.break_end_time)
-        ? [{ start_time: (bhRow as any).break_start_time, end_time: (bhRow as any).break_end_time }]
-        : [];
-      const allBreaks = [...brks, ...singleBreak].map(b => ({
-        start_time: normalize(b.start_time),
-        end_time: normalize(b.end_time),
-      }));
-
-      const subtractBreaks = (wins: Window[], breaks: typeof allBreaks): Window[] => {
-        let result = wins.slice();
-        for (const b of breaks) {
-          const next: Window[] = [];
-          for (const w of result) {
-            if (b.end_time <= w.start || b.start_time >= w.end) {
-              next.push(w);
-              continue;
-            }
-            if (w.start < b.start_time) next.push({ start: w.start, end: b.start_time });
-            if (b.end_time < w.end) next.push({ start: b.end_time, end: w.end });
-          }
-          result = next;
-        }
-        return result.filter(w => w.start < w.end);
-      };
-
-      const windows = subtractBreaks(baseWindows, allBreaks);
-
-      // Enumerate options by slot duration (prefer selected service's duration)
-      const dur: number = (selectedService?.duration_minutes && selectedService.duration_minutes > 0)
-        ? (selectedService.duration_minutes as number)
-        : (bhRow.slot_duration_minutes && bhRow.slot_duration_minutes > 0 ? bhRow.slot_duration_minutes : 60);
-      const addMinutes = (hhmm: string, minutes: number): string => {
-        const [h, m] = hhmm.split(':').map((x: string) => parseInt(x, 10));
-        const total = h * 60 + m + minutes;
-        const hh = Math.floor(total / 60) % 24;
-        const mm = total % 60;
-        return `${hh.toString().padStart(2, '0')}:${mm.toString().padStart(2, '0')}`;
-      };
-
-      const compareTimes = (a: string, b: string) => a.localeCompare(b);
-      const baseTimes: string[] = [];
-      for (const w of windows) {
-        let t = w.start as string;
-        while (compareTimes(addMinutes(t, dur), w.end) <= 0) {
-          baseTimes.push(t.slice(0,5));
-          t = addMinutes(t, dur);
-        }
-      }
-
-      // Exclude conflicts with other recurring rules for this barber (same day/time)
-      let recurringQuery = supabase
-        .from('recurring_appointments')
-        .select('slot_time')
-        .eq('business_id', businessId)
-        .eq('day_of_week', dayOfWeek);
-      // Only filter by user_id if the column exists (avoid schema errors)
-      try {
-        if (user?.id) {
-          recurringQuery = recurringQuery.eq('user_id', user.id);
-        }
-      } catch {
-        // If user_id column doesn't exist, just get all recurring appointments for this day
-      }
-      const { data: recurring } = await recurringQuery;
-      const recurringTimes = new Set((recurring || []).map((r: any) => String(r.slot_time).slice(0,5)));
-
-      // Exclude conflicts with existing booked slots on ANY date that falls on this day of week
-      let bookedQuery = supabase
-        .from('appointments')
-        .select('slot_time, slot_date, is_available')
-        .eq('business_id', businessId)
-        .eq('is_available', false);
-      if (user?.id) {
-        bookedQuery = bookedQuery.or(`user_id.eq.${user.id},user_id.is.null`);
-      } else {
-        bookedQuery = bookedQuery.is('user_id', null);
-      }
-      const { data: allBooked } = await bookedQuery;
-      
-      // Filter to only appointments that fall on the selected day of week
-      const bookedOnThisDay = (allBooked || []).filter((apt: any) => {
-        const aptDate = new Date(apt.slot_date + 'T00:00:00'); // Local date
-        return aptDate.getDay() === dayOfWeek;
-      });
-      const bookedTimes = new Set(bookedOnThisDay.map((s: any) => String(s.slot_time).slice(0,5)));
-
-      const filtered = baseTimes.filter(t => !recurringTimes.has(t) && !bookedTimes.has(t));
-      setAvailableTimes(filtered);
-      // Reset selected time if it became invalid
-      if (selectedTime && !filtered.includes(selectedTime)) {
-        setSelectedTime(null);
-      }
-      })();
-      
-      // Race between loading and timeout
-      await Promise.race([loadPromise, timeoutPromise]);
-      
-    } catch (error) {
-      console.error('Error loading available times:', error);
-      setAvailableTimes([]);
-      // Show error to user
-      Alert.alert(t('error.generic','Error'), t('settings.recurring.timesLoadFailed','Failed to load available times. Please try again.'));
-    } finally {
-      setIsLoadingTimes(false);
-    }
-  };
-
-  // Reload available times when the day changes or when opening modal
-  useEffect(() => {
-    if (showRecurringModal && Number.isInteger(selectedDayOfWeek as any)) {
-      loadAvailableTimesForDay(selectedDayOfWeek as number);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showRecurringModal, selectedDayOfWeek]);
-
-  useEffect(() => {
-    if (showRecurringModal) {
-      // Preload services list for selection
-      servicesApi
-        .getAllServices()
-        .then((all) => {
-          const mine = (all || []).filter(
-            (s) => String(s.worker_id || '') === String(user?.id || '')
-          );
-          setRecurringServices(mine);
-        })
-        .catch(() => setRecurringServices([]));
-      // Reset fields
-      setClientSearch('');
-      setSelectedClient(null);
-      setSelectedDayOfWeek(null);
-      setSelectedTime(null);
-      setSelectedService(null);
-      setRepeatWeeks(1);
-      setShowDayDropdown(false);
-      setShowTimeDropdown(false);
-      setShowServiceDropdown(false);
-      setShowClientDropdown(false);
-      setShowRepeatDropdown(false);
-      // Load initial client list (show all clients by default)
-      searchClients('');
-      // Reset stepper
-      setTimeout(() => {
-        setRecStep(0);
-        recTranslateX.setValue(0);
-        recProgressAnim.setValue(0);
-        setRecRenderKey((k) => k + 1);
-      }, 0);
-    }
-  }, [showRecurringModal, user?.id]);
-
-  const searchClients = async (q: string) => {
-    setClientSearch(q);
-    const query = (q || '').trim();
-    const businessId = getBusinessId();
-    
-    let builder = supabase
-      .from('users')
-      .select('id, name, phone')
-      .eq('user_type', 'client')
-      .eq('business_id', businessId)
-      .order('name');
-    if (query.length > 0) {
-      builder = builder.or(`name.ilike.%${query}%,phone.ilike.%${query}%`);
-    }
-    const { data, error } = await builder;
-    if (error) {
-      setClientResults([]);
-      return;
-    }
-    // Exclude clients that already have a recurring appointment with this barber
-    const { data: recs } = await supabase
-      .from('recurring_appointments')
-      .select('client_phone')
-      .eq('business_id', businessId)
-      .eq('admin_id', user?.id);
-    const recurringPhones = new Set((recs || []).map((r: any) => String(r.client_phone).trim()).filter(Boolean));
-
-    const filtered = (data || [])
-      .filter((u: any) => u.phone && u.phone.trim() !== '')
-      .filter((u: any) => !recurringPhones.has(String(u.phone).trim()));
-
-    setClientResults(filtered);
-  };
-
-  const handleSubmitRecurring = async () => {
-    if (!selectedClient || selectedDayOfWeek === null || !selectedTime || !selectedService) {
-      Alert.alert(t('error.generic','Error'), t('settings.recurring.fillAll','Please fill all fields: client, day, time, and service'));
-      return;
-    }
-    // Final guard before creating: verify time is still available for the nearest occurrence
-    const stillAvailable = await isTimeAvailable(selectedDayOfWeek as number, selectedTime as string);
-    if (!stillAvailable) {
-      Alert.alert(t('settings.recurring.slotTakenTitle','Slot taken'), t('settings.recurring.slotTaken','The selected time is already booked this week. Please choose another time.'));
-      return;
-    }
-    setIsSubmittingRecurring(true);
-    try {
-      const recurringData: any = {
-        client_name: selectedClient.name || 'Client',
-        client_phone: selectedClient.phone,
-        day_of_week: selectedDayOfWeek,
-        slot_time: selectedTime,
-        service_name: selectedService.name,
-        service_id: selectedService.id, // Add service_id reference
-        repeat_interval: repeatWeeks,
-        business_id: getBusinessId(), // Add business_id from the current business
-      };
-      // Add admin_id (the current admin creating the recurring appointment)
-      if (user?.id) {
-        recurringData.admin_id = user.id;
-      }
-      // Add client_id if the selected client has an ID (optional)
-      if ((selectedClient as any).id) {
-        recurringData.client_id = (selectedClient as any).id;
-      }
-      const created = await recurringAppointmentsApi.create(recurringData);
-      if (created) {
-        Alert.alert(t('success.generic','Success'), t('settings.recurring.createSuccess','Recurring appointment created. The slot will be kept after weekly generation.'));
-        setShowRecurringModal(false);
-        try {
-          const items = await recurringAppointmentsApi.listAll();
-          setRecurringList(items);
-        } catch {
-          /* list refresh optional */
-        }
-      } else {
-        Alert.alert(t('error.generic','Error'), t('settings.recurring.createFailed','Failed to create recurring appointment'));
-      }
-    } catch (e) {
-      Alert.alert(t('error.generic','Error'), t('settings.recurring.createFailed','Failed to create recurring appointment'));
-    } finally {
-      setIsSubmittingRecurring(false);
-    }
-  };
-
-
 
   const renderSettingItem = (
     icon: React.ReactNode,
@@ -2188,7 +1836,7 @@ export default function SettingsScreen() {
               ? renderSettingItemLTR(
                   <Calendar size={20} color={businessColors.primary} />,
                   t('settings.profile.bookingWindowRowTitle', 'How far ahead clients can book you'),
-                  t('settings.profile.bookingWindowRowSubtitle', { count: profileBookingOpenDays || 7 }),
+                  t('settings.profile.bookingWindowRowSubtitle', { count: profileBookingOpenDays ?? 7 }),
                   undefined,
                   () => setShowBookingWindowModal(true)
                 )
@@ -2210,6 +1858,21 @@ export default function SettingsScreen() {
                       setIsLoadingRecurring(false);
                     }
                   },
+                )
+              : null}
+            {canSeeAddEmployee
+              ? renderSettingItemLTR(
+                  <Bell size={20} color={businessColors.primary} />,
+                  t('settings.reminder.clientRowTitle', 'Client reminder before appointment'),
+                  clientReminderMinutes != null && clientReminderMinutes > 0
+                    ? t('settings.reminder.clientRowValueHours', {
+                        count: Math.max(1, Math.round(clientReminderMinutes / 60)),
+                      })
+                    : t('settings.reminder.clientTapToEdit', 'Tap to edit reminder timing'),
+                  undefined,
+                  () => openClientReminderModal(),
+                  undefined,
+                  !user?.id,
                 )
               : null}
             <View style={styles.settingItemLTR}>
@@ -2263,57 +1926,6 @@ export default function SettingsScreen() {
                 trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
                 thumbColor={
                   cancellationLimitActive
-                    ? businessColors.primary
-                    : Platform.OS === 'android'
-                      ? '#f4f3f4'
-                      : undefined
-                }
-                ios_backgroundColor="#E5E5EA"
-              />
-            </View>
-            <View style={styles.settingDivider} />
-            <View style={styles.settingItemLTR}>
-              <View style={styles.settingIconLTR}>
-                <Bell size={20} color={businessColors.primary} />
-              </View>
-              <Pressable
-                style={({ pressed }) => [
-                  { flex: 1, paddingRight: 8, opacity: clientReminderActive && user?.id ? 1 : 0.55 },
-                  pressed && clientReminderActive && user?.id ? { opacity: 0.88 } : null,
-                ]}
-                onPress={() => {
-                  if (clientReminderActive && user?.id) openClientReminderModal(false);
-                }}
-                disabled={!clientReminderActive || !user?.id}
-              >
-                <Text style={styles.settingTitleLTR}>
-                  {t('settings.reminder.clientRowTitle', 'Client reminder before appointment')}
-                </Text>
-                {clientReminderActive ? (
-                  clientReminderMinutes != null && clientReminderMinutes > 0 ? (
-                    <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
-                      {t('settings.reminder.clientRowValueMinutes', { count: clientReminderMinutes })}
-                    </Text>
-                  ) : (
-                    <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
-                      {t('settings.reminder.clientTapToEdit', 'Tap to edit reminder timing')}
-                    </Text>
-                  )
-                ) : (
-                  <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
-                    {t('settings.reminder.clientRowValueOff', 'Off')}
-                  </Text>
-                )}
-              </Pressable>
-              <Switch
-                value={clientReminderActive}
-                onValueChange={(v) => {
-                  void handleClientReminderSwitch(v);
-                }}
-                disabled={!user?.id || isSavingProfile}
-                trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
-                thumbColor={
-                  clientReminderActive
                     ? businessColors.primary
                     : Platform.OS === 'android'
                       ? '#f4f3f4'
@@ -2492,6 +2104,87 @@ export default function SettingsScreen() {
                   </View>
                 )}
 
+                {!isLoadingServices && !servicesError && canSeeAddEmployee && (
+                  <View style={[styles.servicesModalFullWidthBlock, styles.serviceImagesPrefOuter]}>
+                    <View
+                      style={[
+                        styles.serviceImagesPrefCard,
+                        Platform.select({
+                          ios: {
+                            shadowColor: businessColors.primary,
+                            shadowOffset: { width: 0, height: 6 },
+                            shadowOpacity: 0.12,
+                            shadowRadius: 16,
+                          },
+                          android: { elevation: 5 },
+                        }),
+                      ]}
+                    >
+                      <LinearGradient
+                        colors={[`${businessColors.primary}`, `${businessColors.primary}99`]}
+                        start={{ x: 0, y: 0.5 }}
+                        end={{ x: 1, y: 0.5 }}
+                        style={styles.serviceImagesPrefAccentBar}
+                      />
+                      <View style={styles.serviceImagesPrefInner}>
+                        <View style={styles.serviceImagesPrefCopy}>
+                          <View style={styles.serviceImagesPrefTitleRow}>
+                            <Text style={styles.serviceImagesPrefTitle} numberOfLines={2}>
+                              {t('settings.services.showImagesTitle', 'Service photos')}
+                            </Text>
+                            <View
+                              style={[
+                                styles.serviceImagesPrefStatusPill,
+                                {
+                                  backgroundColor: showServiceImages
+                                    ? `${businessColors.primary}18`
+                                    : 'rgba(142, 142, 147, 0.16)',
+                                },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.serviceImagesPrefStatusText,
+                                  { color: showServiceImages ? businessColors.primary : '#636366' },
+                                ]}
+                              >
+                                {showServiceImages
+                                  ? t('settings.services.showImagesOn', 'On')
+                                  : t('settings.services.showImagesOff', 'Off')}
+                              </Text>
+                            </View>
+                          </View>
+                          <Text style={styles.serviceImagesPrefSubtitle}>
+                            {t(
+                              'settings.services.showImagesSubtitle',
+                              'Turn on to show your services with photos',
+                            )}
+                          </Text>
+                        </View>
+                        <View style={styles.serviceImagesPrefSwitchCol}>
+                          {isSavingProfile ? (
+                            <ActivityIndicator size="small" color={businessColors.primary} />
+                          ) : (
+                            <Switch
+                              value={showServiceImages}
+                              onValueChange={handleShowServiceImagesToggle}
+                              trackColor={{ false: '#E8E8ED', true: `${businessColors.primary}55` }}
+                              thumbColor={
+                                showServiceImages
+                                  ? businessColors.primary
+                                  : Platform.OS === 'android'
+                                    ? '#f4f3f4'
+                                    : '#FFFFFF'
+                              }
+                              ios_backgroundColor="#E8E8ED"
+                            />
+                          )}
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                )}
+
                 {!isLoadingServices && !servicesError && editableServices.length === 0 && !isAddingService && (
                   <View style={[styles.svcEmptyState, styles.servicesModalFullWidthBlock]}>
                     <View style={[styles.svcEmptyIcon, { backgroundColor: `${businessColors.primary}15` }]}>
@@ -2537,9 +2230,17 @@ export default function SettingsScreen() {
                       <View style={[styles.svcCard, styles.svcListCard, justSaved && styles.svcCardSaved, isActive && styles.svcListCardDragging]}>
                         <View style={[styles.svcCardAccent, { backgroundColor: businessColors.primary }]} />
                         {!isExpanded ? (
-                          <View style={styles.svcListCollapsedRow}>
+                          <View
+                            style={[
+                              styles.svcListCollapsedRow,
+                              !showServiceImages && styles.svcListCollapsedRowNoThumb,
+                            ]}
+                          >
                             <TouchableOpacity
-                              style={styles.svcListChevronHit}
+                              style={[
+                                styles.svcListChevronHit,
+                                !showServiceImages && styles.svcListChevronHitNoThumb,
+                              ]}
                               activeOpacity={0.85}
                               onPress={() => setExpandedServiceId(prev => (prev === svc.id ? null : svc.id))}
                             >
@@ -2583,28 +2284,30 @@ export default function SettingsScreen() {
                                 </View>
                               </View>
                             </TouchableOpacity>
-                            <View style={styles.svcListThumbOuter}>
-                              <TouchableOpacity
-                                onPress={() => handlePickServiceImage(svc.id)}
-                                activeOpacity={0.85}
-                                style={styles.svcListThumbWrap}
-                              >
-                                {svc.image_url ? (
-                                  <Image source={{ uri: svc.image_url }} style={styles.svcListThumb} resizeMode="cover" />
-                                ) : (
-                                  <View style={[styles.svcListThumbPlaceholder, { backgroundColor: `${businessColors.primary}15` }]}>
-                                    <Text style={[styles.svcListThumbPlaceholderText, { color: businessColors.primary }]}>
-                                      {(svc.name || '?').charAt(0).toUpperCase()}
-                                    </Text>
-                                  </View>
-                                )}
-                                {uploadingServiceId === svc.id && (
-                                  <View style={styles.svcListThumbUploadOverlay}>
-                                    <ActivityIndicator size="small" color="#fff" />
-                                  </View>
-                                )}
-                              </TouchableOpacity>
-                            </View>
+                            {showServiceImages ? (
+                              <View style={styles.svcListThumbOuter}>
+                                <TouchableOpacity
+                                  onPress={() => handlePickServiceImage(svc.id)}
+                                  activeOpacity={0.85}
+                                  style={styles.svcListThumbWrap}
+                                >
+                                  {svc.image_url ? (
+                                    <Image source={{ uri: svc.image_url }} style={styles.svcListThumb} resizeMode="cover" />
+                                  ) : (
+                                    <View style={[styles.svcListThumbPlaceholder, { backgroundColor: `${businessColors.primary}15` }]}>
+                                      <Text style={[styles.svcListThumbPlaceholderText, { color: businessColors.primary }]}>
+                                        {(svc.name || '?').charAt(0).toUpperCase()}
+                                      </Text>
+                                    </View>
+                                  )}
+                                  {uploadingServiceId === svc.id && (
+                                    <View style={styles.svcListThumbUploadOverlay}>
+                                      <ActivityIndicator size="small" color="#fff" />
+                                    </View>
+                                  )}
+                                </TouchableOpacity>
+                              </View>
+                            ) : null}
                           </View>
                         ) : (
                           <>
@@ -2627,38 +2330,40 @@ export default function SettingsScreen() {
                               </TouchableOpacity>
                             </View>
 
-                            <View style={[styles.svcAddImageBandArea, { backgroundColor: `${businessColors.primary}08` }]}>
-                              <TouchableOpacity
-                                style={styles.svcAddImageCircleBtn}
-                                onPress={() => handlePickServiceImage(svc.id)}
-                                activeOpacity={0.85}
-                                disabled={uploadingServiceId === svc.id}
-                              >
-                                {svc.image_url ? (
-                                  <>
-                                    <Image source={{ uri: svc.image_url }} style={styles.svcAddImageCircleFull} resizeMode="cover" />
-                                    <View style={styles.svcAddImageChangeOverlay}>
-                                      <Ionicons name="camera-outline" size={22} color="#fff" />
+                            {showServiceImages ? (
+                              <View style={[styles.svcAddImageBandArea, { backgroundColor: `${businessColors.primary}08` }]}>
+                                <TouchableOpacity
+                                  style={styles.svcAddImageCircleBtn}
+                                  onPress={() => handlePickServiceImage(svc.id)}
+                                  activeOpacity={0.85}
+                                  disabled={uploadingServiceId === svc.id}
+                                >
+                                  {svc.image_url ? (
+                                    <>
+                                      <Image source={{ uri: svc.image_url }} style={styles.svcAddImageCircleFull} resizeMode="cover" />
+                                      <View style={styles.svcAddImageChangeOverlay}>
+                                        <Ionicons name="camera-outline" size={22} color="#fff" />
+                                      </View>
+                                    </>
+                                  ) : (
+                                    <View style={[styles.svcAddImageCirclePlaceholder, { borderColor: `${businessColors.primary}40` }]}>
+                                      {uploadingServiceId === svc.id ? (
+                                        <ActivityIndicator size="large" color={businessColors.primary} />
+                                      ) : (
+                                        <>
+                                          <View style={[styles.svcAddImageIconWrap, { backgroundColor: `${businessColors.primary}20` }]}>
+                                            <Ionicons name="camera-outline" size={28} color={businessColors.primary} />
+                                          </View>
+                                          <Text style={[styles.svcAddImageDashedLabel, { color: businessColors.primary, marginTop: 8 }]}>
+                                            {t('settings.services.changeImage','החלף תמונה')}
+                                          </Text>
+                                        </>
+                                      )}
                                     </View>
-                                  </>
-                                ) : (
-                                  <View style={[styles.svcAddImageCirclePlaceholder, { borderColor: `${businessColors.primary}40` }]}>
-                                    {uploadingServiceId === svc.id ? (
-                                      <ActivityIndicator size="large" color={businessColors.primary} />
-                                    ) : (
-                                      <>
-                                        <View style={[styles.svcAddImageIconWrap, { backgroundColor: `${businessColors.primary}20` }]}>
-                                          <Ionicons name="camera-outline" size={28} color={businessColors.primary} />
-                                        </View>
-                                        <Text style={[styles.svcAddImageDashedLabel, { color: businessColors.primary, marginTop: 8 }]}>
-                                          {t('settings.services.changeImage','החלף תמונה')}
-                                        </Text>
-                                      </>
-                                    )}
-                                  </View>
-                                )}
-                              </TouchableOpacity>
-                            </View>
+                                  )}
+                                </TouchableOpacity>
+                              </View>
+                            ) : null}
 
                             <View style={styles.svcAddFieldsArea}>
                               <View style={[styles.formGroup, { marginBottom: 10 }]}>
@@ -2859,9 +2564,6 @@ export default function SettingsScreen() {
                       </View>
                     ) : (
                       adminUsers.map((adm: any) => {
-                        const isExpanded = expandedEmployeeId === adm.id;
-                        const currentBookingDays = bookingOpenDaysByUser[adm.id] ?? 7;
-                        const isSaving = savingBookingDaysForUser === adm.id;
                         return (
                           <View key={adm.id} style={{ marginBottom: 10 }}>
                             <Swipeable
@@ -2906,11 +2608,7 @@ export default function SettingsScreen() {
                               )}
                             >
                               <View style={styles.iosCard}>
-                                <TouchableOpacity
-                                  style={{ flexDirection: 'row', alignItems: 'center' }}
-                                  onPress={() => setExpandedEmployeeId(isExpanded ? null : adm.id)}
-                                  activeOpacity={0.7}
-                                >
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                   {adm.image_url ? (
                                     <Image source={{ uri: adm.image_url }} style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12 }} resizeMode="cover" />
                                   ) : (
@@ -2923,7 +2621,6 @@ export default function SettingsScreen() {
                                     {!!adm.phone && <Text style={styles.previewNotificationContent}>{adm.phone}</Text>}
                                   </View>
                                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                    {isExpanded ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
                                     <TouchableOpacity
                                       style={[styles.iconActionButton, { backgroundColor: '#FFECEC', borderColor: '#FFD1D1' }]}
                                       onPress={() => {
@@ -2958,60 +2655,7 @@ export default function SettingsScreen() {
                                       <Trash2 size={20} color="#FF3B30" />
                                     </TouchableOpacity>
                                   </View>
-                                </TouchableOpacity>
-                                {isExpanded && (
-                                  <View style={{ marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: Colors.border }}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                                      <Calendar size={18} color={businessColors.primary} style={{ marginRight: 8 }} />
-                                      <Text style={{ fontSize: 15, color: Colors.text, fontWeight: '500' }}>
-                                        {t('settings.profile.bookingWindow', 'Booking window (days)')}
-                                      </Text>
-                                    </View>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                                      <TextInput
-                                        style={{
-                                          flex: 1,
-                                          borderWidth: 1,
-                                          borderColor: Colors.border,
-                                          borderRadius: 8,
-                                          paddingHorizontal: 12,
-                                          paddingVertical: 10,
-                                          fontSize: 15,
-                                          color: Colors.text,
-                                          backgroundColor: Colors.white,
-                                        }}
-                                        value={String(currentBookingDays)}
-                                        onChangeText={(text) => {
-                                          const num = Math.max(1, Math.min(60, Math.floor(Number(text) || 7)));
-                                          setBookingOpenDaysByUser((prev) => ({ ...prev, [adm.id]: num }));
-                                        }}
-                                        placeholder="7"
-                                        keyboardType="number-pad"
-                                        placeholderTextColor={Colors.subtext}
-                                      />
-                                      <TouchableOpacity
-                                        style={{
-                                          backgroundColor: businessColors.primary,
-                                          paddingHorizontal: 20,
-                                          paddingVertical: 10,
-                                          borderRadius: 8,
-                                          opacity: isSaving ? 0.6 : 1,
-                                        }}
-                                        onPress={() => handleSaveBookingDaysForUser(adm.id, currentBookingDays)}
-                                        disabled={isSaving}
-                                      >
-                                        {isSaving ? (
-                                          <ActivityIndicator size="small" color="#FFFFFF" />
-                                        ) : (
-                                          <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '600' }}>{t('save', 'Save')}</Text>
-                                        )}
-                                      </TouchableOpacity>
-                                    </View>
-                                    <Text style={{ fontSize: 12, color: Colors.subtext, marginTop: 8, textAlign: isRtlLanguage(i18n.language) ? 'right' : 'left' }}>
-                                      {t('settings.profile.bookingWindowHint', 'How many days ahead can clients book appointments with this employee?')}
-                                    </Text>
-                                  </View>
-                                )}
+                                </View>
                               </View>
                             </Swipeable>
                           </View>
@@ -3203,170 +2847,222 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      {/* Client reminder (before appointment) — full copy + hours/minutes in modal */}
+      {/* Client reminder — bottom sheet (same pattern as booking window) */}
       <Modal
         visible={showClientReminderModal}
-        animationType="fade"
-        transparent
+        animationType="slide"
+        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
         onRequestClose={dismissClientReminderModal}
       >
-        <KeyboardAvoidingView
-          style={styles.smallModalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <View style={styles.smallModalCard}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity style={styles.modalCloseButton} onPress={dismissClientReminderModal}>
-                <Text style={styles.modalCloseText}>{t('cancel', 'Cancel')}</Text>
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: SETTINGS_GROUPED_BG }]} edges={['top']}>
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+          >
+            <View style={[styles.modalHeader, styles.bookingWindowModalHeader]}>
+              <TouchableOpacity
+                style={styles.cancellationModalCloseButton}
+                onPress={dismissClientReminderModal}
+                accessibilityRole="button"
+                accessibilityLabel={t('cancel', 'Cancel')}
+              >
+                <X size={22} color={Colors.text} strokeWidth={2} />
               </TouchableOpacity>
-              <Text style={[styles.modalTitleLTR, I18nManager.isRTL && { textAlign: 'center' }]} numberOfLines={2}>
+              <Text style={[styles.modalTitle, styles.bookingWindowModalTitle]} numberOfLines={2}>
                 {t('settings.reminder.clientRowTitle', 'Client reminder before appointment')}
               </Text>
+              <View style={styles.bookingWindowHeaderSpacer} />
+            </View>
+
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{
+                paddingHorizontal: 20,
+                paddingTop: 8,
+                paddingBottom: insets.bottom + 120,
+              }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+            >
+              <LinearGradient
+                colors={[`${businessColors.primary}18`, `${businessColors.primary}08`, 'transparent']}
+                locations={[0, 0.55, 1]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.bookingWindowExplainer}
+              >
+                <View style={[styles.bookingWindowExplainerIcon, { backgroundColor: `${businessColors.primary}20` }]}>
+                  <Bell size={22} color={businessColors.primary} strokeWidth={2} />
+                </View>
+                <Text style={styles.bookingWindowExplainerText}>{t('settings.reminder.clientAutomatedHint')}</Text>
+              </LinearGradient>
+
+              <View style={styles.bookingWindowHeroCard}>
+                <Text style={styles.bookingWindowFieldLabel}>
+                  {t('settings.reminder.clientDialogHoursLabel', 'Hours before appointment')}
+                </Text>
+                <View style={styles.bookingWindowRulerLtr}>
+                  <BookingDaysRuler
+                    ref={clientReminderHoursRulerRef}
+                    minDay={CLIENT_REMINDER_HOURS_MIN}
+                    maxDay={CLIENT_REMINDER_HOURS_MAX}
+                    fadeColor={Colors.white}
+                    tickColor={Colors.text}
+                    indicatorColor={businessColors.primary}
+                    unitLabel={t('settings.reminder.clientDialogHoursUnit', 'hours')}
+                    onDayChange={onClientReminderHoursRulerChange}
+                  />
+                </View>
+                <Text style={styles.bookingWindowManualLabel}>
+                  {t('settings.reminder.clientDialogManualHours', 'Or enter a number')}
+                </Text>
+                <TextInput
+                  style={styles.bookingWindowManualInput}
+                  value={clientReminderModalHoursDraft}
+                  onChangeText={onClientReminderHoursTextChange}
+                  placeholder="0"
+                  placeholderTextColor={Colors.subtext}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  selectTextOnFocus
+                />
+                <Text style={styles.bookingWindowRangeFoot}>
+                  {t('settings.reminder.clientDialogHoursRange', '0–24 hours. 0 turns the reminder off.')}
+                </Text>
+              </View>
+            </ScrollView>
+
+            <View style={[styles.bookingWindowFooter, { paddingBottom: Math.max(insets.bottom, 10) }]}>
               <TouchableOpacity
-                style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]}
+                style={[
+                  styles.bookingWindowFooterBtn,
+                  { backgroundColor: businessColors.primary },
+                  isSavingProfile && styles.bookingWindowFooterBtnDisabled,
+                ]}
                 onPress={() => {
                   void saveClientReminderFromModal();
                 }}
                 disabled={isSavingProfile}
+                activeOpacity={0.88}
               >
-                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>
+                <Text style={[styles.bookingWindowFooterBtnText, isSavingProfile && { opacity: 0.85 }]}>
                   {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
                 </Text>
               </TouchableOpacity>
             </View>
-            <ScrollView
-              style={styles.smallModalContent}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              <Text
-                style={[
-                  styles.settingSubtitleLTR,
-                  { marginBottom: 16, lineHeight: 22 },
-                  I18nManager.isRTL && { textAlign: 'right' },
-                ]}
-              >
-                {t('settings.reminder.clientAutomatedHint')}
-              </Text>
-              <Text style={[styles.inputLabelLTR, I18nManager.isRTL && { textAlign: 'right' }]}>
-                {t('settings.reminder.clientDialogHoursLabel', 'Hours')}
-              </Text>
-              <TextInput
-                style={[styles.textInput, { marginBottom: 12 }]}
-                value={clientReminderModalHoursDraft}
-                onChangeText={setClientReminderModalHoursDraft}
-                placeholder="0"
-                placeholderTextColor={Colors.subtext}
-                keyboardType="number-pad"
-                textAlign={I18nManager.isRTL ? 'right' : 'left'}
-              />
-              <Text style={[styles.inputLabelLTR, I18nManager.isRTL && { textAlign: 'right' }]}>
-                {t('settings.reminder.clientDialogMinutesLabel', 'Minutes (0–59)')}
-              </Text>
-              <TextInput
-                style={[styles.textInput, { marginBottom: 12 }]}
-                value={clientReminderModalMinutesDraft}
-                onChangeText={setClientReminderModalMinutesDraft}
-                placeholder="0"
-                placeholderTextColor={Colors.subtext}
-                keyboardType="number-pad"
-                textAlign={I18nManager.isRTL ? 'right' : 'left'}
-              />
-              <Text
-                style={[
-                  styles.settingSubtitleLTR,
-                  { fontSize: 13, opacity: 0.85 },
-                  I18nManager.isRTL && { textAlign: 'right' },
-                ]}
-              >
-                {t('settings.reminder.clientDialogCombinedHint')}
-              </Text>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
       </Modal>
 
-      {/* Admin self-reminder — same time fields as client reminder */}
+      {/* Admin self-reminder — minutes 5–60, ruler + bottom sheet */}
       <Modal
         visible={showAdminReminderModal}
-        animationType="fade"
-        transparent
+        animationType="slide"
+        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
         onRequestClose={dismissAdminReminderModal}
       >
-        <KeyboardAvoidingView
-          style={styles.smallModalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <View style={styles.smallModalCard}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity style={styles.modalCloseButton} onPress={dismissAdminReminderModal}>
-                <Text style={styles.modalCloseText}>{t('cancel', 'Cancel')}</Text>
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: SETTINGS_GROUPED_BG }]} edges={['top']}>
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+          >
+            <View style={[styles.modalHeader, styles.bookingWindowModalHeader]}>
+              <TouchableOpacity
+                style={styles.cancellationModalCloseButton}
+                onPress={dismissAdminReminderModal}
+                accessibilityRole="button"
+                accessibilityLabel={t('cancel', 'Cancel')}
+              >
+                <X size={22} color={Colors.text} strokeWidth={2} />
               </TouchableOpacity>
-              <Text style={[styles.modalTitleLTR, I18nManager.isRTL && { textAlign: 'center' }]} numberOfLines={2}>
+              <Text style={[styles.modalTitle, styles.bookingWindowModalTitle]} numberOfLines={2}>
                 {t('settings.reminder.adminRowTitle', 'Self-reminder before appointment')}
               </Text>
+              <View style={styles.bookingWindowHeaderSpacer} />
+            </View>
+
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{
+                paddingHorizontal: 20,
+                paddingTop: 8,
+                paddingBottom: insets.bottom + 120,
+              }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+            >
+              <LinearGradient
+                colors={[`${businessColors.primary}18`, `${businessColors.primary}08`, 'transparent']}
+                locations={[0, 0.55, 1]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.bookingWindowExplainer}
+              >
+                <View style={[styles.bookingWindowExplainerIcon, { backgroundColor: `${businessColors.primary}20` }]}>
+                  <Clock size={22} color={businessColors.primary} strokeWidth={2} />
+                </View>
+                <Text style={styles.bookingWindowExplainerText}>{t('settings.reminder.adminAutomatedHint')}</Text>
+              </LinearGradient>
+
+              <View style={styles.bookingWindowHeroCard}>
+                <Text style={styles.bookingWindowFieldLabel}>
+                  {t('settings.reminder.adminDialogMinutesLabel', 'Minutes before appointment')}
+                </Text>
+                <View style={styles.bookingWindowRulerLtr}>
+                  <BookingDaysRuler
+                    ref={adminReminderMinutesRulerRef}
+                    minDay={ADMIN_SELF_REMINDER_MIN_MINUTES}
+                    maxDay={ADMIN_SELF_REMINDER_MAX_MINUTES}
+                    fadeColor={Colors.white}
+                    tickColor={Colors.text}
+                    indicatorColor={businessColors.primary}
+                    unitLabel={t('settings.reminder.adminDialogMinutesUnit', 'minutes')}
+                    onDayChange={onAdminReminderMinutesRulerChange}
+                  />
+                </View>
+                <Text style={styles.bookingWindowManualLabel}>
+                  {t('settings.reminder.adminDialogManualMinutes', 'Or enter a number')}
+                </Text>
+                <TextInput
+                  style={styles.bookingWindowManualInput}
+                  value={adminReminderModalMinutesDraft}
+                  onChangeText={onAdminReminderMinutesTextChange}
+                  placeholder="15"
+                  placeholderTextColor={Colors.subtext}
+                  keyboardType="number-pad"
+                  maxLength={2}
+                  selectTextOnFocus
+                />
+                <Text style={styles.bookingWindowRangeFoot}>
+                  {t('settings.reminder.adminDialogMinutesRange', '5–60 minutes. Turn off the reminder from settings.')}
+                </Text>
+              </View>
+            </ScrollView>
+
+            <View style={[styles.bookingWindowFooter, { paddingBottom: Math.max(insets.bottom, 10) }]}>
               <TouchableOpacity
-                style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]}
+                style={[
+                  styles.bookingWindowFooterBtn,
+                  { backgroundColor: businessColors.primary },
+                  isSavingProfile && styles.bookingWindowFooterBtnDisabled,
+                ]}
                 onPress={() => {
                   void saveAdminReminderFromModal();
                 }}
                 disabled={isSavingProfile}
+                activeOpacity={0.88}
               >
-                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>
+                <Text style={[styles.bookingWindowFooterBtnText, isSavingProfile && { opacity: 0.85 }]}>
                   {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
                 </Text>
               </TouchableOpacity>
             </View>
-            <ScrollView
-              style={styles.smallModalContent}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              <Text
-                style={[
-                  styles.settingSubtitleLTR,
-                  { marginBottom: 16, lineHeight: 22 },
-                  I18nManager.isRTL && { textAlign: 'right' },
-                ]}
-              >
-                {t('settings.reminder.adminAutomatedHint')}
-              </Text>
-              <Text style={[styles.inputLabelLTR, I18nManager.isRTL && { textAlign: 'right' }]}>
-                {t('settings.reminder.clientDialogHoursLabel', 'Hours')}
-              </Text>
-              <TextInput
-                style={[styles.textInput, { marginBottom: 12 }]}
-                value={adminReminderModalHoursDraft}
-                onChangeText={setAdminReminderModalHoursDraft}
-                placeholder="0"
-                placeholderTextColor={Colors.subtext}
-                keyboardType="number-pad"
-                textAlign={I18nManager.isRTL ? 'right' : 'left'}
-              />
-              <Text style={[styles.inputLabelLTR, I18nManager.isRTL && { textAlign: 'right' }]}>
-                {t('settings.reminder.clientDialogMinutesLabel', 'Minutes (0–59)')}
-              </Text>
-              <TextInput
-                style={[styles.textInput, { marginBottom: 12 }]}
-                value={adminReminderModalMinutesDraft}
-                onChangeText={setAdminReminderModalMinutesDraft}
-                placeholder="0"
-                placeholderTextColor={Colors.subtext}
-                keyboardType="number-pad"
-                textAlign={I18nManager.isRTL ? 'right' : 'left'}
-              />
-              <Text
-                style={[
-                  styles.settingSubtitleLTR,
-                  { fontSize: 13, opacity: 0.85 },
-                  I18nManager.isRTL && { textAlign: 'right' },
-                ]}
-              >
-                {t('settings.reminder.adminDialogCombinedHint')}
-              </Text>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
       </Modal>
 
       {/* Edit Admin (name & phone) Modal */}
@@ -3376,113 +3072,193 @@ export default function SettingsScreen() {
         presentationStyle="pageSheet"
         onRequestClose={() => setShowEditAdminModal(false)}
       >
-        <KeyboardAvoidingView 
-          style={{ flex: 1 }} 
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 50}
         >
-          <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#F8F9FA' }]}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowEditAdminModal(false)}>
-              <Text style={styles.modalCloseText}>{t('cancel','Cancel')}</Text>
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>{t('settings.admin.edit','Edit admin')}</Text>
-            <TouchableOpacity
-              style={[styles.modalSendButton, { backgroundColor: businessColors.primary }, (isSavingAdmin) && styles.modalSendButtonDisabled]}
-              onPress={async () => {
-                if (!user?.id) { setShowEditAdminModal(false); return; }
-                if (!adminNameDraft.trim() || !adminPhoneDraft.trim()) { Alert.alert(t('error.generic','Error'), t('settings.admin.fillNamePhone','Please fill in name and phone number')); return; }
-                try {
-                  setIsSavingAdmin(true);
-                  const updated = await usersApi.updateUser(
-                    user.id as any,
-                    {
-                      name: adminNameDraft.trim() as any,
-                      phone: adminPhoneDraft.trim() as any,
-                    } as any
-                  );
-                  if (updated) {
-                    updateUserProfile({ name: updated.name as any, phone: (updated as any).phone } as any);
-                    setShowEditAdminModal(false);
-                  } else {
-                    Alert.alert(t('error.generic','Error'), t('settings.admin.saveDetailsFailed','Failed to save admin details'));
-                  }
-                } finally {
-                  setIsSavingAdmin(false);
-                }
-              }}
-              disabled={isSavingAdmin}
+          <SafeAreaView style={styles.editAdminModalRoot}>
+            <LinearGradient
+              colors={['#EEF2F9', '#F4F6FB', '#FAFBFD']}
+              locations={[0, 0.45, 1]}
+              style={StyleSheet.absoluteFillObject}
+              pointerEvents="none"
+            />
+            <View style={styles.editAdminHeader}>
+              <TouchableOpacity
+                style={[styles.editAdminHeaderSide, styles.editAdminHeaderSideLeading]}
+                onPress={() => setShowEditAdminModal(false)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityRole="button"
+                accessibilityLabel={t('cancel', 'Cancel')}
+              >
+                <Text style={styles.editAdminCancelText}>{t('cancel', 'Cancel')}</Text>
+              </TouchableOpacity>
+              <Text style={styles.editAdminHeaderTitle} numberOfLines={1}>
+                {t('settings.admin.edit', 'Edit admin')}
+              </Text>
+              <View style={[styles.editAdminHeaderSide, styles.editAdminHeaderSideTrailing]}>
+                <TouchableOpacity
+                  style={[
+                    styles.editAdminSavePill,
+                    { backgroundColor: businessColors.primary },
+                    isSavingAdmin && styles.editAdminSavePillDisabled,
+                  ]}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  onPress={async () => {
+                    if (!user?.id) {
+                      setShowEditAdminModal(false);
+                      return;
+                    }
+                    if (!adminNameDraft.trim() || !adminPhoneDraft.trim()) {
+                      Alert.alert(
+                        t('error.generic', 'Error'),
+                        t('settings.admin.fillNamePhone', 'Please fill in name and phone number'),
+                      );
+                      return;
+                    }
+                    try {
+                      setIsSavingAdmin(true);
+                      const updated = await usersApi.updateUser(
+                        user.id as any,
+                        {
+                          name: adminNameDraft.trim() as any,
+                          phone: adminPhoneDraft.trim() as any,
+                        } as any,
+                      );
+                      if (updated) {
+                        updateUserProfile({ name: updated.name as any, phone: (updated as any).phone } as any);
+                        setShowEditAdminModal(false);
+                      } else {
+                        Alert.alert(
+                          t('error.generic', 'Error'),
+                          t('settings.admin.saveDetailsFailed', 'Failed to save admin details'),
+                        );
+                      }
+                    } finally {
+                      setIsSavingAdmin(false);
+                    }
+                  }}
+                  disabled={isSavingAdmin}
+                  activeOpacity={0.88}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('save', 'Save')}
+                >
+                  <Text style={styles.editAdminSavePillText}>
+                    {isSavingAdmin ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <ScrollView
+              style={styles.editAdminScroll}
+              contentContainerStyle={styles.editAdminScrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              contentInsetAdjustmentBehavior="automatic"
+              automaticallyAdjustKeyboardInsets
             >
-              <Text style={[styles.modalSendText, { color: Colors.white }, isSavingAdmin && styles.modalSendTextDisabled]}>{isSavingAdmin ? t('settings.common.saving','Saving...') : t('save','Save')}</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView 
-            style={styles.modalContent} 
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-            contentInsetAdjustmentBehavior="automatic"
-            automaticallyAdjustKeyboardInsets={true}
-          >
-            <View style={{ alignItems: 'center', marginBottom: 12 }}>
-              <View style={styles.modalAvatarWrap}>
+              <View style={styles.editAdminHero}>
                 <LinearGradient
-                  colors={[businessColors.primary, businessColors.primary]}
+                  colors={[businessColors.primary, `${businessColors.primary}BB`]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
-                  style={styles.modalAvatarRing}
+                  style={styles.editAdminAvatarRing}
                 >
-                  <TouchableOpacity style={styles.modalAvatar} onPress={handlePickAdminAvatar} activeOpacity={0.9} accessibilityRole="button" accessibilityLabel={t('settings.profile.changeProfilePicture','Change profile picture')}>
+                  <TouchableOpacity
+                    style={styles.editAdminAvatarInner}
+                    onPress={handlePickAdminAvatar}
+                    activeOpacity={0.92}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('settings.profile.changeProfilePicture', 'Change profile picture')}
+                  >
                     {user?.image_url ? (
-                      <Image source={{ uri: (user as any).image_url }} style={styles.modalAvatarImage} resizeMode="cover" />
+                      <Image
+                        source={{ uri: (user as any).image_url }}
+                        style={styles.editAdminAvatarImage}
+                        resizeMode="cover"
+                      />
                     ) : (
-                      <User size={36} color={Colors.subtext} strokeWidth={1.75} />
+                      <User size={40} color={Colors.subtext} strokeWidth={1.75} />
                     )}
                     {isUploadingAdminAvatar && (
-                      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.15)', borderRadius: 36 }}>
+                      <View style={styles.editAdminAvatarLoading}>
                         <ActivityIndicator size="small" color={businessColors.primary} />
                       </View>
                     )}
                   </TouchableOpacity>
                 </LinearGradient>
-              </View>
-              <Text style={styles.modalAdminName}>{adminNameDraft || user?.name || t('settings.admin.admin','Admin')}</Text>
-              <Text style={styles.modalAdminMeta}>{adminPhoneDraft || (user as any)?.phone || ''}</Text>
-              <View style={{ marginTop: 8 }}>
-                <TouchableOpacity onPress={handlePickAdminAvatar} style={[styles.pickButton, { alignSelf: 'center', backgroundColor: '#F2F2F7', borderColor: '#E5E5EA' }]} activeOpacity={0.85} disabled={isUploadingAdminAvatar}>
-                  <Text style={styles.pickButtonText}>{isUploadingAdminAvatar ? t('settings.common.uploading','Uploading...') : t('settings.profile.changeProfilePicture','Change profile picture')}</Text>
+                <Text style={styles.editAdminHeroName}>
+                  {adminNameDraft || user?.name || t('settings.admin.admin', 'Admin')}
+                </Text>
+                <Text style={styles.editAdminHeroPhone}>
+                  {adminPhoneDraft || (user as any)?.phone || '—'}
+                </Text>
+                <TouchableOpacity
+                  onPress={handlePickAdminAvatar}
+                  style={[
+                    styles.editAdminPhotoBtn,
+                    { borderColor: `${businessColors.primary}40`, backgroundColor: `${businessColors.primary}12` },
+                  ]}
+                  activeOpacity={0.88}
+                  disabled={isUploadingAdminAvatar}
+                >
+                  <Camera size={18} color={businessColors.primary} strokeWidth={2.2} />
+                  <Text style={[styles.editAdminPhotoBtnText, { color: businessColors.primary }]}>
+                    {isUploadingAdminAvatar
+                      ? t('settings.common.uploading', 'Uploading...')
+                      : t('settings.profile.changeProfilePicture', 'Change profile picture')}
+                  </Text>
                 </TouchableOpacity>
               </View>
-            </View>
 
-            <View style={styles.iosCard}>
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>{t('settings.admin.name','Admin name')}</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={adminNameDraft}
-                  onChangeText={setAdminNameDraft}
-                  placeholder={t('profile.edit.namePlaceholder','Full Name')}
-                  placeholderTextColor={Colors.subtext}
-                  textAlign="left"
-                />
+              <View style={styles.editAdminFormCard}>
+                <View style={styles.editAdminField}>
+                  <Text
+                    style={[
+                      styles.editAdminFieldLabel,
+                      I18nManager.isRTL ? styles.editAdminFieldLabelRtl : styles.editAdminFieldLabelLtr,
+                    ]}
+                  >
+                    {t('settings.admin.name', 'Admin name')}
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.editAdminFieldInput,
+                      I18nManager.isRTL ? styles.editAdminFieldInputRtl : styles.editAdminFieldInputLtr,
+                    ]}
+                    value={adminNameDraft}
+                    onChangeText={setAdminNameDraft}
+                    placeholder={t('profile.edit.namePlaceholder', 'Full Name')}
+                    placeholderTextColor={Colors.subtext}
+                  />
+                </View>
+                <View style={styles.editAdminFieldLast}>
+                  <Text
+                    style={[
+                      styles.editAdminFieldLabel,
+                      I18nManager.isRTL ? styles.editAdminFieldLabelRtl : styles.editAdminFieldLabelLtr,
+                    ]}
+                  >
+                    {t('profile.phone', 'Phone number')}
+                  </Text>
+                  <TextInput
+                    style={[styles.editAdminFieldInput, styles.editAdminPhoneInput]}
+                    value={adminPhoneDraft}
+                    onChangeText={setAdminPhoneDraft}
+                    placeholder={t('settings.admin.phonePlaceholder', '(555) 123-4567')}
+                    placeholderTextColor={Colors.subtext}
+                    keyboardType="phone-pad"
+                    textAlign="left"
+                    {...(Platform.OS === 'android' ? { textAlignVertical: 'center' as const } : {})}
+                  />
+                </View>
               </View>
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>{t('profile.phone','Phone number')}</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={adminPhoneDraft}
-                  onChangeText={setAdminPhoneDraft}
-                  placeholder={t('settings.admin.phonePlaceholder','(555) 123-4567')}
-                  placeholderTextColor={Colors.subtext}
-                  keyboardType="phone-pad"
-                  textAlign="left"
-                />
-              </View>
-            </View>
-            <View style={{ height: 100 }} />
-          </ScrollView>
-        </SafeAreaView>
+              <View style={{ height: 100 }} />
+            </ScrollView>
+          </SafeAreaView>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -3834,148 +3610,260 @@ export default function SettingsScreen() {
         onRequestClose={dismissCancellationModal}
       >
         <TouchableWithoutFeedback onPress={dismissCancellationModal}>
-          <View style={styles.smallModalOverlay}>
+          <View style={styles.cancellationModalOverlay}>
+            {Platform.OS === 'ios' ? (
+              <BlurView intensity={38} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
+            ) : null}
+            <View
+              pointerEvents="none"
+              style={[
+                StyleSheet.absoluteFill,
+                {
+                  backgroundColor:
+                    Platform.OS === 'ios' ? 'rgba(0,0,0,0.28)' : 'rgba(0,0,0,0.52)',
+                },
+              ]}
+            />
             <TouchableWithoutFeedback onPress={() => {}}>
-              <View style={styles.smallModalCard}>
-                <View style={styles.modalHeader}>
-                  <TouchableOpacity style={styles.cancellationModalCloseButton} onPress={dismissCancellationModal}>
-                    <X size={20} color={Colors.text} />
+              <View style={styles.cancellationModalCard}>
+                <View style={styles.cancellationModalInner}>
+                <View style={styles.cancellationModalHeader}>
+                  <TouchableOpacity
+                    style={[styles.cancellationModalCloseButton, styles.cancellationModalCloseOnEnd]}
+                    onPress={dismissCancellationModal}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('cancel', 'Cancel')}
+                  >
+                    <X size={22} color={Colors.text} strokeWidth={2} />
                   </TouchableOpacity>
-                  <Text style={styles.modalTitleLTR}>{t('settings.policies.minCancellationTitle','Appointment cancellation time')}</Text>
-                  <TouchableOpacity style={[styles.modalSendButton, { backgroundColor: businessColors.primary }, isSavingProfile && styles.modalSendButtonDisabled]} onPress={saveCancellationHours} disabled={isSavingProfile}>
-                    <Text style={[styles.modalSendText, { color: Colors.white }, isSavingProfile && styles.modalSendTextDisabled]}>{isSavingProfile ? t('settings.common.saving','Saving...') : t('save','Save')}</Text>
-                  </TouchableOpacity>
+                  <Text style={styles.cancellationModalTitle} numberOfLines={2}>
+                    {t('settings.policies.minCancellationTitle', 'Appointment cancellation time')}
+                  </Text>
+                  <View style={styles.cancellationModalHeaderSpacer} />
                 </View>
-                <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false}>
+
+                <ScrollView
+                  style={styles.cancellationModalScroll}
+                  contentContainerStyle={styles.cancellationModalScrollContent}
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled
+                >
                   <TouchableWithoutFeedback onPress={() => setShowCancellationDropdown(false)}>
-                    <View style={styles.inputContainer}>
-                      <Text style={styles.inputLabelLTR}>{t('settings.policies.hoursBefore','Hours before appointment')}</Text>
-                      <View style={styles.dropdownContainer}>
-                        <TouchableOpacity
-                          style={styles.dropdownButton}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            // Open downward to ensure visibility
-                            setCancellationDropdownDirection('down');
-                            setShowCancellationDropdown(!showCancellationDropdown);
-                          }}
+                    <View>
+                      <LinearGradient
+                        colors={[`${businessColors.primary}18`, `${businessColors.primary}08`, 'transparent']}
+                        locations={[0, 0.55, 1]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.cancellationModalExplainer}
+                      >
+                        <View
+                          style={[
+                            styles.cancellationModalExplainerIcon,
+                            { backgroundColor: `${businessColors.primary}22` },
+                          ]}
                         >
-                          <Text style={styles.dropdownButtonText}>
-                            {cancellationHoursDraft === '0' 
-                              ? t('settings.policies.noRestriction','0 hours (No restriction)') 
-                              : `${cancellationHoursDraft} ${cancellationHoursDraft === '1' ? t('settings.policies.hour','hour') : t('settings.policies.hours','hours')}${parseInt(cancellationHoursDraft) >= 24 ? ` (${Math.floor(parseInt(cancellationHoursDraft) / 24)} ${Math.floor(parseInt(cancellationHoursDraft) / 24) === 1 ? t('settings.policies.day','day') : t('settings.policies.days','days')}${parseInt(cancellationHoursDraft) % 24 > 0 ? ` ${parseInt(cancellationHoursDraft) % 24} ${t('settings.policies.hours','hours')}` : ''})` : ''}`
-                            }
-                          </Text>
-                          {showCancellationDropdown ? (
-                            <Ionicons name="chevron-up" size={20} color={businessColors.primary} />
-                          ) : (
-                            <Ionicons name="chevron-down" size={20} color={businessColors.primary} />
+                          <Clock size={22} color={businessColors.primary} strokeWidth={2} />
+                        </View>
+                        <Text style={styles.cancellationModalExplainerText}>
+                          {t(
+                            'settings.policies.cancellationModalHint',
+                            'Clients cannot cancel inside this window before the appointment starts. Choose how many hours ahead they must cancel by.',
                           )}
+                        </Text>
+                      </LinearGradient>
+
+                      <View style={styles.cancellationModalHero}>
+                        <Text style={styles.cancellationModalFieldLabel}>
+                          {t('settings.policies.hoursBefore', 'Hours before appointment')}
+                        </Text>
+
+                        <TouchableOpacity
+                          style={[
+                            styles.cancellationModalPicker,
+                            showCancellationDropdown && {
+                              borderColor: businessColors.primary,
+                              backgroundColor: `${businessColors.primary}0D`,
+                            },
+                          ]}
+                          onPress={() => setShowCancellationDropdown(!showCancellationDropdown)}
+                          activeOpacity={0.92}
+                        >
+                          {showCancellationDropdown ? (
+                            <Ionicons name="chevron-up" size={22} color={businessColors.primary} />
+                          ) : (
+                            <Ionicons name="chevron-down" size={22} color={businessColors.primary} />
+                          )}
+                          <Text style={styles.cancellationModalPickerText} numberOfLines={3}>
+                            {cancellationHoursDraft === '0'
+                              ? t('settings.policies.noRestriction', '0 hours (No restriction)')
+                              : `${cancellationHoursDraft} ${
+                                  cancellationHoursDraft === '1'
+                                    ? t('settings.policies.hour', 'hour')
+                                    : t('settings.policies.hours', 'hours')
+                                }${
+                                  parseInt(cancellationHoursDraft, 10) >= 24
+                                    ? ` (${Math.floor(parseInt(cancellationHoursDraft, 10) / 24)} ${
+                                        Math.floor(parseInt(cancellationHoursDraft, 10) / 24) === 1
+                                          ? t('settings.policies.day', 'day')
+                                          : t('settings.policies.days', 'days')
+                                      }${
+                                        parseInt(cancellationHoursDraft, 10) % 24 > 0
+                                          ? ` ${parseInt(cancellationHoursDraft, 10) % 24} ${t('settings.policies.hours', 'hours')}`
+                                          : ''
+                                      })`
+                                    : ''
+                                }`}
+                          </Text>
                         </TouchableOpacity>
+
+                        {showCancellationDropdown ? (
+                          <View style={styles.cancellationModalDropdownPanel}>
+                            <ScrollView
+                              style={styles.cancellationModalDropdownScroll}
+                              showsVerticalScrollIndicator={false}
+                              nestedScrollEnabled
+                              keyboardShouldPersistTaps="handled"
+                            >
+                              <TouchableOpacity
+                                style={[
+                                  styles.cancellationModalDropdownRow,
+                                  cancellationHoursDraft === '0' && {
+                                    backgroundColor: `${businessColors.primary}12`,
+                                  },
+                                ]}
+                                onPress={() => {
+                                  setCancellationHoursDraft('0');
+                                  setShowCancellationDropdown(false);
+                                }}
+                              >
+                                <Text
+                                  style={[
+                                    styles.cancellationModalDropdownRowText,
+                                    cancellationHoursDraft === '0' && {
+                                      color: businessColors.primary,
+                                      fontWeight: '700',
+                                    },
+                                  ]}
+                                >
+                                  {t('settings.policies.noRestriction', '0 hours (No restriction)')}
+                                </Text>
+                              </TouchableOpacity>
+
+                              {[1, 2, 3, 6, 12, 24, 48, 72, 168].map((hour) => (
+                                <TouchableOpacity
+                                  key={hour}
+                                  style={[
+                                    styles.cancellationModalDropdownRow,
+                                    cancellationHoursDraft === hour.toString() && {
+                                      backgroundColor: `${businessColors.primary}12`,
+                                    },
+                                  ]}
+                                  onPress={() => {
+                                    setCancellationHoursDraft(hour.toString());
+                                    setShowCancellationDropdown(false);
+                                  }}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.cancellationModalDropdownRowText,
+                                      cancellationHoursDraft === hour.toString() && {
+                                        color: businessColors.primary,
+                                        fontWeight: '700',
+                                      },
+                                    ]}
+                                  >
+                                    {hour}{' '}
+                                    {hour === 1
+                                      ? t('settings.policies.hour', 'hour')
+                                      : t('settings.policies.hours', 'hours')}
+                                    {hour >= 24 ? (
+                                      <Text style={styles.cancellationModalDropdownSubtext}>
+                                        {' '}
+                                        ({Math.floor(hour / 24)}{' '}
+                                        {Math.floor(hour / 24) === 1
+                                          ? t('settings.policies.day', 'day')
+                                          : t('settings.policies.days', 'days')}
+                                        {hour % 24 > 0
+                                          ? ` ${hour % 24} ${t('settings.policies.hours', 'hours')}`
+                                          : ''}
+                                        )
+                                      </Text>
+                                    ) : null}
+                                  </Text>
+                                </TouchableOpacity>
+                              ))}
+
+                              <TouchableOpacity
+                                style={[
+                                  styles.cancellationModalDropdownRow,
+                                  styles.cancellationModalDropdownRowLast,
+                                ]}
+                                onPress={() => {
+                                  setShowCancellationDropdown(false);
+                                  Alert.prompt(
+                                    t('settings.policies.customHoursTitle', 'Custom Hours'),
+                                    t('settings.policies.customHoursMessage', 'Enter number of hours (0-168):'),
+                                    [
+                                      { text: t('cancel', 'Cancel'), style: 'cancel' },
+                                      {
+                                        text: t('ok', 'OK'),
+                                        onPress: (text) => {
+                                          const hours = parseInt(text || '0', 10);
+                                          if (hours >= 0 && hours <= 168) {
+                                            setCancellationHoursDraft(hours.toString());
+                                          } else {
+                                            Alert.alert(
+                                              t('error.generic', 'Error'),
+                                              t(
+                                                'settings.profile.cancellationInvalid',
+                                                'Please enter a valid number between 0 and 168 hours',
+                                              ),
+                                            );
+                                          }
+                                        },
+                                      },
+                                    ],
+                                    'plain-text',
+                                    cancellationHoursDraft,
+                                    'numeric',
+                                  );
+                                }}
+                              >
+                                <Text style={styles.cancellationModalDropdownRowText}>
+                                  {t('settings.policies.customHoursLabel', 'Custom hours...')}
+                                </Text>
+                              </TouchableOpacity>
+                            </ScrollView>
+                          </View>
+                        ) : null}
                       </View>
                     </View>
                   </TouchableWithoutFeedback>
                 </ScrollView>
-                
-                {/* Dropdown positioned outside of ScrollView for better visibility */}
-                {showCancellationDropdown && (
-                  <View style={[
-                    styles.cancellationDropdownOptions,
-                    cancellationDropdownDirection === 'up' 
-                      ? styles.cancellationDropdownOptionsUp 
-                      : styles.cancellationDropdownOptionsDown
-                  ]}>
-                    <ScrollView style={styles.cancellationDropdownList} showsVerticalScrollIndicator={false}>
-                      {/* 0 hours option */}
-                      <TouchableOpacity
-                          style={[
-                            styles.cancellationDropdownItem,
-                            cancellationHoursDraft === '0' && styles.cancellationDropdownItemSelected
-                          ]}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            setCancellationHoursDraft('0');
-                            setShowCancellationDropdown(false);
-                          }}
-                        >
-                          <Text style={[
-                            styles.cancellationDropdownItemText,
-                            cancellationHoursDraft === '0' && styles.cancellationDropdownItemTextSelected
-                          ]}>
-                            0 hours (No restriction)
-                          </Text>
-                        </TouchableOpacity>
-                        
-                        {/* Common options */}
-                        {[1, 2, 3, 6, 12, 24, 48, 72, 168].map((hour) => (
-                          <TouchableOpacity
-                            key={hour}
-                            style={[
-                              styles.cancellationDropdownItem,
-                              cancellationHoursDraft === hour.toString() && styles.cancellationDropdownItemSelected
-                            ]}
-                            onPress={(e) => {
-                              e.stopPropagation();
-                              setCancellationHoursDraft(hour.toString());
-                              setShowCancellationDropdown(false);
-                            }}
-                          >
-                            <Text style={[
-                              styles.cancellationDropdownItemText,
-                              cancellationHoursDraft === hour.toString() && styles.cancellationDropdownItemTextSelected
-                            ]}>
-                              {hour} {hour === 1 ? 'hour' : 'hours'}
-                              {hour >= 24 && (
-                                <Text style={styles.cancellationDropdownItemSubtext}>
-                                  {' '}({Math.floor(hour / 24)} {Math.floor(hour / 24) === 1 ? 'day' : 'days'}
-                                  {hour % 24 > 0 ? ` ${hour % 24} hours` : ''})
-                                </Text>
-                              )}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                        
-                        {/* Custom option */}
-                        <TouchableOpacity
-                          style={styles.cancellationDropdownItem}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            Alert.prompt(
-                              t('settings.policies.customHoursTitle','Custom Hours'),
-                              t('settings.policies.customHoursMessage','Enter number of hours (0-168):'),
-                              [
-                                { text: t('cancel','Cancel'), style: 'cancel' },
-                                {
-                                  text: t('ok','OK'),
-                                  onPress: (text) => {
-                                    const hours = parseInt(text || '0');
-                                    if (hours >= 0 && hours <= 168) {
-                                      setCancellationHoursDraft(hours.toString());
-                                    } else {
-                                      Alert.alert(t('error.generic','Error'), t('settings.profile.cancellationInvalid','Please enter a valid number between 0 and 168 hours'));
-                                    }
-                                  }
-                                }
-                              ],
-                              'plain-text',
-                              cancellationHoursDraft,
-                              'numeric'
-                            );
-                            setShowCancellationDropdown(false);
-                          }}
-                        >
-                          <Text style={styles.cancellationDropdownItemText}>
-                            {t('settings.policies.customHoursLabel','Custom hours...')}
-                          </Text>
-                        </TouchableOpacity>
-                    </ScrollView>
-                  </View>
-                )}
-                
-                <View style={styles.smallModalContent}>
-                  <Text style={[styles.inputLabelLTR, { fontSize: 12, color: Colors.subtext, marginTop: 8 }]}>
-                    Clients cannot cancel appointments within this time period before the appointment.
-                  </Text>
+
+                <View
+                  style={[
+                    styles.cancellationModalFooter,
+                    { paddingBottom: Math.max(insets.bottom, 12) },
+                  ]}
+                >
+                  <TouchableOpacity
+                    style={[
+                      styles.cancellationModalSaveBtn,
+                      { backgroundColor: businessColors.primary },
+                      isSavingProfile && styles.cancellationModalSaveBtnDisabled,
+                    ]}
+                    onPress={saveCancellationHours}
+                    disabled={isSavingProfile}
+                    activeOpacity={0.88}
+                  >
+                    <Text style={[styles.cancellationModalSaveBtnText, isSavingProfile && { opacity: 0.88 }]}>
+                      {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
                 </View>
               </View>
             </TouchableWithoutFeedback>
@@ -3983,86 +3871,164 @@ export default function SettingsScreen() {
         </TouchableWithoutFeedback>
       </Modal>
 
-      {/* Booking horizon (per staff) — sheet with explainer + days input */}
+      {/* Booking horizon (per staff) — explainer + Reanimated ruler + manual entry */}
       <Modal
         visible={showBookingWindowModal}
         animationType="slide"
         presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
         onRequestClose={() => setShowBookingWindowModal(false)}
       >
-        <SafeAreaView style={[styles.modalContainer, { backgroundColor: '#F2F2F7' }]}>
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: SETTINGS_GROUPED_BG }]} edges={['top']}>
           <KeyboardAvoidingView
             style={{ flex: 1 }}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
           >
-            <View style={styles.modalHeader}>
+            <View style={[styles.modalHeader, styles.bookingWindowModalHeader]}>
               <TouchableOpacity
                 style={styles.cancellationModalCloseButton}
                 onPress={() => setShowBookingWindowModal(false)}
                 accessibilityRole="button"
                 accessibilityLabel={t('cancel', 'Cancel')}
               >
-                <X size={20} color={Colors.text} />
+                <X size={22} color={Colors.text} strokeWidth={2} />
               </TouchableOpacity>
-              <Text style={[styles.modalTitle, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>
+              <Text style={[styles.modalTitle, styles.bookingWindowModalTitle]} numberOfLines={2}>
                 {t('settings.profile.bookingWindowModalTitle', 'Your booking range')}
               </Text>
-              <TouchableOpacity
-                style={[
-                  styles.modalSendButton,
-                  { backgroundColor: businessColors.primary },
-                  isSavingProfile && styles.modalSendButtonDisabled,
-                ]}
-                onPress={confirmBookingWindowModal}
-                disabled={isSavingProfile}
-              >
-                <Text style={[styles.modalSendText, { color: Colors.white }, isSavingProfile && styles.modalSendTextDisabled]}>
-                  {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.bookingWindowHeaderSpacer} />
             </View>
+
             <ScrollView
               style={{ flex: 1 }}
-              contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: insets.bottom + 28 }}
+              contentContainerStyle={{
+                paddingHorizontal: 20,
+                paddingTop: 8,
+                paddingBottom: insets.bottom + 120,
+              }}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
             >
               <LinearGradient
-                colors={[`${businessColors.primary}22`, `${businessColors.primary}0D`]}
+                colors={[`${businessColors.primary}18`, `${businessColors.primary}08`, 'transparent']}
+                locations={[0, 0.55, 1]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={{
-                  borderRadius: 16,
-                  padding: 18,
-                  marginBottom: 24,
-                  borderWidth: StyleSheet.hairlineWidth,
-                  borderColor: `${businessColors.primary}40`,
-                }}
+                style={styles.bookingWindowExplainer}
               >
-                <Text style={[styles.previewNotificationContent, { lineHeight: 22, color: Colors.text }]}>
-                  {t('settings.profile.bookingWindowModalBody')}
-                </Text>
+                <View style={[styles.bookingWindowExplainerIcon, { backgroundColor: `${businessColors.primary}20` }]}>
+                  <Calendar size={22} color={businessColors.primary} strokeWidth={2} />
+                </View>
+                <Text style={styles.bookingWindowExplainerText}>{t('settings.profile.bookingWindowModalBody')}</Text>
               </LinearGradient>
-              <View style={[styles.groupCard, { marginBottom: 0 }]}>
-                <Text style={styles.inputLabelLTR}>{t('settings.profile.bookingWindowModalDaysLabel', 'Days open for booking')}</Text>
+
+              <View style={styles.bookingWindowHeroCard}>
+                <Text style={styles.bookingWindowFieldLabel}>
+                  {t('settings.profile.bookingWindowModalDaysLabel', 'Days open for booking')}
+                </Text>
+
+                <View style={styles.bookingWindowRulerLtr}>
+                  <BookingDaysRuler
+                    ref={bookingDaysRulerRef}
+                    minDay={BOOKING_RULER_MIN_DISPLAY}
+                    maxDay={BOOKING_WINDOW_MAX}
+                    fadeColor={Colors.white}
+                    tickColor={Colors.text}
+                    indicatorColor={businessColors.primary}
+                    unitLabel={t('settings.profile.bookingWindowModalDaysUnit', 'days')}
+                    onDayChange={onBookingWindowRulerDay}
+                  />
+                </View>
+
+                <Text style={styles.bookingWindowManualLabel}>
+                  {t('settings.profile.bookingWindowModalManual', 'Or enter a number')}
+                </Text>
                 <TextInput
-                  style={[styles.textInput, { marginTop: 10, fontSize: 28, fontWeight: '700', textAlign: 'center', letterSpacing: 1 }]}
+                  style={styles.bookingWindowManualInput}
                   value={bookingWindowDraft}
-                  onChangeText={setBookingWindowDraft}
+                  onChangeText={onBookingWindowTextChange}
                   placeholder={t('settings.profile.bookingWindowPlaceholder', '7')}
                   placeholderTextColor={Colors.subtext}
                   keyboardType="number-pad"
                   maxLength={2}
                   selectTextOnFocus
                 />
-                <Text style={{ marginTop: 12, fontSize: 13, color: Colors.subtext, textAlign: 'center' }}>
+                <Text style={styles.bookingWindowRangeFoot}>
                   {t('settings.profile.bookingWindowModalRange', 'From 1 to 60 days')}
                 </Text>
               </View>
             </ScrollView>
+
+            <View style={[styles.bookingWindowFooter, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+              <TouchableOpacity
+                style={[
+                  styles.bookingWindowFooterBtn,
+                  { backgroundColor: businessColors.primary },
+                  isSavingProfile && styles.bookingWindowFooterBtnDisabled,
+                ]}
+                onPress={confirmBookingWindowModal}
+                disabled={isSavingProfile}
+                activeOpacity={0.88}
+              >
+                <Text style={[styles.bookingWindowFooterBtnText, isSavingProfile && { opacity: 0.85 }]}>
+                  {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </KeyboardAvoidingView>
         </SafeAreaView>
+      </Modal>
+
+      {/* Booking window save — custom modal (Alert RTL/layout quirks; styled like system success sheet) */}
+      <Modal
+        visible={bookingSaveSuccessDialog !== null}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setBookingSaveSuccessDialog(null)}
+      >
+        <View style={styles.bookingSaveSuccessOverlay} pointerEvents="box-none">
+          <Pressable
+            style={StyleSheet.absoluteFillObject}
+            onPress={() => setBookingSaveSuccessDialog(null)}
+            accessibilityRole="button"
+            accessibilityLabel={t('cancel', 'Close')}
+          />
+          <View
+            style={styles.bookingSaveSuccessCard}
+            accessibilityViewIsModal
+            accessibilityRole="alert"
+          >
+            <View style={styles.bookingSaveSuccessTextBlock}>
+              <Text
+                style={[
+                  styles.bookingSaveSuccessTitle,
+                  isRtlLanguage(i18n.language) ? styles.bookingSaveSuccessTextRtl : styles.bookingSaveSuccessTextLtr,
+                ]}
+              >
+                {bookingSaveSuccessDialog?.title}
+              </Text>
+              <Text
+                style={[
+                  styles.bookingSaveSuccessMessage,
+                  isRtlLanguage(i18n.language) ? styles.bookingSaveSuccessTextRtl : styles.bookingSaveSuccessTextLtr,
+                ]}
+              >
+                {bookingSaveSuccessDialog?.message}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.bookingSaveSuccessOkBtn}
+              onPress={() => setBookingSaveSuccessDialog(null)}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+              accessibilityLabel={t('ok', 'OK')}
+            >
+              <Text style={styles.bookingSaveSuccessOkText}>{t('ok', 'OK')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
 
       {/* Time selection now uses inline dropdown below the field (no nested modal) */}
@@ -4092,7 +4058,7 @@ export default function SettingsScreen() {
               </Text>
               <TouchableOpacity
                 style={[styles.servicesModalCloseButton, { marginLeft: 0, marginRight: -4 }]}
-                onPress={() => setShowRecurringModal(true)}
+                onPress={dismissRecurringHubAndGoToAdd}
                 accessibilityRole="button"
                 accessibilityLabel={t('settings.recurring.addFromHubA11y', 'Add fixed appointment')}
               >
@@ -4122,10 +4088,22 @@ export default function SettingsScreen() {
                                 <Text style={styles.previewNotificationTitle}>{item.client_name}</Text>
                                 <Text style={styles.previewNotificationContent}>{item.client_phone}</Text>
                                 <Text style={styles.previewNotificationContent}>{item.service_name}</Text>
-                                <Text style={styles.previewNotificationContent}>{['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][item.day_of_week]} · {String(item.slot_time).slice(0,5)}</Text>
+                                <Text style={styles.previewNotificationContent}>
+                                  {t(
+                                    `day.${RECURRING_DOW_KEYS[Math.min(Math.max(0, item.day_of_week), 6)]}`,
+                                  )}{' '}
+                                  · {formatTimeToAMPM(String(item.slot_time).slice(0, 5))}
+                                </Text>
                                 {!!item.repeat_interval && (
                                   <Text style={styles.previewNotificationContent}>
-                                    Repeat: {item.repeat_interval === 1 ? 'every week' : `every ${item.repeat_interval} weeks`}
+                                    {t('settings.recurring.listRepeat', 'Repeats {{label}}', {
+                                      label:
+                                        item.repeat_interval === 1
+                                          ? t('settings.recurring.everyWeek', 'every week')
+                                          : t('settings.recurring.everyNWeeks', 'every {{count}} weeks', {
+                                              count: item.repeat_interval,
+                                            }),
+                                    })}
                                   </Text>
                                 )}
                               </View>
@@ -4155,333 +4133,6 @@ export default function SettingsScreen() {
             </View>
           </Animated.View>
         </View>
-      </Modal>
-      {/* Recurring Appointment Modal */}
-      <Modal
-        visible={showRecurringModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowRecurringModal(false)}
-      >
-        <SafeAreaView edges={['top']} style={[styles.modalContainer, { backgroundColor: Colors.white }]}> 
-          <View style={styles.modalHeader}>
-            <TouchableOpacity 
-              style={styles.cancellationModalCloseButton}
-              onPress={() => setShowRecurringModal(false)}
-            >
-              <X size={20} color={Colors.text} />
-            </TouchableOpacity>
-            <Text style={[styles.modalTitle, { textAlign: 'center', position: 'absolute', left: 54, right: 54 }]}>{t('settings.recurring.addTitle','Add recurring appointment')}</Text>
-            <View style={{ width: 44 }} />
-          </View>
-
-          <View key={`rec-body-${recRenderKey}`} style={styles.modalBodyRounded}>
-          {/* Stepper */}
-          <View style={{ paddingHorizontal: 20, paddingTop: 12 }} onLayout={(e) => {
-            const w = e.nativeEvent.layout.width;
-            if (w && w > 0 && w !== recViewportWidth) {
-              setRecViewportWidth(w);
-              recTranslateX.setValue(-recStep * w);
-            }
-          }}>
-            <View style={{ height: 4, backgroundColor: '#E5E5EA', borderRadius: 2, overflow: 'hidden' }}>
-              <Animated.View style={{ height: '100%', backgroundColor: businessColors.primary, width: recProgressAnim.interpolate({ inputRange: [0,1], outputRange: ['0%','100%'] }) }} />
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-              {['Client','Service','Day','Time','Repeat'].map((label, idx) => (
-                <View key={label} style={{ alignItems: 'center', flex: 1 }}>
-                  <View style={{ width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: idx <= recStep ? businessColors.primary : '#D1D1D6', backgroundColor: idx < recStep ? businessColors.primary : '#FFFFFF', marginBottom: 4 }} />
-                  <Text style={{ fontSize: 12, color: idx <= recStep ? businessColors.primary : Colors.subtext }}>{label}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* Steps viewport */}
-          <View style={{ paddingHorizontal: 20 }}>
-            <View style={{ overflow: 'hidden' }} onLayout={(e) => {
-              const w = e.nativeEvent.layout.width;
-              if (w && w > 0 && w !== recViewportWidth) {
-                setRecViewportWidth(w);
-                recTranslateX.setValue(-recStep * w);
-              }
-            }}>
-              <Animated.View key={`steps-${recViewportWidth}-${recRenderKey}`} style={{ flexDirection: 'row', width: Math.max(1, recViewportWidth || 0) * 5, minHeight: 1, transform: [{ translateX: recTranslateX }] }}>
-                <View style={{ width: recViewportWidth }}>
-                  <View style={styles.wizardSectionCard}>
-                    <View style={styles.inputContainer}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <User size={18} color={businessColors.primary} />
-                        <Text style={[styles.inputLabel, { textAlign: 'left', marginBottom: 0 }]}>{t('adminEx.appointmentsAdmin.client','Client')}</Text>
-                      </View>
-                      <Text style={styles.stepHint}>{t('adminEx.appointmentsAdmin.pickClient','Pick the client for this appointment')}</Text>
-                      {!selectedClient ? (
-                        <>
-                      <Pressable style={[styles.dropdownContainer, styles.grayField, { minHeight: 52 }]} onPress={() => setShowClientDropdown(!showClientDropdown)}>
-                            <View style={styles.dropdownHeader}>
-                              <Text style={[styles.dropdownText, styles.dropdownPlaceholder, { textAlign: 'left' }]}>{t('adminEx.appointmentsAdmin.selectClientPlaceholder','Select client...')}</Text>
-                              {showClientDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
-                            </View>
-                          </Pressable>
-                          {showClientDropdown && (
-                            <View style={[styles.dropdownOptions, styles.dropPanelRecurring]}>
-                              <View style={{ paddingHorizontal: 12, paddingVertical: 10 }}>
-                                <TextInput
-                                  style={[styles.textInput, { borderWidth: 1, borderColor: '#E5E5EA', backgroundColor: '#F2F2F7' }]}
-                                  value={clientSearch}
-                                  onChangeText={searchClients}
-                                  placeholder={t('common.searchByNamePhone','Search by name or phone...')}
-                                  placeholderTextColor={Colors.subtext}
-                                  textAlign="left"
-                                />
-                              </View>
-                              <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                                {clientResults.map((c, idx) => (
-                                  <Pressable
-                                    key={c.phone}
-                                    style={[styles.dropdownOption, idx === clientResults.length - 1 && styles.dropdownOptionLast]}
-                                    onPress={() => { setSelectedClient(c); setShowClientDropdown(false); goToRecStep(1); }}
-                                  >
-                                    <View style={styles.dropdownOptionContent}>
-                                      <Text style={styles.dropdownOptionTitle}>{c.name || t('commonEx.client','Client')}</Text>
-                                      <Text style={styles.dropdownOptionDescription}>{c.phone}</Text>
-                                    </View>
-                                  </Pressable>
-                                ))}
-                                {clientResults.length === 0 && (
-                                  <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-                                    <Text style={{ textAlign: 'center', color: Colors.subtext }}>{t('common.noResults','No results')}</Text>
-                                  </View>
-                                )}
-                              </ScrollView>
-                            </View>
-                          )}
-                        </>
-                      ) : (
-                        <View style={[styles.previewCard, { marginTop: 6 }]}>
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <View style={{ alignItems: 'flex-start' }}>
-                              <Text style={styles.previewNotificationTitle}>{selectedClient.name}</Text>
-                              <Text style={styles.previewNotificationContent}>{selectedClient.phone}</Text>
-                            </View>
-                            <TouchableOpacity onPress={() => { setSelectedClient(null); setShowClientDropdown(false); }}>
-                              <Text style={{ color: '#FF3B30', fontWeight: '600' }}>{t('commonEx.change','Change')}</Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                </View>
-                <View style={{ width: recViewportWidth }}>
-                  <View style={styles.wizardSectionCard}>
-                    <View style={styles.inputContainer}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <Calendar size={18} color={businessColors.primary} />
-                        <Text style={[styles.inputLabel, { textAlign: 'left', marginBottom: 0 }]}>{t('booking.field.service','Service')}</Text>
-                      </View>
-                      <Text style={styles.stepHint}>{t('adminEx.appointmentsAdmin.pickService','Choose the service to perform')}</Text>
-                      <Pressable style={[styles.dropdownContainer, styles.grayField, { minHeight: 52 }]} onPress={() => setShowServiceDropdown(!showServiceDropdown)}>
-                        <View style={styles.dropdownHeader}>
-                          {selectedService ? (
-                            <View style={{ flex: 1, alignItems: 'flex-start' }}>
-                              <Text style={styles.serviceHeaderTitle}>{selectedService.name}</Text>
-                              {!!selectedService.duration_minutes && (
-                                <Text style={styles.serviceHeaderSub}>{`${selectedService.duration_minutes} ${t('settings.services.minutes','minutes')}`}</Text>
-                              )}
-                            </View>
-                          ) : (
-                            <Text style={[styles.dropdownText, styles.dropdownPlaceholder, { textAlign: 'left' }]}>{t('adminEx.appointmentsAdmin.selectServicePlaceholder','Select service...')}</Text>
-                          )}
-                          {showServiceDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
-                        </View>
-                      </Pressable>
-                      {showServiceDropdown && (
-                        <View style={[styles.dropdownOptions, styles.dropPanelRecurring]}>
-                          <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                            {recurringServices.map((svc, idx) => (
-                              <Pressable
-                                key={svc.id}
-                                style={[styles.dropdownOption, idx === recurringServices.length - 1 && styles.dropdownOptionLast]}
-                                onPress={() => { setSelectedService(svc); setShowServiceDropdown(false); goToRecStep(2); }}
-                              >
-                                <View style={styles.dropdownOptionContent}>
-                                  <Text style={styles.dropdownOptionTitle}>{svc.name}</Text>
-                                  {!!svc.duration_minutes && (
-                                    <Text style={styles.dropdownOptionDescription}>{`${svc.duration_minutes} ${t('settings.services.minutes','minutes')}`}</Text>
-                                  )}
-                                </View>
-                              </Pressable>
-                            ))}
-                          </ScrollView>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                </View>
-                <View style={{ width: recViewportWidth }}>
-                  <View style={styles.wizardSectionCard}>
-                    <View style={styles.inputContainer}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <Calendar size={18} color={businessColors.primary} />
-                        <Text style={[styles.inputLabel, { textAlign: 'left', marginBottom: 0 }]}>{t('settings.recurring.dayOfWeek','Day of week')}</Text>
-                      </View>
-                      <Text style={styles.stepHint}>{t('settings.recurring.selectDayOfWeek','Select a day of the week')}</Text>
-                      <Pressable
-                        style={[styles.dropdownContainer, styles.grayField, { opacity: selectedService ? 1 : 0.6 }]}
-                        onPress={() => {
-                          if (!selectedService) { Alert.alert(t('error.generic','Error'), t('settings.recurring.selectServiceFirst','Please select a service')); return; }
-                          setShowDayDropdown(!showDayDropdown);
-                        }}
-                      >
-                        <View style={styles.dropdownHeader}>
-                          <Text style={[styles.dropdownText, !Number.isInteger(selectedDayOfWeek as any) && styles.dropdownPlaceholder, { textAlign: 'left' }]}>
-                            {Number.isInteger(selectedDayOfWeek as any) ? dayNames[selectedDayOfWeek as number] : t('admin2.hours.selectDate','Please select a date')}
-                          </Text>
-                          {showDayDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
-                        </View>
-                      </Pressable>
-                      {showDayDropdown && (
-                        <View style={[styles.dropdownOptions, styles.dropPanelRecurring]}>
-                          <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                            {dayNames.map((n, idx) => (
-                              <Pressable key={n} style={[styles.dropdownOption, idx === dayNames.length - 1 && styles.dropdownOptionLast]} onPress={() => { setSelectedDayOfWeek(idx); setShowDayDropdown(false); goToRecStep(3); }}>
-                                <Text style={styles.dropdownOptionTitle}>{n}</Text>
-                              </Pressable>
-                            ))}
-                          </ScrollView>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                </View>
-                <View style={{ width: recViewportWidth }}>
-                  <View style={styles.wizardSectionCard}>
-                    <View style={styles.inputContainer}> 
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <Clock size={18} color={businessColors.primary} />
-                        <Text style={[styles.sectionHeaderTitle, { textAlign: 'left' }]}>{t('selectTime.selectTime','Select Time')}</Text>
-                      </View>
-                      <Text style={styles.stepHint}>{t('adminEx.appointmentsAdmin.pickTime','Pick an available time slot')}</Text>
-                      <Pressable
-                        style={[styles.dropdownContainer, styles.grayField, { minHeight: 52, opacity: Number.isInteger(selectedDayOfWeek as any) ? 1 : 0.6 }]}
-                        onPress={() => {
-                          if (!selectedService) { Alert.alert(t('error.generic','Error'), t('settings.recurring.selectServiceFirst','Please select a service')); return; }
-                          if (!Number.isInteger(selectedDayOfWeek as any)) { Alert.alert(t('error.generic','Error'), t('settings.recurring.selectDayFirst','Please select a day of the week')); return; }
-                          if (!showTimeDropdown) { setIsLoadingTimes(true); if (Number.isInteger(selectedDayOfWeek as any)) { loadAvailableTimesForDay(selectedDayOfWeek as number); } }
-                          setShowTimeDropdown(!showTimeDropdown);
-                        }}
-                      >
-                        <View style={styles.dropdownHeader}>
-                          <Text style={[styles.dropdownText, !selectedTime && styles.dropdownPlaceholder, { textAlign: 'left' }]}>
-                            {selectedTime ? formatTime12Hour(selectedTime) : (isLoadingTimes ? 'Loading times...' : 'Select time...')}
-                          </Text>
-                          {showTimeDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
-                        </View>
-                      </Pressable>
-                      {showTimeDropdown && (
-                        <View style={[styles.dropdownOptions, styles.dropPanelRecurring]}>
-                          {isLoadingTimes ? (
-                            <View style={{ padding: 12, alignItems: 'center' }}>
-                              <ActivityIndicator size="small" color={businessColors.primary} />
-                              <Text style={{ textAlign: 'center', color: Colors.subtext, marginTop: 8 }}>
-                                {t('selectTime.loadingTimes','Loading available times...')}
-                              </Text>
-                            </View>
-                          ) : availableTimes.length === 0 ? (
-                            <View style={{ padding: 12 }}>
-                              <Text style={{ textAlign: 'center', color: Colors.subtext }}>
-                                {t('selectTime.noTimes','No available times for this day')}
-                              </Text>
-                            </View>
-                          ) : (
-                            <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                              {availableTimes.map((timeStr, idx) => (
-                                <Pressable
-                                  key={timeStr}
-                                  style={[styles.dropdownOption, idx === availableTimes.length - 1 && styles.dropdownOptionLast]}
-                                  onPress={async () => {
-                                    if (!Number.isInteger(selectedDayOfWeek as any)) return;
-                                    const ok = await isTimeAvailable(selectedDayOfWeek as number, timeStr);
-                                    if (!ok) { Alert.alert(t('settings.recurring.slotTakenTitle','Slot taken'), t('settings.recurring.slotTaken','The selected time is already booked this week. Please choose another time.')); return; }
-                                    setSelectedTime(timeStr);
-                                    setShowTimeDropdown(false);
-                                    goToRecStep(4);
-                                  }}
-                                >
-                                  <View style={styles.dropdownOptionContent}>
-                                    <Text style={styles.dropdownOptionTitle}>{formatTime12Hour(timeStr)}</Text>
-                                  </View>
-                                </Pressable>
-                              ))}
-                            </ScrollView>
-                          )}
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                </View>
-                <View style={{ width: recViewportWidth }}>
-                  <View style={styles.wizardSectionCard}>
-                    <View style={styles.inputContainer}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <Repeat size={18} color={businessColors.primary} />
-                        <Text style={[styles.inputLabel, { textAlign: 'left', marginBottom: 0 }]}>{t('settings.recurring.repeatEvery','Repeat every')}</Text>
-                      </View>
-                      <Text style={styles.stepHint}>{t('settings.recurring.repeatHint','Set how often this repeats')}</Text>
-                      <Pressable style={[styles.dropdownContainer, styles.grayField, { minHeight: 52 }]} onPress={() => setShowRepeatDropdown(!showRepeatDropdown)}>
-                        <View style={styles.dropdownHeader}>
-                          <Text style={[styles.dropdownText, { textAlign: 'left' }]}>{repeatWeeks === 1 ? t('settings.recurring.everyWeek','every week') : t('settings.recurring.everyNWeeks','every {{count}} weeks', { count: repeatWeeks })}</Text>
-                          {showRepeatDropdown ? <ChevronUp size={20} color={businessColors.primary} /> : <ChevronDown size={20} color={businessColors.primary} />}
-                        </View>
-                      </Pressable>
-                      {showRepeatDropdown && (
-                        <View style={[styles.dropdownOptions, styles.dropPanelRecurring]}>
-                          <ScrollView style={styles.dropdownList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                            {[1, 2, 3, 4].map((w, idx) => (
-                              <Pressable
-                                key={w}
-                                style={[styles.dropdownOption, idx === 3 && styles.dropdownOptionLast]}
-                                onPress={() => { setRepeatWeeks(w); setShowRepeatDropdown(false); }}
-                              >
-                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                                  <Text style={styles.dropdownOptionTitle}>{w === 1 ? 'every week' : `every ${w} weeks`}</Text>
-                                  {repeatWeeks === w && <Check size={18} color={businessColors.primary} />}
-                                </View>
-                              </Pressable>
-                            ))}
-                          </ScrollView>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                </View>
-              </Animated.View>
-            </View>
-            {/* Step navigation visible for all steps */}
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, paddingHorizontal: 4 }}>
-              <TouchableOpacity onPress={goBackRec} disabled={recStep === 0} style={[styles.stepNavButton, recStep === 0 && styles.stepNavButtonDisabled]}>
-                <Text style={[styles.stepNavText, recStep === 0 && styles.stepNavTextDisabled]}>{t('back','Back')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={recStep < 4 ? goNextRec : handleSubmitRecurring}
-                disabled={
-                  (recStep === 0 && !selectedClient) ||
-                  (recStep === 1 && !selectedService) ||
-                  (recStep === 2 && selectedDayOfWeek === null) ||
-                  (recStep === 3 && !selectedTime) ||
-                  (recStep === 4 && !repeatWeeks)
-                }
-                style={[styles.stepNavPrimary, { backgroundColor: businessColors.primary }, ((recStep === 0 && !selectedClient) || (recStep === 1 && !selectedService) || (recStep === 2 && selectedDayOfWeek === null) || (recStep === 3 && !selectedTime) || (recStep === 4 && !repeatWeeks)) && { opacity: 0.6 }]}
-              >
-                <Text style={styles.stepNavPrimaryText}>{recStep < 4 ? 'Next' : (isSubmittingRecurring ? 'Saving...' : 'Done')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          
-          </View>
-        </SafeAreaView>
       </Modal>
 
       {activeSettingsTab === 'services' && (
@@ -4550,50 +4201,52 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Image picker — centered in the header band */}
-              <View style={[styles.svcAddImageBandArea, { backgroundColor: `${businessColors.primary}08` }]}>
-                <TouchableOpacity
-                  style={styles.svcAddImageCircleBtn}
-                  onPress={async () => {
-                    try {
-                      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-                      if (status !== 'granted') { Alert.alert(t('permission.required','Permission Required'), t('settings.common.galleryPermissionImage','Please allow gallery access')); return; }
-                      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', allowsMultipleSelection: false, quality: 0.9, base64: true });
-                      if (result.canceled || !result.assets?.length) return;
-                      const a: any = result.assets[0];
-                      setAddSvcUploadingImage(true);
-                      const uploadedUrl = await uploadServiceImage({ uri: a.uri, base64: a.base64 ?? null, mimeType: a.mimeType ?? null, fileName: a.fileName ?? null });
-                      if (uploadedUrl) setAddSvcImageUrl(uploadedUrl);
-                    } catch { } finally { setAddSvcUploadingImage(false); }
-                  }}
-                  activeOpacity={0.85}
-                  disabled={addSvcUploadingImage}
-                >
-                  {addSvcImageUrl ? (
-                    <>
-                      <Image source={{ uri: addSvcImageUrl }} style={styles.svcAddImageCircleFull} resizeMode="cover" />
-                      <View style={styles.svcAddImageChangeOverlay}>
-                        <Ionicons name="camera-outline" size={22} color="#fff" />
+              {/* Image picker — only when business shows service images */}
+              {showServiceImages ? (
+                <View style={[styles.svcAddImageBandArea, { backgroundColor: `${businessColors.primary}08` }]}>
+                  <TouchableOpacity
+                    style={styles.svcAddImageCircleBtn}
+                    onPress={async () => {
+                      try {
+                        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                        if (status !== 'granted') { Alert.alert(t('permission.required','Permission Required'), t('settings.common.galleryPermissionImage','Please allow gallery access')); return; }
+                        const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', allowsMultipleSelection: false, quality: 0.9, base64: true });
+                        if (result.canceled || !result.assets?.length) return;
+                        const a: any = result.assets[0];
+                        setAddSvcUploadingImage(true);
+                        const uploadedUrl = await uploadServiceImage({ uri: a.uri, base64: a.base64 ?? null, mimeType: a.mimeType ?? null, fileName: a.fileName ?? null });
+                        if (uploadedUrl) setAddSvcImageUrl(uploadedUrl);
+                      } catch { } finally { setAddSvcUploadingImage(false); }
+                    }}
+                    activeOpacity={0.85}
+                    disabled={addSvcUploadingImage}
+                  >
+                    {addSvcImageUrl ? (
+                      <>
+                        <Image source={{ uri: addSvcImageUrl }} style={styles.svcAddImageCircleFull} resizeMode="cover" />
+                        <View style={styles.svcAddImageChangeOverlay}>
+                          <Ionicons name="camera-outline" size={22} color="#fff" />
+                        </View>
+                      </>
+                    ) : (
+                      <View style={[styles.svcAddImageCirclePlaceholder, { borderColor: `${businessColors.primary}40` }]}>
+                        {addSvcUploadingImage ? (
+                          <ActivityIndicator size="large" color={businessColors.primary} />
+                        ) : (
+                          <>
+                            <View style={[styles.svcAddImageIconWrap, { backgroundColor: `${businessColors.primary}20` }]}>
+                              <Ionicons name="camera-outline" size={28} color={businessColors.primary} />
+                            </View>
+                            <Text style={[styles.svcAddImageDashedLabel, { color: businessColors.primary, marginTop: 8 }]}>
+                              {t('settings.services.uploadImage','העלה תמונה')}
+                            </Text>
+                          </>
+                        )}
                       </View>
-                    </>
-                  ) : (
-                    <View style={[styles.svcAddImageCirclePlaceholder, { borderColor: `${businessColors.primary}40` }]}>
-                      {addSvcUploadingImage ? (
-                        <ActivityIndicator size="large" color={businessColors.primary} />
-                      ) : (
-                        <>
-                          <View style={[styles.svcAddImageIconWrap, { backgroundColor: `${businessColors.primary}20` }]}>
-                            <Ionicons name="camera-outline" size={28} color={businessColors.primary} />
-                          </View>
-                          <Text style={[styles.svcAddImageDashedLabel, { color: businessColors.primary, marginTop: 8 }]}>
-                            {t('settings.services.uploadImage','העלה תמונה')}
-                          </Text>
-                        </>
-                      )}
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </View>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              ) : null}
 
               {/* Fields area */}
               <View style={styles.svcAddFieldsArea}>
@@ -5569,6 +5222,222 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
+  cancellationModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    position: 'relative',
+  },
+  /** LTR box so textAlign:right is physical right (global RTL swaps left/right on Text). */
+  cancellationModalInner: {
+    direction: 'ltr',
+    width: '100%',
+    alignSelf: 'stretch',
+  },
+  cancellationModalCard: {
+    width: '100%',
+    maxWidth: 520,
+    backgroundColor: Colors.white,
+    borderRadius: 22,
+    overflow: 'hidden',
+    maxHeight: '88%',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 14 },
+        shadowOpacity: 0.2,
+        shadowRadius: 26,
+      },
+      android: { elevation: 14 },
+    }),
+  },
+  cancellationModalHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(60,60,67,0.12)',
+    backgroundColor: Colors.white,
+  },
+  cancellationModalTitle: {
+    flex: 1,
+    minWidth: 0,
+    marginLeft: 6,
+    textAlign: 'right',
+    fontSize: 17,
+    fontWeight: '700',
+    lineHeight: 22,
+    color: Colors.text,
+  },
+  cancellationModalHeaderSpacer: {
+    width: 44,
+    height: 44,
+  },
+  cancellationModalScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+    backgroundColor: SETTINGS_GROUPED_BG,
+    maxHeight: 460,
+  },
+  cancellationModalScrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 8,
+    alignItems: 'stretch',
+    width: '100%',
+  },
+  cancellationModalExplainer: {
+    direction: 'ltr',
+    borderRadius: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginBottom: 18,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.1)',
+  },
+  cancellationModalExplainerIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancellationModalExplainerText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.text,
+    lineHeight: 21,
+    textAlign: 'right',
+  },
+  cancellationModalHero: {
+    backgroundColor: Colors.white,
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.12)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  cancellationModalFieldLabel: {
+    alignSelf: 'stretch',
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.subtext,
+    marginBottom: 10,
+    letterSpacing: 0.15,
+    textAlign: 'right',
+  },
+  cancellationModalPicker: {
+    direction: 'ltr',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(60,60,67,0.04)',
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.18)',
+    gap: 12,
+  },
+  cancellationModalPickerText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+    lineHeight: 22,
+    textAlign: 'right',
+  },
+  cancellationModalDropdownPanel: {
+    direction: 'ltr',
+    marginTop: 10,
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.12)',
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+      },
+      android: { elevation: 3 },
+    }),
+  },
+  cancellationModalDropdownScroll: {
+    maxHeight: 228,
+  },
+  cancellationModalDropdownRow: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(60,60,67,0.08)',
+  },
+  cancellationModalDropdownRowLast: {
+    borderBottomWidth: 0,
+  },
+  cancellationModalDropdownRowText: {
+    alignSelf: 'stretch',
+    fontSize: 16,
+    color: Colors.text,
+    fontWeight: '500',
+    textAlign: 'right',
+  },
+  cancellationModalDropdownSubtext: {
+    fontSize: 14,
+    color: Colors.subtext,
+    fontWeight: '400',
+    textAlign: 'right',
+  },
+  cancellationModalFooter: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    backgroundColor: Colors.white,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(60,60,67,0.1)',
+  },
+  cancellationModalSaveBtn: {
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  cancellationModalSaveBtnDisabled: {
+    opacity: 0.55,
+  },
+  cancellationModalSaveBtnText: {
+    color: Colors.white,
+    fontSize: 17,
+    fontWeight: '700',
+  },
   smallModalCard: {
     width: '100%',
     maxWidth: 520,
@@ -5627,6 +5496,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginLeft: -4,
     zIndex: 10,
+  },
+  cancellationModalCloseOnEnd: {
+    marginLeft: 0,
+    marginRight: -4,
   },
   modalActionButton: {
     width: 44,
@@ -5711,6 +5584,207 @@ const styles = StyleSheet.create({
   modalSendTextDisabled: {
     color: Colors.subtext,
   },
+  bookingWindowModalHeader: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(60,60,67,0.1)',
+  },
+  bookingWindowModalTitle: {
+    position: 'absolute',
+    left: 52,
+    right: 52,
+    textAlign: 'center',
+    zIndex: 0,
+    fontSize: 17,
+    fontWeight: '700',
+    lineHeight: 22,
+  },
+  bookingWindowHeaderSpacer: {
+    width: 44,
+    height: 44,
+  },
+  bookingWindowExplainer: {
+    borderRadius: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginBottom: 20,
+    flexDirection: 'row-reverse',
+    alignItems: 'flex-start',
+    gap: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.08)',
+    overflow: 'hidden',
+  },
+  bookingWindowExplainerIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  bookingWindowExplainerText: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 22,
+    color: Colors.text,
+    textAlign: 'left',
+    fontWeight: '500',
+  },
+  bookingWindowHeroCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.08)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.07,
+        shadowRadius: 14,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  bookingWindowFieldLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.subtext,
+    textAlign: 'left',
+    letterSpacing: 0.15,
+  },
+  bookingWindowRulerLtr: {
+    direction: 'ltr',
+    marginTop: 4,
+  },
+  bookingWindowManualLabel: {
+    marginTop: 22,
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.subtext,
+    textAlign: 'left',
+  },
+  bookingWindowManualInput: {
+    marginTop: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.18)',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+    color: Colors.text,
+    backgroundColor: 'rgba(60,60,67,0.04)',
+    fontVariant: ['tabular-nums'],
+  },
+  bookingWindowRangeFoot: {
+    marginTop: 10,
+    fontSize: 12,
+    color: Colors.subtext,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  bookingWindowFooter: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    backgroundColor: SETTINGS_GROUPED_BG,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(60,60,67,0.1)',
+  },
+  bookingWindowFooterBtn: {
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  bookingWindowFooterBtnDisabled: {
+    opacity: 0.55,
+  },
+  bookingWindowFooterBtnText: {
+    color: Colors.white,
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  bookingSaveSuccessOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  bookingSaveSuccessCard: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: '#1C1C1E',
+    borderRadius: 22,
+    paddingHorizontal: 22,
+    paddingTop: 22,
+    paddingBottom: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.08)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 14 },
+        shadowOpacity: 0.35,
+        shadowRadius: 28,
+      },
+      android: { elevation: 12 },
+    }),
+  },
+  bookingSaveSuccessTextBlock: {
+    width: '100%',
+    alignSelf: 'stretch',
+  },
+  bookingSaveSuccessTextRtl: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  bookingSaveSuccessTextLtr: {
+    textAlign: 'left',
+    writingDirection: 'ltr',
+  },
+  bookingSaveSuccessTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  bookingSaveSuccessMessage: {
+    marginTop: 10,
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 16,
+    lineHeight: 23,
+    fontWeight: '400',
+  },
+  bookingSaveSuccessOkBtn: {
+    marginTop: 20,
+    backgroundColor: '#3A3A3C',
+    borderRadius: 999,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bookingSaveSuccessOkText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '600',
+  },
   modalContent: {
     flex: 1,
     backgroundColor: '#F2F2F7',
@@ -5758,6 +5832,210 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.subtext,
     textAlign: 'center',
+  },
+  editAdminModalRoot: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  editAdminHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(60,60,67,0.12)',
+  },
+  editAdminHeaderSide: {
+    width: 88,
+    justifyContent: 'center',
+  },
+  editAdminHeaderSideLeading: {
+    alignItems: 'flex-start',
+  },
+  editAdminHeaderSideTrailing: {
+    alignItems: 'flex-end',
+  },
+  editAdminCancelText: {
+    fontSize: 17,
+    fontWeight: '500',
+    color: Colors.text,
+    includeFontPadding: false,
+  },
+  editAdminHeaderTitle: {
+    flex: 1,
+    fontSize: 17,
+    fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'center',
+    letterSpacing: -0.3,
+  },
+  editAdminSavePill: {
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    minWidth: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.12,
+        shadowRadius: 5,
+      },
+      android: { elevation: 3 },
+    }),
+  },
+  editAdminSavePillDisabled: {
+    opacity: 0.5,
+  },
+  editAdminSavePillText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  editAdminScroll: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  editAdminScrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 8,
+  },
+  editAdminHero: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  editAdminAvatarRing: {
+    padding: 4,
+    borderRadius: 52,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.18,
+        shadowRadius: 20,
+      },
+      android: { elevation: 8 },
+    }),
+  },
+  editAdminAvatarInner: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  editAdminAvatarImage: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+  },
+  editAdminAvatarLoading: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.12)',
+    borderRadius: 44,
+  },
+  editAdminHeroName: {
+    marginTop: 16,
+    fontSize: 22,
+    fontWeight: '800',
+    color: Colors.text,
+    textAlign: 'center',
+    letterSpacing: -0.4,
+  },
+  editAdminHeroPhone: {
+    marginTop: 4,
+    fontSize: 15,
+    fontWeight: '500',
+    color: Colors.subtext,
+    textAlign: 'center',
+    writingDirection: 'ltr',
+  },
+  editAdminPhotoBtn: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+  },
+  editAdminPhotoBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  editAdminFormCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    paddingHorizontal: 18,
+    paddingTop: 20,
+    paddingBottom: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.08)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.07,
+        shadowRadius: 24,
+      },
+      android: { elevation: 4 },
+    }),
+  },
+  editAdminField: {
+    marginBottom: 20,
+  },
+  editAdminFieldLast: {
+    marginBottom: 0,
+  },
+  editAdminFieldLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#636366',
+    marginBottom: 8,
+    letterSpacing: -0.1,
+  },
+  editAdminFieldLabelRtl: {
+    alignSelf: 'stretch',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  editAdminFieldLabelLtr: {
+    alignSelf: 'stretch',
+    textAlign: 'left',
+    writingDirection: 'ltr',
+  },
+  editAdminFieldInput: {
+    minHeight: 52,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: Platform.OS === 'ios' ? 14 : 10,
+    fontSize: 17,
+    fontWeight: '600',
+    color: Colors.text,
+    backgroundColor: '#F2F4F7',
+    borderWidth: 0,
+  },
+  editAdminFieldInputRtl: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  editAdminFieldInputLtr: {
+    textAlign: 'left',
+    writingDirection: 'ltr',
+  },
+  editAdminPhoneInput: {
+    textAlign: 'left',
+    writingDirection: 'ltr',
   },
   modalContentContainer: {
     paddingHorizontal: 16,
@@ -5909,6 +6187,70 @@ const styles = StyleSheet.create({
   servicesModalFullWidthBlock: {
     width: '100%',
   },
+  serviceImagesPrefOuter: {
+    paddingHorizontal: 2,
+    marginBottom: 14,
+  },
+  serviceImagesPrefCard: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60, 60, 67, 0.10)',
+  },
+  serviceImagesPrefAccentBar: {
+    width: '100%',
+    height: 4,
+  },
+  serviceImagesPrefInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    paddingTop: 17,
+  },
+  serviceImagesPrefCopy: {
+    flex: 1,
+    minWidth: 0,
+    marginInlineEnd: 14,
+  },
+  serviceImagesPrefTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 6,
+    gap: 8,
+  },
+  serviceImagesPrefTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: Colors.text,
+    letterSpacing: -0.35,
+    lineHeight: 22,
+    flexShrink: 1,
+  },
+  serviceImagesPrefStatusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  serviceImagesPrefStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.15,
+  },
+  serviceImagesPrefSubtitle: {
+    fontSize: 13,
+    color: '#636366',
+    lineHeight: 19,
+    letterSpacing: -0.08,
+  },
+  serviceImagesPrefSwitchCol: {
+    minWidth: 51,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   svcListCell: {
     width: '100%',
     marginBottom: 10,
@@ -5928,6 +6270,11 @@ const styles = StyleSheet.create({
     paddingLeft: 10,
     paddingRight: 8,
     gap: 10,
+  },
+  /** Extra inset on chevron side when service thumbnails are hidden */
+  svcListCollapsedRowNoThumb: {
+    paddingLeft: 28,
+    paddingRight: 12,
   },
   svcListThumbOuter: {
     position: 'relative',
@@ -5985,6 +6332,11 @@ const styles = StyleSheet.create({
     minWidth: 28,
     minHeight: 44,
     paddingHorizontal: 2,
+  },
+  svcListChevronHitNoThumb: {
+    paddingLeft: 8,
+    paddingRight: 8,
+    minWidth: 40,
   },
   inputContainer: {
     marginBottom: 24,
@@ -6188,57 +6540,6 @@ const styles = StyleSheet.create({
     color: Colors.text,
     flex: 1,
     textAlign: 'left',
-  },
-  cancellationDropdownOptions: {
-    position: 'absolute',
-    left: 20,
-    right: 20,
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    maxHeight: 150,
-    zIndex: 1000,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  cancellationDropdownOptionsUp: {
-    bottom: '100%',
-    marginBottom: 4,
-    shadowOffset: { width: 0, height: -2 },
-  },
-  cancellationDropdownOptionsDown: {
-    top: 160,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  cancellationDropdownList: {
-    maxHeight: 130,
-  },
-  cancellationDropdownItem: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
-  },
-  cancellationDropdownItemSelected: {
-    backgroundColor: '#F0F8FF',
-  },
-  cancellationDropdownItemText: {
-    fontSize: 16,
-    color: Colors.text,
-    textAlign: 'left',
-  },
-  cancellationDropdownItemTextSelected: {
-    color: Colors.primary,
-    fontWeight: '600',
-  },
-  cancellationDropdownItemSubtext: {
-    fontSize: 14,
-    color: Colors.subtext,
-    fontWeight: '400',
   },
   dropdownText: {
     fontSize: 16,

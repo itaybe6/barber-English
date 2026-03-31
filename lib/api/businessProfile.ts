@@ -11,6 +11,11 @@ export function isClientApprovalRequired(profile: BusinessProfile | null | undef
   return profile?.require_client_approval !== false;
 }
 
+/** True when service thumbnails should show; missing column / null treated as shown. */
+export function isShowServiceImages(profile: BusinessProfile | null | undefined): boolean {
+  return profile?.show_service_images !== false;
+}
+
 export const businessProfileApi = {
   async getProfile(): Promise<BusinessProfile | null> {
     try {
@@ -66,12 +71,12 @@ export const businessProfileApi = {
         break_by_user: {},
         booking_open_days_by_user: {},
         reminder_minutes_by_user: {},
-        client_reminder_minutes_by_user: {},
         min_cancellation_hours: 24, // Default 24 hours
         primary_color: '#000000', // Default black color
         booking_open_days: 7,
         client_swap_enabled: true,
         require_client_approval: true,
+        show_service_images: true,
       };
 
       const { data, error } = await supabase
@@ -111,7 +116,7 @@ export const businessProfileApi = {
         break_by_user: (updates as any).break_by_user,
         booking_open_days_by_user: (updates as any).booking_open_days_by_user,
         reminder_minutes_by_user: (updates as any).reminder_minutes_by_user,
-        client_reminder_minutes_by_user: (updates as any).client_reminder_minutes_by_user,
+        client_reminder_minutes: (updates as any).client_reminder_minutes,
         min_cancellation_hours: updates.min_cancellation_hours,
         primary_color: updates.primary_color,
             booking_open_days: (updates as any).booking_open_days,
@@ -121,6 +126,7 @@ export const businessProfileApi = {
             accountant_report_time: (updates as any).accountant_report_time,
             client_swap_enabled: (updates as any).client_swap_enabled,
             require_client_approval: (updates as any).require_client_approval,
+            show_service_images: (updates as any).show_service_images,
           })
           .eq('id', businessId)
           .select('*')
@@ -147,7 +153,7 @@ export const businessProfileApi = {
           break_by_user: (updates as any).break_by_user,
           booking_open_days_by_user: (updates as any).booking_open_days_by_user ?? {},
           reminder_minutes_by_user: (updates as any).reminder_minutes_by_user,
-          client_reminder_minutes_by_user: (updates as any).client_reminder_minutes_by_user,
+          client_reminder_minutes: (updates as any).client_reminder_minutes,
           min_cancellation_hours: updates.min_cancellation_hours,
           primary_color: updates.primary_color || '#000000',
           booking_open_days: (updates as any).booking_open_days ?? 7,
@@ -157,6 +163,7 @@ export const businessProfileApi = {
           accountant_report_time: (updates as any).accountant_report_time,
           client_swap_enabled: (updates as any).client_swap_enabled ?? true,
           require_client_approval: (updates as any).require_client_approval ?? true,
+          show_service_images: (updates as any).show_service_images ?? true,
         })
         .select('*')
         .single();
@@ -171,7 +178,29 @@ export const businessProfileApi = {
       return null;
     }
   },
-  
+
+  /** Updates only `show_service_images` (admin service thumbnails + client booking). */
+  async setShowServiceImages(show: boolean): Promise<BusinessProfile | null> {
+    try {
+      const businessId = getBusinessId();
+      const { data, error } = await supabase
+        .from('business_profile')
+        .update({ show_service_images: show })
+        .eq('id', businessId)
+        .select('*')
+        .single();
+
+      if (error) {
+        console.error('Error updating show_service_images:', error);
+        return null;
+      }
+      return (data as BusinessProfile) || null;
+    } catch (e) {
+      console.error('Error in setShowServiceImages:', e);
+      return null;
+    }
+  },
+
   async getBreakMinutesForUser(userId?: string | null): Promise<number> {
     try {
       const businessId = getBusinessId();
@@ -250,30 +279,29 @@ export const businessProfileApi = {
     }
   },
 
-  async getClientReminderMinutesForUser(userId?: string | null): Promise<number | null> {
+  /** Business-wide client reminder (minutes before appointment). Owner-only in settings UI. */
+  async getClientReminderMinutes(): Promise<number | null> {
     try {
       const profile = await this.getProfile();
-      const val = (profile as any)?.client_reminder_minutes_by_user && userId
-        ? ((profile as any).client_reminder_minutes_by_user?.[userId] ?? null)
-        : null;
-      return (val === null || typeof val === 'undefined') ? null : Number(val);
+      const val = (profile as any)?.client_reminder_minutes;
+      if (val === null || typeof val === 'undefined') return null;
+      const n = Number(val);
+      return Number.isFinite(n) && n > 0 ? n : null;
     } catch (e) {
-      console.error('Error in getClientReminderMinutesForUser:', e);
+      console.error('Error in getClientReminderMinutes:', e);
       return null;
     }
   },
 
-  async setClientReminderMinutesForUser(userId: string, minutes: number | null): Promise<void> {
-    const clamped = (minutes === null || typeof minutes === 'undefined')
-      ? null
-      : Math.max(0, Math.min(1440, Math.floor(Number(minutes) || 0)));
+  async setClientReminderMinutes(minutes: number | null): Promise<void> {
+    const clamped =
+      minutes === null || typeof minutes === 'undefined' || Number(minutes) <= 0
+        ? null
+        : Math.max(1, Math.min(1440, Math.floor(Number(minutes) || 0)));
     const businessId = getBusinessId();
-    const profile = await this.getProfile();
-    const currentMap = ((profile as any)?.client_reminder_minutes_by_user ?? {}) as Record<string, number | null>;
-    const nextMap = { ...currentMap, [userId]: clamped };
     const { error } = await supabase
       .from('business_profile')
-      .update({ client_reminder_minutes_by_user: nextMap as any })
+      .update({ client_reminder_minutes: clamped })
       .eq('id', businessId);
     if (error) {
       console.error('Error setting client reminder minutes:', error);
@@ -318,12 +346,12 @@ export const businessProfileApi = {
       const profile = await this.getProfile();
       if (!profile) return 7;
       const globalDefault = Math.max(
-        1,
+        0,
         Math.min(60, Number((profile as any).booking_open_days ?? 7)),
       );
       const byUser = ((profile as any).booking_open_days_by_user ?? {}) as Record<string, number>;
       const values = Object.values(byUser).map((v) =>
-        Math.max(1, Math.min(60, Number(v))),
+        Math.max(0, Math.min(60, Number(v))),
       );
       if (values.length === 0) return globalDefault;
       return Math.max(globalDefault, ...values);
@@ -342,7 +370,7 @@ export const businessProfileApi = {
           p_user_id: userId,
         });
         if (!error && typeof data === 'number') {
-          return Math.max(1, Math.min(60, data));
+          return Math.max(0, Math.min(60, data));
         }
       }
       // Fallback: read profile and extract from JSON or use default
@@ -350,7 +378,7 @@ export const businessProfileApi = {
       const days = (profile as any)?.booking_open_days_by_user && userId
         ? Number((profile as any).booking_open_days_by_user?.[userId] ?? (profile as any)?.booking_open_days ?? 7)
         : Number((profile as any)?.booking_open_days ?? 7);
-      return Math.max(1, Math.min(60, days));
+      return Math.max(0, Math.min(60, days));
     } catch (e) {
       console.error('Error in getBookingOpenDaysForUser:', e);
       return 7;
@@ -358,7 +386,10 @@ export const businessProfileApi = {
   },
 
   async setBookingOpenDaysForUser(userId: string, days: number): Promise<void> {
-    const clamped = Math.max(1, Math.min(60, Math.floor(Number(days) || 7)));
+    const n = Math.floor(Number(days));
+    const clamped = !Number.isFinite(n)
+      ? 7
+      : Math.max(0, Math.min(60, n));
     const businessId = getBusinessId();
     try {
       const { error } = await supabase.rpc('set_booking_open_days_for_user', {

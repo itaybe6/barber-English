@@ -1,7 +1,7 @@
 // @ts-nocheck
 /**
  * Periodic job:
- * - client_reminder: business_profile.client_reminder_minutes_by_user[barber_id], quiet hours Asia/Jerusalem 08:00–21:00
+ * - client_reminder: business_profile.client_reminder_minutes (business-wide), quiet hours Asia/Jerusalem 08:00–21:00
  * - admin_reminder: business_profile.reminder_minutes_by_user[barber_id], optional (null/0 = off), any time
  *
  * Invoke: Authorization: Bearer <SERVICE_ROLE_KEY> (pg_cron via vault JWT).
@@ -81,6 +81,14 @@ function leadFromMap(
   return Math.min(1440, Math.max(1, n));
 }
 
+/** Business-wide client reminder (integer minutes on business_profile). */
+function clientLeadMinutes(raw: unknown): number | null {
+  if (raw === null || typeof raw === "undefined") return null;
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.min(1440, Math.max(1, n));
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
@@ -135,7 +143,7 @@ serve(async (req) => {
     const { data: profiles, error: profErr } = await admin
       .from("business_profile")
       .select(
-        "id, reminder_minutes_by_user, client_reminder_minutes_by_user, display_name",
+        "id, reminder_minutes_by_user, client_reminder_minutes, display_name",
       )
       .in("id", businessIds);
 
@@ -208,11 +216,7 @@ serve(async (req) => {
     // —— Client reminder ——
     if (!row.client_reminder_sent_at && insideClientWindow) {
       const phone = String(row.client_phone ?? "").trim();
-      const clientMap = profile?.client_reminder_minutes_by_user as
-        | Record<string, unknown>
-        | null
-        | undefined;
-      const lead = leadFromMap(clientMap, row.barber_id);
+      const lead = clientLeadMinutes(profile?.client_reminder_minutes);
       if (phone && lead !== null) {
         const sendAtLocal = computeClientSendAtLocal(apptStart, lead);
         if (sendAtLocal <= nowLocal) {
@@ -258,11 +262,7 @@ serve(async (req) => {
         }
       }
     } else if (!row.client_reminder_sent_at && !insideClientWindow) {
-      const clientMap = profile?.client_reminder_minutes_by_user as
-        | Record<string, unknown>
-        | null
-        | undefined;
-      const lead = leadFromMap(clientMap, row.barber_id);
+      const lead = clientLeadMinutes(profile?.client_reminder_minutes);
       const phone = String(row.client_phone ?? "").trim();
       if (phone && lead !== null) {
         const sendAtLocal = computeClientSendAtLocal(apptStart, lead);

@@ -287,13 +287,15 @@ export interface BusinessProfile {
   break_by_user?: Record<string, number>;
   // Per barber: minutes before a booking to notify this admin (optional; null = off)
   reminder_minutes_by_user?: Record<string, number | null>;
-  // Per barber: minutes before a booking to notify the client (optional; null = off)
-  client_reminder_minutes_by_user?: Record<string, number | null>;
+  /** Business-wide: minutes before appointment to notify clients (all barbers). Null/0 = off. */
+  client_reminder_minutes?: number | null;
   min_cancellation_hours?: number;
   /** When false, clients cannot use appointment swap with other clients. Defaults to true if unset. */
   client_swap_enabled?: boolean;
   /** When true, new registrations need admin approval (client_approved=false). Defaults to true if unset. */
   require_client_approval?: boolean;
+  /** When false, hide service images in admin service list, add/edit forms, and client booking. Defaults to true if unset. */
+  show_service_images?: boolean;
   primary_color?: string; // Hex color code for primary UI color
   // Number of days forward to open booking window; defaults to 7 on server (legacy - now use booking_open_days_by_user)
   booking_open_days?: number;

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Platform, ActivityIndicator, I18nManager, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Platform, ActivityIndicator, I18nManager, TouchableOpacity } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 import { usePrimaryContrast } from '@/src/theme/ThemeProvider';
@@ -151,8 +151,9 @@ export default function MonthlyInsightsCard({
               );
               if (interactive) {
                 return (
-                  <Pressable
+                  <TouchableOpacity
                     key={item.key}
+                    activeOpacity={0.88}
                     onPress={onPressNewClients}
                     accessibilityRole="button"
                     accessibilityLabel={t(
@@ -160,11 +161,10 @@ export default function MonthlyInsightsCard({
                       '{{legend}}: {{count}}. Opens the list of new clients this month.',
                       { legend: item.label, count: item.value }
                     )}
-                    android_ripple={{ color: 'rgba(0,0,0,0.08)' }}
-                    style={({ pressed }) => [styles.legendRow, pressed && styles.legendRowPressed]}
+                    style={styles.legendRow}
                   >
                     {inner}
-                  </Pressable>
+                  </TouchableOpacity>
                 );
               }
               return (
@@ -303,9 +303,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ECECF0',
     alignSelf: 'stretch',
-  },
-  legendRowPressed: {
-    opacity: 0.88,
   },
   dot: {
     width: 10,

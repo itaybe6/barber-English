@@ -87,9 +87,10 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
   const contrastAnchor = useMemo(() => darkenHex(primary, 0.22), [primary]);
   const useLightFg = readableOnHex(contrastAnchor) === '#FFFFFF';
   const heroText = useLightFg ? '#FFFFFF' : '#141414';
-  const heroMuted = useLightFg ? 'rgba(255,255,255,0.86)' : 'rgba(0,0,0,0.62)';
-  const heroFaint = useLightFg ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.28)';
-  const phoneBorderUnfocus = useLightFg ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.22)';
+  /** Brighter copy on gradient so subtitles, hints, and placeholders read clearly */
+  const heroMuted = useLightFg ? 'rgba(255,255,255,0.96)' : 'rgba(0,0,0,0.72)';
+  const heroFaint = useLightFg ? 'rgba(255,255,255,0.82)' : 'rgba(0,0,0,0.45)';
+  const phoneBorderUnfocus = useLightFg ? 'rgba(255,255,255,0.58)' : 'rgba(0,0,0,0.22)';
   const phoneBorderFocus = useLightFg ? '#FFFFFF' : primary;
   const ctaElevatedBg = useLightFg ? '#FFFFFF' : 'rgba(0,0,0,0.1)';
   const ctaElevatedLabel = useLightFg ? '#141414' : '#111111';
@@ -494,19 +495,20 @@ const styles = StyleSheet.create({
     lineHeight: 28,
   },
   heroSubtitle: {
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 23,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+    fontWeight: '700',
+  },
+  heroHintLine: {
     fontSize: 15,
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 8,
-    paddingHorizontal: 4,
-  },
-  heroHintLine: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
     marginBottom: 20,
     paddingHorizontal: 6,
-    fontWeight: '500',
+    fontWeight: '700',
   },
   phoneOpenRow: {
     alignSelf: 'stretch',
@@ -526,7 +528,7 @@ const styles = StyleSheet.create({
   phoneOpenInput: {
     flex: 1,
     fontSize: 18,
-    fontWeight: '400',
+    fontWeight: '600',
     letterSpacing: 0.2,
     paddingVertical: Platform.OS === 'ios' ? 8 : 7,
     paddingHorizontal: 0,
@@ -541,9 +543,10 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   softHint: {
-    fontSize: 13,
+    fontSize: 14,
     textAlign: 'center',
     marginTop: 10,
+    fontWeight: '700',
   },
   errorOnHero: {
     fontSize: 13,
@@ -587,8 +590,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   footerNote: {
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: 14,
+    lineHeight: 21,
     textAlign: 'center',
+    fontWeight: '600',
   },
 });

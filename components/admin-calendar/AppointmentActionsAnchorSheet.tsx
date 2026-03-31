@@ -41,33 +41,11 @@ export function getDefaultAppointmentAnchorRect(): AnchorRect {
   };
 }
 
-/**
- * Convert anchor rect to center + size.
- * measureInWindow always returns physical screen coordinates (x=0 at
- * physical left edge), which is what we need for transform-based positioning.
- */
 function anchorToShared(anchor: AnchorRect) {
   return {
-    cx: anchor.x + anchor.width / 2,
     cy: anchor.y + anchor.height / 2,
-    w: Math.max(anchor.width, 40),
     h: Math.max(anchor.height, 36),
   };
-}
-
-/**
- * When the tap is on the physical right side of the screen (e.g. Sunday column
- * in RTL week view), the sheet can look slightly too far right; nudge the open
- * resting position left. Values are in physical px; `winW` is window width.
- */
-function computeOpenedCenterOffsetX(cx: number, winW: number): number {
-  if (winW <= 0) return 0;
-  const r = cx / winW;
-  // Strong right (rightmost day column)
-  if (r > 0.62) return -Math.min(36, winW * 0.085);
-  // Moderate right
-  if (r > 0.52) return -Math.min(22, winW * 0.048);
-  return 0;
 }
 
 type Props = {
@@ -91,12 +69,8 @@ export function AppointmentActionsAnchorSheet({
   const progress = useSharedValue(0);
 
   const init = anchorToShared(anchor);
-  const cx0 = useSharedValue(init.cx);
   const cy0 = useSharedValue(init.cy);
-  const w0 = useSharedValue(init.w);
   const h0 = useSharedValue(init.h);
-  /** Extra horizontal offset for the *opened* position (interpolated target), not the anchor */
-  const openedCenterOffsetX = useSharedValue(computeOpenedCenterOffsetX(init.cx, winW));
 
   const closingRef = useRef(false);
   const onDismissedRef = useRef(onDismissed);
@@ -107,19 +81,16 @@ export function AppointmentActionsAnchorSheet({
   }, []);
 
   const syncAnchor = useCallback(
-    (a: AnchorRect, width: number) => {
+    (a: AnchorRect) => {
       const o = anchorToShared(a);
-      cx0.value = o.cx;
       cy0.value = o.cy;
-      w0.value = o.w;
       h0.value = o.h;
-      openedCenterOffsetX.value = computeOpenedCenterOffsetX(o.cx, width);
     },
-    [cx0, cy0, w0, h0, openedCenterOffsetX]
+    [cy0, h0]
   );
 
   useLayoutEffect(() => {
-    syncAnchor(anchor, winW);
+    syncAnchor(anchor);
     if (!open) return;
     closingRef.current = false;
     progress.value = 0;
@@ -130,7 +101,7 @@ export function AppointmentActionsAnchorSheet({
       });
     });
     return () => cancelAnimationFrame(id);
-  }, [anchor, open, duration, progress, syncAnchor, winW]);
+  }, [anchor, open, duration, progress, syncAnchor]);
 
   useEffect(() => {
     if (open) {
@@ -158,34 +129,23 @@ export function AppointmentActionsAnchorSheet({
     opacity: interpolate(progress.value, [0, 1], [0, 1], Extrapolation.CLAMP),
   }));
 
-  /**
-   * Position the panel using ONLY transform (translateX/Y) instead of left/top.
-   * Transforms are always in physical screen coordinates regardless of RTL,
-   * which matches the physical x/y from measureInWindow.
-   */
   const panelStyle = useAnimatedStyle(() => {
     const finalW = Math.min(winW * 0.88, 420);
-    const targetCX = winW / 2 + openedCenterOffsetX.value;
-    const targetCY = winH * 0.40;
+    const targetTop = winH * 0.40 - finalH / 2;
     const p = progress.value;
-    const cx = interpolate(p, [0, 1], [cx0.value, targetCX], Extrapolation.CLAMP);
-    const cy = interpolate(p, [0, 1], [cy0.value, targetCY], Extrapolation.CLAMP);
-    const w = interpolate(p, [0, 1], [w0.value, finalW], Extrapolation.CLAMP);
+    const startTop = cy0.value - h0.value / 2;
+    const top = interpolate(p, [0, 1], [startTop, targetTop], Extrapolation.CLAMP);
     const h = interpolate(p, [0, 1], [h0.value, finalH], Extrapolation.CLAMP);
     const borderRadius = interpolate(p, [0, 1], [10, 22], Extrapolation.CLAMP);
     return {
       position: 'absolute' as const,
-      left: 0,
-      top: 0,
-      width: w,
+      left: (winW - finalW) / 2,
+      top,
+      width: finalW,
       height: h,
       borderRadius,
       backgroundColor: '#FFFFFF',
       overflow: 'hidden' as const,
-      transform: [
-        { translateX: cx - w / 2 },
-        { translateY: cy - h / 2 },
-      ],
     };
   }, [winW, winH, finalH]);
 

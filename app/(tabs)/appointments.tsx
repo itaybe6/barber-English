@@ -2750,7 +2750,7 @@ export default function AdminAppointmentsScreen() {
                           hitSlop={18}
                           style={[
                             styles.actionsHeroCloseBtn,
-                            isRtl ? { left: 10 } : { right: 10 },
+                            { right: 10 },
                           ]}
                           accessibilityLabel={tHe('close', 'סגור')}
                         >
@@ -2759,7 +2759,7 @@ export default function AdminAppointmentsScreen() {
                           </View>
                         </Pressable>
                         <View style={styles.actionsHeroContent}>
-                          <View style={[styles.actionsHeroTopRow, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
+                          <View style={[styles.actionsHeroTopRow, { flexDirection: 'row' }]}>
                             <LinearGradient
                               colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0.12)']}
                               style={styles.actionsHeroAvatarRing}
@@ -2768,13 +2768,13 @@ export default function AdminAppointmentsScreen() {
                             </LinearGradient>
                             <View style={styles.actionsHeroTitles}>
                               <Text
-                                style={[styles.actionsHeroClientName, isRtl ? { textAlign: 'right' } : { textAlign: 'left' }]}
+                                style={[styles.actionsHeroClientName, { textAlign: 'left' }]}
                                 numberOfLines={2}
                               >
                                 {clientLine}
                               </Text>
                               <Text
-                                style={[styles.actionsHeroService, isRtl ? { textAlign: 'right' } : { textAlign: 'left' }]}
+                                style={[styles.actionsHeroService, { textAlign: 'left' }]}
                                 numberOfLines={2}
                               >
                                 {serviceLine}
@@ -2794,7 +2794,7 @@ export default function AdminAppointmentsScreen() {
                             style={[
                               styles.actionsHeroStatusPill,
                               { backgroundColor: statusPill.bg },
-                              isRtl ? { alignSelf: 'flex-end' } : { alignSelf: 'flex-start' },
+                              { alignSelf: 'flex-start' },
                             ]}
                           >
                             <Text style={[styles.actionsHeroStatusText, { color: statusPill.text }]}>
@@ -2811,11 +2811,11 @@ export default function AdminAppointmentsScreen() {
                           <Ionicons name="call-outline" size={20} color={calendarPrimary} />
                         </View>
                         <View style={styles.actionsPhoneTextCol}>
-                          <Text style={[styles.actionsPhoneLabel, isRtl ? { textAlign: 'right' } : { textAlign: 'left' }]}>
+                          <Text style={[styles.actionsPhoneLabel, { textAlign: 'left' }]}>
                             {tHe('admin.appointments.phoneCardLabel', 'טלפון לחיוג')}
                           </Text>
                           <Text
-                            style={[styles.actionsPhoneValue, isRtl ? { textAlign: 'right' } : { textAlign: 'left' }]}
+                            style={[styles.actionsPhoneValue, { textAlign: 'left' }]}
                             selectable
                           >
                             {phoneLine}
@@ -2825,7 +2825,7 @@ export default function AdminAppointmentsScreen() {
                     ) : null}
 
                     <Text
-                      style={[styles.actionsSectionLabel, isRtl ? { textAlign: 'right' } : { textAlign: 'left' }]}
+                      style={[styles.actionsSectionLabel, { textAlign: 'left' }]}
                     >
                       {tHe('admin.appointments.actionsSection', 'פעולות')}
                     </Text>

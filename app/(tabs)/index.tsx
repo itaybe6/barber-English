@@ -356,6 +356,7 @@ export default function HomeScreen() {
     );
   }, [insets.top, outerScrollCapSV]);
   const [blockedFilter, setBlockedFilter] = useState<'all' | 'blocked' | 'unblocked'>('all');
+  const [clientsListMode, setClientsListMode] = useState<'all' | 'newThisMonth'>('all');
   const [clientStatsMap, setClientStatsMap] = useState<
     Record<string, { totalAppointments: number; avgMonthlySpend: number | null }>
   >({});
@@ -694,6 +695,55 @@ export default function HomeScreen() {
     } finally {
       setLoadingClients(false);
     }
+  };
+
+  /** Same date window as insights "new clients" count — list must match the stat. */
+  const fetchNewClientsThisMonth = async () => {
+    try {
+      setLoadingClients(true);
+      setClients([]);
+      setFilteredClients([]);
+      const { getBusinessId } = await import('@/lib/supabase');
+      const businessId = getBusinessId();
+      const now = new Date();
+      const monthStartIso = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const monthEndExclusiveIso = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('business_id', businessId)
+        .eq('user_type', 'client')
+        .gte('created_at', monthStartIso)
+        .lt('created_at', monthEndExclusiveIso)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching new clients this month:', error);
+        setClients([]);
+        setFilteredClients([]);
+        setClientStatsMap({});
+        return;
+      }
+
+      const list = data || [];
+      setClients(list);
+      setFilteredClients(list);
+
+      const ids = list.map((c) => c.id).filter(Boolean);
+      const stats = await clientAppointmentStatsApi.getStatsForClientIds(ids);
+      setClientStatsMap(stats);
+    } catch (error) {
+      console.error('Error in fetchNewClientsThisMonth:', error);
+      setClientStatsMap({});
+    } finally {
+      setLoadingClients(false);
+    }
+  };
+
+  const closeClientsModal = () => {
+    setShowClientsModal(false);
+    setClientsListMode('all');
   };
 
   // Filter clients based on search query
@@ -1072,6 +1122,7 @@ export default function HomeScreen() {
                 style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
                 activeOpacity={0.82}
                 onPress={() => {
+                  setClientsListMode('all');
                   setSearchQuery('');
                   setBlockedFilter('all');
                   setShowClientsModal(true);
@@ -1179,6 +1230,13 @@ export default function HomeScreen() {
             newClientsThisMonth={insightsData.newClientsThisMonth}
             loading={loadingInsights}
             colors={colors}
+            onPressNewClients={() => {
+              setClientsListMode('newThisMonth');
+              setSearchQuery('');
+              setBlockedFilter('all');
+              setShowClientsModal(true);
+              void fetchNewClientsThisMonth();
+            }}
           />
         )}
 
@@ -1515,21 +1573,27 @@ export default function HomeScreen() {
          animationType="slide"
          transparent={true}
          visible={showClientsModal}
-         onRequestClose={() => setShowClientsModal(false)}
+         onRequestClose={closeClientsModal}
        >
          <View style={styles.modalOverlay}>
             <View style={styles.clientsModal}>
               <View style={styles.modalHeader}>
                 <View style={{ width: 36, height: 36 }} />
-                <Text style={styles.modalTitle}>{t('clients.listTitle','Clients List')}</Text>
+                <Text style={styles.modalTitle}>
+                  {clientsListMode === 'newThisMonth'
+                    ? t('admin.insights.newClientsListTitle', 'New clients this month')
+                    : t('clients.listTitle', 'Clients List')}
+                </Text>
                 <TouchableOpacity 
                   style={styles.closeButton}
-                  onPress={() => setShowClientsModal(false)}
+                  onPress={closeClientsModal}
                 >
                   <Ionicons name="close" size={24} color={colors.text} />
                 </TouchableOpacity>
               </View>
 
+             {clientsListMode === 'all' ? (
+               <>
              {/* Search Bar */}
              <View style={styles.searchContainer}>
                <Ionicons name="search" size={20} color={primaryOnSurface} style={styles.searchIcon} />
@@ -1566,6 +1630,8 @@ export default function HomeScreen() {
                  <Text style={[styles.filterButtonText, blockedFilter === 'unblocked' && styles.filterButtonTextActive]}>{t('clients.filter.unblocked','Unblocked')}</Text>
                </TouchableOpacity>
              </View>
+               </>
+             ) : null}
 
              {/* Clients List */}
              <View style={styles.clientsListSheet}>
@@ -1587,7 +1653,9 @@ export default function HomeScreen() {
                         <Ionicons name="people-outline" size={40} color={primaryOnSurface} />
                       </View>
                       <Text style={[styles.clientsEmptyTitle, { color: colors.text }]}>
-                        {t('clients.listEmpty')}
+                        {clientsListMode === 'newThisMonth'
+                          ? t('admin.insights.newClientsListEmpty', 'No new clients registered this month')
+                          : t('clients.listEmpty')}
                       </Text>
                     </View>
                   }

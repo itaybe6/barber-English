@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Platform, ActivityIndicator, I18nManager } from 'react-native';
+import { View, Text, StyleSheet, Platform, ActivityIndicator, I18nManager, Pressable } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 import { usePrimaryContrast } from '@/src/theme/ThemeProvider';
@@ -10,6 +10,8 @@ interface MonthlyInsightsCardProps {
   newClientsThisMonth: number;
   loading?: boolean;
   colors: { primary: string; text: string; textSecondary: string; secondary?: string };
+  /** Opens list of clients registered this month (insights legend). */
+  onPressNewClients?: () => void;
 }
 
 const CANCELLED_SEGMENT_COLOR = '#EF4444';
@@ -27,6 +29,7 @@ export default function MonthlyInsightsCard({
   newClientsThisMonth,
   loading,
   colors,
+  onPressNewClients,
 }: MonthlyInsightsCardProps) {
   const { t, i18n } = useTranslation();
   const { primaryOnSurface, primaryChartSegment } = usePrimaryContrast();
@@ -134,16 +137,42 @@ export default function MonthlyInsightsCard({
           </View>
 
           <View style={styles.legend}>
-            {segmentDefs.map((item) => (
-              <View key={item.key} style={styles.legendRow}>
-                {/* כמו צילום 1: טקסט משמאל, מספר + נקודה מימין (direction:ltr = קבוע) */}
-                <Text style={[styles.legendLabel, { color: colors.text }]} numberOfLines={2}>
-                  {item.label}
-                </Text>
-                <Text style={[styles.legendValue, { color: colors.text }]}>{item.value}</Text>
-                <View style={[styles.dot, { backgroundColor: item.color }]} />
-              </View>
-            ))}
+            {segmentDefs.map((item) => {
+              const isNewClientsRow = item.key === 'clients';
+              const interactive = isNewClientsRow && typeof onPressNewClients === 'function';
+              const inner = (
+                <>
+                  <Text style={[styles.legendLabel, { color: colors.text }]} numberOfLines={2}>
+                    {item.label}
+                  </Text>
+                  <Text style={[styles.legendValue, { color: colors.text }]}>{item.value}</Text>
+                  <View style={[styles.dot, { backgroundColor: item.color }]} />
+                </>
+              );
+              if (interactive) {
+                return (
+                  <Pressable
+                    key={item.key}
+                    onPress={onPressNewClients}
+                    accessibilityRole="button"
+                    accessibilityLabel={t(
+                      'admin.insights.newClientsLegendA11y',
+                      '{{legend}}: {{count}}. Opens the list of new clients this month.',
+                      { legend: item.label, count: item.value }
+                    )}
+                    android_ripple={{ color: 'rgba(0,0,0,0.08)' }}
+                    style={({ pressed }) => [styles.legendRow, pressed && styles.legendRowPressed]}
+                  >
+                    {inner}
+                  </Pressable>
+                );
+              }
+              return (
+                <View key={item.key} style={styles.legendRow}>
+                  {inner}
+                </View>
+              );
+            })}
           </View>
         </View>
       )}
@@ -274,6 +303,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ECECF0',
     alignSelf: 'stretch',
+  },
+  legendRowPressed: {
+    opacity: 0.88,
   },
   dot: {
     width: 10,

@@ -375,6 +375,29 @@ function _formatSlotDateLine(slotDate: string) {
   return p.weekday ? `${p.weekday} · ${p.dayNum}` : slotDate;
 }
 
+/** End of appointment window in local time (ms). Past = fully finished. */
+function _appointmentEndMs(apt: AvailableTimeSlot): number {
+  const d = String(apt.slot_date || '');
+  const raw = apt.slot_time ? String(apt.slot_time) : '00:00';
+  const hhmm = raw.length >= 5 ? raw.slice(0, 5) : '00:00';
+  const [hhS, mmS] = hhmm.split(':');
+  const hh = parseInt(hhS ?? '0', 10) || 0;
+  const mm = parseInt(mmS ?? '0', 10) || 0;
+  const dur = typeof apt.duration_minutes === 'number' && apt.duration_minutes > 0 ? apt.duration_minutes : 60;
+  const parts = d.split('-').map((x) => parseInt(x, 10));
+  if (parts.length < 3 || parts.some((n) => !Number.isFinite(n))) return NaN;
+  const [yy, mo, day] = parts;
+  const start = new Date(yy!, mo! - 1, day!, hh, mm, 0, 0);
+  return start.getTime() + dur * 60 * 1000;
+}
+
+/** After end time → admin "remove" hard-deletes the row; before/at end → free slot like cancel. */
+function _isAppointmentFullyInPast(apt: AvailableTimeSlot): boolean {
+  const end = _appointmentEndMs(apt);
+  if (!Number.isFinite(end)) return false;
+  return end < Date.now();
+}
+
 function _adminAppointmentStatusLabel(status: string, tHe: (key: string, fallback: string) => string) {
   switch (status) {
     case 'confirmed':
@@ -1003,9 +1026,6 @@ export default function AdminAppointmentsScreen() {
   const [appointments, setAppointments] = useState<AvailableTimeSlot[]>([]);
   const [dayStart, setDayStart] = useState<string>('07:00');
   const [dayEnd, setDayEnd] = useState<string>('21:00');
-  const [showCancelModal, setShowCancelModal] = useState<boolean>(false);
-  const [selectedAppointment, setSelectedAppointment] = useState<AvailableTimeSlot | null>(null);
-  const [isCancelling, setIsCancelling] = useState<boolean>(false);
   const [markedDates, setMarkedDates] = useState<Set<string>>(new Set());
   /** Booked appointments per day (barber scope) — month grid badge */
   const [appointmentCountsByDate, setAppointmentCountsByDate] = useState<Record<string, number>>({});
@@ -1020,7 +1040,6 @@ export default function AdminAppointmentsScreen() {
   }>({ open: false, appointment: null, anchor: null });
 
   /** Open confirm dialog only after anchor sheet Modal unmounts — avoids invisible layer / wrong z-order (esp. Android). */
-  const pendingCancelAppointmentRef = useRef<AvailableTimeSlot | null>(null);
   const pendingDeleteAppointmentRef = useRef<AvailableTimeSlot | null>(null);
 
   const dayAptRefMap = useRef<Map<string, View>>(new Map());
@@ -1732,7 +1751,6 @@ export default function AdminAppointmentsScreen() {
   }, []);
 
   const openActionsMenu = useCallback((apt: AvailableTimeSlot, anchor?: AnchorRect) => {
-    pendingCancelAppointmentRef.current = null;
     pendingDeleteAppointmentRef.current = null;
     setActionsModal({
       open: true,
@@ -1784,30 +1802,13 @@ export default function AdminAppointmentsScreen() {
     setActionsModal({ open: false, appointment: null, anchor: null });
   }, []);
 
-  const beginCancelAppointmentFromSheet = useCallback(
-    (apt: AvailableTimeSlot) => {
-      pendingDeleteAppointmentRef.current = null;
-      pendingCancelAppointmentRef.current = apt;
-      requestCloseActionsModal();
-    },
-    [requestCloseActionsModal]
-  );
-
   const beginDeleteAppointmentFromSheet = useCallback(
     (apt: AvailableTimeSlot) => {
-      pendingCancelAppointmentRef.current = null;
       pendingDeleteAppointmentRef.current = apt;
       requestCloseActionsModal();
     },
     [requestCloseActionsModal]
   );
-
-  /** Fully tear down anchor sheet + cancel confirm — avoids a stuck full-screen Modal if close animation never completes. */
-  const closeCancelAppointmentModal = useCallback(() => {
-    setShowCancelModal(false);
-    setSelectedAppointment(null);
-    resetActionsModal();
-  }, [resetActionsModal]);
 
   /** Week view reads from rangeAppointments — keep it in sync after cancel/delete */
   const removeBookedFromRangeMap = useCallback((id: string, slotDate: string) => {
@@ -1822,80 +1823,16 @@ export default function AdminAppointmentsScreen() {
     });
   }, []);
 
-  const confirmCancelAppointment = useCallback(async () => {
-    if (!selectedAppointment) return;
-    setIsCancelling(true);
-    const apt = selectedAppointment;
-    const businessId = getBusinessId();
-    try {
-      const { error } = await supabase
-        .from('appointments')
-        .update({
-          status: 'cancelled',
-          is_available: true,
-          client_name: null,
-          client_phone: null,
-          service_name: 'Available Slot', // Set to default value instead of null
-        })
-        .eq('id', apt.id)
-        .eq('business_id', businessId)
-        .eq('is_available', false);
-
-      if (error) {
-        console.error('Error canceling appointment:', error);
-        resetActionsModal();
-        Alert.alert(
-          t('error.generic', 'Error'),
-          t('admin.appointments.cancelFailed', 'Could not release this slot. Please try again.')
-        );
-      } else {
-        try {
-          await checkWaitlistAndNotify(apt);
-        } catch (e) {}
-        const dateKey = String((apt as any).slot_date ?? '');
-        setAppointments((prev) => prev.filter((a) => a.id !== apt.id));
-        if (dateKey) removeBookedFromRangeMap(apt.id, dateKey);
-        closeCancelAppointmentModal();
-        void reloadMonthMarks();
-        if (monthDayModalDate && dateKey === monthDayModalDate) {
-          setModalDayAppointments((prev) => prev.filter((a) => a.id !== apt.id));
-        }
-      }
-    } catch (e) {
-      console.error('Error in confirmCancelAppointment:', e);
-      resetActionsModal();
-      Alert.alert(
-        t('error.generic', 'Error'),
-        t('admin.appointments.cancelFailed', 'Could not release this slot. Please try again.')
-      );
-    } finally {
-      setIsCancelling(false);
-    }
-  }, [
-    selectedAppointment,
-    removeBookedFromRangeMap,
-    reloadMonthMarks,
-    monthDayModalDate,
-    resetActionsModal,
-    closeCancelAppointmentModal,
-    t,
-  ]);
-
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [appointmentToDelete, setAppointmentToDelete] = useState<AvailableTimeSlot | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   /** After anchor sheet finishes its close animation — show confirm (must run after delete modal state hooks exist). */
   const onAnchorSheetFullyDismissed = useCallback(() => {
-    const pendingCancel = pendingCancelAppointmentRef.current;
     const pendingDelete = pendingDeleteAppointmentRef.current;
-    pendingCancelAppointmentRef.current = null;
     pendingDeleteAppointmentRef.current = null;
     resetActionsModal();
-    if (pendingCancel) {
-      setSelectedAppointment(pendingCancel);
-      setShowCancelModal(true);
-    } else if (pendingDelete) {
+    if (pendingDelete) {
       setAppointmentToDelete(pendingDelete);
       setShowDeleteModal(true);
     }
@@ -1910,36 +1847,70 @@ export default function AdminAppointmentsScreen() {
   const confirmDeleteAppointment = useCallback(async () => {
     if (!appointmentToDelete) return;
     setIsDeleting(true);
+    const apt = appointmentToDelete;
+    const hardDelete = _isAppointmentFullyInPast(apt);
+    const businessId = getBusinessId();
     try {
-      const { error } = await supabase
-        .from('appointments')
-        .delete()
-        .eq('id', appointmentToDelete.id)
-        .eq('business_id', appointmentToDelete.business_id);
+      if (hardDelete) {
+        const { error } = await supabase
+          .from('appointments')
+          .delete()
+          .eq('id', apt.id)
+          .eq('business_id', apt.business_id);
 
-      if (error) {
-        console.error('Error deleting appointment:', error);
-        resetActionsModal();
-        Alert.alert(
-          t('error.generic', 'Error'),
-          t('admin.appointments.deleteFailed', 'Could not delete this appointment. Please try again.')
-        );
-      } else {
-        const dateKey = String((appointmentToDelete as any).slot_date ?? '');
-        setAppointments((prev) => prev.filter((a) => a.id !== appointmentToDelete.id));
-        if (dateKey) removeBookedFromRangeMap(appointmentToDelete.id, dateKey);
-        closeDeleteAppointmentModal();
-        void reloadMonthMarks();
-        if (monthDayModalDate && dateKey === monthDayModalDate) {
-          setModalDayAppointments((prev) => prev.filter((a) => a.id !== appointmentToDelete.id));
+        if (error) {
+          console.error('Error deleting appointment:', error);
+          resetActionsModal();
+          Alert.alert(
+            t('error.generic', 'Error'),
+            t('admin.appointments.deleteFailed', 'Could not delete this appointment. Please try again.')
+          );
+          return;
         }
+      } else {
+        const { error } = await supabase
+          .from('appointments')
+          .update({
+            status: 'cancelled',
+            is_available: true,
+            client_name: null,
+            client_phone: null,
+            service_name: 'Available Slot',
+          })
+          .eq('id', apt.id)
+          .eq('business_id', businessId)
+          .eq('is_available', false);
+
+        if (error) {
+          console.error('Error freeing appointment slot:', error);
+          resetActionsModal();
+          Alert.alert(
+            t('error.generic', 'Error'),
+            t('admin.appointments.cancelFailed', 'Could not release this slot. Please try again.')
+          );
+          return;
+        }
+        try {
+          await checkWaitlistAndNotify(apt);
+        } catch (e) {}
+      }
+
+      const dateKey = String((apt as any).slot_date ?? '');
+      setAppointments((prev) => prev.filter((a) => a.id !== apt.id));
+      if (dateKey) removeBookedFromRangeMap(apt.id, dateKey);
+      closeDeleteAppointmentModal();
+      void reloadMonthMarks();
+      if (monthDayModalDate && dateKey === monthDayModalDate) {
+        setModalDayAppointments((prev) => prev.filter((a) => a.id !== apt.id));
       }
     } catch (e) {
       console.error('Error in confirmDeleteAppointment:', e);
       resetActionsModal();
       Alert.alert(
         t('error.generic', 'Error'),
-        t('admin.appointments.deleteFailed', 'Could not delete this appointment. Please try again.')
+        hardDelete
+          ? t('admin.appointments.deleteFailed', 'Could not delete this appointment. Please try again.')
+          : t('admin.appointments.cancelFailed', 'Could not release this slot. Please try again.')
       );
     } finally {
       setIsDeleting(false);
@@ -2883,20 +2854,6 @@ export default function AdminAppointmentsScreen() {
 
                     <PressableScale
                       style={styles.actionsSecondaryCard}
-                      accessibilityLabel={tHe('admin.appointments.cancelAndFree', 'ביטול ושחרור משבצת')}
-                      onPress={() => {
-                        const a = actionsModal.appointment;
-                        if (a) beginCancelAppointmentFromSheet(a);
-                      }}
-                    >
-                      <View style={styles.actionsSecondaryIconWarn}>
-                        <Ionicons name="close-circle-outline" size={18} color="#EA580C" />
-                      </View>
-                      <Text style={styles.actionsSecondaryTitleWarn}>{tHe('admin.appointments.cancelAndFree', 'ביטול ושחרור משבצת')}</Text>
-                    </PressableScale>
-
-                    <PressableScale
-                      style={styles.actionsSecondaryCard}
                       accessibilityLabel={tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
                       onPress={() => {
                         const a = actionsModal.appointment;
@@ -2924,47 +2881,7 @@ export default function AdminAppointmentsScreen() {
         </AppointmentActionsAnchorSheet>
       ) : null}
 
-      {/* iOS-style confirmation modal */}
-      <Modal
-        visible={showCancelModal}
-        transparent
-        animationType="fade"
-        onRequestClose={closeCancelAppointmentModal}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.iosAlertContainer}>
-            <Text style={styles.iosAlertTitle}>{tHe('appointments.cancel.title', 'ביטול תור')}</Text>
-            <Text style={styles.iosAlertMessage}>
-              {tHe('admin.appointments.cancelMessage', 'פעולה זו תפנה את הזמן, תסמן את התור כבוטל ותשחרר את המשבצת להזמנה מחדש.')}
-            </Text>
-            <View style={styles.iosAlertButtonsRow}>
-              <TouchableOpacity
-                style={styles.iosAlertButton}
-                activeOpacity={0.8}
-                onPress={closeCancelAppointmentModal}
-                disabled={isCancelling}
-              >
-                <Text style={[styles.iosAlertButtonDefaultText, { color: calendarPrimary }]}>{tHe('cancel', 'ביטול')}</Text>
-              </TouchableOpacity>
-              <View style={styles.iosAlertButtonDivider} />
-              <TouchableOpacity
-                style={styles.iosAlertButton}
-                activeOpacity={0.8}
-                onPress={confirmCancelAppointment}
-                disabled={isCancelling}
-              >
-                {isCancelling ? (
-                  <ActivityIndicator size="small" color="#FF3B30" />
-                ) : (
-                  <Text style={styles.iosAlertButtonDestructiveText}>{tHe('confirm', 'אישור')}</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Delete confirmation modal */}
+      {/* Remove appointment: past = DB delete, future/upcoming = free slot */}
       <Modal
         visible={showDeleteModal}
         transparent
@@ -2975,7 +2892,15 @@ export default function AdminAppointmentsScreen() {
           <View style={styles.iosAlertContainer}>
             <Text style={styles.iosAlertTitle}>{tHe('admin.appointments.deleteTitle', 'מחיקת תור')}</Text>
             <Text style={styles.iosAlertMessage}>
-              {tHe('admin.appointments.deleteMessage', 'פעולה זו תמחק את התור לצמיתות. לא ניתן לבטל פעולה זו.')}
+              {appointmentToDelete && _isAppointmentFullyInPast(appointmentToDelete)
+                ? tHe(
+                    'admin.appointments.smartRemoveMessagePast',
+                    'התור כבר הסתיים. הפעולה תמחק את הרשומה לצמיתות (כאילו לא היה).'
+                  )
+                : tHe(
+                    'admin.appointments.smartRemoveMessageFuture',
+                    'התור עדיין לפנינו. המשבצת תשוחרר ויהיה אפשר לקבוע תור אחר במקום.'
+                  )}
             </Text>
             <View style={styles.iosAlertButtonsRow}>
               <TouchableOpacity

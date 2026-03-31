@@ -54,7 +54,8 @@
  * פולסים: pulseemFromNumber, pulseem_from_number (ברירת מחדל clientName), pulseemSubPassword
  *
  * SMS לבעל המערכת אחרי onboarding מוצלח (חשבון Pulseem ראשי — PULSEEM_MAIN_API_KEY):
- *   ONBOARDING_NOTIFY_SMS_PHONE — יעד (ברירת מחדל 0502307500 אם לא מוגדר)
+ *   ONBOARDING_NOTIFY_SMS_PHONE — יעד(ים): מספרים מופרדים בפסיק/נקודה-פסיק/שורה חדשה
+ *     ברירת מחדל: 0502307500,0527488779
  *   ONBOARDING_WEBHOOK_FROM_NUMBER — Secret: שולח SMS ייעודי לפונקציה זו (למשל 0508085737); עדיפות ראשונה
  *   ONBOARDING_NOTIFY_SMS_FROM — שולח חלופי; אחרת PULSEEM_REST_FROM_NUMBER / PULSEEM_FROM_NUMBER / PULSEEM_OTP_FROM_NUMBER
  *   אם אף אחד לא מוגדר — ברירת מחדל קודית לשולח: 0508085737
@@ -501,7 +502,10 @@ async function invokeProvision(
 }
 
 const PULSEEM_REST_SEND = "https://api.pulseem.com/api/v1/SmsApi/SendSms";
-const ONBOARDING_OWNER_SMS_TEXT = "מזל טוב ! יש לך לקוח חדש";
+const ONBOARDING_OWNER_SMS_TEXT =
+  "מזל טוב אדיר ואיתי האלופים ! יש לכם לקוח חדש";
+
+const DEFAULT_NOTIFY_SMS_PHONES = "0502307500,0527488779";
 
 function phoneDigitsSms(raw: string): string {
   return String(raw || "").replace(/\D/g, "");
@@ -513,6 +517,24 @@ function normalizeSmsDestination(raw: string): string {
   if (d.startsWith("0") && d.length >= 9 && d.length <= 11) return "972" + d.slice(1);
   if (d.length === 9 && /^5\d{8}$/.test(d)) return "972" + d;
   return d;
+}
+
+/** רשימת יעדי SMS — פסיק / ; / שורה חדשה, ללא כפילויות */
+function parseNotifyPhoneNumbers(raw: string): string[] {
+  const parts = raw
+    .split(/[,;\n\r]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of parts) {
+    const n = normalizeSmsDestination(p);
+    if (n.length < 11) continue;
+    if (seen.has(n)) continue;
+    seen.add(n);
+    out.push(n);
+  }
+  return out;
 }
 
 function classifyPulseemRestJson(
@@ -632,6 +654,7 @@ function pulseemRestIsAsyncOnboarding(): boolean {
 async function sendOwnerNewClientSmsBestEffort(): Promise<{
   sent: boolean;
   skipReason?: string;
+  destinations?: number;
 }> {
   if (/^(1|true|yes)$/i.test(
     String(Deno.env.get("ONBOARDING_NOTIFY_SMS_DISABLED") ?? "").trim(),
@@ -644,11 +667,11 @@ async function sendOwnerNewClientSmsBestEffort(): Promise<{
     return { sent: false, skipReason: "missing_PULSEEM_MAIN_API_KEY" };
   }
 
-  const rawPhone =
+  const rawPhones =
     (Deno.env.get("ONBOARDING_NOTIFY_SMS_PHONE") ?? "").trim() ||
-    "0502307500";
-  const toNum = normalizeSmsDestination(rawPhone);
-  if (toNum.length < 11) {
+    DEFAULT_NOTIFY_SMS_PHONES;
+  const toNums = parseNotifyPhoneNumbers(rawPhones);
+  if (toNums.length === 0) {
     return { sent: false, skipReason: "invalid_phone" };
   }
 
@@ -661,15 +684,20 @@ async function sendOwnerNewClientSmsBestEffort(): Promise<{
     "0508085737"
   );
 
-  const ref = crypto.randomUUID().replace(/-/g, "").slice(0, 20);
+  const sendId = crypto.randomUUID().replace(/-/g, "").slice(0, 20);
+  const referenceList = toNums.map(() =>
+    crypto.randomUUID().replace(/-/g, "").slice(0, 20)
+  );
+  const textList = toNums.map(() => ONBOARDING_OWNER_SMS_TEXT);
+
   const body = {
-    sendId: ref,
+    sendId,
     isAsync: pulseemRestIsAsyncOnboarding(),
     smsSendData: {
       fromNumber: fromNum,
-      toNumberList: [toNum],
-      referenceList: [ref],
-      textList: [ONBOARDING_OWNER_SMS_TEXT],
+      toNumberList: toNums,
+      referenceList,
+      textList,
       isAutomaticUnsubscribeLink: false,
     },
   };
@@ -688,8 +716,8 @@ async function sendOwnerNewClientSmsBestEffort(): Promise<{
     throw new Error(`Pulseem REST ${res.status}: ${responseText.slice(0, 240)}`);
   }
   assertPulseemRestJsonLenient(responseText);
-  console.log("[onboarding-webhook] owner notify SMS ok, to=", toNum);
-  return { sent: true };
+  console.log("[onboarding-webhook] owner notify SMS ok, to count=", toNums.length);
+  return { sent: true, destinations: toNums.length };
 }
 
 serve(async (req) => {

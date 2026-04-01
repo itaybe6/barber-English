@@ -1876,6 +1876,8 @@ export default function AdminAppointmentsScreen() {
             client_name: null,
             client_phone: null,
             service_name: 'Available Slot',
+            client_reminder_sent_at: null,
+            admin_reminder_sent_at: null,
           })
           .eq('id', apt.id)
           .eq('business_id', businessId)

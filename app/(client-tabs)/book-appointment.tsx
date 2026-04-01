@@ -134,6 +134,7 @@ const bookingApi = {
       
       const updateData = {
         is_available: false,
+        status: 'confirmed' as const,
         client_name: clientName,
         client_phone: clientPhone,
         service_name: serviceName,
@@ -141,6 +142,8 @@ const bookingApi = {
         barber_id: barberId || null,
         service_id: serviceId || null,
         user_id: userId || null,
+        client_reminder_sent_at: null,
+        admin_reminder_sent_at: null,
         ...(typeof durationMinutes === 'number' ? { duration_minutes: durationMinutes } : {}),
       };
       
@@ -183,6 +186,7 @@ const bookingApi = {
       // First try to update an existing available row for this date/time and user
       const updateData = {
         is_available: false,
+        status: 'confirmed' as const,
         client_name: clientName,
         client_phone: clientPhone,
         service_name: serviceName,
@@ -194,9 +198,15 @@ const bookingApi = {
       };
       
       
+      const updateDataWithReminders = {
+        ...updateData,
+        client_reminder_sent_at: null,
+        admin_reminder_sent_at: null,
+      };
+
       let updateQuery = supabase
         .from('appointments')
-        .update(updateData)
+        .update(updateDataWithReminders)
         .eq('slot_date', slotDate)
         .eq('slot_time', slotTime)
         .eq('business_id', businessId)
@@ -237,6 +247,7 @@ const bookingApi = {
         slot_date: slotDate,
         slot_time: slotTime,
         is_available: false,
+        status: 'confirmed' as const,
         client_name: clientName,
         client_phone: clientPhone,
         service_name: serviceName,
@@ -326,6 +337,8 @@ const bookingApi = {
           client_name: null,
           client_phone: null,
           service_name: 'Available Slot', // Set to default value instead of null
+          client_reminder_sent_at: null,
+          admin_reminder_sent_at: null,
         })
         .eq('id', slotId)
         .eq('business_id', businessId)

@@ -123,6 +123,8 @@ const clientAppointmentsApi = {
           client_name: null,
           client_phone: null,
           service_name: 'Available Slot',
+          client_reminder_sent_at: null,
+          admin_reminder_sent_at: null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', slotId)

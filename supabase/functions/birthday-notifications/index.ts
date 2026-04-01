@@ -6,6 +6,7 @@
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { jwtVerify } from "https://deno.land/x/jose@v5.2.3/index.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -38,6 +39,32 @@ function json(body: Record<string, unknown>, status = 200): Response {
     status,
     headers: { ...cors, "Content-Type": "application/json" },
   });
+}
+
+function jwtSigningSecretForVerify(): string {
+  return (
+    Deno.env.get("SUPABASE_JWT_SECRET") ??
+    Deno.env.get("JWT_SECRET") ??
+    ""
+  ).trim();
+}
+
+async function authorizeInvokeBearer(token: string): Promise<boolean> {
+  if (!token || !serviceRoleKey) return false;
+  if (token === serviceRoleKey) return true;
+  if (!token.startsWith("eyJ")) return false;
+  const secret = jwtSigningSecretForVerify();
+  if (!secret) return false;
+  try {
+    const { payload } = await jwtVerify(
+      token,
+      new TextEncoder().encode(secret),
+      { algorithms: ["HS256"] },
+    );
+    return String(payload.role ?? "") === "service_role";
+  } catch {
+    return false;
+  }
 }
 
 function getJerusalemParts(d = new Date()): {
@@ -120,7 +147,7 @@ serve(async (req) => {
   }
 
   const token = bearerOrApikeyToken(req);
-  if (!serviceRoleKey || token !== serviceRoleKey) {
+  if (!(await authorizeInvokeBearer(token))) {
     return json({ error: "Unauthorized" }, 401);
   }
 

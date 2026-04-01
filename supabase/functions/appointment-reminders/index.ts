@@ -4,10 +4,12 @@
  * - client_reminder: business_profile.client_reminder_minutes (business-wide), quiet hours Asia/Jerusalem 08:00–21:00
  * - admin_reminder: business_profile.reminder_minutes_by_user[barber_id], optional (null/0 = off), any time
  *
- * Invoke: Authorization: Bearer <SERVICE_ROLE_KEY> (pg_cron via vault JWT).
+ * Invoke: Authorization: Bearer <service_role> — same string as Edge SUPABASE_SERVICE_ROLE_KEY,
+ * or legacy eyJ… JWT signed with project JWT Secret (verified via jose when strings differ).
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { jwtVerify } from "https://deno.land/x/jose@v5.2.3/index.ts";
 import { DateTime } from "npm:luxon@3.5.0";
 
 const TZ = "Asia/Jerusalem";
@@ -17,7 +19,40 @@ const FALLBACK_HOUR = 20;
 const FALLBACK_MINUTE = 59;
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const serviceRoleKey = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
+
+function jwtSigningSecretForVerify(): string {
+  return (
+    Deno.env.get("SUPABASE_JWT_SECRET") ??
+    Deno.env.get("JWT_SECRET") ??
+    ""
+  ).trim();
+}
+
+/** pg_net often sends legacy eyJ service_role; Edge may use sb_secret_ — verify HS256 when needed. */
+async function authorizeInvokeBearer(token: string): Promise<boolean> {
+  if (!token || !serviceRoleKey) return false;
+  if (token === serviceRoleKey) return true;
+  if (!token.startsWith("eyJ")) return false;
+  const secret = jwtSigningSecretForVerify();
+  if (!secret) {
+    console.error(
+      "[appointment-reminders] auth: eyJ bearer but no JWT signing secret in Edge env",
+    );
+    return false;
+  }
+  try {
+    const { payload } = await jwtVerify(
+      token,
+      new TextEncoder().encode(secret),
+      { algorithms: ["HS256"] },
+    );
+    return String(payload.role ?? "") === "service_role";
+  } catch (e) {
+    console.error("[appointment-reminders] auth: jwt verify failed", String(e));
+    return false;
+  }
+}
 
 function json(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -107,7 +142,7 @@ serve(async (req) => {
 
   const auth = req.headers.get("Authorization") || "";
   const token = auth.replace(/^Bearer\s+/i, "").trim();
-  if (!token || token !== serviceRoleKey) {
+  if (!(await authorizeInvokeBearer(token))) {
     return json({ ok: false, error: "unauthorized" }, 401);
   }
 
@@ -159,7 +194,7 @@ serve(async (req) => {
   const barberIdsNeedingUser = [
     ...new Set(
       (appointments ?? [])
-        .filter((a) => !a.admin_reminder_sent_at && a.barber_id)
+        .filter((a) => a.barber_id)
         .map((a) => String(a.barber_id)),
     ),
   ];
@@ -198,7 +233,6 @@ serve(async (req) => {
   for (const row of appointments ?? []) {
     examined++;
     const profile = profileByBusiness[String(row.business_id)];
-    const bizName = String(profile?.display_name ?? "").trim() || "המספרה";
 
     const apptStart = appointmentStartLocal(row.slot_date, row.slot_time);
     if (!apptStart) {
@@ -212,6 +246,7 @@ serve(async (req) => {
     const timeLabel = apptStart.toFormat("HH:mm");
     const dateLabel = apptStart.toFormat("dd.MM.yyyy");
     const serviceName = String(row.service_name ?? "שירות").trim();
+    const clientNameForMsg = String(row.client_name ?? "").trim();
 
     // —— Client reminder ——
     if (!row.client_reminder_sent_at && insideClientWindow) {
@@ -220,15 +255,24 @@ serve(async (req) => {
       if (phone && lead !== null) {
         const sendAtLocal = computeClientSendAtLocal(apptStart, lead);
         if (sendAtLocal <= nowLocal) {
+          const greeting = clientNameForMsg
+            ? `היי ${clientNameForMsg}`
+            : "שלום";
+          const barberName = row.barber_id
+            ? (barberById[String(row.barber_id)]?.name ?? "").trim()
+            : "";
+          const withBarber = barberName ? ` אצל ${barberName}` : "";
           const title = "תזכורת לתור";
           const content =
-            `${bizName}: תזכורת — יש לך תור ל${serviceName} ב-${dateLabel} בשעה ${timeLabel}. נשמח לראותך!`;
+            `${greeting},\n\n` +
+            `יש לך תור ל${serviceName}${withBarber} בתאריך ${dateLabel} בשעה ${timeLabel}.\n\n` +
+            `נשמח לראותך!`;
 
           const { error: insErr } = await admin.from("notifications").insert({
             title,
             content,
             type: "client_reminder",
-            recipient_name: String(row.client_name ?? "לקוח").trim() || "לקוח",
+            recipient_name: clientNameForMsg || "לקוח",
             recipient_phone: phone,
             business_id: row.business_id,
             appointment_id: row.id,

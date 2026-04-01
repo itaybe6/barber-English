@@ -39,7 +39,7 @@ export function WaitlistHomeFabPanel({
   const { t } = useTranslation();
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { width: winW, height: winH } = useWindowDimensions();
+  const { height: winH } = useWindowDimensions();
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
@@ -56,8 +56,10 @@ export function WaitlistHomeFabPanel({
     setIsOpen(true);
   }, []);
 
-  const listMaxHeight = Math.round(winH * 0.48);
-  const sheetMaxHeight = Math.round(winH * 0.88);
+  const listMaxHeight = Math.round(winH * 0.5);
+  const sheetMaxHeight = Math.round(winH * 0.9);
+  const rtl = I18nManager.isRTL;
+  const textAlign = rtl ? ('right' as const) : ('left' as const);
 
   if (entries.length === 0) return null;
 
@@ -133,7 +135,7 @@ export function WaitlistHomeFabPanel({
               hitSlop={14}
               style={[
                 styles.sheetCloseBtn,
-                I18nManager.isRTL ? { left: 8 } : { right: 8 },
+                rtl ? { right: 8 } : { left: 8 },
               ]}
               accessibilityRole="button"
               accessibilityLabel={t('close')}
@@ -141,98 +143,90 @@ export function WaitlistHomeFabPanel({
               <Ionicons name="close" size={26} color={colors.textSecondary} />
             </Pressable>
 
+            <View
+              style={[
+                styles.sheetHeaderRow,
+                { flexDirection: rtl ? 'row-reverse' : 'row' },
+              ]}
+            >
+              <View style={[styles.sheetAccentBar, { backgroundColor: colors.primary }]} />
+              <View style={styles.sheetHeaderText}>
+                <Text style={[styles.sheetTitle, { color: colors.text, textAlign }]}>
+                  {t('waitlist.title')}
+                </Text>
+                <Text
+                  style={[styles.sheetSubtitle, { color: colors.textSecondary, textAlign }]}
+                >
+                  {entries.length === 1
+                    ? t('waitlist.waitingFor', { service: entries[0].service_name })
+                    : t('waitlist.waitingForMany', { count: entries.length })}
+                </Text>
+              </View>
+            </View>
+
             <ScrollView
+              style={{ maxHeight: listMaxHeight }}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
-              contentContainerStyle={styles.sheetScrollContent}
+              nestedScrollEnabled
             >
-              <View
-                style={[
-                  styles.sheetHeaderRow,
-                  { flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row' },
-                ]}
-              >
-                <View style={[styles.sheetAccentBar, { backgroundColor: colors.primary }]} />
-                <View style={styles.sheetHeaderText}>
-                  <Text style={[styles.sheetTitle, { color: colors.text }]}>
-                    {t('waitlist.title')}
-                  </Text>
-                  <Text style={[styles.sheetSubtitle, { color: colors.textSecondary }]}>
-                    {entries.length === 1
-                      ? t('waitlist.waitingFor', { service: entries[0].service_name })
-                      : t('waitlist.waitingForMany', { count: entries.length })}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={{ maxHeight: listMaxHeight }}>
-                <ScrollView
-                  nestedScrollEnabled
-                  showsVerticalScrollIndicator={false}
-                  keyboardShouldPersistTaps="handled"
-                >
-                  {entries.map((entry) => {
-                    const periodIcon =
-                      entry.time_period === 'morning'
-                        ? 'sunny'
-                        : entry.time_period === 'afternoon'
-                          ? 'partly-sunny'
-                          : entry.time_period === 'evening'
-                            ? 'moon'
-                            : 'time';
-                    const timeLine =
-                      entry.time_period === 'any'
-                        ? `${t('time_period.any')} — ${t('time_period.flexible')}`
-                        : `${t(`time_period.${entry.time_period}`)} · ${t(`time_period.range.${entry.time_period}` as never)}`;
-                    const periodColor =
-                      entry.time_period === 'morning' ? '#F5A623' : colors.primary;
-                    return (
-                      <View
-                        key={entry.id}
-                        style={[
-                          styles.entryCard,
-                          {
-                            borderColor: primaryBorder,
-                            backgroundColor: colors.background,
-                          },
-                        ]}
+              {entries.map((entry) => {
+                const periodIcon =
+                  entry.time_period === 'morning'
+                    ? 'sunny'
+                    : entry.time_period === 'afternoon'
+                      ? 'partly-sunny'
+                      : entry.time_period === 'evening'
+                        ? 'moon'
+                        : 'time';
+                const timeLine =
+                  entry.time_period === 'any'
+                    ? `${t('time_period.any')} — ${t('time_period.flexible')}`
+                    : `${t(`time_period.${entry.time_period}`)} · ${t(`time_period.range.${entry.time_period}` as never)}`;
+                const periodColor =
+                  entry.time_period === 'morning' ? '#F5A623' : colors.primary;
+                return (
+                  <View
+                    key={entry.id}
+                    style={[
+                      styles.entryCard,
+                      {
+                        borderColor: primaryBorder,
+                        backgroundColor: colors.background,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[styles.entryRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}
+                    >
+                      <Ionicons name="calendar-outline" size={20} color={colors.primary} />
+                      <Text
+                        style={[styles.entryText, { color: colors.text, textAlign }]}
+                        numberOfLines={2}
                       >
-                        <View
-                          style={[
-                            styles.entryRow,
-                            { flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row' },
-                          ]}
-                        >
-                          <Ionicons name="calendar-outline" size={20} color={colors.primary} />
-                          <Text
-                            style={[styles.entryText, { color: colors.text }]}
-                            numberOfLines={2}
-                          >
-                            {formatWaitlistDate(entry.requested_date)}
-                          </Text>
-                        </View>
-                        <View
-                          style={[
-                            styles.entryRow,
-                            {
-                              marginTop: 10,
-                              flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row',
-                            },
-                          ]}
-                        >
-                          <Ionicons name={periodIcon} size={20} color={periodColor} />
-                          <Text
-                            style={[styles.entryText, { color: colors.text }]}
-                            numberOfLines={2}
-                          >
-                            {timeLine}
-                          </Text>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </ScrollView>
-              </View>
+                        {formatWaitlistDate(entry.requested_date)}
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.entryRow,
+                        {
+                          marginTop: 10,
+                          flexDirection: rtl ? 'row-reverse' : 'row',
+                        },
+                      ]}
+                    >
+                      <Ionicons name={periodIcon} size={20} color={periodColor} />
+                      <Text
+                        style={[styles.entryText, { color: colors.text, textAlign }]}
+                        numberOfLines={2}
+                      >
+                        {timeLine}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })}
             </ScrollView>
 
             <TouchableOpacity
@@ -332,9 +326,6 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 20,
   },
-  sheetScrollContent: {
-    paddingBottom: 8,
-  },
   sheetHeaderRow: {
     alignItems: 'stretch',
     gap: 12,
@@ -356,16 +347,12 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '800',
     letterSpacing: -0.5,
-    textAlign: 'left',
-    writingDirection: 'ltr',
   },
   sheetSubtitle: {
     fontSize: 15,
     fontWeight: '600',
     marginTop: 6,
     letterSpacing: -0.2,
-    textAlign: 'left',
-    writingDirection: 'ltr',
   },
   entryCard: {
     borderRadius: 16,
@@ -382,8 +369,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     letterSpacing: -0.2,
-    textAlign: 'left',
-    writingDirection: 'ltr',
   },
   removeBtn: {
     marginTop: 8,

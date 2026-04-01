@@ -42,6 +42,10 @@ verify_jwt = false
 [functions.greeninvoice-connect]
 verify_jwt = false
 
+# Green Invoice: issue receipt (document) for a completed appointment — same caller auth as greeninvoice-connect.
+[functions.greeninvoice-issue-receipt]
+verify_jwt = false
+
 # Database Webhook on notifications INSERT — Authorization: Bearer <SERVICE_ROLE_KEY>
 [functions.notification-push-sms]
 verify_jwt = true

@@ -793,6 +793,8 @@
       "saveFailed": "Не удалось сохранить услугу.",
       "saveSuccess": "Услуга успешно сохранена",
       "orderSaveFailed": "Не удалось сохранить заказ на услугу. Попробуйте еще раз.",
+      "emptyTitle": "Пока нет услуг",
+      "emptySubtitle": "Добавьте первую услугу, чтобы начать",
       "reorderHint": "Перетащите ≡, чтобы изменить порядок услуг.",
       "fabAddHint": "Долгое нажатие на строку — порядок · + внизу — добавить"
     },
@@ -1602,9 +1604,24 @@
       "disconnectConfirmMessage": "Удалить это соединение? Вы можете подключиться снова с новым ключом.",
       "saved": "Подключено успешно",
       "saveFailed": "Не удалось сохранить соединение",
-      "comingSoon": "Далее: выдавать клиентам чеки из приложения.",
+      "comingSoon": "Чек для завершённой записи можно выдать в разделе ниже.",
+      "receipt": {
+        "sectionTitle": "Выдать чек (Green Invoice)",
+        "sectionSubtitle": "Выберите завершённую запись в отображаемом месяце, затем выдайте чек клиенту за услугу.",
+        "sandboxServerNote": "Песочница: в Supabase → Edge Functions → greeninvoice-issue-receipt → Secrets установите GREEN_INVOICE_USE_SANDBOX=true и используйте ключи API тестового аккаунта Morning (sandbox.d.greeninvoice.co.il).",
+        "loadingAppointments": "Загрузка записей…",
+        "noCompletedInMonth": "Нет завершённых записей в этом месяце или у услуги нет цены — для чека нужна сумма.",
+        "anonymousClient": "Клиент",
+        "issueButton": "Выдать чек",
+        "issueFailedTitle": "Не удалось выдать чек",
+        "successTitle": "Чек создан",
+        "successBody": "Документ создан в Green Invoice.",
+        "successWithNumber": "Документ создан. Номер: {{number}}",
+        "sandboxBadge": "Режим Sandbox — документ создан только в тестовой среде.",
+        "openDocument": "Открыть документ"
+      },
       "errors": {
-        "edge_function_not_deployed": "Edge-функция greeninvoice-connect не развёрнута в этом проекте Supabase (404). Выполните: supabase functions deploy greeninvoice-connect или разверните через Dashboard → Edge Functions.",
+        "edge_function_not_deployed": "Edge-функция Green Invoice не развёрнута (404). Выполните: supabase functions deploy greeninvoice-connect и supabase functions deploy greeninvoice-issue-receipt.",
         "invoke_network": "Не удалось связаться с сервером. Попробуйте еще раз.",
         "invalid_session": "Пожалуйста, войдите снова.",
         "forbidden_not_admin": "Подключить Green Invoice может только бизнес-администратор.",
@@ -1612,6 +1629,15 @@
         "missing_credentials": "Требуется идентификатор и секрет ключа API.",
         "missing_caller_context": "Вход не обнаружен. Выйдите и войдите снова.",
         "forbidden_wrong_business": "Пользователь не относится к этому бизнесу. Войдите снова.",
+        "missing_appointment_id": "Запись не выбрана.",
+        "appointment_not_found": "Запись не найдена или не принадлежит этому бизнесу.",
+        "appointment_not_completed": "Чек можно выдать только за завершённую запись.",
+        "appointment_invalid": "Недопустимая запись для выставления.",
+        "appointment_price_unknown": "Не удалось определить цену услуги — обновите каталог услуг.",
+        "greeninvoice_not_connected": "Сначала подключите Green Invoice.",
+        "decrypt_failed": "Не удалось расшифровать сохранённые учётные данные.",
+        "greeninvoice_document_failed": "Green Invoice отклонил создание документа.",
+        "greeninvoice_request_failed": "Запрос к Green Invoice не выполнен.",
         "unknown": "Что-то пошло не так. Попробуйте еще раз."
       }
     }

@@ -6,12 +6,24 @@
  * Encryption: PULSEEM_FIELD_ENCRYPTION_KEY (same as Pulseem fields).
  *
  * Green Invoice token: POST {base}/v1/account/token with JSON { id, secret }; JWT in X-Authorization-Bearer.
+ * Sandbox: set project/function secret GREEN_INVOICE_USE_SANDBOX=true — base becomes https://sandbox.d.greeninvoice.co.il/api (same as green-invoice Python SDK).
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encryptPulseemField } from "./pulseemFieldCrypto.ts";
 
-const GREEN_LIVE = "https://api.greeninvoice.co.il/api/v1/account/token";
+const GREEN_LIVE_BASE = "https://api.greeninvoice.co.il/api";
+const GREEN_SANDBOX_BASE = "https://sandbox.d.greeninvoice.co.il/api";
+
+function useSandboxEnv(): boolean {
+  const v = (Deno.env.get("GREEN_INVOICE_USE_SANDBOX") ?? "").trim().toLowerCase();
+  return v === "true" || v === "1" || v === "yes";
+}
+
+function tokenUrl(): string {
+  const base = useSandboxEnv() ? GREEN_SANDBOX_BASE : GREEN_LIVE_BASE;
+  return `${base}/v1/account/token`;
+}
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -37,7 +49,7 @@ async function fetchGreenInvoiceJwt(
     return { ok: false, message: "חסר מזהה מפתח או מפתח סודי" };
   }
   try {
-    const res = await fetch(GREEN_LIVE, {
+    const res = await fetch(tokenUrl(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, secret }),

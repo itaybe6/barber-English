@@ -372,6 +372,7 @@ export function useAdminAddAppointmentForm({ initialDateKey, onSaveSuccess, onSu
         slot_date: dateString,
         slot_time: `${selectedTime}:00`,
         is_available: false,
+        status: 'confirmed',
         client_name: selectedClient.name,
         client_phone: selectedClient.phone,
         service_name: selectedService.name,

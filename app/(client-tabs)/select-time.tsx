@@ -348,6 +348,8 @@ export default function SelectTimeScreen() {
         client_name: null,
         client_phone: null,
         service_name: 'Available Slot', // Set to default value instead of null
+        client_reminder_sent_at: null,
+        admin_reminder_sent_at: null,
       })
       .eq('id', appointmentId)
       .eq('business_id', businessId);
@@ -370,6 +372,7 @@ export default function SelectTimeScreen() {
       // Try update existing free slot at date+time
       const updateData = {
         is_available: false,
+        status: 'confirmed' as const,
         client_name: user?.name || 'לקוח',
         client_phone: user?.phone || '',
         service_name: serviceName,
@@ -378,6 +381,8 @@ export default function SelectTimeScreen() {
         service_id: serviceId || null,
         barber_id: barberId || null,
         user_id: user?.id || null,
+        client_reminder_sent_at: null,
+        admin_reminder_sent_at: null,
       };
       // 1) Find a single free-slot row id to update (scoped by barber/global)
       const baseSelect = () =>
@@ -457,6 +462,7 @@ export default function SelectTimeScreen() {
             slot_date: selectedDate,
             slot_time: selectedTime,
             is_available: false,
+            status: 'confirmed' as const,
             client_name: user?.name || 'לקוח',
             client_phone: user?.phone || '',
             service_name: serviceName,

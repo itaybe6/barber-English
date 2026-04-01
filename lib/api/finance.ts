@@ -10,6 +10,16 @@ export interface ServiceIncomeBreakdown {
   total: number;
 }
 
+/** Completed appointment row for issuing a Green Invoice receipt (admin finance). */
+export interface CompletedAppointmentReceiptRow {
+  id: string;
+  slot_date: string;
+  slot_time: string;
+  service_name: string;
+  client_label: string;
+  price: number;
+}
+
 export interface MonthlyReport {
   year: number;
   month: number;
@@ -114,6 +124,119 @@ export const financeApi = {
     } catch (err) {
       console.error('Error in getMonthlyIncome:', err);
       return { total: 0, breakdown: [] };
+    }
+  },
+
+  /**
+   * Completed bookings in a month — for Green Invoice receipts (one row per appointment).
+   */
+  async listCompletedAppointmentsForReceipts(
+    year: number,
+    month: number,
+  ): Promise<CompletedAppointmentReceiptRow[]> {
+    try {
+      const businessId = getBusinessId();
+      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+      const endDate =
+        month === 12
+          ? `${year + 1}-01-01`
+          : `${year}-${String(month + 1).padStart(2, '0')}-01`;
+
+      const { data: appointments, error: apptErr } = await supabase
+        .from('appointments')
+        .select(
+          'id, service_name, service_id, slot_date, slot_time, client_name, user_id, status',
+        )
+        .eq('business_id', businessId)
+        .eq('is_available', false)
+        .eq('status', 'completed')
+        .gte('slot_date', startDate)
+        .lt('slot_date', endDate)
+        .order('slot_date', { ascending: false })
+        .order('slot_time', { ascending: false });
+
+      if (apptErr || !appointments?.length) {
+        if (apptErr) {
+          console.error('listCompletedAppointmentsForReceipts:', apptErr);
+        }
+        return [];
+      }
+
+      const { data: services, error: svcErr } = await supabase
+        .from('services')
+        .select('id, name, price')
+        .eq('business_id', businessId);
+
+      if (svcErr) {
+        console.error('listCompletedAppointmentsForReceipts services:', svcErr);
+        return [];
+      }
+
+      const serviceMap = new Map<string, { name: string; price: number }>();
+      const serviceNameMap = new Map<string, { id: string; price: number }>();
+      for (const svc of services || []) {
+        serviceMap.set(svc.id, { name: svc.name, price: svc.price });
+        serviceNameMap.set(svc.name.toLowerCase(), { id: svc.id, price: svc.price });
+      }
+
+      const userIds = [
+        ...new Set(
+          appointments
+            .map((a) => a.user_id)
+            .filter((id): id is string => !!id && String(id).trim().length > 0),
+        ),
+      ];
+
+      const nameByUserId = new Map<string, string>();
+      if (userIds.length > 0) {
+        const { data: users } = await supabase
+          .from('users')
+          .select('id, name')
+          .eq('business_id', businessId)
+          .in('id', userIds);
+        for (const u of users || []) {
+          nameByUserId.set(u.id, u.name);
+        }
+      }
+
+      const rows: CompletedAppointmentReceiptRow[] = [];
+
+      for (const appt of appointments) {
+        let price = 0;
+        let serviceName = appt.service_name || 'Unknown';
+        const serviceId = appt.service_id || null;
+
+        if (serviceId && serviceMap.has(serviceId)) {
+          const svc = serviceMap.get(serviceId)!;
+          price = svc.price;
+          serviceName = svc.name;
+        } else if (serviceName) {
+          const match = serviceNameMap.get(serviceName.toLowerCase());
+          if (match) {
+            price = match.price;
+          }
+        }
+
+        if (price <= 0) continue;
+
+        const cn = (appt.client_name ?? '').trim();
+        const fromUser = appt.user_id ? nameByUserId.get(appt.user_id) : undefined;
+        const clientLabel = (cn || fromUser?.trim() || '').trim();
+
+        rows.push({
+          id: appt.id,
+          slot_date: appt.slot_date,
+          slot_time: appt.slot_time,
+          service_name: serviceName,
+          client_label: clientLabel,
+          price,
+        });
+      }
+
+      return rows;
+    } catch (e) {
+      console.error('listCompletedAppointmentsForReceipts:', e);
+      return [];
     }
   },
 

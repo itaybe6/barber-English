@@ -26,6 +26,9 @@
   "waitlist.remove": "Remove from waitlist",
   "waitlist.leave.title": "Leave waitlist",
   "waitlist.leave.message": "Are you sure you want to leave the waitlist?",
+  "waitlist.compactMessage": "You're on the waitlist",
+  "waitlist.compactHint": "Tap for details",
+  "waitlist.compactA11y": "Waitlist — open details",
   "cancel": "Cancel",
   "confirm": "Confirm",
   "delete": "Delete",
@@ -448,7 +451,9 @@
   },
   "products": {
     "loginToViewDetails": "Please sign in to view product details",
-    "ratingSummary": "{{rating}} ({{count}} reviews)"
+    "ratingSummary": "{{rating}} ({{count}} reviews)",
+    "carouselTitle": "Our Products",
+    "carouselSubtitle": "Discover our premium collection"
   },
   "auth": { "signInNow": "Sign in now", "maybeLater": "Maybe later" },
   "nearestSlots": { "title": "Available soon", "empty": "No nearby available appointments" },

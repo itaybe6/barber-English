@@ -25,6 +25,9 @@
   "waitlist.remove": "إزالة من قائمة الانتظار",
   "waitlist.leave.title": "ترك قائمة الانتظار",
   "waitlist.leave.message": "هل أنت متأكد أنك تريد مغادرة قائمة الانتظار؟",
+  "waitlist.compactMessage": "أنت في قائمة الانتظار",
+  "waitlist.compactHint": "اضغط للتفاصيل",
+  "waitlist.compactA11y": "قائمة الانتظار — فتح التفاصيل",
   "cancel": "يلغي",
   "confirm": "يتأكد",
   "delete": "يمسح",
@@ -511,7 +514,9 @@
   },
   "products": {
     "loginToViewDetails": "الرجاء تسجيل الدخول لعرض تفاصيل المنتج",
-    "ratingSummary": "{{rating}} ({{count}} تعليق)"
+    "ratingSummary": "{{rating}} ({{count}} تعليق)",
+    "carouselTitle": "منتجاتنا",
+    "carouselSubtitle": "اكتشف مجموعتنا المميزة"
   },
   "auth": {
     "signInNow": "قم بتسجيل الدخول الآن",

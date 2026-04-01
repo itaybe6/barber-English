@@ -20,6 +20,7 @@ import { BlurView } from 'expo-blur';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Product } from '@/lib/api/products';
 import { useColors } from '@/src/theme/ThemeProvider';
+import { useTranslation } from 'react-i18next';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH * 0.42; // Slightly wider for better product display
@@ -54,10 +55,13 @@ const StarRating = ({ rating = 5, size = 14 }: { rating?: number; size?: number 
 export default function ProductCarousel({ 
   products, 
   onProductPress, 
-  title = "Our Products",
-  subtitle = "Discover our premium collection"
+  title,
+  subtitle,
 }: ProductCarouselProps) {
-  
+  const { t } = useTranslation();
+  const displayTitle = title ?? t('products.carouselTitle');
+  const displaySubtitle = subtitle ?? t('products.carouselSubtitle');
+
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -257,8 +261,8 @@ export default function ProductCarousel({
       {/* Elegant Header */}
       <View style={styles.elegantHeader}>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.elegantTitle}>{title}</Text>
-          <Text style={styles.elegantSubtitle}>{subtitle}</Text>
+          <Text style={styles.elegantTitle}>{displayTitle}</Text>
+          <Text style={styles.elegantSubtitle}>{displaySubtitle}</Text>
         </View>
       </View>
 

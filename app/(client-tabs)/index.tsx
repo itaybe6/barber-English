@@ -29,6 +29,7 @@ import { Marquee } from '@animatereactnative/marquee';
 import { manicureImages } from '@/src/constants/manicureImages';
 import { ManicureMarqueeTile } from '@/components/ManicureMarqueeTile';
 import SwapOpportunities from '@/components/SwapOpportunities';
+import { WaitlistHomeFabPanel } from '@/components/WaitlistHomeFabPanel';
 import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
 import { toBcp47Locale } from '@/lib/i18nLocale';
 
@@ -889,98 +890,31 @@ export default function ClientHomeScreen() {
             <View style={styles.contentWrapper}>
               <View>
 
-        {/* Waitlist Section - Top Priority */}
         {waitlistEntries.length > 0 && (
-          <View style={styles.waitlistTopSection}>
-            <View style={[styles.waitlistTopCard, { backgroundColor: colors.primary, borderColor: colors.primary, shadowColor: colors.primary }]}>
-              <View style={styles.waitlistTopContent}>
-                <View style={styles.waitlistTopIconContainer}>
-                  <Ionicons name="time" size={28} color="#FFFFFF" />
-                </View>
-                <View style={styles.waitlistTopInfo}>
-                  <Text style={styles.waitlistTopTitle}>{t('waitlist.title')}</Text>
-                  <Text style={styles.waitlistTopSubtitle}>
-                    {waitlistEntries.length === 1 
-                      ? t('waitlist.waitingFor', { service: waitlistEntries[0].service_name })
-                      : t('waitlist.waitingForMany', { count: waitlistEntries.length })
-                    }
-                  </Text>
-                  <View style={styles.waitlistEntriesMeta}>
-                    {waitlistEntries.slice(0, 3).map((entry) => {
-                      const periodIcon =
-                        entry.time_period === 'morning'
-                          ? 'sunny'
-                          : entry.time_period === 'afternoon'
-                            ? 'partly-sunny'
-                            : entry.time_period === 'evening'
-                              ? 'moon'
-                              : 'time';
-                      const timeLine =
-                        entry.time_period === 'any'
-                          ? `${t('time_period.any')} — ${t('time_period.flexible')}`
-                          : `${t(`time_period.${entry.time_period}`)} · ${t(`time_period.range.${entry.time_period}` as never)}`;
-                      return (
-                        <View key={entry.id} style={styles.waitlistEntryBlock}>
-                          <View style={styles.waitlistEntryMetaRow}>
-                            <Ionicons name="calendar-outline" size={16} color="rgba(255, 255, 255, 0.92)" />
-                            <Text style={styles.waitlistEntryMetaText} numberOfLines={2}>
-                              {formatWaitlistDate(entry.requested_date)}
-                            </Text>
-                          </View>
-                          <View style={styles.waitlistEntryMetaRow}>
-                            <Ionicons name={periodIcon} size={16} color="rgba(255, 255, 255, 0.92)" />
-                            <Text style={styles.waitlistEntryMetaText} numberOfLines={2}>
-                              {timeLine}
-                            </Text>
-                          </View>
-                        </View>
-                      );
-                    })}
-                    {waitlistEntries.length > 3 && (
-                      <View style={styles.waitlistTimePeriodItem}>
-                        <Text style={styles.waitlistTimePeriodText}>
-                          +{waitlistEntries.length - 3}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              </View>
-              <TouchableOpacity
-                style={styles.waitlistTopButton}
-                onPress={() => {
-                  Alert.alert(
-                    t('waitlist.leave.title'),
-                    t('waitlist.leave.message'),
-                    [
-                      {
-                        text: t('cancel'),
-                        style: 'cancel',
+          <View style={styles.waitlistInlineHost}>
+            <WaitlistHomeFabPanel
+              entries={waitlistEntries}
+              formatWaitlistDate={formatWaitlistDate}
+              isRemoving={isRemovingFromWaitlist}
+              onRequestRemoveAll={() => {
+                Alert.alert(
+                  t('waitlist.leave.title'),
+                  t('waitlist.leave.message'),
+                  [
+                    { text: t('cancel'), style: 'cancel' },
+                    {
+                      text: t('confirm'),
+                      style: 'destructive',
+                      onPress: () => {
+                        waitlistEntries.forEach((entry) => {
+                          handleRemoveFromWaitlist(entry.id);
+                        });
                       },
-                      {
-                        text: t('confirm'),
-                        style: 'destructive',
-                        onPress: () => {
-                          // Remove all waitlist entries
-                          waitlistEntries.forEach(entry => {
-                            handleRemoveFromWaitlist(entry.id);
-                          });
-                        },
-                      },
-                    ]
-                  );
-                }}
-                activeOpacity={0.8}
-              >
-                <BlurView
-                  intensity={80}
-                  tint="light"
-                  style={styles.waitlistButtonBlur}
-                >
-                  <Text style={styles.waitlistTopButtonText}>{t('waitlist.remove')}</Text>
-                </BlurView>
-              </TouchableOpacity>
-            </View>
+                    },
+                  ]
+                );
+              }}
+            />
           </View>
         )}
 
@@ -1653,6 +1587,12 @@ const styles = StyleSheet.create<any>({
     paddingHorizontal: 24,
     marginBottom: 0, // No margin to avoid extra white space
   },
+  waitlistInlineHost: {
+    paddingHorizontal: 24,
+    marginTop: 12,
+    marginBottom: 8,
+    alignItems: 'stretch',
+  },
   sectionTopSpacer: {
     marginTop: 4,
   },
@@ -2140,113 +2080,6 @@ const styles = StyleSheet.create<any>({
     fontSize: 16,
     color: '#8E8E93',
     fontWeight: '500',
-    letterSpacing: -0.2,
-  },
-  // New Waitlist Top Styles
-  waitlistTopSection: {
-    paddingHorizontal: 24,
-    marginBottom: 32,
-  },
-  waitlistTopCard: {
-    borderRadius: 20,
-    padding: 24,
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 8,
-  },
-  waitlistTopContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  waitlistTopIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  waitlistTopInfo: {
-    flex: 1,
-    marginLeft: 16,
-    alignItems: 'flex-start',
-  },
-  waitlistTopTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 4,
-    textAlign: 'left',
-  },
-  waitlistTopSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontWeight: '500',
-    textAlign: 'left',
-  },
-  waitlistEntriesMeta: {
-    marginTop: 10,
-    gap: 12,
-    alignSelf: 'stretch',
-  },
-  waitlistEntryBlock: {
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.14)',
-    borderRadius: 12,
-  },
-  waitlistEntryMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  waitlistEntryMetaText: {
-    flex: 1,
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.92)',
-    fontWeight: '600',
-    textAlign: 'left',
-  },
-  waitlistTimePeriodItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 12,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    alignSelf: 'flex-start',
-  },
-  waitlistTimePeriodText: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontWeight: '500',
-  },
-  waitlistTopButton: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  waitlistButtonBlur: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 16,
-  },
-  waitlistTopButtonText: {
-    color: '#1C1C1E',
-    fontSize: 16,
-    fontWeight: '600',
     letterSpacing: -0.2,
   },
   // Book Appointment Styles

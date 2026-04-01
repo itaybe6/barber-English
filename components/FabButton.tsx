@@ -38,6 +38,15 @@ export interface FabButtonProps {
    * the keyboard — otherwise `bottom` animates slowly and the sheet stays under the keyboard.
    */
   enablePanelLayoutAnimation?: boolean;
+  /** When set, replaces the centered “+” in the closed state (e.g. waitlist pill). */
+  closedChildren?: React.ReactNode;
+  /** Width when closed and `closedChildren` is set; capped to screen. */
+  closedWidth?: number;
+  closedAccessibilityLabel?: string;
+  /**
+   * `floating` — absolute over the screen (default). `inline` — in document flow (e.g. inside ScrollView).
+   */
+  layoutMode?: 'floating' | 'inline';
 }
 
 export function FabButton({
@@ -53,9 +62,14 @@ export function FabButton({
   grabberColor,
   hideCloseButton = false,
   enablePanelLayoutAnimation = true,
+  closedChildren,
+  closedWidth: closedWidthProp,
+  closedAccessibilityLabel,
+  layoutMode = 'floating',
 }: FabButtonProps) {
   const colors = useColors();
   const { width: screenW } = useWindowDimensions();
+  const isInline = layoutMode === 'inline';
   const openedSize = openedSizeProp ?? screenW * 0.92;
   const spacing = closedSize * 0.18;
   const closeIconSize = Math.round(closedSize * 0.32);
@@ -67,6 +81,10 @@ export function FabButton({
   const iconOnOpen = colors.text;
 
   const openWidth = Math.min(openedSize, screenW - horizontalInset * 2);
+  const closedPanelWidth =
+    closedChildren != null
+      ? Math.min(closedWidthProp ?? screenW - horizontalInset * 2, screenW - horizontalInset * 2)
+      : closedSize;
 
   /**
    * Drive `bottom` via a SharedValue so Reanimated 4 propagates the change to the UI thread
@@ -78,12 +96,16 @@ export function FabButton({
     bottomSV.value = bottom;
   }, [bottom, bottomSV]);
   const panelBottomStyle = useAnimatedStyle(() => ({ bottom: bottomSV.value }));
-  /** סגור: פינה; פתוח: ממורכז אופקית כדי שלא תהיה סטייה */
-  const horizontalStyle = isOpen
-    ? { left: Math.max(horizontalInset, (screenW - openWidth) / 2) }
-    : I18nManager.isRTL
-      ? { left: horizontalInset }
-      : { right: horizontalInset };
+  /** סגור: פינה; פתוח: ממורכז אופקית כדי שלא תהיה סטייה — או inline במרכז / רוחב מלא */
+  const horizontalStyle = isInline
+    ? isOpen
+      ? { alignSelf: 'stretch' as const }
+      : { alignSelf: 'center' as const }
+    : isOpen
+      ? { left: Math.max(horizontalInset, (screenW - openWidth) / 2) }
+      : I18nManager.isRTL
+        ? { left: horizontalInset }
+        : { right: horizontalInset };
 
   /** Icon + Pressable padding (6 each side) — keep text from sitting under the hit target */
   const closeBtnOuterH = closeIconSize + 12;
@@ -105,14 +127,22 @@ export function FabButton({
     ? 4
     : Math.max(2, closeBottom - grabberFlowEnd + 10);
 
+  const panelWidth = isInline
+    ? isOpen
+      ? ('100%' as const)
+      : closedPanelWidth
+    : isOpen
+      ? openWidth
+      : closedPanelWidth;
+
   return (
     <Animated.View
       layout={enablePanelLayoutAnimation ? LinearTransition.duration(duration) : undefined}
       style={[
-        styles.panel,
+        isInline ? styles.panelInline : styles.panel,
         horizontalStyle,
         {
-          width: isOpen ? openWidth : closedSize,
+          width: panelWidth,
           minHeight: isOpen ? undefined : closedSize,
           borderRadius: isOpen ? 22 : closedSize / 2,
           backgroundColor: isOpen ? openBg : closedBg,
@@ -126,12 +156,13 @@ export function FabButton({
               shadowOpacity: isOpen ? 0.12 : 0.25,
               shadowRadius: isOpen ? 20 : 12,
             },
-            /* Above fab dim backdrop (edit-gallery) + admin tab bar; avoids Android eating touches on the sheet. */
-            android: { elevation: isOpen ? 28 : 8 },
+            android: {
+              elevation: isInline ? (isOpen ? 6 : 4) : isOpen ? 28 : 8,
+            },
           }),
         },
         panelStyle,
-        panelBottomStyle,
+        !isInline ? panelBottomStyle : null,
       ]}
     >
       {!isOpen ? (
@@ -140,10 +171,20 @@ export function FabButton({
             style={StyleSheet.absoluteFill}
             onPress={onPress}
             accessibilityRole="button"
-            accessibilityLabel="פתיחה"
+            accessibilityLabel={
+              closedAccessibilityLabel ?? (closedChildren ? undefined : 'פתיחה')
+            }
           />
-          <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.center]}>
-            <Entypo name="plus" size={openIconSize} color={iconOnClosed} />
+          <View
+            pointerEvents="none"
+            style={[
+              StyleSheet.absoluteFill,
+              closedChildren ? styles.closedChildrenWrap : styles.center,
+            ]}
+          >
+            {closedChildren ?? (
+              <Entypo name="plus" size={openIconSize} color={iconOnClosed} />
+            )}
           </View>
         </>
       ) : (
@@ -163,7 +204,13 @@ export function FabButton({
             <Pressable
               onPress={onPress}
               hitSlop={12}
-              style={[styles.closeBtn, { top: closeBtnTop, right: closeBtnEndInset }]}
+              style={[
+                styles.closeBtn,
+                { top: closeBtnTop },
+                I18nManager.isRTL
+                  ? { left: closeBtnEndInset }
+                  : { right: closeBtnEndInset },
+              ]}
               accessibilityRole="button"
               accessibilityLabel="סגירה"
             >
@@ -190,9 +237,18 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     zIndex: 10001,
   },
+  panelInline: {
+    position: 'relative',
+    overflow: 'hidden',
+    zIndex: 2,
+  },
   center: {
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  closedChildrenWrap: {
+    justifyContent: 'center',
+    paddingHorizontal: 14,
   },
   openInner: {
     width: '100%',

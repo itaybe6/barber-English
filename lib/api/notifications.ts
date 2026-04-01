@@ -15,18 +15,38 @@ Notifications.setNotificationHandler({
   }),
 });
 
+/** Same shape as client_phone / appointment queries — reminders store recipient_phone from the booking row. */
+function recipientPhoneQueryVariants(userPhone: string): string[] {
+  const phoneRaw = String(userPhone || '').trim();
+  if (!phoneRaw) return [];
+  const variants = new Set<string>();
+  variants.add(phoneRaw);
+  const onlyDigits = phoneRaw.replace(/[^+\d]/g, '');
+  if (onlyDigits) variants.add(onlyDigits);
+  if (onlyDigits.startsWith('0')) {
+    variants.add(`+972${onlyDigits.slice(1)}`);
+  }
+  if (onlyDigits.startsWith('+972')) {
+    const rest = onlyDigits.slice(4);
+    if (rest && !rest.startsWith('0')) variants.add(`0${rest}`);
+  }
+  return Array.from(variants);
+}
+
 export const notificationsApi = {
   // Push sending moved to server (Supabase Edge Function)
   // Get user's notifications
   async getUserNotifications(userPhone: string): Promise<Notification[]> {
     try {
       const businessId = getBusinessId();
-      
+      const variants = recipientPhoneQueryVariants(userPhone);
+      if (variants.length === 0) return [];
+
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
         .eq('business_id', businessId) // Filter by current business
-        .eq('recipient_phone', userPhone)
+        .in('recipient_phone', variants)
         .order('created_at', { ascending: false });
 
       if (error) {

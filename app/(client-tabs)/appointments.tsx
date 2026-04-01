@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, FlatList, ActivityIndicator, Alert, Modal, RefreshControl, Linking, Image } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
@@ -654,124 +653,53 @@ export default function ClientAppointmentsScreen() {
     );
   }, [appLocale]);
 
-  // Barber Avatar Component
-  const BarberAvatar: React.FC<{ barberId?: string; size?: number }> = React.useCallback(({ barberId, size = 36 }) => {
-    if (!barberId) return null;
-    
-    const imageUrl = barberImages[barberId];
-    
+  // Barber Avatar Component — premium large avatar with colored ring + glow
+  const BarberAvatar: React.FC<{ barberId?: string; size?: number }> = React.useCallback(({ barberId, size = 72 }) => {
+    const imageUrl = barberId ? barberImages[barberId] : undefined;
+    const ringSize = size + 6;
+    const hasImage = Boolean(imageUrl);
+
     return (
-      <View style={[styles.barberAvatarContainer, { width: size, height: size }]}>
-        <LinearGradient
-          colors={["#000000", "#333333"]}
-          style={[styles.barberAvatarGradient, { width: size, height: size, borderRadius: size / 2 }]}
+      <View
+        style={[
+          styles.barberAvatarRing,
+          {
+            width: ringSize,
+            height: ringSize,
+            borderRadius: ringSize / 2,
+            borderColor: hasImage ? colors.primary : 'rgba(142,142,147,0.25)',
+            shadowColor: hasImage ? colors.primary : '#000',
+            shadowOpacity: hasImage ? 0.35 : 0.10,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.barberAvatarInner,
+            { width: size, height: size, borderRadius: size / 2 },
+          ]}
         >
-          <View style={[styles.barberAvatar, { width: size - 4, height: size - 4, borderRadius: (size - 4) / 2 }]}>
-            {imageUrl ? (
-              <Image 
-                source={{ uri: imageUrl }} 
-                style={[styles.barberAvatarImage, { width: size - 4, height: size - 4, borderRadius: (size - 4) / 2 }]} 
-                resizeMode="cover"
-              />
-            ) : (
-              <Ionicons name="person" size={size * 0.5} color="#666" />
-            )}
-          </View>
-        </LinearGradient>
+          {imageUrl ? (
+            <Image
+              source={{ uri: imageUrl }}
+              style={{ width: size, height: size, borderRadius: size / 2 }}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={[styles.barberAvatarFallback, { borderRadius: size / 2 }]}>
+              <Ionicons name="person" size={size * 0.42} color="#AAA" />
+            </View>
+          )}
+        </View>
       </View>
     );
-  }, [barberImages]);
+  }, [barberImages, colors.primary]);
 
-  // Hero card component for the next appointment so it can be embedded in scrollable content
+  // Hero card — reuses the same premium card style as renderAppointment
   const NextAppointmentHero: React.FC = React.useCallback(() => {
     if (!(activeTab === 'upcoming' && nextAppointment)) return null;
-    return (
-      <View style={styles.heroCardContainer}>
-        <LinearGradient
-          colors={["#FFFFFF", "#FAFAFA"]}
-          style={styles.heroCard}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <View style={styles.heroCardOverlay} />
-          
-          <View style={styles.heroContent}>
-            {/* Barber Avatar in top right corner */}
-            <View style={styles.heroBarberAvatarContainer}>
-              <BarberAvatar barberId={nextAppointment!.barber_id} size={48} />
-            </View>
-            
-            {/* Action buttons in top left corner */}
-            <View style={styles.topLeftActions}>
-              <TouchableOpacity
-                style={styles.heroCancelButtonTopLeft}
-                onPress={() => handleCancelAppointment(nextAppointment!)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="close" size={16} color="#FF3B30" />
-                <Text style={styles.heroCancelButtonText}>{t('cancel', 'Cancel')}</Text>
-              </TouchableOpacity>
-              {user?.user_type !== 'admin' && clientSwapEnabled && (
-                <TouchableOpacity
-                  style={[styles.heroSwapButtonTopLeft, { backgroundColor: colors.primary + '18' }]}
-                  onPress={() => {
-                    setSwapAppointment(nextAppointment!);
-                    setShowSwapModal(true);
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="swap-horizontal" size={16} color={colors.primary} />
-                  <Text style={[styles.heroSwapButtonText, { color: colors.primary }]}>{t('swap.swap', 'Swap')}</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-              <Text style={styles.heroServiceNameNext}>{nextAppointment!.service_name || t('booking.field.service', 'Service')}</Text>
-
-            {/* Admin: client info remains */}
-            {user?.user_type === 'admin' && nextAppointment!.client_name && (
-              <View style={styles.heroLocationRow}>
-                <Text style={styles.heroLocationText}>
-                  {nextAppointment!.client_name}
-                  {nextAppointment!.client_phone && ` • ${nextAppointment!.client_phone}`}
-                </Text>
-                <View style={styles.heroLocationIcon}>
-                  <Ionicons name="person" size={12} color="#000000" />
-                </View>
-              </View>
-            )}
-
-            {/* Worker under service for clients */}
-            {user?.user_type !== 'admin' && nextAppointment?.barber_id ? (
-              <View style={styles.heroLocationRow}>
-                <View style={styles.heroLocationIcon}>
-                  <Ionicons name="person" size={12} color="#000000" />
-                </View>
-                <Text style={styles.heroLocationText}>{getBarberName(nextAppointment.barber_id)}</Text>
-              </View>
-            ) : null}
-
-              <View style={styles.heroDetailsContainer}>
-                <View style={styles.timeRowAligned}>
-                  <View style={styles.timeLeftGroup}>
-                    <View style={styles.heroDetailCard}>
-                      <Ionicons name="time" size={16} color={colors.primary} />
-                      <Text style={styles.heroDetailValue}>{formatTime(nextAppointment!.slot_time)}</Text>
-                    </View>
-                    {businessAddress ? (
-                      <TouchableOpacity style={styles.mapIconButton} onPress={openBusinessLocation} activeOpacity={0.8}>
-                        <Ionicons name="location" size={16} color={colors.primary} />
-                      </TouchableOpacity>
-                    ) : null}
-                  </View>
-                  <DatePill date={nextAppointment!.slot_date} />
-                </View>
-              </View>
-          </View>
-        </LinearGradient>
-      </View>
-    );
-  }, [activeTab, nextAppointment, formatDate, formatTime, handleCancelAppointment, businessAddress, colors.primary, clientSwapEnabled, user?.user_type, t, getBarberName]);
+    return renderAppointment({ item: nextAppointment! });
+  }, [activeTab, nextAppointment, renderAppointment]);
 
   // Handle cancel appointment
   function handleCancelAppointment(appointment: AvailableTimeSlot) {
@@ -873,167 +801,98 @@ export default function ClientAppointmentsScreen() {
   };
 
   const renderAppointment = React.useCallback(({ item }: { item: AvailableTimeSlot }) => {
-    if (activeTab === 'past') {
-      return (
-        <View style={styles.heroCardContainer}>
-          <LinearGradient
-            colors={["#FFFFFF", "#FAFAFA"]}
-            style={styles.heroCard}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <View style={styles.heroCardOverlay} />
-            
-            <View style={styles.heroContent}>
-              {/* Barber Avatar in top right corner for history cards */}
-              <View style={styles.heroBarberAvatarContainer}>
-                <BarberAvatar barberId={item.barber_id} size={48} />
-              </View>
-              <View style={styles.regularHeader}>
-                <View style={styles.pastBadge}>
-                  <Ionicons name="checkmark-circle" size={16} color="#34C759" />
-                  <Text style={styles.pastBadgeText}>{t('appointments.completed', 'Completed')}</Text>
-                </View>
-                <View style={styles.regularHeaderRight} />
-              </View>
+    const isPast = activeTab === 'past';
 
-              {/* Location removed for client cards per request */}
-
-              <Text style={styles.heroServiceName}>{item.service_name || t('booking.field.service', 'Service')}</Text>
-
-              {/* Admin: client info remains */}
-              {user?.user_type === 'admin' && item.client_name && (
-                <View style={styles.heroLocationRow}>
-                  <Text style={styles.heroLocationText}>
-                    {item.client_name}
-                    {item.client_phone && ` • ${item.client_phone}`}
-                  </Text>
-                  <View style={styles.heroLocationIcon}>
-                    <Ionicons name="person" size={12} color="#000000" />
-                  </View>
-                </View>
-              )}
-
-              {/* Worker under service (client view) */}
-              {user?.user_type !== 'admin' && item?.barber_id ? (
-                <View style={styles.heroLocationRow}>
-                  <View style={styles.heroLocationIcon}>
-                    <Ionicons name="person" size={12} color="#000000" />
-                  </View>
-                  <Text style={styles.heroLocationText}>{getBarberName(item.barber_id)}</Text>
-                </View>
-              ) : null}
-
-              <View style={styles.heroDetailsContainer}>
-                <View style={styles.timeRowAligned}>
-                  <View style={styles.timeLeftGroup}>
-                    <View style={styles.heroDetailCard}>
-                      <Ionicons name="time" size={16} color={colors.primary} />
-                      <Text style={styles.heroDetailValue}>{formatTime(item.slot_time)}</Text>
-                    </View>
-                    {businessAddress ? (
-                      <TouchableOpacity style={styles.mapIconButton} onPress={openBusinessLocation} activeOpacity={0.8}>
-                        <Ionicons name="location" size={16} color={colors.primary} />
-                      </TouchableOpacity>
-                    ) : null}
-                  </View>
-                  <DatePill date={item.slot_date} />
-                </View>
-              </View>
-            </View>
-          </LinearGradient>
-        </View>
-      );
-    }
-
-    // Upcoming appointments: modern card design
     return (
-      <View style={styles.heroCardContainer}>
-        <LinearGradient
-          colors={["#FFFFFF", "#FAFAFA"]}
-          style={styles.heroCard}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <View style={styles.heroCardOverlay} />
-          
-          <View style={styles.heroContent}>
-            {/* Barber Avatar in top right corner */}
-            <View style={styles.heroBarberAvatarContainer}>
-              <BarberAvatar barberId={item.barber_id} size={48} />
-            </View>
-            
-            {/* Action buttons in top left corner */}
-            <View style={styles.topLeftActions}>
-              <TouchableOpacity
-                style={styles.heroCancelButtonTopLeft}
-                onPress={() => handleCancelAppointment(item)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="close" size={16} color="#FF3B30" />
-                <Text style={styles.heroCancelButtonText}>{t('cancel', 'Cancel')}</Text>
-              </TouchableOpacity>
-              {user?.user_type !== 'admin' && clientSwapEnabled && (
+      <View style={styles.apptCardShadow}>
+        {/* Decorative blobs */}
+        <View style={[styles.apptCardBlobLarge, { backgroundColor: colors.primary + '0C' }]} />
+        <View style={[styles.apptCardBlobSmall, { backgroundColor: colors.primary + '08' }]} />
+
+        {/* Top row: avatar (left) + actions (right) */}
+        <View style={styles.apptCardTopRow}>
+          <BarberAvatar barberId={item.barber_id} size={72} />
+
+          <View style={styles.apptCardActions}>
+            {isPast ? (
+              <View style={styles.apptCompletedBadge}>
+                <Ionicons name="checkmark-circle" size={15} color="#34C759" />
+                <Text style={styles.apptCompletedText}>{t('appointments.completed', 'Completed')}</Text>
+              </View>
+            ) : (
+              <>
                 <TouchableOpacity
-                  style={[styles.heroSwapButtonTopLeft, { backgroundColor: colors.primary + '18' }]}
-                  onPress={() => {
-                    setSwapAppointment(item);
-                    setShowSwapModal(true);
-                  }}
-                  activeOpacity={0.8}
+                  style={styles.apptCancelPill}
+                  onPress={() => handleCancelAppointment(item)}
+                  activeOpacity={0.72}
                 >
-                  <Ionicons name="swap-horizontal" size={16} color={colors.primary} />
-                  <Text style={[styles.heroSwapButtonText, { color: colors.primary }]}>{t('swap.swap', 'Swap')}</Text>
+                  <Ionicons name="close" size={13} color="#FF3B30" />
+                  <Text style={styles.apptCancelPillText}>{t('cancel', 'Cancel')}</Text>
                 </TouchableOpacity>
-              )}
-            </View>
-
-            <Text style={styles.heroServiceNameNext}>{item.service_name || 'Service'}</Text>
-
-            {/* Admin: client info remains */}
-            {user?.user_type === 'admin' && item.client_name && (
-              <View style={styles.heroLocationRow}>
-                <Text style={styles.heroLocationText}>
-                  {item.client_name}
-                  {item.client_phone && ` • ${item.client_phone}`}
-                </Text>
-                <View style={styles.heroLocationIcon}>
-                  <Ionicons name="person" size={12} color="#000000" />
-                </View>
-              </View>
+                {user?.user_type !== 'admin' && clientSwapEnabled && (
+                  <TouchableOpacity
+                    style={[styles.apptSwapPill, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '35' }]}
+                    onPress={() => {
+                      setSwapAppointment(item);
+                      setShowSwapModal(true);
+                    }}
+                    activeOpacity={0.72}
+                  >
+                    <Ionicons name="swap-horizontal" size={13} color={colors.primary} />
+                    <Text style={[styles.apptSwapPillText, { color: colors.primary }]}>{t('swap.swap', 'Swap')}</Text>
+                  </TouchableOpacity>
+                )}
+              </>
             )}
+          </View>
+        </View>
 
-            {/* Worker under service for clients */}
-            {user?.user_type !== 'admin' && item?.barber_id ? (
-              <View style={styles.heroLocationRow}>
-                <View style={styles.heroLocationIcon}>
-                  <Ionicons name="person" size={12} color="#000000" />
-                </View>
-                <Text style={styles.heroLocationText}>{getBarberName(item.barber_id)}</Text>
-              </View>
-            ) : null}
+        {/* Service name */}
+        <Text style={styles.apptServiceName} numberOfLines={2}>
+          {item.service_name || t('booking.field.service', 'Service')}
+        </Text>
 
-            <View style={styles.heroDetailsContainer}>
-              <View style={styles.timeRowAligned}>
-                <View style={styles.timeLeftGroup}>
-                  <View style={styles.heroDetailCard}>
-                    <Ionicons name="time" size={16} color={colors.primary} />
-                    <Text style={styles.heroDetailValue}>{formatTime(item.slot_time)}</Text>
-                  </View>
-                  {businessAddress ? (
-                    <TouchableOpacity style={styles.mapIconButton} onPress={openBusinessLocation} activeOpacity={0.8}>
-                      <Ionicons name="location" size={16} color={colors.primary} />
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
-                <DatePill date={item.slot_date} />
-              </View>
+        {/* Barber / client info */}
+        {user?.user_type === 'admin' && item.client_name ? (
+          <View style={styles.apptInfoRow}>
+            <Text style={styles.apptInfoText}>
+              {item.client_name}{item.client_phone ? ` • ${item.client_phone}` : ''}
+            </Text>
+            <View style={styles.apptInfoIconBubble}>
+              <Ionicons name="person" size={11} color="#8E8E93" />
             </View>
           </View>
-        </LinearGradient>
+        ) : user?.user_type !== 'admin' && item.barber_id ? (
+          <View style={styles.apptInfoRow}>
+            <Text style={styles.apptInfoText}>{getBarberName(item.barber_id)}</Text>
+            <View style={styles.apptInfoIconBubble}>
+              <Ionicons name="person" size={11} color="#8E8E93" />
+            </View>
+          </View>
+        ) : null}
+
+        {/* Separator */}
+        <View style={styles.apptSeparator} />
+
+        {/* Footer: date pill (left) + location + time (right) */}
+        <View style={styles.apptFooter}>
+          <DatePill date={item.slot_date} />
+
+          <View style={styles.apptFooterRight}>
+            {businessAddress ? (
+              <TouchableOpacity style={[styles.apptLocationBtn, { borderColor: colors.primary + '30' }]} onPress={openBusinessLocation} activeOpacity={0.75}>
+                <Ionicons name="location" size={15} color={colors.primary} />
+              </TouchableOpacity>
+            ) : null}
+            <View style={[styles.apptTimePill, { backgroundColor: colors.primary + '14' }]}>
+              <Ionicons name="time" size={15} color={colors.primary} />
+              <Text style={[styles.apptTimePillText, { color: colors.primary }]}>{formatTime(item.slot_time)}</Text>
+            </View>
+          </View>
+        </View>
       </View>
     );
-  }, [formatDate, formatTime, activeTab, handleCancelAppointment, businessAddress, colors.primary, clientSwapEnabled, user?.user_type, t, getBarberName]);
+  }, [formatTime, activeTab, handleCancelAppointment, businessAddress, colors.primary, clientSwapEnabled, user?.user_type, t, getBarberName]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -1590,218 +1449,192 @@ const styles = StyleSheet.create<any>({
     lineHeight: 24,
     fontWeight: '400',
   },
-  // Hero card styles (next appointment)
-  heroCardContainer: {
-    marginHorizontal: 16,
+  // ─── Premium Appointment Card ────────────────────────────────────────────
+  apptCardShadow: {
     marginBottom: 16,
-    borderRadius: 20,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 6,
-    marginTop: 14,
-  },
-  heroCard: {
-    borderRadius: 20,
-    padding: 20,
-    position: 'relative',
+    marginTop: 4,
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
     overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.10,
+    shadowRadius: 22,
+    elevation: 7,
+    padding: 20,
   },
-  heroCardOverlay: {
+  apptCardBlobLarge: {
     position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 100,
-    height: 100,
-    backgroundColor: 'rgba(0, 0, 0, 0.03)',
-    borderRadius: 50,
-    transform: [{ translateX: -20 }, { translateY: -30 }],
+    top: -35,
+    right: -35,
+    width: 155,
+    height: 155,
+    borderRadius: 78,
+    zIndex: 0,
   },
-  heroContent: {
-    position: 'relative',
-    zIndex: 1,
-    alignItems: 'flex-start',
+  apptCardBlobSmall: {
+    position: 'absolute',
+    bottom: -15,
+    left: -15,
+    width: 85,
+    height: 85,
+    borderRadius: 43,
+    zIndex: 0,
   },
-  heroHeaderActions: {
+  apptCardTopRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: 16,
+    zIndex: 1,
   },
-  heroTypeIndicator: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(142, 142, 147, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: -6,
-    marginRight: -6,
-  },
-  heroTypeIndicatorAbsolute: {
-    position: 'absolute',
-    top: -6,
-    right: -6,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(142, 142, 147, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
-  },
-  topLeftActions: {
-    position: 'absolute',
-    top: -6,
-    left: -6,
+  apptCardActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    zIndex: 2,
+    gap: 8,
+    flexShrink: 0,
   },
-  heroCancelButtonTopLeft: {
+  apptCancelPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(255, 59, 48, 0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
+    backgroundColor: 'rgba(255,59,48,0.10)',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,59,48,0.18)',
   },
-  heroSwapButtonTopLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  heroSwapButtonText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  heroCancelButtonText: {
+  apptCancelPillText: {
     fontSize: 12,
     fontWeight: '700',
     color: '#FF3B30',
   },
-    nextCancelButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      backgroundColor: 'rgba(255,59,48,0.08)',
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 14,
-    },
-    nextCancelText: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: '#FF3B30',
-    },
-  heroServiceName: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1C1C1E',
-    textAlign: 'left',
-    letterSpacing: -0.4,
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  heroServiceNameNext: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1C1C1E',
-    textAlign: 'left',
-    letterSpacing: -0.4,
-    marginBottom: 4,
-    marginTop: 36,
-  },
-  heroLocationRow: {
+  apptSwapPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    marginBottom: 6,
-    gap: 8,
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 14,
+    borderWidth: 1,
   },
-  heroLocationIcon: {
+  apptSwapPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  apptCompletedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(52,199,89,0.10)',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(52,199,89,0.20)',
+  },
+  apptCompletedText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#34C759',
+  },
+  apptServiceName: {
+    fontSize: 23,
+    fontWeight: '800',
+    color: '#1C1C1E',
+    letterSpacing: -0.5,
+    textAlign: 'right',
+    marginBottom: 6,
+    zIndex: 1,
+  },
+  apptInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 6,
+    marginBottom: 16,
+    zIndex: 1,
+  },
+  apptInfoIconBubble: {
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: 'rgba(0, 0, 0, 0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.08)',
+    backgroundColor: 'rgba(142,142,147,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heroLocationText: {
-    fontSize: 13,
+  apptInfoText: {
+    fontSize: 14,
     fontWeight: '500',
     color: '#8E8E93',
-    lineHeight: 18,
-    textAlign: 'left',
   },
-  heroDetailsContainer: {
-    flexDirection: 'column',
-    justifyContent: 'flex-start',
-    alignItems: 'flex-start',
-    gap: 8,
+  apptSeparator: {
+    height: 1,
+    backgroundColor: 'rgba(0,0,0,0.07)',
+    marginBottom: 14,
+    zIndex: 1,
   },
-  timeRowAligned: {
+  apptFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    width: '100%',
+    zIndex: 1,
   },
-  timeLeftGroup: {
+  apptFooterRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  mapIconButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  apptTimePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    borderRadius: 14,
+  },
+  apptTimePillText: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  apptLocationBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: 'rgba(0,0,0,0.04)',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
   },
-  heroDetailCard: {
-    flexShrink: 0,
-    flexDirection: 'row',
+  // ─── BarberAvatar (premium ring + glow) ──────────────────────────────────
+  barberAvatarRing: {
+    borderWidth: 2.5,
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 5,
   },
-  heroDetailValue: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1C1C1E',
-    textAlign: 'left',
+  barberAvatarInner: {
+    overflow: 'hidden',
+    backgroundColor: '#F0F0F5',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-
-  // Date pill styles
+  barberAvatarFallback: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F0F0F5',
+  },
+  // ─── Date Pill ────────────────────────────────────────────────────────────
   datePill: {
-    width: 56,
-    borderRadius: 10,
-    backgroundColor: 'rgba(0,0,0,0.06)',
+    width: 58,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.055)',
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.08)',
     alignItems: 'center',
@@ -1809,128 +1642,21 @@ const styles = StyleSheet.create<any>({
     paddingVertical: 8,
   },
   datePillDivider: {
-    width: '85%',
+    width: '80%',
     height: 1,
     backgroundColor: 'rgba(0,0,0,0.08)',
-    marginVertical: 5,
+    marginVertical: 4,
   },
   datePillMonth: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#2C2C2E',
-    opacity: 0.9,
+    color: '#3C3C3E',
+    letterSpacing: 0.3,
   },
   datePillDay: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
-    color: '#2C2C2E',
-    marginTop: 2,
-  },
-
-  // Regular appointment card styles
-  regularHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  upcomingBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  upcomingBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#000000',
-  },
-  pastBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(52, 199, 89, 0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  pastBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#34C759',
-  },
-  regularTypeIndicator: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(142, 142, 147, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  regularCancelButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 59, 48, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  regularFooter: {
-    marginTop: 16,
-    alignItems: 'flex-start',
-  },
-  regularStatusIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  regularStatusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#34C759',
-  },
-  regularStatusText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#34C759',
-  },
-  loadMoreButton: {
-    marginTop: 20,
-    backgroundColor: '#000000',
-    paddingVertical: 12,
-    paddingHorizontal: 25,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadMoreButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  // Cancel button styles
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  cancelButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 59, 48, 0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    gap: 4,
-  },
-  cancelButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FF3B30',
+    color: '#1C1C1E',
   },
   // Modal styles
   modalOverlay: {
@@ -2084,42 +1810,6 @@ const styles = StyleSheet.create<any>({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
-  },
-  // Barber Avatar Styles
-  barberAvatarContainer: {
-    position: 'relative',
-  },
-  barberAvatarGradient: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  barberAvatar: {
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  barberAvatarImage: {
-    width: '100%',
-    height: '100%',
-  },
-  heroBarberAvatarContainer: {
-    position: 'absolute',
-    top: -12,
-    right: 12,
-    transform: [{ translateX: -20 }],
-    zIndex: 3,
-  },
-  regularHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    position: 'relative',
   },
   // Date Header Styles
   dateHeaderContainer: {

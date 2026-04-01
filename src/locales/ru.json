@@ -25,6 +25,9 @@
   "waitlist.remove": "Удалить из списка ожидания",
   "waitlist.leave.title": "Покинуть список ожидания",
   "waitlist.leave.message": "Вы уверены, что хотите выйти из списка ожидания?",
+  "waitlist.compactMessage": "Вы в списке ожидания",
+  "waitlist.compactHint": "Нажмите для подробностей",
+  "waitlist.compactA11y": "Список ожидания — открыть подробности",
   "cancel": "Отмена",
   "confirm": "Подтверждать",
   "delete": "Удалить",
@@ -509,7 +512,9 @@
   },
   "products": {
     "loginToViewDetails": "Пожалуйста, войдите в систему, чтобы просмотреть подробную информацию о продукте",
-    "ratingSummary": "{{rating}} (отзывов: {{count}})"
+    "ratingSummary": "{{rating}} (отзывов: {{count}})",
+    "carouselTitle": "Наши товары",
+    "carouselSubtitle": "Откройте для себя нашу премиальную коллекцию"
   },
   "auth": {
     "signInNow": "Войдите сейчас",

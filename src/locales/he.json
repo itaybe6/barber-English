@@ -27,6 +27,9 @@
   "waitlist.remove": "הסר מרשימת המתנה",
   "waitlist.leave.title": "עזיבת רשימת המתנה",
   "waitlist.leave.message": "האם אתה בטוח שברצונך לעזוב את רשימת ההמתנה?",
+  "waitlist.compactMessage": "נמצאים ברשימת המתנה",
+  "waitlist.compactHint": "הקישו לפרטים",
+  "waitlist.compactA11y": "רשימת המתנה — פתיחת פרטים",
   "cancel": "ביטול",
   "confirm": "אישור",
   "delete": "מחק",
@@ -471,7 +474,9 @@
   },
   "products": {
     "loginToViewDetails": "אנא התחבר/י להצגת פרטי המוצר",
-    "ratingSummary": "{{rating}} ({{count}} ביקורות)"
+    "ratingSummary": "{{rating}} ({{count}} ביקורות)",
+    "carouselTitle": "המוצרים שלנו",
+    "carouselSubtitle": "גלו את האוסף הנבחר שלנו"
   },
   "auth": { "signInNow": "התחבר/י עכשיו", "maybeLater": "אולי אחר כך" },
   "nearestSlots": { "title": "תורים זמינים בקרוב", "empty": "אין תורים זמינים בקרוב" },

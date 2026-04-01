@@ -4,8 +4,8 @@
  */
 export const CLIENT_TAB_BAR_EXTRA_BOTTOM = 18;
 
-/** Matches `ClientFloatingTabBar` row height (TabButton padding 14×2 + ~22px icon + pill). */
-export const CLIENT_FLOATING_TAB_BAR_HEIGHT = 58;
+/** Matches `ClientFloatingTabBar` capsule (icons only, plus inside bar). */
+export const CLIENT_FLOATING_TAB_BAR_HEIGHT = 56;
 
 export function getClientTabBarBottomInset(safeAreaBottom: number): number {
   const base = safeAreaBottom > 0 ? safeAreaBottom + 2 : 8;

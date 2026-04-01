@@ -1,29 +1,52 @@
 import React from "react";
-import { View, StyleSheet, Alert } from "react-native";
+import { View, StyleSheet, Alert, Pressable } from "react-native";
 import { useRouter, useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  CalendarDays,
-  CalendarPlus,
-  Home,
-  Image,
-  User,
-} from "lucide-react-native";
-import { TabButton } from "./tab-button";
+import * as Haptics from "expo-haptics";
+import { CalendarDays, Home, Image, Plus, User } from "lucide-react-native";
 import { useAuthStore } from "@/stores/authStore";
 import { isClientAwaitingApproval } from "@/lib/utils/clientApproval";
 import { useTranslation } from "react-i18next";
 import { getClientTabBarBottomInset } from "@/constants/clientTabBarInsets";
-import { useColors } from "@/src/theme/ThemeProvider";
 
-const INACTIVE = "#8a8a8a";
-const ICON_ACTIVE = "#ffffff";
+const ACTIVE = "#000000";
+const INACTIVE = "#9CA3AF";
+const BAR_BG = "#F2F2F7";
+const ICON_STROKE = 1.85;
+const ICON_SIZE = 24;
+const BOOK_FAB_SIZE = 40;
+const PLUS_ICON_SIZE = 20;
 
 type SetLoginModal = (v: { visible: boolean; title?: string; message?: string }) => void;
 
 interface Props {
   setLoginModal: SetLoginModal;
 }
+
+interface TabSlotProps {
+  focused: boolean;
+  Icon: typeof Home;
+  onPress: () => void;
+  accessibilityLabel: string;
+}
+
+const TabSlot: React.FC<TabSlotProps> = ({ focused, Icon, onPress, accessibilityLabel }) => {
+  const color = focused ? ACTIVE : INACTIVE;
+  return (
+    <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: focused }}
+      onPress={() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
+        onPress();
+      }}
+      style={styles.tabSlot}
+    >
+      <Icon size={ICON_SIZE} color={color} strokeWidth={ICON_STROKE} />
+    </Pressable>
+  );
+};
 
 export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
   const router = useRouter();
@@ -34,7 +57,6 @@ export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
   const isBlocked = Boolean((user as any)?.block);
   const awaitingApproval = isClientAwaitingApproval(user);
   const { t } = useTranslation();
-  const { primary } = useColors();
 
   const currentTab = segments[1] as string | undefined;
   if (currentTab === "book-appointment") {
@@ -42,7 +64,6 @@ export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
   }
 
   const isActive = (tab: string) => currentTab === tab || (tab === "index" && !currentTab);
-  const iconColor = (tab: string) => (isActive(tab) ? ICON_ACTIVE : INACTIVE);
 
   const navigate = (path: string, requireAuth = false) => {
     if (requireAuth && !isAuthenticated) {
@@ -89,49 +110,47 @@ export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
 
   return (
     <View style={[styles.root, { bottom: bottomInset }]} pointerEvents="box-none">
-      {/* Left standalone – Gallery */}
-      <View style={[styles.pill, styles.single, styles.border, styles.shadow]}>
-        <TabButton
-          focused={isActive("gallery")}
-          activeColor={primary}
-          onPress={() => navigate("/(client-tabs)/gallery")}
-        >
-          <Image size={22} color={iconColor("gallery")} />
-        </TabButton>
-      </View>
-
-      {/* Center pill */}
-      <View style={[styles.pill, styles.center, styles.border, styles.shadow]}>
-        <TabButton
+      <View style={[styles.capsule, styles.capsuleShadow]}>
+        <TabSlot
           focused={isActive("index")}
-          activeColor={primary}
+          Icon={Home}
+          accessibilityLabel={t("tabs.home", "Home")}
           onPress={() => navigate("/(client-tabs)")}
-        >
-          <Home size={22} color={iconColor("index")} />
-        </TabButton>
-
-        <TabButton focused={isActive("book-appointment")} activeColor={primary} onPress={handleBook}>
-          <CalendarPlus size={22} color={iconColor("book-appointment")} />
-        </TabButton>
-
-        <TabButton
+        />
+        <TabSlot
+          focused={isActive("gallery")}
+          Icon={Image}
+          accessibilityLabel={t("tabs.gallery", "Gallery")}
+          onPress={() => navigate("/(client-tabs)/gallery")}
+        />
+        <View style={styles.tabSlot}>
+          <Pressable
+            accessibilityLabel={t("tabs.book", "Book")}
+            accessibilityRole="button"
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
+              handleBook();
+            }}
+          >
+            {({ pressed }) => (
+              <View style={[styles.bookFab, pressed && styles.bookFabPressed]}>
+                <Plus size={PLUS_ICON_SIZE} color="#FFFFFF" strokeWidth={2} />
+              </View>
+            )}
+          </Pressable>
+        </View>
+        <TabSlot
           focused={isActive("appointments")}
-          activeColor={primary}
+          Icon={CalendarDays}
+          accessibilityLabel={t("tabs.booking", "Booking")}
           onPress={() => navigate("/(client-tabs)/appointments", true)}
-        >
-          <CalendarDays size={22} color={iconColor("appointments")} />
-        </TabButton>
-      </View>
-
-      {/* Right standalone – Profile */}
-      <View style={[styles.pill, styles.single, styles.border, styles.shadow]}>
-        <TabButton
+        />
+        <TabSlot
           focused={isActive("profile")}
-          activeColor={primary}
+          Icon={User}
+          accessibilityLabel={t("tabs.profile", "Profile")}
           onPress={() => navigate("/(client-tabs)/profile", true)}
-        >
-          <User size={22} color={iconColor("profile")} />
-        </TabButton>
+        />
       </View>
     </View>
   );
@@ -140,33 +159,46 @@ export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
 const styles = StyleSheet.create({
   root: {
     position: "absolute",
-    left: 20,
-    right: 20,
-    flexDirection: "row",
+    left: 28,
+    right: 28,
     alignItems: "center",
-    gap: 8,
   },
-  pill: {
-    backgroundColor: "#ffffff",
-    borderRadius: 999,
-    padding: 2,
-  },
-  single: {},
-  center: {
-    flex: 1,
+  capsule: {
+    direction: "ltr",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    width: "100%",
+    maxWidth: 340,
+    backgroundColor: BAR_BG,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
   },
-  border: {
-    borderWidth: 1,
-    borderColor: "#F1F1F1",
-  },
-  shadow: {
+  capsuleShadow: {
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  tabSlot: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+  },
+  bookFab: {
+    width: BOOK_FAB_SIZE,
+    height: BOOK_FAB_SIZE,
+    borderRadius: BOOK_FAB_SIZE / 2,
+    backgroundColor: "#000000",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bookFabPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.96 }],
   },
 });

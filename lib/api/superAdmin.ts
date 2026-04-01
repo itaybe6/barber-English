@@ -130,6 +130,37 @@ async function invokePulseemProvisionSubaccount<T extends Record<string, unknown
   return { data: data as T, status: res.status };
 }
 
+async function invokePulseemDeleteSubaccount(
+  body: Record<string, unknown>,
+): Promise<{ data: Record<string, unknown> | null; status: number }> {
+  const { url: supabaseUrl, serviceRole: serviceRoleKey } = getAdminSupabaseEnv();
+  if (!serviceRoleKey || !supabaseUrl) {
+    console.error(
+      '[pulseem-delete-subaccount] Missing EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY or URL',
+    );
+    return { data: null, status: 0 };
+  }
+  const base = supabaseUrl.replace(/\/$/, '');
+  const res = await fetch(`${base}/functions/v1/pulseem-delete-subaccount`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: serviceRoleKey,
+    },
+    body: JSON.stringify(body),
+  });
+  const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!res.ok) {
+    console.error('[pulseem-delete-subaccount] HTTP', res.status, data);
+    return { data: data ?? null, status: res.status };
+  }
+  if (data && data.error === 'unauthorized') {
+    return { data: null, status: 401 };
+  }
+  return { data: data ?? null, status: res.status };
+}
+
 async function invokePulseemCreditTransfer<T extends Record<string, unknown>>(
   body: Record<string, unknown>,
 ): Promise<{ data: T | null; status: number }> {
@@ -162,6 +193,17 @@ async function invokePulseemCreditTransfer<T extends Record<string, unknown>>(
     return { data: null, status: 401 };
   }
   return { data: data as T, status: res.status };
+}
+
+export interface DeleteBusinessResult {
+  success: boolean;
+  /** מצב מחיקת תת-חשבון Pulseem (Direct) — אם רלוונטי */
+  pulseem?: {
+    skipped?: boolean;
+    deleted?: boolean;
+    reason?: string;
+    error?: string;
+  };
 }
 
 export interface BusinessOverview {
@@ -1242,8 +1284,36 @@ export const superAdminApi = {
     }
   },
 
-  async deleteBusiness(businessId: string): Promise<boolean> {
+  async deleteBusiness(businessId: string): Promise<DeleteBusinessResult> {
     const client = getAdminSupabaseClient() ?? supabase;
+
+    let pulseemMeta: DeleteBusinessResult['pulseem'];
+    const { data: pulseData, status: pulseStatus } = await invokePulseemDeleteSubaccount({
+      businessId,
+    });
+    if (pulseStatus === 0) {
+      pulseemMeta = { skipped: true, reason: 'no_service_role_in_app' };
+    } else if (pulseStatus === 401 || pulseData?.error === 'unauthorized') {
+      pulseemMeta = { error: MSG_PULSEEM_401 };
+    } else if (pulseData?.ok === true && pulseData?.deleted === true) {
+      pulseemMeta = { deleted: true };
+    } else if (pulseData?.ok === true && pulseData?.skipped === true) {
+      pulseemMeta = {
+        skipped: true,
+        reason: String(pulseData.reason ?? '').trim() || undefined,
+      };
+    } else if (pulseData?.ok === false) {
+      pulseemMeta = {
+        error: String(pulseData.errorMessage ?? 'מחיקת תת-חשבון בפולסים נכשלה'),
+      };
+    } else if (!pulseData) {
+      pulseemMeta = {
+        error: `אין תגובה מהשרת (HTTP ${pulseStatus}) — מחיקת פולסים לא אושרה`,
+      };
+    } else {
+      pulseemMeta = { error: 'תגובה לא צפויה מ-pulseem-delete-subaccount' };
+    }
+
     try {
       const { data: profilePeek } = await client
         .from('business_profile')
@@ -1309,7 +1379,7 @@ export const superAdminApi = {
       const { error: profileError } = await client.from('business_profile').delete().eq('id', businessId);
       if (profileError) {
         console.error('Error deleting business_profile:', profileError.message);
-        return false;
+        return { success: false, pulseem: pulseemMeta };
       }
 
       const removeStoragePrefix = async (prefix: string) => {
@@ -1353,10 +1423,10 @@ export const superAdminApi = {
 
       await removeStorageRefsInBatches(client, storagePathsByBucket);
 
-      return true;
+      return { success: true, pulseem: pulseemMeta };
     } catch (err) {
       console.error('Error in deleteBusiness:', err);
-      return false;
+      return { success: false, pulseem: pulseemMeta };
     }
   },
 

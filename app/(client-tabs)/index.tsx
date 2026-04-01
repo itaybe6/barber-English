@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Linking, Alert, Animated, Easing, InteractionManager, AppState, Dimensions, RefreshControl, Platform, useWindowDimensions } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Linking, Alert, Animated, Easing, InteractionManager, AppState, Dimensions, RefreshControl, Platform, useWindowDimensions, I18nManager } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -33,9 +33,34 @@ import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
 import { toBcp47Locale } from '@/lib/i18nLocale';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const HERO_SPACING = Platform.OS === 'web' ? 12 : 8;
+
+/** Marquee geometry — aligned with `app/(tabs)/index.tsx` (admin home). */
+const HERO_MARQUEE_TRANSLATE_Y = 0;
+const HERO_ITEM_SIZE = Platform.OS === 'web' ? SCREEN_WIDTH * 0.255 : SCREEN_WIDTH * 0.35;
+const HERO_SPACING = Platform.OS === 'web' ? 12 : 6;
+const HERO_HEIGHT = Math.round(SCREEN_HEIGHT * 0.82);
+const HERO_MARQUEE_BOTTOM_BLEED = Math.round(SCREEN_HEIGHT * 0.135);
+const HERO_MARQUEE_HOST_HEIGHT = HERO_HEIGHT + HERO_MARQUEE_BOTTOM_BLEED;
+const MARQUEE_TILT_Z = I18nManager.isRTL ? '3.2deg' : '-3.2deg';
+const MARQUEE_PLANE_SCALE = 1.075;
+const MARQUEE_POST_TRANSFORM_NUDGE_Y = 48;
+
 const HERO_BG = '#FFFFFF';
-const HERO_HEIGHT_FALLBACK = Math.round(SCREEN_HEIGHT * 0.68);
+const HERO_HEIGHT_FALLBACK = HERO_HEIGHT;
+/** Top scrim over hero images — matches admin home primary fade (readability for status bar / header). */
+const HERO_TOP_SCRIM_HEIGHT = Math.round(
+  Math.max(196, Math.min(SCREEN_HEIGHT * 0.23, 226))
+);
+const HERO_TOP_SCRIM_BOTTOM_RADIUS = 32;
+
+const manicureHeroRootStyle = {
+  position: 'absolute' as const,
+  left: -SCREEN_WIDTH * 0.18,
+  right: -SCREEN_WIDTH * 0.18,
+  top: -SCREEN_HEIGHT * 0.02,
+  bottom: -SCREEN_HEIGHT * 0.07,
+  overflow: 'hidden' as const,
+};
 
 function sanitizeUrlArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -64,9 +89,17 @@ function chunkArray<T>(array: T[], size: number): T[][] {
   return chunked;
 }
 
-function ManicureMarqueeHero({ images }: { images: string[] }) {
-  const { width: winW } = useWindowDimensions();
-  const itemSize = Platform.OS === 'web' ? winW * 0.24 : winW * 0.45;
+function hexToRgba(hex: string, a: number): string {
+  const h = hex.replace('#', '');
+  if (h.length < 6) return `rgba(0,0,0,${a})`;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return `rgba(0,0,0,${a})`;
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+const ManicureMarqueeHero = React.memo(({ images }: { images: string[] }) => {
   const safeImages = images.length > 0 ? images : manicureImages;
 
   const columns = useMemo(() => {
@@ -75,18 +108,23 @@ function ManicureMarqueeHero({ images }: { images: string[] }) {
   }, [safeImages]);
 
   return (
-    <View style={styles.manicureHeroRoot} pointerEvents="box-none">
+    <View style={manicureHeroRootStyle} pointerEvents="box-none">
       <View
         style={{
           flex: 1,
           gap: HERO_SPACING,
-          transform: [{ rotate: '-4deg' }],
+          transform: [
+            { perspective: 1000 },
+            { rotateZ: MARQUEE_TILT_Z },
+            { scale: MARQUEE_PLANE_SCALE },
+            { translateY: HERO_MARQUEE_TRANSLATE_Y + MARQUEE_POST_TRANSFORM_NUDGE_Y },
+          ],
         }}
         pointerEvents="auto"
       >
         {columns.map((column, columnIndex) => (
           <Marquee
-            key={`manicure-marquee-${columnIndex}`}
+            key={`manicure-marquee-client-${columnIndex}`}
             speed={Platform.OS === 'web' ? 1 : 0.25}
             spacing={HERO_SPACING}
             reverse={columnIndex % 2 !== 0}
@@ -94,9 +132,9 @@ function ManicureMarqueeHero({ images }: { images: string[] }) {
             <View style={{ flexDirection: 'row', gap: HERO_SPACING }}>
               {column.map((image, index) => (
                 <ManicureMarqueeTile
-                  key={`manicure-image-${columnIndex}-${index}-${image}`}
+                  key={`manicure-image-client-${columnIndex}-${index}-${image}`}
                   uri={image}
-                  itemSize={itemSize}
+                  itemSize={HERO_ITEM_SIZE}
                   borderRadius={HERO_SPACING}
                   columnIndex={columnIndex}
                   index={index}
@@ -115,17 +153,9 @@ function ManicureMarqueeHero({ images }: { images: string[] }) {
         style={styles.manicureHeroFadeBottom}
         pointerEvents="none"
       />
-      <LinearGradient
-        colors={[HERO_BG, HERO_BG, 'rgba(255,255,255,0)']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        locations={[0, Platform.OS === 'web' ? 0.1 : 0.3, 1]}
-        style={styles.manicureHeroFadeTop}
-        pointerEvents="none"
-      />
     </View>
   );
-}
+});
 
 
 // API functions for client home
@@ -236,7 +266,18 @@ export default function ClientHomeScreen() {
   const awaitingApproval = isClientAwaitingApproval(user);
   const colors = useColors();
   const { height: winH } = useWindowDimensions();
-  const heroHeight = winH > 0 ? Math.max(280, Math.round(winH * 0.68)) : HERO_HEIGHT_FALLBACK;
+  const heroHeight = winH > 0 ? Math.round(winH * 0.82) : HERO_HEIGHT_FALLBACK;
+  const heroMarqueeHostHeight =
+    winH > 0 ? Math.round(winH * 0.82) + Math.round(winH * 0.135) : HERO_MARQUEE_HOST_HEIGHT;
+  const heroTopScrimGradientColors = useMemo(
+    () => [
+      hexToRgba(colors.primary, 0.9),
+      hexToRgba(colors.primary, 0.82),
+      hexToRgba(colors.primary, 0.48),
+      hexToRgba(colors.primary, 0),
+    ],
+    [colors.primary]
+  );
   // Ensure light status bar when this screen is focused
   useFocusEffect(
     React.useCallback(() => {
@@ -751,7 +792,33 @@ export default function ClientHomeScreen() {
       >
         {/* Full Screen Hero with Overlay Header */}
         <View style={[styles.fullScreenHero, { height: heroHeight }]}>
-          <ManicureMarqueeHero images={heroImages} />
+          <View
+            style={[styles.clientHeroMarqueeHost, { height: heroMarqueeHostHeight }]}
+            pointerEvents="none"
+            collapsable={false}
+          >
+            <ManicureMarqueeHero images={heroImages} />
+          </View>
+          <View
+            pointerEvents="none"
+            style={[
+              styles.heroTopScrimBand,
+              {
+                height: HERO_TOP_SCRIM_HEIGHT,
+                borderBottomLeftRadius: HERO_TOP_SCRIM_BOTTOM_RADIUS,
+                borderBottomRightRadius: HERO_TOP_SCRIM_BOTTOM_RADIUS,
+              },
+            ]}
+          >
+            <LinearGradient
+              pointerEvents="none"
+              colors={heroTopScrimGradientColors}
+              locations={[0, 0.22, 0.52, 1]}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={StyleSheet.absoluteFillObject}
+            />
+          </View>
           <LinearGradient
             colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0)', 'rgba(255,255,255,0)']}
             start={{ x: 0, y: 0 }}
@@ -762,14 +829,6 @@ export default function ClientHomeScreen() {
           
           {/* Header Overlay */}
           <SafeAreaView edges={["top"]} style={styles.overlayHeader} pointerEvents="box-none">
-            <LinearGradient
-              colors={['rgba(0,0,0,0.62)', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 0, y: 1 }}
-              locations={[0, 0.6, 1]}
-              style={styles.overlayHeaderGradient}
-              pointerEvents="none"
-            />
             <View style={styles.overlayHeaderContent} pointerEvents="box-none">
               <View style={styles.headerSide}>
                 <TouchableOpacity
@@ -1306,6 +1365,16 @@ const styles = StyleSheet.create<any>({
     width: '100%',
     zIndex: 0, // Very low z-index so white background can overlap it
     backgroundColor: HERO_BG,
+    overflow: 'hidden',
+  },
+  /** Same role as admin `adminHeroMarqueeHost` — fixed top, extra height for bottom bleed under tilted grid */
+  clientHeroMarqueeHost: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 0,
+    overflow: 'hidden',
   },
   fullScreenHeroImage: {
     width: '100%',
@@ -1319,6 +1388,15 @@ const styles = StyleSheet.create<any>({
     bottom: 0,
     zIndex: 0, // Very low z-index so white background can overlap it
   },
+  heroTopScrimBand: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1,
+    overflow: 'hidden',
+    borderCurve: 'continuous',
+  },
   overlayHeader: {
     position: 'absolute',
     top: 0,
@@ -1326,13 +1404,6 @@ const styles = StyleSheet.create<any>({
     right: 0,
     zIndex: 2,
     overflow: 'visible',
-  },
-  overlayHeaderGradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 200,
   },
   overlayHeaderContent: {
     flexDirection: 'row',
@@ -1385,27 +1456,12 @@ const styles = StyleSheet.create<any>({
     alignItems: 'flex-start',
     zIndex: 0, // Very low z-index so white background can overlap it
   },
-  manicureHeroRoot: {
-    position: 'absolute',
-    left: -SCREEN_WIDTH * 0.1,
-    right: -SCREEN_WIDTH * 0.1,
-    top: 0,
-    bottom: 0,
-    overflow: 'hidden',
-  },
   manicureHeroFadeBottom: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
     height: '30%',
-  },
-  manicureHeroFadeTop: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    height: Platform.OS === 'web' ? '25%' : '15%',
   },
   scrollContent: {
     paddingBottom: 400, // Extra bottom padding to see the image at the bottom

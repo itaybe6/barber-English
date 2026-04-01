@@ -129,9 +129,9 @@
         "EXPO_PUBLIC_SUPABASE_URL": "https://vqstsrobzbykfivlahxa.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxc3Rzcm9iemJ5a2ZpdmxhaHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc2MDM1MjUsImV4cCI6MjA3MzE3OTUyNX0.iW4vYBC3usEqACGug6BNDkB7PJdHZ75lXo8TJO2x30k",
         "EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxc3Rzcm9iemJ5a2ZpdmxhaHhhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NzYwMzUyNSwiZXhwIjoyMDczMTc5NTI1fQ.Qid2t7FB_yFtoqDsPS8WjOI5bxQEiI1oZVmjTrTr58I",
-        "EXPO_PUBLIC_SA_P": "0502307500",
-        "EXPO_PUBLIC_SA_K": "Itay6236045",
-        "PULSEEM_MAIN_API_KEY": "KE#xdnNcLms]NL$yyaX{VgA-fiaL]O19fC*sYf[}s(00a]hpt",
+        "EXPO_PUBLIC_SA_P": "",
+        "EXPO_PUBLIC_SA_K": "",
+        "PULSEEM_MAIN_API_KEY": "",
         "EXPO_PUBLIC_PROJECT_ID": "8efaeaeb-7141-4328-a75f-5d56de528df1"
       }
     }
@@ -163,5 +163,9 @@
       "secondary": "System"
     }
   },
+<<<<<<< HEAD
   "timestamp": "2026-04-01T12:56:21.337Z"
+=======
+  "timestamp": "2026-03-31T16:53:00.746Z"
+>>>>>>> ec8a8db916aff00f4df211d411dd57a43baa14b7
 }

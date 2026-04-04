@@ -1,15 +1,13 @@
 /**
- * Shared bottom offset for client floating tab bar and booking step bar (absolute `bottom`).
- * Increase to lift the whole bar higher above the screen edge / home indicator.
+ * Shared bottom offset for client floating tab bar — aligned with `AdminFloatingTabBar` (`insets.bottom + 12`).
  */
-export const CLIENT_TAB_BAR_EXTRA_BOTTOM = 18;
+export const CLIENT_TAB_BAR_BOTTOM_OFFSET_ABOVE_SAFE = 12;
 
-/** Matches `ClientFloatingTabBar` capsule (icons only, plus inside bar). */
-export const CLIENT_FLOATING_TAB_BAR_HEIGHT = 56;
+/** Approximate height of one admin-style pill row (border + padding + TabButton + icon). */
+export const CLIENT_FLOATING_TAB_BAR_HEIGHT = 54;
 
 export function getClientTabBarBottomInset(safeAreaBottom: number): number {
-  const base = safeAreaBottom > 0 ? safeAreaBottom + 2 : 8;
-  return base + CLIENT_TAB_BAR_EXTRA_BOTTOM;
+  return safeAreaBottom + CLIENT_TAB_BAR_BOTTOM_OFFSET_ABOVE_SAFE;
 }
 
 /**

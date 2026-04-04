@@ -2,45 +2,18 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
+  Pressable,
   Image,
   StyleSheet,
-  Dimensions,
-  useWindowDimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, {
-  Extrapolation,
-  FadeInDown,
-  interpolate,
-  SharedValue,
-  useAnimatedScrollHandler,
-  useAnimatedStyle,
-  useSharedValue,
-} from 'react-native-reanimated';
-
-import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { SharedValue } from 'react-native-reanimated';
 
 import type { Service } from '@/lib/supabase';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
-import { BOOKING_TABS_HEIGHT } from '@/components/book-appointment/BookingStepTabs';
-import { getClientTabBarBottomInset } from '@/constants/clientTabBarInsets';
 
-const SCREEN = Dimensions.get('window');
-const WIN_H = SCREEN.height;
-
-const _spacing = 8;
-const _borderRadius = 14;
-/** Shorter card so prev/next services peek above & below (carousel feel) */
-const _itemSize = WIN_H * 0.4;
-const _itemGap = _spacing * 2;
-const _itemFullSize = _itemSize + _itemGap;
-/** Room above/below focused card so neighbors + borders/shadows aren’t clipped */
-const _peekInset = Math.max(52, Math.round(WIN_H * 0.076));
-/** Extra viewport height beyond card+peek (shadows, 3px selection border, scale) */
-const _viewportBleed = 44;
-/** Floating title zone — gradient so cards scroll underneath instead of a hard cut */
-const _headerFadeHeight = 118;
+const THUMB_SIZE = 56;
 
 function serviceImageUri(service: Service): string {
   return (
@@ -48,150 +21,6 @@ function serviceImageUri(service: Service): string {
     (service as any)?.cover_url ||
     (service as any)?.image ||
     ''
-  );
-}
-
-type PerplexityServiceCardProps = {
-  service: Service;
-  index: number;
-  scrollY: SharedValue<number>;
-  isSelected: boolean;
-  primaryColor: string;
-  showServiceImages: boolean;
-  t: any;
-  onPress: () => void;
-};
-
-function PerplexityServiceCard({
-  service,
-  index,
-  scrollY,
-  isSelected,
-  primaryColor,
-  showServiceImages,
-  t,
-  onPress,
-}: PerplexityServiceCardProps) {
-  const [imgError, setImgError] = useState(false);
-  const uri = serviceImageUri(service);
-  const showImage = showServiceImages && !!uri && !imgError;
-  const description = ((service as any)?.description as string | undefined)?.trim?.() || '';
-  const duration = (service as any)?.duration_minutes ?? 60;
-  const price = (service as any)?.price ?? 0;
-
-  const stylez = useAnimatedStyle(() => ({
-    opacity: interpolate(
-      scrollY.value,
-      [index - 1, index, index + 1],
-      [0.62, 1, 0.62],
-      Extrapolation.CLAMP
-    ),
-    transform: [
-      {
-        scale: interpolate(
-          scrollY.value,
-          [index - 1, index, index + 1],
-          [0.96, 1, 0.96],
-          Extrapolation.CLAMP
-        ),
-      },
-    ],
-  }));
-
-  return (
-    <TouchableOpacity activeOpacity={0.92} onPress={onPress}>
-      <Animated.View
-        style={[
-          {
-            height: _itemSize,
-            padding: _spacing * 2,
-            borderRadius: _borderRadius,
-            gap: _spacing * 1.5,
-            backgroundColor: '#FFFFFF',
-            overflow: 'hidden',
-            borderWidth: isSelected ? 3 : 1,
-            borderColor: isSelected ? primaryColor : '#E8E8ED',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: 0.08,
-            shadowRadius: 20,
-            elevation: 4,
-          },
-          stylez,
-        ]}
-      >
-        {isSelected && (
-          <View
-            style={[styles.checkFloating, { backgroundColor: primaryColor, borderColor: '#FFFFFF' }]}
-          >
-            <Ionicons name="checkmark" size={18} color="#FFFFFF" />
-          </View>
-        )}
-
-        {showImage ? (
-          <>
-            <Image
-              source={{ uri }}
-              style={[StyleSheet.absoluteFillObject, { borderRadius: _borderRadius, opacity: 0.12 }]}
-              blurRadius={40}
-            />
-            <Image
-              source={{ uri }}
-              style={{
-                borderRadius: _borderRadius - _spacing / 2,
-                flex: 1,
-                height: _itemSize * 0.38,
-                margin: -_spacing,
-              }}
-              resizeMode="cover"
-              onError={() => setImgError(true)}
-            />
-          </>
-        ) : (
-          <View
-            style={{
-              borderRadius: _borderRadius - _spacing / 2,
-              flex: 1,
-              minHeight: _itemSize * 0.34,
-              margin: -_spacing,
-              backgroundColor: primaryColor,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Ionicons name="cut" size={44} color="rgba(255,255,255,0.5)" />
-          </View>
-        )}
-
-        <View style={{ gap: _spacing * 0.75 }}>
-          <Text style={styles.cardTitle} numberOfLines={2}>
-            {(service as any)?.name || ''}
-          </Text>
-          {description ? (
-            <Text style={styles.cardDescription} numberOfLines={3}>
-              {description}
-            </Text>
-          ) : (
-            <Text style={styles.cardDescription} numberOfLines={2}>
-              {`${duration} ${t('booking.min', 'min')} · ₪${price}`}
-            </Text>
-          )}
-        </View>
-
-        <View style={styles.metaRow}>
-          <View style={styles.metaChip}>
-            <Ionicons name="time-outline" size={14} color="#6B7280" />
-            <Text style={styles.metaChipText}>
-              {duration} {t('booking.min', 'min')}
-            </Text>
-          </View>
-          <View style={styles.metaChip}>
-            <Ionicons name="pricetag-outline" size={14} color="#6B7280" />
-            <Text style={styles.metaChipText}>₪{price}</Text>
-          </View>
-        </View>
-      </Animated.View>
-    </TouchableOpacity>
   );
 }
 
@@ -206,7 +35,6 @@ type Props = {
   selectedServiceId?: string | number | null;
   selectedServiceIds?: string[];
   externalScrollX?: SharedValue<number>;
-  /** When false, cards use icon placeholder instead of photos (business_profile.show_service_images). */
   showServiceImages?: boolean;
   t: any;
   onSelectService: (service: Service, index: number) => void;
@@ -217,7 +45,6 @@ export default function ServiceSelection({
   styles: parentStyles,
   step2FadeStyle,
   topOffset = 0,
-  safeAreaBottom,
   isLoading,
   services,
   selectedServiceId,
@@ -226,160 +53,59 @@ export default function ServiceSelection({
   t,
   onSelectService,
 }: Props) {
-  const { height: windowHeight } = useWindowDimensions();
   const { colors } = useBusinessColors();
-  const scrollY = useSharedValue(0);
-  /** ScrollView (not FlatList) — parent screen uses ScrollView; nesting VirtualizedList caused blank area + RN warning */
-  const scrollRef = React.useRef<Animated.ScrollView>(null);
-
-  /** Matches book-appointment spacer below step tabs: `TOP_OFFSET + 12` */
-  const SCROLL_TOP_EXTRA = 12;
-  /** Same inset as booking step bar / client floating tab bar */
-  const tabBarBottomOffset = getClientTabBarBottomInset(safeAreaBottom);
-  const TAB_ROW_HEIGHT = BOOKING_TABS_HEIGHT;
-  const LIST_GAP_ABOVE_TAB = 10;
-  const bottomChrome = tabBarBottomOffset + TAB_ROW_HEIGHT + LIST_GAP_ABOVE_TAB;
-
-  const baseMinViewport = _itemSize + _peekInset * 2 + _itemGap + _viewportBleed;
-  const usableListHeight =
-    windowHeight - topOffset - SCROLL_TOP_EXTRA - bottomChrome;
-
-  /** Fill space to bottom nav; old Math.min(0.66*H, …) left a large empty band on web / short viewports */
-  const listViewportHeight = Math.min(
-    windowHeight * 0.96,
-    Math.max(baseMinViewport, usableListHeight)
-  );
-  const verticalPad = Math.max(24, (listViewportHeight - _itemSize) / 2);
-
-  const onScroll = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      scrollY.value = e.contentOffset.y / _itemFullSize;
-    },
-  });
-
-  const onMomentumScrollEnd = React.useCallback(
-    (e: { nativeEvent: { contentOffset: { y: number } } }) => {
-      const y = Math.max(0, e.nativeEvent.contentOffset.y);
-      const idx = Math.round(y / _itemFullSize);
-      const clamped = Math.max(0, Math.min(idx, Math.max(0, services.length - 1)));
-      const target = clamped * _itemFullSize;
-      if (Math.abs(target - y) > 1.5 && scrollRef.current) {
-        try {
-          scrollRef.current.scrollTo({ y: target, animated: true });
-        } catch {
-          /* noop */
-        }
-      }
-    },
-    [services.length]
-  );
 
   if (!visible) return null;
 
-  const footerPad = Math.max(safeAreaBottom, 20) + 72;
+  const isSvcSelected = (item: Service) => {
+    const svcId = String((item as any).id ?? '');
+    if (selectedServiceIds?.length) return selectedServiceIds.includes(svcId);
+    return svcId === String(selectedServiceId ?? '');
+  };
 
   return (
     <Animated.View
       style={[
         parentStyles.section,
-        parentStyles.sectionFullBleed,
         step2FadeStyle,
         {
-          backgroundColor: 'transparent',
-          alignSelf: 'stretch',
-          minHeight: listViewportHeight,
+          marginTop: Math.max(topOffset + 12, 16),
+          marginBottom: 0,
         },
       ]}
     >
       {isLoading ? (
-        <View style={[parentStyles.loadingContainer, { flex: 1, justifyContent: 'center' }]}>
-          <Text style={[parentStyles.loadingText, { color: '#9CA3AF' }]}>
+        <View style={styles.loadingState}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[parentStyles.loadingText, { color: '#9CA3AF', marginTop: 12 }]}>
             {t('booking.loadingServices', 'Loading services...')}
           </Text>
         </View>
       ) : services.length > 0 ? (
-        <View>
-          <View
-            style={{
-              width: '100%',
-              height: listViewportHeight,
-              overflow: 'visible',
-              position: 'relative',
-            }}
-          >
-            <Animated.ScrollView
-              ref={scrollRef}
-              nestedScrollEnabled
-              removeClippedSubviews={false}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              style={StyleSheet.absoluteFillObject}
-              contentContainerStyle={{
-                gap: _itemGap,
-                paddingHorizontal: _spacing * 2,
-                paddingTop: verticalPad,
-                paddingBottom: verticalPad + footerPad,
-              }}
-              onScroll={onScroll}
-              scrollEventThrottle={1000 / 60}
-              snapToInterval={_itemFullSize}
-              snapToAlignment="start"
-              decelerationRate="fast"
-              onMomentumScrollEnd={onMomentumScrollEnd}
-            >
-              {services.map((item, index) => {
-                const svcId = String((item as any).id ?? '');
-                const isSelected = selectedServiceIds
-                  ? selectedServiceIds.includes(svcId)
-                  : svcId === String(selectedServiceId ?? '');
-                return (
-                  <PerplexityServiceCard
-                    key={svcId || `svc-${index}`}
-                    service={item}
-                    index={index}
-                    scrollY={scrollY}
-                    isSelected={isSelected}
-                    primaryColor={colors.primary}
-                    showServiceImages={showServiceImages}
-                    t={t}
-                    onPress={() => onSelectService(item, index)}
-                  />
-                );
-              })}
-              <View style={{ height: 8 }} />
-            </Animated.ScrollView>
+        <View style={styles.shell}>
+          <View style={styles.header}>
+            <Text style={styles.title}>{t('booking.selectServices', 'Select Services')}</Text>
+            <Text style={styles.subtitle}>
+              {t('booking.selectMultipleHint', 'Tap to select one or more services')}
+            </Text>
+          </View>
 
-            {/* Title floats above scroll; gradient hides hard edge so carousel runs underneath */}
-            <View
-              pointerEvents="none"
-              style={[styles.headerOverlay, { height: _headerFadeHeight }]}
-            >
-              <LinearGradient
-                colors={[
-                  'rgba(255,255,255,0.98)',
-                  'rgba(255,255,255,0.88)',
-                  'rgba(255,255,255,0.45)',
-                  'rgba(255,255,255,0)',
-                ]}
-                locations={[0, 0.35, 0.65, 1]}
-                style={StyleSheet.absoluteFillObject}
+          <View style={styles.list}>
+            {services.map((service, index) => (
+              <ServiceRow
+                key={String((service as any).id ?? `svc-${index}`)}
+                service={service}
+                isSelected={isSvcSelected(service)}
+                primaryColor={colors.primary}
+                showServiceImages={showServiceImages}
+                onPress={() => onSelectService(service, index)}
+                t={t}
               />
-              <Animated.View
-                entering={FadeInDown.delay(80).duration(400)}
-                style={styles.headerOverlayContent}
-              >
-                <Text style={styles.headerTitle}>{t('booking.selectServices', 'Select Services')}</Text>
-                <Text style={styles.headerSub}>
-                  {t('booking.selectMultipleHint', 'Tap to select one or more services')}
-                </Text>
-              </Animated.View>
-            </View>
+            ))}
           </View>
         </View>
       ) : (
-        <View
-          style={[parentStyles.loadingContainer, { flex: 1, justifyContent: 'center', alignItems: 'center' }]}
-        >
+        <View style={styles.loadingState}>
           <Ionicons name="briefcase-outline" size={48} color="#D1D5DB" style={{ marginBottom: 16 }} />
           <Text style={[parentStyles.loadingText, { color: '#9CA3AF', fontSize: 17 }]}>
             {t('booking.noServices', 'No services available')}
@@ -390,88 +116,248 @@ export default function ServiceSelection({
   );
 }
 
+type RowProps = {
+  service: Service;
+  isSelected: boolean;
+  primaryColor: string;
+  showServiceImages: boolean;
+  onPress: () => void;
+  t: any;
+};
+
+function ServiceRow({
+  service,
+  isSelected,
+  primaryColor,
+  showServiceImages,
+  onPress,
+  t,
+}: RowProps) {
+  const [imgError, setImgError] = useState(false);
+  const uri = serviceImageUri(service);
+  const showImage = showServiceImages && !!uri && !imgError;
+  const duration = (service as any)?.duration_minutes ?? 60;
+  const price = (service as any)?.price ?? 0;
+  const name = String((service as any)?.name || '');
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: isSelected }}
+      accessibilityLabel={
+        price > 0
+          ? `${name}, ${duration} ${t('booking.min', 'min')}, ₪${price}`
+          : `${name}, ${duration} ${t('booking.min', 'min')}`
+      }
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+    >
+      <View style={styles.priceRing}>
+        <View style={styles.priceInner}>
+          <Text
+            style={[styles.priceText, { color: price > 0 ? primaryColor : '#9CA3AF' }]}
+            numberOfLines={2}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+          >
+            {price > 0 ? `₪${price}` : '—'}
+          </Text>
+        </View>
+      </View>
+
+      <View
+        style={[
+          styles.infoPill,
+          isSelected ? styles.infoPillSelected : styles.infoPillIdle,
+        ]}
+      >
+        {isSelected ? (
+          <Ionicons name="checkmark-circle" size={20} color={primaryColor} style={styles.checkIcon} />
+        ) : null}
+        <View style={styles.infoTextBlock}>
+          <Text style={styles.serviceName} numberOfLines={2}>
+            {name}
+          </Text>
+          <Text style={styles.durationLine} numberOfLines={1}>
+            {duration} {t('booking.min', 'min')}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.thumbRing}>
+        <View style={styles.thumbInner}>
+          {showImage ? (
+            <Image
+              source={{ uri }}
+              style={styles.thumbImage}
+              resizeMode="cover"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <View
+              style={[
+                styles.thumbPlaceholder,
+                {
+                  backgroundColor: isSelected ? '#E8ECF2' : `${primaryColor}20`,
+                },
+              ]}
+            >
+              <Ionicons name="cut" size={26} color={primaryColor} />
+            </View>
+          )}
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  headerOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 20,
+  shell: {
+    gap: 36,
   },
-  headerOverlayContent: {
+  loadingState: {
+    minHeight: 220,
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 4,
+    justifyContent: 'center',
   },
-  headerTitle: {
-    color: '#1C1C1E',
-    fontSize: 22,
+  header: {
+    gap: 8,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    letterSpacing: -0.4,
+  },
+  subtitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.78)',
+    textAlign: 'center',
+  },
+  list: {
+    gap: 24,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    direction: 'ltr',
+    gap: 10,
+  },
+  rowPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.97 }],
+  },
+  thumbRing: {
+    width: THUMB_SIZE + 6,
+    height: THUMB_SIZE + 6,
+    borderRadius: (THUMB_SIZE + 6) / 2,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  thumbInner: {
+    width: THUMB_SIZE,
+    height: THUMB_SIZE,
+    borderRadius: THUMB_SIZE / 2,
+    overflow: 'hidden',
+    backgroundColor: '#EEF2F7',
+  },
+  thumbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  thumbPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  priceRing: {
+    width: THUMB_SIZE + 6,
+    height: THUMB_SIZE + 6,
+    borderRadius: (THUMB_SIZE + 6) / 2,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  priceInner: {
+    width: THUMB_SIZE,
+    height: THUMB_SIZE,
+    borderRadius: THUMB_SIZE / 2,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  priceText: {
+    fontSize: 14,
     fontWeight: '800',
     textAlign: 'center',
     letterSpacing: -0.3,
-    textShadowColor: 'rgba(255,255,255,0.9)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 6,
   },
-  headerSub: {
-    color: '#6B7280',
-    fontSize: 14,
-    fontWeight: '500',
-    textAlign: 'center',
-    marginTop: 6,
-    textShadowColor: 'rgba(255,255,255,0.85)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 4,
-  },
-  checkFloating: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    zIndex: 10,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+  infoPill: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
+    maxWidth: 280,
+    borderRadius: 999,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    gap: 8,
+    position: 'relative',
+  },
+  infoPillIdle: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderWidth: 1.5,
+    borderColor: 'transparent',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
     elevation: 3,
   },
-  cardTitle: {
-    fontSize: 20,
-    color: '#1C1C1E',
+  infoPillSelected: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  infoTextBlock: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  serviceName: {
+    fontSize: 16,
     fontWeight: '700',
+    color: '#111827',
+    letterSpacing: -0.2,
+    textAlign: 'right',
   },
-  cardDescription: {
-    fontWeight: '400',
-    color: '#6B7280',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: _spacing,
-    flexWrap: 'wrap',
-  },
-  metaChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: '#F3F4F6',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  metaChipText: {
-    color: '#374151',
-    fontSize: 12,
+  durationLine: {
+    marginTop: 4,
+    fontSize: 13,
     fontWeight: '600',
+    color: '#6B7280',
+    textAlign: 'right',
+  },
+  checkIcon: {
+    marginRight: 6,
   },
 });

@@ -1,12 +1,12 @@
 import React from 'react';
 import { View, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
-import { Check, ChevronLeft, Home } from 'lucide-react-native';
+import { CalendarDays, Check, ChevronLeft, Clock3, Home, Scissors, User } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 
-import AnimatedTabs, { TabsPropsData } from '@/components/book-appointment/AnimatedTabs';
 import { TabButton } from '@/components/shopify-tab-bar/tab-button';
 import { getClientTabBarBottomInset } from '@/constants/clientTabBarInsets';
+import { useColors, usePrimaryContrast } from '@/src/theme/ThemeProvider';
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -32,6 +32,7 @@ type Props = {
 };
 
 const INACTIVE = '#6b7280';
+const DISABLED = '#c4c7cf';
 
 /** Moss / forest greens — distinct from the old emerald→teal arrow. */
 const BOOKING_TAB_SELECTED = '#15803d';
@@ -40,7 +41,7 @@ const BOOKING_TAB_SELECTED_DEEP = '#14532d';
 const ADVANCE_GRADIENT = ['#86efac', '#22c55e', BOOKING_TAB_SELECTED_DEEP] as const;
 const ADVANCE_GRADIENT_LOCATIONS = [0, 0.45, 1] as const;
 
-// Side pills (~50) and center AnimatedTabs stacked (~54+) — keep in sync with layout
+// Side pills plus center icon-only step pill — keep in sync with layout
 export const BOOKING_TABS_HEIGHT = 62;
 
 /** Distance from screen bottom to top edge of booking bar (matches ClientFloatingTabBar inset). */
@@ -60,19 +61,43 @@ export default function BookingStepTabs({
   advanceNext,
 }: Props) {
   const bottomInset = getClientTabBarBottomInset(safeAreaBottom);
+  const { primary } = useColors();
+  const { onPrimary } = usePrimaryContrast();
 
-  /** Visual order (LTR): time → day → service → barber */
-  const data = React.useMemo<TabsPropsData[]>(
+  const steps = React.useMemo(
     () => [
-      { icon: 'Clock', label: labels.time },
-      { icon: 'Calendar', label: labels.day },
-      { icon: 'Briefcase', label: labels.service },
-      { icon: 'User', label: labels.barber },
+      {
+        step: 4 as Step,
+        enabled: canGoTime,
+        label: labels.time,
+        icon: Clock3,
+      },
+      {
+        step: 3 as Step,
+        enabled: canGoDay,
+        label: labels.day,
+        icon: CalendarDays,
+      },
+      {
+        step: 2 as Step,
+        enabled: canGoService,
+        label: labels.service,
+        icon: Scissors,
+      },
+      {
+        step: 1 as Step,
+        enabled: true,
+        label: labels.barber,
+        icon: User,
+      },
     ],
-    [labels]
+    [canGoDay, canGoService, canGoTime, labels]
   );
 
-  const selectedIndex = Math.max(0, Math.min(3, 4 - Number(currentStep)));
+  const getStepIconColor = (step: Step, enabled: boolean) => {
+    if (currentStep === step) return onPrimary;
+    return enabled ? INACTIVE : DISABLED;
+  };
 
   return (
     <View
@@ -149,28 +174,27 @@ export default function BookingStepTabs({
 
         <View style={[styles.pill, styles.center, styles.border, styles.pillBooking, styles.shadow]}>
           <View style={styles.tabsInner}>
-            <AnimatedTabs
-              data={data}
-              selectedIndex={selectedIndex}
-              stacked
-              rtlMirror={false}
-              onChange={(idx) => {
-                const step = (4 - idx) as Step;
-                if (step === 1) return onChangeStep(1);
-                if (step === 2 && canGoService) return onChangeStep(2);
-                if (step === 3 && canGoDay) return onChangeStep(3);
-                if (step === 4 && canGoTime) return onChangeStep(4);
-              }}
-              activeColor="#ffffff"
-              inactiveColor="#4b5563"
-              activeBackgroundColor={BOOKING_TAB_SELECTED}
-              inactiveBackgroundColor="transparent"
-            />
+            {steps.map(({ step, enabled, label, icon: Icon }) => (
+              <TabButton
+                key={step}
+                focused={currentStep === step}
+                activeColor={primary}
+                onPress={() => {
+                  if (!enabled) return;
+                  onChangeStep(step);
+                }}
+                accessibilityLabel={label}
+                accessibilityRole="tab"
+                buttonPadding={12}
+              >
+                <Icon size={20} color={getStepIconColor(step, enabled)} />
+              </TabButton>
+            ))}
           </View>
         </View>
 
         <View style={[styles.pill, styles.single, styles.border, styles.pillBooking, styles.shadow]}>
-          <TabButton focused={false} activeColor={BOOKING_TAB_SELECTED} onPress={onHome}>
+          <TabButton focused={false} activeColor={primary} onPress={onHome}>
             <Home size={22} color={INACTIVE} />
           </TabButton>
         </View>
@@ -201,8 +225,8 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   pillBooking: {
-    backgroundColor: '#f5fbf7',
-    borderColor: 'rgba(21, 128, 61, 0.14)',
+    backgroundColor: '#ffffff',
+    borderColor: '#F1F1F1',
   },
   single: {},
   advancePillActive: {
@@ -240,9 +264,12 @@ const styles = StyleSheet.create({
   center: {
     flex: 1,
     minWidth: 0,
-    overflow: 'hidden',
   },
   tabsInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
     paddingVertical: 4,
     paddingHorizontal: 4,
   },

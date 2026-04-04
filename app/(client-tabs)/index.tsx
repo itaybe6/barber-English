@@ -1,6 +1,24 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Linking, Alert, Animated, Easing, InteractionManager, AppState, Dimensions, RefreshControl, Platform, useWindowDimensions, I18nManager } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  TouchableOpacity,
+  Image,
+  Linking,
+  Alert,
+  Animated as RNAnimated,
+  Easing,
+  InteractionManager,
+  AppState,
+  Dimensions,
+  RefreshControl,
+  Platform,
+  I18nManager,
+} from 'react-native';
+import Animated, { useSharedValue, useAnimatedScrollHandler, runOnJS } from 'react-native-reanimated';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import Colors from '@/constants/colors';
@@ -22,7 +40,7 @@ import { useDesignsStore } from '@/stores/designsStore';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { useProductsStore } from '@/stores/productsStore';
 import { getCurrentClientLogo } from '@/src/theme/assets';
-import { useColors } from '@/src/theme/ThemeProvider';
+import { useColors, usePrimaryContrast } from '@/src/theme/ThemeProvider';
 import { StatusBar, setStatusBarStyle, setStatusBarBackgroundColor } from 'expo-status-bar';
 import { useTranslation } from 'react-i18next';
 import { Marquee } from '@animatereactnative/marquee';
@@ -42,12 +60,19 @@ const HERO_SPACING = Platform.OS === 'web' ? 12 : 6;
 const HERO_HEIGHT = Math.round(SCREEN_HEIGHT * 0.82);
 const HERO_MARQUEE_BOTTOM_BLEED = Math.round(SCREEN_HEIGHT * 0.135);
 const HERO_MARQUEE_HOST_HEIGHT = HERO_HEIGHT + HERO_MARQUEE_BOTTOM_BLEED;
+/** Match admin home sheet overlap / pull-up (`app/(tabs)/index.tsx`). */
+const HERO_OVERLAP = 214;
+const HERO_SHEET_PULL_UP = 64;
+const OUTER_INNER_HANDOFF_ON_PX = 4;
+const OUTER_INNER_HANDOFF_OFF_PX = 36;
 const MARQUEE_TILT_Z = I18nManager.isRTL ? '3.2deg' : '-3.2deg';
 const MARQUEE_PLANE_SCALE = 1.075;
 const MARQUEE_POST_TRANSFORM_NUDGE_Y = 48;
+/** Hero header logo frame — same as admin `ADMIN_HOME_LOGO_*` (`app/(tabs)/index.tsx`). */
+const CLIENT_HOME_LOGO_WIDTH = 200;
+const CLIENT_HOME_LOGO_HEIGHT = 78;
 
 const HERO_BG = '#FFFFFF';
-const HERO_HEIGHT_FALLBACK = HERO_HEIGHT;
 /** Top scrim over hero images — matches admin home primary fade (readability for status bar / header). */
 const HERO_TOP_SCRIM_HEIGHT = Math.round(
   Math.max(196, Math.min(SCREEN_HEIGHT * 0.23, 226))
@@ -266,17 +291,16 @@ export default function ClientHomeScreen() {
   const isBlocked = Boolean((user as any)?.block);
   const awaitingApproval = isClientAwaitingApproval(user);
   const colors = useColors();
-  const { height: winH } = useWindowDimensions();
-  const heroHeight = winH > 0 ? Math.round(winH * 0.82) : HERO_HEIGHT_FALLBACK;
-  const heroMarqueeHostHeight =
-    winH > 0 ? Math.round(winH * 0.82) + Math.round(winH * 0.135) : HERO_MARQUEE_HOST_HEIGHT;
+  const insets = useSafeAreaInsets();
+  const { primaryOnSurface } = usePrimaryContrast();
   const heroTopScrimGradientColors = useMemo(
-    () => [
-      hexToRgba(colors.primary, 0.9),
-      hexToRgba(colors.primary, 0.82),
-      hexToRgba(colors.primary, 0.48),
-      hexToRgba(colors.primary, 0),
-    ],
+    () =>
+      [
+        hexToRgba(colors.primary, 0.9),
+        hexToRgba(colors.primary, 0.82),
+        hexToRgba(colors.primary, 0.48),
+        hexToRgba(colors.primary, 0),
+      ] as const,
     [colors.primary]
   );
   // Ensure light status bar when this screen is focused
@@ -303,7 +327,7 @@ export default function ClientHomeScreen() {
   const [waitlistEntries, setWaitlistEntries] = useState<WaitlistEntry[]>([]);
   const [isLoadingWaitlist, setIsLoadingWaitlist] = useState(false);
   const [isRemovingFromWaitlist, setIsRemovingFromWaitlist] = useState(false);
-  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [, setUnreadNotificationsCount] = useState(0);
   const [cardWidth, setCardWidth] = useState(0);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const heroImages = useMemo(() => resolveHeroImageUrls(businessProfile), [businessProfile]);
@@ -311,6 +335,65 @@ export default function ClientHomeScreen() {
   const [managerPhone, setManagerPhone] = useState<string | null>(null);
   const [businessPhone, setBusinessPhone] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [innerScrollEnabled, setInnerScrollEnabled] = useState(false);
+  const innerScrollRef = useRef<ScrollView>(null);
+  const outerScrollCapSV = useSharedValue(0);
+  const outerScrollLayoutHRef = useRef(0);
+  const outerScrollContentHRef = useRef(0);
+  const applyOuterScrollCap = useCallback(() => {
+    const lh = outerScrollLayoutHRef.current;
+    const ch = outerScrollContentHRef.current;
+    if (lh > 0 && ch > lh + 1) {
+      outerScrollCapSV.value = ch - lh;
+    } else {
+      outerScrollCapSV.value = Math.max(
+        0,
+        HERO_HEIGHT - HERO_OVERLAP - insets.top - 60 - HERO_SHEET_PULL_UP
+      );
+    }
+  }, [insets.top, outerScrollCapSV]);
+  useEffect(() => {
+    outerScrollCapSV.value = Math.max(
+      0,
+      HERO_HEIGHT - HERO_OVERLAP - insets.top - 60 - HERO_SHEET_PULL_UP
+    );
+  }, [insets.top, outerScrollCapSV]);
+  const innerActiveSV = useSharedValue(0);
+  const enableInnerScrollJS = useCallback((enabled: boolean) => {
+    setInnerScrollEnabled(enabled);
+    if (!enabled) {
+      const resetInner = () => innerScrollRef.current?.scrollTo({ y: 0, animated: false });
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(resetInner);
+        });
+      } else {
+        resetInner();
+      }
+    }
+  }, []);
+  const outerScrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      'worklet';
+      const y = event.contentOffset.y;
+      const cap = outerScrollCapSV.value;
+      const wasInner = innerActiveSV.value === 1;
+      let nextInner = wasInner;
+      if (cap > 0) {
+        if (wasInner) {
+          nextInner = y > cap - OUTER_INNER_HANDOFF_OFF_PX;
+        } else {
+          nextInner = y >= cap - OUTER_INNER_HANDOFF_ON_PX;
+        }
+      } else {
+        nextInner = false;
+      }
+      if (nextInner !== wasInner) {
+        innerActiveSV.value = nextInner ? 1 : 0;
+        runOnJS(enableInnerScrollJS)(nextInner);
+      }
+    },
+  });
   const [mapCoords, setMapCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [osmFailed, setOsmFailed] = useState(false);
   const [googleFailed, setGoogleFailed] = useState(false);
@@ -351,15 +434,15 @@ export default function ClientHomeScreen() {
   
 
   // Animated pulse for approved status dot
-  const statusPulseAnim = React.useRef(new Animated.Value(0)).current;
-  const statusLoopRef = React.useRef<Animated.CompositeAnimation | null>(null);
+  const statusPulseAnim = React.useRef(new RNAnimated.Value(0)).current;
+  const statusLoopRef = React.useRef<RNAnimated.CompositeAnimation | null>(null);
   const statusDotAnimatedStyle = {
     opacity: statusPulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }),
   } as const;
 
   // Calendar icon background pulse (infinite)
-  const iconPulseAnim = React.useRef(new Animated.Value(0)).current;
-  const iconPulseLoopRef = React.useRef<Animated.CompositeAnimation | null>(null);
+  const iconPulseAnim = React.useRef(new RNAnimated.Value(0)).current;
+  const iconPulseLoopRef = React.useRef<RNAnimated.CompositeAnimation | null>(null);
   const iconPulseAnimatedStyle = {
     opacity: iconPulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.08, 0.18] }),
     transform: [
@@ -377,15 +460,15 @@ export default function ClientHomeScreen() {
       statusPulseAnim.setValue(0);
 
       const start = () => {
-        const loop = Animated.loop(
-          Animated.sequence([
-            Animated.timing(statusPulseAnim, {
+        const loop = RNAnimated.loop(
+          RNAnimated.sequence([
+            RNAnimated.timing(statusPulseAnim, {
               toValue: 1,
               duration: 900,
               easing: Easing.inOut(Easing.quad),
               useNativeDriver: true,
             }),
-            Animated.timing(statusPulseAnim, {
+            RNAnimated.timing(statusPulseAnim, {
               toValue: 0,
               duration: 900,
               easing: Easing.inOut(Easing.quad),
@@ -419,15 +502,15 @@ export default function ClientHomeScreen() {
   useEffect(() => {
     iconPulseLoopRef.current?.stop();
     iconPulseAnim.stopAnimation?.(() => {});
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(iconPulseAnim, {
+    const loop = RNAnimated.loop(
+      RNAnimated.sequence([
+        RNAnimated.timing(iconPulseAnim, {
           toValue: 1,
           duration: 1100,
           easing: Easing.inOut(Easing.quad),
           useNativeDriver: true,
         }),
-        Animated.timing(iconPulseAnim, {
+        RNAnimated.timing(iconPulseAnim, {
           toValue: 0,
           duration: 1100,
           easing: Easing.inOut(Easing.quad),
@@ -786,110 +869,76 @@ export default function ClientHomeScreen() {
   return (
     <View style={styles.container}>
       <StatusBar style="light" translucent backgroundColor="transparent" />
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#000" />}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Full Screen Hero with Overlay Header */}
-        <View style={[styles.fullScreenHero, { height: heroHeight }]}>
-          <View
-            style={[styles.clientHeroMarqueeHost, { height: heroMarqueeHostHeight }]}
-            pointerEvents="none"
-            collapsable={false}
-          >
-            <ManicureMarqueeHero images={heroImages} />
-          </View>
-          <View
-            pointerEvents="none"
-            style={[
-              styles.heroTopScrimBand,
-              {
-                height: HERO_TOP_SCRIM_HEIGHT,
-                borderBottomLeftRadius: HERO_TOP_SCRIM_BOTTOM_RADIUS,
-                borderBottomRightRadius: HERO_TOP_SCRIM_BOTTOM_RADIUS,
-              },
-            ]}
-          >
-            <LinearGradient
-              pointerEvents="none"
-              colors={heroTopScrimGradientColors}
-              locations={[0, 0.22, 0.52, 1]}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={StyleSheet.absoluteFillObject}
-            />
-          </View>
-          <LinearGradient
-            colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0)', 'rgba(255,255,255,0)']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={styles.fullScreenHeroOverlay}
-            pointerEvents="none"
-          />
-          
-          {/* Header Overlay */}
-          <SafeAreaView edges={["top"]} style={styles.overlayHeader} pointerEvents="box-none">
-            <View style={styles.overlayHeaderContent} pointerEvents="box-none">
-              <View style={styles.headerSide}>
-                <TouchableOpacity
-                  style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}
-                  onPress={() => requireAuth(t('profile.title'), () => router.push('/(client-tabs)/profile'))}
-                  activeOpacity={0.85}
-                  accessibilityLabel={t('profile.title')}
-                >
-                  <Ionicons name="settings-outline" size={24} color="#fff" />
-                </TouchableOpacity>
-              </View>
-              <View style={styles.headerCenter}>
-                <Image source={getCurrentClientLogo()} style={styles.overlayLogo} resizeMode="contain" />
-              </View>
-              <View style={styles.headerSide}>
-                <TouchableOpacity 
-                  style={[styles.overlayButton, { backgroundColor: `${colors.primary}26` }]}
-                  onPress={async () => {
-                    return requireAuth(t('notifications.title'), async () => {
-                      await router.push('/(client-tabs)/notifications');
-                      setUnreadNotificationsCount(0);
-                    });
-                  }}
-                  activeOpacity={0.85}
-                  accessibilityLabel={t('notifications.title')}
-                >
-                  <Ionicons name="notifications-outline" size={24} color="#fff" />
-                  {unreadNotificationsCount > 0 && (
-                    <View style={[styles.overlayNotificationBadge, { backgroundColor: colors.primary }]}>
-                      <Text style={styles.notificationBadgeText}>
-                        {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
-                      </Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          </SafeAreaView>
-        </View>
+      <View style={styles.fullScreenHero}>
+        <LinearGradient
+          colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0)', 'rgba(255,255,255,0)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.fullScreenHeroOverlay}
+          pointerEvents="none"
+        />
+      </View>
 
-        {/* Content Section with Rounded Top */}
-        <SafeAreaView edges={["left","right"]}>
-        <View 
+      <View style={styles.clientHeroMarqueeHost} pointerEvents="none" collapsable={false}>
+        <ManicureMarqueeHero images={heroImages} />
+      </View>
+
+      <Animated.ScrollView
+        style={{ flex: 1, zIndex: 3, backgroundColor: 'transparent' }}
+        showsVerticalScrollIndicator={false}
+        nestedScrollEnabled
+        keyboardShouldPersistTaps="handled"
+        bounces={false}
+        overScrollMode="never"
+        pointerEvents="box-none"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={primaryOnSurface}
+          />
+        }
+        contentContainerStyle={{ paddingTop: HERO_HEIGHT - HERO_OVERLAP }}
+        scrollEventThrottle={1}
+        onLayout={(e) => {
+          outerScrollLayoutHRef.current = e.nativeEvent.layout.height;
+          applyOuterScrollCap();
+        }}
+        onContentSizeChange={(_w, h) => {
+          outerScrollContentHRef.current = h;
+          applyOuterScrollCap();
+        }}
+        onScroll={outerScrollHandler}
+      >
+        <View
           style={[
-            styles.contentWrapperContainer,
+            styles.clientHomeSheetShell,
             {
-              zIndex: 10, // Always high z-index to stay above hero text
-            }
+              height: SCREEN_HEIGHT - insets.top - 60,
+              marginTop: -HERO_SHEET_PULL_UP,
+            },
           ]}
         >
+          <View style={styles.dragHandle} />
           <LinearGradient
-            colors={['rgba(255,255,255,0.92)', 'rgba(255,255,255,0.32)', 'rgba(255,255,255,0.78)']}
-            locations={[0, 0.45, 1]}
+            colors={['rgba(0,0,0,0.06)', 'rgba(0,0,0,0)']}
             start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.contentWrapperGlassBorder}
+            end={{ x: 0, y: 1 }}
+            style={styles.sheetTopShadow}
+            pointerEvents="none"
+          />
+          <ScrollView
+            ref={innerScrollRef}
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
+            scrollEnabled={innerScrollEnabled}
+            showsVerticalScrollIndicator={false}
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
           >
-            <View style={styles.contentWrapper}>
-              <View>
-
+            <SafeAreaView edges={['left', 'right']} style={styles.clientHomeSafeArea}>
+              <View style={[styles.contentWrapperSheet, { zIndex: 10 }]}>
+                <View style={styles.contentWrapperInner}>
         {waitlistEntries.length > 0 && (
           <View style={styles.waitlistInlineHost}>
             <WaitlistHomeFabPanel
@@ -1263,25 +1312,52 @@ export default function ClientHomeScreen() {
                   />
                 </TouchableOpacity>
               </View>
-            </View>
-          </View>
-        </LinearGradient>
+                </View>
+              </View>
+
+              <LoginRequiredModal
+                visible={loginModal.visible}
+                title={loginModal.title}
+                message={loginModal.message}
+                onClose={() => setLoginModal({ visible: false })}
+                onLogin={() => {
+                  setLoginModal({ visible: false });
+                  router.push('/login');
+                }}
+              />
+            </SafeAreaView>
+          </ScrollView>
+        </View>
+      </Animated.ScrollView>
+
+      <View
+        pointerEvents="none"
+        style={[
+          styles.heroTopScrimBand,
+          {
+            height: HERO_TOP_SCRIM_HEIGHT,
+            borderBottomLeftRadius: HERO_TOP_SCRIM_BOTTOM_RADIUS,
+            borderBottomRightRadius: HERO_TOP_SCRIM_BOTTOM_RADIUS,
+          },
+        ]}
+      >
+        <LinearGradient
+          pointerEvents="none"
+          colors={heroTopScrimGradientColors}
+          locations={[0, 0.22, 0.52, 1]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
       </View>
 
-        {/* Login required modal */}
-        <LoginRequiredModal
-          visible={loginModal.visible}
-          title={loginModal.title}
-          message={loginModal.message}
-          onClose={() => setLoginModal({ visible: false })}
-          onLogin={() => {
-            setLoginModal({ visible: false });
-            router.push('/login');
-          }}
-        />
-
+      <SafeAreaView edges={['top']} style={styles.overlayHeader} pointerEvents="box-none">
+        <View style={styles.overlayHeaderLogoOnly} pointerEvents="box-none">
+          <View style={styles.headerLogoInner}>
+            <Image source={getCurrentClientLogo()} style={styles.overlayLogo} resizeMode="contain" />
+          </View>
+        </View>
       </SafeAreaView>
-      </ScrollView>
     </View>
   );
 }
@@ -1289,16 +1365,18 @@ export default function ClientHomeScreen() {
 const styles = StyleSheet.create<any>({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA', // Same color as contentWrapper to hide the bottom section
-    minHeight: '100%', // Ensure container takes full height
+    backgroundColor: '#FFFFFF',
+    minHeight: '100%',
   },
-  // Full Screen Hero Styles
+  // Full Screen Hero Styles — fixed behind sheet (aligned with admin home)
   fullScreenHero: {
-    position: 'relative',
-    height: HERO_HEIGHT_FALLBACK,
-    width: '100%',
-    zIndex: 0, // Very low z-index so white background can overlap it
-    backgroundColor: HERO_BG,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: HERO_MARQUEE_HOST_HEIGHT,
+    zIndex: 0,
+    backgroundColor: 'transparent',
     overflow: 'hidden',
   },
   /** Same role as admin `adminHeroMarqueeHost` — fixed top, extra height for bottom bleed under tilted grid */
@@ -1307,8 +1385,32 @@ const styles = StyleSheet.create<any>({
     top: 0,
     left: 0,
     right: 0,
-    zIndex: 0,
+    height: HERO_MARQUEE_HOST_HEIGHT,
+    zIndex: 1,
     overflow: 'hidden',
+  },
+  /** Rounded shell for inner scroll — solid white so nothing shows through at the sides/top */
+  clientHomeSheetShell: {
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+  },
+  dragHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#CBD5E1',
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  sheetTopShadow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 20,
   },
   fullScreenHeroImage: {
     width: '100%',
@@ -1327,6 +1429,7 @@ const styles = StyleSheet.create<any>({
     top: 0,
     left: 0,
     right: 0,
+    /** Below sheet (zIndex 3) so the card slides over the scrim — same as admin */
     zIndex: 1,
     overflow: 'hidden',
     borderCurve: 'continuous',
@@ -1339,47 +1442,19 @@ const styles = StyleSheet.create<any>({
     zIndex: 2,
     overflow: 'visible',
   },
-  overlayHeaderContent: {
+  /** Hero header: logo only (settings in tab bar; notifications in white sheet below). */
+  overlayHeaderLogoOnly: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     paddingHorizontal: 20,
     paddingVertical: 8,
   },
-  overlayButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    backdropFilter: 'blur(10px)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    shadowColor: 'rgba(0, 0, 0, 0.3)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
+  /** White logo on hero scrim — same as admin home `overlayLogo` (fills `headerLogoInner`) */
   overlayLogo: {
-    width: 170,
-    height: 60,
-  },
-  overlayNotificationBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: '#000000',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
+    width: '100%',
+    height: '100%',
+    tintColor: '#FFFFFF',
   },
   fullScreenHeroContent: {
     position: 'absolute',
@@ -1398,8 +1473,7 @@ const styles = StyleSheet.create<any>({
     height: '30%',
   },
   scrollContent: {
-    paddingBottom: 400, // Extra bottom padding to see the image at the bottom
-    flexGrow: 1, // Allow content to grow and be scrollable
+    paddingBottom: 24,
   },
   header: {
     flexDirection: 'row',
@@ -1470,47 +1544,37 @@ const styles = StyleSheet.create<any>({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerCenter: {
-    flex: 1,
+  /** Matches admin `overlayLogoInner` — fixed box so logo scales like manager home */
+  headerLogoInner: {
+    width: CLIENT_HOME_LOGO_WIDTH,
+    height: CLIENT_HOME_LOGO_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Grey rounded container like admin home
-  contentWrapperContainer: {
-    marginTop: 0,
-    paddingTop: 1, // Reduced to tighten space under hero
-    paddingBottom: 0, // No bottom padding to allow full scrolling
+  /** Full-width safe area so the sheet is not inset from screen edges (admin home is edge-to-edge white). */
+  clientHomeSafeArea: {
+    flexGrow: 1,
+    width: '100%',
+  },
+  /** Solid white sheet — matches admin `contentWrapper` (no glass gradient / no inset padding ring). */
+  contentWrapperSheet: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-    backgroundColor: 'transparent',
+    overflow: 'hidden',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    elevation: 12,
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    elevation: 18,
   },
-  contentWrapperGlassBorder: {
-    flex: 1,
-    borderTopLeftRadius: 31,
-    borderTopRightRadius: 31,
-    borderBottomLeftRadius: 31,
-    borderBottomRightRadius: 31,
-    padding: 9,
-    overflow: 'hidden',
-  },
-  contentWrapper: {
-    flex: 1,
-    backgroundColor: 'rgba(248,249,250,0.96)',
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
-    borderBottomLeftRadius: 26,
-    borderBottomRightRadius: 26,
-    paddingTop: 1,
+  contentWrapperInner: {
+    width: '100%',
+    paddingTop: 0,
     paddingBottom: 0,
-    minHeight: '100%',
     overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
   },
   logo: {
     width: 160,
@@ -2185,12 +2249,12 @@ const styles = StyleSheet.create<any>({
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.06)'
   },
-  // Appointments Header (matching gallery design)
+  // Appointments Header — same white as sheet (no gray panel behind title/subtitle)
   appointmentsHeader: {
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 8,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: 'transparent',
   },
   appointmentsHeaderContent: {
     flex: 1,

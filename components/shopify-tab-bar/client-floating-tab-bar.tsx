@@ -1,52 +1,35 @@
-import React from "react";
-import { View, StyleSheet, Alert, Pressable } from "react-native";
+import React, { useEffect } from "react";
+import { View, StyleSheet, Alert } from "react-native";
 import { useRouter, useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as Haptics from "expo-haptics";
-import { CalendarDays, Home, Image, Plus, User } from "lucide-react-native";
+import { Bell, CalendarDays, Home, Plus, User } from "lucide-react-native";
+import Animated, {
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 import { useAuthStore } from "@/stores/authStore";
 import { isClientAwaitingApproval } from "@/lib/utils/clientApproval";
 import { useTranslation } from "react-i18next";
 import { getClientTabBarBottomInset } from "@/constants/clientTabBarInsets";
+import { TabButton } from "./tab-button";
+import { useColors, usePrimaryContrast } from "@/src/theme/ThemeProvider";
 
-const ACTIVE = "#000000";
-const INACTIVE = "#9CA3AF";
-const BAR_BG = "#F2F2F7";
-const ICON_STROKE = 1.85;
-const ICON_SIZE = 24;
-const BOOK_FAB_SIZE = 40;
-const PLUS_ICON_SIZE = 20;
+const INACTIVE = "#8a8a8a";
+const ICON_SIZE = 22;
+const PLUS_WIGGLE_DEGREES = 18;
+const PLUS_WIGGLE_DURATION = 280;
+const PLUS_WIGGLE_PAUSE = 1500;
 
 type SetLoginModal = (v: { visible: boolean; title?: string; message?: string }) => void;
 
 interface Props {
   setLoginModal: SetLoginModal;
 }
-
-interface TabSlotProps {
-  focused: boolean;
-  Icon: typeof Home;
-  onPress: () => void;
-  accessibilityLabel: string;
-}
-
-const TabSlot: React.FC<TabSlotProps> = ({ focused, Icon, onPress, accessibilityLabel }) => {
-  const color = focused ? ACTIVE : INACTIVE;
-  return (
-    <Pressable
-      accessibilityLabel={accessibilityLabel}
-      accessibilityRole="tab"
-      accessibilityState={{ selected: focused }}
-      onPress={() => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
-        onPress();
-      }}
-      style={styles.tabSlot}
-    >
-      <Icon size={ICON_SIZE} color={color} strokeWidth={ICON_STROKE} />
-    </Pressable>
-  );
-};
 
 export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
   const router = useRouter();
@@ -57,13 +40,16 @@ export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
   const isBlocked = Boolean((user as any)?.block);
   const awaitingApproval = isClientAwaitingApproval(user);
   const { t } = useTranslation();
+  const { primary } = useColors();
+  const { onPrimary } = usePrimaryContrast();
+  const plusWiggle = useSharedValue(0);
 
   const currentTab = segments[1] as string | undefined;
-  if (currentTab === "book-appointment") {
-    return null;
-  }
+  const shouldHideTabBar = currentTab === "book-appointment";
 
   const isActive = (tab: string) => currentTab === tab || (tab === "index" && !currentTab);
+
+  const iconColor = (tab: string) => (isActive(tab) ? onPrimary : INACTIVE);
 
   const navigate = (path: string, requireAuth = false) => {
     if (requireAuth && !isAuthenticated) {
@@ -89,7 +75,7 @@ export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
     if (isBlocked) {
       Alert.alert(
         t("account.blocked", "Account Blocked"),
-        t("account.blocked.message", "Your account is blocked. You cannot book appointments.")
+        t("account.blocked.message", "Your account is blocked. You cannot book appointments."),
       );
       return;
     }
@@ -106,51 +92,107 @@ export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
     router.push("/(client-tabs)/book-appointment");
   };
 
-  const bottomInset = getClientTabBarBottomInset(insets.bottom);
+  useEffect(() => {
+    plusWiggle.set(
+      withRepeat(
+        withSequence(
+          withDelay(
+            PLUS_WIGGLE_PAUSE,
+            withTiming(-1, { duration: PLUS_WIGGLE_DURATION }),
+          ),
+          withTiming(0, { duration: PLUS_WIGGLE_DURATION }),
+          withDelay(
+            PLUS_WIGGLE_PAUSE,
+            withTiming(1, { duration: PLUS_WIGGLE_DURATION }),
+          ),
+          withTiming(0, { duration: PLUS_WIGGLE_DURATION }),
+        ),
+        -1,
+        false,
+      ),
+    );
+  }, [plusWiggle]);
+
+  const plusIconStyle = useAnimatedStyle(() => {
+    const rotate = interpolate(
+      plusWiggle.get(),
+      [-1, 0, 1],
+      [-PLUS_WIGGLE_DEGREES, 0, PLUS_WIGGLE_DEGREES],
+    );
+    const scale = interpolate(plusWiggle.get(), [-1, 0, 1], [1.08, 1, 1.08]);
+    const translateY = interpolate(plusWiggle.get(), [-1, 0, 1], [-1.5, 0, -1.5]);
+
+    return {
+      transform: [
+        { translateY },
+        { scale },
+        { rotate: `${rotate}deg` },
+      ],
+    };
+  });
+
+  if (shouldHideTabBar) {
+    return null;
+  }
 
   return (
-    <View style={[styles.root, { bottom: bottomInset }]} pointerEvents="box-none">
-      <View style={[styles.capsule, styles.capsuleShadow]}>
-        <TabSlot
-          focused={isActive("index")}
-          Icon={Home}
-          accessibilityLabel={t("tabs.home", "Home")}
-          onPress={() => navigate("/(client-tabs)")}
-        />
-        <TabSlot
-          focused={isActive("gallery")}
-          Icon={Image}
-          accessibilityLabel={t("tabs.gallery", "Gallery")}
-          onPress={() => navigate("/(client-tabs)/gallery")}
-        />
-        <View style={styles.tabSlot}>
-          <Pressable
+    <View
+      style={[styles.root, { bottom: getClientTabBarBottomInset(insets.bottom) }]}
+      pointerEvents="box-none"
+    >
+      <View style={[styles.inner, styles.innerLtr]}>
+        <View style={[styles.pill, styles.border, styles.shadow]}>
+          <TabButton
+            focused={false}
+            activeColor={primary}
+            onPress={handleBook}
             accessibilityLabel={t("tabs.book", "Book")}
             accessibilityRole="button"
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
-              handleBook();
-            }}
           >
-            {({ pressed }) => (
-              <View style={[styles.bookFab, pressed && styles.bookFabPressed]}>
-                <Plus size={PLUS_ICON_SIZE} color="#FFFFFF" strokeWidth={2} />
-              </View>
-            )}
-          </Pressable>
+            <Animated.View style={plusIconStyle}>
+              <Plus size={ICON_SIZE} color={primary} strokeWidth={2.4} />
+            </Animated.View>
+          </TabButton>
         </View>
-        <TabSlot
-          focused={isActive("appointments")}
-          Icon={CalendarDays}
-          accessibilityLabel={t("tabs.booking", "Booking")}
-          onPress={() => navigate("/(client-tabs)/appointments", true)}
-        />
-        <TabSlot
-          focused={isActive("profile")}
-          Icon={User}
-          accessibilityLabel={t("tabs.profile", "Profile")}
-          onPress={() => navigate("/(client-tabs)/profile", true)}
-        />
+
+        <View style={[styles.pill, styles.center, styles.border, styles.shadow]}>
+          <TabButton
+            focused={isActive("profile")}
+            activeColor={primary}
+            onPress={() => navigate("/(client-tabs)/profile", true)}
+            accessibilityLabel={t("tabs.profile", "Profile")}
+            accessibilityRole="tab"
+          >
+            <User size={ICON_SIZE} color={iconColor("profile")} />
+          </TabButton>
+          <TabButton
+            focused={isActive("notifications")}
+            activeColor={primary}
+            onPress={() => navigate("/(client-tabs)/notifications", true)}
+            accessibilityLabel={t("notifications.title", "Notifications")}
+            accessibilityRole="tab"
+          >
+            <Bell size={ICON_SIZE} color={iconColor("notifications")} />
+          </TabButton>
+          <TabButton
+            focused={isActive("appointments")}
+            activeColor={primary}
+            onPress={() => navigate("/(client-tabs)/appointments", true)}
+            accessibilityLabel={t("tabs.booking", "Booking")}
+            accessibilityRole="tab"
+          >
+            <CalendarDays size={ICON_SIZE} color={iconColor("appointments")} />
+          </TabButton>
+          <TabButton
+            focused={isActive("index")}
+            activeColor={primary}
+            onPress={() => navigate("/(client-tabs)")}
+            accessibilityLabel={t("tabs.home", "Home")}
+            accessibilityRole="tab"
+          >
+            <Home size={ICON_SIZE} color={iconColor("index")} />
+          </TabButton>
+        </View>
       </View>
     </View>
   );
@@ -159,46 +201,37 @@ export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
 const styles = StyleSheet.create({
   root: {
     position: "absolute",
-    left: 28,
-    right: 28,
+    left: 0,
+    right: 0,
     alignItems: "center",
   },
-  capsule: {
-    direction: "ltr",
+  inner: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    width: "100%",
-    maxWidth: 340,
-    backgroundColor: BAR_BG,
+    gap: 8,
+  },
+  innerLtr: {
+    direction: "ltr",
+  },
+  pill: {
+    backgroundColor: "#ffffff",
     borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 6,
+    padding: 2,
   },
-  capsuleShadow: {
+  center: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    justifyContent: "center",
+  },
+  border: {
+    borderWidth: 1,
+    borderColor: "#F1F1F1",
+  },
+  shadow: {
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-  tabSlot: {
-    flex: 1,
-    minWidth: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-  },
-  bookFab: {
-    width: BOOK_FAB_SIZE,
-    height: BOOK_FAB_SIZE,
-    borderRadius: BOOK_FAB_SIZE / 2,
-    backgroundColor: "#000000",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  bookFabPressed: {
-    opacity: 0.88,
-    transform: [{ scale: 0.96 }],
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
   },
 });

@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import BarberSelection from '@/components/book-appointment/BarberSelection';
 import ServiceSelection from '@/components/book-appointment/ServiceSelection';
 import DaySelection from '@/components/book-appointment/DaySelection';
@@ -27,6 +28,8 @@ import { notificationsApi } from '@/lib/api/notifications';
 import { businessProfileApi, isShowServiceImages } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
 import { User } from '@/lib/supabase';
+import { darkenHex } from '@/lib/colorContrast';
+import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
 import Animated, { useSharedValue, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, Easing, FadeIn } from 'react-native-reanimated';
 import type { SharedValue } from 'react-native-reanimated';
 
@@ -404,6 +407,11 @@ export default function BookAppointment() {
   const { user } = useAuthStore();
 
   const { colors } = useBusinessColors();
+  const bookingGradientEnd = useMemo(() => darkenHex(colors.primary, 0.42), [colors.primary]);
+  const bookingGradient = useMemo(
+    () => [colors.primary, bookingGradientEnd] as const,
+    [colors.primary, bookingGradientEnd]
+  );
   const safeAreaInsets = useSafeAreaInsets();
   const styles = createStyles(colors);
   const bookingBarTopFromBottom = getBookingStepBarTopFromBottom(safeAreaInsets.bottom);
@@ -1640,44 +1648,17 @@ export default function BookAppointment() {
   ]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: 'transparent' }}>
-      {/* Background (changes with scroll for steps 1-2, cross-fade for steps 3-4) */}
-      {(() => {
-        try {
-          if (currentStep === 1) {
-            const barberUri = (selectedBarber as any)?.image_url || null;
-            return <DynamicBackground uri={barberUri} safeTop={safeAreaInsets.top} safeBottom={safeAreaInsets.bottom} />;
-          }
-          if (currentStep === 2) {
-            const barberUri = (selectedBarber as any)?.image_url || null;
-            const svcUri =
-              showServiceImagesBooking && selectedServices.length > 0
-                ? ((selectedServices[0] as any)?.image_url ||
-                    (selectedServices[0] as any)?.cover_url ||
-                    (selectedServices[0] as any)?.image ||
-                    null)
-                : null;
-            return (
-              <DynamicBackground
-                uri={svcUri || barberUri}
-                safeTop={safeAreaInsets.top}
-                safeBottom={safeAreaInsets.bottom}
-              />
-            );
-          }
-          const uri =
-            (showServiceImagesBooking
-              ? (selectedService as any)?.image_url ||
-                (selectedService as any)?.cover_url ||
-                (selectedService as any)?.image
-              : null) ||
-            (selectedBarber as any)?.image_url ||
-            null;
-          return <DynamicBackground uri={uri} safeTop={safeAreaInsets.top} safeBottom={safeAreaInsets.bottom} />;
-        } catch {
-          return null;
-        }
-      })()}
+    <View style={{ flex: 1, backgroundColor: bookingGradientEnd }}>
+      <LinearGradient colors={[...bookingGradient]} style={StyleSheet.absoluteFill} />
+      {Platform.OS !== 'web' ? (
+        <BrandLavaLampBackground
+          primaryColor={colors.primary}
+          baseColor={bookingGradientEnd}
+          count={4}
+          duration={16000}
+          blurIntensity={48}
+        />
+      ) : null}
 
       <SafeAreaView style={styles.container} edges={[]}>
         <BookingStepTabs
@@ -1689,29 +1670,34 @@ export default function BookAppointment() {
             day: t('booking.step.day', 'Day'),
             time: t('booking.step.time', 'Time'),
           }}
-          canGoService={!!selectedBarber}
+          canGoService={!!selectedBarber && currentStep >= 2}
           canGoDay={!!selectedService}
           canGoTime={selectedDay !== null}
           onHome={handleBookingHome}
           onChangeStep={(step) => setCurrentStep(Number(step) as any)}
           advanceNext={
-            currentStep < 4
-              ? { enabled: bookingAdvanceNextEnabled, onPress: advanceToNextStep }
-              : {
-                  enabled: !!selectedTime,
-                  loading: isCheckingAppointments,
-                  onPress: handleBookAppointment,
-                  variant: 'confirm' as const,
-                }
+            currentStep === 1
+              ? { enabled: false, onPress: advanceToNextStep }
+              : currentStep < 4
+                ? { enabled: bookingAdvanceNextEnabled, onPress: advanceToNextStep }
+                : {
+                    enabled: !!selectedTime,
+                    loading: isCheckingAppointments,
+                    onPress: handleBookAppointment,
+                    variant: 'confirm' as const,
+                  }
           }
         />
       {/* Header removed on steps 3-4 per request */}
-      <View style={[
-        styles.contentWrapper,
-        (currentStep === 1 || currentStep === 2 || currentStep === 3 || currentStep === 4)
-          ? { backgroundColor: 'transparent', borderTopLeftRadius: 0, borderTopRightRadius: 0, paddingTop: 0 }
-          : null
-      ]}>
+      <View
+        style={[
+          styles.contentWrapper,
+          (currentStep === 1 || currentStep === 2 || currentStep === 3 || currentStep === 4)
+            ? { backgroundColor: 'transparent', borderTopLeftRadius: 0, borderTopRightRadius: 0, paddingTop: 0 }
+            : null,
+          currentStep === 4 ? { pointerEvents: 'none' as const } : null,
+        ]}
+      >
           {currentStep !== 4 && (
           <ScrollView
           ref={scrollRef as any}
@@ -1727,7 +1713,7 @@ export default function BookAppointment() {
             onScroll={currentStep >= 3 ? handleScrollTransitions : undefined}
             alwaysBounceVertical={currentStep >= 3}
             bounces={currentStep >= 3}
-            scrollEnabled={currentStep >= 3}
+            scrollEnabled={currentStep < 4}
             overScrollMode={currentStep >= 3 ? 'always' : 'never'}
           contentInsetAdjustmentBehavior="always"
           scrollEventThrottle={16}
@@ -1760,6 +1746,36 @@ export default function BookAppointment() {
             setDayAvailability({});
           }}
         />
+
+        {/* Step 1: “המשך” in scroll flow — fixed gap below last staff row */}
+        {currentStep === 1 && (
+          <View style={styles.bookingStep1CtaWrap}>
+            <TouchableOpacity
+              style={[
+                styles.bookingStep1Cta,
+                selectedBarber ? styles.bookingStep1CtaActive : styles.bookingStep1CtaDisabled,
+              ]}
+              disabled={!selectedBarber}
+              activeOpacity={0.88}
+              onPress={() => {
+                if (!selectedBarber) return;
+                advanceToNextStep();
+              }}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !selectedBarber }}
+              accessibilityLabel={t('booking.continue', 'המשך')}
+            >
+              <Text
+                style={[
+                  styles.bookingStep1CtaText,
+                  { color: selectedBarber ? colors.primary : 'rgba(255,255,255,0.5)' },
+                ]}
+              >
+                {t('booking.continue', 'המשך')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Step 2: Service Selection - Multi-select grid */}
         <ServiceSelection
@@ -3062,6 +3078,41 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingHorizontal: 16,
     alignItems: 'center',
     zIndex: 10,
+  },
+  bookingStep1CtaWrap: {
+    marginTop: 28,
+    marginBottom: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  bookingStep1Cta: {
+    alignSelf: 'center',
+    paddingVertical: 11,
+    paddingHorizontal: 32,
+    minWidth: 132,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+  },
+  bookingStep1CtaActive: {
+    backgroundColor: '#FFFFFF',
+    borderColor: 'rgba(15, 23, 42, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  bookingStep1CtaDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  bookingStep1CtaText: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+    textAlign: 'center',
   },
   bookButton: {
     flexDirection: 'row',

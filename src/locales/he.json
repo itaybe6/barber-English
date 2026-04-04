@@ -50,6 +50,7 @@
   "booking.subtitle": "בחר/י שירות, יום ושעה",
   "booking.loadingEmployees": "טוען אנשי צוות...",
   "booking.selectService": "בחר/י שירות",
+  "booking.selectTreatment": "בחר טיפול",
   "booking.loadingServices": "טוען שירותים...",
   "booking.noServices": "אין שירותים זמינים",
   "booking.selectDay": "בחר/י יום",
@@ -110,6 +111,8 @@
   "booking.checking": "בודק..."
   ,
   "booking.chooseTime": "בחר/י שעה",
+  "booking.selectTimeTitle": "בחר שעה",
+  "booking.selectTimeSubtitle": "סמן את השעה הרצויה למטה",
   "booking.chooseDateHint": "בחר/י ספר ושירות כדי לראות תאריכים זמינים.",
   "booking.loadingWindow": "טוען...",
   "booking.openDays": "{{count}} ימים",

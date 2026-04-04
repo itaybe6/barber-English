@@ -339,13 +339,7 @@ export default function SelectBarberScreen() {
             />
           </View>
 
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={() => router.push('/(client-tabs)/notifications' as any)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="notifications-outline" size={22} color="#FFFFFF" />
-          </TouchableOpacity>
+          <View style={styles.headerButton} />
         </View>
       </SafeAreaView>
 

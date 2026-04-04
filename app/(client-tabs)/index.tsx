@@ -16,7 +16,9 @@ import {
   RefreshControl,
   Platform,
   I18nManager,
+  LayoutChangeEvent,
 } from 'react-native';
+import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
 import Animated, { useSharedValue, useAnimatedScrollHandler, runOnJS } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -31,7 +33,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import LoginRequiredModal from '@/components/LoginRequiredModal';
 import { Appointment as AvailableTimeSlot } from '@/lib/supabase';
-import { notificationsApi } from '@/lib/api/notifications';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import type { BusinessProfile, WaitlistEntry } from '@/lib/supabase';
 import DesignCarousel from '@/components/DesignCarousel';
@@ -292,7 +293,7 @@ export default function ClientHomeScreen() {
   const awaitingApproval = isClientAwaitingApproval(user);
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { primaryOnSurface } = usePrimaryContrast();
+  const { primaryOnSurface, onPrimary } = usePrimaryContrast();
   const heroTopScrimGradientColors = useMemo(
     () =>
       [
@@ -327,8 +328,8 @@ export default function ClientHomeScreen() {
   const [waitlistEntries, setWaitlistEntries] = useState<WaitlistEntry[]>([]);
   const [isLoadingWaitlist, setIsLoadingWaitlist] = useState(false);
   const [isRemovingFromWaitlist, setIsRemovingFromWaitlist] = useState(false);
-  const [, setUnreadNotificationsCount] = useState(0);
   const [cardWidth, setCardWidth] = useState(0);
+  const [lavaCardLayout, setLavaCardLayout] = useState<{ w: number; h: number } | null>(null);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const heroImages = useMemo(() => resolveHeroImageUrls(businessProfile), [businessProfile]);
 
@@ -621,22 +622,6 @@ export default function ClientHomeScreen() {
     }
   }, [user?.phone]);
 
-  // Fetch unread notifications count
-  const fetchUnreadNotificationsCount = useCallback(async () => {
-    if (!user?.phone) {
-      setUnreadNotificationsCount(0);
-      return;
-    }
-
-    try {
-      const count = await notificationsApi.getUnreadCount(user.phone);
-      setUnreadNotificationsCount(count);
-    } catch (error) {
-      console.error('Error fetching unread notifications count:', error);
-      setUnreadNotificationsCount(0);
-    }
-  }, [user?.phone]);
-
   // Handle removing from waitlist
   const handleRemoveFromWaitlist = async (entryId: string) => {
     setIsRemovingFromWaitlist(true);
@@ -664,11 +649,6 @@ export default function ClientHomeScreen() {
   useEffect(() => {
     fetchWaitlistEntries();
   }, [fetchWaitlistEntries]);
-
-  // Fetch unread notifications count when component mounts
-  useEffect(() => {
-    fetchUnreadNotificationsCount();
-  }, [fetchUnreadNotificationsCount]);
 
   // Fetch designs on mount
   useEffect(() => {
@@ -796,7 +776,6 @@ export default function ClientHomeScreen() {
     useCallback(() => {
       fetchUserAppointments();
       fetchWaitlistEntries();
-      fetchUnreadNotificationsCount();
       // Reload business profile to get updated images
       const loadProfile = async () => {
         try {
@@ -807,7 +786,7 @@ export default function ClientHomeScreen() {
         }
       };
       loadProfile();
-    }, [fetchUserAppointments, fetchWaitlistEntries, fetchUnreadNotificationsCount])
+    }, [fetchUserAppointments, fetchWaitlistEntries])
   );
 
   // Pull-to-refresh handler to reload dashboard data
@@ -817,7 +796,6 @@ export default function ClientHomeScreen() {
         await Promise.all([
         fetchUserAppointments(),
         fetchWaitlistEntries(),
-        fetchUnreadNotificationsCount(),
         fetchDesigns(),
         fetchProducts(),
         (async () => {
@@ -830,7 +808,7 @@ export default function ClientHomeScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [fetchUserAppointments, fetchWaitlistEntries, fetchUnreadNotificationsCount, fetchDesigns, fetchProducts]);
+  }, [fetchUserAppointments, fetchWaitlistEntries, fetchDesigns, fetchProducts]);
 
   // Show all services in a horizontal scroll
   
@@ -970,144 +948,106 @@ export default function ClientHomeScreen() {
         {/* Swap Opportunities Section */}
         <SwapOpportunities />
 
-        {/* Appointments Section */}
-        <View style={[styles.sectionContainer, { marginTop: 16 }]}> 
-          <View style={styles.appointmentsHeader}>
-            <View style={styles.appointmentsHeaderContent}>
-              <View style={{ width: 22 }} />
-              <View style={{ alignItems: 'center' }}>
-                <Text style={styles.appointmentsHeaderTitle}>
-                  {t('appointments.title')}
-                </Text>
-                <Text style={styles.appointmentsHeaderSubtitle}>
-                  {t('appointments.subtitle')}
-                </Text>
-              </View>
-              <View style={{ width: 22 }} />
-            </View>
-          </View>
-
-          {/* Next Appointment */}
+        {/* Appointment / Book Card */}
+        <View style={[styles.sectionContainer, { marginTop: 16 }]}>
           {isLoading ? (
             <View style={styles.loadingCard}>
               <Text style={styles.loadingText}>{t('appointments.loadingAppointments', 'Loading your appointments...')}</Text>
             </View>
           ) : nextAppointment ? (
+            /* ── Next Appointment Card (clean, like admin) ── */
             <TouchableOpacity
-              activeOpacity={0.9}
+              activeOpacity={0.88}
               onPress={() => requireAuth(t('appointments.title'), () => router.push('/(client-tabs)/appointments'))}
-              style={styles.nextAppointmentContainer}
+              style={styles.clientNextCard}
             >
-              <Image 
-                source={require('@/assets/images/nextApp.jpg')} 
-                style={styles.nextAppointmentImage}
-                resizeMode="cover"
-              />
-              <LinearGradient
-                colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.1)', 'rgba(0,0,0,0.6)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 0, y: 1 }}
-                style={styles.nextAppointmentOverlay}
-              />
-              
-
-              {/* Main Content with Blur Background */}
-              <View style={styles.nextAppointmentContent}>
-                <BlurView 
-                  intensity={30} 
-                  tint="light"
-                  style={styles.nextAppointmentInfoBlur}
-                >
-                  <View style={styles.appointmentInfo}>
-                    <Text style={styles.nextAppointmentLabel}>{t('appointments.next')}</Text>
-                    <Text style={styles.nextAppointmentService}>{nextAppointment.service_name || 'Service'}</Text>
-                    <View style={styles.nextAppointmentDetails}>
-                      <View style={styles.appointmentDetail}>
-                        <Ionicons name="calendar-outline" size={16} color="rgba(255, 255, 255, 0.8)" />
-                        <Text style={styles.nextAppointmentDetailText}>{formatDate(nextAppointment.slot_date)}</Text>
-                      </View>
-                      <View style={styles.nextAppointmentDetailsDivider} />
-                      <View style={styles.appointmentDetail}>
-                        <Ionicons name="time-outline" size={16} color="rgba(255, 255, 255, 0.8)" />
-                        <Text style={styles.nextAppointmentDetailText}>{formatTime(nextAppointment.slot_time)}</Text>
-                      </View>
+              <View style={styles.clientNextHeader}>
+                <Text style={styles.clientNextHeaderLabel}>{t('appointments.next', 'Next appointment')}</Text>
+                <View style={[styles.clientNextTimeIcon, { backgroundColor: `${colors.primary}18` }]}>
+                  <Ionicons name="time-outline" size={15} color={primaryOnSurface} />
+                </View>
+              </View>
+              <View style={styles.clientNextDivider} />
+              <View style={styles.clientNextBody}>
+                <View style={styles.clientNextInfo}>
+                  <Text style={styles.clientNextService} numberOfLines={1}>
+                    {nextAppointment.service_name || t('service', 'Service')}
+                  </Text>
+                  <View style={styles.clientNextDetails}>
+                    <View style={styles.clientNextDetail}>
+                      <Ionicons name="calendar-outline" size={13} color="#8E8E93" />
+                      <Text style={styles.clientNextDetailText}>{formatDate(nextAppointment.slot_date)}</Text>
+                    </View>
+                    <View style={styles.clientNextDetailSep} />
+                    <View style={styles.clientNextDetail}>
+                      <Ionicons name="time-outline" size={13} color="#8E8E93" />
+                      <Text style={styles.clientNextDetailText}>{formatTime(nextAppointment.slot_time)}</Text>
                     </View>
                   </View>
-                </BlurView>
+                  <View style={styles.clientNextStatus}>
+                    <View style={styles.clientNextStatusDot} />
+                    <Text style={styles.clientNextStatusText}>{t('appointments.confirmed', 'Confirmed')}</Text>
+                  </View>
+                </View>
+                <View style={[styles.clientNextTimePill, { backgroundColor: `${colors.primary}14` }]}>
+                  <Text style={[styles.clientNextTimeHM, { color: primaryOnSurface }]}>
+                    {formatTime(nextAppointment.slot_time)}
+                  </Text>
+                </View>
               </View>
             </TouchableOpacity>
           ) : (
-            <View style={styles.bookAppointmentContainer}>
-              <Image 
-                source={require('@/assets/images/bookApp.jpg')} 
-                style={styles.bookAppointmentImage}
-                resizeMode="cover"
-              />
+            /* ── Lava Lamp Book Appointment Card ── */
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={[styles.lavaBookCard, (isBlocked || awaitingApproval) && { opacity: 0.55 }]}
+              disabled={isBlocked || awaitingApproval}
+              onPress={() => {
+                if (!isAuthenticated) {
+                  setLoginModal({ visible: true, title: t('login.required'), message: t('login.pleaseSignInToBook') });
+                  return;
+                }
+                if (isBlocked) { Alert.alert(t('account.blocked'), t('account.blocked.message')); return; }
+                if (awaitingApproval) { Alert.alert(t('account.awaitingApproval'), t('account.awaitingApproval.message')); return; }
+                router.push('/(client-tabs)/book-appointment');
+              }}
+              onLayout={(e: LayoutChangeEvent) => {
+                const { width, height } = e.nativeEvent.layout;
+                if (width > 0 && height > 0) setLavaCardLayout({ w: width, h: height });
+              }}
+            >
               <LinearGradient
-                colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.1)', 'rgba(0,0,0,0.6)']}
+                colors={[colors.primary, `${colors.primary}DD`]}
                 start={{ x: 0, y: 0 }}
-                end={{ x: 0, y: 1 }}
-                style={styles.bookAppointmentOverlay}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
               />
-              {businessProfile?.display_name && (
-                <View style={styles.bookAppointmentBadgeWrapper}>
-                  <BlurView
-                    intensity={24}
-                    tint="light"
-                    style={styles.bookAppointmentBadgeBlur}
-                  >
-                    <Text style={styles.bookAppointmentBadgeText}>
-                      {businessProfile.display_name}
-                    </Text>
-                  </BlurView>
+              {Platform.OS !== 'web' && lavaCardLayout ? (
+                <BrandLavaLampBackground
+                  primaryColor={colors.primary}
+                  baseColor={colors.primary}
+                  layoutWidth={lavaCardLayout.w}
+                  layoutHeight={lavaCardLayout.h}
+                  count={3}
+                  duration={13000}
+                  blurIntensity={32}
+                  emphasis="bold"
+                />
+              ) : null}
+              <View style={styles.lavaBookContent}>
+                <View style={styles.lavaBookTextBlock}>
+                  <Text style={[styles.lavaBookTitle, { color: onPrimary }]}>
+                    {t('book.now', 'Book Now')}
+                  </Text>
+                  <Text style={[styles.lavaBookLabel, { color: `${onPrimary}99` }]}>
+                    {t('appointments.noUpcoming', 'No upcoming appointments')}
+                  </Text>
                 </View>
-              )}
-              
-              {/* Content with blur background */}
-              <View style={styles.bookAppointmentContent}>
-                {/* Book Appointment Button */}
-                <TouchableOpacity
-                  style={[
-                    styles.bookAppointmentButton,
-                    (isBlocked || awaitingApproval) && { opacity: 0.5 },
-                  ]}
-                  onPress={() => {
-                    if (!isAuthenticated) {
-                      setLoginModal({
-                        visible: true,
-                        title: t('login.required'),
-                        message: t('login.pleaseSignInToBook'),
-                      });
-                      return;
-                    }
-                    if (isBlocked) {
-                      Alert.alert(t('account.blocked'), t('account.blocked.message'));
-                      return;
-                    }
-                    if (awaitingApproval) {
-                      Alert.alert(t('account.awaitingApproval'), t('account.awaitingApproval.message'));
-                      return;
-                    }
-                    router.push('/(client-tabs)/book-appointment');
-                  }}
-                  activeOpacity={0.8}
-                  disabled={isBlocked || awaitingApproval}
-                >
-                  <BlurView 
-                    intensity={30} 
-                    tint="light"
-                    style={styles.bookAppointmentButtonBlur}
-                  >
-                    <View style={styles.bookAppointmentButtonContent}>
-                      <Text style={styles.bookAppointmentButtonText}>{t('book.now')}</Text>
-                      <View style={[styles.bookAppointmentIconCircle, { backgroundColor: colors.primary }]}>
-                        <MaterialCommunityIcons name="arrow-top-left" size={20} color="#FFFFFF" />
-                      </View>
-                    </View>
-                  </BlurView>
-                </TouchableOpacity>
+                <View style={[styles.lavaBookArrow, { backgroundColor: `${onPrimary}22` }]}>
+                  <Ionicons name="add" size={26} color={onPrimary} />
+                </View>
               </View>
-            </View>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -2146,136 +2086,162 @@ const styles = StyleSheet.create<any>({
     fontWeight: '500',
     letterSpacing: -0.2,
   },
-  // Book Appointment Styles
-  bookAppointmentContainer: {
-    position: 'relative',
-    height: 280,
-    borderRadius: 24,
-    overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.25,
-    shadowRadius: 24,
-    elevation: 12,
-    marginHorizontal: 4,
-  },
-  bookAppointmentImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 24,
-  },
-  bookAppointmentOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: 24,
-  },
-  bookAppointmentBadgeWrapper: {
-    position: 'absolute',
-    top: 14,
-    left: 14,
-    zIndex: 5,
-  },
-  bookAppointmentBadgeBlur: {
-    borderRadius: 14,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    overflow: 'hidden',
-  },
-  bookAppointmentBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-    textShadowColor: 'rgba(0, 0, 0, 0.25)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  bookAppointmentContent: {
-    position: 'absolute',
-    bottom: 32,
-    left: 24,
-    right: 24,
-    alignItems: 'flex-end',
-  },
-  bookAppointmentButton: {
+  // ── Lava Lamp Book Card ──
+  lavaBookCard: {
     borderRadius: 20,
     overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
+    marginHorizontal: 4,
+    position: 'relative',
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 14, shadowOffset: { width: 0, height: 6 } },
+      android: { elevation: 7 },
+    }),
   },
-  bookAppointmentButtonBlur: {
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    overflow: 'hidden',
-  },
-  bookAppointmentButtonContent: {
+  lavaBookContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: 6,
+    gap: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    zIndex: 2,
   },
-  bookAppointmentButtonText: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-    textAlign: 'left',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  bookAppointmentIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
+  lavaBookIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)'
+    flexShrink: 0,
   },
-  // Appointments Header — same white as sheet (no gray panel behind title/subtitle)
-  appointmentsHeader: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 8,
-    backgroundColor: 'transparent',
-  },
-  appointmentsHeaderContent: {
+  lavaBookTextBlock: {
     flex: 1,
+    gap: 4,
+    alignItems: 'flex-start',
+  },
+  lavaBookTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    textAlign: 'right',
+  },
+  lavaBookLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    letterSpacing: 0.1,
+    textAlign: 'right',
+  },
+  lavaBookArrow: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+
+  // ── Next Appointment Card (clean, like admin DailySchedule) ──
+  clientNextCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    marginHorizontal: 4,
+    ...Platform.select({
+      ios: { shadowColor: '#1e253b', shadowOpacity: 0.09, shadowRadius: 14, shadowOffset: { width: 0, height: 5 } },
+      android: { elevation: 5 },
+    }),
+  },
+  clientNextHeader: {
+    flexDirection: 'row',
+    direction: 'ltr' as any,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 11,
+  },
+  clientNextHeaderLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+    color: '#64748B',
+  },
+  clientNextTimeIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clientNextDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+  },
+  clientNextBody: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    gap: 12,
   },
-  appointmentsHeaderTitle: {
-    fontSize: 26,
+  clientNextInfo: {
+    flex: 1,
+    gap: 6,
+  },
+  clientNextService: {
+    fontSize: 18,
     fontWeight: '700',
     color: '#1C1C1E',
-    textAlign: 'center',
     letterSpacing: -0.3,
   },
-  appointmentsHeaderSubtitle: {
-    fontSize: 14,
-    fontWeight: '400',
+  clientNextDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  clientNextDetail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  clientNextDetailText: {
+    fontSize: 13,
     color: '#8E8E93',
-    textAlign: 'center',
-    letterSpacing: 0.2,
-    marginTop: 6,
+    fontWeight: '500',
+  },
+  clientNextDetailSep: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: '#C7C7CC',
+  },
+  clientNextStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  clientNextStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#34C759',
+  },
+  clientNextStatusText: {
+    fontSize: 12,
+    color: '#34C759',
+    fontWeight: '600',
+  },
+  clientNextTimePill: {
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  clientNextTimeHM: {
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
   // Modern Section Headers (for other sections)
   sectionHeaderModern: {
@@ -2322,95 +2288,6 @@ const styles = StyleSheet.create<any>({
     color: '#1C1C1E',
     textAlign: 'center',
     letterSpacing: -0.5,
-  },
-  // Next Appointment with Background Image Styles
-  nextAppointmentContainer: {
-    position: 'relative',
-    height: 220,
-    borderRadius: 24,
-    overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.25,
-    shadowRadius: 24,
-    elevation: 12,
-    marginHorizontal: 4,
-  },
-  nextAppointmentImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 24,
-  },
-  nextAppointmentOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: 24,
-  },
-  nextAppointmentContent: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
-    alignItems: 'center',
-  },
-  nextAppointmentInfoBlur: {
-    borderRadius: 20,
-    paddingVertical: 20,
-    paddingHorizontal: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    overflow: 'hidden',
-    shadowColor: 'rgba(0, 0, 0, 0.2)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  nextAppointmentLabel: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontWeight: '600',
-    textAlign: 'left',
-    letterSpacing: -0.1,
-    marginBottom: 6,
-  },
-  nextAppointmentService: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    marginBottom: 16,
-    textAlign: 'left',
-    letterSpacing: -0.4,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-  nextAppointmentDetails: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    gap: 16,
-    direction: 'ltr',
-  },
-  nextAppointmentDetailText: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontWeight: '600',
-    letterSpacing: -0.2,
-    writingDirection: 'ltr',
-    textAlign: 'left',
-  },
-  nextAppointmentDetailsDivider: {
-    width: 1,
-    height: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
   },
   // sectionHeaderModernSimple and sectionSubtitle defined earlier
 });

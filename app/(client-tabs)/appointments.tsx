@@ -899,83 +899,59 @@ export default function ClientAppointmentsScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.container}>
-        <View style={styles.toggleContainer}>
-          <View style={styles.toggleWrapper}>
-            <TouchableOpacity 
+
+        {/* ── Page Header ── */}
+        <View style={styles.pageHeader}>
+          {/* Left: back arrow when in history mode */}
+          <View style={styles.pageHeaderSide}>
+            {activeTab === 'past' && (
+              <TouchableOpacity
+                style={styles.headerIconBtn}
+                onPress={() => setActiveTab('upcoming')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="chevron-forward" size={22} color={colors.primary} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Center: title */}
+          <Text style={styles.pageTitle}>
+            {activeTab === 'past'
+              ? t('appointments.history', 'היסטוריה')
+              : t('appointments.myAppointments', 'התורים שלי')}
+          </Text>
+
+          {/* Right: history icon */}
+          <View style={styles.pageHeaderSide}>
+            <TouchableOpacity
               style={[
-                styles.toggleBtn,
-                activeTab === 'upcoming' && {
-                  ...styles.toggleBtnActive,
-                  backgroundColor: colors.primary,
-                  shadowColor: colors.primary,
-                }
+                styles.headerIconBtn,
+                activeTab === 'past' && { backgroundColor: colors.primary + '18' },
               ]}
-              onPress={() => setActiveTab('upcoming')}
+              onPress={() => setActiveTab(activeTab === 'past' ? 'upcoming' : 'past')}
               activeOpacity={0.7}
             >
-              <View style={[
-                styles.toggleBadge,
-                { backgroundColor: activeTab === 'upcoming' ? 'rgba(255,255,255,0.3)' : colors.primary }
-              ]}>
-                <Text style={[
-                  styles.toggleBadgeText,
-                  { color: '#FFFFFF' }
-                ]}>
-                  {upcomingAppointments.length}
-                </Text>
-              </View>
-              <Text style={[
-                styles.toggleText, 
-                activeTab === 'upcoming' && styles.toggleTextActive
-              ]}>
-                {t('appointments.upcoming', 'Upcoming')}
-              </Text>
-              <Ionicons 
-                name="calendar-outline" 
-                size={18} 
-                color={activeTab === 'upcoming' ? '#FFFFFF' : '#8E8E93'} 
-              />
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[
-                styles.toggleBtn,
-                activeTab === 'past' && {
-                  ...styles.toggleBtnActive,
-                  backgroundColor: colors.primary,
-                  shadowColor: colors.primary,
-                }
-              ]}
-              onPress={() => setActiveTab('past')}
-              activeOpacity={0.7}
-            >
-              <View style={[
-                styles.toggleBadge,
-                { backgroundColor: activeTab === 'past' ? 'rgba(255,255,255,0.3)' : colors.primary }
-              ]}>
-                <Text style={[
-                  styles.toggleBadgeText,
-                  { color: '#FFFFFF' }
-                ]}>
-                  {pastAppointments.length}
-                </Text>
-              </View>
-              <Text style={[
-                styles.toggleText, 
-                activeTab === 'past' && styles.toggleTextActive
-              ]}>
-                {t('appointments.history', 'History')}
-              </Text>
-              <Ionicons 
-                name="checkmark-done-circle-outline" 
-                size={18} 
-                color={activeTab === 'past' ? '#FFFFFF' : '#8E8E93'} 
+              <Ionicons
+                name={activeTab === 'past' ? 'time' : 'time-outline'}
+                size={22}
+                color={activeTab === 'past' ? colors.primary : '#8E8E93'}
               />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Include the hero card within refreshable content (below) */}
+        {/* Upcoming count chip */}
+        {activeTab === 'upcoming' && upcomingAppointments.length > 0 && (
+          <View style={styles.countChipRow}>
+            <View style={[styles.countChip, { backgroundColor: colors.primary + '14' }]}>
+              <Ionicons name="calendar" size={13} color={colors.primary} />
+              <Text style={[styles.countChipText, { color: colors.primary }]}>
+                {upcomingAppointments.length} {t('appointments.upcoming', 'קרובים')}
+              </Text>
+            </View>
+          </View>
+        )}
 
         {isLoading ? (
           <ScrollView
@@ -1039,36 +1015,35 @@ export default function ClientAppointmentsScreen() {
             }
           />
         ) : (
-            <ScrollView
-              contentContainerStyle={styles.emptyState}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={onRefresh}
-                  colors={[Colors.primary]}
-                  tintColor={Colors.primary}
-                  title={t('appointments.updating', 'Updating appointments...')}
-                  titleColor={Colors.primary}
-                />
-              }
-            >
-              <Ionicons 
-                name="calendar-outline" 
-                size={64} 
-                color={Colors.subtext} 
-                style={styles.emptyIcon}
+          <ScrollView
+            contentContainerStyle={styles.emptyState}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[Colors.primary]}
+                tintColor={Colors.primary}
               />
-              <Text style={styles.emptyTitle}>
-                {activeTab === 'upcoming' 
-                  ? t('appointments.empty.upcoming', 'No upcoming appointments')
-                  : t('appointments.empty.past', 'No past appointments')}
-              </Text>
-              <Text style={styles.emptySubtitle}>
-                {activeTab === 'upcoming' 
-                  ? t('appointments.emptySubtitle.upcoming', 'Your upcoming appointments will appear here')
-                  : t('appointments.emptySubtitle.past', 'Your past appointments will appear here')}
-              </Text>
-            </ScrollView>
+            }
+          >
+            <View style={[styles.emptyIconCircle, { backgroundColor: colors.primary + '12' }]}>
+              <Ionicons
+                name={activeTab === 'upcoming' ? 'calendar-outline' : 'time-outline'}
+                size={42}
+                color={colors.primary}
+              />
+            </View>
+            <Text style={styles.emptyTitle}>
+              {activeTab === 'upcoming'
+                ? t('appointments.empty.upcoming', 'אין תורים קרובים')
+                : t('appointments.empty.past', 'אין תורים קודמים')}
+            </Text>
+            <Text style={styles.emptySubtitle}>
+              {activeTab === 'upcoming'
+                ? t('appointments.emptySubtitle.upcoming', 'התורים הקרובים שלך יופיעו כאן')
+                : t('appointments.emptySubtitle.past', 'התורים הקודמים שלך יופיעו כאן')}
+            </Text>
+          </ScrollView>
         )}
       </View>
 
@@ -1253,58 +1228,53 @@ const styles = StyleSheet.create<any>({
     marginTop: 8,
     fontWeight: '400',
   },
-  toggleContainer: {
-    backgroundColor: 'transparent',
+  pageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 6,
-    borderBottomWidth: 0,
-    borderBottomColor: 'transparent',
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  pageHeaderSide: {
+    width: 40,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  toggleWrapper: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(142, 142, 147, 0.12)',
-    borderRadius: 25,
-    padding: 4,
-    width: '85%',
-    marginBottom: 8,
-  },
-  toggleBtn: {
+  pageTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#1C1C1E',
+    letterSpacing: -0.5,
+    textAlign: 'center',
     flex: 1,
+  },
+  headerIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countChipRow: {
+    paddingHorizontal: 20,
+    paddingBottom: 6,
+    paddingTop: 2,
+  },
+  countChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 21,
-    gap: 8,
+    gap: 6,
+    alignSelf: 'flex-end',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
   },
-  toggleBtnActive: {
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  toggleText: {
-    fontSize: 16,
+  countChipText: {
+    fontSize: 13,
     fontWeight: '700',
-    color: '#8E8E93',
-    letterSpacing: -0.3,
-  },
-  toggleTextActive: {
-    color: '#FFFFFF',
-  },
-  toggleBadge: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-  },
-  toggleBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
+    letterSpacing: -0.2,
   },
   appointmentsList: {
     paddingHorizontal: 16,
@@ -1418,10 +1388,11 @@ const styles = StyleSheet.create<any>({
   },
 
   emptyState: {
-    flex: 1,
-    alignItems: 'stretch',
+    flexGrow: 1,
+    alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 40,
+    paddingBottom: 120,
   },
   emptyStateWithHero: {
     flexGrow: 1,
@@ -1430,11 +1401,14 @@ const styles = StyleSheet.create<any>({
     afterHeroSpacer: {
       height: 16,
     },
-  emptyIcon: {
-    marginTop: 20,
-    marginBottom: 10,
-    opacity: 0.6,
+  emptyIconCircle: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    alignItems: 'center',
+    justifyContent: 'center',
     alignSelf: 'center',
+    marginBottom: 20,
   },
   emptyTitle: {
     fontSize: 22,

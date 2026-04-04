@@ -7,6 +7,8 @@
   "appointments.title": "Appointments",
   "appointments.subtitle": "Manage your bookings",
   "appointments.next": "Your next appointment",
+  "appointments.noUpcoming": "No upcoming appointments",
+  "appointments.confirmed": "Confirmed",
   "book.now": "Book now",
   "login.required": "Login Required",
   "login.pleaseSignInTo": "Please sign in to {{action}}.",

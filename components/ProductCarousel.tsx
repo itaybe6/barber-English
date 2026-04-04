@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,26 +7,20 @@ import {
   Image,
   StyleSheet,
   Dimensions,
-  Animated,
-  Easing,
-  InteractionManager,
-  AppState,
   Modal,
   SafeAreaView,
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Product } from '@/lib/api/products';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { useTranslation } from 'react-i18next';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = SCREEN_WIDTH * 0.42; // Slightly wider for better product display
-const CARD_HEIGHT = 280; // Taller for product cards
-const PRODUCT_IMAGE_HEIGHT = Math.max(200, CARD_HEIGHT * 0.62);
-const CARD_SPACING = 16;
+const CARD_WIDTH = SCREEN_WIDTH * 0.52;
+const CARD_HEIGHT = CARD_WIDTH * 1.1; // slightly taller than square
+const CARD_SPACING = 14;
 
 interface ProductCarouselProps {
   products: Product[];
@@ -66,90 +60,6 @@ export default function ProductCarousel({
   const [modalVisible, setModalVisible] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const colors = useColors();
-  
-  // Animation values for floating elements
-  const floatingAnim = useRef(new Animated.Value(0)).current;
-  const sparkleAnim = useRef(new Animated.Value(0)).current;
-  const glowAnim = useRef(new Animated.Value(0)).current;
-
-  // Floating animation effect
-  useEffect(() => {
-    const createFloatingAnimation = () => {
-      return Animated.loop(
-        Animated.sequence([
-          Animated.timing(floatingAnim, {
-            toValue: 1,
-            duration: 2000,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-          Animated.timing(floatingAnim, {
-            toValue: 0,
-            duration: 2000,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-        ])
-      );
-    };
-
-    const createSparkleAnimation = () => {
-      return Animated.loop(
-        Animated.sequence([
-          Animated.timing(sparkleAnim, {
-            toValue: 1,
-            duration: 1500,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-          Animated.timing(sparkleAnim, {
-            toValue: 0,
-            duration: 1500,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-        ])
-      );
-    };
-
-    const createGlowAnimation = () => {
-      return Animated.loop(
-        Animated.sequence([
-          Animated.timing(glowAnim, {
-            toValue: 1,
-            duration: 3000,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-          Animated.timing(glowAnim, {
-            toValue: 0,
-            duration: 3000,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-        ])
-      );
-    };
-
-    const interactionHandle = InteractionManager.runAfterInteractions(() => {
-      createFloatingAnimation().start();
-      createSparkleAnimation().start();
-      createGlowAnimation().start();
-    });
-
-    const appStateSub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        createFloatingAnimation().start();
-        createSparkleAnimation().start();
-        createGlowAnimation().start();
-      }
-    });
-
-    return () => {
-      interactionHandle && typeof interactionHandle.cancel === 'function' && interactionHandle.cancel();
-      appStateSub.remove();
-    };
-  }, [floatingAnim, sparkleAnim, glowAnim]);
 
   const handleProductPress = (product: Product) => {
     setSelectedProduct(product);
@@ -164,91 +74,42 @@ export default function ProductCarousel({
   };
 
   const renderProductCard = (product: Product, index: number) => {
-    const floatingStyle = {
-      transform: [
-        {
-          translateY: floatingAnim.interpolate({
-            inputRange: [0, 1],
-            outputRange: [0, -8],
-          }),
-        },
-      ],
-    };
-
-    const glowStyle = {
-      opacity: glowAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0.3, 0.7],
-      }),
-    };
-
     return (
-      <View key={product.id} style={styles.productContainer}>
-        <Animated.View style={[styles.productCard, floatingStyle]}>
-          {/* Product Image Container */}
-          <View style={styles.productImageContainer}>
-            <Image
-              source={
-                product.image_url
-                  ? { uri: product.image_url }
-                  : require('@/assets/images/default/HomePage/barber/101-min.png')
-              }
-              style={styles.productImage}
-              resizeMode="contain"
-            />
-            
-            {/* Gradient Overlay */}
-            <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.1)', 'rgba(0,0,0,0.3)']}
-              style={styles.productImageOverlay}
-            />
-            
-            {/* Glow Effect */}
-            <Animated.View style={[styles.glowEffect, glowStyle]} />
-            
-            {/* Star Rating Badge */}
-            <View style={styles.starRatingBadge}>
-              <BlurView intensity={20} tint="light" style={styles.starRatingBlur}>
-                <StarRating rating={5} size={12} />
-              </BlurView>
-            </View>
-            
-            {/* Price Badge */}
-            <View style={styles.priceBadge}>
-              <BlurView intensity={24} tint="light" style={styles.priceBadgeBlur}>
-                <Text style={styles.priceBadgeText}>{formatPrice(product.price)}</Text>
-              </BlurView>
-            </View>
-          </View>
-
-          {/* Product Info */}
-          <View style={styles.productInfo}>
+      <TouchableOpacity
+        key={product.id}
+        style={styles.productContainer}
+        onPress={() => handleProductPress(product)}
+        activeOpacity={0.88}
+      >
+        {/* Card — overflow hidden for image + gradient */}
+        <View style={styles.productCard}>
+          <Image
+            source={
+              product.image_url
+                ? { uri: product.image_url }
+                : require('@/assets/images/default/HomePage/barber/101-min.png')
+            }
+            style={styles.productImage}
+            resizeMode="cover"
+          />
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.28)', 'rgba(0,0,0,0.82)']}
+            locations={[0.2, 0.55, 1]}
+            style={styles.productGradient}
+          />
+          {/* Name sits on the gradient, above where the pill overlaps */}
+          <View style={styles.productFooter}>
             <Text style={styles.productName} numberOfLines={2}>
               {product.name}
             </Text>
-            {product.description && (
-              <Text style={styles.productDescription} numberOfLines={2}>
-                {product.description}
-              </Text>
-            )}
-            
-            {/* Bottom Row - Empty for spacing */}
-            <View style={styles.productBottomRow}>
-            </View>
           </View>
+        </View>
 
-          {/* Touch Overlay */}
-          <TouchableOpacity
-            style={styles.productTouchOverlay}
-            onPress={() => handleProductPress(product)}
-            activeOpacity={0.95}
-          >
-            <View style={styles.productActionIndicator}>
-              <MaterialIcons name="shopping-bag" size={20} color={colors.primary} />
-            </View>
-          </TouchableOpacity>
-        </Animated.View>
-      </View>
+        {/* Price pill — half outside the card */}
+        <View style={styles.pricePill}>
+          <Text style={styles.pricePillText}>{formatPrice(product.price)}</Text>
+        </View>
+      </TouchableOpacity>
     );
   };
 
@@ -385,152 +246,79 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: 0.2,
   },
-  scrollView: {
-    paddingLeft: 24,
-  },
+  scrollView: {},
   scrollContainer: {
-    paddingRight: 24,
+    paddingHorizontal: 16,
   },
   productContainer: {
     width: CARD_WIDTH,
     marginRight: CARD_SPACING,
     alignItems: 'center',
+    // no overflow:hidden so the pill can hang outside the card
   },
   productCard: {
     width: '100%',
     height: CARD_HEIGHT,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 18,
     overflow: 'hidden',
+    backgroundColor: '#1C1C1E',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.04)',
-  },
-  productImageContainer: {
-    position: 'relative',
-    height: PRODUCT_IMAGE_HEIGHT,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F5F5F7',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
+    elevation: 7,
   },
   productImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     width: '100%',
     height: '100%',
   },
-  productImageOverlay: {
+  productGradient: {
     position: 'absolute',
-    top: 0,
     left: 0,
     right: 0,
     bottom: 0,
+    height: '70%',
   },
-  glowEffect: {
+  productFooter: {
     position: 'absolute',
-    top: -20,
-    left: -20,
-    right: -20,
-    bottom: -20,
-    backgroundColor: 'rgba(0, 122, 255, 0.1)',
-    borderRadius: 30,
-  },
-  starRatingBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  starRatingBlur: {
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  priceBadge: {
-    position: 'absolute',
-    bottom: 12,
-    left: 12,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  priceBadgeBlur: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  priceBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  productInfo: {
-    flex: 1,
-    padding: 16,
-    paddingTop: 12,
+    left: 0,
+    right: 0,
+    bottom: 26,
+    paddingHorizontal: 12,
+    alignItems: 'center',
   },
   productName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1C1C1E',
-    marginBottom: 4,
-    lineHeight: 20,
-  },
-  productDescription: {
-    fontSize: 13,
-    color: '#8E8E93',
-    marginBottom: 12,
-    lineHeight: 16,
-  },
-  productBottomRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  productPrice: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
-    color: '#1C1C1E',
+    color: '#FFFFFF',
+    lineHeight: 19,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
-  productTouchOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    opacity: 0,
-  },
-  productActionIndicator: {
-    width: 48,
-    height: 48,
+  pricePill: {
+    marginTop: -16,
+    backgroundColor: '#1C1C1E',
     borderRadius: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 22,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 6,
+    elevation: 5,
   },
-  starContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  star: {
-    marginRight: 2,
+  pricePillText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   // Modal Styles
   modalOverlay: {

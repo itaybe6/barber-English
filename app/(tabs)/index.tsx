@@ -2155,12 +2155,9 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     fontWeight: '700',
   },
   /* ─── Admin Products Carousel ─── */
-  /** Same horizontal inset as `DesignCarousel` (paddingLeft/Right 24) — not flush to card edges */
-  productAdminCarousel: {
-    paddingLeft: 24,
-  },
+  productAdminCarousel: {},
   productAdminCarouselContent: {
-    paddingRight: 24,
+    paddingHorizontal: 16,
     gap: 14,
     paddingVertical: 6,
     paddingBottom: 8,

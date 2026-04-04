@@ -8,6 +8,8 @@
   "appointments.title": "תורים",
   "appointments.subtitle": "נהל את ההזמנות שלך",
   "appointments.next": "התור הבא שלך",
+  "appointments.noUpcoming": "אין תורים קרובים",
+  "appointments.confirmed": "מאושר",
   "book.now": "קבע תור",
   "login.required": "נדרש להתחבר",
   "login.pleaseSignInTo": "אנא התחבר כדי {{action}}.",

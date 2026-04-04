@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import { View, StyleSheet, Alert } from "react-native";
 import { useRouter, useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Bell, CalendarDays, Home, Plus, User } from "lucide-react-native";
+import { CalendarDays, Home, Plus, User } from "lucide-react-native";
 import Animated, {
   interpolate,
   useAnimatedStyle,
@@ -164,15 +164,6 @@ export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
             accessibilityRole="tab"
           >
             <User size={ICON_SIZE} color={iconColor("profile")} />
-          </TabButton>
-          <TabButton
-            focused={isActive("notifications")}
-            activeColor={primary}
-            onPress={() => navigate("/(client-tabs)/notifications", true)}
-            accessibilityLabel={t("notifications.title", "Notifications")}
-            accessibilityRole="tab"
-          >
-            <Bell size={ICON_SIZE} color={iconColor("notifications")} />
           </TabButton>
           <TabButton
             focused={isActive("appointments")}

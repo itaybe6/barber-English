@@ -29,7 +29,6 @@ export default function ClientTabsLayout() {
             <Tabs.Screen name="appointments" options={{ title: t("tabs.booking", "Booking") }} />
             <Tabs.Screen name="profile" options={{ title: t("tabs.profile", "Profile") }} />
             <Tabs.Screen name="waitlist" options={{ title: t("waitlist.title", "Waitlist"), href: null }} />
-            <Tabs.Screen name="notifications" options={{ title: t("notifications.title", "Notifications"), href: null }} />
             <Tabs.Screen name="select-time" options={{ href: null }} />
             <Tabs.Screen name="select-barber" options={{ href: null }} />
             <Tabs.Screen name="select-service" options={{ href: null }} />

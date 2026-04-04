@@ -3,13 +3,10 @@ import { StyleSheet, Text, View, TouchableOpacity, Platform } from 'react-native
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { ChevronRight } from 'lucide-react-native';
-import NotificationButton from './NotificationButton';
 
 interface HeaderProps {
   title: string;
   showBack?: boolean;
-  showNotifications?: boolean;
-  onNotificationsPress?: () => void;
   rightComponent?: React.ReactNode;
   transparent?: boolean;
 }
@@ -17,8 +14,6 @@ interface HeaderProps {
 export default function Header({
   title,
   showBack = false,
-  showNotifications = false,
-  onNotificationsPress,
   rightComponent,
   transparent = false,
 }: HeaderProps) {
@@ -49,12 +44,6 @@ export default function Header({
       </View>
       <View style={styles.rightContainer}>
         {rightComponent}
-        {showNotifications && (
-          <NotificationButton 
-            color={transparent ? Colors.white : Colors.text}
-            style={styles.notificationButton}
-          />
-        )}
       </View>
     </View>
   );
@@ -113,9 +102,6 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
   backButton: {
-    padding: 4,
-  },
-  notificationButton: {
     padding: 4,
   },
 });

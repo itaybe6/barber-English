@@ -516,11 +516,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: 0.2,
   },
-  scrollView: {
-    paddingLeft: 24,
-  },
+  scrollView: {},
   scrollContainer: {
-    paddingRight: 24,
+    paddingHorizontal: 16,
   },
   // Design Card Style - No Border
   storyContainer: {

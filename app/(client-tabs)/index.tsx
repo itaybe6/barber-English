@@ -1420,13 +1420,14 @@ export default function ClientHomeScreen() {
         />
       </View>
 
-      <SafeAreaView edges={['top']} style={styles.overlayHeader} pointerEvents="box-none">
-        <View style={styles.overlayHeaderLogoOnly} pointerEvents="box-none">
-          <View style={styles.headerLogoInner}>
-            <Image source={getCurrentClientLogo()} style={styles.overlayLogo} resizeMode="contain" />
-          </View>
+      <View
+        pointerEvents="none"
+        style={[styles.overlayHeaderLogoOnly, { top: insets.top - 15 }]}
+      >
+        <View style={styles.headerLogoInner}>
+          <Image source={getCurrentClientLogo()} style={styles.overlayLogo} resizeMode="contain" />
         </View>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }
@@ -1511,13 +1512,14 @@ const styles = StyleSheet.create<any>({
     zIndex: 2,
     overflow: 'visible',
   },
-  /** Hero header: logo only (settings in tab bar; notifications in white sheet below). */
+  /** Hero header: logo only — absolute positioned same as admin overlayLogoWrapper */
   overlayHeaderLogoOnly: {
-    flexDirection: 'row',
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 4,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
+    justifyContent: 'flex-start',
   },
   /** White logo on hero scrim — same as admin home `overlayLogo` (fills `headerLogoInner`) */
   overlayLogo: {

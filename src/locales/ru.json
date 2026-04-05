@@ -626,6 +626,7 @@
       "errorPhoneNotRegistered": "Этот номер телефона у нас не зарегистрирован. Вы можете зарегистрироваться на экране регистрации или перепроверить номер.",
       "sameNumberAsSenderTitle": "Отправитель и получатель одинаковы",
       "sameNumberAsSenderMessage": "Вы запросили код на рабочий номер телефона, с которого отправляется SMS. Многие мобильные сети блокируют это. Попробуйте другой телефон или попросите у Pulseem специальный идентификатор отправителя.",
+      "errorMonthlyQuota": "Для этого бизнеса исчерпан месячный лимит SMS. Попробуйте в следующем месяце или обратитесь в поддержку.",
       "a11y": {
         "delete": "Удалить"
       }
@@ -1614,6 +1615,8 @@
       "receipt": {
         "sectionTitle": "Выдать чек (Green Invoice)",
         "sectionSubtitle": "Выберите подтверждённую или завершённую запись в месяце (как в разбивке доходов), затем выдайте чек.",
+        "searchPlaceholder": "Поиск по имени клиента",
+        "noSearchResults": "Ничего не найдено",
         "sandboxNoteToggle": "Для разработчиков: Sandbox / Supabase",
         "sandboxServerNote": "Режим разработки: Morning Sandbox и API-ключ (https://www.greeninvoice.co.il/help-center/settings/development-tool). Supabase → Edge Functions → Secrets: GREEN_INVOICE_USE_SANDBOX=true (на весь проект; читают greeninvoice-connect и greeninvoice-issue-receipt). API: https://sandbox.d.greeninvoice.co.il/api — docs: https://www.greeninvoice.co.il/api-docs",
         "loadingAppointments": "Загрузка записей…",

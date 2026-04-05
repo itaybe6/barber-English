@@ -628,6 +628,7 @@
       "errorPhoneNotRegistered": "رقم الهاتف هذا غير مسجل لدينا. يمكنك التسجيل من شاشة التسجيل أو التحقق مرة أخرى من الرقم.",
       "sameNumberAsSenderTitle": "المرسل والمستلم هما نفس الشيء",
       "sameNumberAsSenderMessage": "لقد طلبت رمزًا لرقم هاتف العمل الذي يتم إرسال الرسائل القصيرة منه. العديد من شبكات الهاتف المحمول تمنع ذلك. جرب هاتفًا آخر، أو اطلب من Pulseem معرف مرسل مخصصًا.",
+      "errorMonthlyQuota": "وصل هذا العمل إلى الحد الشهري لرسائل SMS. حاول مرة أخرى الشهر القادم أو اتصل بالدعم.",
       "a11y": {
         "delete": "يمسح"
       }
@@ -1624,6 +1625,8 @@
       "receipt": {
         "sectionTitle": "إصدار إيصال (الفاتورة الخضراء)",
         "sectionSubtitle": "اختر موعدًا مؤكدًا أو مكتملًا في الشهر المعروض (كما في تفصيل الدخل)، ثم أصدر إيصالاً.",
+        "searchPlaceholder": "بحث باسم العميل",
+        "noSearchResults": "لا توجد نتائج",
         "sandboxNoteToggle": "للمطورين: Sandbox / Supabase",
         "sandboxServerNote": "وضع التطوير: حساب Morning Sandbox ومفتاح API (https://www.greeninvoice.co.il/help-center/settings/development-tool). في Supabase → Edge Functions → Secrets: GREEN_INVOICE_USE_SANDBOX=true (لمشروع كامل؛ تستخدمه greeninvoice-connect و greeninvoice-issue-receipt). واجهة API: https://sandbox.d.greeninvoice.co.il/api — التوثيق: https://www.greeninvoice.co.il/api-docs",
         "loadingAppointments": "جاري تحميل المواعيد…",

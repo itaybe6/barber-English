@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { Days } from './days';
 import {
+  buildIsraeliHolidayLabelMap,
   buildMonthRange,
   getShortWeekdayNames,
   getSingleLetterHebrewWeekdays,
@@ -45,6 +46,8 @@ export type AdminVerticalMonthCalendarProps = {
   formatCountBadge?: (count: number) => string;
   /** Floating "Today" chip (default true). Set false e.g. on admin waitlist month view. */
   showTodayPill?: boolean;
+  /** Show Israeli holiday / observance labels under the Hebrew date. */
+  showHolidayLabels?: boolean;
 };
 
 function formatMonthLong(date: Date, language: string): string {
@@ -96,6 +99,7 @@ export default function AdminVerticalMonthCalendar({
   onJumpToDate,
   formatCountBadge: formatCountBadgeProp,
   showTodayPill = true,
+  showHolidayLabels = false,
 }: AdminVerticalMonthCalendarProps) {
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -141,6 +145,10 @@ export default function AdminVerticalMonthCalendar({
   const weekdayNames = useMemo(
     () => (language.startsWith('he') ? getSingleLetterHebrewWeekdays() : getShortWeekdayNames(language)),
     [language]
+  );
+  const holidayLabels = useMemo(
+    () => (showHolidayLabels ? buildIsraeliHolidayLabelMap(rangeStart, rangeEnd, language) : {}),
+    [rangeStart, rangeEnd, language, showHolidayLabels]
   );
 
   const scrollToMonthIndex = useCallback((idx: number, animated: boolean) => {
@@ -284,6 +292,7 @@ export default function AdminVerticalMonthCalendar({
                 rangeEnd={rangeEnd}
                 dayAvailability={dayAvailability}
                 constraintDates={constraintDates}
+                holidayLabels={holidayLabels}
                 selectedDate={selectedDate}
                 cellSize={cellSize}
                 primaryColor={primaryColor}

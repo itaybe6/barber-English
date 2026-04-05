@@ -2571,6 +2571,7 @@ export default function AdminAppointmentsScreen() {
                 onRefresh={onRefresh}
                 todayLabel={tHe('admin.calendar.today', 'היום')}
                 monthHint={tHe('admin.calendar.monthTapDayHint', 'הקישו על יום כדי לראות את כל התורים')}
+                showHolidayLabels
               />
             </View>
           )}

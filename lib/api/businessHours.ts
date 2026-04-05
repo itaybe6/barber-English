@@ -1,12 +1,13 @@
 import { supabase, BusinessHours, getBusinessId } from '../supabase';
 
 export const businessHoursApi = {
-  // Fix any existing appointments with null service_name
   async fixNullServiceNames(): Promise<void> {
     try {
+      const businessId = getBusinessId();
       const { error } = await supabase
         .from('appointments')
         .update({ service_name: 'Available Slot' })
+        .eq('business_id', businessId)
         .is('service_name', null);
 
       if (error) {
@@ -52,13 +53,13 @@ export const businessHoursApi = {
     return this.getAllBusinessHours(userId);
   },
 
-  // Update slot duration for all days
   async updateAllSlotDuration(slotDurationMinutes: number): Promise<number> {
     try {
+      const businessId = getBusinessId();
       const { data, error } = await supabase
         .from('business_hours')
         .update({ slot_duration_minutes: slotDurationMinutes })
-        // PostgREST requires a WHERE clause for UPDATE; use full-range filter to target all rows
+        .eq('business_id', businessId)
         .gte('day_of_week', 0)
         .lte('day_of_week', 6)
         .select('day_of_week');
@@ -195,9 +196,6 @@ export const businessHoursApi = {
   async generateTimeSlotsForDate(date: string, userId?: string): Promise<any[]> {
     try {
       const businessId = getBusinessId();
-      
-      // Fix any existing appointments with null service_name first
-      await this.fixNullServiceNames();
       
       // Helper: apply recurring appointments for a given date after slots exist
       const applyRecurringAssignments = async (targetDate: string) => {

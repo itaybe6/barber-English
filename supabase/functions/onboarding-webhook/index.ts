@@ -31,7 +31,10 @@
  *
  * כתובת: address, business_address, location, full_address, כתובת_העסק
  *
- * צבע: primaryColor, primary_color, brand_color, theme_color, accent_color
+ * צבע מותג (לובאל): data.business.brand_color — HEX עם # (למשל #D4A574, #E91E63)
+ *   גם: brandColor, primaryColor, primary_color, theme_color, accent_color
+ *   ברירת מחדל אם חסר/לא תקין: #D4A574 (רוז גולד)
+ *   נשמר ב-business_profile.primary_color וב-theme.json / app.config (כפתורים, מותג)
  *
  * תמונות — שטוח או תחת images / branding / assets / media:
  *   logo + logoBase64, logo_base64, logo_image
@@ -64,7 +67,8 @@
  * מבנה לובאל (דוגמה):
  *   { "event": "new_business_onboarded", "timestamp": "...", "data": { "business": { ... }, "services": [...] } }
  *   business: business_name_he, business_name_en, app_name_en, address, manager_name, phone,
- *   manager_password, logo_url, manager_photo_url, id (UUID אופציונלי — יהיה business_profile.id),
+ *   manager_password, logo_url, manager_photo_url, brand_color (צבע ראשי לאפליקציה),
+ *   id (UUID אופציונלי — יהיה business_profile.id),
  *   plan, price, commitment (לא נשמרים ב-DB כרגע)
  *   services[]: name, price, duration_minutes, sort_order → order_index
  */
@@ -123,6 +127,51 @@ function mergePayload(raw: Record<string, unknown>): Record<string, unknown> {
     Object.assign(out, bizNested as Record<string, unknown>);
   }
   return out;
+}
+
+/** ברירת מחדל לובאל — רוז גולד */
+const DEFAULT_BRAND_COLOR_HEX = "#D4A574";
+
+/** מחזיר #RRGGBB או null אם הפורמט לא תקין */
+function normalizeHexColor(input: string): string | null {
+  let s = String(input ?? "").trim();
+  if (!s) return null;
+  if (!s.startsWith("#")) {
+    if (/^[0-9A-Fa-f]{6}$/.test(s)) s = "#" + s;
+    else if (/^[0-9A-Fa-f]{3}$/.test(s)) {
+      s = "#" + s.toLowerCase().split("").map((c) => c + c).join("");
+    } else return null;
+  }
+  const body = s.slice(1);
+  if (/^[0-9A-Fa-f]{6}$/i.test(body)) return "#" + body.toUpperCase();
+  if (/^[0-9A-Fa-f]{3}$/i.test(body)) {
+    const low = body.toLowerCase();
+    return (
+      "#" +
+      low
+        .split("")
+        .map((c) => c + c)
+        .join("")
+        .toUpperCase()
+    );
+  }
+  if (/^[0-9A-Fa-f]{8}$/i.test(body)) {
+    return "#" + body.slice(0, 6).toUpperCase();
+  }
+  return null;
+}
+
+/** צבע ראשי לעסק — עדיפות ל-brand_color מלובאל */
+function resolvePrimaryBrandColor(p: Record<string, unknown>): string {
+  const raw = pickStr(p, [
+    "brand_color",
+    "brandColor",
+    "primaryColor",
+    "primary_color",
+    "theme_color",
+    "accent_color",
+  ]);
+  return normalizeHexColor(raw) ?? DEFAULT_BRAND_COLOR_HEX;
 }
 
 function pickNumber(
@@ -832,14 +881,7 @@ serve(async (req) => {
     "full_address",
     "כתובת_העסק",
   ]);
-  const primaryColor =
-    pickStr(p, [
-      "primaryColor",
-      "primary_color",
-      "brand_color",
-      "theme_color",
-      "accent_color",
-    ]) || "#000000";
+  const color = resolvePrimaryBrandColor(p);
   const pulseemFromNumber = pickStr(p, [
     "pulseemFromNumber",
     "pulseem_from_number",
@@ -913,8 +955,8 @@ serve(async (req) => {
     businessId = externalBusinessId.trim().toLowerCase();
   }
   const slug = clientName.toLowerCase();
-  const color = primaryColor;
   const pulseFrom = pulseemFromNumber || clientName;
+  const notificationTintHex = color.replace(/^#/, "");
 
   const admin = createClient(supabaseUrl, serviceRole);
 
@@ -1132,7 +1174,7 @@ serve(async (req) => {
       web: { favicon: `./branding/${clientName}/icon.png` },
       plugins: [
         ["expo-router", { origin: `https://${slug}.com/` }],
-        ["expo-notifications", { color: "#ffffff" }],
+        ["expo-notifications", { color: notificationTintHex }],
         "expo-web-browser",
         "expo-font",
         "expo-localization",
@@ -1155,7 +1197,7 @@ serve(async (req) => {
     colors: {
       primary: color,
       secondary: color + "CC",
-      accent: "#FF3B30",
+      accent: color,
       background: "#FFFFFF",
       surface: "#F2F2F7",
       text: "#1C1C1E",

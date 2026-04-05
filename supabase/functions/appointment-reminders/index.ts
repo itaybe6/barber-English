@@ -149,7 +149,8 @@ serve(async (req) => {
   const admin = createClient(supabaseUrl, serviceRoleKey);
   const nowUtc = DateTime.utc();
   const nowLocal = nowUtc.setZone(TZ);
-  const windowStartDate = nowLocal.minus({ days: 1 }).toISODate();
+  const todayDate = nowLocal.toISODate();
+  const windowEndDate = nowLocal.plus({ days: 2 }).toISODate();
 
   const { data: appointments, error: apptErr } = await admin
     .from("appointments")
@@ -158,11 +159,12 @@ serve(async (req) => {
     )
     .eq("is_available", false)
     .in("status", ["confirmed", "pending"])
-    .gte("slot_date", windowStartDate ?? "1970-01-01")
+    .gte("slot_date", todayDate ?? "1970-01-01")
+    .lte("slot_date", windowEndDate ?? "2099-12-31")
     .or(
       "client_reminder_sent_at.is.null,admin_reminder_sent_at.is.null",
     )
-    .limit(800);
+    .limit(300);
 
   if (apptErr) {
     console.error("[appointment-reminders] appointments", apptErr);

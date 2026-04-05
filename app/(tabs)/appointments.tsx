@@ -1127,17 +1127,16 @@ export default function AdminAppointmentsScreen() {
         setIsLoading(true);
       }
 
-      // Fix any existing appointments with null service_name first
-      await businessHoursApi.fixNullServiceNames();
-
       // Ensure slots exist for the day (idempotent and will not override booked ones)
       await businessHoursApi.generateTimeSlotsForDate(dateString);
 
+      const businessId = getBusinessId();
       let query = supabase
         .from('appointments')
-        .select('*')
+        .select('id, slot_date, slot_time, client_name, client_phone, service_name, barber_id, status, is_available, business_id, user_id, created_at')
+        .eq('business_id', businessId)
         .eq('slot_date', dateString)
-        .eq('is_available', false); // booked only
+        .eq('is_available', false);
 
       // סינון לפי המשתמש הנוכחי - רק תורים שהוא יצר
       if (user?.id) {
@@ -1191,9 +1190,11 @@ export default function AdminAppointmentsScreen() {
           setRangeConstraints(new Map());
           return;
         }
+        const businessId = getBusinessId();
         const { data, error } = await supabase
           .from('appointments')
-          .select('*')
+          .select('id, slot_date, slot_time, client_name, client_phone, service_name, barber_id, status, is_available, business_id, user_id, created_at')
+          .eq('business_id', businessId)
           .eq('is_available', false)
           .eq('barber_id', user.id)
           .gte('slot_date', startDateStr)

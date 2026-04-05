@@ -46,7 +46,13 @@ function DesignCoverImage({ uri, style }: { uri: string; style: object }) {
     return <View style={[style, styles.designImagePlaceholder]} />;
   }
   if (isVideoUrl(trimmed)) {
-    return <GalleryLoopVideo uri={trimmed} style={style} />;
+    return (
+      <View style={[style, styles.videoThumbnailContainer]}>
+        <View style={styles.videoPlayOverlay}>
+          <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.9)" />
+        </View>
+      </View>
+    );
   }
   return (
     <ExpoImage
@@ -153,7 +159,7 @@ export default function DesignCarousel({
         if (user) {
           const { data: profile } = await supabase
             .from('users')
-            .select('*')
+            .select('id, name, image_url')
             .eq('id', user.id)
             .single();
           
@@ -553,6 +559,15 @@ const styles = StyleSheet.create({
   },
   designImagePlaceholder: {
     backgroundColor: '#E8E8ED',
+  },
+  videoThumbnailContainer: {
+    backgroundColor: '#1C1C1E',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoPlayOverlay: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   adminProfileOverlay: {
     position: 'absolute',

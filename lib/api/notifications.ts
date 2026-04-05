@@ -44,10 +44,11 @@ export const notificationsApi = {
 
       const { data, error } = await supabase
         .from('notifications')
-        .select('*')
-        .eq('business_id', businessId) // Filter by current business
+        .select('id, title, content, type, is_read, read_at, created_at, recipient_name, recipient_phone, appointment_id, business_id')
+        .eq('business_id', businessId)
         .in('recipient_phone', variants)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(100);
 
       if (error) {
         console.error('Error fetching user notifications:', error);

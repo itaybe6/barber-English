@@ -27,7 +27,9 @@ export const designsApi = {
         query = query.eq('user_id', userId);
       }
 
-      const { data, error } = await query.order('created_at', { ascending: false });
+      const { data, error } = await query
+        .order('created_at', { ascending: false })
+        .limit(200);
 
       if (error) {
         console.error('Error fetching designs:', error);

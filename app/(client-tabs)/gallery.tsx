@@ -91,7 +91,9 @@ const DesignTile = memo(({ item, onOpen, uploaderUser, businessColors, isProduct
             {urls.map((url, idx) => (
               <View key={`${item.id}-img-${idx}`} style={{ width: slideSize, height: slideSize }}>
                 {isVideoUrl(url) ? (
-                  <GalleryLoopVideo uri={url} style={styles.image} />
+                  <View style={[styles.image, { backgroundColor: '#1C1C1E', justifyContent: 'center', alignItems: 'center' }]}>
+                    <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.9)" />
+                  </View>
                 ) : (
                   <Animated.Image
                     source={{ uri: url }}

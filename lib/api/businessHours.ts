@@ -196,62 +196,8 @@ export const businessHoursApi = {
   async generateTimeSlotsForDate(date: string, userId?: string): Promise<any[]> {
     try {
       const businessId = getBusinessId();
-      
-      // Helper: apply recurring appointments for a given date after slots exist
-      const applyRecurringAssignments = async (targetDate: string) => {
-        try {
-          const dayOfWeek = new Date(targetDate).getDay();
 
-          // Fetch approved recurring rules for this day
-          const { data: rules, error: rulesError } = await supabase
-            .from('recurring_appointments')
-            .select('*')
-            .eq('business_id', businessId)
-            .eq('day_of_week', dayOfWeek);
-
-          if (rulesError || !rules || rules.length === 0) {
-            return;
-          }
-
-          // Filter by optional date range in code for simplicity
-          const validRules = rules.filter((r: any) => {
-            const startOk = !r.start_date || r.start_date <= targetDate;
-            const endOk = !r.end_date || r.end_date >= targetDate;
-            return startOk && endOk;
-          });
-
-          for (const rule of validRules) {
-            // Find slot for the rule time
-          const { data: slot } = await supabase
-              .from('appointments')
-              .select('id, is_available')
-              .eq('business_id', businessId)
-              .eq('slot_date', targetDate)
-              .eq('slot_time', rule.slot_time)
-              .maybeSingle();
-
-            if (!slot || !slot.id || slot.is_available !== true) {
-              // No slot or already booked
-              continue;
-            }
-
-            // Try to book it for the recurring client (only if still available)
-            await supabase
-              .from('appointments')
-              .update({
-                is_available: false,
-                client_name: rule.client_name,
-                client_phone: rule.client_phone,
-                service_name: rule.service_name,
-              })
-              .eq('business_id', businessId)
-              .eq('id', slot.id)
-              .eq('is_available', true);
-          }
-        } catch (e) {
-          console.error('Error applying recurring assignments:', e);
-        }
-      };
+      // Recurring → concrete appointments: nightly pg_cron (materialize_recurring_appointments_forward).
 
       // Get day of week (0=Sunday, 1=Monday, etc.)
       const dayOfWeek = new Date(date).getDay();
@@ -465,9 +411,6 @@ export const businessHoursApi = {
           }
         }
       }
-
-      // Apply recurring assignments after slots exist
-      await applyRecurringAssignments(date);
 
       // Return final slots for the date and user
       let finalQuery = supabase

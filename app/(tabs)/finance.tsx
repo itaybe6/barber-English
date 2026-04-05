@@ -90,11 +90,17 @@ function RtlText({
   style,
   ...props
 }: React.ComponentProps<typeof Text>) {
-  return <Text {...props} style={[styles.rtlText, style]} />;
+  const { i18n } = useTranslation();
+  const lang = (i18n.language || '').toLowerCase();
+  const isRTL = (typeof i18n.dir === 'function' ? i18n.dir() : 'rtl') === 'rtl' || lang.startsWith('he');
+  return <Text {...props} style={[isRTL ? styles.rtlText : styles.ltrText, style]} />;
 }
 
 function RtlTextInput({ style, ...props }: TextInputProps) {
-  return <TextInput {...props} style={[styles.rtlText, style]} />;
+  const { i18n } = useTranslation();
+  const lang = (i18n.language || '').toLowerCase();
+  const isRTL = (typeof i18n.dir === 'function' ? i18n.dir() : 'rtl') === 'rtl' || lang.startsWith('he');
+  return <TextInput {...props} style={[isRTL ? styles.rtlText : styles.ltrText, style]} />;
 }
 
 /** Same gradient / lava base as `app/login.tsx` */
@@ -121,7 +127,9 @@ function lightenHex(hex: string, ratio: number): string {
 }
 
 export default function FinanceScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = (i18n.language || '').toLowerCase();
+  const isRTL = (typeof i18n.dir === 'function' ? i18n.dir() : 'rtl') === 'rtl' || lang.startsWith('he');
   const insets = useSafeAreaInsets();
   const { colors: theme } = useBusinessColors();
   const primaryColor = theme.primary || '#000000';
@@ -497,7 +505,7 @@ export default function FinanceScreen() {
   // --- Loading State ---
   if (loading) {
     return (
-      <View style={[styles.rtlRoot, { direction: 'rtl' }]}>
+      <View style={[styles.rtlRoot, { direction: isRTL ? 'rtl' : 'ltr' }]}>
         <StatusBar style="dark" backgroundColor={theme.surface} />
         <View style={{ paddingTop: insets.top, backgroundColor: theme.surface }} />
         <View style={[styles.loadingWrap, { flex: 1 }]}>
@@ -510,7 +518,7 @@ export default function FinanceScreen() {
 
   return (
     // direction: 'rtl' makes all flex-row layouts render right→left automatically
-    <View style={styles.rtlRoot}>
+    <View style={[styles.rtlRoot, { direction: isRTL ? 'rtl' : 'ltr' }]}>
       <StatusBar style="dark" backgroundColor={theme.surface} />
 
       <Animated.View
@@ -536,7 +544,7 @@ export default function FinanceScreen() {
 
       <AnimatedKeyboardAwareScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, { direction: isRTL ? 'rtl' : 'ltr' }]}
         showsVerticalScrollIndicator={false}
         bounces
         keyboardShouldPersistTaps="handled"
@@ -1110,6 +1118,14 @@ const styles = StyleSheet.create({
   rtlText: {
     textAlign: 'right',
     writingDirection: 'rtl',
+    // Ensure Text stretches inside column layouts so textAlign actually takes effect
+    // (otherwise Text can size-to-content and appear visually "left stuck" under LTR layout)
+    alignSelf: 'stretch',
+  },
+  ltrText: {
+    textAlign: 'left',
+    writingDirection: 'ltr',
+    alignSelf: 'stretch',
   },
   loadingWrap: {
     flex: 1,

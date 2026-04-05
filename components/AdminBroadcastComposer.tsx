@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,11 +11,11 @@ import {
   Alert,
   ViewStyle,
   I18nManager,
+  Animated,
 } from 'react-native';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import Colors from '@/constants/colors';
 import { messagesApi } from '@/lib/api/messages';
 import { notificationsApi } from '@/lib/api/notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,6 +34,20 @@ type AdminBroadcastComposerProps = {
   /** When set, opening the sheet and sending require this to resolve true (business owner / super-admin gate). */
   ensureCanBroadcast?: () => Promise<boolean>;
 };
+
+function darkenHex(hex: string, ratio: number): string {
+  const h = (hex || '').replace('#', '');
+  if (h.length !== 6) return hex;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const f = 1 - Math.max(0, Math.min(1, ratio));
+  const to = (n: number) =>
+    Math.round(Math.max(0, Math.min(255, n * f)))
+      .toString(16)
+      .padStart(2, '0');
+  return `#${to(r)}${to(g)}${to(b)}`;
+}
 
 export default function AdminBroadcastComposer({
   variant = 'floating',
@@ -63,7 +77,24 @@ export default function AdminBroadcastComposer({
   const [notificationContent, setNotificationContent] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [ownerOnlyModalOpen, setOwnerOnlyModalOpen] = useState(false);
+  const [titleFocused, setTitleFocused] = useState(false);
+  const [contentFocused, setContentFocused] = useState(false);
   const closeOwnerOnlyModal = useCallback(() => setOwnerOnlyModalOpen(false), []);
+
+  // Slide-in animation
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (isOpen) {
+      Animated.spring(slideAnim, {
+        toValue: 1,
+        damping: 24,
+        stiffness: 260,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      slideAnim.setValue(0);
+    }
+  }, [isOpen, slideAnim]);
 
   const currentTitle = title.trim();
   const canSend = currentTitle.length > 0 && notificationContent.trim().length > 0 && !isSending;
@@ -99,6 +130,21 @@ export default function AdminBroadcastComposer({
   const resetState = () => {
     setTitle('');
     setNotificationContent('');
+    setTitleFocused(false);
+    setContentFocused(false);
+  };
+
+  const handleSendWithConfirm = () => {
+    if (!canSend) return;
+    const confirmTitle = t('admin.broadcastComposer.confirmTitle', 'לשלוח לכל הלקוחות?');
+    const confirmBody = t(
+      'admin.broadcastComposer.confirmBody',
+      'הודעה זו תישלח כעת לכל הלקוחות ותופיע גם בדף הבית.\n\nאפשר לערוך ולשלוח מחדש בכל זמן.',
+    );
+    Alert.alert(confirmTitle, confirmBody, [
+      { text: strings.cancel, style: 'cancel' },
+      { text: strings.sendAll, style: 'default', onPress: () => void handleSend() },
+    ]);
   };
 
   const handleSend = async () => {
@@ -159,10 +205,9 @@ export default function AdminBroadcastComposer({
     }
   };
 
-  const closeBtnSide = isRTL ? { left: 10 } : { right: 10 };
   const textAlign = isRTL ? 'right' : 'left';
-  const labelAlign = isRTL ? 'right' : 'left';
-  const iconSendMargin = isRTL ? { marginRight: 8 } : { marginLeft: 8 };
+  const rowDir = isRTL ? { flexDirection: 'row-reverse' as const } : { flexDirection: 'row' as const };
+  const rowDirReverse = isRTL ? { flexDirection: 'row' as const } : { flexDirection: 'row-reverse' as const };
 
   const openSheetIfAllowed = async () => {
     if (ensureCanBroadcast) {
@@ -180,35 +225,41 @@ export default function AdminBroadcastComposer({
     setOpen(true);
   };
 
+  const sheetTranslateY = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [600, 0],
+  });
+
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+
   return (
     <>
       <BroadcastOwnerOnlyModal visible={ownerOnlyModalOpen} onClose={closeOwnerOnlyModal} />
+
       {renderTrigger &&
         (variant === 'floating' ? (
           <View
             pointerEvents="box-none"
             style={[
               styles.fabContainer,
-              {
-                top: Math.max(110, insets.top + 80),
-                left: 10,
-              },
+              { top: Math.max(110, insets.top + 80), left: 10 },
             ]}
           >
             <TouchableOpacity
-              activeOpacity={0.9}
+              activeOpacity={0.88}
               onPress={() => void openSheetIfAllowed()}
               accessibilityRole="button"
               accessibilityLabel={strings.accessibilitySend}
               style={styles.fabWrapper}
             >
               <LinearGradient
-                colors={[colors.primary, colors.primary]}
+                colors={[colors.primary, darkenHex(colors.primary, 0.3)]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.fab}
               >
-                <Ionicons name="notifications-outline" size={18} color="#fff" style={iconSendMargin} />
+                <Ionicons name="megaphone-outline" size={17} color="#fff" style={{ marginEnd: 7 }} />
                 <Text style={styles.fabLabel} numberOfLines={1}>
                   {strings.triggerLabel}
                 </Text>
@@ -223,124 +274,243 @@ export default function AdminBroadcastComposer({
             accessibilityLabel={strings.accessibilitySend}
             style={[styles.iconButton, iconContainerStyle]}
           >
-            <Ionicons name="notifications-outline" size={22} color={effectiveIconColor} />
+            <Ionicons name="megaphone-outline" size={22} color={effectiveIconColor} />
           </TouchableOpacity>
         ))}
 
-      <Modal visible={isOpen} animationType="fade" transparent onRequestClose={() => setOpen(false)}>
+      <Modal
+        visible={isOpen}
+        animationType="none"
+        transparent
+        statusBarTranslucent
+        onRequestClose={() => setOpen(false)}
+      >
         <View style={{ flex: 1 }}>
+          {/* Backdrop */}
           <Pressable style={styles.overlayDismiss} onPress={() => setOpen(false)} />
-          <View style={styles.overlayCenter} pointerEvents="box-none">
-            <View style={styles.sheet}>
-              <LinearGradient
-                colors={[colors.primary, colors.primary]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.sheetHeader}
-              >
-                <TouchableOpacity
-                  style={[styles.headerCloseButton, closeBtnSide]}
-                  onPress={() => setOpen(false)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="close" size={22} color="#fff" />
-                </TouchableOpacity>
-                <Text style={styles.sheetTitle}>{strings.headerTitle}</Text>
-              </LinearGradient>
 
+          {/* Sheet */}
+          <Animated.View
+            style={[
+              styles.overlayBottom,
+              { transform: [{ translateY: sheetTranslateY }] },
+            ]}
+            pointerEvents="box-none"
+          >
+            <View
+              style={[
+                styles.sheet,
+                { backgroundColor: colors.background, paddingBottom: Math.max(insets.bottom, 8) + 86 },
+              ]}
+            >
+              {/* Drag handle */}
+              <View style={styles.dragHandle} />
+
+              {/* KeyboardAware scroll — all content except sticky bar */}
               <KeyboardAwareScreenScroll
-                style={{ flexGrow: 1, maxHeight: '100%' }}
+                style={{ flexGrow: 1 }}
                 keyboardShouldPersistTaps="handled"
-                contentContainerStyle={styles.content}
+                contentContainerStyle={styles.scrollContent}
               >
-                <Text style={[styles.subtitle, { textAlign: labelAlign }]}>{strings.subtitle}</Text>
-
-                <View style={styles.sectionCard}>
-                  <Text style={[styles.label, { textAlign: labelAlign }]}>{strings.titleLabel}</Text>
-                  <TextInput
-                    style={[styles.input, { textAlign }]}
-                    placeholder={strings.titlePlaceholder}
-                    placeholderTextColor={Colors.subtext}
-                    value={title}
-                    onChangeText={setTitle}
-                    maxLength={80}
-                  />
-                  <Text style={[styles.counter, isRTL ? styles.counterRtl : styles.counterLtr]}>
-                    {title.length}/80
-                  </Text>
-                </View>
-
-                <View style={[styles.sectionCard, { marginTop: 14 }]}>
-                  <Text style={[styles.label, { textAlign: labelAlign }]}>{strings.contentLabel}</Text>
-                  <TextInput
-                    style={[styles.input, styles.textArea, { textAlign }]}
-                    placeholder={strings.contentPlaceholder}
-                    placeholderTextColor={Colors.subtext}
-                    value={notificationContent}
-                    onChangeText={setNotificationContent}
-                    multiline
-                    numberOfLines={6}
-                    maxLength={500}
-                    textAlignVertical="top"
-                  />
-                  <Text style={[styles.counter, isRTL ? styles.counterRtl : styles.counterLtr]}>
-                    {notificationContent.length}/500
-                  </Text>
-                </View>
-
-                <View style={styles.previewCard}>
-                  <Text style={[styles.previewHint, { textAlign: labelAlign }]}>{strings.previewHint}</Text>
-                  <View
-                    style={[
-                      styles.previewInner,
-                      { flexDirection: isRTL ? 'row-reverse' : 'row' },
-                    ]}
+                {/* ── Hero header ── */}
+                <View style={styles.heroSection}>
+                  {/* Close button */}
+                  <TouchableOpacity
+                    style={[styles.closeBtn, isRTL ? { left: 16 } : { right: 16 }]}
+                    onPress={() => setOpen(false)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={strings.cancel}
                   >
-                    <Ionicons
-                      name="notifications-outline"
-                      size={20}
-                      color={colors.primary}
-                      style={isRTL ? { marginLeft: 10 } : { marginRight: 10 }}
-                    />
-                    <Text style={[styles.previewTitle, { textAlign }]} numberOfLines={2}>
-                      {currentTitle || strings.previewTitlePlaceholder}
+                    <View style={[styles.closeBtnInner, { backgroundColor: `${colors.textSecondary}18` }]}>
+                      <Ionicons name="close" size={16} color={colors.textSecondary} />
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Icon */}
+                  <View style={[styles.heroIconWrap, { backgroundColor: `${colors.primary}14` }]}>
+                    <LinearGradient
+                      colors={[colors.primary, darkenHex(colors.primary, 0.28)]}
+                      start={{ x: 0.1, y: 0 }}
+                      end={{ x: 0.9, y: 1 }}
+                      style={styles.heroIconGradient}
+                    >
+                      <Ionicons name="megaphone" size={30} color="#fff" />
+                    </LinearGradient>
+                  </View>
+
+                  <Text style={[styles.heroTitle, { color: colors.text }]}>
+                    {strings.headerTitle}
+                  </Text>
+                  <Text style={[styles.heroSubtitle, { color: colors.textSecondary }]}>
+                    {strings.subtitle}
+                  </Text>
+
+                  {/* Audience chip */}
+                  <View style={[styles.audienceChip, rowDir, { backgroundColor: `${colors.primary}10`, borderColor: `${colors.primary}22` }]}>
+                    <Ionicons name="people" size={14} color={colors.primary} />
+                    <Text style={[styles.audienceChipText, { color: colors.primary }]}>
+                      {t('admin.broadcastComposer.audienceAllClients', 'לכל הלקוחות')}
                     </Text>
                   </View>
-                  <Text style={[styles.previewContent, { textAlign }]} numberOfLines={8}>
-                    {notificationContent || strings.previewContentPlaceholder}
-                  </Text>
                 </View>
 
-                <View style={styles.actionsRow}>
-                  <TouchableOpacity
-                    style={styles.secondaryButton}
-                    onPress={() => setOpen(false)}
-                    activeOpacity={0.85}
+                {/* ── Title field ── */}
+                <View style={styles.sectionGroup}>
+                  <Text style={[styles.sectionLabel, { color: colors.textSecondary, textAlign }]}>
+                    {strings.titleLabel.toUpperCase()}
+                  </Text>
+                  <View
+                    style={[
+                      styles.fieldCard,
+                      {
+                        backgroundColor: colors.background,
+                        borderColor: titleFocused ? colors.primary : `${colors.border}88`,
+                        shadowColor: titleFocused ? colors.primary : '#000',
+                        shadowOpacity: titleFocused ? 0.12 : 0.04,
+                      },
+                    ]}
                   >
-                    <Text style={styles.secondaryButtonText}>{strings.cancel}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={handleSend}
-                    activeOpacity={0.85}
-                    disabled={!canSend}
-                    style={{ flex: 1 }}
+                    <TextInput
+                      style={[styles.fieldInput, { textAlign, color: colors.text, writingDirection: isRTL ? 'rtl' : 'ltr' }]}
+                      placeholder={strings.titlePlaceholder}
+                      placeholderTextColor={`${colors.textSecondary}80`}
+                      value={title}
+                      onChangeText={setTitle}
+                      maxLength={80}
+                      returnKeyType="next"
+                      onFocus={() => setTitleFocused(true)}
+                      onBlur={() => setTitleFocused(false)}
+                    />
+                    <Text style={[styles.charCounter, { color: `${colors.textSecondary}80` }]}>
+                      {title.length}/80
+                    </Text>
+                  </View>
+                </View>
+
+                {/* ── Content field ── */}
+                <View style={[styles.sectionGroup, { marginTop: 4 }]}>
+                  <Text style={[styles.sectionLabel, { color: colors.textSecondary, textAlign }]}>
+                    {strings.contentLabel.toUpperCase()}
+                  </Text>
+                  <View
+                    style={[
+                      styles.fieldCard,
+                      {
+                        backgroundColor: colors.background,
+                        borderColor: contentFocused ? colors.primary : `${colors.border}88`,
+                        shadowColor: contentFocused ? colors.primary : '#000',
+                        shadowOpacity: contentFocused ? 0.12 : 0.04,
+                      },
+                    ]}
                   >
-                    <LinearGradient
-                      colors={canSend ? [colors.primary, colors.primary] : ['#B0B0B0', '#B0B0B0']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={[styles.primaryButton, !canSend && { opacity: 0.55 }]}
-                    >
-                      <Ionicons name="send" size={18} color="#fff" style={iconSendMargin} />
-                      <Text style={styles.primaryButtonText}>
-                        {isSending ? strings.sending : strings.sendAll}
-                      </Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
+                    <TextInput
+                      style={[styles.fieldInput, styles.fieldInputMulti, { textAlign, color: colors.text, writingDirection: isRTL ? 'rtl' : 'ltr' }]}
+                      placeholder={strings.contentPlaceholder}
+                      placeholderTextColor={`${colors.textSecondary}80`}
+                      value={notificationContent}
+                      onChangeText={setNotificationContent}
+                      multiline
+                      numberOfLines={5}
+                      maxLength={500}
+                      textAlignVertical="top"
+                      onFocus={() => setContentFocused(true)}
+                      onBlur={() => setContentFocused(false)}
+                    />
+                    <Text style={[styles.charCounter, { color: `${colors.textSecondary}80` }]}>
+                      {notificationContent.length}/500
+                    </Text>
+                  </View>
+                </View>
+
+                {/* ── iOS Notification Preview ── */}
+                <View style={[styles.sectionGroup, { marginTop: 4 }]}>
+                  <Text style={[styles.sectionLabel, { color: colors.textSecondary, textAlign }]}>
+                    {strings.previewHint.toUpperCase()}
+                  </Text>
+
+                  {/* iOS notification widget */}
+                  <View style={[styles.notifCard, { backgroundColor: Platform.OS === 'ios' ? 'rgba(242,242,247,0.97)' : '#F2F2F7' }]}>
+                    {/* Top row: app icon + name + time */}
+                    <View style={[styles.notifTopRow, rowDirReverse]}>
+                      <View style={[rowDir, styles.notifAppRow]}>
+                        <View style={[styles.notifAppIcon, { backgroundColor: colors.primary }]}>
+                          <Ionicons name="notifications" size={11} color="#fff" />
+                        </View>
+                        <Text style={styles.notifAppName} numberOfLines={1}>
+                          {t('admin.broadcastComposer.appName', 'הסלון שלנו')}
+                        </Text>
+                      </View>
+                      <Text style={styles.notifTime}>{timeStr}</Text>
+                    </View>
+
+                    {/* Divider */}
+                    <View style={styles.notifDivider} />
+
+                    {/* Notification body */}
+                    <Text style={[styles.notifTitle, { textAlign }]} numberOfLines={2}>
+                      {currentTitle || strings.previewTitlePlaceholder}
+                    </Text>
+                    <Text style={[styles.notifBody, { textAlign }]} numberOfLines={4}>
+                      {notificationContent || strings.previewContentPlaceholder}
+                    </Text>
+                  </View>
                 </View>
               </KeyboardAwareScreenScroll>
+
+              {/* ── Sticky action bar ── */}
+              <View
+                style={[
+                  styles.actionBar,
+                  {
+                    backgroundColor: colors.background,
+                    borderTopColor: `${colors.border}44`,
+                    paddingBottom: Math.max(insets.bottom, 8),
+                  },
+                ]}
+              >
+                <TouchableOpacity
+                  style={[styles.cancelBtn, { borderColor: `${colors.border}BB` }]}
+                  onPress={() => setOpen(false)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>
+                    {strings.cancel}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={handleSendWithConfirm}
+                  activeOpacity={canSend ? 0.88 : 1}
+                  disabled={!canSend}
+                  style={styles.sendBtnWrap}
+                  accessibilityRole="button"
+                  accessibilityLabel={strings.accessibilitySend}
+                  accessibilityState={{ disabled: !canSend, busy: isSending }}
+                >
+                  <LinearGradient
+                    colors={
+                      canSend
+                        ? [colors.primary, darkenHex(colors.primary, 0.3)]
+                        : ['#C7C7CC', '#C7C7CC']
+                    }
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[styles.sendBtn, !canSend && { opacity: 0.6 }]}
+                  >
+                    {isSending ? (
+                      <Ionicons name="hourglass-outline" size={18} color="#fff" style={{ marginEnd: 8 }} />
+                    ) : (
+                      <Ionicons name="send" size={16} color="#fff" style={{ marginEnd: 8 }} />
+                    )}
+                    <Text style={styles.sendBtnText}>
+                      {isSending ? strings.sending : strings.sendAll}
+                    </Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          </Animated.View>
         </View>
       </Modal>
     </>
@@ -349,10 +519,10 @@ export default function AdminBroadcastComposer({
 
 const createStyles = (colors: { primary: string; text?: string }) =>
   StyleSheet.create({
+    /* ─── FAB trigger ─── */
     fabContainer: {
       position: 'absolute',
       zIndex: 50,
-      right: undefined,
     },
     fabWrapper: {
       alignSelf: 'flex-start',
@@ -361,7 +531,7 @@ const createStyles = (colors: { primary: string; text?: string }) =>
       maxWidth: 240,
       minHeight: 46,
       borderRadius: 23,
-      paddingHorizontal: 14,
+      paddingHorizontal: 16,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
@@ -370,7 +540,7 @@ const createStyles = (colors: { primary: string; text?: string }) =>
           shadowColor: '#000',
           shadowOffset: { width: 0, height: 4 },
           shadowOpacity: 0.18,
-          shadowRadius: 10,
+          shadowRadius: 12,
         },
         android: { elevation: 6 },
       }),
@@ -388,177 +558,276 @@ const createStyles = (colors: { primary: string; text?: string }) =>
       backgroundColor: 'transparent',
       alignItems: 'center',
       justifyContent: 'center',
+    },
+
+    /* ─── Overlay ─── */
+    overlayDismiss: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+    },
+    overlayBottom: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      justifyContent: 'flex-end',
+    },
+
+    /* ─── Sheet ─── */
+    sheet: {
+      width: '100%',
+      maxWidth: 560,
+      maxHeight: '93%',
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      overflow: 'hidden',
+      alignSelf: 'center',
       ...Platform.select({
         ios: {
           shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
+          shadowOffset: { width: 0, height: -6 },
+          shadowOpacity: 0.14,
+          shadowRadius: 30,
+        },
+        android: { elevation: 20 },
+      }),
+    },
+    dragHandle: {
+      width: 36,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: 'rgba(60,60,67,0.25)',
+      alignSelf: 'center',
+      marginTop: 10,
+      marginBottom: 4,
+    },
+    scrollContent: {
+      paddingBottom: 16,
+    },
+
+    /* ─── Hero header ─── */
+    heroSection: {
+      alignItems: 'center',
+      paddingTop: 20,
+      paddingBottom: 22,
+      paddingHorizontal: 20,
+    },
+    closeBtn: {
+      position: 'absolute',
+      top: 16,
+      zIndex: 10,
+    },
+    closeBtnInner: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    heroIconWrap: {
+      width: 72,
+      height: 72,
+      borderRadius: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 16,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
           shadowOpacity: 0.1,
-          shadowRadius: 8,
+          shadowRadius: 12,
         },
         android: { elevation: 4 },
       }),
     },
-    overlayDismiss: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0,0,0,0.4)',
-    },
-    overlayCenter: {
-      ...StyleSheet.absoluteFillObject,
+    heroIconGradient: {
+      width: 64,
+      height: 64,
+      borderRadius: 20,
       alignItems: 'center',
       justifyContent: 'center',
-      padding: 18,
     },
-    sheet: {
-      width: '100%',
-      maxWidth: 400,
-      maxHeight: '88%',
-      backgroundColor: '#fff',
-      borderRadius: 20,
+    heroTitle: {
+      fontSize: 22,
+      fontWeight: '800',
+      letterSpacing: -0.5,
+      textAlign: 'center',
+      lineHeight: 28,
+    },
+    heroSubtitle: {
+      fontSize: 14,
+      fontWeight: '400',
+      textAlign: 'center',
+      lineHeight: 20,
+      marginTop: 6,
+      maxWidth: 280,
+    },
+    audienceChip: {
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: 999,
+      borderWidth: 1,
+      marginTop: 14,
+    },
+    audienceChipText: {
+      fontSize: 13,
+      fontWeight: '700',
+    },
+
+    /* ─── Form sections ─── */
+    sectionGroup: {
+      paddingHorizontal: 16,
+      marginBottom: 12,
+    },
+    sectionLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+      letterSpacing: 0.6,
+      marginBottom: 8,
+      marginStart: 4,
+    },
+    fieldCard: {
+      borderRadius: 16,
+      borderWidth: 1.5,
       overflow: 'hidden',
       ...Platform.select({
         ios: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 12 },
-          shadowOpacity: 0.2,
-          shadowRadius: 24,
+          shadowOffset: { width: 0, height: 2 },
+          shadowRadius: 8,
         },
-        android: { elevation: 18 },
+        android: {},
       }),
     },
-    sheetHeader: {
-      paddingHorizontal: 48,
-      paddingTop: 20,
-      paddingBottom: 18,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    sheetTitle: {
-      color: '#fff',
-      fontSize: 17,
-      fontWeight: '800',
-      textAlign: 'center',
-      lineHeight: 24,
-    },
-    headerCloseButton: {
-      position: 'absolute',
-      top: 12,
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: 'rgba(255,255,255,0.22)',
-    },
-    content: {
-      paddingHorizontal: 18,
-      paddingTop: 16,
-      paddingBottom: 20,
-      backgroundColor: '#F5F5F7',
-    },
-    subtitle: {
-      fontSize: 14,
-      color: Colors.subtext,
-      lineHeight: 21,
-      marginBottom: 16,
-    },
-    label: {
-      fontSize: 15,
-      color: Colors.text,
-      fontWeight: '700',
-      marginBottom: 8,
-    },
-    input: {
-      backgroundColor: '#fff',
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: '#E5E5EA',
-      paddingHorizontal: 14,
-      paddingVertical: 13,
+    fieldInput: {
       fontSize: 16,
-      color: Colors.text,
-    },
-    textArea: {
-      minHeight: 128,
-    },
-    counter: {
-      fontSize: 12,
-      color: Colors.subtext,
-      marginTop: 6,
-    },
-    counterRtl: {
-      textAlign: 'left',
-    },
-    counterLtr: {
-      textAlign: 'right',
-    },
-    sectionCard: {
-      backgroundColor: '#fff',
-      borderRadius: 16,
-      padding: 14,
-      borderWidth: 1,
-      borderColor: '#E8E8ED',
-    },
-    previewCard: {
-      backgroundColor: '#fff',
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: '#E8E8ED',
-      padding: 14,
-      marginTop: 14,
-    },
-    previewHint: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: Colors.subtext,
-      marginBottom: 10,
-    },
-    previewInner: {
-      alignItems: 'center',
-      marginBottom: 10,
-    },
-    previewTitle: {
-      flex: 1,
-      fontSize: 16,
-      fontWeight: '700',
-      color: Colors.text,
-    },
-    previewContent: {
-      fontSize: 15,
-      color: Colors.subtext,
+      fontWeight: '400',
+      paddingHorizontal: 16,
+      paddingTop: 14,
+      paddingBottom: 6,
       lineHeight: 22,
     },
-    actionsRow: {
-      flexDirection: 'row',
+    fieldInputMulti: {
+      minHeight: 120,
+      paddingBottom: 10,
+    },
+    charCounter: {
+      fontSize: 11,
+      fontWeight: '500',
+      textAlign: 'right',
+      paddingEnd: 14,
+      paddingBottom: 10,
+    },
+
+    /* ─── iOS Notification Preview ─── */
+    notifCard: {
+      borderRadius: 16,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.07,
+          shadowRadius: 10,
+        },
+        android: { elevation: 2 },
+      }),
+    },
+    notifTopRow: {
+      alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 12,
-      marginTop: 18,
+      marginBottom: 8,
     },
-    secondaryButton: {
-      flex: 1,
-      backgroundColor: '#fff',
-      borderRadius: 14,
+    notifAppRow: {
+      alignItems: 'center',
+      gap: 6,
+    },
+    notifAppIcon: {
+      width: 18,
+      height: 18,
+      borderRadius: 5,
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 15,
-      borderWidth: 1,
-      borderColor: '#E5E5EA',
     },
-    secondaryButtonText: {
-      color: colors.primary,
-      fontSize: 16,
+    notifAppName: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: 'rgba(60,60,67,0.7)',
+    },
+    notifTime: {
+      fontSize: 12,
+      color: 'rgba(60,60,67,0.5)',
+      fontWeight: '400',
+    },
+    notifDivider: {
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: 'rgba(60,60,67,0.15)',
+      marginBottom: 8,
+    },
+    notifTitle: {
+      fontSize: 15,
       fontWeight: '700',
+      color: '#1C1C1E',
+      lineHeight: 20,
+      marginBottom: 3,
     },
-    primaryButton: {
-      flex: 1,
+    notifBody: {
+      fontSize: 13,
+      fontWeight: '400',
+      color: 'rgba(60,60,67,0.85)',
+      lineHeight: 18,
+    },
+
+    /* ─── Action bar ─── */
+    actionBar: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      flexDirection: 'row',
+      gap: 10,
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      borderTopWidth: StyleSheet.hairlineWidth,
+    },
+    cancelBtn: {
+      flex: 0.9,
+      height: 52,
       borderRadius: 14,
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 15,
-      flexDirection: 'row',
+      borderWidth: 1,
     },
-    primaryButtonText: {
+    cancelBtnText: {
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    sendBtnWrap: {
+      flex: 1.8,
+    },
+    sendBtn: {
+      height: 52,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row',
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.18,
+          shadowRadius: 10,
+        },
+        android: { elevation: 4 },
+      }),
+    },
+    sendBtnText: {
       color: '#fff',
       fontSize: 16,
       fontWeight: '700',
+      letterSpacing: -0.2,
     },
   });

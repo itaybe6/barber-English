@@ -60,6 +60,8 @@ import MonthlyInsightsCard from '@/components/MonthlyInsightsCard';
 import { PendingClientApprovalsCard, PendingClientApprovalsCardHandle } from '@/components/admin/PendingClientApprovalsCard';
 import { clientAppointmentStatsApi } from '@/lib/api/clientAppointmentStats';
 import { HorizontalCarouselDots, carouselIndexFromOffset } from '@/components/HorizontalCarouselDots';
+import { usersApi } from '@/lib/api/users';
+import type { User as DbUser } from '@/lib/supabase';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -373,7 +375,7 @@ export default function HomeScreen() {
     );
   }, [insets.top, outerScrollCapSV]);
   const [blockedFilter, setBlockedFilter] = useState<'all' | 'blocked' | 'unblocked'>('all');
-  const [clientsListMode, setClientsListMode] = useState<'all' | 'newThisMonth'>('all');
+  const [clientsListMode, setClientsListMode] = useState<'all' | 'newThisMonth' | 'pendingApproval'>('all');
   const [clientStatsMap, setClientStatsMap] = useState<
     Record<string, { totalAppointments: number; avgMonthlySpend: number | null }>
   >({});
@@ -381,6 +383,23 @@ export default function HomeScreen() {
   const [pendingApprovalsOpenNonce, setPendingApprovalsOpenNonce] = useState(0);
   const [pendingClientsCount, setPendingClientsCount] = useState(0);
   const pendingCardRef = React.useRef<PendingClientApprovalsCardHandle>(null);
+  const [pendingClients, setPendingClients] = useState<DbUser[]>([]);
+  const [loadingPendingClients, setLoadingPendingClients] = useState(false);
+  const [pendingClientActionId, setPendingClientActionId] = useState<string | null>(null);
+  const pendingFilteredClients = useMemo(() => {
+    const raw = searchQuery.trim();
+    if (!raw) return pendingClients;
+    const q = raw.toLowerCase();
+    const qDigits = raw.replace(/\D/g, '');
+    return pendingClients.filter((u) => {
+      const name = String((u as any)?.name || '').toLowerCase();
+      const phone = String((u as any)?.phone || '');
+      const phoneDigits = phone.replace(/\D/g, '');
+      if (name.includes(q)) return true;
+      if (qDigits && phoneDigits.includes(qDigits)) return true;
+      return false;
+    });
+  }, [pendingClients, searchQuery]);
   const [waitlistWaitingCount, setWaitlistWaitingCount] = useState(0);
 
   /** SharedValue tracks inner-scroll state so the UI-thread worklet can read it without crossing to JS */
@@ -759,10 +778,76 @@ export default function HomeScreen() {
     }
   };
 
+  const fetchPendingClients = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      setLoadingPendingClients(true);
+      const list = await usersApi.getPendingClients();
+      setPendingClients(list);
+      setPendingClientsCount(list.length);
+    } catch (e) {
+      console.error('Error in fetchPendingClients:', e);
+      setPendingClients([]);
+    } finally {
+      setLoadingPendingClients(false);
+    }
+  }, [isAdmin]);
+
+  const approvePendingClient = useCallback(
+    async (id: string) => {
+      setPendingClientActionId(id);
+      try {
+        const updated = await usersApi.approveClient(id);
+        if (!updated) {
+          Alert.alert(t('error.generic', 'Error'), t('admin.pendingClients.approveError', 'Could not approve'));
+          return;
+        }
+        setPendingClients((prev) => prev.filter((u) => u.id !== id));
+        setPendingClientsCount((prev) => Math.max(0, prev - 1));
+        void fetchClients();
+      } finally {
+        setPendingClientActionId(null);
+      }
+    },
+    [fetchClients, t]
+  );
+
+  const rejectPendingClient = useCallback(
+    (item: DbUser) => {
+      Alert.alert(
+        t('admin.pendingClients.rejectTitle', 'Decline registration'),
+        t('admin.pendingClients.rejectMessage', 'Remove {{name}}? They will need to register again.', { name: item.name }),
+        [
+          { text: t('cancel', 'Cancel'), style: 'cancel' },
+          {
+            text: t('admin.pendingClients.rejectConfirm', 'Remove'),
+            style: 'destructive',
+            onPress: async () => {
+              setPendingClientActionId(item.id);
+              try {
+                const done = await usersApi.deleteUser(item.id);
+                if (!done) {
+                  Alert.alert(t('error.generic', 'Error'), t('admin.pendingClients.rejectError', 'Could not remove'));
+                  return;
+                }
+                setPendingClients((prev) => prev.filter((u) => u.id !== item.id));
+                setPendingClientsCount((prev) => Math.max(0, prev - 1));
+              } finally {
+                setPendingClientActionId(null);
+              }
+            },
+          },
+        ]
+      );
+    },
+    [t]
+  );
+
   const closeClientsModal = useCallback(() => {
     if (Date.now() - clientsModalOpenTsRef.current < 400) return;
     setShowClientsModal(false);
     setClientsListMode('all');
+    setPendingClients([]);
   }, []);
 
   // Filter clients based on search query
@@ -1120,28 +1205,6 @@ export default function HomeScreen() {
               <TouchableOpacity
                 style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
                 activeOpacity={0.82}
-                onPress={() => pendingCardRef.current?.open()}
-                accessibilityRole="button"
-                accessibilityLabel={t('admin.pendingClients.bannerA11y')}
-              >
-                <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
-                  <Ionicons name="person-add-outline" size={24} color={primaryOnSurface} />
-                  {pendingClientsCount > 0 ? (
-                    <View style={[styles.quickTileBadge, { backgroundColor: '#EF4444' }]}>
-                      <Text style={styles.quickTileBadgeText}>
-                        {pendingClientsCount > 99 ? '99+' : pendingClientsCount}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-                <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
-                  {t('admin.pendingClients.bannerTitle')}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
-                activeOpacity={0.82}
                 onPress={() => {
                   setClientsListMode('all');
                   setSearchQuery('');
@@ -1155,6 +1218,13 @@ export default function HomeScreen() {
               >
                 <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
                   <Ionicons name="people-outline" size={24} color={primaryOnSurface} />
+                  {pendingClientsCount > 0 ? (
+                    <View style={[styles.quickTileBadge, { backgroundColor: '#EF4444' }]}>
+                      <Text style={styles.quickTileBadgeText}>
+                        {pendingClientsCount > 99 ? '99+' : pendingClientsCount}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
                 <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
                   {t('admin.home.clients')}
@@ -1615,50 +1685,227 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               </View>
 
-             {clientsListMode === 'all' ? (
-               <>
-             {/* Search Bar */}
-             <View style={styles.searchContainer}>
-               <Ionicons name="search" size={20} color={primaryOnSurface} style={styles.searchIcon} />
-               <TextInput
-                 style={styles.searchInput}
-                 placeholder={t('common.searchByName','Search by name...')}
-                 placeholderTextColor={colors.textSecondary}
-                 value={searchQuery}
-                 onChangeText={setSearchQuery}
-               />
-             </View>
+             {clientsListMode === 'all' || clientsListMode === 'pendingApproval' ? (
+               <View style={styles.searchContainer}>
+                 <Ionicons name="search" size={20} color={primaryOnSurface} style={styles.searchIcon} />
+                 <TextInput
+                   style={[
+                     styles.searchInput,
+                     I18nManager.isRTL ? styles.searchInputRtl : styles.searchInputLtr,
+                   ]}
+                   placeholder={t('common.searchByName', 'Search by name...')}
+                   placeholderTextColor={colors.textSecondary}
+                   value={searchQuery}
+                   onChangeText={setSearchQuery}
+                 />
+               </View>
+             ) : null}
 
-             {/* Blocked Filter */}
-             <View style={styles.filterRow}>
-               <TouchableOpacity
-                 onPress={() => setBlockedFilter('all')}
-                 style={[styles.filterButton, blockedFilter === 'all' && styles.filterButtonActive]}
-                 activeOpacity={0.85}
-               >
-                 <Text style={[styles.filterButtonText, blockedFilter === 'all' && styles.filterButtonTextActive]}>{t('clients.filter.all','All')}</Text>
-               </TouchableOpacity>
-               <TouchableOpacity
-                 onPress={() => setBlockedFilter('blocked')}
-                 style={[styles.filterButton, blockedFilter === 'blocked' && styles.filterButtonActive]}
-                 activeOpacity={0.85}
-               >
-                 <Text style={[styles.filterButtonText, blockedFilter === 'blocked' && styles.filterButtonTextActive]}>{t('clients.filter.blocked','Blocked')}</Text>
-               </TouchableOpacity>
-               <TouchableOpacity
-                 onPress={() => setBlockedFilter('unblocked')}
-                 style={[styles.filterButton, blockedFilter === 'unblocked' && styles.filterButtonActive]}
-                 activeOpacity={0.85}
-               >
-                 <Text style={[styles.filterButtonText, blockedFilter === 'unblocked' && styles.filterButtonTextActive]}>{t('clients.filter.unblocked','Unblocked')}</Text>
-               </TouchableOpacity>
-             </View>
-               </>
+             {/* Blocked Filter + New Clients (single row) */}
+             {clientsListMode !== 'newThisMonth' ? (
+               <View style={styles.filterRow}>
+                 <TouchableOpacity
+                   onPress={() => {
+                     const needsReload = clientsListMode !== 'all';
+                     setClientsListMode('all');
+                     setBlockedFilter('all');
+                     if (needsReload) {
+                       setSearchQuery('');
+                       void fetchClients();
+                     }
+                   }}
+                   style={[
+                     styles.filterButton,
+                     clientsListMode === 'all' && blockedFilter === 'all' && styles.filterButtonActive,
+                   ]}
+                   activeOpacity={0.85}
+                 >
+                   <Text
+                     style={[
+                       styles.filterButtonText,
+                       clientsListMode === 'all' && blockedFilter === 'all' && styles.filterButtonTextActive,
+                     ]}
+                   >
+                     {t('clients.filter.all', 'All')}
+                   </Text>
+                 </TouchableOpacity>
+
+                 <TouchableOpacity
+                   onPress={() => {
+                     const needsReload = clientsListMode !== 'all';
+                     setClientsListMode('all');
+                     setBlockedFilter('unblocked');
+                     if (needsReload) {
+                       setSearchQuery('');
+                       void fetchClients();
+                     }
+                   }}
+                   style={[
+                     styles.filterButton,
+                     clientsListMode === 'all' && blockedFilter === 'unblocked' && styles.filterButtonActive,
+                   ]}
+                   activeOpacity={0.85}
+                 >
+                   <Text
+                     style={[
+                       styles.filterButtonText,
+                       clientsListMode === 'all' && blockedFilter === 'unblocked' && styles.filterButtonTextActive,
+                     ]}
+                   >
+                     {t('clients.filter.unblocked', 'Unblocked')}
+                   </Text>
+                 </TouchableOpacity>
+
+                 <TouchableOpacity
+                   onPress={() => {
+                     const needsReload = clientsListMode !== 'all';
+                     setClientsListMode('all');
+                     setBlockedFilter('blocked');
+                     if (needsReload) {
+                       setSearchQuery('');
+                       void fetchClients();
+                     }
+                   }}
+                   style={[
+                     styles.filterButton,
+                     clientsListMode === 'all' && blockedFilter === 'blocked' && styles.filterButtonActive,
+                   ]}
+                   activeOpacity={0.85}
+                 >
+                   <Text
+                     style={[
+                       styles.filterButtonText,
+                       clientsListMode === 'all' && blockedFilter === 'blocked' && styles.filterButtonTextActive,
+                     ]}
+                   >
+                     {t('clients.filter.blocked', 'Blocked')}
+                   </Text>
+                 </TouchableOpacity>
+
+                 <TouchableOpacity
+                   onPress={() => {
+                     setClientsListMode('pendingApproval');
+                     setSearchQuery('');
+                     setBlockedFilter('all');
+                     void fetchPendingClients();
+                   }}
+                   style={[styles.filterButton, clientsListMode === 'pendingApproval' && styles.filterButtonActive]}
+                   activeOpacity={0.85}
+                   accessibilityRole="button"
+                   accessibilityLabel={t('admin.pendingClients.bannerA11y')}
+                 >
+                   <Text
+                     style={[
+                       styles.filterButtonText,
+                       clientsListMode === 'pendingApproval' && styles.filterButtonTextActive,
+                     ]}
+                   >
+                     {pendingClientsCount > 0
+                       ? `${t('admin.pendingClients.bannerTitle')} (${pendingClientsCount > 99 ? '99+' : pendingClientsCount})`
+                       : t('admin.pendingClients.bannerTitle')}
+                   </Text>
+                 </TouchableOpacity>
+               </View>
              ) : null}
 
              {/* Clients List */}
              <View style={styles.clientsListSheet}>
-             {loadingClients ? (
+             {clientsListMode === 'pendingApproval' ? (
+               loadingPendingClients ? (
+                 <View style={styles.loadingContainer}>
+                   <ActivityIndicator size="large" color={primaryOnSurface} />
+                   <Text style={styles.loadingText}>{t('admin.pendingClients.loading', 'Loading…')}</Text>
+                 </View>
+               ) : (
+                 <FlatList
+                   style={styles.clientsFlatList}
+                   data={pendingFilteredClients}
+                   keyExtractor={(item) => item.id}
+                   keyboardShouldPersistTaps="handled"
+                   showsVerticalScrollIndicator={true}
+                   ListEmptyComponent={
+                     <View style={styles.clientsEmptyWrap}>
+                       <View style={[styles.clientsEmptyIcon, { backgroundColor: `${colors.primary}14` }]}>
+                         <Ionicons name="people-outline" size={40} color={primaryOnSurface} />
+                       </View>
+                       <Text style={[styles.clientsEmptyTitle, { color: colors.text }]}>
+                         {pendingClients.length === 0
+                           ? t('admin.pendingClients.empty', 'No pending clients')
+                           : t('common.noResults', 'No results')}
+                       </Text>
+                     </View>
+                   }
+                   renderItem={({ item }) => {
+                     const busy = pendingClientActionId === item.id;
+                     const initial = (item.name || '?').trim().charAt(0).toUpperCase() || '?';
+                     return (
+                       <View style={styles.clientCard}>
+                         <View style={styles.clientCardHeader}>
+                           <View style={styles.clientCardLead}>
+                             <View style={[styles.clientAvatar, { backgroundColor: `${colors.primary}22` }]}>
+                               <Text style={[styles.clientAvatarLetter, { color: primaryOnSurface }]}>
+                                 {initial}
+                               </Text>
+                             </View>
+                             <View style={styles.clientCardTextCol}>
+                               <View style={styles.clientNameRow}>
+                                 <Text style={[styles.modalClientName, { color: colors.text }]} numberOfLines={1}>
+                                   {item.name || t('common.client', 'Client')}
+                                 </Text>
+                               </View>
+                               {item.phone ? (
+                                 <Text style={[styles.clientStatCaption, { color: colors.textSecondary }]} numberOfLines={1}>
+                                   {item.phone}
+                                 </Text>
+                               ) : null}
+                             </View>
+                           </View>
+                           <View style={styles.clientCardActions}>
+                             <TouchableOpacity
+                               style={[styles.clientUnblockPill, { backgroundColor: `${colors.primary}14`, borderColor: `${colors.primary}35` }]}
+                               onPress={() => approvePendingClient(item.id)}
+                               disabled={busy}
+                               activeOpacity={0.85}
+                               accessibilityRole="button"
+                               accessibilityLabel={t('admin.pendingClients.approve', 'Approve')}
+                             >
+                               {busy ? (
+                                 <ActivityIndicator size="small" color={primaryOnSurface} />
+                               ) : (
+                                 <Text style={[styles.clientUnblockPillText, { color: primaryOnSurface }]}>
+                                   {t('admin.pendingClients.approve', 'Approve')}
+                                 </Text>
+                               )}
+                             </TouchableOpacity>
+                             <TouchableOpacity
+                               style={styles.clientBlockPill}
+                               onPress={() => rejectPendingClient(item)}
+                               disabled={busy}
+                               activeOpacity={0.85}
+                               accessibilityRole="button"
+                               accessibilityLabel={t('admin.pendingClients.decline', 'Decline')}
+                             >
+                               {busy ? (
+                                 <ActivityIndicator size="small" color="#fff" />
+                               ) : (
+                                 <Text style={styles.clientBlockPillText}>
+                                   {t('admin.pendingClients.decline', 'Decline')}
+                                 </Text>
+                               )}
+                             </TouchableOpacity>
+                           </View>
+                         </View>
+                       </View>
+                     );
+                   }}
+                   contentContainerStyle={[
+                     styles.clientsListContent,
+                     { paddingBottom: insets.bottom + 24 },
+                     pendingFilteredClients.length === 0 && styles.clientsListContentEmpty,
+                   ]}
+                 />
+               )
+             ) : loadingClients ? (
                <View style={styles.loadingContainer}>
                  <ActivityIndicator size="large" color={primaryOnSurface} />
                  <Text style={styles.loadingText}>{t('clients.loading','Loading clients...')}</Text>
@@ -3025,7 +3272,7 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     flex: 1,
   },
   searchContainer: {
-    flexDirection: 'row', // LTR
+    flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f2f2f7',
     borderRadius: 16,
@@ -3036,15 +3283,26 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     paddingVertical: 13,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#E8E8ED',
+    position: 'relative',
   },
   searchIcon: {
-    marginRight: 12, // LTR - icon should be on the left in LTR layout
+    position: 'absolute',
+    left: 16,
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
     color: colors.text,
+    paddingLeft: 32, // leave space for the left search icon
+  },
+  searchInputRtl: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    direction: 'rtl',
+  },
+  searchInputLtr: {
     textAlign: 'left',
+    writingDirection: 'ltr',
   },
   loadingContainer: {
     flex: 1,

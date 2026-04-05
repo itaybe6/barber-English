@@ -833,6 +833,7 @@ export default function ClientHomeScreen() {
   // Show all services in a horizontal scroll
   
   const appLocale = toBcp47Locale(i18n?.language);
+  const isRTL = I18nManager.isRTL;
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString(appLocale as any, {
@@ -853,6 +854,49 @@ export default function ClientHomeScreen() {
   const formatTime = (timeString: string) => {
     return formatTime12Hour(timeString);
   };
+
+  const parseFormattedTime = (formatted: string) => {
+    const trimmed = formatted.trim();
+    const match = trimmed.match(/^(\d{1,2}:\d{2})\s*(.*)$/);
+    return {
+      hm: match?.[1] ?? trimmed,
+      suffix: match?.[2] ?? '',
+    };
+  };
+
+  const getAppointmentStatusColor = (status?: AvailableTimeSlot['status']) => {
+    switch (status) {
+      case 'confirmed':
+        return '#34C759';
+      case 'pending':
+        return '#F59E0B';
+      case 'cancelled':
+      case 'no_show':
+        return '#EF4444';
+      case 'completed':
+        return '#64748B';
+      default:
+        return '#34C759';
+    }
+  };
+
+  const getAppointmentStatusLabel = (status?: AvailableTimeSlot['status']) => {
+    switch (status) {
+      case 'pending':
+        return t('appointments.pending', 'Pending');
+      case 'cancelled':
+        return t('appointments.cancelled', 'Cancelled');
+      case 'completed':
+        return t('appointments.completed', 'Completed');
+      case 'no_show':
+        return t('appointments.noShow', 'No show');
+      case 'confirmed':
+      default:
+        return t('appointments.confirmed', 'Confirmed');
+    }
+  };
+
+  const nextAppointmentTime = parseFormattedTime(formatTime(nextAppointment?.slot_time ?? ''));
   
   const socialLinks = [
     businessProfile?.instagram_url ? { name: 'Instagram', icon: 'logo-instagram', color: '#E4405F', url: businessProfile.instagram_url } : null,
@@ -982,37 +1026,79 @@ export default function ClientHomeScreen() {
               style={styles.clientNextCard}
             >
               <View style={styles.clientNextHeader}>
-                <Text style={styles.clientNextHeaderLabel}>{t('appointments.next', 'Next appointment')}</Text>
                 <View style={[styles.clientNextTimeIcon, { backgroundColor: `${colors.primary}18` }]}>
                   <Ionicons name="time-outline" size={15} color={primaryOnSurface} />
                 </View>
+                <Text style={styles.clientNextHeaderLabel}>{t('appointments.next', 'Next appointment')}</Text>
               </View>
               <View style={styles.clientNextDivider} />
-              <View style={styles.clientNextBody}>
-                <View style={styles.clientNextInfo}>
-                  <Text style={styles.clientNextService} numberOfLines={1}>
+              <View style={[styles.clientNextBody, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                <View
+                  style={[
+                    styles.clientNextInfo,
+                    { alignItems: isRTL ? 'flex-end' : 'flex-start' },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.clientNextService,
+                      { textAlign: isRTL ? 'right' : 'left' },
+                    ]}
+                    numberOfLines={1}
+                  >
                     {nextAppointment.service_name || t('service', 'Service')}
                   </Text>
-                  <View style={styles.clientNextDetails}>
-                    <View style={styles.clientNextDetail}>
+                  <View
+                    style={[
+                      styles.clientNextDetails,
+                      { flexDirection: isRTL ? 'row-reverse' : 'row' },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.clientNextDetail,
+                        { flexDirection: isRTL ? 'row-reverse' : 'row' },
+                      ]}
+                    >
                       <Ionicons name="calendar-outline" size={13} color="#8E8E93" />
                       <Text style={styles.clientNextDetailText}>{formatDate(nextAppointment.slot_date)}</Text>
                     </View>
-                    <View style={styles.clientNextDetailSep} />
-                    <View style={styles.clientNextDetail}>
-                      <Ionicons name="time-outline" size={13} color="#8E8E93" />
-                      <Text style={styles.clientNextDetailText}>{formatTime(nextAppointment.slot_time)}</Text>
-                    </View>
                   </View>
-                  <View style={styles.clientNextStatus}>
-                    <View style={styles.clientNextStatusDot} />
-                    <Text style={styles.clientNextStatusText}>{t('appointments.confirmed', 'Confirmed')}</Text>
+                  <View
+                    style={[
+                      styles.clientNextStatus,
+                      {
+                        flexDirection: isRTL ? 'row-reverse' : 'row',
+                        alignSelf: isRTL ? 'flex-end' : 'flex-start',
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.clientNextStatusDot,
+                        { backgroundColor: getAppointmentStatusColor(nextAppointment.status) },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.clientNextStatusText,
+                        { color: getAppointmentStatusColor(nextAppointment.status) },
+                      ]}
+                    >
+                      {getAppointmentStatusLabel(nextAppointment.status)}
+                    </Text>
                   </View>
                 </View>
-                <View style={[styles.clientNextTimePill, { backgroundColor: `${colors.primary}14` }]}>
+                <View style={[styles.clientNextTimeDivider, { backgroundColor: `${colors.primary}25` }]} />
+                <View style={styles.clientNextTimeBlock}>
                   <Text style={[styles.clientNextTimeHM, { color: primaryOnSurface }]}>
-                    {formatTime(nextAppointment.slot_time)}
+                    {nextAppointmentTime.hm}
                   </Text>
+                  {nextAppointmentTime.suffix ? (
+                    <Text style={[styles.clientNextTimeSuffix, { color: `${primaryOnSurface}B3` }]}>
+                      {nextAppointmentTime.suffix}
+                    </Text>
+                  ) : null}
                 </View>
               </View>
             </TouchableOpacity>
@@ -2254,35 +2340,34 @@ const styles = StyleSheet.create<any>({
     backgroundColor: '#F1F5F9',
   },
   clientNextBody: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 16,
-    gap: 12,
+    gap: 14,
   },
   clientNextInfo: {
     flex: 1,
     gap: 6,
+    minWidth: 0,
   },
   clientNextService: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     color: '#1C1C1E',
     letterSpacing: -0.3,
   },
   clientNextDetails: {
-    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexWrap: 'wrap',
   },
   clientNextDetail: {
-    flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
   clientNextDetailText: {
-    fontSize: 13,
+    fontSize: 12.5,
     color: '#8E8E93',
     fontWeight: '500',
   },
@@ -2308,18 +2393,29 @@ const styles = StyleSheet.create<any>({
     color: '#34C759',
     fontWeight: '600',
   },
-  clientNextTimePill: {
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  clientNextTimeDivider: {
+    width: 1.5,
+    height: 44,
+    borderRadius: 2,
+    marginHorizontal: 4,
+  },
+  clientNextTimeBlock: {
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 2,
     flexShrink: 0,
   },
   clientNextTimeHM: {
-    fontSize: 22,
+    fontSize: 28,
     fontWeight: '800',
-    letterSpacing: -0.5,
+    letterSpacing: -1,
+    includeFontPadding: false,
+  },
+  clientNextTimeSuffix: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
   // Modern Section Headers (for other sections)
   sectionHeaderModern: {

@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
+  InteractionManager,
   ScrollView,
   StatusBar,
   Alert,
@@ -177,10 +178,18 @@ export default function WaitlistScreen() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [phoneToImage, setPhoneToImage] = useState<Record<string, string>>({});
+  const [deferHeavyUI, setDeferHeavyUI] = useState(true);
   const { user } = useAuthStore();
   const colors = useColors();
   const { onPrimary } = usePrimaryContrast();
   const { t, i18n } = useTranslation();
+
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      setDeferHeavyUI(false);
+    });
+    return () => task.cancel();
+  }, []);
 
   const [selectedDate, setSelectedDate] = useState(() => {
     const d = new Date();
@@ -300,6 +309,7 @@ export default function WaitlistScreen() {
   };
 
   const waitlistByDate: Record<string, WaitlistEntry[]> = useMemo(() => {
+    if (deferHeavyUI) return {};
     const map: Record<string, WaitlistEntry[]> = {};
     for (const entry of waitlist) {
       const key = entry.requested_date;
@@ -307,7 +317,7 @@ export default function WaitlistScreen() {
       map[key].push(entry);
     }
     return map;
-  }, [waitlist]);
+  }, [waitlist, deferHeavyUI]);
 
   const monthSheetEntries = useMemo(
     () => (monthSheetKey ? waitlistByDate[monthSheetKey] ?? [] : []),
@@ -315,12 +325,13 @@ export default function WaitlistScreen() {
   );
 
   const waitlistCountsByDate = useMemo(() => {
+    if (deferHeavyUI) return {};
     const r: Record<string, number> = {};
     for (const e of waitlist) {
       r[e.requested_date] = (r[e.requested_date] || 0) + 1;
     }
     return r;
-  }, [waitlist]);
+  }, [waitlist, deferHeavyUI]);
   const headerSubtitle = useMemo(
     () => t('admin.waitlist.subtitleMonth', 'Monthly — tap a day to open the list'),
     [t]
@@ -486,25 +497,31 @@ export default function WaitlistScreen() {
       </View>
 
       <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
-        <AdminVerticalMonthCalendar
-          dayAvailability={waitlistCountsByDate}
-          selectedDate={selectedDate}
-          language={typeof i18n.language === 'string' && i18n.language.startsWith('he') ? 'he' : 'en'}
-          primaryColor={calendarPrimary}
-          anchorMonthKey={adminMonthAnchorKey}
-          onVisibleMonthChange={onWaitlistMonthVisible}
-          onDayPress={onWaitlistDayPress}
-          onJumpToDate={onJumpToDate}
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          todayLabel={t('admin.calendar.today', 'Today')}
-          monthHint={t(
-            'admin.waitlist.monthCalendarHint',
-            'Numbers show how many clients are on the waitlist that day. Tap a day to open the list.'
-          )}
-          formatCountBadge={formatCountBadge}
-          showTodayPill={false}
-        />
+        {deferHeavyUI ? (
+          <View style={styles.calendarDeferPlaceholder}>
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        ) : (
+          <AdminVerticalMonthCalendar
+            dayAvailability={waitlistCountsByDate}
+            selectedDate={selectedDate}
+            language={typeof i18n.language === 'string' && i18n.language.startsWith('he') ? 'he' : 'en'}
+            primaryColor={calendarPrimary}
+            anchorMonthKey={adminMonthAnchorKey}
+            onVisibleMonthChange={onWaitlistMonthVisible}
+            onDayPress={onWaitlistDayPress}
+            onJumpToDate={onJumpToDate}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            todayLabel={t('admin.calendar.today', 'Today')}
+            monthHint={t(
+              'admin.waitlist.monthCalendarHint',
+              'Numbers show how many clients are on the waitlist that day. Tap a day to open the list.'
+            )}
+            formatCountBadge={formatCountBadge}
+            showTodayPill={false}
+          />
+        )}
       </View>
 
       <Modal
@@ -572,6 +589,11 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '800',
     color: Colors.text,
+  },
+  calendarDeferPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   monthBadge: {
     flexDirection: 'row',

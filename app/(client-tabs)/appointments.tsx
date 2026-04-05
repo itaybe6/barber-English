@@ -28,10 +28,10 @@ const clientAppointmentsApi = {
       const businessId = getBusinessId();
       let query = supabase
         .from('appointments')
-        .select('*')
+        .select('id, slot_date, slot_time, client_name, client_phone, service_name, barber_id, status, is_available, business_id, user_id, created_at')
         .in('slot_date', dates)
         .eq('business_id', businessId)
-        .eq('is_available', false); // Only booked appointments
+        .eq('is_available', false);
 
       // If this is an admin user (barber), filter by their user_id OR barber_id
       if (currentUserId) {
@@ -80,7 +80,7 @@ const clientAppointmentsApi = {
 
       const { data: appointmentData, error: fetchError } = await supabase
         .from('appointments')
-        .select('*')
+        .select('id, slot_date, slot_time, client_name, client_phone, service_name, barber_id, status, is_available, business_id, user_id')
         .eq('id', slotId)
         .eq('business_id', businessId)
         .single();
@@ -298,15 +298,6 @@ export default function ClientAppointmentsScreen() {
       setRefreshing(true);
     } else {
       setIsLoading(true);
-    }
-
-    // Fix any existing appointments with null service_name first
-    try {
-      const { businessHoursApi } = await import('@/lib/api/businessHours');
-      await businessHoursApi.fixNullServiceNames();
-    } catch (error) {
-      console.error('Error fixing null service names:', error);
-      // Continue anyway
     }
 
     const today = new Date();

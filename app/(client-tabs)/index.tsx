@@ -194,10 +194,10 @@ const clientHomeApi = {
       
       let query = supabase
         .from('appointments')
-        .select('*')
-        .eq('business_id', businessId) // Filter by current business
+        .select('id, slot_date, slot_time, client_name, client_phone, service_name, barber_id, status, business_id, user_id')
+        .eq('business_id', businessId)
         .in('slot_date', dates)
-        .eq('is_available', false) // Only booked appointments
+        .eq('is_available', false)
         .order('slot_date')
         .order('slot_time');
 

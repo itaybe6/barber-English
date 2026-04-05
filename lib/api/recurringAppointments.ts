@@ -101,9 +101,7 @@ export const recurringAppointmentsApi = {
 
       const created = data as RecurringAppointment;
 
-      // Seed concrete appointments in appointments for the next 7 days (no duplicates)
-      // This will book the slot immediately if it's today or in the next 7 days
-      await recurringAppointmentsApi.seedUpcomingOccurrences(created, 1);
+      // Concrete slots are materialized nightly on the server (pg_cron → materialize_recurring_appointments_forward).
 
       return created;
     } catch (e) {
@@ -189,101 +187,6 @@ export const recurringAppointmentsApi = {
       return false;
     }
     return true;
-  },
-
-  // Create or book concrete slots for the next `weeks` occurrences (default 1 = only this week)
-  async seedUpcomingOccurrences(rule: RecurringAppointment, weeks: number = 1): Promise<void> {
-    try {
-      const businessId = getBusinessId();
-      const today = new Date();
-      // Normalize to local today date (strip time)
-      const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-      // Compute first occurrence date on/after today for the specified weekday
-      const currentDow = start.getDay();
-      const delta = (rule.day_of_week - currentDow + 7) % 7; // 0..6
-      const first = new Date(start);
-      first.setDate(start.getDate() + delta);
-
-      // If the first occurrence is today, we need to check if it's still available
-      // If it's in the future (tomorrow or later), we can book it immediately
-
-      const toDateString = (d: Date) => new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().split('T')[0];
-
-      const withinRange = (d: Date) => {
-        const ds = toDateString(d);
-        const startOk = !rule.start_date || rule.start_date <= ds;
-        const endOk = !rule.end_date || rule.end_date >= ds;
-        return startOk && endOk;
-      };
-
-      const interval = Math.max(1, rule.repeat_interval || 1);
-      
-      // Seed appointments for the next 7 days (including today if it matches the day of week)
-      for (let i = 0; i < 7; i++) {
-        const occ = new Date(start);
-        occ.setDate(start.getDate() + i);
-        
-        // Only process if this day matches the recurring day of week
-        if (occ.getDay() !== rule.day_of_week) continue;
-        
-        // Respect start/end range and repeat interval
-        if (!withinRange(occ)) continue;
-        
-        const anchor = rule.start_date ? new Date(rule.start_date + 'T00:00:00') : first;
-        const weeksFromAnchor = Math.floor((occ.getTime() - new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate()).getTime()) / (7 * 24 * 60 * 60 * 1000));
-        if (weeksFromAnchor % interval !== 0) continue;
-        
-        const dateStr = toDateString(occ);
-
-        // Check if a slot exists
-        const { data: slot } = await supabase
-          .from('appointments')
-          .select('id, is_available, client_phone')
-          .eq('business_id', businessId)
-          .eq('slot_date', dateStr)
-          .eq('slot_time', rule.slot_time)
-          .maybeSingle();
-
-        if (!slot) {
-          // Insert as booked for this client
-          await supabase
-            .from('appointments')
-            .insert({
-              business_id: businessId,
-              slot_date: dateStr,
-              slot_time: rule.slot_time,
-              is_available: false,
-              client_name: rule.client_name,
-              client_phone: rule.client_phone,
-              service_name: rule.service_name,
-              service_id: rule.service_id,
-              user_id: rule.admin_id,
-              barber_id: rule.admin_id,
-            });
-        } else if (slot.is_available === true) {
-          // Book the existing available slot for this client
-          await supabase
-            .from('appointments')
-            .update({
-              is_available: false,
-              client_name: rule.client_name,
-              client_phone: rule.client_phone,
-              service_name: rule.service_name,
-              service_id: rule.service_id,
-              user_id: rule.admin_id,
-              barber_id: rule.admin_id,
-            })
-            .eq('business_id', businessId)
-            .eq('id', slot.id)
-            .eq('is_available', true);
-        } else {
-          // Already booked; leave as-is (no duplicates)
-        }
-      }
-    } catch (e) {
-      console.error('Error seeding upcoming recurring occurrences:', e);
-    }
   },
 };
 

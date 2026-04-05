@@ -1025,7 +1025,9 @@ export default function EditGalleryScreen() {
                         </View>
                         <View style={styles.reorderThumbWrap}>
                           {coverIsVideo ? (
-                            <GalleryLoopVideo uri={coverUri} style={styles.reorderThumb} />
+                            <View style={[styles.reorderThumb, { backgroundColor: '#1C1C1E', justifyContent: 'center', alignItems: 'center' }]}>
+                              <Ionicons name="play-circle" size={28} color="rgba(255,255,255,0.9)" />
+                            </View>
                           ) : (
                             <ExpoImage
                               source={{ uri: coverUri }}
@@ -1077,9 +1079,10 @@ export default function EditGalleryScreen() {
                     ]}
                   >
                     <TouchableOpacity activeOpacity={0.88} onPress={() => openEdit(item)} style={styles.tileInner} accessibilityRole="button" accessibilityLabel={item.name}>
-                      {/* Cover: prefer first still image so grid matches client gallery */}
                       {coverIsVideo ? (
-                        <GalleryLoopVideo uri={coverUri} style={styles.tileImage} />
+                        <View style={[styles.tileImage, { backgroundColor: '#1C1C1E', justifyContent: 'center', alignItems: 'center' }]}>
+                          <Ionicons name="play-circle" size={40} color="rgba(255,255,255,0.9)" />
+                        </View>
                       ) : (
                         <ExpoImage
                           source={{ uri: coverUri }}

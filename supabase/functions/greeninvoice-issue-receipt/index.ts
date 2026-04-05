@@ -3,8 +3,8 @@
  * Admin-only: create a Green Invoice receipt (document type 400) for a completed appointment.
  * Auth: verify_jwt=false — body includes business_id + caller_user_id; service role validates admin + tenant.
  *
- * Sandbox: set Edge secret GREEN_INVOICE_USE_SANDBOX=true (or "1") and use API keys from the sandbox account.
- * Bases match green-invoice Python client: live api.greeninvoice.co.il, sandbox sandbox.d.greeninvoice.co.il
+ * Sandbox: Edge secret GREEN_INVOICE_USE_SANDBOX=true and/or JSON body use_sandbox: true (app dev toggle).
+ * Bases: live api.greeninvoice.co.il, sandbox sandbox.d.greeninvoice.co.il
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -34,13 +34,22 @@ function json(body: Record<string, unknown>, status = 200): Response {
   });
 }
 
-function useSandboxEnv(): boolean {
+function sandboxFromEnv(): boolean {
   const v = (Deno.env.get("GREEN_INVOICE_USE_SANDBOX") ?? "").trim().toLowerCase();
   return v === "true" || v === "1" || v === "yes";
 }
 
-function apiBase(): string {
-  return useSandboxEnv() ? GREEN_SANDBOX : GREEN_LIVE;
+function bodyWantsSandbox(body: Record<string, unknown>): boolean {
+  const b = body["use_sandbox"];
+  return b === true || b === "true" || b === 1;
+}
+
+function useSandboxEffective(body: Record<string, unknown>): boolean {
+  return sandboxFromEnv() || bodyWantsSandbox(body);
+}
+
+function apiBase(body: Record<string, unknown>): string {
+  return useSandboxEffective(body) ? GREEN_SANDBOX : GREEN_LIVE;
 }
 
 async function fetchGreenInvoiceJwt(
@@ -160,7 +169,8 @@ serve(async (req) => {
   if (apptErr || !appt) {
     return json({ ok: false, error: "appointment_not_found" }, 404);
   }
-  if (String(appt.status) !== "completed") {
+  const st = String(appt.status ?? "");
+  if (st !== "completed" && st !== "confirmed") {
     return json({ ok: false, error: "appointment_not_completed" }, 400);
   }
   if (appt.is_available === true) {
@@ -242,7 +252,7 @@ serve(async (req) => {
     return json({ ok: false, error: "greeninvoice_not_connected" }, 400);
   }
 
-  const base = apiBase();
+  const base = apiBase(body);
   const tokenUrl = `${base}/v1/account/token`;
   const gi = await fetchGreenInvoiceJwt(tokenUrl, apiKeyId, apiSecret);
   if (!gi.ok) {
@@ -332,7 +342,7 @@ serve(async (req) => {
 
   return json({
     ok: true,
-    sandbox: useSandboxEnv(),
+    sandbox: useSandboxEffective(body),
     document: {
       id: d["id"] ?? null,
       number: d["number"] ?? null,

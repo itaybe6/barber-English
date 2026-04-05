@@ -1,6 +1,7 @@
 import { FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase, getBusinessId } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
+import { useGreenInvoiceDevModeStore } from '@/stores/greenInvoiceDevModeStore';
 
 type FnResponse = {
   ok?: boolean;
@@ -44,11 +45,13 @@ async function invoke(body: Record<string, unknown>): Promise<FnResponse> {
     return { ok: false, error: 'invalid_session' };
   }
 
+  const useSandbox = useGreenInvoiceDevModeStore.getState().useSandboxApi;
   const { data, error } = await supabase.functions.invoke('greeninvoice-issue-receipt', {
     body: {
       ...body,
       business_id: ctx.businessId,
       caller_user_id: ctx.callerUserId,
+      use_sandbox: useSandbox,
     },
   });
 

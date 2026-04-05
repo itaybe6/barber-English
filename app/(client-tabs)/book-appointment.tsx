@@ -36,14 +36,13 @@ import type { SharedValue } from 'react-native-reanimated';
 
 // API functions for booking appointments
 const bookingApi = {
-  // Get available time slots for a specific date and barber
   async getAvailableSlots(date: string, barberId?: string): Promise<Appointment[]> {
     try {
       const businessId = getBusinessId();
       
       let query = supabase
         .from('appointments')
-        .select('*')
+        .select('id, slot_date, slot_time, is_available, client_name, client_phone, service_name, barber_id, status, business_id, user_id, service_id, duration_minutes')
         .eq('slot_date', date)
         .eq('business_id', businessId);
 
@@ -65,16 +64,15 @@ const bookingApi = {
     }
   },
 
-  // Get user appointments for multiple dates (most efficient for user appointments)
   async getUserAppointmentsForMultipleDates(dates: string[], userName?: string, userPhone?: string): Promise<Appointment[]> {
     try {
       const businessId = getBusinessId();
       
       let query = supabase
         .from('appointments')
-        .select('*')
+        .select('id, slot_date, slot_time, client_name, client_phone, service_name, barber_id, status, is_available, business_id, user_id')
         .in('slot_date', dates)
-        .eq('is_available', false) // Only booked appointments
+        .eq('is_available', false)
         .eq('business_id', businessId)
         .order('slot_date')
         .order('slot_time');
@@ -293,10 +291,9 @@ const bookingApi = {
     try {
       const businessId = getBusinessId();
       
-      // First, get the appointment details before cancelling
       const { data: appointmentData, error: fetchError } = await supabase
         .from('appointments')
-        .select('*')
+        .select('id, slot_date, slot_time, client_name, client_phone, service_name, barber_id, status, business_id')
         .eq('id', slotId)
         .eq('business_id', businessId)
         .single();
@@ -310,10 +307,10 @@ const bookingApi = {
         return { success: false, error: 'Appointment not found' };
       }
 
-      // Check cancellation policy
       const { data: businessProfile } = await supabase
         .from('business_profile')
         .select('min_cancellation_hours')
+        .eq('id', businessId)
         .single();
 
       const rawMc = businessProfile?.min_cancellation_hours;
@@ -789,10 +786,11 @@ export default function BookAppointment() {
 
       const businessId = getBusinessId();
       
+      const APPT_COLS = 'id, slot_date, slot_time, client_name, client_phone, service_name, barber_id, status, is_available, business_id, user_id';
       if (phoneVariants.length > 0) {
         let query = supabase
           .from('appointments')
-          .select('*')
+          .select(APPT_COLS)
           .eq('business_id', businessId)
           .eq('slot_date', dateString)
           .eq('is_available', false)
@@ -808,7 +806,7 @@ export default function BookAppointment() {
       } else if (nameRaw) {
         let query = supabase
           .from('appointments')
-          .select('*')
+          .select(APPT_COLS)
           .eq('business_id', businessId)
           .eq('slot_date', dateString)
           .eq('is_available', false)
@@ -852,9 +850,10 @@ export default function BookAppointment() {
         const dayOfWeek = date.getDay();
         const businessId = getBusinessId();
         
+        const BH_COLS = 'id, day_of_week, start_time, end_time, break_start_time, break_end_time, is_active, slot_duration_minutes, breaks, user_id, business_id';
         let bhQuery = supabase
           .from('business_hours')
-          .select('*')
+          .select(BH_COLS)
           .eq('day_of_week', dayOfWeek)
           .eq('is_active', true)
           .eq('business_id', businessId);
@@ -866,11 +865,10 @@ export default function BookAppointment() {
         }
 
         let { data: bhRow } = await bhQuery.maybeSingle();
-        // Fallback: if no barber-specific hours found, try global hours
         if (!bhRow && selectedBarber?.id) {
           const { data: globalBh } = await supabase
             .from('business_hours')
-            .select('*')
+            .select(BH_COLS)
             .eq('day_of_week', dayOfWeek)
             .eq('is_active', true)
             .eq('business_id', businessId)
@@ -1084,9 +1082,10 @@ export default function BookAppointment() {
           const dow = d.fullDate.getDay();
           const businessId = getBusinessId();
           
+          const BH_SEL = 'id, day_of_week, start_time, end_time, break_start_time, break_end_time, is_active, slot_duration_minutes, breaks, user_id, business_id';
           let bhQuery = supabase
             .from('business_hours')
-            .select('*')
+            .select(BH_SEL)
             .eq('day_of_week', dow)
             .eq('is_active', true)
             .eq('business_id', businessId);
@@ -1098,11 +1097,10 @@ export default function BookAppointment() {
           }
 
           let { data: bhRow } = await bhQuery.maybeSingle();
-          // Fallback: if no barber-specific hours found, try global hours
           if (!bhRow && selectedBarber?.id) {
             const { data: globalBh } = await supabase
               .from('business_hours')
-              .select('*')
+              .select(BH_SEL)
               .eq('day_of_week', dow)
               .eq('is_active', true)
               .eq('business_id', businessId)
@@ -1235,9 +1233,10 @@ export default function BookAppointment() {
       const dayOfWeek = date.getDay();
       const businessId = getBusinessId();
       
+      const BH_FIELDS = 'id, day_of_week, start_time, end_time, break_start_time, break_end_time, is_active, slot_duration_minutes, breaks, user_id, business_id';
       let bhQuery = supabase
         .from('business_hours')
-        .select('*')
+        .select(BH_FIELDS)
         .eq('day_of_week', dayOfWeek)
         .eq('is_active', true)
         .eq('business_id', businessId);
@@ -1249,11 +1248,10 @@ export default function BookAppointment() {
       }
 
       let { data: bhRow } = await bhQuery.maybeSingle();
-      // Fallback: if no barber-specific hours found, try global hours
       if (!bhRow && selectedBarber?.id) {
         const { data: globalBh } = await supabase
           .from('business_hours')
-          .select('*')
+          .select(BH_FIELDS)
           .eq('day_of_week', dayOfWeek)
           .eq('is_active', true)
           .eq('business_id', businessId)

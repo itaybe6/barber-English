@@ -152,11 +152,12 @@ export const useWaitlistStore = create<WaitlistStore>((set, get) => ({
       
       const { data, error } = await supabase
         .from('waitlist_entries')
-        .select('*')
+        .select('id, client_name, client_phone, requested_date, requested_time, service_name, status, notes, created_at, business_id')
         .eq('client_phone', clientPhone)
         .eq('business_id', businessId)
         .order('requested_date', { ascending: true })
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true })
+        .limit(50);
 
       if (error) {
         console.error('Error fetching client waitlist entries:', error);

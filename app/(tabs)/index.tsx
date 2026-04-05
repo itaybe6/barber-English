@@ -688,7 +688,7 @@ export default function HomeScreen() {
       
       const { data, error } = await supabase
         .from('users')
-        .select('*')
+        .select('id, name, phone, image_url, created_at, client_approved, user_type, business_id, birth_date')
         .eq('user_type', 'client')
         .eq('business_id', businessId)
         .eq('client_approved', true)
@@ -729,7 +729,7 @@ export default function HomeScreen() {
 
       const { data, error } = await supabase
         .from('users')
-        .select('*')
+        .select('id, name, phone, image_url, created_at, client_approved, user_type, business_id, birth_date')
         .eq('business_id', businessId)
         .eq('user_type', 'client')
         .gte('created_at', monthStartIso)

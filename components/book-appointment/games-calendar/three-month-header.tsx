@@ -31,8 +31,9 @@ export function ThreeMonthHeader({ data, activeIndex, primaryColor, onGoToIndex 
   const safeIndex = Math.max(0, Math.min(n - 1, activeIndex));
   const currEntry = data[safeIndex];
 
-  const canGoPrev = safeIndex > 0;
-  const canGoNext = safeIndex < n - 1;
+  // RTL: visually right = earlier in time, visually left = later in time
+  const canGoPrev = safeIndex < n - 1;  // left arrow → next month (forward in RTL)
+  const canGoNext = safeIndex > 0;      // right arrow → prev month (backward in RTL)
 
   const monthName = currEntry ? formatMonthOnly(currEntry.date) : '';
   const yearStr = currEntry ? String(currEntry.date.getFullYear()) : '';
@@ -55,9 +56,9 @@ export function ThreeMonthHeader({ data, activeIndex, primaryColor, onGoToIndex 
         borderBottomColor: 'rgba(0,0,0,0.08)',
       }}
     >
-      {/* ← Previous month */}
+      {/* ← Next month (RTL: left = forward in time) */}
       <Pressable
-        onPress={() => canGoPrev && onGoToIndex(safeIndex - 1)}
+        onPress={() => canGoPrev && onGoToIndex(safeIndex + 1)}
         disabled={!canGoPrev}
         hitSlop={HIT_SLOP}
         style={({ pressed }) => ({
@@ -70,7 +71,7 @@ export function ThreeMonthHeader({ data, activeIndex, primaryColor, onGoToIndex 
           backgroundColor: pressed && canGoPrev ? `${primaryColor}15` : 'transparent',
         })}
         accessibilityRole="button"
-        accessibilityLabel="חודש קודם"
+        accessibilityLabel="חודש הבא"
       >
         <ChevronLeft size={22} color={primaryColor} strokeWidth={2.5} />
       </Pressable>
@@ -112,9 +113,9 @@ export function ThreeMonthHeader({ data, activeIndex, primaryColor, onGoToIndex 
         </Text>
       </View>
 
-      {/* → Next month */}
+      {/* → Previous month (RTL: right = backward in time) */}
       <Pressable
-        onPress={() => canGoNext && onGoToIndex(safeIndex + 1)}
+        onPress={() => canGoNext && onGoToIndex(safeIndex - 1)}
         disabled={!canGoNext}
         hitSlop={HIT_SLOP}
         style={({ pressed }) => ({
@@ -127,7 +128,7 @@ export function ThreeMonthHeader({ data, activeIndex, primaryColor, onGoToIndex 
           backgroundColor: pressed && canGoNext ? `${primaryColor}15` : 'transparent',
         })}
         accessibilityRole="button"
-        accessibilityLabel="חודש הבא"
+        accessibilityLabel="חודש קודם"
       >
         <ChevronRight size={22} color={primaryColor} strokeWidth={2.5} />
       </Pressable>

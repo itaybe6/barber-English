@@ -91,12 +91,16 @@ function CalendarShell({
     pageWidth.value = Math.max(1, layoutW);
   }, [layoutW, pageWidth]);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (layoutW <= 0 || monthCount < 1) return;
-    const w = Math.max(1, pageWidth.value);
-    const logical = activeMonthIndexRef.current;
-    const physical = monthCount - 1 - logical;
-    scrollViewRef.current?.scrollTo({ x: physical * w, animated: false });
+    // Defer scroll until after the native layout pass so pagingEnabled + scrollTo work correctly.
+    const timer = setTimeout(() => {
+      const w = Math.max(1, pageWidth.value);
+      const logical = activeMonthIndexRef.current;
+      const physical = monthCount - 1 - logical;
+      scrollViewRef.current?.scrollTo({ x: physical * w, animated: false });
+    }, 80);
+    return () => clearTimeout(timer);
   }, [layoutW, monthCount, pageWidth, scrollViewRef]);
 
   const isAdmin = variant === 'admin';

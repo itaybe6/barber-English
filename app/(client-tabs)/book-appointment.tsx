@@ -16,6 +16,8 @@ import BookingSuccessAnimatedOverlay, {
   type SuccessLine,
 } from '@/components/book-appointment/BookingSuccessAnimatedOverlay';
 import BookingStepTabs, { getBookingStepBarTopFromBottom } from '@/components/book-appointment/BookingStepTabs';
+import WaitlistBottomSheet from '@/components/book-appointment/WaitlistBottomSheet';
+import ConfirmBookingSheet from '@/components/book-appointment/ConfirmBookingSheet';
 
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { Service } from '@/lib/supabase';
@@ -430,6 +432,7 @@ export default function BookAppointment() {
   const [isLoadingBarbers, setIsLoadingBarbers] = useState<boolean>(false);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [showWaitlistSheet, setShowWaitlistSheet] = useState(false);
   const [isBooking, setIsBooking] = useState(false);
   const [isCheckingAppointments, setIsCheckingAppointments] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -626,12 +629,7 @@ export default function BookAppointment() {
 
   const days = getNextNDays(bookingOpenDays);
   const selectedDate = selectedDay !== null ? days[selectedDay]?.fullDate : null;
-  /** Step-4 booking uses the bottom-bar checkmark; no footer CTA on time step. */
-  const footerVisible = currentStep === 3 && selectedDay !== null;
-  const buttonHeight = 56;
-  const contentBottomPadding = footerVisible
-    ? footerBottom + buttonHeight + 12
-    : Math.max(96, bookingBarTopFromBottom + 40);
+  const contentBottomPadding = Math.max(96, bookingBarTopFromBottom + 40);
   
   // Compute available start times dynamically for the selected service and date using business_hours
   const getAvailableTimeSlotsForDate = () => {
@@ -1022,14 +1020,6 @@ export default function BookAppointment() {
     try {
       const list = await usersApi.getAdminUsers();
       setAvailableBarbers(list);
-      // Auto-select first barber and reset scroll position
-      if (list.length > 0) {
-        setSelectedBarber(list[0]);
-      }
-      // Keep user on the single-page view if only one barber
-      if (list.length === 1) {
-        setCurrentStep(1);
-      }
     } catch (e) {
       setAvailableBarbers([]);
     } finally {
@@ -1108,7 +1098,7 @@ export default function BookAppointment() {
               .maybeSingle();
             bhRow = globalBh;
           }
-          if (!bhRow) return [dateStr, 0] as const;
+          if (!bhRow) return [dateStr, -1] as const; // -1 = closed (no business hours)
           type Window = { start: string; end: string };
           const base: Window[] = [{ start: bhRow.start_time, end: bhRow.end_time }];
           const brks: Array<{ start_time: string; end_time: string }> = (bhRow as any).breaks || [];
@@ -1552,10 +1542,14 @@ export default function BookAppointment() {
     }
   }, [currentStep, selectedBarber, selectedServices.length, selectedDay, finalizeStep2ToDay, abortStep2Transition]);
 
+  const selectedDayDateStr = selectedDate ? toLocalDateStr(selectedDate) : '';
+  const selectedDayHasAvail =
+    selectedDayDateStr ? (dayAvailability[selectedDayDateStr] ?? -1) > 0 : false;
+
   const bookingAdvanceNextEnabled =
     (currentStep === 1 && !!selectedBarber) ||
     (currentStep === 2 && selectedServices.length > 0) ||
-    (currentStep === 3 && selectedDay !== null);
+    (currentStep === 3 && selectedDay !== null && selectedDayHasAvail);
 
   const timeSelectionProps: TimeSelectionProps = {
     visible:
@@ -1667,6 +1661,7 @@ export default function BookAppointment() {
             service: t('booking.step.service', 'Service'),
             day: t('booking.step.day', 'Day'),
             time: t('booking.step.time', 'Time'),
+            continue: t('booking.continue', 'המשך'),
           }}
           canGoService={!!selectedBarber && currentStep >= 2}
           canGoDay={!!selectedService}
@@ -1675,15 +1670,17 @@ export default function BookAppointment() {
           onChangeStep={(step) => setCurrentStep(Number(step) as any)}
           advanceNext={
             currentStep === 1
-              ? { enabled: false, onPress: advanceToNextStep }
-              : currentStep < 4
-                ? { enabled: bookingAdvanceNextEnabled, onPress: advanceToNextStep }
-                : {
-                    enabled: !!selectedTime,
-                    loading: isCheckingAppointments,
-                    onPress: handleBookAppointment,
-                    variant: 'confirm' as const,
-                  }
+              ? { enabled: !!selectedBarber, onPress: advanceToNextStep }
+              : currentStep === 3 && selectedDay !== null && !selectedDayHasAvail && selectedDayDateStr && (dayAvailability[selectedDayDateStr] ?? -1) === 0
+                ? { enabled: true, onPress: () => setShowWaitlistSheet(true), variant: 'waitlist' as const }
+                : currentStep < 4
+                  ? { enabled: bookingAdvanceNextEnabled, onPress: advanceToNextStep }
+                  : {
+                      enabled: !!selectedTime,
+                      loading: isCheckingAppointments,
+                      onPress: handleBookAppointment,
+                      variant: 'confirm' as const,
+                    }
           }
         />
       {/* Header removed on steps 3-4 per request */}
@@ -1745,36 +1742,6 @@ export default function BookAppointment() {
           }}
         />
 
-        {/* Step 1: “המשך” in scroll flow — fixed gap below last staff row */}
-        {currentStep === 1 && (
-          <View style={styles.bookingStep1CtaWrap}>
-            <TouchableOpacity
-              style={[
-                styles.bookingStep1Cta,
-                selectedBarber ? styles.bookingStep1CtaActive : styles.bookingStep1CtaDisabled,
-              ]}
-              disabled={!selectedBarber}
-              activeOpacity={0.88}
-              onPress={() => {
-                if (!selectedBarber) return;
-                advanceToNextStep();
-              }}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !selectedBarber }}
-              accessibilityLabel={t('booking.continue', 'המשך')}
-            >
-              <Text
-                style={[
-                  styles.bookingStep1CtaText,
-                  { color: selectedBarber ? colors.primary : 'rgba(255,255,255,0.5)' },
-                ]}
-              >
-                {t('booking.continue', 'המשך')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* Step 2: Service Selection - Multi-select grid */}
         <ServiceSelection
           visible={currentStep === 2 && !!selectedBarber}
@@ -1818,6 +1785,7 @@ export default function BookAppointment() {
               dayAvailability={dayAvailability}
               language={i18n?.language || 'he'}
               primaryColor={colors.primary}
+              t={t}
               onSelectDayIndex={(idx) => setSelectedDay(idx)}
               onClearTime={() => setSelectedTime(null)}
             />
@@ -1833,142 +1801,34 @@ export default function BookAppointment() {
       {/* Step 4: Revolutionary Time Selection with Liquid Glass (outside ScrollView) */}
       <TimeSelection {...timeSelectionProps} />
 
-      {/* Footer action button per step */}
-      {footerVisible && currentStep >= 3 && (
-        <View style={[styles.bookingFooter, { bottom: footerBottom }]}>
-          {/* Step 1 & 2 buttons moved into overlay; footer shown from step 3 onwards */}
+      {/* Waitlist button is now embedded in BookingStepTabs (variant='waitlist') — no separate footer needed */}
 
-        {currentStep === 3 && selectedDay !== null && (() => {
-          const dateStr = selectedDate ? toLocalDateStr(selectedDate) : '';
-          const hasAvailForSelected = dateStr ? ((dayAvailability[dateStr] ?? 0) > 0) : false;
-          if (hasAvailForSelected) { return null; }
-          return (
-            <TouchableOpacity
-              style={styles.waitlistButton}
-              onPress={() => {
-                router.push({
-                  pathname: '/(client-tabs)/waitlist' as any,
-                  params: {
-                    serviceName: selectedService?.name || 'שירות כללי',
-                    selectedDate: dateStr,
-                    barberId: selectedBarber?.id || '',
-                  } as any,
-                } as any);
-              }}
-              activeOpacity={0.9}
-            >
-              <Ionicons name="hourglass" size={18} color="#FFFFFF" />
-              <Text style={styles.waitlistButtonText}>{t('booking.joinWaitlist', 'Join Waitlist')}</Text>
-            </TouchableOpacity>
-          );
-        })()}
-        </View>
-      )}
+      {/* Waitlist Bottom Sheet */}
+      <WaitlistBottomSheet
+        visible={showWaitlistSheet}
+        onClose={() => setShowWaitlistSheet(false)}
+        selectedDate={selectedDate ? toLocalDateStr(selectedDate) : ''}
+        serviceName={selectedService?.name || 'שירות כללי'}
+        barberId={selectedBarber?.id || ''}
+      />
 
-      {/* Confirmation Modal */}
-      {showConfirmModal && (
-        <Modal
-          visible={showConfirmModal}
-          animationType="fade"
-          transparent={true}
-          onRequestClose={() => setShowConfirmModal(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                {/* Removed top calendar icon per request */}
-                <Text style={styles.modalTitle}>{t('booking.confirmTitle', 'Confirm Appointment Booking')}</Text>
-              </View>
-              
-              <View style={styles.appointmentDetails}>
-                {/* Services list */}
-                <View style={styles.detailRow}>
-                  <View style={styles.detailIcon}>
-                    <Ionicons name="briefcase-outline" size={20} color="#6B7280" />
-                  </View>
-                  <View style={styles.detailContent}>
-                    <Text style={styles.detailLabel}>
-                      {selectedServices.length > 1
-                        ? t('booking.field.services', 'Services')
-                        : t('booking.field.service', 'Service')}
-                    </Text>
-                    {selectedServices.map((svc, idx) => (
-                      <View key={svc.id} style={{ flexDirection: 'row', alignItems: 'center', marginTop: idx > 0 ? 4 : 0 }}>
-                        {selectedServices.length > 1 && (
-                          <Text style={{ color: '#9CA3AF', fontSize: 13, marginRight: 6 }}>{idx + 1}.</Text>
-                        )}
-                        <Text style={styles.detailValue}>{svc.name}</Text>
-                        <Text style={{ color: '#9CA3AF', fontSize: 13, marginLeft: 8 }}>
-                          {svc.duration_minutes ?? 60}{t('booking.min', 'min')}
-                        </Text>
-                      </View>
-                    ))}
-                    {selectedServices.length > 1 && (
-                      <View style={{ flexDirection: 'row', marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#F3F4F6' }}>
-                        <Text style={{ color: '#374151', fontSize: 14, fontWeight: '700' }}>
-                          {t('booking.total', 'Total')}: {totalDuration} {t('booking.min', 'min')}  ·  ₪{totalPrice}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-                
-                <View style={styles.detailRow}>
-                  <View style={styles.detailIcon}>
-                    <Ionicons name="calendar" size={20} color="#6B7280" />
-                  </View>
-                  <View style={styles.detailContent}>
-                    <Text style={styles.detailLabel}>{t('booking.field.date', 'Date')}</Text>
-                    <Text style={styles.detailValue}>
-                      {selectedDay !== null ? (() => {
-                        const date = days[selectedDay].fullDate;
-                        const dayName = days[selectedDay].dayName;
-                        const formattedDate = date.toLocaleDateString(toBcp47Locale(i18n?.language), {
-                          day: 'numeric',
-                          month: 'long',
-                          year: 'numeric'
-                        });
-                        return `${dayName}, ${formattedDate}`;
-                      })() : ''}
-                    </Text>
-                  </View>
-                </View>
-                
-                <View style={styles.detailRow}>
-                  <View style={styles.detailIcon}>
-                    <Ionicons name="time" size={20} color="#6B7280" />
-                  </View>
-                  <View style={styles.detailContent}>
-                    <Text style={styles.detailLabel}>{t('booking.field.time', 'Time')}</Text>
-                    <Text style={styles.detailValue}>
-                      {selectedTime}
-                      {selectedServices.length > 1 && ` - ${_toHHMM(_toMinutes(selectedTime || '00:00') + totalDuration)}`}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-              
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonCancel]}
-                  onPress={() => setShowConfirmModal(false)}
-                >
-                  <Text style={styles.modalButtonCancelText}>{t('cancel', 'Cancel')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonConfirm]}
-                  onPress={() => {
-                    setShowConfirmModal(false);
-                    proceedWithBooking();
-                  }}
-                >
-                  <Text style={styles.modalButtonText}>{t('confirm', 'Confirm')}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
-      )}
+      {/* Confirmation Bottom Sheet */}
+      <ConfirmBookingSheet
+        visible={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        onConfirm={() => { setShowConfirmModal(false); proceedWithBooking(); }}
+        serviceName={selectedService?.name || ''}
+        serviceDuration={(selectedService as any)?.duration_minutes ?? 60}
+        servicePrice={(selectedService as any)?.price ?? 0}
+        date={selectedDay !== null ? (() => {
+          const d = days[selectedDay].fullDate;
+          return `${days[selectedDay].dayName}, ${d.toLocaleDateString(toBcp47Locale(i18n?.language), { day: 'numeric', month: 'long', year: 'numeric' })}`;
+        })() : ''}
+        time={selectedTime || ''}
+        extraServices={selectedServices.slice(1).map(s => ({ name: s.name, duration_minutes: (s as any).duration_minutes ?? 60 }))}
+        totalDuration={totalDuration}
+        totalPrice={totalPrice}
+      />
 
       {/* Replace Confirmation Modal */}
       {existingAppointment && showReplaceModal && (
@@ -3077,41 +2937,6 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
     zIndex: 10,
   },
-  bookingStep1CtaWrap: {
-    marginTop: 28,
-    marginBottom: 8,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  bookingStep1Cta: {
-    alignSelf: 'center',
-    paddingVertical: 11,
-    paddingHorizontal: 32,
-    minWidth: 132,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-  },
-  bookingStep1CtaActive: {
-    backgroundColor: '#FFFFFF',
-    borderColor: 'rgba(15, 23, 42, 0.08)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  bookingStep1CtaDisabled: {
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    borderColor: 'rgba(255,255,255,0.35)',
-  },
-  bookingStep1CtaText: {
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-    textAlign: 'center',
-  },
   bookButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3651,6 +3476,8 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 25,
     gap: 8,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.7)',
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,

@@ -34,6 +34,7 @@ import { BlurView } from 'expo-blur';
 import LoginRequiredModal from '@/components/LoginRequiredModal';
 import { Appointment as AvailableTimeSlot } from '@/lib/supabase';
 import { businessProfileApi } from '@/lib/api/businessProfile';
+import { usersApi } from '@/lib/api/users';
 import type { BusinessProfile, WaitlistEntry } from '@/lib/supabase';
 import DesignCarousel from '@/components/DesignCarousel';
 import ProductCarousel from '@/components/ProductCarousel';
@@ -294,16 +295,12 @@ export default function ClientHomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { primaryOnSurface, onPrimary } = usePrimaryContrast();
-  const heroTopScrimGradientColors = useMemo(
-    () =>
-      [
-        hexToRgba(colors.primary, 0.9),
-        hexToRgba(colors.primary, 0.82),
-        hexToRgba(colors.primary, 0.48),
-        hexToRgba(colors.primary, 0),
-      ] as const,
-    [colors.primary]
-  );
+  const heroTopScrimGradientColors = [
+    'rgba(0,0,0,0.92)',
+    'rgba(0,0,0,0.82)',
+    'rgba(0,0,0,0.55)',
+    'rgba(0,0,0,0)',
+  ] as const;
   // Ensure light status bar when this screen is focused
   useFocusEffect(
     React.useCallback(() => {
@@ -324,6 +321,8 @@ export default function ClientHomeScreen() {
   );
   
   const [nextAppointment, setNextAppointment] = useState<AvailableTimeSlot | null>(null);
+  const [nextBarberName, setNextBarberName] = useState<string>('');
+  const [nextBarberImage, setNextBarberImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [waitlistEntries, setWaitlistEntries] = useState<WaitlistEntry[]>([]);
   const [isLoadingWaitlist, setIsLoadingWaitlist] = useState(false);
@@ -590,9 +589,23 @@ export default function ClientHomeScreen() {
       
       
       if (upcomingAppointments.length > 0) {
-        setNextAppointment(upcomingAppointments[0]);
+        const appt = upcomingAppointments[0];
+        setNextAppointment(appt);
+        // Fetch barber info
+        if (appt.barber_id) {
+          try {
+            const barberData = await usersApi.getUserById(appt.barber_id);
+            setNextBarberName(barberData?.name ? String(barberData.name) : '');
+            setNextBarberImage(barberData?.image_url ?? null);
+          } catch {
+            setNextBarberName('');
+            setNextBarberImage(null);
+          }
+        }
       } else {
         setNextAppointment(null);
+        setNextBarberName('');
+        setNextBarberImage(null);
       }
     } catch (error) {
       console.error('Error fetching user appointments:', error);
@@ -1026,67 +1039,41 @@ export default function ClientHomeScreen() {
               style={styles.clientNextCard}
             >
               <View style={styles.clientNextHeader}>
-                <View style={[styles.clientNextTimeIcon, { backgroundColor: `${colors.primary}18` }]}>
-                  <Ionicons name="time-outline" size={15} color={primaryOnSurface} />
-                </View>
+                {/* Date in header */}
+                <Text style={styles.clientNextBarberHeaderName} numberOfLines={1}>
+                  {formatDate(nextAppointment.slot_date)}
+                </Text>
                 <Text style={styles.clientNextHeaderLabel}>{t('appointments.next', 'Next appointment')}</Text>
               </View>
               <View style={styles.clientNextDivider} />
               <View style={[styles.clientNextBody, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-                <View
-                  style={[
-                    styles.clientNextInfo,
-                    { alignItems: isRTL ? 'flex-end' : 'flex-start' },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.clientNextService,
-                      { textAlign: isRTL ? 'right' : 'left' },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {nextAppointment.service_name || t('service', 'Service')}
-                  </Text>
-                  <View
-                    style={[
-                      styles.clientNextDetails,
-                      { flexDirection: isRTL ? 'row-reverse' : 'row' },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.clientNextDetail,
-                        { flexDirection: isRTL ? 'row-reverse' : 'row' },
-                      ]}
-                    >
-                      <Ionicons name="calendar-outline" size={13} color="#8E8E93" />
-                      <Text style={styles.clientNextDetailText}>{formatDate(nextAppointment.slot_date)}</Text>
-                    </View>
-                  </View>
-                  <View
-                    style={[
-                      styles.clientNextStatus,
-                      {
-                        flexDirection: isRTL ? 'row-reverse' : 'row',
-                        alignSelf: isRTL ? 'flex-end' : 'flex-start',
-                      },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.clientNextStatusDot,
-                        { backgroundColor: getAppointmentStatusColor(nextAppointment.status) },
-                      ]}
+                {/* Avatar + texts side by side */}
+                <View style={[styles.clientNextInfo, { flexDirection: isRTL ? 'row-reverse' : 'row', alignItems: 'center', gap: 12 }]}>
+                  {/* Big avatar */}
+                  {nextBarberImage ? (
+                    <Image
+                      source={{ uri: nextBarberImage }}
+                      style={styles.clientNextBarberBigAvatar}
+                      resizeMode="cover"
                     />
+                  ) : (
+                    <View style={[styles.clientNextBarberBigAvatar, styles.clientNextBarberAvatarFallback]}>
+                      <Ionicons name="person" size={22} color="#AAA" />
+                    </View>
+                  )}
+                  {/* Service name + barber name stacked */}
+                  <View style={{ flex: 1, alignItems: isRTL ? 'flex-end' : 'flex-start', gap: 3 }}>
                     <Text
-                      style={[
-                        styles.clientNextStatusText,
-                        { color: getAppointmentStatusColor(nextAppointment.status) },
-                      ]}
+                      style={[styles.clientNextService, { textAlign: isRTL ? 'right' : 'left' }]}
+                      numberOfLines={1}
                     >
-                      {getAppointmentStatusLabel(nextAppointment.status)}
+                      {nextAppointment.service_name || t('service', 'Service')}
                     </Text>
+                    {nextBarberName ? (
+                      <Text style={[styles.clientNextBarberHeaderName, { textAlign: isRTL ? 'right' : 'left' }]} numberOfLines={1}>
+                        {nextBarberName}
+                      </Text>
+                    ) : null}
                   </View>
                 </View>
                 <View style={[styles.clientNextTimeDivider, { backgroundColor: `${colors.primary}25` }]} />
@@ -1253,27 +1240,25 @@ export default function ClientHomeScreen() {
                </View>
              )}
               <View style={styles.mapOverlay} />
+              {/* Apple-style map pin */}
               <View style={styles.mapPinHost} pointerEvents="none">
-                <View style={[styles.mapPinRing, { borderColor: `${colors.primary}66` }]} />
-                <LinearGradient
-                  colors={[colors.primary, `${colors.primary}CC`]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.mapPinCore}
-                >
-                  <View style={styles.mapPinLogoFrame}>
+                {/* Balloon container */}
+                <View style={styles.mapBalloon}>
+                  {/* White circle with logo */}
+                  <View style={[styles.mapBalloonCircle, {
+                    shadowColor: '#000000',
+                  }]}>
                     <Image
                       source={getCurrentClientLogo()}
-                      style={styles.mapPinLogo}
+                      style={styles.mapBalloonLogo}
                       resizeMode="contain"
                     />
                   </View>
-                </LinearGradient>
-              </View>
-              <View style={styles.mapAttribution}>
-                <Text style={styles.mapAttributionText}>
-                  {GOOGLE_STATIC_MAPS_KEY && !googleFailed ? 'Google Maps' : t('map.mapsLabel', 'Maps')}
-                </Text>
+                  {/* Tip: white rotated square overlapping the circle bottom */}
+                  <View style={styles.mapBalloonTip} />
+                  {/* Shadow dot */}
+                  <View style={[styles.mapBalloonDot, { backgroundColor: colors.primary + '28' }]} />
+                </View>
               </View>
               {/* Bottom dark bar with business name and address */}
               {(businessProfile?.display_name || displayAddress) && (
@@ -1284,15 +1269,14 @@ export default function ClientHomeScreen() {
                   style={styles.mapBottomBar}
                 >
                   {!!businessProfile?.display_name && (
-                    <Text style={styles.mapBottomName}>{businessProfile.display_name}</Text>
+                    <Text style={[styles.mapBottomName, { textAlign: 'left', width: '100%' }]}>
+                      {businessProfile.display_name}
+                    </Text>
                   )}
                   {!!displayAddress && (
-                    <View style={styles.mapBottomAddressRow}>
-                      <Ionicons name="location-outline" size={14} color="#F2F2F7" />
-                      <Text style={styles.mapBottomAddress} numberOfLines={1}>
-                        {displayAddress}
-                      </Text>
-                    </View>
+                    <Text style={[styles.mapBottomAddress, { textAlign: 'left', width: '100%' }]} numberOfLines={1}>
+                      {displayAddress}
+                    </Text>
                   )}
                 </LinearGradient>
               )}
@@ -1301,67 +1285,42 @@ export default function ClientHomeScreen() {
         ) : null}
 
 
-        {/* Social Section */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeaderModern}>
-            <View style={styles.headerDecorationLeft}>
-              <View style={[styles.decorationDot, { opacity: 0.3 }]} />
-              <View style={[styles.decorationDot, { opacity: 0.2 }]} />
-              <View style={[styles.decorationDot, { opacity: 0.1 }]} />
-            </View>
-            <View style={styles.headerTitleContainer}>
-              <Text style={[styles.modernTitle, { color: '#1C1C1E' }]}>{t('follow.us')}</Text>
-            </View>
-            <View style={styles.headerDecorationRight}>
-              <View style={[styles.decorationDot, { opacity: 0.1 }]} />
-              <View style={[styles.decorationDot, { opacity: 0.2 }]} />
-              <View style={[styles.decorationDot, { opacity: 0.3 }]} />
-            </View>
-          </View>
-
-          {/* Location + Social icons in one row */}
+        {/* Social Section — minimal, no title */}
+        {(socialLinks.length > 0 || businessPhone || managerPhone) && (
           <View style={styles.socialContainer}>
             {socialLinks.map((social) => (
               <TouchableOpacity
                 key={social.name}
-                style={[styles.socialButton, { backgroundColor: social.color }]}
+                style={styles.socialButtonMinimal}
                 onPress={() => Linking.openURL(social.url)}
-                activeOpacity={0.8}
+                activeOpacity={0.7}
               >
-                <Ionicons name={social.icon as any} size={social.name === 'Instagram' ? 28 : 24} color="#FFFFFF" />
+                <Ionicons name={social.icon as any} size={22} color={social.color} />
               </TouchableOpacity>
             ))}
-            {/* Location button removed – map shown below */}
-            <TouchableOpacity
-              style={[styles.socialButton, styles.whatsappCircleButton]}
-              onPress={async () => {
-                const phoneToUse = businessPhone || managerPhone;
-                if (!phoneToUse) {
-                  Alert.alert(t('error.generic', 'Error'), t('appointments.managerPhoneUnavailable', 'Manager phone number is currently unavailable'));
-                  return;
-                }
-                const message = 'Hi';
-                const smsUrl = Platform.OS === 'ios'
-                  ? `sms:${phoneToUse}&body=${encodeURIComponent(message)}`
-                  : `sms:${phoneToUse}?body=${encodeURIComponent(message)}`;
-                try {
-                  const canOpen = await Linking.canOpenURL(smsUrl);
-                  if (canOpen) {
-                    await Linking.openURL(smsUrl);
-                  } else {
-                    Alert.alert(t('error.generic', 'Error'), t('common.smsOpenFailed', 'SMS app cannot be opened on this device'));
-                  }
-                } catch (e) {
-                  Alert.alert(t('error.generic', 'Error'), t('common.smsOpenFailed', 'SMS app cannot be opened on this device'));
-                }
-              }}
-              activeOpacity={0.8}
-              accessibilityLabel={t('notifications.title')}
-            >
-              <Ionicons name="chatbubble-ellipses-outline" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
+            {(businessPhone || managerPhone) && (
+              <TouchableOpacity
+                style={styles.socialButtonMinimal}
+                onPress={async () => {
+                  const phoneToUse = businessPhone || managerPhone;
+                  if (!phoneToUse) return;
+                  const message = 'Hi';
+                  const smsUrl = Platform.OS === 'ios'
+                    ? `sms:${phoneToUse}&body=${encodeURIComponent(message)}`
+                    : `sms:${phoneToUse}?body=${encodeURIComponent(message)}`;
+                  try {
+                    const canOpen = await Linking.canOpenURL(smsUrl);
+                    if (canOpen) await Linking.openURL(smsUrl);
+                  } catch {}
+                }}
+                activeOpacity={0.7}
+                accessibilityLabel={t('notifications.title')}
+              >
+                <Ionicons name="chatbubble-ellipses-outline" size={22} color="#3C3C43" />
+              </TouchableOpacity>
+            )}
           </View>
-        </View>
+        )}
 
         {/* Static Map Section under Follow us – removed (moved above) */}
         
@@ -2062,8 +2021,16 @@ const styles = StyleSheet.create<any>({
   socialContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 16,
-    marginBottom: 0, // No margin to avoid extra white space
+    gap: 12,
+    marginVertical: 20,
+  },
+  socialButtonMinimal: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F2F2F7',
   },
   socialButton: {
     width: 56,
@@ -2071,11 +2038,6 @@ const styles = StyleSheet.create<any>({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
   },
   googleMapsLogo: {
     width: 28,
@@ -2109,47 +2071,59 @@ const styles = StyleSheet.create<any>({
     position: 'absolute',
     top: '50%',
     left: '50%',
-    transform: [{ translateX: -26 }, { translateY: -46 }],
-    width: 52,
-    height: 52,
+    // total visual height: circle(58) + tip(10) + dot(4) + gap(2) = ~74
+    transform: [{ translateX: -29 }, { translateY: -74 }],
+    width: 58,
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  mapPinRing: {
+  mapPinPulse: {
     position: 'absolute',
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 2,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    top: -10,
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    borderWidth: 1.5,
   },
-  mapPinCore: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+  mapBalloon: {
+    alignItems: 'center',
+  },
+  mapBalloonCircle: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: 'rgba(255,255,255,0.92)',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.22,
-    shadowRadius: 18,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.20,
+    shadowRadius: 16,
+    elevation: 12,
+    zIndex: 1,
   },
-  mapPinLogoFrame: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.94)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
+  mapBalloonLogo: {
+    width: 38,
+    height: 38,
   },
-  mapPinLogo: {
-    width: 34,
-    height: 34,
+  mapBalloonTip: {
+    width: 18,
+    height: 18,
+    backgroundColor: '#FFFFFF',
+    transform: [{ rotate: '45deg' }],
+    marginTop: -13,
+    borderBottomRightRadius: 3,
+    zIndex: -1,
   },
+  mapBalloonDot: {
+    width: 10,
+    height: 5,
+    borderRadius: 5,
+    marginTop: 4,
+  },
+  // legacy (unused but kept to avoid ref errors)
+  mapPinRing: { position: 'absolute', width: 0, height: 0 },
+  mapPinCore: { width: 0, height: 0 },
+  mapPinLogoFrame: { width: 0, height: 0 },
+  mapPinLogo: { width: 34, height: 34 },
   mapAttribution: {
     position: 'absolute',
     left: 8,
@@ -2172,7 +2146,6 @@ const styles = StyleSheet.create<any>({
     paddingHorizontal: 12,
     paddingTop: 20,
     paddingBottom: 14,
-    alignItems: 'flex-end',
   },
   mapBottomName: {
     fontSize: 18,
@@ -2180,23 +2153,21 @@ const styles = StyleSheet.create<any>({
     color: '#FFFFFF',
     marginBottom: 2,
     textAlign: 'right',
-    alignSelf: I18nManager.isRTL ? 'flex-start' : 'flex-end',
-    writingDirection: I18nManager.isRTL ? 'rtl' : 'ltr',
-    maxWidth: '100%',
+    width: '100%',
   },
   mapBottomAddressRow: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: I18nManager.isRTL ? 'flex-start' : 'flex-end',
     gap: 6,
-    maxWidth: '100%',
-    alignSelf: 'flex-end',
+    width: '100%',
   },
   mapBottomAddress: {
     fontSize: 13,
     fontWeight: '500',
     color: '#F2F2F7',
     textAlign: 'right',
-    writingDirection: I18nManager.isRTL ? 'rtl' : 'ltr',
+    flexShrink: 1,
   },
   mapDetailsContainer: {
     paddingHorizontal: 8,
@@ -2224,7 +2195,7 @@ const styles = StyleSheet.create<any>({
     borderColor: '#E5E5EA',
   },
   whatsappCircleButton: {
-    backgroundColor: '#30D158',
+    backgroundColor: '#F2F2F7',
   },
   // Footer developer logo
   footerContainer: {
@@ -2394,6 +2365,39 @@ const styles = StyleSheet.create<any>({
     fontSize: 12,
     color: '#34C759',
     fontWeight: '600',
+  },
+  clientNextBarberRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  clientNextBarberAvatar: { width: 26, height: 26, borderRadius: 13, overflow: 'hidden' },
+  clientNextBarberAvatarFallback: {
+    backgroundColor: '#E5E5EA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clientNextBarberName: { fontSize: 12.5, fontWeight: '500', color: '#6C6C70', flexShrink: 1 },
+  clientNextBarberHeaderWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  clientNextBarberHeaderAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  clientNextBarberBigAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  clientNextBarberHeaderName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#3C3C43',
+    flexShrink: 1,
+    maxWidth: 120,
   },
   clientNextTimeDivider: {
     width: 1.5,

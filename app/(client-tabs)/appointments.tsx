@@ -878,21 +878,6 @@ export default function ClientAppointmentsScreen() {
           <View style={styles.apptCardBadgeRow}>
             <View
               style={[
-                styles.apptStatusBadge,
-                {
-                  backgroundColor: statusConfig.backgroundColor,
-                  borderColor: statusConfig.borderColor,
-                },
-              ]}
-            >
-              <Ionicons name={statusConfig.icon} size={13} color={statusConfig.color} />
-              <Text style={[styles.apptStatusBadgeText, { color: statusConfig.color }]}>
-                {statusConfig.label}
-              </Text>
-            </View>
-
-            <View
-              style={[
                 styles.apptMiniDateChip,
                 {
                   backgroundColor: colors.primary + '0B',
@@ -903,6 +888,22 @@ export default function ClientAppointmentsScreen() {
               <Ionicons name="calendar-outline" size={12} color={colors.primary} />
               <Text style={[styles.apptMiniDateChipText, { color: colors.primary }]}>
                 {formatCompactDate(item.slot_date)}
+              </Text>
+            </View>
+
+            {/* צ'יפ שעה */}
+            <View
+              style={[
+                styles.apptMiniDateChip,
+                {
+                  backgroundColor: colors.primary + '0D',
+                  borderColor: colors.primary + '18',
+                },
+              ]}
+            >
+              <Ionicons name="time-outline" size={12} color={colors.primary} />
+              <Text style={[styles.apptMiniDateChipText, { color: colors.primary }]}>
+                {formatTime(item.slot_time)}
               </Text>
             </View>
           </View>
@@ -919,58 +920,42 @@ export default function ClientAppointmentsScreen() {
           ) : <View style={{ width: 42 }} />}
         </View>
 
-        <View style={styles.apptCardDivider} />
+        {!isPast && (
+          <>
+            <View style={styles.apptCardDivider} />
 
-        {/* ── שורת כפתורים תחתונה: ביטול | החלף | שעה (RTL) ── */}
-        <View style={styles.apptCardFooter}>
-          {/* ביטול – ראשון → ימין ב־RTL */}
-          {!isPast ? (
-            <TouchableOpacity
-              style={[styles.apptFooterBtn, styles.apptCancelBtn]}
-              onPress={() => handleCancelAppointment(item)}
-              activeOpacity={0.78}
-            >
-              <Ionicons name="close" size={14} color="#FF3B30" />
-              <Text style={styles.apptCancelBtnText}>{t('cancel', 'Cancel')}</Text>
-            </TouchableOpacity>
-          ) : null}
+            {/* ── שורת כפתורים תחתונה: ביטול | החלף ── */}
+            <View style={styles.apptCardFooter}>
+              {/* ביטול – ראשון → ימין ב־RTL */}
+              <TouchableOpacity
+                style={[styles.apptFooterBtn, styles.apptCancelBtn]}
+                onPress={() => handleCancelAppointment(item)}
+                activeOpacity={0.78}
+              >
+                <Ionicons name="close" size={14} color="#FF3B30" />
+                <Text style={styles.apptCancelBtnText}>{t('cancel', 'Cancel')}</Text>
+              </TouchableOpacity>
 
-          {/* החלף – שני → אמצע */}
-          {!isPast && user?.user_type !== 'admin' && clientSwapEnabled ? (
-            <TouchableOpacity
-              style={[
-                styles.apptFooterBtn,
-                styles.apptSwapBtn,
-                { borderColor: 'rgba(15,23,42,0.12)' },
-              ]}
-              onPress={() => {
-                setSwapAppointment(item);
-                setShowSwapModal(true);
-              }}
-              activeOpacity={0.78}
-            >
-              <Ionicons name="swap-horizontal" size={14} color="#3C3C43" />
-              <Text style={styles.apptSwapBtnText}>{t('swap.swap', 'Swap')}</Text>
-            </TouchableOpacity>
-          ) : null}
-
-          {/* שעה – אחרון → שמאל ב־RTL */}
-          <View
-            style={[
-              styles.apptFooterBtn,
-              styles.apptTimeBtn,
-              {
-                backgroundColor: colors.primary + '0D',
-                borderColor: colors.primary + '18',
-              },
-            ]}
-          >
-            <Text style={[styles.apptTimeBtnText, { color: colors.primary }]}>
-              {formatTime(item.slot_time)}
-            </Text>
-            <Ionicons name="time-outline" size={15} color={colors.primary} />
-          </View>
-        </View>
+              {/* החלף – שני → שמאל ב־RTL */}
+              {user?.user_type !== 'admin' && clientSwapEnabled ? (
+                <TouchableOpacity
+                  style={[
+                    styles.apptFooterBtn,
+                  styles.apptSwapBtn,
+                  ]}
+                  onPress={() => {
+                    setSwapAppointment(item);
+                    setShowSwapModal(true);
+                  }}
+                  activeOpacity={0.78}
+                >
+                  <Ionicons name="swap-horizontal" size={14} color="#3C3C43" />
+                  <Text style={styles.apptSwapBtnText}>{t('swap.swap', 'Swap')}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </>
+        )}
       </View>
     );
   }, [formatTime, formatCompactDate, activeTab, handleCancelAppointment, businessAddress, colors.primary, clientSwapEnabled, user?.user_type, t, getBarberName]);
@@ -1697,7 +1682,7 @@ const styles = StyleSheet.create<any>({
     flex: 1,
     height: 46,
     borderRadius: 999,
-    borderWidth: 1,
+    borderWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1705,7 +1690,6 @@ const styles = StyleSheet.create<any>({
   },
   apptCancelBtn: {
     backgroundColor: 'rgba(255,59,48,0.09)',
-    borderColor: 'rgba(255,59,48,0.15)',
   },
   apptCancelBtnText: {
     fontSize: 14,

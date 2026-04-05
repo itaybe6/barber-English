@@ -32,6 +32,10 @@ const IOS_TODAY_RED = '#FF3B30';
 const AVAIL_DAY_FILL = '#D8F3E1';
 const AVAIL_DAY_TEXT = '#0D4F2C';
 const CONSTRAINT_PILL_BG = '#FEF3C7';
+const STATUS_DOT_GREEN = '#22c55e';
+const STATUS_DOT_RED = '#ef4444';
+const STATUS_DOT_GRAY = '#C7C7CC';
+const STATUS_DOT_SIZE = 5;
 const CONSTRAINT_PILL_FG = '#B45309';
 const CONSTRAINT_PILL_BORDER = 'rgba(180,83,9,0.35)';
 
@@ -196,19 +200,23 @@ const DayCell = React.memo(function DayCell({
     displayMode === 'availability' && inRange && hasAvail && !isSel && !isToday;
   const showAvailGreen = showBookingGreen;
 
-  const circleColor = isToday
-    ? IOS_TODAY_RED
-    : isSel
-    ? primaryColor
-    : showAvailGreen
-    ? AVAIL_DAY_FILL
-    : 'transparent';
+  const circleColor = isSel ? primaryColor : 'transparent';
 
   const textColor =
-    isToday || isSel ? '#FFFFFF' : showAvailGreen ? AVAIL_DAY_TEXT : inRange ? '#1C1C1E' : '#C7C7CC';
+    isSel ? '#FFFFFF' : inRange ? '#1C1C1E' : '#C7C7CC';
 
   const isPast = !isToday && date < TODAY;
-  const textOpacity = isPast && inRange && !isSel && !isToday && !showAvailGreen ? 0.4 : 1;
+  const textOpacity = isPast && inRange && !isSel && !isToday ? 0.4 : 1;
+
+  // Status dot shown below day number (booking mode only, not on selected)
+  // availCount < 0 means closed (no business hours), 0 means fully booked, >0 means available
+  const isClosed = availCount < 0;
+  const showStatusDot = displayMode === 'availability' && inRange && !isSel;
+  const statusDotColor = hasAvail
+    ? STATUS_DOT_GREEN
+    : isClosed
+      ? STATUS_DOT_GRAY
+      : STATUS_DOT_RED;
 
   const onCircle = isToday || isSel;
 
@@ -227,15 +235,18 @@ const DayCell = React.memo(function DayCell({
     displayMode === 'count' && hasConstraint && constraintPillLabel ? constraintPillLabel : null;
   const hasHolidayLabel = !!holidayLabel;
 
+  // Closed days can't be pressed; fully-booked days CAN be pressed (to trigger waitlist)
+  const isDisabled = !inRange || isClosed;
+
   return (
     <Pressable
-      disabled={!inRange}
+      disabled={isDisabled}
       onPress={() => onDayPress(date)}
       style={({ pressed }) => ({
         width: cellSize,
         alignItems: 'center',
         paddingVertical: 3,
-        opacity: pressed && inRange ? 0.6 : 1,
+        opacity: pressed && !isDisabled ? 0.6 : 1,
       })}
       accessibilityRole="button"
       accessibilityLabel={
@@ -243,7 +254,7 @@ const DayCell = React.memo(function DayCell({
           ? `${date.getDate()}, ${[holidayLabel, badgeLabel, constraintLabel].filter(Boolean).join(', ')}`
           : `${date.getDate()}`
       }
-      accessibilityState={{ selected: isSel, disabled: !inRange }}
+      accessibilityState={{ selected: isSel, disabled: isDisabled }}
     >
       <View style={{ alignItems: 'center', justifyContent: 'center' }}>
         <View
@@ -254,29 +265,18 @@ const DayCell = React.memo(function DayCell({
             backgroundColor: circleColor,
             alignItems: 'center',
             justifyContent: 'center',
-            ...(showBookingGreen
-              ? {
-                  borderWidth: StyleSheet.hairlineWidth * 2,
-                  borderColor: 'rgba(52,199,89,0.4)',
-                }
-              : {}),
             ...(isToday && !isSel
-              ? Platform.select({
-                  ios: {
-                    shadowColor: IOS_TODAY_RED,
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.35,
-                    shadowRadius: 4,
-                  },
-                  android: { elevation: 3 },
-                })
+              ? {
+                  borderWidth: 2,
+                  borderColor: primaryColor,
+                }
               : {}),
           }}
         >
           <Text
             style={{
               fontSize: circleSize >= 34 ? 16 : 14,
-              fontWeight: isToday || isSel ? '700' : showAvailGreen ? '600' : '400',
+              fontWeight: isSel ? '700' : isToday ? '600' : '400',
               color: textColor,
               opacity: textOpacity,
               includeFontPadding: false,
@@ -333,9 +333,7 @@ const DayCell = React.memo(function DayCell({
               ? (badgeLabel && constraintLabel ? 48 : 26)
               : hasHolidayLabel
                 ? 16
-              : showHebrewDates
-                ? 10
-                : 8,
+              : STATUS_DOT_SIZE + 4,
           justifyContent: 'center',
           alignItems: 'center',
           marginTop: hasHolidayLabel ? 1 : 2,
@@ -358,13 +356,24 @@ const DayCell = React.memo(function DayCell({
             maxWidth={cellSize + 4}
           />
         ) : null}
-        {inRange && hasAvail && displayMode === 'availability' && onCircle ? (
+        {showStatusDot && displayMode === 'availability' ? (
           <View
             style={{
-              width: 5,
-              height: 5,
-              borderRadius: 2.5,
-              backgroundColor: 'rgba(255,255,255,0.9)',
+              width: STATUS_DOT_SIZE,
+              height: STATUS_DOT_SIZE,
+              borderRadius: STATUS_DOT_SIZE / 2,
+              backgroundColor: statusDotColor,
+            }}
+          />
+        ) : null}
+        {/* White dot under selected day (has filled circle) when available */}
+        {isSel && hasAvail && displayMode === 'availability' ? (
+          <View
+            style={{
+              width: STATUS_DOT_SIZE,
+              height: STATUS_DOT_SIZE,
+              borderRadius: STATUS_DOT_SIZE / 2,
+              backgroundColor: 'rgba(255,255,255,0.85)',
             }}
           />
         ) : null}
@@ -439,7 +448,7 @@ export function Days({
 
               const inRange = date >= rangeStartDay && date <= rangeEndDay;
               const dsIso = toIso(date);
-              const availCount = dayAvailability[dsIso] ?? 0;
+              const availCount = dayAvailability[dsIso] ?? -1; // -1 = not loaded yet, treat as closed
               const hasAvail = availCount > 0;
               const hasConstraint = !!(constraintDates && constraintDates.has(dsIso));
               const holidayLabel = holidayLabels?.[dsIso] ?? null;

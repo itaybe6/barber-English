@@ -5,8 +5,8 @@ import {
   Pressable,
   StyleSheet,
   FlatList,
-  useWindowDimensions,
   I18nManager,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,9 +25,6 @@ export interface TimeSelectionProps {
   onSelectTime: (time: string) => void;
 }
 
-const NUM_COLUMNS = 3;
-const ROW_GAP = 10;
-
 export default function TimeSelection({
   visible,
   topOffset,
@@ -39,12 +36,7 @@ export default function TimeSelection({
   onSelectTime,
 }: TimeSelectionProps) {
   const insets = useSafeAreaInsets();
-  const { width: windowWidth } = useWindowDimensions();
   const barBottom = getBookingStepBarTopFromBottom(insets.bottom);
-
-  const hPad = 20;
-  const slotWidth =
-    (windowWidth - hPad * 2 - ROW_GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS;
 
   if (!visible) return null;
 
@@ -52,7 +44,7 @@ export default function TimeSelection({
     <View style={localStyles.header}>
       <Text style={localStyles.title}>{t('booking.selectTimeTitle', 'בחר שעה')}</Text>
       <Text style={localStyles.subtitle}>
-        {t('booking.selectTimeSubtitle', 'בחר/י משבצת זמן פנויה')}
+        {t('booking.selectTimeSubtitle', 'סמן את השעה הרצויה למטה')}
       </Text>
     </View>
   );
@@ -63,32 +55,20 @@ export default function TimeSelection({
       <Pressable
         onPress={() => onSelectTime(item)}
         style={({ pressed }) => [
-          localStyles.slotCard,
-          { width: slotWidth },
-          selected && [localStyles.slotCardSelected, { borderColor: primaryColor }],
-          pressed && localStyles.slotPressed,
+          localStyles.slotRow,
+          selected && { borderColor: 'transparent', backgroundColor: 'rgba(255,255,255,0.96)' },
+          pressed && { opacity: 0.82, transform: [{ scale: 0.99 }] },
         ]}
         accessibilityRole="button"
         accessibilityState={{ selected }}
         accessibilityLabel={item}
       >
-        {selected ? (
-          <Ionicons
-            name="checkmark-circle"
-            size={18}
-            color={primaryColor}
-            style={[
-              localStyles.slotCheck,
-              I18nManager.isRTL ? { right: 6, left: undefined } : { left: 6, right: undefined },
-            ]}
-          />
-        ) : null}
         <Ionicons
-          name="time-outline"
-          size={20}
-          color={selected ? primaryColor : '#6B7280'}
+          name={selected ? 'checkmark-circle' : 'time-outline'}
+          size={18}
+          color={selected ? primaryColor : '#9CA3AF'}
         />
-        <Text style={[localStyles.slotTime, selected && { color: primaryColor }]}>{item}</Text>
+        <Text style={localStyles.slotTime}>{item}</Text>
       </Pressable>
     );
   };
@@ -99,38 +79,32 @@ export default function TimeSelection({
       style={[StyleSheet.absoluteFillObject, { bottom: barBottom, zIndex: 2 }]}
     >
       <View style={[localStyles.fillColumn, { paddingTop: Math.max(0, topOffset + 12) }]}>
+        {/* Fixed header — does not scroll */}
+        {header}
+
         {availableTimeSlots && availableTimeSlots.length > 0 ? (
           <FlatList
             data={availableTimeSlots}
             keyExtractor={(item) => `t-${item}`}
-            numColumns={NUM_COLUMNS}
             renderItem={renderItem}
-            ListHeaderComponent={header}
-            showsVerticalScrollIndicator
+            showsVerticalScrollIndicator={false}
             removeClippedSubviews
-            columnWrapperStyle={localStyles.columnWrapper}
             contentContainerStyle={[
               localStyles.listContent,
-              {
-                paddingHorizontal: hPad,
-                paddingBottom: Math.max(listBottomPadding, 24),
-              },
+              { paddingBottom: Math.max(listBottomPadding, 24) },
             ]}
-            initialNumToRender={24}
-            maxToRenderPerBatch={24}
+            initialNumToRender={20}
+            maxToRenderPerBatch={20}
             windowSize={7}
           />
         ) : (
-          <View style={localStyles.emptyWrap}>
-            {header}
-            <View style={localStyles.emptyBody}>
-              <Text style={localStyles.emptyTitle}>
-                {t('booking.noSlots', 'אין שעות פנויות לתאריך שנבחר')}
-              </Text>
-              <Text style={localStyles.emptySub}>
-                {t('booking.chooseAnotherDay', 'בחר/י יום אחר או חזור/י אחורה')}
-              </Text>
-            </View>
+          <View style={localStyles.emptyBody}>
+            <Text style={localStyles.emptyTitle}>
+              {t('booking.noSlots', 'אין שעות פנויות לתאריך שנבחר')}
+            </Text>
+            <Text style={localStyles.emptySub}>
+              {t('booking.chooseAnotherDay', 'בחר/י יום אחר או חזור/י אחורה')}
+            </Text>
           </View>
         )}
       </View>
@@ -145,7 +119,7 @@ const localStyles = StyleSheet.create({
   header: {
     gap: 8,
     alignItems: 'center',
-    marginBottom: 28,
+    marginBottom: 24,
     paddingHorizontal: 8,
   },
   title: {
@@ -163,54 +137,37 @@ const localStyles = StyleSheet.create({
   },
   listContent: {
     flexGrow: 1,
+    paddingHorizontal: 20,
     paddingTop: 4,
-  },
-  columnWrapper: {
-    gap: ROW_GAP,
-    marginBottom: ROW_GAP,
-    justifyContent: 'flex-start',
-  },
-  slotCard: {
+    gap: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 6,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+  },
+  slotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    borderRadius: 999,
     borderWidth: 1.5,
     borderColor: 'transparent',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-    position: 'relative',
-    overflow: 'visible',
-  },
-  slotCardSelected: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
-    shadowOpacity: 0.12,
-    elevation: 4,
-  },
-  slotPressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.98 }],
-  },
-  slotCheck: {
-    position: 'absolute',
-    top: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 22,
+    gap: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+      },
+      android: { elevation: 3 },
+    }),
   },
   slotTime: {
-    marginTop: 6,
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '700',
     color: '#111827',
     letterSpacing: -0.3,
-  },
-  emptyWrap: {
-    flex: 1,
-    paddingHorizontal: 20,
   },
   emptyBody: {
     flex: 1,

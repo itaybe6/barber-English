@@ -8,6 +8,7 @@ import { normalizeAppLanguage } from '@/lib/i18nLocale';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 
 import React from 'react';
 import { useAuthStore } from '@/stores/authStore';
@@ -220,9 +221,10 @@ export default function RootLayout() {
       <BusinessColorsProvider>
         <ThemeProvider>
           <GestureHandlerRootView style={{ flex: 1 }} onLayout={onLayoutRootView}>
-            <StatusBar style="dark" />
-            {/* Removed boot debug overlay */}
-            {content}
+            <BottomSheetModalProvider>
+              <StatusBar style="dark" />
+              {content}
+            </BottomSheetModalProvider>
           </GestureHandlerRootView>
         </ThemeProvider>
       </BusinessColorsProvider>

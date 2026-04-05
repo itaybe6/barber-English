@@ -55,34 +55,40 @@ interface TimePeriodSelectorProps {
   selectedPeriod: TimePeriod | null;
   onSelectPeriod: (period: TimePeriod) => void;
   disabled?: boolean;
+  hideHeader?: boolean;
 }
 
 export default function TimePeriodSelector({
   selectedPeriod,
   onSelectPeriod,
   disabled = false,
+  hideHeader = false,
 }: TimePeriodSelectorProps) {
   const { t } = useTranslation();
   const { colors } = useBusinessColors();
 
   return (
     <View style={styles.outer}>
-      <View style={[styles.sectionPill, { backgroundColor: `${colors.primary}12` }]}>
-        <Ionicons name="sparkles" size={14} color={colors.primary} />
-        <Text style={[styles.sectionPillText, { color: colors.primary }]}>
-          {t('waitlist.preferredWindow', 'Preferred time')}
-        </Text>
-      </View>
+      {!hideHeader && (
+        <>
+          <View style={[styles.sectionPill, { backgroundColor: `${colors.primary}12` }]}>
+            <Ionicons name="sparkles" size={14} color={colors.primary} />
+            <Text style={[styles.sectionPillText, { color: colors.primary }]}>
+              {t('waitlist.preferredWindow', 'Preferred time')}
+            </Text>
+          </View>
 
-      <Text style={[styles.title, { color: colors.text }]}>
-        {t('waitlist.selectPeriod', 'Please select a preferred time period')}
-      </Text>
-      <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-        {t(
-          'waitlist.selectPeriodSubtitle',
-          "We'll notify you when a slot opens in your preferred time period"
-        )}
-      </Text>
+          <Text style={[styles.title, { color: colors.text }]}>
+            {t('waitlist.selectPeriod', 'Please select a preferred time period')}
+          </Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            {t(
+              'waitlist.selectPeriodSubtitle',
+              "We'll notify you when a slot opens in your preferred time period"
+            )}
+          </Text>
+        </>
+      )}
 
       <View style={styles.optionsStack}>
         {timePeriodOptions.map((option) => {

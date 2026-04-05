@@ -1,28 +1,19 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   Pressable,
-  Image,
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Clock3 } from 'lucide-react-native';
 import Animated, { SharedValue } from 'react-native-reanimated';
 
 import type { Service } from '@/lib/supabase';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 
 const THUMB_SIZE = 56;
-
-function serviceImageUri(service: Service): string {
-  return (
-    (service as any)?.image_url ||
-    (service as any)?.cover_url ||
-    (service as any)?.image ||
-    ''
-  );
-}
 
 type Props = {
   visible: boolean;
@@ -97,7 +88,6 @@ export default function ServiceSelection({
                 service={service}
                 isSelected={isSvcSelected(service)}
                 primaryColor={colors.primary}
-                showServiceImages={showServiceImages}
                 onPress={() => onSelectService(service, index)}
                 t={t}
               />
@@ -120,7 +110,6 @@ type RowProps = {
   service: Service;
   isSelected: boolean;
   primaryColor: string;
-  showServiceImages: boolean;
   onPress: () => void;
   t: any;
 };
@@ -129,13 +118,9 @@ function ServiceRow({
   service,
   isSelected,
   primaryColor,
-  showServiceImages,
   onPress,
   t,
 }: RowProps) {
-  const [imgError, setImgError] = useState(false);
-  const uri = serviceImageUri(service);
-  const showImage = showServiceImages && !!uri && !imgError;
   const duration = (service as any)?.duration_minutes ?? 60;
   const price = (service as any)?.price ?? 0;
   const name = String((service as any)?.name || '');
@@ -152,6 +137,7 @@ function ServiceRow({
       }
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
     >
+      {/* Price circle */}
       <View style={styles.priceRing}>
         <View style={styles.priceInner}>
           <Text
@@ -165,6 +151,7 @@ function ServiceRow({
         </View>
       </View>
 
+      {/* Info pill */}
       <View
         style={[
           styles.infoPill,
@@ -178,33 +165,12 @@ function ServiceRow({
           <Text style={styles.serviceName} numberOfLines={2}>
             {name}
           </Text>
-          <Text style={styles.durationLine} numberOfLines={1}>
-            {duration} {t('booking.min', 'min')}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.thumbRing}>
-        <View style={styles.thumbInner}>
-          {showImage ? (
-            <Image
-              source={{ uri }}
-              style={styles.thumbImage}
-              resizeMode="cover"
-              onError={() => setImgError(true)}
-            />
-          ) : (
-            <View
-              style={[
-                styles.thumbPlaceholder,
-                {
-                  backgroundColor: isSelected ? '#E8ECF2' : `${primaryColor}20`,
-                },
-              ]}
-            >
-              <Ionicons name="cut" size={26} color={primaryColor} />
-            </View>
-          )}
+          <View style={styles.durationBadge}>
+            <Clock3 size={12} color={primaryColor} strokeWidth={2.2} />
+            <Text style={[styles.durationText, { color: primaryColor }]} numberOfLines={1}>
+              {duration} {t('booking.min', "דק'")}
+            </Text>
+          </View>
         </View>
       </View>
     </Pressable>
@@ -253,35 +219,6 @@ const styles = StyleSheet.create({
     opacity: 0.88,
     transform: [{ scale: 0.97 }],
   },
-  thumbRing: {
-    width: THUMB_SIZE + 6,
-    height: THUMB_SIZE + 6,
-    borderRadius: (THUMB_SIZE + 6) / 2,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.14,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  thumbInner: {
-    width: THUMB_SIZE,
-    height: THUMB_SIZE,
-    borderRadius: THUMB_SIZE / 2,
-    overflow: 'hidden',
-    backgroundColor: '#EEF2F7',
-  },
-  thumbImage: {
-    width: '100%',
-    height: '100%',
-  },
-  thumbPlaceholder: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   priceRing: {
     width: THUMB_SIZE + 6,
     height: THUMB_SIZE + 6,
@@ -313,12 +250,11 @@ const styles = StyleSheet.create({
   infoPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    maxWidth: 280,
+    alignSelf: 'center',
     borderRadius: 999,
-    paddingVertical: 12,
-    paddingHorizontal: 18,
+    paddingVertical: 13,
+    paddingHorizontal: 20,
     gap: 8,
-    position: 'relative',
   },
   infoPillIdle: {
     backgroundColor: 'rgba(255,255,255,0.92)',
@@ -342,6 +278,7 @@ const styles = StyleSheet.create({
   infoTextBlock: {
     flexShrink: 1,
     minWidth: 0,
+    gap: 5,
   },
   serviceName: {
     fontSize: 16,
@@ -350,14 +287,18 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
     textAlign: 'right',
   },
-  durationLine: {
-    marginTop: 4,
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6B7280',
-    textAlign: 'right',
+  durationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-end',
+  },
+  durationText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: -0.1,
   },
   checkIcon: {
-    marginRight: 6,
+    marginRight: 2,
   },
 });

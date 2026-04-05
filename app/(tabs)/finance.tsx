@@ -8,6 +8,7 @@ import {
   Platform,
   Alert,
   TextInput,
+  type TextInputProps,
   Modal,
   ActivityIndicator,
   Image,
@@ -84,6 +85,17 @@ const FINANCE_HEADER_HIDE = { duration: 260, easing: Easing.in(Easing.cubic) } a
 const FINANCE_HEADER_SHOW = { duration: 300, easing: Easing.out(Easing.cubic) } as const;
 const FINANCE_SCROLL_DOWN_THRESHOLD = 6;
 const FINANCE_SCROLL_UP_THRESHOLD = 6;
+
+function RtlText({
+  style,
+  ...props
+}: React.ComponentProps<typeof Text>) {
+  return <Text {...props} style={[styles.rtlText, style]} />;
+}
+
+function RtlTextInput({ style, ...props }: TextInputProps) {
+  return <TextInput {...props} style={[styles.rtlText, style]} />;
+}
 
 /** Same gradient / lava base as `app/login.tsx` */
 function darkenHex(hex: string, ratio: number): string {
@@ -490,7 +502,7 @@ export default function FinanceScreen() {
         <View style={{ paddingTop: insets.top, backgroundColor: theme.surface }} />
         <View style={[styles.loadingWrap, { flex: 1 }]}>
           <ActivityIndicator size="large" color={primaryColor} />
-          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>טוען נתונים פיננסיים...</Text>
+          <RtlText style={[styles.loadingText, { color: theme.textSecondary }]}>טוען נתונים פיננסיים...</RtlText>
         </View>
       </View>
     );
@@ -516,8 +528,8 @@ export default function FinanceScreen() {
           ]}
         >
           <View style={styles.topBarTitleBlock}>
-            <Text style={[styles.topBarTitle, { color: theme.text }]}>מעקב פיננסי</Text>
-            <Text style={[styles.topBarSubtitle, { color: theme.textSecondary }]}>הכנסות והוצאות</Text>
+            <RtlText style={[styles.topBarTitle, { color: theme.text }]}>מעקב פיננסי</RtlText>
+            <RtlText style={[styles.topBarSubtitle, { color: theme.textSecondary }]}>הכנסות והוצאות</RtlText>
           </View>
         </View>
       </Animated.View>
@@ -574,8 +586,8 @@ export default function FinanceScreen() {
                     <ChevronRight size={22} color="rgba(255,255,255,0.85)" />
                   </TouchableOpacity>
                   <View style={styles.monthCenter}>
-                    <Text style={styles.monthNameHe}>{MONTH_NAMES_HE[month - 1]}</Text>
-                    <Text style={styles.monthYearHe}>{year}</Text>
+                    <RtlText style={styles.monthNameHe}>{MONTH_NAMES_HE[month - 1]}</RtlText>
+                    <RtlText style={styles.monthYearHe}>{year}</RtlText>
                   </View>
                   <TouchableOpacity
                     onPress={goToNextMonth}
@@ -590,10 +602,10 @@ export default function FinanceScreen() {
                 </View>
 
                 {/* Net Profit */}
-                <Text style={styles.heroNetLabel}>רווח נקי</Text>
-                <Text style={[styles.heroNetAmount, { color: netProfit >= 0 ? '#A7F3D0' : '#FCA5A5' }]}>
+                <RtlText style={styles.heroNetLabel}>רווח נקי</RtlText>
+                <RtlText style={[styles.heroNetAmount, { color: netProfit >= 0 ? '#A7F3D0' : '#FCA5A5' }]}>
                   {netProfit >= 0 ? '+' : ''}{formatCurrency(netProfit)}
-                </Text>
+                </RtlText>
 
                 {/* Income / Expenses mini cards (bento strip) */}
                 <View style={styles.heroMiniRow}>
@@ -601,24 +613,24 @@ export default function FinanceScreen() {
                     <View style={[styles.heroMiniIcon, { backgroundColor: 'rgba(220,252,231,0.95)' }]}>
                       <ArrowUpRight size={14} color={theme.success} />
                     </View>
-                    <Text style={styles.heroMiniLabel}>הכנסות</Text>
-                    <Text style={styles.heroMiniValue}>{formatCurrency(totalIncome)}</Text>
+                    <RtlText style={styles.heroMiniLabel}>הכנסות</RtlText>
+                    <RtlText style={styles.heroMiniValue}>{formatCurrency(totalIncome)}</RtlText>
                   </View>
                   <View style={styles.heroMiniDivider} />
                   <View style={styles.heroMiniCard}>
                     <View style={[styles.heroMiniIcon, { backgroundColor: 'rgba(254,226,226,0.95)' }]}>
                       <ArrowDownRight size={14} color={theme.error} />
                     </View>
-                    <Text style={styles.heroMiniLabel}>הוצאות</Text>
-                    <Text style={styles.heroMiniValue}>{formatCurrency(totalExpenses)}</Text>
+                    <RtlText style={styles.heroMiniLabel}>הוצאות</RtlText>
+                    <RtlText style={styles.heroMiniValue}>{formatCurrency(totalExpenses)}</RtlText>
                   </View>
                 </View>
 
                 {expenseToIncomePct !== null ? (
                   <View style={styles.heroRatioBlock} accessibilityLabel={`הוצאות מהוות ${expenseToIncomePct} אחוז מההכנסות`}>
                     <View style={styles.heroRatioHead}>
-                      <Text style={styles.heroRatioCaption}>הוצאות ביחס להכנסות</Text>
-                      <Text style={styles.heroRatioPct}>{expenseToIncomePct}%</Text>
+                      <RtlText style={styles.heroRatioCaption}>הוצאות ביחס להכנסות</RtlText>
+                      <RtlText style={styles.heroRatioPct}>{expenseToIncomePct}%</RtlText>
                     </View>
                     <View style={styles.heroRatioTrack}>
                       <View style={[styles.heroRatioFill, { width: `${expenseToIncomePct}%` }]} />
@@ -634,7 +646,7 @@ export default function FinanceScreen() {
                   accessibilityRole="progressbar"
                 >
                   <ActivityIndicator size="large" color="#FFFFFF" />
-                  <Text style={styles.heroLoadingText}>טוען…</Text>
+                  <RtlText style={styles.heroLoadingText}>טוען…</RtlText>
                 </View>
               ) : null}
             </View>
@@ -655,17 +667,17 @@ export default function FinanceScreen() {
                 <Receipt size={22} color={greenInvoiceAccent} />
               </View>
               <View style={styles.greenInvoiceTextBlock}>
-                <Text style={[styles.greenInvoiceTitle, { color: theme.text }]}>
+                  <RtlText style={[styles.greenInvoiceTitle, { color: theme.text }]}>
                   {t('finance.greenInvoice.modalTitle')}
-                </Text>
-                <Text style={[styles.greenInvoiceStatus, { color: giConnected ? greenInvoiceAccent : theme.textSecondary }]}>
+                  </RtlText>
+                  <RtlText style={[styles.greenInvoiceStatus, { color: giConnected ? greenInvoiceAccent : theme.textSecondary }]}>
                   {giConnected ? t('finance.greenInvoice.connected') : t('finance.greenInvoice.notConnected')}
-                </Text>
+                  </RtlText>
               </View>
             </View>
-            <Text style={[styles.greenInvoiceHint, { color: theme.textSecondary }]}>
+              <RtlText style={[styles.greenInvoiceHint, { color: theme.textSecondary }]}>
               {t('finance.greenInvoice.cardSummary')}
-            </Text>
+              </RtlText>
             <TouchableOpacity
               style={[styles.greenInvoiceBtn, { backgroundColor: greenInvoiceAccent }]}
               onPress={openGreenInvoiceModal}
@@ -673,19 +685,19 @@ export default function FinanceScreen() {
               accessibilityRole="button"
               accessibilityLabel={t('finance.greenInvoice.connectButton')}
             >
-              <Text style={styles.greenInvoiceBtnText}>
+                <RtlText style={styles.greenInvoiceBtnText}>
                 {giConnected ? t('finance.greenInvoice.modalTitle') : t('finance.greenInvoice.connectButton')}
-              </Text>
+                </RtlText>
             </TouchableOpacity>
 
             <View style={[styles.giDevModeRow, { borderTopColor: `${theme.border}40` }]}>
               <View style={styles.giDevModeTextBlock}>
-                <Text style={[styles.giDevModeLabel, { color: theme.text }]}>
+                <RtlText style={[styles.giDevModeLabel, { color: theme.text }]}>
                   {t('finance.greenInvoice.devModeToggle')}
-                </Text>
-                <Text style={[styles.giDevModeHint, { color: theme.textSecondary }]}>
+                </RtlText>
+                <RtlText style={[styles.giDevModeHint, { color: theme.textSecondary }]}>
                   {t('finance.greenInvoice.devModeHint')}
-                </Text>
+                </RtlText>
               </View>
               <Switch
                 value={giUseSandboxApi}
@@ -711,14 +723,14 @@ export default function FinanceScreen() {
               {giReceiptLoading ? (
                 <View style={styles.giReceiptLoading}>
                   <ActivityIndicator size="small" color={greenInvoiceAccent} />
-                  <Text style={[styles.giReceiptLoadingText, { color: theme.textSecondary }]}>
+                  <RtlText style={[styles.giReceiptLoadingText, { color: theme.textSecondary }]}>
                     {t('finance.greenInvoice.receipt.loadingAppointments')}
-                  </Text>
+                  </RtlText>
                 </View>
               ) : giReceiptRows.length === 0 ? (
-                <Text style={[styles.giReceiptEmpty, { color: theme.textSecondary }]}>
+                <RtlText style={[styles.giReceiptEmpty, { color: theme.textSecondary }]}>
                   {t('finance.greenInvoice.receipt.noCompletedInMonth')}
-                </Text>
+                </RtlText>
               ) : (
                 <>
                   <View
@@ -731,7 +743,7 @@ export default function FinanceScreen() {
                     ]}
                   >
                     <Search size={18} color={theme.textSecondary} />
-                    <TextInput
+                    <RtlTextInput
                       style={[styles.giReceiptSearchInput, { color: theme.text }]}
                       placeholder={t('finance.greenInvoice.receipt.searchPlaceholder')}
                       placeholderTextColor={theme.textSecondary}
@@ -744,9 +756,9 @@ export default function FinanceScreen() {
                     />
                   </View>
                   {giReceiptFilteredRows.length === 0 ? (
-                    <Text style={[styles.giReceiptEmpty, { color: theme.textSecondary }]}>
+                    <RtlText style={[styles.giReceiptEmpty, { color: theme.textSecondary }]}>
                       {t('finance.greenInvoice.receipt.noSearchResults')}
-                    </Text>
+                    </RtlText>
                   ) : (
                     giReceiptFilteredRows.map((row) => {
                     const selected = selectedGiAppointmentId === row.id;
@@ -769,15 +781,15 @@ export default function FinanceScreen() {
                         accessibilityState={{ selected }}
                         accessibilityLabel={`${client}, ${row.service_name}, ${row.slot_date}`}
                       >
-                        <Text style={[styles.giReceiptRowMain, { color: theme.text }]} numberOfLines={1}>
+                        <RtlText style={[styles.giReceiptRowMain, { color: theme.text }]} numberOfLines={1}>
                           {client} · {row.service_name}
-                        </Text>
-                        <Text style={[styles.giReceiptRowMeta, { color: theme.textSecondary }]} numberOfLines={1}>
+                        </RtlText>
+                        <RtlText style={[styles.giReceiptRowMeta, { color: theme.textSecondary }]} numberOfLines={1}>
                           {row.slot_date} · {row.slot_time}
-                        </Text>
-                        <Text style={[styles.giReceiptRowPrice, { color: theme.success }]}>
+                        </RtlText>
+                        <RtlText style={[styles.giReceiptRowPrice, { color: theme.success }]}>
                           {formatCurrency(row.price)}
-                        </Text>
+                        </RtlText>
                       </TouchableOpacity>
                     );
                   })
@@ -799,9 +811,9 @@ export default function FinanceScreen() {
                     {issuingGiReceipt ? (
                       <ActivityIndicator size="small" color="#fff" />
                     ) : (
-                      <Text style={styles.giReceiptIssueBtnText}>
+                      <RtlText style={styles.giReceiptIssueBtnText}>
                         {t('finance.greenInvoice.receipt.issueButton')}
-                      </Text>
+                      </RtlText>
                     )}
                   </TouchableOpacity>
                 </>
@@ -814,8 +826,8 @@ export default function FinanceScreen() {
             {incomeBreakdown.length === 0 ? (
               <View style={styles.emptyState}>
                 <TrendingUp size={36} color="#E5E7EB" />
-                <Text style={styles.emptyTitle}>אין הכנסות החודש</Text>
-                <Text style={styles.emptySubtitle}>תורים שהושלמו יופיעו כאן</Text>
+                <RtlText style={styles.emptyTitle}>אין הכנסות החודש</RtlText>
+                <RtlText style={styles.emptySubtitle}>תורים שהושלמו יופיעו כאן</RtlText>
               </View>
             ) : (
               <>
@@ -826,31 +838,31 @@ export default function FinanceScreen() {
                   >
                     <View style={styles.incomeLeftBlock}>
                       <View style={[styles.incomeBadge, { backgroundColor: `${primaryColor}18` }]}>
-                        <Text style={[styles.incomeBadgeText, { color: primaryColor }]}>
+                        <RtlText style={[styles.incomeBadgeText, { color: primaryColor }]}>
                           {item.count}
-                        </Text>
+                        </RtlText>
                       </View>
-                      <Text style={styles.incomeServiceName} numberOfLines={1}>
+                      <RtlText style={styles.incomeServiceName} numberOfLines={1}>
                         {item.service_name}
-                      </Text>
+                      </RtlText>
                     </View>
                     <View style={styles.incomeTotalBlock}>
-                      <Text style={[styles.incomeServiceTotal, { color: theme.success }]}>
+                      <RtlText style={[styles.incomeServiceTotal, { color: theme.success }]}>
                         {formatCurrency(item.total)}
-                      </Text>
-                      <Text style={styles.incomeServiceSub}>
+                      </RtlText>
+                      <RtlText style={styles.incomeServiceSub}>
                         {item.count} תורים × {formatCurrency(item.price)}
-                      </Text>
+                      </RtlText>
                     </View>
                   </View>
                 ))}
                 <View style={styles.incomeTotalRow}>
-                  <Text style={[styles.totalLabel, { color: theme.text }]}>סך הכל הכנסות</Text>
-                  <Text style={[styles.totalAmount, { color: theme.success }]}>
+                  <RtlText style={[styles.totalLabel, { color: theme.text }]}>סך הכל הכנסות</RtlText>
+                  <RtlText style={[styles.totalAmount, { color: theme.success }]}>
                     {formatCurrency(totalIncome)}
-                  </Text>
+                  </RtlText>
                 </View>
-                <Text style={styles.priceNote}>* ההכנסות מחושבות לפי המחיר הנוכחי של השירות</Text>
+                <RtlText style={styles.priceNote}>* ההכנסות מחושבות לפי המחיר הנוכחי של השירות</RtlText>
               </>
             )}
           </View>
@@ -865,7 +877,7 @@ export default function FinanceScreen() {
               accessibilityLabel="הוסף הוצאה חדשה"
             >
               <Plus size={16} color="#fff" />
-              <Text style={styles.addExpenseBtnText}>הוסף הוצאה</Text>
+              <RtlText style={styles.addExpenseBtnText}>הוסף הוצאה</RtlText>
             </TouchableOpacity>
           </View>
 
@@ -873,8 +885,8 @@ export default function FinanceScreen() {
             {expenses.length === 0 ? (
               <View style={styles.emptyState}>
                 <DollarSign size={36} color="#E5E7EB" />
-                <Text style={styles.emptyTitle}>אין הוצאות רשומות</Text>
-                <Text style={styles.emptySubtitle}>לחץ "הוסף הוצאה" להוספת רשומה חדשה</Text>
+                <RtlText style={styles.emptyTitle}>אין הוצאות רשומות</RtlText>
+                <RtlText style={styles.emptySubtitle}>לחץ "הוסף הוצאה" להוספת רשומה חדשה</RtlText>
               </View>
             ) : (
               <>
@@ -888,16 +900,16 @@ export default function FinanceScreen() {
                       {/* In RTL: text block on RIGHT, amount+delete on LEFT */}
                       <View style={styles.expenseTextBlock}>
                         <View style={styles.expenseTopRow}>
-                          <Text style={styles.expenseDescription}>
+                          <RtlText style={styles.expenseDescription}>
                             {expense.description || cat.label}
-                          </Text>
+                          </RtlText>
                           <View style={[styles.categoryPill, { backgroundColor: cat.bg }]}>
-                            <Text style={[styles.categoryPillText, { color: cat.color }]}>
+                            <RtlText style={[styles.categoryPillText, { color: cat.color }]}>
                               {cat.label}
-                            </Text>
+                            </RtlText>
                           </View>
                         </View>
-                        <Text style={styles.expenseDate}>{expense.expense_date}</Text>
+                        <RtlText style={styles.expenseDate}>{expense.expense_date}</RtlText>
                       </View>
                       {expense.receipt_url && (
                         <TouchableOpacity
@@ -909,9 +921,9 @@ export default function FinanceScreen() {
                         </TouchableOpacity>
                       )}
                       <View style={styles.expenseActions}>
-                        <Text style={[styles.expenseAmount, { color: theme.error }]}>
+                        <RtlText style={[styles.expenseAmount, { color: theme.error }]}>
                           -{formatCurrency(Number(expense.amount))}
-                        </Text>
+                        </RtlText>
                         <TouchableOpacity
                           onPress={() => handleDeleteExpense(expense)}
                           style={styles.deleteBtn}
@@ -927,10 +939,10 @@ export default function FinanceScreen() {
                 })}
                 <View style={styles.rowDivider} />
                 <View style={[styles.expenseRow, styles.totalRow]}>
-                  <Text style={[styles.totalLabel, { color: theme.text }]}>סך הכל הוצאות</Text>
-                  <Text style={[styles.totalAmount, { color: theme.error }]}>
+                  <RtlText style={[styles.totalLabel, { color: theme.text }]}>סך הכל הוצאות</RtlText>
+                  <RtlText style={[styles.totalAmount, { color: theme.error }]}>
                     {formatCurrency(totalExpenses)}
-                  </Text>
+                  </RtlText>
                 </View>
               </>
             )}
@@ -952,7 +964,7 @@ export default function FinanceScreen() {
 
             {/* Modal header — in RTL: title on RIGHT, close on LEFT */}
             <View style={styles.modalTopRow}>
-              <Text style={styles.modalTitle}>הוספת הוצאה</Text>
+              <RtlText style={styles.modalTitle}>הוספת הוצאה</RtlText>
               <TouchableOpacity onPress={() => { setShowAddExpense(false); setNewExpenseReceipt(null); }} style={styles.modalCloseBtn}>
                 <X size={22} color={theme.textSecondary} />
               </TouchableOpacity>
@@ -960,7 +972,7 @@ export default function FinanceScreen() {
 
             {/* Big amount field */}
             <View style={styles.amountBox}>
-              <Text style={styles.amountCurrency}>₪</Text>
+              <RtlText style={styles.amountCurrency}>₪</RtlText>
               <TextInput
                 style={styles.amountInput}
                 value={newExpenseAmount}
@@ -974,7 +986,7 @@ export default function FinanceScreen() {
             </View>
 
             {/* Description */}
-            <TextInput
+            <RtlTextInput
               style={styles.descInput}
               value={newExpenseDescription}
               onChangeText={setNewExpenseDescription}
@@ -985,7 +997,7 @@ export default function FinanceScreen() {
             />
 
             {/* Category grid */}
-            <Text style={styles.modalSectionLabel}>בחר קטגוריה</Text>
+            <RtlText style={styles.modalSectionLabel}>בחר קטגוריה</RtlText>
             <View style={styles.categoryGrid}>
               {CATEGORIES.map((cat) => {
                 const cfg = CATEGORY_CONFIG[cat];
@@ -1004,16 +1016,16 @@ export default function FinanceScreen() {
                       },
                     ]}
                   >
-                    <Text style={[styles.categoryGridText, { color: selected ? '#fff' : cfg.color }]}>
+                    <RtlText style={[styles.categoryGridText, { color: selected ? '#fff' : cfg.color }]}>
                       {cfg.label}
-                    </Text>
+                    </RtlText>
                   </TouchableOpacity>
                 );
               })}
             </View>
 
             {/* Receipt / proof */}
-            <Text style={styles.modalSectionLabel}>קבלה / אסמכתא (אופציונלי)</Text>
+            <RtlText style={styles.modalSectionLabel}>קבלה / אסמכתא (אופציונלי)</RtlText>
             {newExpenseReceipt ? (
               <View style={styles.receiptPreviewRow}>
                 <View style={styles.receiptThumbWrap}>
@@ -1026,7 +1038,7 @@ export default function FinanceScreen() {
                     <X size={16} color="#fff" />
                   </TouchableOpacity>
                 </View>
-                <Text style={styles.receiptAddedText}>תמונה נוספה</Text>
+                <RtlText style={styles.receiptAddedText}>תמונה נוספה</RtlText>
               </View>
             ) : (
               <TouchableOpacity
@@ -1035,7 +1047,7 @@ export default function FinanceScreen() {
                 activeOpacity={0.7}
               >
                 <FileImage size={22} color={primaryColor} />
-                <Text style={[styles.receiptAddBtnText, { color: primaryColor }]}>הוסף תמונת קבלה</Text>
+                <RtlText style={[styles.receiptAddBtnText, { color: primaryColor }]}>הוסף תמונת קבלה</RtlText>
               </TouchableOpacity>
             )}
 
@@ -1047,7 +1059,7 @@ export default function FinanceScreen() {
             >
               {savingExpense
                 ? <ActivityIndicator size="small" color="#fff" />
-                : <Text style={styles.modalAddBtnText}>הוסף הוצאה</Text>
+                : <RtlText style={styles.modalAddBtnText}>הוסף הוצאה</RtlText>
               }
             </TouchableOpacity>
           </View>
@@ -1094,6 +1106,10 @@ const styles = StyleSheet.create({
     flex: 1,
     direction: 'rtl',
     backgroundColor: '#F4F6FB',
+  },
+  rtlText: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   loadingWrap: {
     flex: 1,
@@ -1398,7 +1414,7 @@ const styles = StyleSheet.create({
     ...cardShadow,
   },
   giReceiptSearchWrap: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     borderRadius: 14,
     borderWidth: 1.5,
@@ -1469,13 +1485,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     direction: 'rtl',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'flex-end',
     marginHorizontal: 16,
     marginTop: 8,
     marginBottom: 10,
   },
   addExpenseBtn: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 16,
@@ -1526,7 +1542,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F0F2F7',
   },
   incomeRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 14,
@@ -1537,7 +1553,7 @@ const styles = StyleSheet.create({
   },
   incomeLeftBlock: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 10,
   },
@@ -1557,22 +1573,24 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: Colors.text,
-    textAlign: 'left',
+    textAlign: 'right',
   },
   incomeTotalBlock: {
-    alignItems: 'center',
+    alignItems: 'flex-end',
   },
   incomeServiceTotal: {
     fontSize: 19,
     fontWeight: '800',
+    textAlign: 'right',
   },
   incomeServiceSub: {
     fontSize: 11,
     color: Colors.subtext,
     marginTop: 2,
+    textAlign: 'right',
   },
   incomeTotalRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: 14,
@@ -1610,7 +1628,7 @@ const styles = StyleSheet.create({
 
   // ── Expense rows ──
   expenseRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     paddingVertical: 13,
   },
@@ -1618,10 +1636,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   expenseTopRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 8,
-    justifyContent: 'flex-start',
+    justifyContent: 'flex-end',
   },
   expenseDescription: {
     fontSize: 15,
@@ -1647,7 +1665,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   expenseReceiptBtn: {
-    marginLeft: 8,
+    marginRight: 8,
   },
   expenseReceiptThumb: {
     width: 40,
@@ -1656,10 +1674,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#F4F6FB',
   },
   expenseActions: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 8,
-    marginLeft: 12,
+    marginRight: 12,
   },
   expenseAmount: {
     fontSize: 15,
@@ -1699,7 +1717,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   modalTopRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 24,
@@ -1767,11 +1785,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   categoryGrid: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     flexWrap: 'wrap',
     gap: 10,
     marginBottom: 20,
-    justifyContent: 'flex-start',
+    justifyContent: 'flex-end',
   },
   receiptAddBtn: {
     flexDirection: 'row',
@@ -1790,7 +1808,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   receiptPreviewRow: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 12,
     marginBottom: 24,
@@ -1819,6 +1837,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.subtext,
     fontWeight: '600',
+    textAlign: 'right',
   },
   categoryGridItem: {
     paddingHorizontal: 18,

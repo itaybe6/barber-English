@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking, Dimensions, Switch, I18nManager, DeviceEventEmitter, type LayoutChangeEvent } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking, Dimensions, Switch, I18nManager, DeviceEventEmitter, Keyboard, type LayoutChangeEvent } from 'react-native';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
@@ -80,6 +80,7 @@ const BOOKING_RULER_MIN_DISPLAY = 0;
 
 const CLIENT_REMINDER_HOURS_MIN = 0;
 const CLIENT_REMINDER_HOURS_MAX = 24;
+const WINDOW_HEIGHT = Dimensions.get('window').height;
 
 const ADMIN_SELF_REMINDER_MIN_MINUTES = 5;
 const ADMIN_SELF_REMINDER_MAX_MINUTES = 60;
@@ -108,6 +109,14 @@ export default function SettingsScreen() {
     [expoExtra]
   );
   const hasGooglePlacesAutocomplete = googlePlacesKey.length > 0;
+  const [addressKeyboardHeight, setAddressKeyboardHeight] = useState(0);
+  const addressSheetHeight = addressKeyboardHeight > 0 ? '88%' : '75%';
+  const addressSuggestionsMaxHeight = useMemo(() => {
+    if (addressKeyboardHeight <= 0) return 280;
+    const visibleScreenHeight = WINDOW_HEIGHT - addressKeyboardHeight;
+    const available = visibleScreenHeight - 320;
+    return Math.max(120, Math.min(220, available));
+  }, [addressKeyboardHeight]);
 
   /** Match client booking list: `order_index` (then name). Missing index sorts after indexed rows. */
   const sortServicesLikeClientBooking = useCallback((list: Service[]) => {
@@ -435,6 +444,27 @@ export default function SettingsScreen() {
       }
     } catch {}
   };
+  useEffect(() => {
+    if (!showAddressSheet) {
+      setAddressKeyboardHeight(0);
+      return;
+    }
+
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setAddressKeyboardHeight(event.endCoordinates?.height ?? 0);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setAddressKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [showAddressSheet]);
   const openEditInstagram = () => {
     setInstagramDraft(profileInstagram || '');
     setShowEditInstagramModal(true);
@@ -3287,7 +3317,15 @@ export default function SettingsScreen() {
         }}>
           <Animated.View style={[styles.sheetOverlay, { opacity: addressOverlayOpacity }]} />
         </TouchableWithoutFeedback>
-        <Animated.View style={[styles.addressSheetContainer, { transform: [{ translateY: addressCombinedTranslateY }] }]}>
+        <Animated.View
+          style={[
+            styles.addressSheetContainer,
+            {
+              height: addressSheetHeight,
+              transform: [{ translateY: addressCombinedTranslateY }],
+            },
+          ]}
+        >
           <LinearGradient
             colors={['#F8FAFF', '#FFFFFF', '#FFFFFF']}
             locations={[0, 0.35, 1]}
@@ -3380,9 +3418,17 @@ export default function SettingsScreen() {
                 <KeyboardAvoidingView
                   behavior={Platform.select({ ios: 'padding', android: undefined })}
                   style={styles.addressSheetBody}
-                  keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+                  keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
                 >
-                  <View style={[styles.addressSheetContentPad, { paddingBottom: insets.bottom + 20 }]}>
+                  <View
+                    style={[
+                      styles.addressSheetContentPad,
+                      {
+                        paddingBottom:
+                          insets.bottom + 20 + (addressKeyboardHeight > 0 ? Math.min(addressKeyboardHeight * 0.18, 56) : 0),
+                      },
+                    ]}
+                  >
                     <Text
                       style={[
                         styles.addressFieldSectionLabel,
@@ -3398,7 +3444,7 @@ export default function SettingsScreen() {
                       <View style={styles.addressAutocompleteFlex}>
                         {hasGooglePlacesAutocomplete ? (
                           <GooglePlacesAutocomplete
-                            keyboardShouldPersistTaps="handled"
+                            keyboardShouldPersistTaps="always"
                             placeholder={t('settings.profile.businessAddressSearchPlaceholder', 'Street, city…')}
                             fetchDetails
                             debounce={220}
@@ -3479,7 +3525,7 @@ export default function SettingsScreen() {
                                 marginTop: 8,
                                 borderWidth: StyleSheet.hairlineWidth,
                                 borderColor: '#E8EAEF',
-                                maxHeight: 280,
+                                maxHeight: addressSuggestionsMaxHeight,
                                 ...Platform.select({
                                   ios: {
                                     shadowColor: '#1a1f36',

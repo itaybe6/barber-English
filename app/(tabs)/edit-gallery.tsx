@@ -46,6 +46,12 @@ import {
   isVideoDurationOverGalleryLimit,
 } from '@/lib/utils/galleryVideoPick';
 import { copyGalleryVideoToCacheForPlayback } from '@/lib/utils/galleryVideoLocalUri';
+import {
+  ensureGalleryVideoWithinSizeLimit,
+  GALLERY_VIDEO_MAX_SIZE_BYTES,
+  isGalleryVideoCompressionUnavailableError,
+  isGalleryVideoSizeLimitError,
+} from '@/lib/utils/galleryVideoCompression';
 import { GalleryLoopVideo } from '@/components/GalleryLoopVideo';
 import { GalleryPickedVideoPreview } from '@/components/GalleryPickedVideoPreview';
 import { ShortGalleryVideoPickerModal } from '@/components/ShortGalleryVideoPickerModal';
@@ -353,22 +359,60 @@ export default function EditGalleryScreen() {
           console.warn('[edit-gallery] copyGalleryVideoToCacheForPlayback failed, using source uri', e);
         }
 
+        const preparedVideo = await ensureGalleryVideoWithinSizeLimit({
+          uri: playbackUri,
+          durationMs,
+          fileName: a.fileName,
+          fileSize: a.fileSize ?? null,
+          mimeType: a.mimeType || guessMediaMimeFromUri(a.fileName || a.uri),
+        });
+
         if (role === 'create') {
           setPickedVideo({
-            uri: playbackUri,
+            uri: preparedVideo.uri,
             base64: null,
-            mimeType: a.mimeType || guessMediaMimeFromUri(a.fileName || a.uri),
-            fileName: a.fileName ?? `video_${Date.now()}.mp4`,
+            mimeType: preparedVideo.mimeType,
+            fileName: preparedVideo.fileName,
           });
         } else {
           const asset: LocalAsset = {
-            uri: playbackUri,
+            uri: preparedVideo.uri,
             base64: null,
-            mimeType: a.mimeType || guessMediaMimeFromUri(a.fileName || a.uri),
-            fileName: a.fileName ?? `video_${Date.now()}.mp4`,
+            mimeType: preparedVideo.mimeType,
+            fileName: preparedVideo.fileName,
           };
           setEditImages((prev) => [...prev, { kind: 'local', asset, mediaType: 'video' }]);
         }
+      } catch (error) {
+        console.error('[edit-gallery] commitPickedGalleryVideo failed', error);
+        if (isGalleryVideoCompressionUnavailableError(error)) {
+          Alert.alert(
+            t('error.generic', 'Error'),
+            t(
+              'admin.gallery.videoCompressionUnavailable',
+              'Video compression is not available in this build. Open the app in a development build or a production build and try again.'
+            )
+          );
+          return;
+        }
+        if (isGalleryVideoSizeLimitError(error)) {
+          Alert.alert(
+            t('error.generic', 'Error'),
+            t(
+              'admin.gallery.videoSizeLimitExceeded',
+              'The selected video must be up to {{maxMb}} MB after compression. Try a shorter or simpler clip.',
+              { maxMb: Math.round(GALLERY_VIDEO_MAX_SIZE_BYTES / (1024 * 1024)) }
+            )
+          );
+          return;
+        }
+        Alert.alert(
+          t('error.generic', 'Error'),
+          t(
+            'admin.gallery.videoCompressionFailed',
+            'Could not prepare the video for upload. Try another clip or trim it and try again.'
+          )
+        );
       } finally {
         setIsPreparingGalleryVideo(false);
       }
@@ -1309,7 +1353,7 @@ export default function EditGalleryScreen() {
                     {t('admin.gallery.addVideo', 'הוספת וידאו (אחד)')}
                   </Text>
                   <Text style={[styles.pickSub, styles.fabTextRight, { color: colors.textSecondary }]}>
-                    {t('admin.gallery.videoMutedHint', 'עד 15 שניות · עובד בלולאה')}
+                    {t('admin.gallery.videoMutedHint', 'עד 15 שניות · עד 2MB · עובד בלולאה')}
                   </Text>
                 </View>
                 <View style={styles.pickCardTrailing}>
@@ -1710,7 +1754,7 @@ export default function EditGalleryScreen() {
                       {t('admin.gallery.addVideo', 'הוספת וידאו (אחד)')}
                     </Text>
                     <Text style={[styles.pickSub, styles.fabTextRight, { color: colors.textSecondary }]}>
-                      {t('admin.gallery.videoMutedHint', 'עד 15 שניות · עובד בלולאה')}
+                      {t('admin.gallery.videoMutedHint', 'עד 15 שניות · עד 2MB · עובד בלולאה')}
                     </Text>
                   </View>
                   <View style={styles.pickCardTrailing}>
@@ -2035,7 +2079,7 @@ export default function EditGalleryScreen() {
               {t('admin.gallery.preparingVideo', 'מכינים את הווידאו…')}
             </Text>
             <Text style={{ marginTop: 8, textAlign: 'center' as const, color: colors.textSecondary, fontSize: 13, lineHeight: 19 }}>
-              {t('admin.gallery.preparingVideoSub', 'בודקים אורך ומוסיפים לעיצוב')}
+              {t('admin.gallery.preparingVideoSub', 'בודקים אורך ומכווצים עד 2MB')}
             </Text>
           </View>
         </View>

@@ -8,6 +8,7 @@ type DaysProps = {
   rangeEnd: Date;
   dayAvailability: Record<string, number>;
   constraintDates?: Set<string>;
+  holidayLabels?: Record<string, string>;
   /** Short label for the constraint chip, e.g. "אילוץ" / "Block" */
   constraintPillLabel?: string;
   selectedDate: Date | null;
@@ -162,6 +163,7 @@ type DayCellProps = {
   availCount: number;
   hasAvail: boolean;
   hasConstraint: boolean;
+  holidayLabel?: string | null;
   cellSize: number;
   primaryColor: string;
   displayMode: 'availability' | 'count';
@@ -179,6 +181,7 @@ const DayCell = React.memo(function DayCell({
   availCount,
   hasAvail,
   hasConstraint,
+  holidayLabel,
   cellSize,
   primaryColor,
   displayMode,
@@ -215,6 +218,7 @@ const DayCell = React.memo(function DayCell({
   const badgeLabel = displayMode === 'count' && hasAvail ? fmtBadge(availCount) : null;
   const constraintLabel =
     displayMode === 'count' && hasConstraint && constraintPillLabel ? constraintPillLabel : null;
+  const hasHolidayLabel = !!holidayLabel;
 
   return (
     <Pressable
@@ -228,8 +232,8 @@ const DayCell = React.memo(function DayCell({
       })}
       accessibilityRole="button"
       accessibilityLabel={
-        [badgeLabel, constraintLabel].filter(Boolean).length
-          ? `${date.getDate()}, ${[badgeLabel, constraintLabel].filter(Boolean).join(', ')}`
+        [holidayLabel, badgeLabel, constraintLabel].filter(Boolean).length
+          ? `${date.getDate()}, ${[holidayLabel, badgeLabel, constraintLabel].filter(Boolean).join(', ')}`
           : `${date.getDate()}`
       }
       accessibilityState={{ selected: isSel, disabled: !inRange }}
@@ -295,17 +299,39 @@ const DayCell = React.memo(function DayCell({
         </Text>
       )}
 
+      {inRange && hasHolidayLabel ? (
+        <Text
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.72}
+          style={{
+            fontSize: 8.5,
+            fontWeight: '600',
+            color: '#D23F31',
+            includeFontPadding: false,
+            marginTop: 1,
+            lineHeight: 11,
+            textAlign: 'center',
+            width: cellSize + 6,
+          }}
+        >
+          {holidayLabel}
+        </Text>
+      ) : null}
+
       <View
         style={{
           minHeight:
             displayMode === 'count' && (badgeLabel || constraintLabel)
               ? (badgeLabel && constraintLabel ? 48 : 26)
+              : hasHolidayLabel
+                ? 16
               : showHebrewDates
                 ? 10
                 : 8,
           justifyContent: 'center',
           alignItems: 'center',
-          marginTop: showHebrewDates ? 2 : 2,
+          marginTop: hasHolidayLabel ? 1 : 2,
           paddingHorizontal: 1,
           gap: constraintLabel && badgeLabel ? 3 : 0,
         }}
@@ -348,6 +374,7 @@ export function Days({
   rangeEnd,
   dayAvailability,
   constraintDates,
+  holidayLabels,
   constraintPillLabel,
   selectedDate,
   cellSize,
@@ -408,6 +435,7 @@ export function Days({
               const availCount = dayAvailability[dsIso] ?? 0;
               const hasAvail = availCount > 0;
               const hasConstraint = !!(constraintDates && constraintDates.has(dsIso));
+              const holidayLabel = holidayLabels?.[dsIso] ?? null;
               const isSel = selectedDate ? sameDate(date, selectedDate) : false;
               const isToday = sameDate(date, TODAY);
 
@@ -421,6 +449,7 @@ export function Days({
                   availCount={availCount}
                   hasAvail={hasAvail}
                   hasConstraint={hasConstraint}
+                  holidayLabel={holidayLabel}
                   cellSize={cellSize}
                   primaryColor={primaryColor}
                   displayMode={displayMode}

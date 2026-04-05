@@ -47,6 +47,7 @@ import {
   type AnchorRect,
 } from '@/components/admin-calendar/AppointmentActionsAnchorSheet';
 import { AppointmentsCalendarLoader } from '@/components/admin-calendar/AppointmentsCalendarLoader';
+import type { CalendarViewMode } from '@/components/admin-calendar/calendarViewMode';
 import AdminVerticalMonthCalendar from '@/components/book-appointment/games-calendar/AdminVerticalMonthCalendar';
 import { CalendarReminderFabPanel } from '@/components/CalendarReminderFabPanel';
 import { useAdminCalendarView } from '@/contexts/AdminCalendarViewContext';
@@ -187,6 +188,8 @@ const _extraPaddingBottom = _hourSize;
 /** תצוגת יומן שבועית (אדמין): חלון שעות קבוע, בנפרד משעות העסק של התצוגה היומית */
 const WEEK_GRID_VIEW_START = '07:00';
 const WEEK_GRID_VIEW_END = '22:00';
+/** ריווח תחתון בתצוגת שבוע — מעל ה-tab הצף (~100px + שורת שעה לסנכרון עמודת זמנים) */
+const WEEK_GRID_SCROLL_BOTTOM_EXTRA = 100;
 
 Animated.addWhitelistedNativeProps?.({
   contentOffset: true,
@@ -1657,7 +1660,14 @@ export default function AdminAppointmentsScreen() {
     const minDaySize = 82;
     const daySize = Math.max(inner / cols, minDaySize);
     const hourSize = 72;
-    return { cols, daySize, hourSize, timeCol, padBottom: hourSize * 2 };
+    /** ריפוד תחתון אחד לעמודת שעות + גלילה אנכית; לא כפול מול FlashList אופקי */
+    return {
+      cols,
+      daySize,
+      hourSize,
+      timeCol,
+      padBottom: hourSize + WEEK_GRID_SCROLL_BOTTOM_EXTRA,
+    };
   }, []);
 
   useEffect(() => {
@@ -1687,7 +1697,25 @@ export default function AdminAppointmentsScreen() {
     scrollX.value = e.contentOffset.x;
   });
 
-  /** ממקם את עמודת היום הנבחר באזור הגלילה (במקום קצה RTL/LTR קבוע). */
+  /**
+   * תצוגת שבוע עם ימים הפוכים (עברית): א׳ בקצה ליד השעות — תוכן ה-FlashList מסתיים בא׳, לכן offset מקסימלי.
+   * בלי היפוך: א׳ בעמודה הראשונה — offset 0.
+   */
+  const scrollWeekGridToWeekStartAnchor = useCallback(() => {
+    if (calendarView !== 'week' || gridDays.length === 0) return;
+    const sw = Dimensions.get('window').width;
+    const visibleWidth = sw - gridDims.timeCol;
+    const colW = gridDims.daySize;
+    const totalWidth = gridDays.length * colW;
+    const maxOffset = Math.max(0, totalWidth - visibleWidth);
+    const offset = weekGridReverseDays ? maxOffset : 0;
+    scrollX.value = offset;
+    requestAnimationFrame(() => {
+      flashListRef.current?.scrollToOffset({ offset, animated: false });
+    });
+  }, [calendarView, gridDays.length, gridDims.daySize, gridDims.timeCol, weekGridReverseDays]);
+
+  /** בתוך תצוגת שבוע — ממרכז את היום הנבחר אחרי בחירה מסרגל הימים */
   const scrollWeekGridToSelectedColumn = useCallback(() => {
     if (calendarView !== 'week' || gridDays.length === 0) return;
     const idx = gridDays.findIndex((d) => d.formatted === selectedDateStr);
@@ -1706,10 +1734,28 @@ export default function AdminAppointmentsScreen() {
     });
   }, [calendarView, gridDays, selectedDateStr, gridDims.daySize, gridDims.timeCol]);
 
+  const prevCalendarViewRef = useRef<CalendarViewMode | null>(null);
+
   useEffect(() => {
-    const timer = setTimeout(() => scrollWeekGridToSelectedColumn(), 0);
+    if (calendarView !== 'week' || gridDays.length === 0) {
+      prevCalendarViewRef.current = calendarView;
+      return;
+    }
+    const from = prevCalendarViewRef.current;
+    const justEnteredWeek = from !== 'week';
+    const timer = setTimeout(() => {
+      if (justEnteredWeek) scrollWeekGridToWeekStartAnchor();
+      else scrollWeekGridToSelectedColumn();
+      prevCalendarViewRef.current = calendarView;
+    }, 0);
     return () => clearTimeout(timer);
-  }, [scrollWeekGridToSelectedColumn]);
+  }, [
+    calendarView,
+    selectedDateStr,
+    gridDays.length,
+    scrollWeekGridToWeekStartAnchor,
+    scrollWeekGridToSelectedColumn,
+  ]);
   const headerStylez = useAnimatedStyle(() => {
     return {
       transform: [{ translateX: -scrollX.value }],
@@ -2285,7 +2331,6 @@ export default function AdminAppointmentsScreen() {
                       snapToInterval={gridDims.daySize}
                       decelerationRate="fast"
                       bounces={false}
-                      contentContainerStyle={{ paddingBottom: gridDims.padBottom }}
                       showsHorizontalScrollIndicator={false}
                       renderItem={({ item, index }) => (
                         <WeekDayColumn

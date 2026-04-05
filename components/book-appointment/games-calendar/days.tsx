@@ -221,6 +221,13 @@ const DayCell = React.memo(function DayCell({
   const onCircle = isToday || isSel;
 
   const hebrewDay = showHebrewDates ? formatHebrewDay(date) : '';
+  const hebrewTextColor = !inRange
+    ? '#D1D1D6'
+    : isToday
+      ? IOS_TODAY_RED
+      : isSel
+        ? primaryColor
+        : '#8E8E93';
 
   const fmtBadge = formatAppointmentBadge ?? ((c: number) => `${c} תורים`);
   const badgeLabel = displayMode === 'count' && hasAvail ? fmtBadge(availCount) : null;
@@ -287,7 +294,7 @@ const DayCell = React.memo(function DayCell({
           style={{
             fontSize: 9.5,
             fontWeight: '400',
-            color: onCircle ? 'rgba(255,255,255,0.0)' : inRange ? '#8E8E93' : '#D1D1D6',
+            color: hebrewTextColor,
             includeFontPadding: false,
             marginTop: 1,
             lineHeight: 12,
@@ -338,14 +345,14 @@ const DayCell = React.memo(function DayCell({
           <AdminAppointmentPill
             label={badgeLabel}
             primaryColor={primaryColor}
-            onPrimaryCircle={onCircle}
+            onPrimaryCircle={false}
             maxWidth={cellSize + 4}
           />
         ) : null}
         {inRange && constraintLabel ? (
           <AdminConstraintPill
             label={constraintLabel}
-            onPrimaryCircle={onCircle}
+            onPrimaryCircle={false}
             maxWidth={cellSize + 4}
           />
         ) : null}

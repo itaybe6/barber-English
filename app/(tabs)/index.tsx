@@ -18,7 +18,7 @@ import {
   Dimensions,
   I18nManager,
 } from 'react-native';
-import Animated, { useSharedValue, useAnimatedScrollHandler, runOnJS } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedScrollHandler, runOnJS, useAnimatedStyle } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -58,8 +58,11 @@ import { manicureImages } from '@/src/constants/manicureImages';
 import { ManicureMarqueeTile } from '@/components/ManicureMarqueeTile';
 import MonthlyInsightsCard from '@/components/MonthlyInsightsCard';
 import { PendingClientApprovalsCard, PendingClientApprovalsCardHandle } from '@/components/admin/PendingClientApprovalsCard';
+import WaitlistHomePreviewAvatars from '@/components/admin/WaitlistHomePreviewAvatars';
 import { clientAppointmentStatsApi } from '@/lib/api/clientAppointmentStats';
 import { HorizontalCarouselDots, carouselIndexFromOffset } from '@/components/HorizontalCarouselDots';
+import { usersApi } from '@/lib/api/users';
+import type { User as DbUser } from '@/lib/supabase';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -107,17 +110,6 @@ function chunkArray<T>(array: T[], size: number): T[][] {
     index += safeSize;
   }
   return chunked;
-}
-
-/** Build rgba() strings for LinearGradient from theme hex (e.g. hero scrim behind white logo). */
-function hexToRgba(hex: string, a: number): string {
-  const h = hex.replace('#', '');
-  if (h.length < 6) return `rgba(0,0,0,${a})`;
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return `rgba(0,0,0,${a})`;
-  return `rgba(${r},${g},${b},${a})`;
 }
 
 const manicureHeroRootStyle = {
@@ -223,15 +215,17 @@ export default function HomeScreen() {
   const styles = createStyles(colors, primaryOnSurface);
   const heroLogoScrimGradientColors = useMemo(
     () => [
-      hexToRgba(colors.primary, 0.9),
-      hexToRgba(colors.primary, 0.82),
-      hexToRgba(colors.primary, 0.48),
-      hexToRgba(colors.primary, 0),
+      // Match client home top scrim (`app/(client-tabs)/index.tsx`) — black fade for readability.
+      'rgba(0,0,0,0.92)',
+      'rgba(0,0,0,0.82)',
+      'rgba(0,0,0,0.55)',
+      'rgba(0,0,0,0)',
     ],
-    [colors.primary]
+    []
   );
   /** Section headers: Hebrew titles flush right, edit control on the opposite side (LTR physical layout). */
   const adminSectionTitleOnRight = Boolean(i18n.language?.startsWith('he'));
+  const isRTL = I18nManager.isRTL;
 
   const [heroImages, setHeroImages] = useState<string[] | null>(null);
 
@@ -373,7 +367,7 @@ export default function HomeScreen() {
     );
   }, [insets.top, outerScrollCapSV]);
   const [blockedFilter, setBlockedFilter] = useState<'all' | 'blocked' | 'unblocked'>('all');
-  const [clientsListMode, setClientsListMode] = useState<'all' | 'newThisMonth'>('all');
+  const [clientsListMode, setClientsListMode] = useState<'all' | 'newThisMonth' | 'pendingApproval'>('all');
   const [clientStatsMap, setClientStatsMap] = useState<
     Record<string, { totalAppointments: number; avgMonthlySpend: number | null }>
   >({});
@@ -381,10 +375,32 @@ export default function HomeScreen() {
   const [pendingApprovalsOpenNonce, setPendingApprovalsOpenNonce] = useState(0);
   const [pendingClientsCount, setPendingClientsCount] = useState(0);
   const pendingCardRef = React.useRef<PendingClientApprovalsCardHandle>(null);
+  const [pendingClients, setPendingClients] = useState<DbUser[]>([]);
+  const [loadingPendingClients, setLoadingPendingClients] = useState(false);
+  const [pendingClientActionId, setPendingClientActionId] = useState<string | null>(null);
+  const pendingFilteredClients = useMemo(() => {
+    const raw = searchQuery.trim();
+    if (!raw) return pendingClients;
+    const q = raw.toLowerCase();
+    const qDigits = raw.replace(/\D/g, '');
+    return pendingClients.filter((u) => {
+      const name = String((u as any)?.name || '').toLowerCase();
+      const phone = String((u as any)?.phone || '');
+      const phoneDigits = phone.replace(/\D/g, '');
+      if (name.includes(q)) return true;
+      if (qDigits && phoneDigits.includes(qDigits)) return true;
+      return false;
+    });
+  }, [pendingClients, searchQuery]);
   const [waitlistWaitingCount, setWaitlistWaitingCount] = useState(0);
+  const [waitlistPreviewClients, setWaitlistPreviewClients] = useState<
+    { key: string; client_name: string }[]
+  >([]);
 
   /** SharedValue tracks inner-scroll state so the UI-thread worklet can read it without crossing to JS */
   const innerActiveSV = useSharedValue(0);
+  /** Drives subtle hero parallax while dragging the sheet */
+  const outerScrollYSV = useSharedValue(0);
 
   const enableInnerScrollJS = useCallback(
     (enabled: boolean) => {
@@ -409,6 +425,7 @@ export default function HomeScreen() {
     onScroll: (event) => {
       'worklet';
       const y = event.contentOffset.y;
+      outerScrollYSV.value = y;
       const cap = outerScrollCapSV.value;
       const wasInner = innerActiveSV.value === 1;
       let nextInner = wasInner;
@@ -427,6 +444,14 @@ export default function HomeScreen() {
       }
     },
   });
+
+  const heroMarqueeAnimatedStyle = useAnimatedStyle(() => {
+    const y = Math.max(0, outerScrollYSV.value);
+    const clamped = Math.min(y, HERO_HEIGHT + 40);
+    // Parallax: background shifts slightly slower than the sheet
+    const translateY = -clamped * 0.22;
+    return { transform: [{ translateY }] };
+  }, []);
 
   const formatClientMoney = useCallback(
     (amount: number) => {
@@ -651,17 +676,48 @@ export default function HomeScreen() {
         newClientsThisMonth: newClientsRes.error ? 0 : newClientsRes.count ?? 0,
       });
 
-      // ממתינים בסטטוס waiting — כמו מסך רשימת המתנה: לספר מחובר רק רשומות עם user_id = הספר (barberId מהזמנה)
+      // ממתינים בסטטוס waiting — כמו מסך רשימת המתנה: לספר מחובר רק רשומות עם user_id = הספר
       let waitlistCountQuery = supabase
         .from('waitlist_entries')
         .select('id', { count: 'exact', head: true })
         .eq('business_id', businessId)
         .eq('status', 'waiting');
+      let waitlistPreviewQuery = supabase
+        .from('waitlist_entries')
+        .select('id, client_name, client_phone, requested_date, created_at')
+        .eq('business_id', businessId)
+        .eq('status', 'waiting')
+        .order('requested_date', { ascending: true })
+        .order('created_at', { ascending: true })
+        .limit(40);
       if (!isSuperAdmin && user?.id) {
         waitlistCountQuery = waitlistCountQuery.eq('user_id', user.id);
+        waitlistPreviewQuery = waitlistPreviewQuery.eq('user_id', user.id);
       }
-      const { count: wCount } = await waitlistCountQuery;
-      setWaitlistWaitingCount(wCount ?? 0);
+      const [waitlistCountRes, waitlistPreviewRes] = await Promise.all([
+        waitlistCountQuery,
+        waitlistPreviewQuery,
+      ]);
+      setWaitlistWaitingCount(waitlistCountRes.count ?? 0);
+      if (waitlistPreviewRes.error) {
+        console.error('Error fetching waitlist preview:', waitlistPreviewRes.error);
+        setWaitlistPreviewClients([]);
+      } else {
+        const seen = new Set<string>();
+        const unique: { key: string; client_name: string }[] = [];
+        for (const row of waitlistPreviewRes.data || []) {
+          const r = row as { id?: string; client_name?: string; client_phone?: string };
+          const phone = String(r.client_phone || '').trim();
+          const dedupeKey = phone || String(r.id || '');
+          if (!dedupeKey || seen.has(dedupeKey)) continue;
+          seen.add(dedupeKey);
+          unique.push({
+            key: String(r.id),
+            client_name: String(r.client_name || '').trim() || '?',
+          });
+        }
+        setWaitlistPreviewClients(unique);
+      }
     } catch (error) {
       console.error('Error in fetchInsightsData:', error);
     } finally {
@@ -676,6 +732,7 @@ export default function HomeScreen() {
       void fetchInsightsData();
       void fetchNextAppointment();
       void fetchTodayAppointmentsCount();
+      void fetchPendingClients();
     }, [isAdmin, user?.id, isSuperAdmin])
   );
 
@@ -759,10 +816,76 @@ export default function HomeScreen() {
     }
   };
 
+  const fetchPendingClients = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      setLoadingPendingClients(true);
+      const list = await usersApi.getPendingClients();
+      setPendingClients(list);
+      setPendingClientsCount(list.length);
+    } catch (e) {
+      console.error('Error in fetchPendingClients:', e);
+      setPendingClients([]);
+    } finally {
+      setLoadingPendingClients(false);
+    }
+  }, [isAdmin]);
+
+  const approvePendingClient = useCallback(
+    async (id: string) => {
+      setPendingClientActionId(id);
+      try {
+        const updated = await usersApi.approveClient(id);
+        if (!updated) {
+          Alert.alert(t('error.generic', 'Error'), t('admin.pendingClients.approveError', 'Could not approve'));
+          return;
+        }
+        setPendingClients((prev) => prev.filter((u) => u.id !== id));
+        setPendingClientsCount((prev) => Math.max(0, prev - 1));
+        void fetchClients();
+      } finally {
+        setPendingClientActionId(null);
+      }
+    },
+    [fetchClients, t]
+  );
+
+  const rejectPendingClient = useCallback(
+    (item: DbUser) => {
+      Alert.alert(
+        t('admin.pendingClients.rejectTitle', 'Decline registration'),
+        t('admin.pendingClients.rejectMessage', 'Remove {{name}}? They will need to register again.', { name: item.name }),
+        [
+          { text: t('cancel', 'Cancel'), style: 'cancel' },
+          {
+            text: t('admin.pendingClients.rejectConfirm', 'Remove'),
+            style: 'destructive',
+            onPress: async () => {
+              setPendingClientActionId(item.id);
+              try {
+                const done = await usersApi.deleteUser(item.id);
+                if (!done) {
+                  Alert.alert(t('error.generic', 'Error'), t('admin.pendingClients.rejectError', 'Could not remove'));
+                  return;
+                }
+                setPendingClients((prev) => prev.filter((u) => u.id !== item.id));
+                setPendingClientsCount((prev) => Math.max(0, prev - 1));
+              } finally {
+                setPendingClientActionId(null);
+              }
+            },
+          },
+        ]
+      );
+    },
+    [t]
+  );
+
   const closeClientsModal = useCallback(() => {
     if (Date.now() - clientsModalOpenTsRef.current < 400) return;
     setShowClientsModal(false);
     setClientsListMode('all');
+    setPendingClients([]);
   }, []);
 
   // Filter clients based on search query
@@ -1039,9 +1162,13 @@ export default function HomeScreen() {
       </View>
 
       {/* Fixed hero marquee — not a child of the sheet ScrollView; sheet slides over it, zero scroll coupling */}
-      <View style={styles.adminHeroMarqueeHost} pointerEvents="none" collapsable={false}>
+      <Animated.View
+        style={[styles.adminHeroMarqueeHost, heroMarqueeAnimatedStyle]}
+        pointerEvents="box-none"
+        collapsable={false}
+      >
         <ManicureMarqueeHero images={heroImagesResolved} />
-      </View>
+      </Animated.View>
 
       {/* Sheet + outer scroll only moves the white panel; background stays visually independent */}
       <Animated.ScrollView
@@ -1113,32 +1240,10 @@ export default function HomeScreen() {
           onCountChange={setPendingClientsCount}
         />
 
-        {/* ── Quick: pending clients · broadcast · notifications + waitlist (gallery/products via section headers) ── */}
+        {/* ── Quick tiles + רשימת המתנה מתחת ── */}
         {isAdmin && (
           <View style={styles.quickTilesGrid}>
             <View style={styles.quickTilesRow}>
-              <TouchableOpacity
-                style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
-                activeOpacity={0.82}
-                onPress={() => pendingCardRef.current?.open()}
-                accessibilityRole="button"
-                accessibilityLabel={t('admin.pendingClients.bannerA11y')}
-              >
-                <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
-                  <Ionicons name="person-add-outline" size={24} color={primaryOnSurface} />
-                  {pendingClientsCount > 0 ? (
-                    <View style={[styles.quickTileBadge, { backgroundColor: '#EF4444' }]}>
-                      <Text style={styles.quickTileBadgeText}>
-                        {pendingClientsCount > 99 ? '99+' : pendingClientsCount}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-                <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
-                  {t('admin.pendingClients.bannerTitle')}
-                </Text>
-              </TouchableOpacity>
-
               <TouchableOpacity
                 style={[styles.quickTile, { backgroundColor: `${colors.primary}0F` }]}
                 activeOpacity={0.82}
@@ -1155,6 +1260,13 @@ export default function HomeScreen() {
               >
                 <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
                   <Ionicons name="people-outline" size={24} color={primaryOnSurface} />
+                  {pendingClientsCount > 0 ? (
+                    <View style={[styles.quickTileBadge, { backgroundColor: '#EF4444' }]}>
+                      <Text style={styles.quickTileBadgeText}>
+                        {pendingClientsCount > 99 ? '99+' : pendingClientsCount}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
                 <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
                   {t('admin.home.clients')}
@@ -1198,47 +1310,62 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* שורה שנייה: רשימת המתנה — מלבן רחב */}
             <TouchableOpacity
-              style={[styles.waitlistTile, { backgroundColor: `${colors.primary}0F` }]}
-              activeOpacity={0.82}
+              style={[styles.waitlistCard, { backgroundColor: colors.surface }]}
+              activeOpacity={0.88}
               onPress={() => router.push('/(tabs)/waitlist')}
               accessibilityRole="button"
+              accessibilityLabel={t('admin.waitlist.title', 'רשימת המתנה')}
             >
-              {/* LTR: מונה משמאל | רווח | כותרת+סאב צמודים לאייקון | אייקון מימין (לא לזוז) */}
-              <View style={styles.waitlistTileCount}>
-                <Text style={[styles.waitlistTileCountNum, { color: primaryOnSurface }]}>
-                  {waitlistWaitingCount}
-                </Text>
-                <Text style={[styles.waitlistTileCountLabel, { color: colors.textSecondary }]}>
-                  {t('admin.waitlist.waitingLabel', 'ממתינים')}
-                </Text>
+              <View style={styles.waitlistCardHeader}>
+                <Ionicons name="chevron-back-outline" size={15} color="#CBD5E1" />
+                <View style={styles.waitlistCardHeaderTitleGroup}>
+                  <Text
+                    style={[styles.waitlistCardHeaderTitle, { textAlign: isRTL ? 'right' : 'left' }]}
+                    numberOfLines={1}
+                  >
+                    {t('admin.waitlist.title', 'רשימת המתנה')}
+                  </Text>
+                  <View style={[styles.waitlistCardHeaderIcon, { backgroundColor: `${colors.primary}18` }]}>
+                    <Ionicons name="hourglass-outline" size={15} color={primaryOnSurface} />
+                  </View>
+                </View>
               </View>
-              <View style={styles.waitlistTileSpacer} />
-              <View style={styles.waitlistTileInfo}>
-                <Text
+              <View style={styles.waitlistCardDivider} />
+              <View style={[styles.waitlistCardBody, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                <View
                   style={[
-                    styles.waitlistTileTitle,
-                    { color: colors.text },
-                    i18n.language?.startsWith('he') ? styles.waitlistTileTextHe : styles.waitlistTileTextEn,
+                    styles.waitlistCardInfoCol,
+                    { alignItems: isRTL ? 'flex-end' : 'flex-start' },
                   ]}
-                  numberOfLines={1}
                 >
-                  {t('admin.waitlist.title', 'רשימת המתנה')}
-                </Text>
-                <Text
-                  style={[
-                    styles.waitlistTileSub,
-                    { color: colors.textSecondary },
-                    i18n.language?.startsWith('he') ? styles.waitlistTileTextHe : styles.waitlistTileTextEn,
-                  ]}
-                  numberOfLines={2}
-                >
-                  {t('admin.waitlist.viewAndManage', 'צפייה וניהול לקוחות ממתינים')}
-                </Text>
-              </View>
-              <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
-                <Ionicons name="hourglass-outline" size={24} color={primaryOnSurface} />
+                  <Text
+                    style={[
+                      styles.waitlistCardSub,
+                      { color: '#94A3B8', textAlign: isRTL ? 'right' : 'left' },
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {t('admin.waitlist.viewAndManage', 'צפייה וניהול לקוחות ממתינים')}
+                  </Text>
+                  {waitlistPreviewClients.length > 0 ? (
+                    <WaitlistHomePreviewAvatars
+                      clients={waitlistPreviewClients}
+                      primaryColor={colors.primary}
+                      surfaceColor={colors.surface}
+                      maxSlots={5}
+                    />
+                  ) : null}
+                </View>
+                <View style={[styles.waitlistCardVertDivider, { backgroundColor: `${colors.primary}25` }]} />
+                <View style={styles.waitlistCardCountBlock}>
+                  <Text style={[styles.waitlistCardCountNum, { color: primaryOnSurface }]}>
+                    {waitlistWaitingCount}
+                  </Text>
+                  <Text style={[styles.waitlistCardCountLabel, { color: `${primaryOnSurface}B3` }]}>
+                    {t('admin.waitlist.waitingLabel', 'ממתינים')}
+                  </Text>
+                </View>
               </View>
             </TouchableOpacity>
           </View>
@@ -1615,50 +1742,227 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               </View>
 
-             {clientsListMode === 'all' ? (
-               <>
-             {/* Search Bar */}
-             <View style={styles.searchContainer}>
-               <Ionicons name="search" size={20} color={primaryOnSurface} style={styles.searchIcon} />
-               <TextInput
-                 style={styles.searchInput}
-                 placeholder={t('common.searchByName','Search by name...')}
-                 placeholderTextColor={colors.textSecondary}
-                 value={searchQuery}
-                 onChangeText={setSearchQuery}
-               />
-             </View>
+             {clientsListMode === 'all' || clientsListMode === 'pendingApproval' ? (
+               <View style={styles.searchContainer}>
+                 <Ionicons name="search" size={20} color={primaryOnSurface} style={styles.searchIcon} />
+                 <TextInput
+                   style={[
+                     styles.searchInput,
+                     I18nManager.isRTL ? styles.searchInputRtl : styles.searchInputLtr,
+                   ]}
+                   placeholder={t('common.searchByName', 'Search by name...')}
+                   placeholderTextColor={colors.textSecondary}
+                   value={searchQuery}
+                   onChangeText={setSearchQuery}
+                 />
+               </View>
+             ) : null}
 
-             {/* Blocked Filter */}
-             <View style={styles.filterRow}>
-               <TouchableOpacity
-                 onPress={() => setBlockedFilter('all')}
-                 style={[styles.filterButton, blockedFilter === 'all' && styles.filterButtonActive]}
-                 activeOpacity={0.85}
-               >
-                 <Text style={[styles.filterButtonText, blockedFilter === 'all' && styles.filterButtonTextActive]}>{t('clients.filter.all','All')}</Text>
-               </TouchableOpacity>
-               <TouchableOpacity
-                 onPress={() => setBlockedFilter('blocked')}
-                 style={[styles.filterButton, blockedFilter === 'blocked' && styles.filterButtonActive]}
-                 activeOpacity={0.85}
-               >
-                 <Text style={[styles.filterButtonText, blockedFilter === 'blocked' && styles.filterButtonTextActive]}>{t('clients.filter.blocked','Blocked')}</Text>
-               </TouchableOpacity>
-               <TouchableOpacity
-                 onPress={() => setBlockedFilter('unblocked')}
-                 style={[styles.filterButton, blockedFilter === 'unblocked' && styles.filterButtonActive]}
-                 activeOpacity={0.85}
-               >
-                 <Text style={[styles.filterButtonText, blockedFilter === 'unblocked' && styles.filterButtonTextActive]}>{t('clients.filter.unblocked','Unblocked')}</Text>
-               </TouchableOpacity>
-             </View>
-               </>
+             {/* Blocked Filter + New Clients (single row) */}
+             {clientsListMode !== 'newThisMonth' ? (
+               <View style={styles.filterRow}>
+                 <TouchableOpacity
+                   onPress={() => {
+                     const needsReload = clientsListMode !== 'all';
+                     setClientsListMode('all');
+                     setBlockedFilter('all');
+                     if (needsReload) {
+                       setSearchQuery('');
+                       void fetchClients();
+                     }
+                   }}
+                   style={[
+                     styles.filterButton,
+                     clientsListMode === 'all' && blockedFilter === 'all' && styles.filterButtonActive,
+                   ]}
+                   activeOpacity={0.85}
+                 >
+                   <Text
+                     style={[
+                       styles.filterButtonText,
+                       clientsListMode === 'all' && blockedFilter === 'all' && styles.filterButtonTextActive,
+                     ]}
+                   >
+                     {t('clients.filter.all', 'All')}
+                   </Text>
+                 </TouchableOpacity>
+
+                 <TouchableOpacity
+                   onPress={() => {
+                     const needsReload = clientsListMode !== 'all';
+                     setClientsListMode('all');
+                     setBlockedFilter('unblocked');
+                     if (needsReload) {
+                       setSearchQuery('');
+                       void fetchClients();
+                     }
+                   }}
+                   style={[
+                     styles.filterButton,
+                     clientsListMode === 'all' && blockedFilter === 'unblocked' && styles.filterButtonActive,
+                   ]}
+                   activeOpacity={0.85}
+                 >
+                   <Text
+                     style={[
+                       styles.filterButtonText,
+                       clientsListMode === 'all' && blockedFilter === 'unblocked' && styles.filterButtonTextActive,
+                     ]}
+                   >
+                     {t('clients.filter.unblocked', 'Unblocked')}
+                   </Text>
+                 </TouchableOpacity>
+
+                 <TouchableOpacity
+                   onPress={() => {
+                     const needsReload = clientsListMode !== 'all';
+                     setClientsListMode('all');
+                     setBlockedFilter('blocked');
+                     if (needsReload) {
+                       setSearchQuery('');
+                       void fetchClients();
+                     }
+                   }}
+                   style={[
+                     styles.filterButton,
+                     clientsListMode === 'all' && blockedFilter === 'blocked' && styles.filterButtonActive,
+                   ]}
+                   activeOpacity={0.85}
+                 >
+                   <Text
+                     style={[
+                       styles.filterButtonText,
+                       clientsListMode === 'all' && blockedFilter === 'blocked' && styles.filterButtonTextActive,
+                     ]}
+                   >
+                     {t('clients.filter.blocked', 'Blocked')}
+                   </Text>
+                 </TouchableOpacity>
+
+                 <TouchableOpacity
+                   onPress={() => {
+                     setClientsListMode('pendingApproval');
+                     setSearchQuery('');
+                     setBlockedFilter('all');
+                     void fetchPendingClients();
+                   }}
+                   style={[styles.filterButton, clientsListMode === 'pendingApproval' && styles.filterButtonActive]}
+                   activeOpacity={0.85}
+                   accessibilityRole="button"
+                   accessibilityLabel={t('admin.pendingClients.bannerA11y')}
+                 >
+                   <Text
+                     style={[
+                       styles.filterButtonText,
+                       clientsListMode === 'pendingApproval' && styles.filterButtonTextActive,
+                     ]}
+                   >
+                     {pendingClientsCount > 0
+                       ? `${t('admin.pendingClients.bannerTitle')} (${pendingClientsCount > 99 ? '99+' : pendingClientsCount})`
+                       : t('admin.pendingClients.bannerTitle')}
+                   </Text>
+                 </TouchableOpacity>
+               </View>
              ) : null}
 
              {/* Clients List */}
              <View style={styles.clientsListSheet}>
-             {loadingClients ? (
+             {clientsListMode === 'pendingApproval' ? (
+               loadingPendingClients ? (
+                 <View style={styles.loadingContainer}>
+                   <ActivityIndicator size="large" color={primaryOnSurface} />
+                   <Text style={styles.loadingText}>{t('admin.pendingClients.loading', 'Loading…')}</Text>
+                 </View>
+               ) : (
+                 <FlatList
+                   style={styles.clientsFlatList}
+                   data={pendingFilteredClients}
+                   keyExtractor={(item) => item.id}
+                   keyboardShouldPersistTaps="handled"
+                   showsVerticalScrollIndicator={true}
+                   ListEmptyComponent={
+                     <View style={styles.clientsEmptyWrap}>
+                       <View style={[styles.clientsEmptyIcon, { backgroundColor: `${colors.primary}14` }]}>
+                         <Ionicons name="people-outline" size={40} color={primaryOnSurface} />
+                       </View>
+                       <Text style={[styles.clientsEmptyTitle, { color: colors.text }]}>
+                         {pendingClients.length === 0
+                           ? t('admin.pendingClients.empty', 'No pending clients')
+                           : t('common.noResults', 'No results')}
+                       </Text>
+                     </View>
+                   }
+                   renderItem={({ item }) => {
+                     const busy = pendingClientActionId === item.id;
+                     const initial = (item.name || '?').trim().charAt(0).toUpperCase() || '?';
+                     return (
+                       <View style={styles.clientCard}>
+                         <View style={styles.clientCardHeader}>
+                           <View style={styles.clientCardLead}>
+                             <View style={[styles.clientAvatar, { backgroundColor: `${colors.primary}22` }]}>
+                               <Text style={[styles.clientAvatarLetter, { color: primaryOnSurface }]}>
+                                 {initial}
+                               </Text>
+                             </View>
+                             <View style={styles.clientCardTextCol}>
+                               <View style={styles.clientNameRow}>
+                                 <Text style={[styles.modalClientName, { color: colors.text }]} numberOfLines={1}>
+                                   {item.name || t('common.client', 'Client')}
+                                 </Text>
+                               </View>
+                               {item.phone ? (
+                                 <Text style={[styles.clientStatCaption, { color: colors.textSecondary }]} numberOfLines={1}>
+                                   {item.phone}
+                                 </Text>
+                               ) : null}
+                             </View>
+                           </View>
+                           <View style={styles.clientCardActions}>
+                             <TouchableOpacity
+                               style={[styles.clientUnblockPill, { backgroundColor: `${colors.primary}14`, borderColor: `${colors.primary}35` }]}
+                               onPress={() => approvePendingClient(item.id)}
+                               disabled={busy}
+                               activeOpacity={0.85}
+                               accessibilityRole="button"
+                               accessibilityLabel={t('admin.pendingClients.approve', 'Approve')}
+                             >
+                               {busy ? (
+                                 <ActivityIndicator size="small" color={primaryOnSurface} />
+                               ) : (
+                                 <Text style={[styles.clientUnblockPillText, { color: primaryOnSurface }]}>
+                                   {t('admin.pendingClients.approve', 'Approve')}
+                                 </Text>
+                               )}
+                             </TouchableOpacity>
+                             <TouchableOpacity
+                               style={styles.clientBlockPill}
+                               onPress={() => rejectPendingClient(item)}
+                               disabled={busy}
+                               activeOpacity={0.85}
+                               accessibilityRole="button"
+                               accessibilityLabel={t('admin.pendingClients.decline', 'Decline')}
+                             >
+                               {busy ? (
+                                 <ActivityIndicator size="small" color="#fff" />
+                               ) : (
+                                 <Text style={styles.clientBlockPillText}>
+                                   {t('admin.pendingClients.decline', 'Decline')}
+                                 </Text>
+                               )}
+                             </TouchableOpacity>
+                           </View>
+                         </View>
+                       </View>
+                     );
+                   }}
+                   contentContainerStyle={[
+                     styles.clientsListContent,
+                     { paddingBottom: insets.bottom + 24 },
+                     pendingFilteredClients.length === 0 && styles.clientsListContentEmpty,
+                   ]}
+                 />
+               )
+             ) : loadingClients ? (
                <View style={styles.loadingContainer}>
                  <ActivityIndicator size="large" color={primaryOnSurface} />
                  <Text style={styles.loadingText}>{t('clients.loading','Loading clients...')}</Text>
@@ -1866,7 +2170,7 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
   /* ─── Daily Schedule ─── */
   dailyScheduleWrap: {
     marginTop: 12,
-    marginBottom: 4,
+    marginBottom: 0,
   },
   broadcastBannerWrap: {
     marginBottom: 14,
@@ -1933,82 +2237,105 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
   broadcastBannerChevronWrap: {
     opacity: 0.95,
   },
-  /* ─── Quick Tiles (3 + waitlist) ─── */
+  /* ─── Quick tiles row + waitlist card (מתחת) ─── */
   quickTilesGrid: {
-    marginTop: 14,
+    marginTop: 12,
     marginBottom: 6,
-    gap: 10,
+    gap: 12,
   },
   quickTilesRow: {
     flexDirection: 'row',
     gap: 10,
   },
-  waitlistTile: {
+  /** רשימת המתנה — מיושר לכרטיס nextCard ב-DailySchedule (surface, צל, כותרת+מפריד+גוף) */
+  waitlistCard: {
     borderRadius: 20,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    ...({ direction: 'ltr' } as const),
-    alignItems: 'center',
-    gap: 12,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
+        shadowColor: '#1e293b',
+        shadowOpacity: 0.09,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 5 },
       },
-      android: { elevation: 2 },
+      android: { elevation: 5 },
     }),
   },
-  waitlistTileInfo: {
+  waitlistCardHeader: {
+    flexDirection: 'row',
+    direction: 'ltr',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 13,
+    paddingBottom: 11,
+  },
+  waitlistCardHeaderTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     flexShrink: 1,
     minWidth: 0,
-    maxWidth: '52%',
-    gap: 2,
-    alignItems: 'flex-end',
   },
-  waitlistTileSpacer: {
-    flex: 1,
-    minWidth: 6,
-  },
-  waitlistTileTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-    alignSelf: 'stretch',
-  },
-  waitlistTileSub: {
-    fontSize: 12,
-    fontWeight: '500',
-    alignSelf: 'stretch',
-    lineHeight: 16,
-  },
-  waitlistTileTextHe: {
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  waitlistTileTextEn: {
-    textAlign: 'right',
-    writingDirection: 'ltr',
-  },
-  waitlistTileCount: {
+  waitlistCardHeaderIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
     alignItems: 'center',
-    minWidth: 56,
-    flexShrink: 0,
+    justifyContent: 'center',
   },
-  waitlistTileCountNum: {
+  waitlistCardHeaderTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+    color: '#64748B',
+    flexShrink: 1,
+  },
+  waitlistCardDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginHorizontal: 0,
+  },
+  waitlistCardBody: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    gap: 14,
+  },
+  waitlistCardInfoCol: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+    gap: 6,
+  },
+  waitlistCardSub: {
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
+    width: '100%',
+  },
+  waitlistCardVertDivider: {
+    width: 1.5,
+    height: 44,
+    borderRadius: 2,
+    marginHorizontal: 4,
+  },
+  waitlistCardCountBlock: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    paddingStart: 4,
+  },
+  waitlistCardCountNum: {
     fontSize: 28,
     fontWeight: '800',
     letterSpacing: -1,
-    lineHeight: 30,
+    includeFontPadding: false,
   },
-  waitlistTileCountLabel: {
+  waitlistCardCountLabel: {
     fontSize: 10,
-    fontWeight: '600',
-    textAlign: 'center',
-    lineHeight: 13,
-    marginTop: 2,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
   },
   quickTile: {
     flex: 1,
@@ -3025,7 +3352,7 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     flex: 1,
   },
   searchContainer: {
-    flexDirection: 'row', // LTR
+    flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f2f2f7',
     borderRadius: 16,
@@ -3036,15 +3363,26 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     paddingVertical: 13,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#E8E8ED',
+    position: 'relative',
   },
   searchIcon: {
-    marginRight: 12, // LTR - icon should be on the left in LTR layout
+    position: 'absolute',
+    left: 16,
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
     color: colors.text,
+    paddingLeft: 32, // leave space for the left search icon
+  },
+  searchInputRtl: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    direction: 'rtl',
+  },
+  searchInputLtr: {
     textAlign: 'left',
+    writingDirection: 'ltr',
   },
   loadingContainer: {
     flex: 1,

@@ -47,6 +47,11 @@ export interface FabButtonProps {
    * `floating` — absolute over the screen (default). `inline` — in document flow (e.g. inside ScrollView).
    */
   layoutMode?: 'floating' | 'inline';
+  /**
+   * Open panel placement. `bottom` — anchored above `bottom` (default). `center` — vertically centered
+   * in the area above `bottom` (keyboard lift still shrinks that area). Ignored when closed or `inline`.
+   */
+  panelVerticalAlign?: 'bottom' | 'center';
 }
 
 export function FabButton({
@@ -66,9 +71,10 @@ export function FabButton({
   closedWidth: closedWidthProp,
   closedAccessibilityLabel,
   layoutMode = 'floating',
+  panelVerticalAlign = 'bottom',
 }: FabButtonProps) {
   const colors = useColors();
-  const { width: screenW } = useWindowDimensions();
+  const { width: screenW, height: screenH } = useWindowDimensions();
   const isInline = layoutMode === 'inline';
   const openedSize = openedSizeProp ?? screenW * 0.92;
   const spacing = closedSize * 0.18;
@@ -135,33 +141,121 @@ export function FabButton({
       ? openWidth
       : closedPanelWidth;
 
+  const useCenteredOpen = !isInline && isOpen && panelVerticalAlign === 'center';
+
+  const openShadow = isOpen
+    ? Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 10 },
+          shadowOpacity: 0.12,
+          shadowRadius: 20,
+        },
+        android: {
+          elevation: isInline ? 6 : 28,
+        },
+      })
+    : undefined;
+
+  const closedShadow = !isOpen
+    ? Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.25,
+          shadowRadius: 12,
+        },
+        android: {
+          elevation: isInline ? 4 : 8,
+        },
+      })
+    : undefined;
+
+  const openChrome = (
+    <>
+      <View
+        style={[
+          styles.grabber,
+          { backgroundColor: grabberColor ?? colors.primary },
+          hideCloseButton ? { marginBottom: 6 } : null,
+        ]}
+      />
+      {!hideCloseButton ? (
+        <Pressable
+          onPress={onPress}
+          hitSlop={12}
+          style={[
+            styles.closeBtn,
+            { top: closeBtnTop },
+            I18nManager.isRTL
+              ? { left: closeBtnEndInset }
+              : { right: closeBtnEndInset },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="סגירה"
+        >
+          <Entypo name="cross" size={closeIconSize} color={iconOnOpen} />
+        </Pressable>
+      ) : null}
+      <View
+        style={[
+          styles.rtlContent,
+          { direction: I18nManager.isRTL ? 'rtl' : 'ltr', paddingTop: rtlContentPaddingTop },
+        ]}
+      >
+        {children}
+      </View>
+    </>
+  );
+
+  const openSheetPadding = {
+    paddingTop: spacing * 1.2,
+    paddingHorizontal: openPaddingH,
+    paddingBottom: spacing * 1.2,
+  };
+
+  const openCardStyle = {
+    width: openWidth,
+    borderRadius: 22,
+    backgroundColor: openBg,
+    ...openSheetPadding,
+    ...openShadow,
+    maxHeight: Math.min(screenH * 0.92, screenH - 32),
+    overflow: 'hidden' as const,
+  };
+
+  const closedFabStyle = {
+    width: panelWidth,
+    minHeight: closedSize,
+    borderRadius: closedSize / 2,
+    backgroundColor: closedBg,
+    paddingTop: 0,
+    paddingHorizontal: 0,
+    paddingBottom: 0,
+    ...closedShadow,
+  };
+
+  const openBottomSheetStyle = {
+    width: panelWidth,
+    borderRadius: 22,
+    backgroundColor: openBg,
+    ...openSheetPadding,
+    ...openShadow,
+  };
+
   return (
     <Animated.View
       layout={enablePanelLayoutAnimation ? LinearTransition.duration(duration) : undefined}
       style={[
         isInline ? styles.panelInline : styles.panel,
-        horizontalStyle,
-        {
-          width: panelWidth,
-          minHeight: isOpen ? undefined : closedSize,
-          borderRadius: isOpen ? 22 : closedSize / 2,
-          backgroundColor: isOpen ? openBg : closedBg,
-          paddingTop: isOpen ? spacing * 1.2 : 0,
-          paddingHorizontal: isOpen ? openPaddingH : 0,
-          paddingBottom: isOpen ? spacing * 1.2 : 0,
-          ...Platform.select({
-            ios: {
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: isOpen ? 10 : 6 },
-              shadowOpacity: isOpen ? 0.12 : 0.25,
-              shadowRadius: isOpen ? 20 : 12,
-            },
-            android: {
-              elevation: isInline ? (isOpen ? 6 : 4) : isOpen ? 28 : 8,
-            },
-          }),
-        },
-        panelStyle,
+        useCenteredOpen ? styles.panelCenterWrap : null,
+        !useCenteredOpen ? horizontalStyle : null,
+        useCenteredOpen
+          ? styles.panelCenterFill
+          : isOpen
+            ? openBottomSheetStyle
+            : closedFabStyle,
+        !useCenteredOpen ? panelStyle : null,
         !isInline ? panelBottomStyle : null,
       ]}
     >
@@ -187,44 +281,21 @@ export function FabButton({
             )}
           </View>
         </>
+      ) : useCenteredOpen ? (
+        <Animated.View
+          entering={FadeInDown.duration(duration)}
+          exiting={FadeOutDown.duration(duration)}
+          style={[openCardStyle, panelStyle]}
+        >
+          <View style={styles.openInner}>{openChrome}</View>
+        </Animated.View>
       ) : (
         <Animated.View
           entering={FadeInDown.duration(duration)}
           exiting={FadeOutDown.duration(duration)}
           style={styles.openInner}
         >
-          <View
-            style={[
-              styles.grabber,
-              { backgroundColor: grabberColor ?? colors.primary },
-              hideCloseButton ? { marginBottom: 6 } : null,
-            ]}
-          />
-          {!hideCloseButton ? (
-            <Pressable
-              onPress={onPress}
-              hitSlop={12}
-              style={[
-                styles.closeBtn,
-                { top: closeBtnTop },
-                I18nManager.isRTL
-                  ? { left: closeBtnEndInset }
-                  : { right: closeBtnEndInset },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="סגירה"
-            >
-              <Entypo name="cross" size={closeIconSize} color={iconOnOpen} />
-            </Pressable>
-          ) : null}
-          <View
-            style={[
-              styles.rtlContent,
-              { direction: I18nManager.isRTL ? 'rtl' : 'ltr', paddingTop: rtlContentPaddingTop },
-            ]}
-          >
-            {children}
-          </View>
+          {openChrome}
         </Animated.View>
       )}
     </Animated.View>
@@ -236,6 +307,24 @@ const styles = StyleSheet.create({
     position: 'absolute',
     overflow: 'hidden',
     zIndex: 10001,
+  },
+  /** Lets the centered inner card’s shadow render outside the hit box wrapper. */
+  panelCenterWrap: {
+    overflow: 'visible',
+  },
+  /** Full screen above `bottom`; centers the sheet; touches pass through to backdrop outside the card. */
+  panelCenterFill: {
+    top: 0,
+    left: 0,
+    right: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    pointerEvents: 'box-none',
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    paddingTop: 0,
+    paddingHorizontal: 0,
+    paddingBottom: 0,
   },
   panelInline: {
     position: 'relative',

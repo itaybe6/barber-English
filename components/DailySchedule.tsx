@@ -286,7 +286,7 @@ export default function DailySchedule({
 
 const createStyles = (colors: any) => StyleSheet.create({
   wrapper: {
-    gap: 10,
+    gap: 12,
   },
 
   /* ── Today Banner (גרדיאנט + LavaLamp כמו login) ── */

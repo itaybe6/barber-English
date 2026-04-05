@@ -15,19 +15,17 @@ import {
   Modal,
 } from 'react-native';
 import Colors from '@/constants/colors';
-import { Phone, Trash2, ChevronLeft, ChevronRight, X } from 'lucide-react-native';
+import { Phone, Trash2, X } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import WaitlistClientCard from '@/components/WaitlistClientCard';
 import { supabase, WaitlistEntry } from '@/lib/supabase';
-import DaySelector from '@/components/DaySelector';
 import AdminVerticalMonthCalendar from '@/components/book-appointment/games-calendar/AdminVerticalMonthCalendar';
 import { useAuthStore } from '@/stores/authStore';
 import { useColors, usePrimaryContrast } from '@/src/theme/ThemeProvider';
 import { useTranslation } from 'react-i18next';
 import { formatTimeFromDate } from '@/lib/utils/timeFormat';
 import i18n from '@/src/config/i18n';
-import { useAdminWaitlistCalendarView } from '@/contexts/AdminWaitlistCalendarViewContext';
 
 const GC_SURFACE = '#FFFFFF';
 const GC_PAGE_BG = '#F8F9FA';
@@ -43,46 +41,6 @@ function formatDateToLocalString(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
-}
-
-function getStartOfWeekSunday(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  const day = d.getDay();
-  d.setDate(d.getDate() - day);
-  return d;
-}
-
-function addDays(d: Date, n: number): Date {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-function formatWeekRangeLabel(anchorDate: Date, lang: string): string {
-  const start = getStartOfWeekSunday(anchorDate);
-  const end = addDays(start, 6);
-  const isHe = lang.startsWith('he');
-  try {
-    const sameMonth =
-      start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth();
-    if (sameMonth) {
-      const my = new Intl.DateTimeFormat(isHe ? 'he-IL-u-ca-gregory' : 'en-US', {
-        month: 'long',
-        year: 'numeric',
-      }).format(start);
-      return `${start.getDate()}–${end.getDate()} ${my}`;
-    }
-    const fmt = new Intl.DateTimeFormat(isHe ? 'he-IL-u-ca-gregory' : 'en-US', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
-    return `${fmt.format(start)} – ${fmt.format(end)}`;
-  } catch {
-    return `${formatDateToLocalString(start)} – ${formatDateToLocalString(end)}`;
-  }
 }
 
 async function fetchWaitlistForRange(startDate: Date, endDate: Date, userId?: string): Promise<WaitlistEntry[]> {
@@ -223,8 +181,6 @@ export default function WaitlistScreen() {
   const colors = useColors();
   const { onPrimary } = usePrimaryContrast();
   const { t, i18n } = useTranslation();
-  const { waitlistCalendarView } = useAdminWaitlistCalendarView();
-  const isRtl = I18nManager.isRTL;
 
   const [selectedDate, setSelectedDate] = useState(() => {
     const d = new Date();
@@ -239,8 +195,6 @@ export default function WaitlistScreen() {
 
   const [monthDaySheetOpen, setMonthDaySheetOpen] = useState(false);
   const [monthSheetAnchorDate, setMonthSheetAnchorDate] = useState<Date | null>(null);
-
-  const selectedDateKey = useMemo(() => formatDateToLocalString(selectedDate), [selectedDate]);
 
   const monthSheetKey = useMemo(
     () => (monthSheetAnchorDate ? formatDateToLocalString(monthSheetAnchorDate) : ''),
@@ -262,24 +216,13 @@ export default function WaitlistScreen() {
     }
   }, [monthSheetAnchorDate, i18n.language, monthSheetKey]);
 
-  useEffect(() => {
-    if (waitlistCalendarView !== 'month') {
-      setMonthDaySheetOpen(false);
-    }
-  }, [waitlistCalendarView]);
-
   const { rangeStart, rangeEnd } = useMemo(() => {
-    if (waitlistCalendarView === 'month') {
-      const start = new Date(visibleMonth.y, visibleMonth.m, 1);
-      const end = new Date(visibleMonth.y, visibleMonth.m + 1, 0);
-      start.setHours(0, 0, 0, 0);
-      end.setHours(0, 0, 0, 0);
-      return { rangeStart: start, rangeEnd: end };
-    }
-    const wkStart = getStartOfWeekSunday(selectedDate);
-    const wkEnd = addDays(wkStart, 6);
-    return { rangeStart: wkStart, rangeEnd: wkEnd };
-  }, [waitlistCalendarView, selectedDate, visibleMonth]);
+    const start = new Date(visibleMonth.y, visibleMonth.m, 1);
+    const end = new Date(visibleMonth.y, visibleMonth.m + 1, 0);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+    return { rangeStart: start, rangeEnd: end };
+  }, [visibleMonth]);
 
   const fetchRangeKey = useMemo(
     () => `${formatDateToLocalString(rangeStart)}_${formatDateToLocalString(rangeEnd)}`,
@@ -371,8 +314,6 @@ export default function WaitlistScreen() {
     [monthSheetKey, waitlistByDate]
   );
 
-  const markedDates = useMemo(() => new Set(Object.keys(waitlistByDate)), [waitlistByDate]);
-
   const waitlistCountsByDate = useMemo(() => {
     const r: Record<string, number> = {};
     for (const e of waitlist) {
@@ -380,34 +321,18 @@ export default function WaitlistScreen() {
     }
     return r;
   }, [waitlist]);
-
-  const selectedDayEntries = useMemo(() => waitlistByDate[selectedDateKey] || [], [waitlistByDate, selectedDateKey]);
-
-  const weekDayKeys = useMemo(() => {
-    const start = getStartOfWeekSunday(selectedDate);
-    return Array.from({ length: 7 }, (_, i) => formatDateToLocalString(addDays(start, i)));
-  }, [selectedDate]);
-
-  const headerSubtitle = useMemo(() => {
-    if (waitlistCalendarView === 'day') return t('admin.waitlist.subtitleDay', 'Daily — pick a day');
-    if (waitlistCalendarView === 'week') return t('admin.waitlist.subtitleWeek', 'Weekly — all days in this week');
-    return t('admin.waitlist.subtitleMonth', 'Monthly — tap a day to open the list');
-  }, [waitlistCalendarView, t]);
+  const headerSubtitle = useMemo(
+    () => t('admin.waitlist.subtitleMonth', 'Monthly — tap a day to open the list'),
+    [t]
+  );
 
   const headerBadgeText = useMemo(() => {
     const loc = i18n.language?.startsWith('he') ? 'he-IL' : 'en-US';
-    if (waitlistCalendarView === 'month') {
-      const d = new Date(visibleMonth.y, visibleMonth.m, 1);
-      return d.toLocaleDateString(loc, { month: 'long', year: 'numeric' });
-    }
-    if (waitlistCalendarView === 'week') {
-      return formatWeekRangeLabel(selectedDate, i18n.language || 'en');
-    }
-    return selectedDate.toLocaleDateString(loc, { month: 'long', year: 'numeric' });
-  }, [waitlistCalendarView, visibleMonth, selectedDate, i18n.language]);
+    const d = new Date(visibleMonth.y, visibleMonth.m, 1);
+    return d.toLocaleDateString(loc, { month: 'long', year: 'numeric' });
+  }, [visibleMonth, i18n.language]);
 
   const calendarPrimary = colors.primary || '#1A73E8';
-  const calendarRipple = `${calendarPrimary}2A`;
 
   const adminMonthAnchorKey = useMemo(() => `${visibleMonth.y}-${visibleMonth.m}`, [visibleMonth]);
 
@@ -525,75 +450,6 @@ export default function WaitlistScreen() {
     );
   };
 
-  const hasAnyInWeek = useMemo(
-    () => weekDayKeys.some((k) => (waitlistByDate[k]?.length ?? 0) > 0),
-    [weekDayKeys, waitlistByDate]
-  );
-
-  const listBody = loading ? (
-    <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 32 }} />
-  ) : waitlistCalendarView === 'week' ? (
-    hasAnyInWeek ? (
-      <View style={styles.cardsContainer}>
-        {weekDayKeys.map((dayKey) => {
-          const entries = waitlistByDate[dayKey] || [];
-          if (entries.length === 0) return null;
-          const [yy, mm, dd] = dayKey.split('-').map((x) => parseInt(x, 10));
-          const d = new Date(yy, mm - 1, dd);
-          const loc = i18n.language?.startsWith('he') ? 'he-IL-u-ca-gregory' : 'en-US';
-          let sectionTitle = dayKey;
-          try {
-            sectionTitle = d.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'short' });
-          } catch {
-            /* keep key */
-          }
-          return (
-            <View key={dayKey} style={styles.weekSection}>
-              <Text style={styles.weekSectionTitle}>{sectionTitle}</Text>
-              {entries.map((e) => (
-                <React.Fragment key={e.id}>{renderEntryCard(e)}</React.Fragment>
-              ))}
-            </View>
-          );
-        })}
-      </View>
-    ) : (
-      <View style={styles.emptyState}>
-        <View style={styles.emptyIconCircle}>
-          <Ionicons name="hourglass-outline" size={22} color={colors.primary} />
-        </View>
-        <Text style={styles.emptyTitle}>{t('admin.waitlist.emptyWeekTitle', 'No waitlist this week')}</Text>
-        <Text style={styles.emptySubtitle}>{t('admin.waitlist.emptyWeekSubtitle', 'No clients are waiting in this date range')}</Text>
-      </View>
-    )
-  ) : selectedDayEntries.length > 0 ? (
-    <View style={styles.cardsContainer}>
-      {selectedDayEntries.map((e) => (
-        <React.Fragment key={e.id}>{renderEntryCard(e)}</React.Fragment>
-      ))}
-    </View>
-  ) : (
-    <View style={styles.emptyState}>
-      <View style={styles.emptyIconCircle}>
-        <Ionicons name="hourglass-outline" size={22} color={colors.primary} />
-      </View>
-      <Text style={styles.emptyTitle}>{t('admin.waitlist.emptyTitle', 'No waitlist entries for this day')}</Text>
-      <Text style={styles.emptySubtitle}>{t('admin.waitlist.emptySubtitle', 'No clients are waiting for this day')}</Text>
-    </View>
-  );
-
-  const listScroll = (
-    <ScrollView
-      contentContainerStyle={[styles.scrollContent, { padding: 16, paddingBottom: 120 }]}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[calendarPrimary]} tintColor={calendarPrimary} />
-      }
-    >
-      {listBody}
-    </ScrollView>
-  );
-
   const monthModalListSection = loading ? (
     <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
   ) : monthSheetEntries.length > 0 ? (
@@ -615,151 +471,80 @@ export default function WaitlistScreen() {
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: '#fff' }}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      {waitlistCalendarView !== 'week' ? (
-        <View style={styles.headerLikeAppointments}>
-          <View style={styles.headerTopRow}>
-            <View style={styles.headerTitleColumn}>
-              <Text style={[styles.headerTitle, { color: colors.primary }]}>{t('admin.waitlist.title', 'Waitlist')}</Text>
-              <Text style={styles.headerSubtitle}>{headerSubtitle}</Text>
-            </View>
-            <View style={styles.monthBadge}>
-              <Text style={styles.monthText} numberOfLines={2}>
-                {headerBadgeText}
-              </Text>
-            </View>
+      <View style={styles.headerLikeAppointments}>
+        <View style={styles.headerTopRow}>
+          <View style={styles.headerTitleColumn}>
+            <Text style={[styles.headerTitle, { color: colors.primary }]}>{t('admin.waitlist.title', 'Waitlist')}</Text>
+            <Text style={styles.headerSubtitle}>{headerSubtitle}</Text>
+          </View>
+          <View style={styles.monthBadge}>
+            <Text style={styles.monthText} numberOfLines={2}>
+              {headerBadgeText}
+            </Text>
           </View>
         </View>
-      ) : null}
+      </View>
 
-      {waitlistCalendarView === 'day' ? (
-        <View style={{ backgroundColor: GC_SURFACE }}>
-          <DaySelector
-            selectedDate={selectedDate}
-            onSelectDate={setSelectedDate}
-            daysToShow={7}
-            mode="week"
-            startFromToday={false}
-            markedDates={markedDates}
-            containerBackgroundColor={GC_SURFACE}
-            contentPaddingTop={2}
-            contentPaddingBottom={2}
-          />
-        </View>
-      ) : null}
+      <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+        <AdminVerticalMonthCalendar
+          dayAvailability={waitlistCountsByDate}
+          selectedDate={selectedDate}
+          language={typeof i18n.language === 'string' && i18n.language.startsWith('he') ? 'he' : 'en'}
+          primaryColor={calendarPrimary}
+          anchorMonthKey={adminMonthAnchorKey}
+          onVisibleMonthChange={onWaitlistMonthVisible}
+          onDayPress={onWaitlistDayPress}
+          onJumpToDate={onJumpToDate}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          todayLabel={t('admin.calendar.today', 'Today')}
+          monthHint={t(
+            'admin.waitlist.monthCalendarHint',
+            'Numbers show how many clients are on the waitlist that day. Tap a day to open the list.'
+          )}
+          formatCountBadge={formatCountBadge}
+          showTodayPill={false}
+        />
+      </View>
 
-      {waitlistCalendarView === 'week' ? (
-        <View style={styles.gcTopChrome}>
-          <View style={styles.gcHeader}>
-            <View style={[styles.gcNavTrack, { flexDirection: isRtl ? 'row-reverse' : 'row' }]}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={String(t('admin.appointments.navPrev', 'Previous'))}
-                onPress={() => {
-                  const d = new Date(selectedDate);
-                  d.setDate(d.getDate() - 7);
-                  d.setHours(0, 0, 0, 0);
-                  setSelectedDate(getStartOfWeekSunday(d));
-                }}
-                android_ripple={{ color: calendarRipple, borderless: false }}
-                style={({ pressed }) => [
-                  styles.gcNavCircleBtn,
-                  Platform.OS === 'ios' && pressed && styles.gcNavCircleBtnPressedIos,
-                ]}
-              >
-                <ChevronRight size={22} color={calendarPrimary} strokeWidth={2.5} />
-              </Pressable>
-              <View style={styles.gcMonthTitleWrap} pointerEvents="none">
-                <Text style={styles.gcMonthTitle} numberOfLines={1}>
-                  {formatWeekRangeLabel(selectedDate, i18n.language || 'en')}
-                </Text>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={String(t('admin.appointments.navNext', 'Next'))}
-                onPress={() => {
-                  const d = new Date(selectedDate);
-                  d.setDate(d.getDate() + 7);
-                  d.setHours(0, 0, 0, 0);
-                  setSelectedDate(getStartOfWeekSunday(d));
-                }}
-                android_ripple={{ color: calendarRipple, borderless: false }}
-                style={({ pressed }) => [
-                  styles.gcNavCircleBtn,
-                  Platform.OS === 'ios' && pressed && styles.gcNavCircleBtnPressedIos,
-                ]}
-              >
-                <ChevronLeft size={22} color={calendarPrimary} strokeWidth={2.5} />
-              </Pressable>
-            </View>
+      <Modal
+        visible={monthDaySheetOpen}
+        animationType="slide"
+        onRequestClose={closeMonthSheet}
+        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
+      >
+        <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.monthModalSafe}>
+          <View style={[styles.monthModalHeader, { borderBottomColor: colors.border }]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={String(t('close', 'Close'))}
+              onPress={closeMonthSheet}
+              hitSlop={12}
+              style={styles.monthModalCloseBtn}
+            >
+              <X size={24} color={colors.text} strokeWidth={2.4} />
+            </Pressable>
+            <Text style={[styles.monthModalTitle, { color: colors.text }]} numberOfLines={2}>
+              {t('admin.waitlist.monthModalTitle', 'Waitlist — {{date}}', { date: monthModalTitleLabel })}
+            </Text>
+            <View style={styles.monthModalHeaderSpacer} />
           </View>
-        </View>
-      ) : null}
-
-      {waitlistCalendarView === 'month' ? (
-        <>
-          <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
-            <AdminVerticalMonthCalendar
-              dayAvailability={waitlistCountsByDate}
-              selectedDate={selectedDate}
-              language={typeof i18n.language === 'string' && i18n.language.startsWith('he') ? 'he' : 'en'}
-              primaryColor={calendarPrimary}
-              anchorMonthKey={adminMonthAnchorKey}
-              onVisibleMonthChange={onWaitlistMonthVisible}
-              onDayPress={onWaitlistDayPress}
-              onJumpToDate={onJumpToDate}
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              todayLabel={t('admin.calendar.today', 'Today')}
-              monthHint={t(
-                'admin.waitlist.monthCalendarHint',
-                'Numbers show how many clients are on the waitlist that day. Tap a day to open the list.'
-              )}
-              formatCountBadge={formatCountBadge}
-              showTodayPill={false}
-            />
-          </View>
-          <Modal
-            visible={monthDaySheetOpen}
-            animationType="slide"
-            onRequestClose={closeMonthSheet}
-            presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
+          <ScrollView
+            contentContainerStyle={[styles.monthModalScroll, { paddingBottom: 28 }]}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[calendarPrimary]}
+                tintColor={calendarPrimary}
+              />
+            }
           >
-            <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.monthModalSafe}>
-              <View style={[styles.monthModalHeader, { borderBottomColor: colors.border }]}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={String(t('close', 'Close'))}
-                  onPress={closeMonthSheet}
-                  hitSlop={12}
-                  style={styles.monthModalCloseBtn}
-                >
-                  <X size={24} color={colors.text} strokeWidth={2.4} />
-                </Pressable>
-                <Text style={[styles.monthModalTitle, { color: colors.text }]} numberOfLines={2}>
-                  {t('admin.waitlist.monthModalTitle', 'Waitlist — {{date}}', { date: monthModalTitleLabel })}
-                </Text>
-                <View style={styles.monthModalHeaderSpacer} />
-              </View>
-              <ScrollView
-                contentContainerStyle={[styles.monthModalScroll, { paddingBottom: 28 }]}
-                showsVerticalScrollIndicator={false}
-                refreshControl={
-                  <RefreshControl
-                    refreshing={refreshing}
-                    onRefresh={onRefresh}
-                    colors={[calendarPrimary]}
-                    tintColor={calendarPrimary}
-                  />
-                }
-              >
-                {monthModalListSection}
-              </ScrollView>
-            </SafeAreaView>
-          </Modal>
-        </>
-      ) : (
-        <View style={[styles.waitlistBg, { marginTop: 0, paddingTop: 12 }]}>{listScroll}</View>
-      )}
+            {monthModalListSection}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }

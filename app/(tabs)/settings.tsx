@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking, Dimensions, Switch, I18nManager, DeviceEventEmitter, type LayoutChangeEvent } from 'react-native';
-import Constants from 'expo-constants';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
@@ -56,6 +55,7 @@ import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatli
 import { SettingsScreenTabs } from '@/components/settings/SettingsScreenTabs';
 import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
 import { BookingDaysRuler, type BookingDaysRulerHandle } from '@/components/BookingDaysRuler';
+import { getExpoExtra } from '@/lib/getExtra';
 
 // Helper for shadow style
 const shadowStyle = Platform.select({
@@ -95,6 +95,19 @@ export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t, i18n } = useTranslation();
+  const expoExtra = useMemo(() => getExpoExtra(), []);
+  const googlePlacesKey = useMemo(
+    () =>
+      String(
+        (process.env as any)?.EXPO_PUBLIC_GOOGLE_PLACES_KEY ||
+          (expoExtra as any)?.EXPO_PUBLIC_GOOGLE_PLACES_KEY ||
+          (process.env as any)?.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY ||
+          (expoExtra as any)?.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY ||
+          ''
+      ).trim(),
+    [expoExtra]
+  );
+  const hasGooglePlacesAutocomplete = googlePlacesKey.length > 0;
 
   /** Match client booking list: `order_index` (then name). Missing index sorts after indexed rows. */
   const sortServicesLikeClientBooking = useCallback((list: Service[]) => {
@@ -403,6 +416,11 @@ export default function SettingsScreen() {
   // Open editors with current values
   const openEditAddress = () => {
     setAddressDraft(profileAddress || '');
+    setPlacesFormattedAddress('');
+    setPlacesPlaceId('');
+    setPlacesLat(null);
+    setPlacesLng(null);
+    justSelectedPlaceRef.current = false;
     setShowAddressSheet(true);
     addressSheetAnim.setValue(0);
     Animated.timing(addressSheetAnim, {
@@ -3378,86 +3396,114 @@ export default function SettingsScreen() {
                         <MapPin size={20} color={businessColors.primary} strokeWidth={2.2} />
                       </View>
                       <View style={styles.addressAutocompleteFlex}>
-                        <GooglePlacesAutocomplete
-                          keyboardShouldPersistTaps="handled"
-                          placeholder={t('settings.profile.businessAddressSearchPlaceholder', 'Street, city…')}
-                          fetchDetails
-                          debounce={220}
-                          enablePoweredByContainer={false}
-                          minLength={2}
-                          predefinedPlaces={[]}
-                          nearbyPlacesAPI={undefined as any}
-                          query={{
-                            key: (Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_PLACES_KEY || process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY,
-                            language: normalizeAppLanguage(i18n.language),
-                            types: 'geocode',
-                          }}
-                          ref={placesInputRef}
-                          onPress={(data: any, details: any) => {
-                            const formatted = details?.formatted_address || data?.description || '';
-                            const placeId = data?.place_id || details?.place_id || '';
-                            const lat = details?.geometry?.location?.lat ?? null;
-                            const lng = details?.geometry?.location?.lng ?? null;
-                            const shortAddress =
-                              formatShortAddress(details, data?.description || formatted) ||
-                              String(formatted || data?.description || '').trim();
-                            setPlacesFormattedAddress(shortAddress);
-                            setPlacesPlaceId(placeId);
-                            setPlacesLat(lat);
-                            setPlacesLng(lng);
-                            setAddressDraft(shortAddress);
-                            justSelectedPlaceRef.current = true;
-                          }}
-                          textInputProps={{
-                            value: addressDraft,
-                            onChangeText: (tx: string) => {
-                              if (justSelectedPlaceRef.current) {
-                                justSelectedPlaceRef.current = false;
+                        {hasGooglePlacesAutocomplete ? (
+                          <GooglePlacesAutocomplete
+                            keyboardShouldPersistTaps="handled"
+                            placeholder={t('settings.profile.businessAddressSearchPlaceholder', 'Street, city…')}
+                            fetchDetails
+                            debounce={220}
+                            enablePoweredByContainer={false}
+                            minLength={2}
+                            predefinedPlaces={[]}
+                            nearbyPlacesAPI={undefined as any}
+                            query={{
+                              key: googlePlacesKey,
+                              language: normalizeAppLanguage(i18n.language),
+                              types: 'geocode',
+                            }}
+                            ref={placesInputRef}
+                            onPress={(data: any, details: any) => {
+                              const formatted = details?.formatted_address || data?.description || '';
+                              const placeId = data?.place_id || details?.place_id || '';
+                              const lat = details?.geometry?.location?.lat ?? null;
+                              const lng = details?.geometry?.location?.lng ?? null;
+                              const shortAddress =
+                                formatShortAddress(details, data?.description || formatted) ||
+                                String(formatted || data?.description || '').trim();
+                              setPlacesFormattedAddress(shortAddress);
+                              setPlacesPlaceId(placeId);
+                              setPlacesLat(lat);
+                              setPlacesLng(lng);
+                              setAddressDraft(shortAddress);
+                              justSelectedPlaceRef.current = true;
+                            }}
+                            textInputProps={{
+                              value: addressDraft,
+                              onChangeText: (tx: string) => {
+                                if (justSelectedPlaceRef.current) {
+                                  justSelectedPlaceRef.current = false;
+                                  setAddressDraft(tx);
+                                  return;
+                                }
                                 setAddressDraft(tx);
-                                return;
-                              }
-                              setAddressDraft(tx);
-                              if (placesPlaceId) {
-                                setPlacesPlaceId('');
-                                setPlacesFormattedAddress('');
-                                setPlacesLat(null);
-                                setPlacesLng(null);
-                              }
-                            },
-                            placeholderTextColor: '#9CA3AF',
-                            autoCorrect: false,
-                            autoCapitalize: 'none',
-                            textAlign: isRtlLanguage(i18n.language) ? 'right' : 'left',
-                          }}
-                          styles={{
-                            container: { flex: 0 },
-                            textInputContainer: { padding: 0, borderWidth: 0, backgroundColor: 'transparent' },
-                            textInput: [styles.addressSearchInput as any],
-                            listView: {
-                              position: 'absolute',
-                              top: 54,
-                              left: 0,
-                              right: 0,
-                              zIndex: 9999,
-                              elevation: 16,
-                              backgroundColor: '#FFFFFF',
-                              borderRadius: 16,
-                              marginTop: 8,
-                              borderWidth: StyleSheet.hairlineWidth,
-                              borderColor: '#E8EAEF',
-                              maxHeight: 280,
-                              ...Platform.select({
-                                ios: {
-                                  shadowColor: '#1a1f36',
-                                  shadowOffset: { width: 0, height: 10 },
-                                  shadowOpacity: 0.12,
-                                  shadowRadius: 24,
-                                },
-                                android: { elevation: 12 },
-                              }),
-                            },
-                          }}
-                        />
+                                if (placesPlaceId) {
+                                  setPlacesPlaceId('');
+                                  setPlacesFormattedAddress('');
+                                  setPlacesLat(null);
+                                  setPlacesLng(null);
+                                }
+                              },
+                              placeholderTextColor: '#9CA3AF',
+                              autoCorrect: false,
+                              autoCapitalize: 'none',
+                              textAlign: isRtlLanguage(i18n.language) ? 'right' : 'left',
+                            }}
+                            styles={{
+                              container: { flex: 0 },
+                              textInputContainer: { padding: 0, borderWidth: 0, backgroundColor: 'transparent' },
+                              textInput: [styles.addressSearchInput as any],
+                              row: {
+                                paddingVertical: 12,
+                                paddingHorizontal: 14,
+                                backgroundColor: '#FFFFFF',
+                              },
+                              description: {
+                                color: '#111827',
+                                fontSize: 15,
+                                textAlign: isRtlLanguage(i18n.language) ? 'right' : 'left',
+                                writingDirection: isRtlLanguage(i18n.language) ? 'rtl' : 'ltr',
+                              },
+                              separator: {
+                                height: StyleSheet.hairlineWidth,
+                                backgroundColor: '#E8EAEF',
+                              },
+                              listView: {
+                                position: 'absolute',
+                                top: 54,
+                                left: 0,
+                                right: 0,
+                                zIndex: 9999,
+                                elevation: 16,
+                                backgroundColor: '#FFFFFF',
+                                borderRadius: 16,
+                                marginTop: 8,
+                                borderWidth: StyleSheet.hairlineWidth,
+                                borderColor: '#E8EAEF',
+                                maxHeight: 280,
+                                ...Platform.select({
+                                  ios: {
+                                    shadowColor: '#1a1f36',
+                                    shadowOffset: { width: 0, height: 10 },
+                                    shadowOpacity: 0.12,
+                                    shadowRadius: 24,
+                                  },
+                                  android: { elevation: 12 },
+                                }),
+                              },
+                            }}
+                          />
+                        ) : (
+                          <TextInput
+                            style={styles.addressSearchInput}
+                            value={addressDraft}
+                            onChangeText={setAddressDraft}
+                            placeholder={t('settings.profile.businessAddressSearchPlaceholder', 'Street, city…')}
+                            placeholderTextColor="#9CA3AF"
+                            autoCorrect={false}
+                            autoCapitalize="none"
+                            textAlign={isRtlLanguage(i18n.language) ? 'right' : 'left'}
+                          />
+                        )}
                       </View>
                     </View>
 
@@ -3470,7 +3516,7 @@ export default function SettingsScreen() {
                         <View style={[styles.addressMapFrame, { borderColor: `${businessColors.primary}28` }]}>
                           <Image
                             source={{
-                              uri: `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent((placesFormattedAddress || addressDraft) as string)}&zoom=15&size=800x400&scale=2&markers=color:red|${encodeURIComponent((placesFormattedAddress || addressDraft) as string)}&key=${(Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_PLACES_KEY || process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY}`,
+                              uri: `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent((placesFormattedAddress || addressDraft) as string)}&zoom=15&size=800x400&scale=2&markers=color:red|${encodeURIComponent((placesFormattedAddress || addressDraft) as string)}&key=${googlePlacesKey}`,
                             }}
                             style={styles.addressMapImage}
                             resizeMode="cover"
@@ -4876,6 +4922,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
     paddingTop: 4,
+    zIndex: 1,
   },
   addressFieldSectionLabel: {
     fontSize: 12,
@@ -4894,6 +4941,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     paddingLeft: 6,
     paddingRight: 4,
+    overflow: 'visible',
+    zIndex: 50,
     ...Platform.select({
       ios: {
         shadowColor: '#1a2744',
@@ -4915,6 +4964,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 52,
     justifyContent: 'center',
+    zIndex: 50,
   },
   addressSearchInput: {
     minHeight: 52,

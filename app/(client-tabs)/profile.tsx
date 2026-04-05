@@ -277,6 +277,8 @@ export default function ClientProfileScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 28 }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        scrollEnabled={false}
+        bounces={false}
       >
         <View style={styles.profileHeaderRoot}>
           <View style={styles.profileHeaderColumn}>

@@ -1227,8 +1227,8 @@ export default function ClientHomeScreen() {
                <Image
                  source={{ uri: (
                    mapCoords
-                     ? `https://maps.googleapis.com/maps/api/staticmap?center=${mapCoords.lat},${mapCoords.lon}&zoom=16&scale=2&size=640x400&maptype=roadmap&style=feature:poi|visibility:off&style=feature:transit|visibility:off&style=feature:road|element:geometry|color:0xf0f0f0&style=feature:water|element:geometry|color:0xd8ecff&style=feature:landscape|element:geometry|color:0xf7f7f7&key=${GOOGLE_STATIC_MAPS_KEY}`
-                     : `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(displayAddress)}&zoom=16&scale=2&size=640x400&maptype=roadmap&style=feature:poi|visibility:off&style=feature:transit|visibility:off&style=feature:road|element:geometry|color:0xf0f0f0&style=feature:water|element:geometry|color:0xd8ecff&style=feature:landscape|element:geometry|color:0xf7f7f7&key=${GOOGLE_STATIC_MAPS_KEY}`
+                    ? `https://maps.googleapis.com/maps/api/staticmap?center=${mapCoords.lat},${mapCoords.lon}&zoom=16&scale=2&size=640x400&maptype=roadmap&style=feature:poi|visibility:off&style=feature:transit|visibility:off&style=feature:road|element:geometry|color:0xf0f0f0&style=feature:water|element:geometry|color:0xd8ecff&style=feature:landscape|element:geometry|color:0xf7f7f7&key=${GOOGLE_STATIC_MAPS_KEY}`
+                    : `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(displayAddress)}&zoom=16&scale=2&size=640x400&maptype=roadmap&style=feature:poi|visibility:off&style=feature:transit|visibility:off&style=feature:road|element:geometry|color:0xf0f0f0&style=feature:water|element:geometry|color:0xd8ecff&style=feature:landscape|element:geometry|color:0xf7f7f7&key=${GOOGLE_STATIC_MAPS_KEY}`
                  ) }}
                  style={styles.mapImage}
                  resizeMode="cover"
@@ -2178,7 +2178,7 @@ const styles = StyleSheet.create<any>({
     color: '#FFFFFF',
     marginBottom: 2,
     textAlign: 'right',
-    alignSelf: 'flex-end',
+    alignSelf: I18nManager.isRTL ? 'flex-start' : 'flex-end',
     writingDirection: I18nManager.isRTL ? 'rtl' : 'ltr',
     maxWidth: '100%',
   },

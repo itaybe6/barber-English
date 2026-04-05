@@ -9,7 +9,7 @@ type AdminWaitlistCalendarViewContextValue = {
 const AdminWaitlistCalendarViewContext = createContext<AdminWaitlistCalendarViewContextValue | null>(null);
 
 export function AdminWaitlistCalendarViewProvider({ children }: { children: ReactNode }) {
-  const [waitlistCalendarView, setWaitlistCalendarView] = useState<CalendarViewMode>('week');
+  const [waitlistCalendarView, setWaitlistCalendarView] = useState<CalendarViewMode>('month');
   const value = useMemo(
     () => ({ waitlistCalendarView, setWaitlistCalendarView }),
     [waitlistCalendarView]

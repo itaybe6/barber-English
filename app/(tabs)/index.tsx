@@ -18,7 +18,7 @@ import {
   Dimensions,
   I18nManager,
 } from 'react-native';
-import Animated, { useSharedValue, useAnimatedScrollHandler, runOnJS } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedScrollHandler, runOnJS, useAnimatedStyle } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -109,17 +109,6 @@ function chunkArray<T>(array: T[], size: number): T[][] {
     index += safeSize;
   }
   return chunked;
-}
-
-/** Build rgba() strings for LinearGradient from theme hex (e.g. hero scrim behind white logo). */
-function hexToRgba(hex: string, a: number): string {
-  const h = hex.replace('#', '');
-  if (h.length < 6) return `rgba(0,0,0,${a})`;
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return `rgba(0,0,0,${a})`;
-  return `rgba(${r},${g},${b},${a})`;
 }
 
 const manicureHeroRootStyle = {
@@ -225,12 +214,13 @@ export default function HomeScreen() {
   const styles = createStyles(colors, primaryOnSurface);
   const heroLogoScrimGradientColors = useMemo(
     () => [
-      hexToRgba(colors.primary, 0.9),
-      hexToRgba(colors.primary, 0.82),
-      hexToRgba(colors.primary, 0.48),
-      hexToRgba(colors.primary, 0),
+      // Match client home top scrim (`app/(client-tabs)/index.tsx`) — black fade for readability.
+      'rgba(0,0,0,0.92)',
+      'rgba(0,0,0,0.82)',
+      'rgba(0,0,0,0.55)',
+      'rgba(0,0,0,0)',
     ],
-    [colors.primary]
+    []
   );
   /** Section headers: Hebrew titles flush right, edit control on the opposite side (LTR physical layout). */
   const adminSectionTitleOnRight = Boolean(i18n.language?.startsWith('he'));
@@ -404,6 +394,8 @@ export default function HomeScreen() {
 
   /** SharedValue tracks inner-scroll state so the UI-thread worklet can read it without crossing to JS */
   const innerActiveSV = useSharedValue(0);
+  /** Drives subtle hero parallax while dragging the sheet */
+  const outerScrollYSV = useSharedValue(0);
 
   const enableInnerScrollJS = useCallback(
     (enabled: boolean) => {
@@ -428,6 +420,7 @@ export default function HomeScreen() {
     onScroll: (event) => {
       'worklet';
       const y = event.contentOffset.y;
+      outerScrollYSV.value = y;
       const cap = outerScrollCapSV.value;
       const wasInner = innerActiveSV.value === 1;
       let nextInner = wasInner;
@@ -446,6 +439,14 @@ export default function HomeScreen() {
       }
     },
   });
+
+  const heroMarqueeAnimatedStyle = useAnimatedStyle(() => {
+    const y = Math.max(0, outerScrollYSV.value);
+    const clamped = Math.min(y, HERO_HEIGHT + 40);
+    // Parallax: background shifts slightly slower than the sheet
+    const translateY = -clamped * 0.22;
+    return { transform: [{ translateY }] };
+  }, []);
 
   const formatClientMoney = useCallback(
     (amount: number) => {
@@ -695,6 +696,7 @@ export default function HomeScreen() {
       void fetchInsightsData();
       void fetchNextAppointment();
       void fetchTodayAppointmentsCount();
+      void fetchPendingClients();
     }, [isAdmin, user?.id, isSuperAdmin])
   );
 
@@ -1124,9 +1126,13 @@ export default function HomeScreen() {
       </View>
 
       {/* Fixed hero marquee — not a child of the sheet ScrollView; sheet slides over it, zero scroll coupling */}
-      <View style={styles.adminHeroMarqueeHost} pointerEvents="none" collapsable={false}>
+      <Animated.View
+        style={[styles.adminHeroMarqueeHost, heroMarqueeAnimatedStyle]}
+        pointerEvents="box-none"
+        collapsable={false}
+      >
         <ManicureMarqueeHero images={heroImagesResolved} />
-      </View>
+      </Animated.View>
 
       {/* Sheet + outer scroll only moves the white panel; background stays visually independent */}
       <Animated.ScrollView

@@ -301,11 +301,6 @@ export default function RegisterScreen() {
         return t('login.otp.errorInvoke', 'לא ניתן להגיע לשרת. בדקו חיבור לאינטרנט.');
       case 'rate_limit_sends':
         return t('login.otp.errorRateLimit', 'נשלחו יותר מדי קודים. נסו שוב מאוחר יותר.');
-      case 'pulseem_monthly_quota_exceeded':
-        return t(
-          'login.otp.errorMonthlyQuota',
-          'הגעתם למכסת הודעות SMS החודשית. נסו שוב בחודש הבא או פנו לתמיכה.',
-        );
       case 'sms_send_failed':
         return t('login.otp.errorSms', 'שליחת ה-SMS נכשלה.');
       case 'phone_registered':

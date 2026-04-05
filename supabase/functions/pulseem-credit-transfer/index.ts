@@ -20,6 +20,7 @@
  *   { "monthlyTopupAll": true,
  *     "directSmsCredits"?: number — default from PULSEEM_MONTHLY_TOPUP_DIRECT_SMS or 100 }
  * Transfers Direct SMS credits for every business with pulseem_has_api_key.
+ * Pulseem balance accumulates month to month (unused credits remain); sends fail when Pulseem reports no credits.
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";

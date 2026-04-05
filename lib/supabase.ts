@@ -317,11 +317,6 @@ export interface BusinessProfile {
   pulseem_has_password?: boolean;
   pulseem_api_key?: string | null;
   pulseem_has_api_key?: boolean;
-  /** YYYY-MM Asia/Jerusalem — period for pulseem_monthly_sms_used */
-  pulseem_monthly_sms_period?: string | null;
-  pulseem_monthly_sms_used?: number;
-  /** Max tenant SMS per calendar month (Jerusalem); null = unlimited */
-  pulseem_monthly_sms_cap?: number | null;
   /** Green Invoice API — מזהה מפתח מכלי המפתחים */
   greeninvoice_api_key_id?: string | null;
   /** Encrypted API secret (enc:v1:...) — same encryption as Pulseem fields */

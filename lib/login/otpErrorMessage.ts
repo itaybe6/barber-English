@@ -20,11 +20,6 @@ export function otpErrorMessage(t: TFunction, code: string | undefined): string 
       return t('login.otp.errorInvoke', 'לא ניתן להגיע לשרת (Edge Function). בדוק פריסה ואינטרנט.');
     case 'rate_limit_sends':
       return t('login.otp.errorRateLimit', 'נשלחו יותר מדי קודים לשעה. נסה שוב מאוחר יותר.');
-    case 'pulseem_monthly_quota_exceeded':
-      return t(
-        'login.otp.errorMonthlyQuota',
-        'הגעת למכסת הודעות SMS החודשית של העסק. נסה שוב בחודש הבא או פנה לתמיכה.',
-      );
     case 'sms_send_failed':
       return t('login.otp.errorSms', 'שליחת ה-SMS נכשלה. נסה שוב.');
     case 'wrong_code':

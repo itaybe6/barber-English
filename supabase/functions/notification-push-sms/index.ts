@@ -12,9 +12,6 @@
  * Sender secrets: PULSEEM_OTP_FROM_NUMBER, PULSEEM_FROM_NUMBER, PULSEEM_REST_FROM_NUMBER, PULSEEM_ASMX_FROM_NUMBER
  * (same precedence as auth-phone-otp). DB pulseem_from_number is used as-is unless
  * PULSEEM_OTP_ALPHANUMERIC_FALLBACK_BUSINESS_PHONE=1 (legacy).
- *
- * Monthly SMS quota: consume_pulseem_monthly_sms_quota before Pulseem send; refund on failure.
- * PULSEEM_MONTHLY_SMS_QUOTA_DISABLED=1 skips quota.
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -32,40 +29,6 @@ const SMS_MAX_CHARS = 480;
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-function pulseemMonthlyQuotaDisabled(): boolean {
-  return /^(1|true|yes)$/i.test(
-    String(Deno.env.get("PULSEEM_MONTHLY_SMS_QUOTA_DISABLED") ?? "").trim(),
-  );
-}
-
-async function consumePulseemMonthlySmsQuota(
-  admin: ReturnType<typeof createClient>,
-  businessId: string,
-): Promise<boolean> {
-  if (pulseemMonthlyQuotaDisabled()) return true;
-  const { data, error } = await admin.rpc("consume_pulseem_monthly_sms_quota", {
-    p_business_id: businessId,
-  });
-  if (error) {
-    console.error("[notification-push-sms] consume_pulseem_monthly_sms_quota", error);
-    return false;
-  }
-  return data === true;
-}
-
-async function refundPulseemMonthlySmsQuota(
-  admin: ReturnType<typeof createClient>,
-  businessId: string,
-): Promise<void> {
-  if (pulseemMonthlyQuotaDisabled()) return;
-  const { error } = await admin.rpc("refund_pulseem_monthly_sms_quota", {
-    p_business_id: businessId,
-  });
-  if (error) {
-    console.error("[notification-push-sms] refund_pulseem_monthly_sms_quota", error);
-  }
-}
 
 function json(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -633,15 +596,6 @@ serve(async (req) => {
       return { pushOk, smsOk: false, smsSkip: creds.error };
     }
 
-    const quotaOk = await consumePulseemMonthlySmsQuota(admin, businessId);
-    if (!quotaOk) {
-      return {
-        pushOk,
-        smsOk: false,
-        smsSkip: "pulseem_monthly_quota_exceeded",
-      };
-    }
-
     try {
       await sendPulseemSingleSms({
         userId: creds.userId,
@@ -654,7 +608,6 @@ serve(async (req) => {
       return { pushOk, smsOk: true };
     } catch (e) {
       console.error("[notification-push-sms] SMS failed", e);
-      await refundPulseemMonthlySmsQuota(admin, businessId);
       return {
         pushOk,
         smsOk: false,

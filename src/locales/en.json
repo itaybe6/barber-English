@@ -517,7 +517,6 @@
       "errorPhoneNotRegistered": "This phone number isn’t registered with us. You can sign up from the registration screen or double-check the number.",
       "sameNumberAsSenderTitle": "Sender and recipient are the same",
       "sameNumberAsSenderMessage": "You requested a code to the business phone number that SMS is sent from. Many mobile networks block that. Try another phone, or ask Pulseem for a dedicated sender ID.",
-      "errorMonthlyQuota": "This business has reached its monthly SMS limit. Try again next month or contact support.",
       "a11y": { "delete": "Delete" }
     }
   },

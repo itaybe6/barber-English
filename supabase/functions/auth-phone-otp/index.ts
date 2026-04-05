@@ -31,10 +31,6 @@
  *
  * Pulseem decrypt helpers are inlined below so Dashboard / single-file bundles succeed.
  * Keep in sync with pulseem-admin-credentials/pulseemFieldCrypto.ts (same enc:v1: format).
- *
- * Monthly SMS quota (business_profile.pulseem_monthly_sms_cap, default 100, month in Asia/Jerusalem):
- *   consume_pulseem_monthly_sms_quota RPC before each OTP SMS; refund on send failure.
- *   PULSEEM_MONTHLY_SMS_QUOTA_DISABLED=1 — skip quota (ops only).
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -124,40 +120,6 @@ function timingSafeEqualHex(a: string, b: string): boolean {
   let x = 0;
   for (let i = 0; i < a.length; i++) x |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return x === 0;
-}
-
-function pulseemMonthlyQuotaDisabled(): boolean {
-  return /^(1|true|yes)$/i.test(
-    String(Deno.env.get("PULSEEM_MONTHLY_SMS_QUOTA_DISABLED") ?? "").trim(),
-  );
-}
-
-async function consumePulseemMonthlySmsQuota(
-  admin: ReturnType<typeof createClient>,
-  businessId: string,
-): Promise<boolean> {
-  if (pulseemMonthlyQuotaDisabled()) return true;
-  const { data, error } = await admin.rpc("consume_pulseem_monthly_sms_quota", {
-    p_business_id: businessId,
-  });
-  if (error) {
-    console.error("[auth-phone-otp] consume_pulseem_monthly_sms_quota", error);
-    return false;
-  }
-  return data === true;
-}
-
-async function refundPulseemMonthlySmsQuota(
-  admin: ReturnType<typeof createClient>,
-  businessId: string,
-): Promise<void> {
-  if (pulseemMonthlyQuotaDisabled()) return;
-  const { error } = await admin.rpc("refund_pulseem_monthly_sms_quota", {
-    p_business_id: businessId,
-  });
-  if (error) {
-    console.error("[auth-phone-otp] refund_pulseem_monthly_sms_quota", error);
-  }
 }
 
 function randomSixDigitCode(): string {
@@ -1033,11 +995,6 @@ serve(async (req) => {
         return json({ ok: false, error: "rate_limit_sends" }, 429);
       }
 
-      const quotaOk = await consumePulseemMonthlySmsQuota(admin, businessId);
-      if (!quotaOk) {
-        return json({ ok: false, error: "pulseem_monthly_quota_exceeded" }, 429);
-      }
-
       const code = randomSixDigitCode();
       const codeHash = await sha256Hex(`${businessId}:${digits}:login:${code}`);
       const expiresAt = new Date(Date.now() + OTP_TTL_MS).toISOString();
@@ -1082,7 +1039,6 @@ serve(async (req) => {
         pulseFromUsed = sent.fromUsed;
       } catch (e) {
         console.error("[auth-phone-otp] pulseem send", e);
-        await refundPulseemMonthlySmsQuota(admin, businessId);
         await admin.from("auth_phone_otp_challenges").delete().eq(
           "business_id",
           businessId,
@@ -1209,11 +1165,6 @@ serve(async (req) => {
         return json({ ok: false, error: "rate_limit_sends" }, 429);
       }
 
-      const quotaOkReg = await consumePulseemMonthlySmsQuota(admin, businessId);
-      if (!quotaOkReg) {
-        return json({ ok: false, error: "pulseem_monthly_quota_exceeded" }, 429);
-      }
-
       const code = randomSixDigitCode();
       const codeHash = await sha256Hex(
         `${businessId}:${digits}:register:${code}`,
@@ -1260,7 +1211,6 @@ serve(async (req) => {
         pulseFromUsed = sent.fromUsed;
       } catch (e) {
         console.error("[auth-phone-otp] pulseem send", e);
-        await refundPulseemMonthlySmsQuota(admin, businessId);
         await admin.from("auth_phone_otp_challenges").delete().eq(
           "business_id",
           businessId,

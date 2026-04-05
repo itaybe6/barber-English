@@ -372,13 +372,14 @@ export default function AdminBroadcastComposer({
                     ]}
                   >
                     <TextInput
-                      style={[styles.fieldInput, { textAlign, color: colors.text, writingDirection: isRTL ? 'rtl' : 'ltr' }]}
+                      style={[styles.fieldInput, { color: colors.text }]}
                       placeholder={strings.titlePlaceholder}
                       placeholderTextColor={`${colors.textSecondary}80`}
                       value={title}
                       onChangeText={setTitle}
                       maxLength={80}
                       returnKeyType="next"
+                      textAlign="right"
                       onFocus={() => setTitleFocused(true)}
                       onBlur={() => setTitleFocused(false)}
                     />
@@ -405,7 +406,7 @@ export default function AdminBroadcastComposer({
                     ]}
                   >
                     <TextInput
-                      style={[styles.fieldInput, styles.fieldInputMulti, { textAlign, color: colors.text, writingDirection: isRTL ? 'rtl' : 'ltr' }]}
+                      style={[styles.fieldInput, styles.fieldInputMulti, { color: colors.text }]}
                       placeholder={strings.contentPlaceholder}
                       placeholderTextColor={`${colors.textSecondary}80`}
                       value={notificationContent}
@@ -414,6 +415,7 @@ export default function AdminBroadcastComposer({
                       numberOfLines={5}
                       maxLength={500}
                       textAlignVertical="top"
+                      textAlign="right"
                       onFocus={() => setContentFocused(true)}
                       onBlur={() => setContentFocused(false)}
                     />
@@ -437,9 +439,6 @@ export default function AdminBroadcastComposer({
                         <View style={[styles.notifAppIcon, { backgroundColor: colors.primary }]}>
                           <Ionicons name="notifications" size={11} color="#fff" />
                         </View>
-                        <Text style={styles.notifAppName} numberOfLines={1}>
-                          {t('admin.broadcastComposer.appName', 'הסלון שלנו')}
-                        </Text>
                       </View>
                       <Text style={styles.notifTime}>{timeStr}</Text>
                     </View>
@@ -577,7 +576,7 @@ const createStyles = (colors: { primary: string; text?: string }) =>
     sheet: {
       width: '100%',
       maxWidth: 560,
-      maxHeight: '93%',
+      maxHeight: '99%',
       borderTopLeftRadius: 28,
       borderTopRightRadius: 28,
       overflow: 'hidden',
@@ -708,6 +707,7 @@ const createStyles = (colors: { primary: string; text?: string }) =>
       paddingTop: 14,
       paddingBottom: 6,
       lineHeight: 22,
+      textAlign: 'right',
     },
     fieldInputMulti: {
       minHeight: 120,

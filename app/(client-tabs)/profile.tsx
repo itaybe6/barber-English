@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Modal, Pressable, TextInput, ActivityIndicator, Switch, Image, Platform, type LayoutChangeEvent } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Modal, Pressable, TextInput, ActivityIndicator, Image, Platform, I18nManager, type LayoutChangeEvent } from 'react-native';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,75 +8,39 @@ import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
 import { Ionicons } from '@expo/vector-icons';
-import { LogOut } from 'lucide-react-native';
+import { ChevronLeft, FileText, Globe, LogOut, Trash2, User } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
+import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
  
 import { supabase } from '@/lib/supabase';
 import { usersApi } from '@/lib/api/users';
-import { normalizeAppLanguage } from '@/lib/i18nLocale';
-import { notificationsApi } from '@/lib/api/notifications';
-import Reanimated, {
-  Extrapolation,
-  interpolate,
-  useAnimatedScrollHandler,
-  useAnimatedStyle,
-  useSharedValue,
-} from 'react-native-reanimated';
+
+const PROFILE_GROUPED_BG = '#F2F2F7';
 
 export default function ClientProfileScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
-  const { user, logout, updateUserProfile, notificationsEnabled, setNotificationsEnabled } = useAuthStore();
+  const { user, logout, updateUserProfile } = useAuthStore();
   const insets = useSafeAreaInsets();
   const { colors: businessColors } = useBusinessColors();
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editName, setEditName] = useState<string>('');
   const [editPhone, setEditPhone] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
-  const [editPassword, setEditPassword] = useState<string>('');
-  const [showEditPassword, setShowEditPassword] = useState<boolean>(false);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
   const [isLanguageOpen, setIsLanguageOpen] = useState(false);
-  const [pushEnabled, setPushEnabled] = useState<boolean>(notificationsEnabled);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-
-  /** Same bank-app style 3D collapse on scroll as admin `settings.tsx` */
-  const clientProfileScrollY = useSharedValue(0);
-  const clientProfileHeaderBlockHeight = useSharedValue(120);
-  const onClientProfileScroll = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      clientProfileScrollY.value = e.contentOffset.y;
-    },
-  });
-  const clientProfileDummySpacerStyle = useAnimatedStyle(() => ({
-    height: clientProfileHeaderBlockHeight.value,
-  }));
-  const clientProfileCardFlipStyle = useAnimatedStyle(() => {
-    const y = Math.max(clientProfileScrollY.value, 0);
-    const h = Math.max(clientProfileHeaderBlockHeight.value, 72);
-    return {
-      transform: [
-        { perspective: h * 5 },
-        {
-          translateY: interpolate(y, [0, h], [0, -h * 0.5], Extrapolation.CLAMP),
-        },
-        {
-          rotateX: `${interpolate(y, [0, h], [0, 88], Extrapolation.CLAMP)}deg`,
-        },
-      ],
-      opacity: interpolate(y, [0, h * 0.55, h], [1, 0.92, 0], Extrapolation.CLAMP),
-    };
-  });
-  const onClientProfileHeaderLayout = (e: LayoutChangeEvent) => {
-    const next = e.nativeEvent.layout.height;
-    if (next > 0) {
-      clientProfileHeaderBlockHeight.value = next;
+  const [profileLavaLayout, setProfileLavaLayout] = useState({ w: 0, h: 0 });
+  const onProfileLavaLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    if (width > 0 && height > 0) {
+      setProfileLavaLayout((prev) => (prev.w === width && prev.h === height ? prev : { w: width, h: height }));
     }
-  };
+  }, []);
 
   const guessMimeFromUri = (uriOrName: string): string => {
     const ext = uriOrName.split('.').pop()?.toLowerCase().split('?')[0] || 'jpg';
@@ -198,248 +162,239 @@ export default function ClientProfileScreen() {
     router.replace('/(client-tabs)');
   };
 
-  const menuItems = [
-    {
-      id: 'edit-profile',
-      icon: 'person-outline',
-      title: t('profile.menu.edit', 'Edit Profile'),
-      subtitle: t('profile.menu.editSubtitle', 'Update personal details'),
-      onPress: async () => {
-        setEditName(user?.name ?? '');
-        setEditPhone(user?.phone ?? '');
-        setEditPassword('');
-        setIsEditOpen(true);
-        // Try to load freshest user details (email, etc.)
-        try {
-          if (user?.id) {
-            const full = await usersApi.getUserById(user.id);
-            if (full) {
-              setEditName(full.name ?? '');
-              setEditPhone(full.phone ?? '');
-            }
-          }
-        } catch {}
-      },
-    },
-    {
-      id: 'notifications',
-      icon: 'notifications-outline',
-      title: t('notifications.title', 'Notifications'),
-      subtitle: pushEnabled ? t('profile.notifications.enabled', 'Notifications enabled') : t('profile.notifications.disabled', 'Notifications disabled'),
-      onPress: async () => {
-        const next = !pushEnabled;
-        setPushEnabled(next);
-        setNotificationsEnabled(next);
-        try {
-          if (!user?.phone) return;
-          if (next) {
-            const token = await notificationsApi.requestNotificationPermissions();
-            if (token) {
-              await notificationsApi.registerPushToken(user.phone, token);
-            }
-          } else {
-            await notificationsApi.clearPushToken(user.phone);
-          }
-        } catch {}
-      },
-    },
-    {
-      id: 'language',
-      icon: 'globe-outline',
-      title: t('profile.language.title', 'Language'),
-      subtitle: (() => {
-        switch (normalizeAppLanguage(i18n.language)) {
-          case 'he':
-            return t('profile.language.hebrew', 'Hebrew');
-          case 'ar':
-            return t('profile.language.arabic', 'Arabic');
-          case 'ru':
-            return t('profile.language.russian', 'Russian');
-          default:
-            return t('profile.language.english', 'English');
+  const isRtl = I18nManager.isRTL;
+
+  const openEditProfile = useCallback(async () => {
+    setEditName(user?.name ?? '');
+    setEditPhone(user?.phone ?? '');
+    setIsEditOpen(true);
+    try {
+      if (user?.id) {
+        const full = await usersApi.getUserById(user.id);
+        if (full) {
+          setEditName(full.name ?? '');
+          setEditPhone(full.phone ?? '');
         }
-      })(),
-      onPress: () => setIsLanguageOpen(true),
-    },
-    {
-      id: 'delete-account',
-      icon: 'trash-outline',
-      title: t('profile.delete.title', 'Delete Account'),
-      subtitle: t('profile.delete.subtitle', 'Permanently delete your account'),
-      onPress: async () => {
-        if (!user?.id || isDeleting) return;
-        Alert.alert(
-          t('profile.delete.title', 'Delete Account'),
-          t('profile.delete.confirm', 'Are you sure you want to delete your account? This action cannot be undone.'),
-          [
-            { text: t('cancel', 'Cancel'), style: 'cancel' },
-            {
-              text: t('profile.delete.confirmButton', 'Delete'),
-              style: 'destructive',
-              onPress: async () => {
-                try {
-                  setIsDeleting(true);
-                  const ok = await usersApi.deleteUserAndAllDataById(user.id);
-                  if (ok) {
-                    logout();
-                    router.replace('/login');
-                  } else {
-                    Alert.alert(t('error.generic', 'Error'), t('profile.delete.failed', 'Failed to delete account'));
-                  }
-                } catch (e) {
-                  console.error('delete account failed', e);
-                  Alert.alert(t('error.generic', 'Error'), t('profile.delete.failed', 'Failed to delete account'));
-                } finally {
-                  setIsDeleting(false);
-                }
+      }
+    } catch {}
+  }, [user?.id, user?.name, user?.phone]);
+
+  const confirmDeleteAccount = useCallback(async () => {
+    if (!user?.id || isDeleting) return;
+    Alert.alert(
+      t('profile.delete.title', 'Delete Account'),
+      t('profile.delete.confirm', 'Are you sure you want to delete your account? This action cannot be undone.'),
+      [
+        { text: t('cancel', 'Cancel'), style: 'cancel' },
+        {
+          text: t('profile.delete.confirmButton', 'Delete'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsDeleting(true);
+              const ok = await usersApi.deleteUserAndAllDataById(user.id);
+              if (ok) {
+                logout();
+                router.replace('/login');
+              } else {
+                Alert.alert(t('error.generic', 'Error'), t('profile.delete.failed', 'Failed to delete account'));
               }
+            } catch (e) {
+              console.error('delete account failed', e);
+              Alert.alert(t('error.generic', 'Error'), t('profile.delete.failed', 'Failed to delete account'));
+            } finally {
+              setIsDeleting(false);
             }
-          ]
-        );
-      },
-    },
-    {
-      id: 'terms',
-      icon: 'document-text-outline',
-      title: t('profile.terms.title', 'Terms of Use'),
-      subtitle: t('profile.terms.subtitle', 'View the app terms of use'),
-      onPress: () => setIsTermsOpen(true),
-    },
-  ];
+          },
+        },
+      ],
+    );
+  }, [isDeleting, logout, router, t, user?.id]);
+
+  const renderSettingsRow = (
+    icon: React.ReactNode,
+    title: string,
+    subtitle?: string,
+    onPress?: () => void,
+    danger?: boolean,
+    hideChevron?: boolean,
+  ) => {
+    const chevron = hideChevron ? null : (
+      <View style={[styles.settingChevron, isRtl ? styles.settingChevronRtl : styles.settingChevronLtr]}>
+        <ChevronLeft size={18} color={danger ? 'rgba(60,60,67,0.35)' : businessColors.primary} />
+      </View>
+    );
+    const content = (
+      <View style={[styles.settingContent, isRtl ? styles.settingContentRtl : styles.settingContentLtr]}>
+        <Text
+          style={[styles.settingTitle, danger ? styles.settingTitleDanger : null, isRtl ? styles.settingTitleRtl : styles.settingTitleLtr]}
+          numberOfLines={1}
+        >
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text style={[styles.settingSubtitle, isRtl ? styles.settingSubtitleRtl : styles.settingSubtitleLtr]} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+    );
+    return (
+      <TouchableOpacity
+        style={[
+          styles.settingRow,
+          isRtl ? styles.settingRowRtl : styles.settingRowLtr,
+          danger ? styles.settingRowDanger : null,
+        ]}
+        onPress={onPress}
+        disabled={!onPress}
+        activeOpacity={0.82}
+      >
+        {isRtl ? (
+          <>
+            {chevron}
+            {content}
+            <View style={styles.settingIcon}>{icon}</View>
+          </>
+        ) : (
+          <>
+            <View style={styles.settingIcon}>{icon}</View>
+            {content}
+            {chevron}
+          </>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.pageRoot} edges={['left', 'right']}>
+      <StatusBar style="light" />
 
-      <SafeAreaView edges={['left', 'right', 'bottom']} style={{ flex: 1 }}>
-        <View style={styles.contentWrapper}>
-          <View style={styles.profileScrollHost}>
-          <Reanimated.ScrollView
-            style={styles.profileScrollFill}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-            onScroll={onClientProfileScroll}
-            scrollEventThrottle={16}
-            keyboardShouldPersistTaps="handled"
-          >
-            <Reanimated.View style={clientProfileDummySpacerStyle} />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 28 }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.profileHeaderRoot}>
+          <View style={styles.profileHeaderColumn}>
+            <View style={styles.profileHeaderBackdrop} onLayout={onProfileLavaLayout} pointerEvents="none">
+              <LinearGradient
+                colors={[businessColors.primary, `${businessColors.primary}CC`]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1.1, y: 1 }}
+                style={StyleSheet.absoluteFillObject}
+              />
+              {profileLavaLayout.w > 0 && profileLavaLayout.h > 0 ? (
+                <BrandLavaLampBackground
+                  primaryColor={businessColors.primary}
+                  baseColor={businessColors.primary}
+                  layoutWidth={profileLavaLayout.w}
+                  layoutHeight={profileLavaLayout.h}
+                  emphasis="bold"
+                  count={6}
+                  duration={10000}
+                  blurIntensity={28}
+                />
+              ) : null}
+            </View>
 
-        {/* Menu Items */}
-        <View style={styles.menuContainer}>
-          {menuItems.map((item) => {
-            const isNotifications = item.id === 'notifications';
-            return (
-              <TouchableOpacity 
-                key={item.id}
-                style={styles.menuItem}
-                onPress={item.onPress}
-                activeOpacity={isNotifications ? 0.7 : 0.6}
-              >
-                <View style={[styles.menuItemIcon, { backgroundColor: `${businessColors.primary}15` }]}>
-                  <Ionicons name={item.icon as any} size={20} color={businessColors.primary} />
-                </View>
-                <View style={styles.menuItemContent}>
-                  <View style={styles.menuItemText}>
-                    <Text style={styles.menuItemTitle}>{item.title}</Text>
-                    <Text style={styles.menuItemSubtitle}>{item.subtitle}</Text>
-                  </View>
-                </View>
-                {!isNotifications && (
-                  <Ionicons name="chevron-forward-outline" size={20} color={Colors.subtext} />
-                )}
-                {isNotifications && (
-                  <Switch
-                    value={pushEnabled}
-                    onValueChange={async (value) => {
-                      setPushEnabled(value);
-                      setNotificationsEnabled(value);
-                      try {
-                        if (!user?.phone) return;
-                        if (value) {
-                          const token = await notificationsApi.requestNotificationPermissions();
-                          if (token) {
-                            await notificationsApi.registerPushToken(user.phone, token);
-                          }
-                        } else {
-                          await notificationsApi.clearPushToken(user.phone);
-                        }
-                      } catch {}
-                    }}
-                    trackColor={{ false: '#E5E5EA', true: `${businessColors.primary}30` }}
-                    thumbColor={pushEnabled ? businessColors.primary : Colors.card}
-                    ios_backgroundColor="#E5E5EA"
-                    style={styles.switch}
-                  />
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Logout Button */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <LinearGradient
-            colors={[businessColors.primary, businessColors.primary]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.logoutGradient}
-          >
-            <LogOut size={20} color={Colors.white} />
-            <Text style={styles.logoutText}>{t('profile.logout.title', 'Log out')}</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-
-        <Text style={styles.versionText}>{t('settings.sections.version','Version')} 1.0.0</Text>
-          </Reanimated.ScrollView>
-
-          <View pointerEvents="box-none" style={styles.clientProfileStickyHost}>
-            <View style={styles.clientProfileHeaderMeasure} onLayout={onClientProfileHeaderLayout}>
-              <Reanimated.View style={[styles.clientProfileCardOuter, clientProfileCardFlipStyle]}>
-                <View
-                  style={[styles.gradientHeader, { paddingTop: 8 + insets.top, backgroundColor: Colors.white }]}
-                >
-                  <View style={styles.profileCard}>
-                    <View style={styles.profileTop}>
-                      <View style={styles.avatarWrap}>
-                        <LinearGradient
-                          colors={[businessColors.primary, businessColors.primary]}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
-                          style={styles.avatarGradientRing}
-                        >
-                          <View style={styles.profileAvatar}>
-                            {user?.image_url ? (
-                              <Image source={{ uri: user.image_url }} style={styles.avatarImage} />
-                            ) : (
-                              <Ionicons name="person-outline" size={28} color="#2F2F2F" />
-                            )}
-                          </View>
-                        </LinearGradient>
-                        <TouchableOpacity style={styles.avatarPlusWrap} onPress={pickAndUploadAvatar} disabled={isUploadingAvatar}>
-                          <LinearGradient
-                            colors={[businessColors.primary, businessColors.primary]}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={styles.avatarPlus}
-                          >
-                            {isUploadingAvatar ? (
-                              <ActivityIndicator color="#FFFFFF" size="small" />
-                            ) : (
-                              <Ionicons name="add" size={16} color="#FFFFFF" />
-                            )}
-                          </LinearGradient>
-                        </TouchableOpacity>
+            <View style={[styles.profileHeaderContent, { paddingTop: insets.top + 12 }]}>
+              <View style={styles.profileHeaderRowSlot}>
+                <View style={[styles.profileHeaderRow, isRtl ? styles.profileHeaderRowRtl : styles.profileHeaderRowLtr]}>
+                  <View style={styles.avatarWrap}>
+                    <LinearGradient
+                      colors={['rgba(255,255,255,0.38)', 'rgba(255,255,255,0.14)']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.avatarGradientRing}
+                    >
+                      <View style={styles.profileAvatar}>
+                        {user?.image_url ? (
+                          <Image source={{ uri: user.image_url }} style={styles.avatarImage} />
+                        ) : (
+                          <User size={32} color={Colors.subtext} strokeWidth={1.75} />
+                        )}
                       </View>
-                      <Text style={[styles.profileName, styles.profileNameOnGradient, styles.centerText]}>{user?.name || t('valuedClient', 'Valued Client')}</Text>
-                      <Text style={[styles.profilePhone, styles.profilePhoneOnGradient, styles.centerText]}>{user?.phone || t('profile.phone', 'Phone number')}</Text>
-                    </View>
+                    </LinearGradient>
+                    <TouchableOpacity
+                      style={[styles.avatarPlusWrap, isRtl ? styles.avatarPlusWrapRtl : styles.avatarPlusWrapLtr]}
+                      onPress={pickAndUploadAvatar}
+                      disabled={isUploadingAvatar}
+                      activeOpacity={0.9}
+                    >
+                      <View style={[styles.avatarPlus, { backgroundColor: businessColors.primary }]}>
+                        {isUploadingAvatar ? (
+                          <ActivityIndicator color="#FFFFFF" size="small" />
+                        ) : (
+                          <Ionicons name="camera" size={14} color="#FFFFFF" />
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={[styles.profileHeaderInfo, isRtl ? styles.profileHeaderInfoRtl : styles.profileHeaderInfoLtr]}>
+                    <Text style={[styles.profileNameNew, isRtl ? styles.profileHeaderTextRtl : styles.profileHeaderTextLtr]} numberOfLines={1}>
+                      {user?.name || t('valuedClient', 'Valued Client')}
+                    </Text>
+                    <Text style={[styles.profilePhoneNew, isRtl ? styles.profileHeaderTextRtl : styles.profileHeaderTextLtr]} numberOfLines={1}>
+                      {user?.phone || t('profile.phone', 'Phone number')}
+                    </Text>
                   </View>
                 </View>
-              </Reanimated.View>
+              </View>
             </View>
           </View>
-          </View>
         </View>
-      </SafeAreaView>
+
+        <View style={styles.groupedBody}>
+          <View style={styles.cardNew}>
+            {renderSettingsRow(
+              <User size={20} color={businessColors.primary} />,
+              t('profile.menu.edit', 'Edit Profile'),
+              t('profile.menu.editSubtitle', 'Update personal details'),
+              openEditProfile,
+            )}
+            <View style={[styles.settingDivider, isRtl ? styles.settingDividerRtl : styles.settingDividerLtr]} />
+
+            {renderSettingsRow(
+              <Globe size={20} color={businessColors.primary} />,
+              t('profile.language.title', 'Language'),
+              i18n.language?.startsWith('he') ? t('profile.language.hebrew', 'Hebrew') : t('profile.language.english', 'English'),
+              () => setIsLanguageOpen(true),
+            )}
+            <View style={[styles.settingDivider, isRtl ? styles.settingDividerRtl : styles.settingDividerLtr]} />
+
+            {renderSettingsRow(
+              <FileText size={20} color={businessColors.primary} />,
+              t('profile.terms.title', 'Terms of Use'),
+              t('profile.terms.subtitle', 'View the app terms of use'),
+              () => setIsTermsOpen(true),
+            )}
+            <View style={[styles.settingDivider, isRtl ? styles.settingDividerRtl : styles.settingDividerLtr]} />
+
+            {renderSettingsRow(
+              <Trash2 size={20} color="#FF3B30" />,
+              t('profile.delete.title', 'Delete Account'),
+              t('profile.delete.subtitle', 'Permanently delete your account'),
+              confirmDeleteAccount,
+              true,
+            )}
+            <View style={[styles.settingDivider, isRtl ? styles.settingDividerRtl : styles.settingDividerLtr]} />
+
+            {renderSettingsRow(
+              <LogOut size={20} color="#FF3B30" />,
+              t('profile.logout.title', 'Log out'),
+              t('profile.logout.subtitle', 'ניתן להתחבר שוב בכל זמן'),
+              handleLogout,
+              true,
+              true,
+            )}
+          </View>
+
+        </View>
+      </ScrollView>
 
       {/* Logout Confirmation Modal */}
       <Modal
@@ -472,93 +427,150 @@ export default function ClientProfileScreen() {
 
       {/* Edit Profile Modal */}
       <Modal visible={isEditOpen} transparent animationType="slide" onRequestClose={() => setIsEditOpen(false)}>
-        <KeyboardAwareScreenScroll style={styles.modalOverlay} contentContainerStyle={styles.modalOverlayContent} keyboardShouldPersistTaps="handled">
-            <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{t('profile.edit.title', 'Edit Profile')}</Text>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{t('profile.edit.name', 'Name')}</Text>
-              <TextInput
-                value={editName}
-                onChangeText={setEditName}
-                placeholder={t('profile.edit.namePlaceholder', 'Full Name')}
-                style={styles.textInput}
-                textAlign="left"
-              />
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{t('profile.edit.phone', 'Phone')}</Text>
-              <TextInput
-                value={editPhone}
-                onChangeText={setEditPhone}
-                placeholder={t('profile.edit.phonePlaceholder', 'Phone Number')}
-                keyboardType="phone-pad"
-                style={styles.textInput}
-                textAlign="left"
-              />
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{t('profile.edit.newPassword', 'New Password')}</Text>
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  value={editPassword}
-                  onChangeText={setEditPassword}
-                  placeholder={t('profile.edit.passwordPlaceholder', 'Leave empty if no change')}
-                  secureTextEntry={!showEditPassword}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  style={[styles.textInput, { paddingRight: 44 }]}
-                  textAlign="left"
-                />
-                <TouchableOpacity onPress={() => setShowEditPassword(v => !v)} style={styles.passwordToggle}>
-                  <Ionicons name={showEditPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={Colors.subtext} />
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdropPressable} onPress={() => setIsEditOpen(false)} />
+          <KeyboardAwareScreenScroll
+            style={styles.modalOverlayScroll}
+            contentContainerStyle={styles.modalOverlayContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.editSheet}>
+              <View style={styles.editSheetHandle} />
+
+              <View style={styles.editSheetHeader}>
+                <View style={{ width: 44 }} />
+                <Text style={styles.editSheetTitle}>{t('profile.edit.title', 'Edit Profile')}</Text>
+                <TouchableOpacity
+                  onPress={() => setIsEditOpen(false)}
+                  style={styles.editSheetCloseBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('close', 'Close')}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  activeOpacity={0.82}
+                >
+                  <Ionicons name="close" size={22} color={Colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.editSheetBody}>
+                <View style={styles.fieldCard}>
+                  <Text style={[styles.fieldLabel, isRtl ? styles.fieldLabelRtl : styles.fieldLabelLtr]}>
+                    {t('profile.edit.name', 'Name')}
+                  </Text>
+                  <View style={[styles.fieldRow, isRtl ? styles.fieldRowRtl : styles.fieldRowLtr]}>
+                    <View style={[styles.fieldIconWrap, { backgroundColor: `${businessColors.primary}12` }]}>
+                      <Ionicons name="person-outline" size={18} color={businessColors.primary} />
+                    </View>
+                    <TextInput
+                      value={editName}
+                      onChangeText={setEditName}
+                      placeholder={t('profile.edit.namePlaceholder', 'Full Name')}
+                      placeholderTextColor="#9CA3AF"
+                      style={[
+                        styles.fieldInput,
+                        isRtl ? styles.fieldInputRtl : styles.fieldInputLtr,
+                        { textAlign: isRtl ? 'right' : 'left', writingDirection: isRtl ? 'rtl' : 'ltr' },
+                      ]}
+                      autoCorrect={false}
+                      autoCapitalize="words"
+                      returnKeyType="next"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.fieldCard}>
+                  <Text style={[styles.fieldLabel, isRtl ? styles.fieldLabelRtl : styles.fieldLabelLtr]}>
+                    {t('profile.edit.phone', 'Phone')}
+                  </Text>
+                  <View style={[styles.fieldRow, isRtl ? styles.fieldRowRtl : styles.fieldRowLtr]}>
+                    <View style={[styles.fieldIconWrap, { backgroundColor: `${businessColors.primary}12` }]}>
+                      <Ionicons name="call-outline" size={18} color={businessColors.primary} />
+                    </View>
+                    <TextInput
+                      value={editPhone}
+                      onChangeText={setEditPhone}
+                      placeholder={t('profile.edit.phonePlaceholder', 'Phone Number')}
+                      placeholderTextColor="#9CA3AF"
+                      keyboardType="phone-pad"
+                      style={[
+                        styles.fieldInput,
+                        isRtl ? styles.fieldInputRtl : styles.fieldInputLtr,
+                        { textAlign: isRtl ? 'right' : 'left', writingDirection: isRtl ? 'rtl' : 'ltr' },
+                      ]}
+                      autoCorrect={false}
+                      autoCapitalize="none"
+                      returnKeyType="done"
+                    />
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.editSheetFooter}>
+                <TouchableOpacity
+                  style={[styles.footerBtn, styles.footerBtnSecondary]}
+                  onPress={() => setIsEditOpen(false)}
+                  disabled={isSaving}
+                  activeOpacity={0.82}
+                >
+                  <Text style={styles.footerBtnSecondaryText}>{t('cancel', 'Cancel')}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.footerBtn, { overflow: 'hidden' }, isSaving ? styles.footerBtnDisabled : null]}
+                  onPress={async () => {
+                    if (!user?.id) {
+                      setIsEditOpen(false);
+                      return;
+                    }
+                    if (!editName.trim() || !editPhone.trim()) {
+                      Alert.alert(t('error.generic', 'Error'), t('profile.edit.fillAll', 'Please fill in all fields'));
+                      return;
+                    }
+                    try {
+                      setIsSaving(true);
+                      const updated = await usersApi.updateUser(user.id, {
+                        name: editName.trim(),
+                        phone: editPhone.trim(),
+                        language: i18n.language?.startsWith('he') ? 'he' : 'en',
+                      } as any);
+                      if (updated) {
+                        updateUserProfile({
+                          name: updated.name as any,
+                          phone: (updated as any).phone,
+                          language: (updated as any).language,
+                        } as any);
+                      } else {
+                        Alert.alert(t('error.generic', 'Error'), t('profile.saveFailed', 'Failed to save profile'));
+                        return;
+                      }
+                      setIsEditOpen(false);
+                    } catch (e) {
+                      console.error('Failed to save profile', e);
+                      Alert.alert(t('error.generic', 'Error'), t('profile.saveFailed', 'Failed to save profile'));
+                    } finally {
+                      setIsSaving(false);
+                    }
+                  }}
+                  disabled={isSaving}
+                  activeOpacity={0.9}
+                >
+                  <LinearGradient
+                    colors={[businessColors.primary, `${businessColors.primary}CC`]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.footerBtnPrimaryGradient}
+                  >
+                    {isSaving ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.footerBtnPrimaryText}>{t('save', 'Save')}</Text>
+                    )}
+                  </LinearGradient>
                 </TouchableOpacity>
               </View>
             </View>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setIsEditOpen(false)} disabled={isSaving}>
-                <Text style={styles.cancelBtnText}>{t('cancel', 'Cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalBtn, styles.saveBtn, { backgroundColor: businessColors.primary }]}
-                onPress={async () => {
-                  if (!user?.id) {
-                    setIsEditOpen(false);
-                    return;
-                  }
-                  if (!editName.trim() || !editPhone.trim()) {
-                    Alert.alert(t('error.generic','Error'), t('profile.edit.fillAll','Please fill in all fields'));
-                    return;
-                  }
-                  try {
-                    setIsSaving(true);
-                    const updated = await usersApi.updateUser(user.id, {
-                      name: editName.trim(),
-                      phone: editPhone.trim(),
-                      language: normalizeAppLanguage(i18n.language),
-                      ...(editPassword.trim() ? { password: editPassword.trim() } : {}),
-                    } as any);
-                    if (updated) {
-                      updateUserProfile({ name: updated.name as any, phone: (updated as any).phone, language: (updated as any).language } as any);
-                    } else {
-                      Alert.alert(t('error.generic','Error'), t('profile.saveFailed','Failed to save profile'));
-                      return;
-                    }
-                    setIsEditOpen(false);
-                  } catch (e) {
-                    console.error('Failed to save profile', e);
-                    Alert.alert(t('error.generic','Error'), t('profile.saveFailed','Failed to save profile'));
-                  } finally {
-                    setIsSaving(false);
-                  }
-                }}
-                disabled={isSaving}
-              >
-                {isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>{t('save', 'Save')}</Text>}
-              </TouchableOpacity>
-            </View>
-            </View>
-        </KeyboardAwareScreenScroll>
+          </KeyboardAwareScreenScroll>
+        </View>
       </Modal>
 
       {/* Language Bottom Sheet */}
@@ -609,42 +621,6 @@ export default function ClientProfileScreen() {
               >
                 <Text style={styles.languageOptionText}>{t('profile.language.hebrew','Hebrew')}</Text>
                 {i18n.language?.startsWith('he') && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.languageOption}
-                onPress={async () => {
-                  try {
-                    await i18n.changeLanguage('ar');
-                    if (user?.id) {
-                      const updated = await usersApi.updateUser(user.id, { language: 'ar' } as any);
-                      if (updated) updateUserProfile({ language: 'ar' } as any);
-                    }
-                  } finally {
-                    setIsLanguageOpen(false);
-                  }
-                }}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.languageOptionText}>{t('profile.language.arabic','Arabic')}</Text>
-                {i18n.language?.startsWith('ar') && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.languageOption}
-                onPress={async () => {
-                  try {
-                    await i18n.changeLanguage('ru');
-                    if (user?.id) {
-                      const updated = await usersApi.updateUser(user.id, { language: 'ru' } as any);
-                      if (updated) updateUserProfile({ language: 'ru' } as any);
-                    }
-                  } finally {
-                    setIsLanguageOpen(false);
-                  }
-                }}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.languageOptionText}>{t('profile.language.russian','Russian')}</Text>
-                {i18n.language?.startsWith('ru') && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
               </TouchableOpacity>
               <Text style={styles.helperNote}>{t('profile.language.restartNote','Direction changes may require app restart')}</Text>
             </View>
@@ -729,106 +705,222 @@ export default function ClientProfileScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create<any>({
-  container: {
+  pageRoot: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: PROFILE_GROUPED_BG,
   },
-  contentWrapper: {
+  scroll: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    marginTop: 10,
-    paddingTop: 8,
+    backgroundColor: PROFILE_GROUPED_BG,
   },
-  profileScrollHost: {
-    flex: 1,
+  profileHeaderRoot: {
+    width: '100%',
   },
-  profileScrollFill: {
-    flex: 1,
-    backgroundColor: 'transparent',
+  profileHeaderColumn: {
+    width: '100%',
+    overflow: 'hidden',
+    position: 'relative',
   },
-  clientProfileStickyHost: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 2,
-    ...Platform.select({
-      android: { elevation: 4 },
-    }),
-  },
-  clientProfileHeaderMeasure: {
-    marginBottom: 2,
-  },
-  clientProfileCardOuter: {
-    borderRadius: 22,
+  profileHeaderBackdrop: {
+    ...StyleSheet.absoluteFillObject,
     overflow: 'hidden',
   },
-  header: {
+  profileHeaderContent: {
+    width: '100%',
+    paddingHorizontal: 20,
+    paddingBottom: 18,
+    position: 'relative',
+    zIndex: 1,
+  },
+  profileHeaderRowSlot: {
+    position: 'relative',
+    width: '100%',
+  },
+  profileEditIconHit: {
+    position: 'absolute',
+    zIndex: 2,
+    top: 0,
+    bottom: 0,
+    width: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileEditIconHitRtl: {
+    left: 14,
+  },
+  profileEditIconHitLtr: {
+    right: 14,
+  },
+  profileEditIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
+    width: '100%',
+    gap: 16,
   },
-  headerTitle: {
-    fontSize: 18,
+  profileHeaderRowLtr: {
+    flexDirection: 'row',
+  },
+  profileHeaderRowRtl: {
+    flexDirection: 'row-reverse',
+  },
+  profileHeaderInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  profileHeaderInfoLtr: {
+    alignItems: 'flex-start',
+  },
+  profileHeaderInfoRtl: {
+    alignItems: 'flex-end',
+  },
+  profileHeaderTextLtr: {
+    textAlign: 'left',
+  },
+  profileHeaderTextRtl: {
+    textAlign: 'right',
+  },
+  profileNameNew: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -0.4,
+  },
+  profilePhoneNew: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.72)',
+    marginTop: 1,
+  },
+  groupedBody: {
+    paddingTop: 16,
+    paddingBottom: 12,
+    backgroundColor: PROFILE_GROUPED_BG,
+    flexGrow: 1,
+  },
+  sectionTitleNew: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#8E8E93',
+    letterSpacing: 0.55,
+    textTransform: 'uppercase',
+    marginBottom: 7,
+    marginTop: 14,
+  },
+  sectionTitleNewLtr: {
+    textAlign: 'left',
+    paddingLeft: 20,
+    paddingRight: 0,
+  },
+  sectionTitleNewRtl: {
+    textAlign: 'right',
+    paddingRight: 20,
+    paddingLeft: 0,
+  },
+  cardNew: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginBottom: 4,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60, 60, 67, 0.14)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  settingRow: {
+    alignItems: 'center',
+    minHeight: 64,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    backgroundColor: Colors.white,
+  },
+  settingRowLtr: {
+    flexDirection: 'row',
+  },
+  settingRowRtl: {
+    flexDirection: 'row',
+  },
+  settingRowDanger: {
+    backgroundColor: Colors.white,
+  },
+  settingIcon: {
+    width: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingContent: {
+    flex: 1,
+    paddingHorizontal: 10,
+  },
+  settingContentLtr: {
+    alignItems: 'flex-start',
+  },
+  settingContentRtl: {
+    alignItems: 'flex-end',
+  },
+  settingTitle: {
+    fontSize: 16,
     fontWeight: '600',
     color: Colors.text,
   },
-  scrollContent: {
-    paddingBottom: 100,
+  settingTitleLtr: {
+    textAlign: 'left',
   },
-  headerContainer: {
-    backgroundColor: 'transparent',
-    paddingTop: 0,
-    paddingBottom: 0,
-    paddingHorizontal: 0,
-    marginBottom: 8,
+  settingTitleRtl: {
+    textAlign: 'right',
   },
-  headerDecor1: { },
-  headerDecor2: { },
-  gradientHeader: {
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    paddingTop: 0,
-    paddingBottom: 12,
-    paddingHorizontal: 20,
+  settingTitleDanger: {
+    color: '#FF3B30',
   },
-  profileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 0,
-    paddingTop: 0,
+  settingSubtitle: {
+    fontSize: 12,
+    color: Colors.subtext,
+    marginTop: 3,
   },
-  profileCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 12,
-    marginHorizontal: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
+  settingSubtitleLtr: {
+    textAlign: 'left',
   },
-  profileTop: {
-    alignItems: 'center',
-    marginBottom: 0,
-    gap: 4,
+  settingSubtitleRtl: {
+    textAlign: 'right',
   },
-  centerText: {
-    textAlign: 'center',
+  settingChevron: {
+    width: 28,
+    justifyContent: 'center',
+  },
+  settingChevronLtr: {
+    alignItems: 'flex-end',
+  },
+  settingChevronRtl: {
+    alignItems: 'flex-start',
+  },
+  settingDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(60,60,67,0.14)',
+  },
+  settingDividerLtr: {
+    marginLeft: 58,
+  },
+  settingDividerRtl: {
+    marginRight: 58,
   },
   profileAvatar: {
     width: 64,
@@ -857,7 +949,12 @@ const styles = StyleSheet.create<any>({
   avatarPlusWrap: {
     position: 'absolute',
     bottom: 2,
+  },
+  avatarPlusWrapLtr: {
     left: 2,
+  },
+  avatarPlusWrapRtl: {
+    right: 2,
   },
   avatarPlus: {
     width: 22,
@@ -873,153 +970,177 @@ const styles = StyleSheet.create<any>({
     fontSize: 22,
     fontWeight: '800',
   },
-  profileImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 3,
-    borderColor: Colors.white,
-  },
-  profileInfo: {
-    flex: 1,
-    marginLeft: 6,
-    alignItems: 'flex-start',
-  },
-  profileName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text,
-    marginBottom: 4,
-  },
-  profileNameOnGradient: {
-    color: Colors.text,
-  },
-  profilePhone: {
-    fontSize: 16,
-    color: Colors.text,
-    opacity: 0.7,
-    marginBottom: 8,
-  },
-  profilePhoneOnGradient: {
-    color: Colors.text,
-    opacity: 0.7,
-    marginBottom: 0,
-  },
-  profileEmail: {
-    fontSize: 14,
-    color: Colors.subtext,
-  },
-  phoneRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  loyaltyBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  loyaltyText: {
-    color: Colors.white,
-    fontSize: 12,
-    fontWeight: '600',
-    marginRight: 4,
-  },
-
-  editButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
     padding: 20,
+  },
+  modalBackdropPressable: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  modalOverlayScroll: {
+    flex: 1,
+    backgroundColor: 'transparent',
   },
   modalOverlayContent: {
     flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modalCard: {
+  editSheet: {
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 440,
     backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 24,
+    borderCurve: 'continuous',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60, 60, 67, 0.12)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.2,
+        shadowRadius: 24,
+      },
+      android: { elevation: 10 },
+    }),
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.text,
-    marginBottom: 12,
-    textAlign: 'center',
+  editSheetHandle: {
+    alignSelf: 'center',
+    width: 44,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: 'rgba(60,60,67,0.18)',
+    marginTop: 2,
+    marginBottom: 10,
   },
-  inputGroup: {
-    marginBottom: 12,
-  },
-  inputLabel: {
-    fontSize: 12,
-    color: Colors.subtext,
-    marginBottom: 6,
-    textAlign: 'left',
-  },
-  inputWrapper: {
-    position: 'relative',
-  },
-  textInput: {
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    backgroundColor: '#fafafa',
-    color: Colors.text,
-  },
-  passwordToggle: {
-    position: 'absolute',
-    right: 10,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-  },
-  modalActions: {
+  editSheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 8,
+    paddingBottom: 6,
   },
-  modalBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
+  editSheetTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: Colors.text,
+    letterSpacing: -0.2,
+  },
+  editSheetCloseBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(60,60,67,0.06)',
+  },
+  editSheetBody: {
+    paddingTop: 8,
+    gap: 12,
+  },
+  fieldCard: {
+    backgroundColor: '#F6F7FB',
+    borderRadius: 16,
+    borderCurve: 'continuous',
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.10)',
+  },
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: 'rgba(60,60,67,0.72)',
+    marginBottom: 8,
+  },
+  fieldLabelLtr: {
+    textAlign: 'left',
+  },
+  fieldLabelRtl: {
+    textAlign: 'right',
+  },
+  fieldRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 44,
+  },
+  fieldRowLtr: {
+    flexDirection: 'row',
+  },
+  fieldRowRtl: {
+    flexDirection: 'row-reverse',
+  },
+  fieldIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    borderCurve: 'continuous',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cancelBtn: {
-    backgroundColor: '#F2F2F7',
-  },
-  cancelBtnText: {
-    color: Colors.text,
+  fieldInput: {
+    flex: 1,
     fontSize: 16,
     fontWeight: '600',
+    color: Colors.text,
+    paddingVertical: 8,
+    textAlignVertical: 'center',
   },
-  saveBtn: {
-    backgroundColor: Colors.primary,
+  fieldInputLtr: {
+    paddingLeft: 0,
+    paddingRight: 6,
+    textAlign: 'left',
+    writingDirection: 'ltr',
   },
-  saveBtnText: {
-    color: Colors.white,
+  fieldInputRtl: {
+    paddingRight: 0,
+    paddingLeft: 6,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  editSheetFooter: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  footerBtn: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 16,
+    borderCurve: 'continuous',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerBtnSecondary: {
+    backgroundColor: 'rgba(60,60,67,0.08)',
+  },
+  footerBtnSecondaryText: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  footerBtnPrimaryGradient: {
+    width: '100%',
+    minHeight: 48,
+    borderRadius: 16,
+    borderCurve: 'continuous',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  footerBtnPrimaryText: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+  },
+  footerBtnDisabled: {
+    opacity: 0.7,
   },
   // History sheet styles
   historyOverlay: {
@@ -1216,53 +1337,7 @@ const styles = StyleSheet.create<any>({
     fontWeight: '500',
     textAlign: 'center',
   },
-  menuContainer: {
-    paddingHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 18,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  menuItemContent: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  menuItemIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  menuItemText: {
-    flex: 1,
-    alignItems: 'flex-start',
-  },
-  menuItemTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 2,
-  },
-  menuItemSubtitle: {
-    fontSize: 12,
-    color: Colors.subtext,
-  },
-  switch: {
-    transform: [{ scaleX: 1.1 }, { scaleY: 1.1 }],
-  },
+  // (Client profile now uses grouped settings rows; legacy menu styles intentionally kept elsewhere if needed.)
   logoutOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
@@ -1323,31 +1398,5 @@ const styles = StyleSheet.create<any>({
     color: '#fff',
   },
 
-  logoutButton: {
-    marginTop: 8,
-    marginHorizontal: 16,
-    borderRadius: 16,
-    alignSelf: 'stretch',
-    marginBottom: 24,
-    overflow: 'hidden',
-  },
-  logoutGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 16,
-  },
-  logoutText: {
-    fontSize: 16,
-    color: Colors.white,
-    fontWeight: '500',
-    marginLeft: 8,
-  },
-  versionText: {
-    fontSize: 12,
-    color: Colors.subtext,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
+  // versionText removed (no version label on client profile)
 });

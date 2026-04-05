@@ -24,9 +24,9 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import Colors from '@/constants/colors';
-import Constants from 'expo-constants';
 import { useAuthStore } from '@/stores/authStore';
 import { supabase, getBusinessId } from '@/lib/supabase';
+import { getExpoExtra } from '@/lib/getExtra';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import MovingBorderCard from '@/components/MovingBorderCard';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -398,11 +398,10 @@ export default function ClientHomeScreen() {
   const [mapCoords, setMapCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [osmFailed, setOsmFailed] = useState(false);
   const [googleFailed, setGoogleFailed] = useState(false);
-  // Do not require branding/current.json — Metro reads it during bundling while app.config.js
-  // may be rewriting it; on Windows (OneDrive) that causes EBUSY. Keys are already in expo.extra.
+  const extra = useMemo(() => getExpoExtra(), []);
   const GOOGLE_STATIC_MAPS_KEY =
-    (Constants?.expoConfig?.extra as any)?.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY ||
     (process.env as any)?.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY ||
+    (extra as any)?.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY ||
     '';
 
   
@@ -537,8 +536,8 @@ export default function ClientHomeScreen() {
 
   // Always use business profile address for map display (fallback to a safe default)
   const DEFAULT_MAP = {
-    address: '386 East Shoreline Drive, Long Beach, CA',
-    coords: { lat: 33.7609, lon: -118.196 }
+    address: 'Tel Aviv-Yafo, Israel',
+    coords: { lat: 32.0853, lon: 34.7818 },
   } as const;
   const displayAddress = (
     typeof businessProfile?.address === 'string' && (businessProfile.address as string).trim().length > 0
@@ -695,24 +694,45 @@ export default function ClientHomeScreen() {
       try {
         const address = displayAddress;
         if (!address) { setMapCoords(DEFAULT_MAP.coords); return; }
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(address)}`,
+        // Prefer Google Geocoding (matches "Google Maps" expectations) when we have a key.
+        if (GOOGLE_STATIC_MAPS_KEY) {
+          try {
+            const gRes = await fetch(
+              `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${encodeURIComponent(
+                GOOGLE_STATIC_MAPS_KEY
+              )}`
+            );
+            const gData: any = await gRes.json();
+            const loc = gData?.results?.[0]?.geometry?.location;
+            const latNum = Number(loc?.lat);
+            const lonNum = Number(loc?.lng);
+            if (!Number.isNaN(latNum) && !Number.isNaN(lonNum)) {
+              setMapCoords({ lat: latNum, lon: lonNum });
+              return;
+            }
+          } catch {
+            // fall through to OSM geocode
+          }
+        }
+
+        // Fallback: OSM Nominatim (no key required)
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(address)}`,
           {
             headers: {
-              'User-Agent': 'SlotlysApp/1.0 (+https://slotlys.com)'
-            }
+              'User-Agent': 'SlotlysApp/1.0 (+https://slotlys.com)',
+            },
           }
         );
         const data: any[] = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          const { lat, lon } = data[0];
-          const latNum = Number(lat);
-          const lonNum = Number(lon);
-          if (!isNaN(latNum) && !isNaN(lonNum)) {
-            setMapCoords({ lat: latNum, lon: lonNum });
-            return;
-          }
+        const first = Array.isArray(data) ? data[0] : null;
+        const latNum = Number(first?.lat);
+        const lonNum = Number(first?.lon);
+        if (!Number.isNaN(latNum) && !Number.isNaN(lonNum)) {
+          setMapCoords({ lat: latNum, lon: lonNum });
+          return;
         }
-        // If we got here, use default coords to ensure the map renders
+
         setMapCoords(DEFAULT_MAP.coords);
       } catch (e) {
         // Fallback to default coords
@@ -1176,7 +1196,7 @@ export default function ClientHomeScreen() {
         )}
 
         {/* Location / Map Section (moved above Follow us) */}
-        {displayAddress && (
+        {displayAddress ? (
           <View style={[styles.sectionContainer, { marginBottom: 24 }]}> 
             <View style={styles.sectionHeaderModernSimple}>
               <Text style={{ fontSize: 26, fontWeight: '700', color: '#1C1C1E', textAlign: 'center', letterSpacing: -0.3, marginBottom: 4 }}>{t('how.to.get.here')}</Text>
@@ -1200,13 +1220,15 @@ export default function ClientHomeScreen() {
                  } catch {}
                }}
                style={styles.mapCard}
+               accessibilityRole="button"
+               accessibilityLabel={t('tap.map.for.directions')}
              >
              {GOOGLE_STATIC_MAPS_KEY && !googleFailed ? (
                <Image
                  source={{ uri: (
                    mapCoords
-                     ? `https://maps.googleapis.com/maps/api/staticmap?center=${mapCoords.lat},${mapCoords.lon}&zoom=15&scale=2&size=640x400&maptype=roadmap&markers=color:red|${mapCoords.lat},${mapCoords.lon}&key=${GOOGLE_STATIC_MAPS_KEY}`
-                     : `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(displayAddress)}&zoom=15&scale=2&size=640x400&maptype=roadmap&markers=color:red|${encodeURIComponent(displayAddress)}&key=${GOOGLE_STATIC_MAPS_KEY}`
+                     ? `https://maps.googleapis.com/maps/api/staticmap?center=${mapCoords.lat},${mapCoords.lon}&zoom=16&scale=2&size=640x400&maptype=roadmap&style=feature:poi|visibility:off&style=feature:transit|visibility:off&style=feature:road|element:geometry|color:0xf0f0f0&style=feature:water|element:geometry|color:0xd8ecff&style=feature:landscape|element:geometry|color:0xf7f7f7&key=${GOOGLE_STATIC_MAPS_KEY}`
+                     : `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(displayAddress)}&zoom=16&scale=2&size=640x400&maptype=roadmap&style=feature:poi|visibility:off&style=feature:transit|visibility:off&style=feature:road|element:geometry|color:0xf0f0f0&style=feature:water|element:geometry|color:0xd8ecff&style=feature:landscape|element:geometry|color:0xf7f7f7&key=${GOOGLE_STATIC_MAPS_KEY}`
                  ) }}
                  style={styles.mapImage}
                  resizeMode="cover"
@@ -1214,7 +1236,7 @@ export default function ClientHomeScreen() {
                />
              ) : mapCoords ? (
                <Image
-                 source={{ uri: `https://api.maptiler.com/maps/streets/static/${mapCoords.lon},${mapCoords.lat},14/640x400.png?key=get_your_own_OpIi9ZULNHzrESv6T2vL` }}
+                 source={{ uri: `https://staticmap.openstreetmap.de/staticmap.php?center=${mapCoords.lat},${mapCoords.lon}&zoom=16&size=640x400&maptype=mapnik` }}
                  style={styles.mapImage}
                  resizeMode="cover"
                  defaultSource={require('@/assets/images/1homePage.jpg')}
@@ -1231,11 +1253,27 @@ export default function ClientHomeScreen() {
                </View>
              )}
               <View style={styles.mapOverlay} />
-              <View style={[styles.mapLogoCircle, { borderColor: colors.primary }]}>
-                <Image source={getCurrentClientLogo()} style={styles.mapLogoImage} resizeMode="contain" />
+              <View style={styles.mapPinHost} pointerEvents="none">
+                <View style={[styles.mapPinRing, { borderColor: `${colors.primary}66` }]} />
+                <LinearGradient
+                  colors={[colors.primary, `${colors.primary}CC`]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.mapPinCore}
+                >
+                  <View style={styles.mapPinLogoFrame}>
+                    <Image
+                      source={getCurrentClientLogo()}
+                      style={styles.mapPinLogo}
+                      resizeMode="contain"
+                    />
+                  </View>
+                </LinearGradient>
               </View>
               <View style={styles.mapAttribution}>
-                <Text style={styles.mapAttributionText}>{t('map.mapsLabel', 'Maps')}</Text>
+                <Text style={styles.mapAttributionText}>
+                  {GOOGLE_STATIC_MAPS_KEY && !googleFailed ? 'Google Maps' : t('map.mapsLabel', 'Maps')}
+                </Text>
               </View>
               {/* Bottom dark bar with business name and address */}
               {(businessProfile?.display_name || displayAddress) && (
@@ -1249,13 +1287,18 @@ export default function ClientHomeScreen() {
                     <Text style={styles.mapBottomName}>{businessProfile.display_name}</Text>
                   )}
                   {!!displayAddress && (
-                    <Text style={styles.mapBottomAddress} numberOfLines={1}>{displayAddress}</Text>
+                    <View style={styles.mapBottomAddressRow}>
+                      <Ionicons name="location-outline" size={14} color="#F2F2F7" />
+                      <Text style={styles.mapBottomAddress} numberOfLines={1}>
+                        {displayAddress}
+                      </Text>
+                    </View>
                   )}
                 </LinearGradient>
               )}
             </TouchableOpacity>
           </View>
-        )}
+        ) : null}
 
 
         {/* Social Section */}
@@ -2060,29 +2103,50 @@ const styles = StyleSheet.create<any>({
     bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.25)',
   },
-  mapLogoCircle: {
+  mapPinHost: {
     position: 'absolute',
-    top: '40%',
+    top: '50%',
     left: '50%',
-    transform: [{ translateX: -28 }, { translateY: -28 }],
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#FFFFFF',
+    transform: [{ translateX: -26 }, { translateY: -46 }],
+    width: 52,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 8,
-    borderWidth: 3,
-    borderColor: '#000000',
   },
-  mapLogoImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  mapPinRing: {
+    position: 'absolute',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 2,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  mapPinCore: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.92)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  mapPinLogoFrame: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  mapPinLogo: {
+    width: 34,
+    height: 34,
   },
   mapAttribution: {
     position: 'absolute',
@@ -2106,17 +2170,26 @@ const styles = StyleSheet.create<any>({
     paddingHorizontal: 12,
     paddingTop: 20,
     paddingBottom: 14,
+    alignItems: 'flex-end',
   },
   mapBottomName: {
     fontSize: 18,
     fontWeight: '700',
     color: '#FFFFFF',
     marginBottom: 2,
+    textAlign: 'right',
+  },
+  mapBottomAddressRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+    maxWidth: '100%',
   },
   mapBottomAddress: {
     fontSize: 13,
     fontWeight: '500',
     color: '#F2F2F7',
+    textAlign: 'right',
   },
   mapDetailsContainer: {
     paddingHorizontal: 8,

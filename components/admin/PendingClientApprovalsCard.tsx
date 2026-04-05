@@ -133,12 +133,6 @@ export const PendingClientApprovalsCard = React.forwardRef<
     }, [isAdmin, load])
   );
 
-  React.useEffect(() => {
-    if (modalOpen && !loading && pending.length === 0) {
-      setModalOpen(false);
-    }
-  }, [modalOpen, loading, pending.length]);
-
   const finishClose = React.useCallback(() => {
     setDisplayModal(false);
   }, []);

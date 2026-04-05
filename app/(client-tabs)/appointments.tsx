@@ -410,6 +410,14 @@ export default function ClientAppointmentsScreen() {
     return formatTime12Hour(timeString);
   }, []);
 
+  const formatCompactDate = React.useCallback((dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString(appLocale as any, {
+      day: 'numeric',
+      month: 'short',
+    });
+  }, [appLocale]);
+
   // Memoize date calculations for better performance
   const today = React.useMemo(() => {
     const date = new Date();
@@ -649,7 +657,7 @@ export default function ClientAppointmentsScreen() {
   // Barber Avatar Component — premium large avatar with colored ring + glow
   const BarberAvatar: React.FC<{ barberId?: string; size?: number }> = React.useCallback(({ barberId, size = 72 }) => {
     const imageUrl = barberId ? barberImages[barberId] : undefined;
-    const ringSize = size + 6;
+    const ringSize = size + 4;
     const hasImage = Boolean(imageUrl);
 
     return (
@@ -662,7 +670,7 @@ export default function ClientAppointmentsScreen() {
             borderRadius: ringSize / 2,
             borderColor: hasImage ? colors.primary : 'rgba(142,142,147,0.25)',
             shadowColor: hasImage ? colors.primary : '#000',
-            shadowOpacity: hasImage ? 0.35 : 0.10,
+            shadowOpacity: hasImage ? 0.18 : 0.08,
           },
         ]}
       >
@@ -795,97 +803,177 @@ export default function ClientAppointmentsScreen() {
 
   const renderAppointment = React.useCallback(({ item }: { item: AvailableTimeSlot }) => {
     const isPast = activeTab === 'past';
+    const statusConfig = (() => {
+      if (isPast || item.status === 'completed') {
+        return {
+          label: t('appointments.completed', 'Completed'),
+          color: '#34C759',
+          backgroundColor: 'rgba(52,199,89,0.10)',
+          borderColor: 'rgba(52,199,89,0.18)',
+          icon: 'checkmark-circle' as const,
+        };
+      }
+
+      switch (item.status) {
+        case 'pending':
+          return {
+            label: t('appointments.pending', 'Pending'),
+            color: '#F59E0B',
+            backgroundColor: 'rgba(245,158,11,0.10)',
+            borderColor: 'rgba(245,158,11,0.18)',
+            icon: 'time-outline' as const,
+          };
+        case 'cancelled':
+        case 'no_show':
+          return {
+            label: t('appointments.cancelled', 'Cancelled'),
+            color: '#EF4444',
+            backgroundColor: 'rgba(239,68,68,0.10)',
+            borderColor: 'rgba(239,68,68,0.18)',
+            icon: 'close-circle' as const,
+          };
+        case 'confirmed':
+        default:
+          return {
+            label: t('appointments.confirmed', 'Confirmed'),
+            color: colors.primary,
+            backgroundColor: colors.primary + '10',
+            borderColor: colors.primary + '1A',
+            icon: 'checkmark-done-circle-outline' as const,
+          };
+      }
+    })();
+
+    const secondaryInfo = user?.user_type === 'admin' && item.client_name
+      ? `${item.client_name}${item.client_phone ? ` • ${item.client_phone}` : ''}`
+      : user?.user_type !== 'admin' && item.barber_id
+        ? getBarberName(item.barber_id)
+        : '';
 
     return (
       <View style={styles.apptCardShadow}>
-        {/* Decorative blobs */}
-        <View style={[styles.apptCardBlobLarge, { backgroundColor: colors.primary + '0C' }]} />
-        <View style={[styles.apptCardBlobSmall, { backgroundColor: colors.primary + '08' }]} />
+        {/* ── שורה עליונה: אווטאר ימין + שם שירות + נותן שירות ── */}
+        <View style={styles.apptCardHeader}>
+          {/* אווטאר – ראשון ב־row → ימין ב־RTL */}
+          <BarberAvatar barberId={item.barber_id} size={64} />
 
-        {/* Top row: avatar (left) + actions (right) */}
-        <View style={styles.apptCardTopRow}>
-          <BarberAvatar barberId={item.barber_id} size={72} />
-
-          <View style={styles.apptCardActions}>
-            {isPast ? (
-              <View style={styles.apptCompletedBadge}>
-                <Ionicons name="checkmark-circle" size={15} color="#34C759" />
-                <Text style={styles.apptCompletedText}>{t('appointments.completed', 'Completed')}</Text>
+          <View style={styles.apptCardHeaderContent}>
+            <Text style={styles.apptServiceName} numberOfLines={2}>
+              {item.service_name || t('booking.field.service', 'Service')}
+            </Text>
+            {secondaryInfo ? (
+              <View style={styles.apptInfoRow}>
+                <Ionicons name="person-outline" size={13} color="#8E8E93" />
+                <Text style={styles.apptInfoText} numberOfLines={1}>
+                  {secondaryInfo}
+                </Text>
               </View>
-            ) : (
-              <>
-                <TouchableOpacity
-                  style={styles.apptCancelPill}
-                  onPress={() => handleCancelAppointment(item)}
-                  activeOpacity={0.72}
-                >
-                  <Ionicons name="close" size={13} color="#FF3B30" />
-                  <Text style={styles.apptCancelPillText}>{t('cancel', 'Cancel')}</Text>
-                </TouchableOpacity>
-                {user?.user_type !== 'admin' && clientSwapEnabled && (
-                  <TouchableOpacity
-                    style={[styles.apptSwapPill, { backgroundColor: colors.primary + '18', borderColor: colors.primary + '35' }]}
-                    onPress={() => {
-                      setSwapAppointment(item);
-                      setShowSwapModal(true);
-                    }}
-                    activeOpacity={0.72}
-                  >
-                    <Ionicons name="swap-horizontal" size={13} color={colors.primary} />
-                    <Text style={[styles.apptSwapPillText, { color: colors.primary }]}>{t('swap.swap', 'Swap')}</Text>
-                  </TouchableOpacity>
-                )}
-              </>
-            )}
+            ) : null}
           </View>
         </View>
 
-        {/* Service name */}
-        <Text style={styles.apptServiceName} numberOfLines={2}>
-          {item.service_name || t('booking.field.service', 'Service')}
-        </Text>
+        {/* ── שורת צ'יפים + מיקום ── */}
+        <View style={styles.apptTopMetaRow}>
+          {/* צ'יפים – ראשון ב־row → ימין ב־RTL */}
+          <View style={styles.apptCardBadgeRow}>
+            <View
+              style={[
+                styles.apptStatusBadge,
+                {
+                  backgroundColor: statusConfig.backgroundColor,
+                  borderColor: statusConfig.borderColor,
+                },
+              ]}
+            >
+              <Ionicons name={statusConfig.icon} size={13} color={statusConfig.color} />
+              <Text style={[styles.apptStatusBadgeText, { color: statusConfig.color }]}>
+                {statusConfig.label}
+              </Text>
+            </View>
 
-        {/* Barber / client info */}
-        {user?.user_type === 'admin' && item.client_name ? (
-          <View style={styles.apptInfoRow}>
-            <Text style={styles.apptInfoText}>
-              {item.client_name}{item.client_phone ? ` • ${item.client_phone}` : ''}
+            <View
+              style={[
+                styles.apptMiniDateChip,
+                {
+                  backgroundColor: colors.primary + '0B',
+                  borderColor: colors.primary + '14',
+                },
+              ]}
+            >
+              <Ionicons name="calendar-outline" size={12} color={colors.primary} />
+              <Text style={[styles.apptMiniDateChipText, { color: colors.primary }]}>
+                {formatCompactDate(item.slot_date)}
+              </Text>
+            </View>
+          </View>
+
+          {/* מיקום – אחרון ב־row → שמאל ב־RTL */}
+          {businessAddress ? (
+            <TouchableOpacity
+              style={[styles.apptLocationBtn, { borderColor: colors.primary + '22' }]}
+              onPress={openBusinessLocation}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="location-outline" size={16} color={colors.primary} />
+            </TouchableOpacity>
+          ) : <View style={{ width: 42 }} />}
+        </View>
+
+        <View style={styles.apptCardDivider} />
+
+        {/* ── שורת כפתורים תחתונה: ביטול | החלף | שעה (RTL) ── */}
+        <View style={styles.apptCardFooter}>
+          {/* ביטול – ראשון → ימין ב־RTL */}
+          {!isPast ? (
+            <TouchableOpacity
+              style={[styles.apptFooterBtn, styles.apptCancelBtn]}
+              onPress={() => handleCancelAppointment(item)}
+              activeOpacity={0.78}
+            >
+              <Ionicons name="close" size={14} color="#FF3B30" />
+              <Text style={styles.apptCancelBtnText}>{t('cancel', 'Cancel')}</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {/* החלף – שני → אמצע */}
+          {!isPast && user?.user_type !== 'admin' && clientSwapEnabled ? (
+            <TouchableOpacity
+              style={[
+                styles.apptFooterBtn,
+                styles.apptSwapBtn,
+                { borderColor: 'rgba(15,23,42,0.12)' },
+              ]}
+              onPress={() => {
+                setSwapAppointment(item);
+                setShowSwapModal(true);
+              }}
+              activeOpacity={0.78}
+            >
+              <Ionicons name="swap-horizontal" size={14} color="#3C3C43" />
+              <Text style={styles.apptSwapBtnText}>{t('swap.swap', 'Swap')}</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {/* שעה – אחרון → שמאל ב־RTL */}
+          <View
+            style={[
+              styles.apptFooterBtn,
+              styles.apptTimeBtn,
+              {
+                backgroundColor: colors.primary + '0D',
+                borderColor: colors.primary + '18',
+              },
+            ]}
+          >
+            <Text style={[styles.apptTimeBtnText, { color: colors.primary }]}>
+              {formatTime(item.slot_time)}
             </Text>
-            <View style={styles.apptInfoIconBubble}>
-              <Ionicons name="person" size={11} color="#8E8E93" />
-            </View>
-          </View>
-        ) : user?.user_type !== 'admin' && item.barber_id ? (
-          <View style={styles.apptInfoRow}>
-            <Text style={styles.apptInfoText}>{getBarberName(item.barber_id)}</Text>
-            <View style={styles.apptInfoIconBubble}>
-              <Ionicons name="person" size={11} color="#8E8E93" />
-            </View>
-          </View>
-        ) : null}
-
-        {/* Separator */}
-        <View style={styles.apptSeparator} />
-
-        {/* Footer: date pill (left) + location + time (right) */}
-        <View style={styles.apptFooter}>
-          <DatePill date={item.slot_date} />
-
-          <View style={styles.apptFooterRight}>
-            {businessAddress ? (
-              <TouchableOpacity style={[styles.apptLocationBtn, { borderColor: colors.primary + '30' }]} onPress={openBusinessLocation} activeOpacity={0.75}>
-                <Ionicons name="location" size={15} color={colors.primary} />
-              </TouchableOpacity>
-            ) : null}
-            <View style={[styles.apptTimePill, { backgroundColor: colors.primary + '14' }]}>
-              <Ionicons name="time" size={15} color={colors.primary} />
-              <Text style={[styles.apptTimePillText, { color: colors.primary }]}>{formatTime(item.slot_time)}</Text>
-            </View>
+            <Ionicons name="time-outline" size={15} color={colors.primary} />
           </View>
         </View>
       </View>
     );
-  }, [formatTime, activeTab, handleCancelAppointment, businessAddress, colors.primary, clientSwapEnabled, user?.user_type, t, getBarberName]);
+  }, [formatTime, formatCompactDate, activeTab, handleCancelAppointment, businessAddress, colors.primary, clientSwapEnabled, user?.user_type, t, getBarberName]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -932,17 +1020,6 @@ export default function ClientAppointmentsScreen() {
           </View>
         </View>
 
-        {/* Upcoming count chip */}
-        {activeTab === 'upcoming' && upcomingAppointments.length > 0 && (
-          <View style={styles.countChipRow}>
-            <View style={[styles.countChip, { backgroundColor: colors.primary + '14' }]}>
-              <Ionicons name="calendar" size={13} color={colors.primary} />
-              <Text style={[styles.countChipText, { color: colors.primary }]}>
-                {upcomingAppointments.length} {t('appointments.upcoming', 'קרובים')}
-              </Text>
-            </View>
-          </View>
-        )}
 
         {isLoading ? (
           <ScrollView
@@ -1420,15 +1497,44 @@ const styles = StyleSheet.create<any>({
   apptCardShadow: {
     marginBottom: 16,
     marginTop: 4,
-    borderRadius: 24,
+    borderRadius: 26,
     backgroundColor: '#FFFFFF',
-    overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.10,
-    shadowRadius: 22,
-    elevation: 7,
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.05)',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 5,
     padding: 20,
+  },
+  apptCardHeader: {
+    // row + RTL → first child (avatar) lands on the RIGHT
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 14,
+  },
+  apptCardHeaderContent: {
+    flexShrink: 1,
+    alignItems: 'flex-start',
+    gap: 3,
+  },
+  apptTopMetaRow: {
+    // row + RTL → badges (first) RIGHT, location (last) LEFT
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 2,
+  },
+  apptCardBadgeRow: {
+    // row + RTL → status (first) rightmost, date second
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+    flexShrink: 1,
   },
   apptCardBlobLarge: {
     position: 'absolute',
@@ -1506,35 +1612,59 @@ const styles = StyleSheet.create<any>({
     fontWeight: '700',
     color: '#34C759',
   },
+  apptStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  apptStatusBadgeText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
+  apptMiniDateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  apptMiniDateChipText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
   apptServiceName: {
-    fontSize: 23,
+    fontSize: 20,
     fontWeight: '800',
     color: '#1C1C1E',
     letterSpacing: -0.5,
-    textAlign: 'right',
-    marginBottom: 6,
-    zIndex: 1,
   },
   apptInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 6,
-    marginBottom: 16,
-    zIndex: 1,
+    gap: 5,
   },
   apptInfoIconBubble: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: 'rgba(142,142,147,0.12)',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(142,142,147,0.10)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   apptInfoText: {
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '500',
     color: '#8E8E93',
+    textAlign: 'right',
+    flexShrink: 1,
   },
   apptSeparator: {
     height: 1,
@@ -1542,47 +1672,81 @@ const styles = StyleSheet.create<any>({
     marginBottom: 14,
     zIndex: 1,
   },
-  apptFooter: {
+  apptCardDivider: {
+    height: 1,
+    backgroundColor: 'rgba(15,23,42,0.06)',
+    marginVertical: 16,
+  },
+  apptCardFooter: {
+    // row + RTL → cancel (first) RIGHT, swap middle, time (last) LEFT
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    zIndex: 1,
-  },
-  apptFooterRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  apptTimePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 13,
-    paddingVertical: 9,
-    borderRadius: 14,
-  },
-  apptTimePillText: {
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: -0.2,
+    gap: 10,
   },
   apptLocationBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.04)',
+    backgroundColor: '#F5F5F7',
     borderWidth: 1,
   },
+  // ── שלושת כפתורי ה-footer – pill אחיד ──
+  apptFooterBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  apptCancelBtn: {
+    backgroundColor: 'rgba(255,59,48,0.09)',
+    borderColor: 'rgba(255,59,48,0.15)',
+  },
+  apptCancelBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FF3B30',
+    letterSpacing: -0.2,
+  },
+  apptSwapBtn: {
+    backgroundColor: '#F5F5F7',
+  },
+  apptSwapBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#3C3C43',
+    letterSpacing: -0.2,
+  },
+  apptTimeBtn: {
+    // primary-tinted pill, no border radius override needed
+  },
+  apptTimeBtnText: {
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+  },
+  // legacy names kept so no ref errors
+  apptFooterActions: { flexDirection: 'row', gap: 8 },
+  apptTimeCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  apptTimeCardText: { fontSize: 16, fontWeight: '800' },
+  apptActionButton: { height: 44, borderRadius: 999, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  apptSwapButton: { backgroundColor: '#F5F5F7' },
+  apptSwapButtonText: { fontSize: 14, fontWeight: '700' },
+  apptCancelButton: { backgroundColor: 'rgba(255,59,48,0.09)', borderColor: 'rgba(255,59,48,0.15)' },
+  apptCancelButtonText: { fontSize: 14, fontWeight: '700', color: '#FF3B30' },
   // ─── BarberAvatar (premium ring + glow) ──────────────────────────────────
   barberAvatarRing: {
-    borderWidth: 2.5,
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
     shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 12,
-    elevation: 5,
+    shadowRadius: 10,
+    elevation: 4,
   },
   barberAvatarInner: {
     overflow: 'hidden',

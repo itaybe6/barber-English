@@ -16,6 +16,7 @@ import {
   useWindowDimensions,
   BackHandler,
   Keyboard,
+  I18nManager,
   type KeyboardEvent,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -117,7 +118,10 @@ export default function EditGalleryScreen() {
     };
   }, []);
 
-  const styles = useMemo(() => createStyles(colors, windowWidth, windowHeight), [colors, windowWidth, windowHeight]);
+  const styles = useMemo(
+    () => createStyles(colors, windowWidth, windowHeight, I18nManager.isRTL),
+    [colors, windowWidth, windowHeight, I18nManager.isRTL],
+  );
 
   const { designs, fetchDesigns, createDesign, deleteDesign, updateDesign, applyDesignDisplayOrder, isLoading } =
     useDesignsStore();
@@ -1238,6 +1242,7 @@ export default function EditGalleryScreen() {
         grabberColor={colors.primary}
         hideCloseButton
         enablePanelLayoutAnimation={false}
+        panelVerticalAlign="center"
       >
         <View style={styles.fabSheetHeader}>
           <View style={styles.fabSheetHeaderSpacer} />
@@ -1638,6 +1643,7 @@ export default function EditGalleryScreen() {
           grabberColor={colors.primary}
           hideCloseButton
           enablePanelLayoutAnimation={false}
+          panelVerticalAlign="center"
         >
           <View style={styles.fabSheetHeader}>
             <View style={styles.fabSheetHeaderSpacer} />
@@ -2096,7 +2102,7 @@ export default function EditGalleryScreen() {
   );
 }
 
-function createStyles(colors: ThemeColors, windowWidth: number, windowHeight: number) {
+function createStyles(colors: ThemeColors, windowWidth: number, windowHeight: number, layoutRtl: boolean) {
   const paddingH = 20;
   const gap = 10;
   const layout = { paddingH, gap };
@@ -2557,7 +2563,13 @@ function createStyles(colors: ThemeColors, windowWidth: number, windowHeight: nu
     emptySubtitle: { fontSize: 15, color: colors.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 22 },
     fieldLabel: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 16, marginBottom: 8 },
     block: { marginTop: 4 },
-    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    /** RTL: row starts at the right — flex-start keeps chips flush to the label side; LTR: flex-end. */
+    chipRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      justifyContent: layoutRtl ? 'flex-start' : 'flex-end',
+    },
     chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth },
     chipText: { fontSize: 14, fontWeight: '500' },
     fabPrimaryBtn: {

@@ -163,6 +163,7 @@ export default function ClientProfileScreen() {
   };
 
   const isRtl = I18nManager.isRTL;
+  const isHebrew = i18n.language?.startsWith('he');
 
   const openEditProfile = useCallback(async () => {
     setEditName(user?.name ?? '');
@@ -469,7 +470,7 @@ export default function ClientProfileScreen() {
                       style={[
                         styles.fieldInput,
                         isRtl ? styles.fieldInputRtl : styles.fieldInputLtr,
-                        { textAlign: isRtl ? 'right' : 'left', writingDirection: isRtl ? 'rtl' : 'ltr' },
+                        { textAlign: isHebrew ? 'right' : 'left', writingDirection: isHebrew ? 'rtl' : 'ltr' },
                       ]}
                       autoCorrect={false}
                       autoCapitalize="words"
@@ -495,7 +496,7 @@ export default function ClientProfileScreen() {
                       style={[
                         styles.fieldInput,
                         isRtl ? styles.fieldInputRtl : styles.fieldInputLtr,
-                        { textAlign: isRtl ? 'right' : 'left', writingDirection: isRtl ? 'rtl' : 'ltr' },
+                        { textAlign: isHebrew ? 'right' : 'left', writingDirection: 'ltr' },
                       ]}
                       autoCorrect={false}
                       autoCapitalize="none"

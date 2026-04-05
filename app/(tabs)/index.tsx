@@ -58,6 +58,7 @@ import { manicureImages } from '@/src/constants/manicureImages';
 import { ManicureMarqueeTile } from '@/components/ManicureMarqueeTile';
 import MonthlyInsightsCard from '@/components/MonthlyInsightsCard';
 import { PendingClientApprovalsCard, PendingClientApprovalsCardHandle } from '@/components/admin/PendingClientApprovalsCard';
+import WaitlistHomePreviewAvatars from '@/components/admin/WaitlistHomePreviewAvatars';
 import { clientAppointmentStatsApi } from '@/lib/api/clientAppointmentStats';
 import { HorizontalCarouselDots, carouselIndexFromOffset } from '@/components/HorizontalCarouselDots';
 import { usersApi } from '@/lib/api/users';
@@ -392,6 +393,9 @@ export default function HomeScreen() {
     });
   }, [pendingClients, searchQuery]);
   const [waitlistWaitingCount, setWaitlistWaitingCount] = useState(0);
+  const [waitlistPreviewClients, setWaitlistPreviewClients] = useState<
+    { key: string; client_name: string }[]
+  >([]);
 
   /** SharedValue tracks inner-scroll state so the UI-thread worklet can read it without crossing to JS */
   const innerActiveSV = useSharedValue(0);
@@ -672,17 +676,48 @@ export default function HomeScreen() {
         newClientsThisMonth: newClientsRes.error ? 0 : newClientsRes.count ?? 0,
       });
 
-      // ממתינים בסטטוס waiting — כמו מסך רשימת המתנה: לספר מחובר רק רשומות עם user_id = הספר (barberId מהזמנה)
+      // ממתינים בסטטוס waiting — כמו מסך רשימת המתנה: לספר מחובר רק רשומות עם user_id = הספר
       let waitlistCountQuery = supabase
         .from('waitlist_entries')
         .select('id', { count: 'exact', head: true })
         .eq('business_id', businessId)
         .eq('status', 'waiting');
+      let waitlistPreviewQuery = supabase
+        .from('waitlist_entries')
+        .select('id, client_name, client_phone, requested_date, created_at')
+        .eq('business_id', businessId)
+        .eq('status', 'waiting')
+        .order('requested_date', { ascending: true })
+        .order('created_at', { ascending: true })
+        .limit(40);
       if (!isSuperAdmin && user?.id) {
         waitlistCountQuery = waitlistCountQuery.eq('user_id', user.id);
+        waitlistPreviewQuery = waitlistPreviewQuery.eq('user_id', user.id);
       }
-      const { count: wCount } = await waitlistCountQuery;
-      setWaitlistWaitingCount(wCount ?? 0);
+      const [waitlistCountRes, waitlistPreviewRes] = await Promise.all([
+        waitlistCountQuery,
+        waitlistPreviewQuery,
+      ]);
+      setWaitlistWaitingCount(waitlistCountRes.count ?? 0);
+      if (waitlistPreviewRes.error) {
+        console.error('Error fetching waitlist preview:', waitlistPreviewRes.error);
+        setWaitlistPreviewClients([]);
+      } else {
+        const seen = new Set<string>();
+        const unique: { key: string; client_name: string }[] = [];
+        for (const row of waitlistPreviewRes.data || []) {
+          const r = row as { id?: string; client_name?: string; client_phone?: string };
+          const phone = String(r.client_phone || '').trim();
+          const dedupeKey = phone || String(r.id || '');
+          if (!dedupeKey || seen.has(dedupeKey)) continue;
+          seen.add(dedupeKey);
+          unique.push({
+            key: String(r.id),
+            client_name: String(r.client_name || '').trim() || '?',
+          });
+        }
+        setWaitlistPreviewClients(unique);
+      }
     } catch (error) {
       console.error('Error in fetchInsightsData:', error);
     } finally {
@@ -1313,6 +1348,14 @@ export default function HomeScreen() {
                   >
                     {t('admin.waitlist.viewAndManage', 'צפייה וניהול לקוחות ממתינים')}
                   </Text>
+                  {waitlistPreviewClients.length > 0 ? (
+                    <WaitlistHomePreviewAvatars
+                      clients={waitlistPreviewClients}
+                      primaryColor={colors.primary}
+                      surfaceColor={colors.surface}
+                      maxSlots={5}
+                    />
+                  ) : null}
                 </View>
                 <View style={[styles.waitlistCardVertDivider, { backgroundColor: `${colors.primary}25` }]} />
                 <View style={styles.waitlistCardCountBlock}>
@@ -2127,7 +2170,7 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
   /* ─── Daily Schedule ─── */
   dailyScheduleWrap: {
     marginTop: 12,
-    marginBottom: 4,
+    marginBottom: 0,
   },
   broadcastBannerWrap: {
     marginBottom: 14,
@@ -2196,9 +2239,9 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
   },
   /* ─── Quick tiles row + waitlist card (מתחת) ─── */
   quickTilesGrid: {
-    marginTop: 14,
+    marginTop: 12,
     marginBottom: 6,
-    gap: 10,
+    gap: 12,
   },
   quickTilesRow: {
     flexDirection: 'row',

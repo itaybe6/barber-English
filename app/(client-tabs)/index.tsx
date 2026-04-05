@@ -2092,18 +2092,23 @@ const styles = StyleSheet.create<any>({
     color: '#FFFFFF',
     marginBottom: 2,
     textAlign: 'right',
+    alignSelf: 'flex-end',
+    writingDirection: I18nManager.isRTL ? 'rtl' : 'ltr',
+    maxWidth: '100%',
   },
   mapBottomAddressRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 6,
     maxWidth: '100%',
+    alignSelf: 'flex-end',
   },
   mapBottomAddress: {
     fontSize: 13,
     fontWeight: '500',
     color: '#F2F2F7',
     textAlign: 'right',
+    writingDirection: I18nManager.isRTL ? 'rtl' : 'ltr',
   },
   mapDetailsContainer: {
     paddingHorizontal: 8,

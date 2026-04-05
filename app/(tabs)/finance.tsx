@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Image,
   Linking,
+  Switch,
   type LayoutChangeEvent,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -44,10 +45,12 @@ import { financeApi, type CompletedAppointmentReceiptRow } from '@/lib/api/finan
 import { GreenInvoiceConnectModal } from '@/components/GreenInvoiceConnectModal';
 import type { BusinessExpense, ExpenseCategory } from '@/lib/supabase';
 import { useAdminFinanceMonthReport } from '@/hooks/useAdminFinanceMonthReport';
+import { useGreenInvoiceDevModeStore } from '@/stores/greenInvoiceDevModeStore';
 import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Plus,
   Trash2,
   TrendingUp,
@@ -142,6 +145,9 @@ export default function FinanceScreen() {
   const [giReceiptLoading, setGiReceiptLoading] = useState(false);
   const [selectedGiAppointmentId, setSelectedGiAppointmentId] = useState<string | null>(null);
   const [issuingGiReceipt, setIssuingGiReceipt] = useState(false);
+  const [giSandboxNoteOpen, setGiSandboxNoteOpen] = useState(false);
+  const giUseSandboxApi = useGreenInvoiceDevModeStore((s) => s.useSandboxApi);
+  const giSetUseSandboxApi = useGreenInvoiceDevModeStore((s) => s.setUseSandboxApi);
 
   const [heroLavaLayout, setHeroLavaLayout] = useState<{ w: number; h: number } | null>(null);
   const onHeroLavaLayout = useCallback((e: LayoutChangeEvent) => {
@@ -635,7 +641,7 @@ export default function FinanceScreen() {
               </View>
             </View>
             <Text style={[styles.greenInvoiceHint, { color: theme.textSecondary }]}>
-              {t('finance.greenInvoice.helpHint')}
+              {t('finance.greenInvoice.cardSummary')}
             </Text>
             <TouchableOpacity
               style={[styles.greenInvoiceBtn, { backgroundColor: greenInvoiceAccent }]}
@@ -648,6 +654,25 @@ export default function FinanceScreen() {
                 {giConnected ? t('finance.greenInvoice.modalTitle') : t('finance.greenInvoice.connectButton')}
               </Text>
             </TouchableOpacity>
+
+            <View style={[styles.giDevModeRow, { borderTopColor: `${theme.border}40` }]}>
+              <View style={styles.giDevModeTextBlock}>
+                <Text style={[styles.giDevModeLabel, { color: theme.text }]}>
+                  {t('finance.greenInvoice.devModeToggle')}
+                </Text>
+                <Text style={[styles.giDevModeHint, { color: theme.textSecondary }]}>
+                  {t('finance.greenInvoice.devModeHint')}
+                </Text>
+              </View>
+              <Switch
+                value={giUseSandboxApi}
+                onValueChange={giSetUseSandboxApi}
+                trackColor={{ false: `${theme.border}55`, true: `${greenInvoiceAccent}99` }}
+                thumbColor="#fff"
+                ios_backgroundColor={`${theme.border}55`}
+                accessibilityLabel={t('finance.greenInvoice.devModeToggle')}
+              />
+            </View>
           </View>
 
           {giConnected ? (
@@ -666,9 +691,31 @@ export default function FinanceScreen() {
               <Text style={[styles.giReceiptSubtitle, { color: theme.textSecondary }]}>
                 {t('finance.greenInvoice.receipt.sectionSubtitle')}
               </Text>
-              <Text style={[styles.giReceiptSandbox, { color: theme.textSecondary }]}>
-                {t('finance.greenInvoice.receipt.sandboxServerNote')}
-              </Text>
+
+              <TouchableOpacity
+                style={styles.giReceiptSandboxToggle}
+                onPress={() => setGiSandboxNoteOpen((v) => !v)}
+                activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: giSandboxNoteOpen }}
+                accessibilityLabel={t('finance.greenInvoice.receipt.sandboxNoteToggle')}
+              >
+                <Text style={[styles.giReceiptSandboxToggleText, { color: greenInvoiceAccent }]}>
+                  {t('finance.greenInvoice.receipt.sandboxNoteToggle')}
+                </Text>
+                <View
+                  style={{
+                    transform: [{ rotate: giSandboxNoteOpen ? '180deg' : '0deg' }],
+                  }}
+                >
+                  <ChevronDown size={18} color={greenInvoiceAccent} />
+                </View>
+              </TouchableOpacity>
+              {giSandboxNoteOpen ? (
+                <Text style={[styles.giReceiptSandbox, { color: theme.textSecondary }]}>
+                  {t('finance.greenInvoice.receipt.sandboxServerNote')}
+                </Text>
+              ) : null}
 
               {giReceiptLoading ? (
                 <View style={styles.giReceiptLoading}>
@@ -1297,6 +1344,30 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
   },
+  giDevModeRow: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    direction: 'rtl',
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  giDevModeTextBlock: {
+    flex: 1,
+  },
+  giDevModeLabel: {
+    fontSize: 14,
+    fontWeight: '800',
+    textAlign: 'right',
+    marginBottom: 4,
+  },
+  giDevModeHint: {
+    fontSize: 11,
+    lineHeight: 15,
+    textAlign: 'right',
+  },
   giReceiptCard: {
     marginHorizontal: 16,
     marginTop: 12,
@@ -1318,6 +1389,19 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     textAlign: 'right',
     marginBottom: 8,
+  },
+  giReceiptSandboxToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 6,
+    paddingVertical: 6,
+    marginBottom: 4,
+  },
+  giReceiptSandboxToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'right',
   },
   giReceiptSandbox: {
     fontSize: 11,

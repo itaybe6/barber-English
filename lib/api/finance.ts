@@ -128,7 +128,7 @@ export const financeApi = {
   },
 
   /**
-   * Completed bookings in a month — for Green Invoice receipts (one row per appointment).
+   * Booked appointments in a month eligible for receipts — same statuses as monthly income (confirmed | completed).
    */
   async listCompletedAppointmentsForReceipts(
     year: number,
@@ -142,6 +142,7 @@ export const financeApi = {
           ? `${year + 1}-01-01`
           : `${year}-${String(month + 1).padStart(2, '0')}-01`;
 
+      /** Same eligibility as getMonthlyIncome: booked slots counted as income (confirmed | completed). */
       const { data: appointments, error: apptErr } = await supabase
         .from('appointments')
         .select(
@@ -149,7 +150,7 @@ export const financeApi = {
         )
         .eq('business_id', businessId)
         .eq('is_available', false)
-        .eq('status', 'completed')
+        .in('status', ['confirmed', 'completed'])
         .gte('slot_date', startDate)
         .lt('slot_date', endDate)
         .order('slot_date', { ascending: false })

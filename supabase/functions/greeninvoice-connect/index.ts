@@ -6,7 +6,7 @@
  * Encryption: PULSEEM_FIELD_ENCRYPTION_KEY (same as Pulseem fields).
  *
  * Green Invoice token: POST {base}/v1/account/token with JSON { id, secret }; JWT in X-Authorization-Bearer.
- * Sandbox: set project/function secret GREEN_INVOICE_USE_SANDBOX=true — base becomes https://sandbox.d.greeninvoice.co.il/api (same as green-invoice Python SDK).
+ * Sandbox: secret GREEN_INVOICE_USE_SANDBOX=true and/or body use_sandbox: true (app dev toggle).
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -15,13 +15,22 @@ import { encryptPulseemField } from "./pulseemFieldCrypto.ts";
 const GREEN_LIVE_BASE = "https://api.greeninvoice.co.il/api";
 const GREEN_SANDBOX_BASE = "https://sandbox.d.greeninvoice.co.il/api";
 
-function useSandboxEnv(): boolean {
+function sandboxFromEnv(): boolean {
   const v = (Deno.env.get("GREEN_INVOICE_USE_SANDBOX") ?? "").trim().toLowerCase();
   return v === "true" || v === "1" || v === "yes";
 }
 
-function tokenUrl(): string {
-  const base = useSandboxEnv() ? GREEN_SANDBOX_BASE : GREEN_LIVE_BASE;
+function bodyWantsSandbox(body: Record<string, unknown>): boolean {
+  const b = body["use_sandbox"];
+  return b === true || b === "true" || b === 1;
+}
+
+function useSandboxEffective(body: Record<string, unknown>): boolean {
+  return sandboxFromEnv() || bodyWantsSandbox(body);
+}
+
+function tokenUrl(body: Record<string, unknown>): string {
+  const base = useSandboxEffective(body) ? GREEN_SANDBOX_BASE : GREEN_LIVE_BASE;
   return `${base}/v1/account/token`;
 }
 
@@ -42,6 +51,7 @@ function json(body: Record<string, unknown>, status = 200): Response {
 async function fetchGreenInvoiceJwt(
   apiKeyId: string,
   apiSecret: string,
+  body: Record<string, unknown>,
 ): Promise<{ ok: true; jwt: string } | { ok: false; message: string }> {
   const id = apiKeyId.trim();
   const secret = apiSecret.trim();
@@ -49,7 +59,7 @@ async function fetchGreenInvoiceJwt(
     return { ok: false, message: "חסר מזהה מפתח או מפתח סודי" };
   }
   try {
-    const res = await fetch(tokenUrl(), {
+    const res = await fetch(tokenUrl(body), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, secret }),
@@ -129,7 +139,7 @@ serve(async (req) => {
     if (!apiKeyId || !apiSecret) {
       return json({ ok: false, error: "missing_credentials" }, 400);
     }
-    const gi = await fetchGreenInvoiceJwt(apiKeyId, apiSecret);
+    const gi = await fetchGreenInvoiceJwt(apiKeyId, apiSecret, body);
     if (!gi.ok) {
       return json({ ok: false, error: "greeninvoice_auth_failed", message: gi.message }, 400);
     }
@@ -167,7 +177,7 @@ serve(async (req) => {
     return json({ ok: false, error: "missing_credentials" }, 400);
   }
 
-  const gi = await fetchGreenInvoiceJwt(apiKeyId, apiSecret);
+  const gi = await fetchGreenInvoiceJwt(apiKeyId, apiSecret, body);
   if (!gi.ok) {
     return json({ ok: false, error: "greeninvoice_auth_failed", message: gi.message }, 400);
   }

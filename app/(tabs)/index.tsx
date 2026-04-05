@@ -224,6 +224,7 @@ export default function HomeScreen() {
   );
   /** Section headers: Hebrew titles flush right, edit control on the opposite side (LTR physical layout). */
   const adminSectionTitleOnRight = Boolean(i18n.language?.startsWith('he'));
+  const isRTL = I18nManager.isRTL;
 
   const [heroImages, setHeroImages] = useState<string[] | null>(null);
 
@@ -1204,7 +1205,7 @@ export default function HomeScreen() {
           onCountChange={setPendingClientsCount}
         />
 
-        {/* ── Quick: pending clients · broadcast · notifications + waitlist (gallery/products via section headers) ── */}
+        {/* ── Quick tiles + רשימת המתנה מתחת ── */}
         {isAdmin && (
           <View style={styles.quickTilesGrid}>
             <View style={styles.quickTilesRow}>
@@ -1274,47 +1275,54 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* שורה שנייה: רשימת המתנה — מלבן רחב */}
             <TouchableOpacity
-              style={[styles.waitlistTile, { backgroundColor: `${colors.primary}0F` }]}
-              activeOpacity={0.82}
+              style={[styles.waitlistCard, { backgroundColor: colors.surface }]}
+              activeOpacity={0.88}
               onPress={() => router.push('/(tabs)/waitlist')}
               accessibilityRole="button"
+              accessibilityLabel={t('admin.waitlist.title', 'רשימת המתנה')}
             >
-              {/* LTR: מונה משמאל | רווח | כותרת+סאב צמודים לאייקון | אייקון מימין (לא לזוז) */}
-              <View style={styles.waitlistTileCount}>
-                <Text style={[styles.waitlistTileCountNum, { color: primaryOnSurface }]}>
-                  {waitlistWaitingCount}
-                </Text>
-                <Text style={[styles.waitlistTileCountLabel, { color: colors.textSecondary }]}>
-                  {t('admin.waitlist.waitingLabel', 'ממתינים')}
-                </Text>
+              <View style={styles.waitlistCardHeader}>
+                <Ionicons name="chevron-back-outline" size={15} color="#CBD5E1" />
+                <View style={styles.waitlistCardHeaderTitleGroup}>
+                  <Text
+                    style={[styles.waitlistCardHeaderTitle, { textAlign: isRTL ? 'right' : 'left' }]}
+                    numberOfLines={1}
+                  >
+                    {t('admin.waitlist.title', 'רשימת המתנה')}
+                  </Text>
+                  <View style={[styles.waitlistCardHeaderIcon, { backgroundColor: `${colors.primary}18` }]}>
+                    <Ionicons name="hourglass-outline" size={15} color={primaryOnSurface} />
+                  </View>
+                </View>
               </View>
-              <View style={styles.waitlistTileSpacer} />
-              <View style={styles.waitlistTileInfo}>
-                <Text
+              <View style={styles.waitlistCardDivider} />
+              <View style={[styles.waitlistCardBody, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                <View
                   style={[
-                    styles.waitlistTileTitle,
-                    { color: colors.text },
-                    i18n.language?.startsWith('he') ? styles.waitlistTileTextHe : styles.waitlistTileTextEn,
+                    styles.waitlistCardInfoCol,
+                    { alignItems: isRTL ? 'flex-end' : 'flex-start' },
                   ]}
-                  numberOfLines={1}
                 >
-                  {t('admin.waitlist.title', 'רשימת המתנה')}
-                </Text>
-                <Text
-                  style={[
-                    styles.waitlistTileSub,
-                    { color: colors.textSecondary },
-                    i18n.language?.startsWith('he') ? styles.waitlistTileTextHe : styles.waitlistTileTextEn,
-                  ]}
-                  numberOfLines={2}
-                >
-                  {t('admin.waitlist.viewAndManage', 'צפייה וניהול לקוחות ממתינים')}
-                </Text>
-              </View>
-              <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
-                <Ionicons name="hourglass-outline" size={24} color={primaryOnSurface} />
+                  <Text
+                    style={[
+                      styles.waitlistCardSub,
+                      { color: '#94A3B8', textAlign: isRTL ? 'right' : 'left' },
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {t('admin.waitlist.viewAndManage', 'צפייה וניהול לקוחות ממתינים')}
+                  </Text>
+                </View>
+                <View style={[styles.waitlistCardVertDivider, { backgroundColor: `${colors.primary}25` }]} />
+                <View style={styles.waitlistCardCountBlock}>
+                  <Text style={[styles.waitlistCardCountNum, { color: primaryOnSurface }]}>
+                    {waitlistWaitingCount}
+                  </Text>
+                  <Text style={[styles.waitlistCardCountLabel, { color: `${primaryOnSurface}B3` }]}>
+                    {t('admin.waitlist.waitingLabel', 'ממתינים')}
+                  </Text>
+                </View>
               </View>
             </TouchableOpacity>
           </View>
@@ -2186,7 +2194,7 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
   broadcastBannerChevronWrap: {
     opacity: 0.95,
   },
-  /* ─── Quick Tiles (3 + waitlist) ─── */
+  /* ─── Quick tiles row + waitlist card (מתחת) ─── */
   quickTilesGrid: {
     marginTop: 14,
     marginBottom: 6,
@@ -2196,72 +2204,95 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     flexDirection: 'row',
     gap: 10,
   },
-  waitlistTile: {
+  /** רשימת המתנה — מיושר לכרטיס nextCard ב-DailySchedule (surface, צל, כותרת+מפריד+גוף) */
+  waitlistCard: {
     borderRadius: 20,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    ...({ direction: 'ltr' } as const),
-    alignItems: 'center',
-    gap: 12,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
+        shadowColor: '#1e293b',
+        shadowOpacity: 0.09,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 5 },
       },
-      android: { elevation: 2 },
+      android: { elevation: 5 },
     }),
   },
-  waitlistTileInfo: {
+  waitlistCardHeader: {
+    flexDirection: 'row',
+    direction: 'ltr',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 13,
+    paddingBottom: 11,
+  },
+  waitlistCardHeaderTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     flexShrink: 1,
     minWidth: 0,
-    maxWidth: '52%',
-    gap: 2,
-    alignItems: 'flex-end',
   },
-  waitlistTileSpacer: {
-    flex: 1,
-    minWidth: 6,
-  },
-  waitlistTileTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-    alignSelf: 'stretch',
-  },
-  waitlistTileSub: {
-    fontSize: 12,
-    fontWeight: '500',
-    alignSelf: 'stretch',
-    lineHeight: 16,
-  },
-  waitlistTileTextHe: {
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  waitlistTileTextEn: {
-    textAlign: 'right',
-    writingDirection: 'ltr',
-  },
-  waitlistTileCount: {
+  waitlistCardHeaderIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
     alignItems: 'center',
-    minWidth: 56,
-    flexShrink: 0,
+    justifyContent: 'center',
   },
-  waitlistTileCountNum: {
+  waitlistCardHeaderTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+    color: '#64748B',
+    flexShrink: 1,
+  },
+  waitlistCardDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginHorizontal: 0,
+  },
+  waitlistCardBody: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    gap: 14,
+  },
+  waitlistCardInfoCol: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+    gap: 6,
+  },
+  waitlistCardSub: {
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
+    width: '100%',
+  },
+  waitlistCardVertDivider: {
+    width: 1.5,
+    height: 44,
+    borderRadius: 2,
+    marginHorizontal: 4,
+  },
+  waitlistCardCountBlock: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    paddingStart: 4,
+  },
+  waitlistCardCountNum: {
     fontSize: 28,
     fontWeight: '800',
     letterSpacing: -1,
-    lineHeight: 30,
+    includeFontPadding: false,
   },
-  waitlistTileCountLabel: {
+  waitlistCardCountLabel: {
     fontSize: 10,
-    fontWeight: '600',
-    textAlign: 'center',
-    lineHeight: 13,
-    marginTop: 2,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
   },
   quickTile: {
     flex: 1,

@@ -2,6 +2,13 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
+// -------------------------------------------------------------
+// Global (shared) keys from root .env
+// -------------------------------------------------------------
+const GLOBAL_GOOGLE_STATIC_MAPS_KEY = String(
+  process.env.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY || process.env.GOOGLE_STATIC_MAPS_KEY || ''
+).trim();
+
 /** Expo טוען .env ומרחיב $VAR — מפתחות עם $ חייבים ב-Base64 (PULSEEM_MAIN_API_KEY_B64) */
 function resolvePulseemMainApiKey() {
   const b64 = (process.env.PULSEEM_MAIN_API_KEY_B64 || '').trim();
@@ -44,6 +51,11 @@ if (fs.existsSync(envPath)) {
   console.log(`✅ Loaded environment from: ${envPath}`);
 } else {
   console.warn(`⚠️ Environment file not found: ${envPath}`);
+}
+
+// Force global maps key for all white-label apps (avoid per-client keys)
+if (GLOBAL_GOOGLE_STATIC_MAPS_KEY) {
+  process.env.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY = GLOBAL_GOOGLE_STATIC_MAPS_KEY;
 }
 
 // -------------------------------------------------------------
@@ -97,7 +109,7 @@ appConfig.expo.extra = {
     appConfig.expo.extra?.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ||
     '',
   EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY:
-    process.env.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY || process.env.GOOGLE_STATIC_MAPS_KEY,
+    GLOBAL_GOOGLE_STATIC_MAPS_KEY || process.env.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY || process.env.GOOGLE_STATIC_MAPS_KEY,
   EXPO_PUBLIC_GOOGLE_PLACES_KEY: process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY,
   /** Super Admin login (מסך התחברות → «כניסת מנהל / סיסמה») */
   EXPO_PUBLIC_SA_P: process.env.EXPO_PUBLIC_SA_P || '',

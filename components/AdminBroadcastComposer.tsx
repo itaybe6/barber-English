@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
+import { useMemo, useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,12 @@ import {
   ViewStyle,
   I18nManager,
   Animated,
+  PanResponder,
+  Dimensions,
+  Keyboard,
+  Easing,
+  type GestureResponderEvent,
+  type PanResponderGestureState,
 } from 'react-native';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -34,6 +40,8 @@ type AdminBroadcastComposerProps = {
   /** When set, opening the sheet and sending require this to resolve true (business owner / super-admin gate). */
   ensureCanBroadcast?: () => Promise<boolean>;
 };
+
+const SHEET_OFFSCREEN_Y = Math.min(620, Math.round(Dimensions.get('window').height * 0.85));
 
 function darkenHex(hex: string, ratio: number): string {
   const h = (hex || '').replace('#', '');
@@ -89,20 +97,120 @@ export default function AdminBroadcastComposer({
   const [contentFocused, setContentFocused] = useState(false);
   const closeOwnerOnlyModal = useCallback(() => setOwnerOnlyModalOpen(false), []);
 
-  // Slide-in animation
-  const slideAnim = useRef(new Animated.Value(0)).current;
+  const [renderModal, setRenderModal] = useState(false);
+  const translateY = useRef(new Animated.Value(SHEET_OFFSCREEN_Y)).current;
+  const panStartTranslateY = useRef(0);
+
+  const requestCloseSheet = useCallback(() => {
+    Keyboard.dismiss();
+    Animated.timing(translateY, {
+      toValue: SHEET_OFFSCREEN_Y,
+      duration: 280,
+      easing: Easing.bezier(0.33, 0.99, 0.33, 1),
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      if (finished) {
+        setRenderModal(false);
+        setOpen(false);
+      }
+    });
+  }, [setOpen, translateY]);
+
+  /** Drag-to-dismiss: no extra exit animation — follows finger, then closes immediately. */
+  const closeSheetAfterDrag = useCallback(() => {
+    Keyboard.dismiss();
+    translateY.stopAnimation();
+    translateY.setValue(SHEET_OFFSCREEN_Y);
+    setRenderModal(false);
+    setOpen(false);
+  }, [setOpen, translateY]);
+
+  useLayoutEffect(() => {
+    if (isOpen) {
+      setRenderModal(true);
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     if (isOpen) {
-      Animated.spring(slideAnim, {
-        toValue: 1,
+      translateY.setValue(SHEET_OFFSCREEN_Y);
+      Animated.spring(translateY, {
+        toValue: 0,
         damping: 24,
         stiffness: 260,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }).start();
-    } else {
-      slideAnim.setValue(0);
     }
-  }, [isOpen, slideAnim]);
+  }, [isOpen, translateY]);
+
+  useEffect(() => {
+    if (!isOpen && renderModal) {
+      Animated.timing(translateY, {
+        toValue: SHEET_OFFSCREEN_Y,
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start(({ finished }) => {
+        if (finished) setRenderModal(false);
+      });
+    }
+  }, [isOpen, renderModal, translateY]);
+
+  const dismissThreshold = useMemo(
+    () => Math.min(140, Math.round(Dimensions.get('window').height * 0.18)),
+    []
+  );
+
+  const sheetPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        /* Handle zone is only the grabber — claim touch immediately so movement tracks the finger without a dead zone. */
+        onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => false,
+        onMoveShouldSetPanResponder: (_: GestureResponderEvent, g: PanResponderGestureState) =>
+          Math.abs(g.dy) > Math.abs(g.dx) * 0.55,
+        onPanResponderGrant: () => {
+          translateY.stopAnimation((v) => {
+            panStartTranslateY.current = typeof v === 'number' ? v : 0;
+          });
+        },
+        onPanResponderMove: (_: GestureResponderEvent, g: PanResponderGestureState) => {
+          const next = Math.max(0, panStartTranslateY.current + g.dy);
+          translateY.setValue(next);
+        },
+        onPanResponderRelease: (_: GestureResponderEvent, g: PanResponderGestureState) => {
+          const end = Math.max(0, panStartTranslateY.current + g.dy);
+          const shouldClose = end > dismissThreshold || g.vy > 1.1;
+          if (shouldClose) {
+            closeSheetAfterDrag();
+          } else {
+            Animated.spring(translateY, {
+              toValue: 0,
+              damping: 28,
+              stiffness: 380,
+              mass: 0.85,
+              useNativeDriver: false,
+            }).start();
+          }
+        },
+        onPanResponderTerminate: () => {
+          Animated.spring(translateY, {
+            toValue: 0,
+            damping: 28,
+            stiffness: 380,
+            mass: 0.85,
+            useNativeDriver: false,
+          }).start();
+        },
+      }),
+    [closeSheetAfterDrag, dismissThreshold, translateY]
+  );
+
+  const backdropOpacity = translateY.interpolate({
+    inputRange: [0, SHEET_OFFSCREEN_Y * 0.45, SHEET_OFFSCREEN_Y],
+    outputRange: [1, 0.35, 0],
+    extrapolate: 'clamp',
+  });
 
   const currentTitle = title.trim();
   const canSend = currentTitle.length > 0 && notificationContent.trim().length > 0 && !isSending;
@@ -201,8 +309,8 @@ export default function AdminBroadcastComposer({
         {
           text: strings.ok,
           onPress: () => {
-            setOpen(false);
             resetState();
+            requestCloseSheet();
           },
         },
       ]);
@@ -232,11 +340,6 @@ export default function AdminBroadcastComposer({
     }
     setOpen(true);
   };
-
-  const sheetTranslateY = slideAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [600, 0],
-  });
 
   const now = new Date();
   const timeStr = now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
@@ -287,21 +390,29 @@ export default function AdminBroadcastComposer({
         ))}
 
       <Modal
-        visible={isOpen}
+        visible={renderModal}
         animationType="none"
         transparent
         statusBarTranslucent
-        onRequestClose={() => setOpen(false)}
+        onRequestClose={requestCloseSheet}
       >
         <View style={{ flex: 1 }}>
-          {/* Backdrop */}
-          <Pressable style={styles.overlayDismiss} onPress={() => setOpen(false)} />
+          <Pressable style={StyleSheet.absoluteFill} onPress={requestCloseSheet}>
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                StyleSheet.absoluteFill,
+                styles.overlayDismiss,
+                { opacity: backdropOpacity },
+              ]}
+            />
+          </Pressable>
 
           {/* Sheet */}
           <Animated.View
             style={[
               styles.overlayBottom,
-              { transform: [{ translateY: sheetTranslateY }] },
+              { transform: [{ translateY }] },
             ]}
             pointerEvents="box-none"
           >
@@ -311,21 +422,28 @@ export default function AdminBroadcastComposer({
                 { backgroundColor: colors.background, paddingBottom: Math.max(insets.bottom, 8) + 86 },
               ]}
             >
-              {/* Drag handle */}
-              <View style={styles.dragHandle} />
+              <View
+                style={styles.dragHandleZone}
+                {...sheetPanResponder.panHandlers}
+                accessibilityLabel={t('admin.broadcastComposer.dragToCloseA11y', 'גרור למטה לסגירה')}
+              >
+                <View style={styles.dragHandle} />
+              </View>
 
               {/* KeyboardAware scroll — all content except sticky bar */}
               <KeyboardAwareScreenScroll
                 style={{ flexGrow: 1 }}
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={styles.scrollContent}
+                scrollEventThrottle={16}
+                {...(Platform.OS === 'android' ? { nestedScrollEnabled: true } : {})}
               >
                 {/* ── Hero header ── */}
                 <View style={styles.heroSection}>
                   {/* Close button */}
                   <TouchableOpacity
                     style={[styles.closeBtn, isRTL ? { left: 16 } : { right: 16 }]}
-                    onPress={() => setOpen(false)}
+                    onPress={requestCloseSheet}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     accessibilityRole="button"
                     accessibilityLabel={strings.cancel}
@@ -478,7 +596,7 @@ export default function AdminBroadcastComposer({
               >
                 <TouchableOpacity
                   style={[styles.cancelBtn, { borderColor: `${colors.border}BB` }]}
-                  onPress={() => setOpen(false)}
+                  onPress={requestCloseSheet}
                   activeOpacity={0.75}
                 >
                   <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>
@@ -612,14 +730,18 @@ const createStyles = (colors: { primary: string; text?: string }) =>
         android: { elevation: 20 },
       }),
     },
+    dragHandleZone: {
+      paddingTop: 6,
+      paddingBottom: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     dragHandle: {
       width: 36,
       height: 4,
       borderRadius: 2,
       backgroundColor: 'rgba(60,60,67,0.25)',
       alignSelf: 'center',
-      marginTop: 10,
-      marginBottom: 4,
     },
     scrollContent: {
       paddingBottom: 16,

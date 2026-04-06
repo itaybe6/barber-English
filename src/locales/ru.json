@@ -493,6 +493,8 @@
   "profile.language.title": "Язык",
   "profile.language.english": "Английский",
   "profile.language.hebrew": "иврит",
+  "profile.language.arabic": "Арабский",
+  "profile.language.russian": "Русский",
   "profile.language.restartNote": "При изменении направления может потребоваться перезапуск приложения.",
   "tabs": {
     "home": "Дом",

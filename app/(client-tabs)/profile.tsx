@@ -16,6 +16,7 @@ import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-a
  
 import { supabase } from '@/lib/supabase';
 import { usersApi } from '@/lib/api/users';
+import { normalizeAppLanguage, isRtlLanguage } from '@/lib/i18nLocale';
 
 const PROFILE_GROUPED_BG = '#F2F2F7';
 
@@ -163,7 +164,7 @@ export default function ClientProfileScreen() {
   };
 
   const isRtl = I18nManager.isRTL;
-  const isHebrew = i18n.language?.startsWith('he');
+  const isRtlInput = isRtlLanguage(i18n.language);
 
   const openEditProfile = useCallback(async () => {
     setEditName(user?.name ?? '');
@@ -364,7 +365,18 @@ export default function ClientProfileScreen() {
             {renderSettingsRow(
               <Globe size={20} color={businessColors.primary} />,
               t('profile.language.title', 'Language'),
-              i18n.language?.startsWith('he') ? t('profile.language.hebrew', 'Hebrew') : t('profile.language.english', 'English'),
+              (() => {
+                switch (normalizeAppLanguage(i18n.language)) {
+                  case 'he':
+                    return t('profile.language.hebrew', 'Hebrew');
+                  case 'ar':
+                    return t('profile.language.arabic', 'Arabic');
+                  case 'ru':
+                    return t('profile.language.russian', 'Russian');
+                  default:
+                    return t('profile.language.english', 'English');
+                }
+              })(),
               () => setIsLanguageOpen(true),
             )}
             <View style={[styles.settingDivider, isRtl ? styles.settingDividerRtl : styles.settingDividerLtr]} />
@@ -472,7 +484,7 @@ export default function ClientProfileScreen() {
                       style={[
                         styles.fieldInput,
                         isRtl ? styles.fieldInputRtl : styles.fieldInputLtr,
-                        { textAlign: isHebrew ? 'right' : 'left', writingDirection: isHebrew ? 'rtl' : 'ltr' },
+                        { textAlign: isRtlInput ? 'right' : 'left', writingDirection: isRtlInput ? 'rtl' : 'ltr' },
                       ]}
                       autoCorrect={false}
                       autoCapitalize="words"
@@ -498,7 +510,7 @@ export default function ClientProfileScreen() {
                       style={[
                         styles.fieldInput,
                         isRtl ? styles.fieldInputRtl : styles.fieldInputLtr,
-                        { textAlign: isHebrew ? 'right' : 'left', writingDirection: 'ltr' },
+                        { textAlign: isRtlInput ? 'right' : 'left', writingDirection: 'ltr' },
                       ]}
                       autoCorrect={false}
                       autoCapitalize="none"
@@ -534,7 +546,7 @@ export default function ClientProfileScreen() {
                       const updated = await usersApi.updateUser(user.id, {
                         name: editName.trim(),
                         phone: editPhone.trim(),
-                        language: i18n.language?.startsWith('he') ? 'he' : 'en',
+                        language: normalizeAppLanguage(i18n.language),
                       } as any);
                       if (updated) {
                         updateUserProfile({
@@ -624,6 +636,42 @@ export default function ClientProfileScreen() {
               >
                 <Text style={styles.languageOptionText}>{t('profile.language.hebrew','Hebrew')}</Text>
                 {i18n.language?.startsWith('he') && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.languageOption}
+                onPress={async () => {
+                  try {
+                    await i18n.changeLanguage('ar');
+                    if (user?.id) {
+                      const updated = await usersApi.updateUser(user.id, { language: 'ar' } as any);
+                      if (updated) updateUserProfile({ language: 'ar' } as any);
+                    }
+                  } finally {
+                    setIsLanguageOpen(false);
+                  }
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.languageOptionText}>{t('profile.language.arabic', 'Arabic')}</Text>
+                {i18n.language?.startsWith('ar') && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.languageOption}
+                onPress={async () => {
+                  try {
+                    await i18n.changeLanguage('ru');
+                    if (user?.id) {
+                      const updated = await usersApi.updateUser(user.id, { language: 'ru' } as any);
+                      if (updated) updateUserProfile({ language: 'ru' } as any);
+                    }
+                  } finally {
+                    setIsLanguageOpen(false);
+                  }
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.languageOptionText}>{t('profile.language.russian', 'Russian')}</Text>
+                {i18n.language?.startsWith('ru') && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
               </TouchableOpacity>
               <Text style={styles.helperNote}>{t('profile.language.restartNote','Direction changes may require app restart')}</Text>
             </View>

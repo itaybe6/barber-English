@@ -43,8 +43,20 @@ const CLIENT = process.env.CLIENT || clientFromProfile || 'EliyaMoshe';
 const clientDir = path.join(__dirname, 'branding', CLIENT);
 
 // -------------------------------------------------------------
-// 2. טוען ENV_FILE של הלקוח אם קיים
+// 2. טוען ENV — קודם ENV_FILE (כמו ב-eas.json) אם הקובץ קיים, אחר כך branding/<CLIENT>/.env
+//    ב-EAS הסודות מגיעים מ-Secrets / env של הפרופיל; קובץ .env לרוב לא ב-repo
 // -------------------------------------------------------------
+const envFileFromProfile = String(process.env.ENV_FILE || '').trim();
+if (envFileFromProfile) {
+  const envFilePath = path.isAbsolute(envFileFromProfile)
+    ? envFileFromProfile
+    : path.join(__dirname, envFileFromProfile);
+  if (fs.existsSync(envFilePath)) {
+    require('dotenv').config({ path: envFilePath });
+    console.log(`✅ Loaded environment from ENV_FILE: ${envFilePath}`);
+  }
+}
+
 const envPath = path.join(clientDir, '.env');
 if (fs.existsSync(envPath)) {
   require('dotenv').config({ path: envPath });
@@ -126,24 +138,37 @@ try {
   appConfig.expo.extra = appConfig.expo.extra || {};
   appConfig.expo.extra.eas = appConfig.expo.extra.eas || {};
 
-  const projectIdFromEnv = process.env.EAS_PROJECT_ID || process.env.EXPO_PUBLIC_PROJECT_ID || appConfig.expo.extra.eas.projectId;
+  const trimPid = (v) => (typeof v === 'string' ? v.trim() : '');
+  const extraEasPid = trimPid(appConfig.expo.extra.eas.projectId);
+  const projectIdFromEnv =
+    trimPid(process.env.EAS_PROJECT_ID) ||
+    trimPid(process.env.EXPO_PUBLIC_PROJECT_ID) ||
+    (extraEasPid || undefined);
+
+  /** לא למשוך EAS_PROJECT_ID מפרופיל של לקוח אחר (מונע slug mismatch מול expo.dev) */
+  const easProjectIdMatchesClient = (env) => {
+    const pid = trimPid(env?.EAS_PROJECT_ID);
+    const profileClient = trimPid(env?.CLIENT);
+    if (!pid || !profileClient) return false;
+    return profileClient === CLIENT;
+  };
 
   let projectIdFromEasJson = undefined;
   if (!projectIdFromEnv) {
     try {
       const easJsonPath = path.join(__dirname, 'eas.json');
       const easJson = JSON.parse(fs.readFileSync(easJsonPath, 'utf8'));
-      // העדפה: פרופיל ה-BUILD הפעיל, ואם אין – production
       const activeProfile = process.env.EAS_BUILD_PROFILE;
-      if (activeProfile && easJson?.build?.[activeProfile]?.env?.EAS_PROJECT_ID) {
-        projectIdFromEasJson = easJson.build[activeProfile].env.EAS_PROJECT_ID;
-      } else if (easJson?.build?.production?.env?.EAS_PROJECT_ID) {
-        projectIdFromEasJson = easJson.build.production.env.EAS_PROJECT_ID;
+      if (activeProfile && easProjectIdMatchesClient(easJson?.build?.[activeProfile]?.env)) {
+        projectIdFromEasJson = trimPid(easJson.build[activeProfile].env.EAS_PROJECT_ID);
+      } else if (easProjectIdMatchesClient(easJson?.build?.production?.env)) {
+        projectIdFromEasJson = trimPid(easJson.build.production.env.EAS_PROJECT_ID);
       } else {
-        // fallback: סריקה של כל הפרופילים ומציאת ה-EAS_PROJECT_ID הראשון
-        const profiles = Object.values(easJson?.build || {});
-        for (const p of profiles) {
-          if (p?.env?.EAS_PROJECT_ID) { projectIdFromEasJson = p.env.EAS_PROJECT_ID; break; }
+        for (const p of Object.values(easJson?.build || {})) {
+          if (easProjectIdMatchesClient(p?.env)) {
+            projectIdFromEasJson = trimPid(p.env.EAS_PROJECT_ID);
+            break;
+          }
         }
       }
     } catch {}
@@ -200,57 +225,59 @@ try {
 }
 
 // -------------------------------------------------------------
-// 8. כותב current.json עם קונפיג מלא (debug/runtime)
+// 8–9. כתיבה לדיסק — מקומית / CI רגיל בלבד. ב-EAS Build לעיתים אין הרשאת כתיבה לפרויקט.
+//    הלקוח בזמן ריצה מגיע מ-expo.extra.CLIENT (ראו src/theme/assets.ts).
 // -------------------------------------------------------------
-const currentConfigPath = path.join(__dirname, 'branding', 'current.json');
-const currentConfig = {
-  client: CLIENT,
-  config: appConfig,
-  theme: themeConfig,
-  timestamp: new Date().toISOString()
-};
+const isEasBuild = process.env.EAS_BUILD === 'true';
 
-let currentJsonTmpPath;
-try {
-  const brandingDir = path.dirname(currentConfigPath);
-  if (!fs.existsSync(brandingDir)) {
-    fs.mkdirSync(brandingDir, { recursive: true });
-  }
-  const payload = JSON.stringify(currentConfig, null, 2);
-  currentJsonTmpPath = path.join(brandingDir, `.current-${process.pid}.tmp.json`);
-  fs.writeFileSync(currentJsonTmpPath, payload, 'utf8');
-  fs.renameSync(currentJsonTmpPath, currentConfigPath);
-  currentJsonTmpPath = undefined;
-  console.log(`✅ Written current config to: ${currentConfigPath}`);
-} catch (error) {
-  if (currentJsonTmpPath) {
-    try {
-      fs.unlinkSync(currentJsonTmpPath);
-    } catch {
-      /* ignore */
+if (!isEasBuild) {
+  const currentConfigPath = path.join(__dirname, 'branding', 'current.json');
+  const currentConfig = {
+    client: CLIENT,
+    config: appConfig,
+    theme: themeConfig,
+    timestamp: new Date().toISOString(),
+  };
+
+  let currentJsonTmpPath;
+  try {
+    const brandingDir = path.dirname(currentConfigPath);
+    if (!fs.existsSync(brandingDir)) {
+      fs.mkdirSync(brandingDir, { recursive: true });
     }
+    const payload = JSON.stringify(currentConfig, null, 2);
+    currentJsonTmpPath = path.join(brandingDir, `.current-${process.pid}.tmp.json`);
+    fs.writeFileSync(currentJsonTmpPath, payload, 'utf8');
+    fs.renameSync(currentJsonTmpPath, currentConfigPath);
+    currentJsonTmpPath = undefined;
+    console.log(`✅ Written current config to: ${currentConfigPath}`);
+  } catch (error) {
+    if (currentJsonTmpPath) {
+      try {
+        fs.unlinkSync(currentJsonTmpPath);
+      } catch {
+        /* ignore */
+      }
+    }
+    console.error(`❌ Error writing current config: ${error.message}`);
   }
-  console.error(`❌ Error writing current config: ${error.message}`);
-}
 
-// -------------------------------------------------------------
-// 9. כותב src/config/currentClient.ts
-// -------------------------------------------------------------
-try {
-  const currentClientPath = path.join(__dirname, 'src', 'config', 'currentClient.ts');
-  const currentClientContent = `// Current client configuration
-// This file is automatically updated by the build process
+  try {
+    const currentClientPath = path.join(__dirname, 'src', 'config', 'currentClient.ts');
+    const currentClientContent = `// Current client configuration
+// This file is automatically updated by the build process (skipped on EAS Build — use expo.extra.CLIENT).
 
 export const CURRENT_CLIENT = '${CLIENT}';
 `;
-  const configDir = path.dirname(currentClientPath);
-  if (!fs.existsSync(configDir)) {
-    fs.mkdirSync(configDir, { recursive: true });
+    const configDir = path.dirname(currentClientPath);
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
+    }
+    fs.writeFileSync(currentClientPath, currentClientContent);
+    console.log(`✅ Written current client to: ${currentClientPath}`);
+  } catch (error) {
+    console.error(`❌ Error writing current client: ${error.message}`);
   }
-  fs.writeFileSync(currentClientPath, currentClientContent);
-  console.log(`✅ Written current client to: ${currentClientPath}`);
-} catch (error) {
-  console.error(`❌ Error writing current client: ${error.message}`);
 }
 
 // -------------------------------------------------------------

@@ -12,6 +12,7 @@ import {
   I18nManager,
   Modal,
   Alert,
+  BackHandler,
 } from 'react-native';
 import * as Calendar from 'expo-calendar';
 import BookingSuccessAnimatedOverlay, {
@@ -19,7 +20,7 @@ import BookingSuccessAnimatedOverlay, {
 } from '@/components/book-appointment/BookingSuccessAnimatedOverlay';
 import { isRtlLanguage, toBcp47Locale } from '@/lib/i18nLocale';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -99,10 +100,25 @@ export default function AddAppointmentScreen() {
   const params = useLocalSearchParams<{ date?: string | string[] }>();
   const initialDateKey = parseDateParam(params.date);
 
+  const goBackToAppointments = useCallback(() => {
+    router.replace('/(tabs)/appointments');
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== 'android') return undefined;
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        goBackToAppointments();
+        return true;
+      });
+      return () => sub.remove();
+    }, [goBackToAppointments])
+  );
+
   const onBookedSuccess = useCallback(() => {
     DeviceEventEmitter.emit(ADMIN_CALENDAR_APPOINTMENTS_CHANGED);
-    router.back();
-  }, []);
+    goBackToAppointments();
+  }, [goBackToAppointments]);
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successAnimKey, setSuccessAnimKey] = useState(0);
@@ -310,7 +326,7 @@ export default function AddAppointmentScreen() {
       <SafeAreaView style={styles.safeTop} edges={['top']}>
         <View style={styles.headerRow}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={goBackToAppointments}
             style={({ pressed }) => [styles.headerIconBtn, pressed && { opacity: 0.75 }]}
             accessibilityRole="button"
             accessibilityLabel={t('back', 'Back')}

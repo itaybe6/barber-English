@@ -1,0 +1,38 @@
+diff --git a/node_modules/@expo/image-utils/build/Cache.js b/node_modules/@expo/image-utils/build/Cache.js
+index 85adb45..0ec4f5f 100644
+--- a/node_modules/@expo/image-utils/build/Cache.js
++++ b/node_modules/@expo/image-utils/build/Cache.js
+@@ -11,9 +11,14 @@ exports.cacheImageAsync = cacheImageAsync;
+ exports.clearUnusedCachesAsync = clearUnusedCachesAsync;
+ const crypto_1 = __importDefault(require("crypto"));
+ const fs_1 = __importDefault(require("fs"));
++const os_1 = require("os");
+ const path_1 = require("path");
+-const CACHE_LOCATION = '.expo/web/cache/production/images';
+ const cacheKeys = {};
++/** EAS / read-only checkouts: avoid writing under projectRoot (see expo prebuild icon cache). */
++function getCacheBaseDir(projectRoot) {
++    const id = crypto_1.default.createHash('sha256').update(projectRoot).digest('hex').slice(0, 16);
++    return (0, path_1.join)(os_1.tmpdir(), 'expo-image-utils-cache', id);
++}
+ // Calculate SHA256 Checksum value of a file based on its contents
+ function calculateHash(filePath) {
+     const contents = filePath.startsWith('http') ? filePath : fs_1.default.readFileSync(filePath);
+@@ -36,7 +41,7 @@ async function createCacheKeyWithDirectoryAsync(projectRoot, type, icon) {
+     return cacheKey;
+ }
+ async function ensureCacheDirectory(projectRoot, type, cacheKey) {
+-    const cacheFolder = (0, path_1.join)(projectRoot, CACHE_LOCATION, type, cacheKey);
++    const cacheFolder = (0, path_1.join)(getCacheBaseDir(projectRoot), 'web', 'cache', 'production', 'images', type, cacheKey);
+     await fs_1.default.promises.mkdir(cacheFolder, { recursive: true });
+     return cacheFolder;
+ }
+@@ -58,7 +63,7 @@ async function cacheImageAsync(fileName, buffer, cacheKey) {
+ }
+ async function clearUnusedCachesAsync(projectRoot, type) {
+     // Clean up any old caches
+-    const cacheFolder = (0, path_1.join)(projectRoot, CACHE_LOCATION, type);
++    const cacheFolder = (0, path_1.join)(getCacheBaseDir(projectRoot), 'web', 'cache', 'production', 'images', type);
+     await fs_1.default.promises.mkdir(cacheFolder, { recursive: true });
+     const currentCaches = await fs_1.default.promises.readdir(cacheFolder);
+     if (!Array.isArray(currentCaches)) {

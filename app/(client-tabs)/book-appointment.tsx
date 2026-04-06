@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Image, Modal, RefreshControl, Linking, Platform, Dimensions, FlatList, PanResponder } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Image, Modal, RefreshControl, Linking, Platform, Dimensions, FlatList, PanResponder, I18nManager } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { BlurView } from 'expo-blur';
 import * as Calendar from 'expo-calendar';
@@ -26,6 +26,7 @@ import { supabase, getBusinessId, Appointment } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
 import { isRtlLanguage, toBcp47Locale } from '@/lib/i18nLocale';
+import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { notificationsApi } from '@/lib/api/notifications';
 import { businessProfileApi, isShowServiceImages } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
@@ -413,6 +414,7 @@ export default function BookAppointment() {
   );
   const safeAreaInsets = useSafeAreaInsets();
   const styles = createStyles(colors);
+  const rtl = I18nManager.isRTL;
   const bookingBarTopFromBottom = getBookingStepBarTopFromBottom(safeAreaInsets.bottom);
   const footerBottom = bookingBarTopFromBottom + 12;
   const params = (router as any).useLocalSearchParams?.() || {};
@@ -1846,46 +1848,75 @@ export default function BookAppointment() {
           transparent={true}
           onRequestClose={() => setShowReplaceModal(false)}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>{t('booking.existingTitle', 'Existing Appointment')}</Text>
-              <Text style={styles.modalMessage} numberOfLines={0} allowFontScaling={false}>
+          <View style={styles.existingModalOverlay}>
+            <BlurView intensity={28} tint="dark" style={StyleSheet.absoluteFill} />
+            <View style={[styles.existingModalCard, { backgroundColor: colors.background }]}>
+              <View style={[styles.existingModalIconRing, { backgroundColor: `${colors.primary}18` }]}>
+                <Ionicons name="calendar-outline" size={30} color={colors.primary} />
+              </View>
+              <Text style={[styles.existingModalTitle, { color: colors.text }]}>
+                {t('booking.existingTitle', 'Existing Appointment')}
+              </Text>
+              <Text style={[styles.existingModalMessage, { color: colors.textSecondary }]}>
                 {t('booking.existingMessage', 'You have an existing appointment on {{date}} at {{time}} for {{service}}.\n\nDo you want to cancel the existing appointment and book a new one on {{newDate}} at {{newTime}}?', {
                   date: existingAppointment?.slot_date ? new Date(existingAppointment.slot_date).toLocaleDateString(toBcp47Locale(i18n?.language), { weekday: 'long', month: 'long', day: 'numeric' }) : t('booking.unknown', 'Unknown'),
-                  time: existingAppointment?.slot_time || t('booking.unknown', 'Unknown'),
+                  time: existingAppointment?.slot_time
+                    ? formatTime12Hour(String(existingAppointment.slot_time))
+                    : t('booking.unknown', 'Unknown'),
                   service: existingAppointment?.service_name || t('booking.undefined', 'Undefined'),
                   newDate: selectedDay !== null ? `${days[selectedDay].dayName} ${days[selectedDay].date}` : '',
-                  newTime: selectedTime || ''
+                  newTime: selectedTime ? formatTime12Hour(String(selectedTime)) : '',
                 })}
               </Text>
-              <View style={[styles.modalButtons, styles.modalButtonsStacked]}>
+              <View style={[styles.existingModalDualRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonStacked, styles.modalButtonCancel]}
-                  onPress={() => setShowReplaceModal(false)}
-                >
-                  <Text style={styles.modalButtonCancelText}>{t('cancel', 'Cancel')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonStacked, styles.modalButtonReplace]}
+                  style={styles.existingModalBtnReplace}
                   onPress={() => {
                     setShowReplaceModal(false);
                     if (existingAppointment) {
                       proceedWithBooking(existingAppointment);
                     }
                   }}
+                  activeOpacity={0.88}
                 >
-                  <Text style={styles.modalButtonText}>{t('booking.replace', 'Replace Appointment')}</Text>
+                  <View style={[styles.existingModalBtnInner, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+                    <Ionicons name="swap-horizontal" size={19} color="#FFFFFF" />
+                    <Text style={styles.existingModalBtnPrimaryText} numberOfLines={2}>
+                      {t('booking.replace', 'Replace Appointment')}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonStacked, styles.modalButtonBookAdditional]}
+                  style={styles.existingModalBtnAdd}
                   onPress={() => {
                     setShowReplaceModal(false);
                     proceedWithBooking();
                   }}
+                  activeOpacity={0.88}
                 >
-                  <Text style={styles.modalButtonText}>{t('booking.bookAdditional', 'Book Additional Appointment')}</Text>
+                  <View style={[styles.existingModalBtnInner, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+                    <Ionicons name="add-circle-outline" size={19} color="#FFFFFF" />
+                    <Text style={styles.existingModalBtnPrimaryText} numberOfLines={2}>
+                      {t('booking.bookAdditional', 'Book Additional Appointment')}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               </View>
+              <TouchableOpacity
+                style={[
+                  styles.existingModalBtnDismiss,
+                  {
+                    backgroundColor: `${colors.text}0C`,
+                    borderColor: `${colors.text}18`,
+                  },
+                ]}
+                onPress={() => setShowReplaceModal(false)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.existingModalBtnDismissText, { color: colors.textSecondary }]}>
+                  {t('cancel', 'Cancel')}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         </Modal>
@@ -3677,6 +3708,116 @@ const createStyles = (colors: any) => StyleSheet.create({
   modalButtonCancelText: {
     color: colors.primary,
     fontSize: 17,
+    fontWeight: '700',
+    textAlign: 'center',
+    letterSpacing: -0.2,
+  },
+  existingModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  existingModalCard: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: 28,
+    paddingHorizontal: 22,
+    paddingTop: 26,
+    paddingBottom: 22,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.22,
+    shadowRadius: 28,
+    elevation: 22,
+  },
+  existingModalIconRing: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  existingModalTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    textAlign: 'center',
+    letterSpacing: -0.45,
+    marginBottom: 10,
+    lineHeight: 28,
+  },
+  existingModalMessage: {
+    fontSize: 15,
+    fontWeight: '500',
+    textAlign: 'center',
+    lineHeight: 23,
+    marginBottom: 22,
+    letterSpacing: -0.2,
+  },
+  existingModalDualRow: {
+    width: '100%',
+    gap: 10,
+    marginBottom: 12,
+  },
+  existingModalBtnInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  existingModalBtnReplace: {
+    flex: 1,
+    minHeight: 54,
+    borderRadius: 18,
+    backgroundColor: colors.warning,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    shadowColor: colors.warning,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: Platform.OS === 'ios' ? 0.38 : 0.28,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  existingModalBtnAdd: {
+    flex: 1,
+    minHeight: 54,
+    borderRadius: 18,
+    backgroundColor: colors.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    shadowColor: colors.success,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: Platform.OS === 'ios' ? 0.38 : 0.28,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  existingModalBtnPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'center',
+    letterSpacing: -0.15,
+    flexShrink: 1,
+  },
+  existingModalBtnDismiss: {
+    alignSelf: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 36,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    minWidth: 200,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  existingModalBtnDismissText: {
+    fontSize: 16,
     fontWeight: '700',
     textAlign: 'center',
     letterSpacing: -0.2,

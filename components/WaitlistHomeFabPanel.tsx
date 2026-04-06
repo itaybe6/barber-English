@@ -67,17 +67,12 @@ export function WaitlistHomeFabPanel({
 
   if (entries.length === 0) return null;
 
-  const primaryBorder = `${colors.primary}55`;
-
   const trigger =
     triggerVariant === 'tag' ? (
       <TouchableOpacity
         style={[
           styles.homeTag,
-          {
-            borderColor: `${colors.primary}4D`,
-            backgroundColor: `${colors.primary}14`,
-          },
+          { backgroundColor: `${colors.primary}14` },
         ]}
         onPress={open}
         activeOpacity={0.88}
@@ -177,42 +172,40 @@ export function WaitlistHomeFabPanel({
               },
             ]}
           >
-            <View style={styles.grabberHost}>
-              <View style={[styles.grabber, { backgroundColor: colors.primary }]} />
-            </View>
-
-            <Pressable
-              onPress={close}
-              hitSlop={14}
-              style={[
-                styles.sheetCloseBtn,
-                rtl ? { right: 8 } : { left: 8 },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={t('close')}
-            >
-              <Ionicons name="close" size={26} color={colors.textSecondary} />
-            </Pressable>
-
             <View
               style={[
                 styles.sheetHeaderRow,
                 { flexDirection: rtl ? 'row-reverse' : 'row' },
               ]}
             >
-              <View style={[styles.sheetAccentBar, { backgroundColor: colors.primary }]} />
               <View style={styles.sheetHeaderText}>
                 <Text style={[styles.sheetTitle, { color: colors.text, textAlign }]}>
                   {t('waitlist.title')}
                 </Text>
                 <Text
-                  style={[styles.sheetSubtitle, { color: colors.textSecondary, textAlign }]}
+                  style={[styles.sheetSubtitle, { color: colors.primary, textAlign }]}
                 >
                   {entries.length === 1
                     ? t('waitlist.waitingFor', { service: entries[0].service_name })
                     : t('waitlist.waitingForMany', { count: entries.length })}
                 </Text>
               </View>
+
+              <Pressable
+                onPress={close}
+                hitSlop={12}
+                style={({ pressed }) => [
+                  styles.sheetCloseBtn,
+                  {
+                    backgroundColor: pressed ? `${colors.text}18` : `${colors.text}0D`,
+                    borderColor: `${colors.text}22`,
+                  },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={t('close')}
+              >
+                <Ionicons name="close" size={22} color={colors.text} />
+              </Pressable>
             </View>
 
             <ScrollView
@@ -240,19 +233,20 @@ export function WaitlistHomeFabPanel({
                   <View
                     key={entry.id}
                     style={[
-                      styles.entryCard,
-                      {
-                        borderColor: primaryBorder,
-                        backgroundColor: colors.background,
-                      },
+                      styles.entryTagsWrap,
+                      { flexDirection: rtl ? 'row-reverse' : 'row' },
                     ]}
                   >
                     <View
-                      style={[styles.entryRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}
+                      style={[
+                        styles.entryTag,
+                        { flexDirection: rtl ? 'row-reverse' : 'row' },
+                        { backgroundColor: `${colors.primary}20` },
+                      ]}
                     >
-                      <Ionicons name="calendar-outline" size={20} color={colors.primary} />
+                      <Ionicons name="calendar-outline" size={17} color={colors.primary} />
                       <Text
-                        style={[styles.entryText, { color: colors.text, textAlign }]}
+                        style={[styles.entryTagText, { color: colors.text, textAlign }]}
                         numberOfLines={2}
                       >
                         {formatWaitlistDate(entry.requested_date)}
@@ -260,16 +254,14 @@ export function WaitlistHomeFabPanel({
                     </View>
                     <View
                       style={[
-                        styles.entryRow,
-                        {
-                          marginTop: 10,
-                          flexDirection: rtl ? 'row-reverse' : 'row',
-                        },
+                        styles.entryTag,
+                        { flexDirection: rtl ? 'row-reverse' : 'row' },
+                        { backgroundColor: `${periodColor}2B` },
                       ]}
                     >
-                      <Ionicons name={periodIcon} size={20} color={periodColor} />
+                      <Ionicons name={periodIcon} size={17} color={periodColor} />
                       <Text
-                        style={[styles.entryText, { color: colors.text, textAlign }]}
+                        style={[styles.entryTagText, { color: colors.text, textAlign }]}
                         numberOfLines={2}
                       >
                         {timeLine}
@@ -312,7 +304,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 11,
     borderRadius: 9999,
-    borderWidth: 1,
     gap: 7,
     ...Platform.select({
       ios: {
@@ -399,7 +390,7 @@ const styles = StyleSheet.create({
   sheet: {
     borderTopLeftRadius: SHEET_RADIUS,
     borderTopRightRadius: SHEET_RADIUS,
-    paddingTop: 6,
+    paddingTop: 18,
     paddingHorizontal: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
@@ -407,66 +398,69 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 24,
   },
-  grabberHost: {
-    alignItems: 'center',
-    paddingBottom: 8,
-  },
-  grabber: {
-    width: 42,
-    height: 4,
-    borderRadius: 2,
-    opacity: 0.85,
-  },
   sheetCloseBtn: {
-    position: 'absolute',
-    top: 10,
-    zIndex: 4,
-    padding: 8,
+    marginTop: 2,
+    width: 40,
+    height: 40,
     borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
   },
   sheetHeaderRow: {
-    alignItems: 'stretch',
-    gap: 12,
-    marginBottom: 18,
-    marginTop: 4,
-    paddingHorizontal: 2,
-  },
-  sheetAccentBar: {
-    width: 4,
-    borderRadius: 2,
-    alignSelf: 'stretch',
-    minHeight: 48,
+    alignItems: 'flex-start',
+    gap: 14,
+    marginBottom: 20,
+    marginTop: 2,
   },
   sheetHeaderText: {
     flex: 1,
     justifyContent: 'center',
+    minWidth: 0,
   },
   sheetTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
-    letterSpacing: -0.5,
+    letterSpacing: -0.4,
+    lineHeight: 28,
   },
   sheetSubtitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginTop: 6,
-    letterSpacing: -0.2,
+    fontSize: 16,
+    fontWeight: '800',
+    marginTop: 10,
+    letterSpacing: -0.25,
+    lineHeight: 22,
   },
-  entryCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 12,
-  },
-  entryRow: {
+  entryTagsWrap: {
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 14,
     alignItems: 'center',
-    gap: 12,
   },
-  entryText: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '600',
+  entryTag: {
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 9999,
+    maxWidth: '100%',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 3,
+      },
+      android: { elevation: 1 },
+      default: {},
+    }),
+  },
+  entryTagText: {
+    flexShrink: 1,
+    fontSize: 14,
+    fontWeight: '700',
     letterSpacing: -0.2,
+    lineHeight: 19,
   },
   removeBtn: {
     marginTop: 8,

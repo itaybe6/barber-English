@@ -10,14 +10,18 @@ const DEFAULT_CLIENT: keyof typeof clientLogos = 'EliyaMoshe';
 
 export const getCurrentClient = (): keyof typeof clientLogos => {
   try {
+    const fromExtra =
+      Constants.expoConfig?.extra?.CLIENT || Constants.expoConfig?.extra?.client;
+
+    if (fromExtra && fromExtra in clientLogos) {
+      return fromExtra as keyof typeof clientLogos;
+    }
+
     if (CURRENT_CLIENT && CURRENT_CLIENT in clientLogos) {
       return CURRENT_CLIENT as keyof typeof clientLogos;
     }
 
-    const client =
-      Constants.expoConfig?.extra?.CLIENT ||
-      process.env.CLIENT ||
-      Constants.expoConfig?.extra?.client;
+    const client = process.env.CLIENT;
 
     if (client && client in clientLogos) {
       return client as keyof typeof clientLogos;

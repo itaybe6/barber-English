@@ -58,7 +58,7 @@ export default function AdminBroadcastComposer({
   renderTrigger = true,
   ensureCanBroadcast,
 }: AdminBroadcastComposerProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const insets = useSafeAreaInsets();
   const colors = useColors();
@@ -73,6 +73,14 @@ export default function AdminBroadcastComposer({
   };
 
   const isRTL = I18nManager.isRTL;
+  /** Modals often lay out as LTR — use language + dir so icon side/mirror still match the UI. */
+  const activeLang = (i18n.resolvedLanguage || i18n.language || '').toLowerCase();
+  const sendIconMirrored =
+    activeLang.startsWith('he') ||
+    activeLang.startsWith('iw') ||
+    activeLang.startsWith('ar') ||
+    (typeof i18n.dir === 'function' && i18n.dir() === 'rtl') ||
+    isRTL;
   const [title, setTitle] = useState('');
   const [notificationContent, setNotificationContent] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -495,16 +503,29 @@ export default function AdminBroadcastComposer({
                     }
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
-                    style={[styles.sendBtn, !canSend && { opacity: 0.6 }]}
+                    style={[
+                      styles.sendBtn,
+                      !canSend && { opacity: 0.6 },
+                      /* Force LTR row so icon stays visually left of label even when Modal ignores app RTL. */
+                      styles.sendBtnRowLtr,
+                    ]}
                   >
                     {isSending ? (
-                      <Ionicons name="hourglass-outline" size={18} color="#fff" style={{ marginEnd: 8 }} />
+                      <>
+                        <Ionicons name="hourglass-outline" size={18} color="#fff" />
+                        <Text style={styles.sendBtnText}>{strings.sending}</Text>
+                      </>
                     ) : (
-                      <Ionicons name="send" size={16} color="#fff" style={{ marginEnd: 8 }} />
+                      <>
+                        <Ionicons
+                          name="send"
+                          size={16}
+                          color="#fff"
+                          style={sendIconMirrored ? { transform: [{ scaleX: -1 }] } : undefined}
+                        />
+                        <Text style={styles.sendBtnText}>{strings.sendAll}</Text>
+                      </>
                     )}
-                    <Text style={styles.sendBtnText}>
-                      {isSending ? strings.sending : strings.sendAll}
-                    </Text>
                   </LinearGradient>
                 </TouchableOpacity>
               </View>
@@ -808,12 +829,16 @@ const createStyles = (colors: { primary: string; text?: string }) =>
     sendBtnWrap: {
       flex: 1.8,
     },
+    sendBtnRowLtr: {
+      direction: 'ltr',
+    },
     sendBtn: {
       height: 52,
       borderRadius: 14,
       alignItems: 'center',
       justifyContent: 'center',
       flexDirection: 'row',
+      gap: 8,
       ...Platform.select({
         ios: {
           shadowColor: '#000',

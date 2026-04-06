@@ -35,6 +35,7 @@ import {
   Plus,
   Bell,
   Camera,
+  Megaphone,
 } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -84,6 +85,7 @@ const WINDOW_HEIGHT = Dimensions.get('window').height;
 
 const ADMIN_SELF_REMINDER_MIN_MINUTES = 5;
 const ADMIN_SELF_REMINDER_MAX_MINUTES = 60;
+const HOME_FIXED_MESSAGE_MAX_LEN = 500;
 
 const RECURRING_DOW_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
@@ -169,6 +171,13 @@ export default function SettingsScreen() {
   const [profileBookingOpenDays, setProfileBookingOpenDays] = useState(7);
   const [clientSwapEnabled, setClientSwapEnabled] = useState(true);
   const [requireClientApproval, setRequireClientApproval] = useState(true);
+  const [homeFixedMessageEnabled, setHomeFixedMessageEnabled] = useState(false);
+  const [homeFixedMessageText, setHomeFixedMessageText] = useState('');
+  const [homeFixedInputFocused, setHomeFixedInputFocused] = useState(false);
+  /** When false, show a one-line summary; full editor opens on tap (collapsed after save / when message exists). */
+  const [homeFixedMessageEditorOpen, setHomeFixedMessageEditorOpen] = useState(false);
+  /** Extra ScrollView bottom inset so policies + home-message composer stay above keyboard & tab bar */
+  const [settingsKeyboardInset, setSettingsKeyboardInset] = useState(0);
   const [showServiceImages, setShowServiceImages] = useState(true);
   const [showEditAddressModal, setShowEditAddressModal] = useState(false);
   const [showAddressSheet, setShowAddressSheet] = useState(false);
@@ -185,6 +194,7 @@ export default function SettingsScreen() {
   const bookingDaysRulerRef = useRef<BookingDaysRulerHandle>(null);
   const clientReminderHoursRulerRef = useRef<BookingDaysRulerHandle>(null);
   const adminReminderMinutesRulerRef = useRef<BookingDaysRulerHandle>(null);
+  const homeFixedMessageInputRef = useRef<TextInput>(null);
   const [showCancellationDropdown, setShowCancellationDropdown] = useState(false);
   // Address bottom sheet animation
   const addressSheetAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
@@ -288,6 +298,13 @@ export default function SettingsScreen() {
           const cr = (p as BusinessProfile)?.client_reminder_minutes;
           const n = cr === null || cr === undefined ? NaN : Number(cr);
           setClientReminderMinutes(Number.isFinite(n) && n > 0 ? n : null);
+        }
+        setHomeFixedMessageEnabled(p.home_fixed_message_enabled === true);
+        setHomeFixedMessageText(p.home_fixed_message ?? '');
+        {
+          const hm = String(p.home_fixed_message ?? '').trim();
+          const on = p.home_fixed_message_enabled === true;
+          setHomeFixedMessageEditorOpen(on && hm.length === 0);
         }
       }
     } catch (error) {
@@ -617,6 +634,108 @@ export default function SettingsScreen() {
       setIsSavingProfile(false);
     }
   };
+
+  const handleHomeFixedMessageToggle = async (next: boolean) => {
+    if (!canSeeAddEmployee) return;
+    const prevEnabled = homeFixedMessageEnabled;
+    setHomeFixedMessageEnabled(next);
+    setIsSavingProfile(true);
+    try {
+      if (next) {
+        const trimmed = homeFixedMessageText.trim();
+        if (trimmed.length > HOME_FIXED_MESSAGE_MAX_LEN) {
+          setHomeFixedMessageEnabled(prevEnabled);
+          Alert.alert(
+            t('error.generic', 'Error'),
+            t('settings.policies.homeFixedMessageTooLong', { max: HOME_FIXED_MESSAGE_MAX_LEN }),
+          );
+          return;
+        }
+        const updated = await businessProfileApi.updateHomeFixedMessage({
+          enabled: true,
+          message: trimmed || null,
+        });
+        if (!updated) {
+          setHomeFixedMessageEnabled(prevEnabled);
+          Alert.alert(
+            t('error.generic', 'Error'),
+            t('settings.policies.homeFixedMessageSaveFailed', 'Could not save the home message setting'),
+          );
+          return;
+        }
+        setProfile(updated);
+        setHomeFixedMessageEnabled(updated.home_fixed_message_enabled === true);
+        setHomeFixedMessageText(updated.home_fixed_message ?? '');
+        {
+          const hm = String(updated.home_fixed_message ?? '').trim();
+          setHomeFixedMessageEditorOpen(hm.length === 0);
+        }
+      } else {
+        const updated = await businessProfileApi.updateHomeFixedMessage({ enabled: false });
+        if (!updated) {
+          setHomeFixedMessageEnabled(prevEnabled);
+          Alert.alert(
+            t('error.generic', 'Error'),
+            t('settings.policies.homeFixedMessageSaveFailed', 'Could not save the home message setting'),
+          );
+          return;
+        }
+        setProfile(updated);
+        setHomeFixedMessageEnabled(false);
+        setHomeFixedMessageText(updated.home_fixed_message ?? homeFixedMessageText);
+        setHomeFixedMessageEditorOpen(false);
+      }
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleHomeFixedMessageSavePress = async () => {
+    if (!canSeeAddEmployee || !homeFixedMessageEnabled) return;
+    const trimmed = homeFixedMessageText.trim();
+    if (trimmed.length > HOME_FIXED_MESSAGE_MAX_LEN) {
+      Alert.alert(
+        t('error.generic', 'Error'),
+        t('settings.policies.homeFixedMessageTooLong', { max: HOME_FIXED_MESSAGE_MAX_LEN }),
+      );
+      return;
+    }
+    setIsSavingProfile(true);
+    try {
+      const updated = await businessProfileApi.updateHomeFixedMessage({
+        enabled: true,
+        message: trimmed || null,
+      });
+      if (!updated) {
+        Alert.alert(
+          t('error.generic', 'Error'),
+          t('settings.policies.homeFixedMessageSaveFailed', 'Could not save the home message setting'),
+        );
+        return;
+      }
+      setProfile(updated);
+      setHomeFixedMessageText(updated.home_fixed_message ?? '');
+      setHomeFixedMessageEditorOpen(false);
+      Keyboard.dismiss();
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const onShow = (e: { endCoordinates?: { height?: number } }) => {
+      setSettingsKeyboardInset(Math.max(0, e.endCoordinates?.height ?? 0));
+    };
+    const onHide = () => setSettingsKeyboardInset(0);
+    const subShow = Keyboard.addListener(showEvt, onShow);
+    const subHide = Keyboard.addListener(hideEvt, onHide);
+    return () => {
+      subShow.remove();
+      subHide.remove();
+    };
+  }, []);
 
   const persistBookingOpenDays = async (next: string): Promise<boolean> => {
     if (!user?.id) {
@@ -1555,6 +1674,12 @@ export default function SettingsScreen() {
     }
   }, [settingsScreenTabs, activeSettingsTab]);
 
+  useEffect(() => {
+    if (activeSettingsTab !== 'appointments') {
+      Keyboard.dismiss();
+    }
+  }, [activeSettingsTab]);
+
   const [showManageRecurringModal, setShowManageRecurringModal] = useState(false);
 
   const [isLoadingRecurring, setIsLoadingRecurring] = useState(false);
@@ -1869,8 +1994,36 @@ export default function SettingsScreen() {
             />
           </View>
 
-          <View style={[styles.settingsBelowTabs, { paddingBottom: insets.bottom + 100 }]}>
+          <View
+            style={[
+              styles.settingsBelowTabs,
+              {
+                paddingBottom: activeSettingsTab === 'appointments' ? 0 : insets.bottom + 100,
+              },
+            ]}
+          >
         {activeSettingsTab === 'appointments' && (
+          <ScrollView
+            style={styles.settingsAppointmentsScroll}
+            contentContainerStyle={[
+              styles.settingsAppointmentsScrollContent,
+              {
+                /**
+                 * iOS: do NOT add keyboard height here — `automaticallyAdjustKeyboardInsets` already
+                 * adjusts insets; adding both + scrollToEnd scrolled into empty space below the field.
+                 * Android: manual bottom padding when keyboard is open (insets API is weaker).
+                 */
+                paddingBottom:
+                  insets.bottom +
+                  120 +
+                  (Platform.OS === 'android' ? settingsKeyboardInset : 0),
+              },
+            ]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+            showsVerticalScrollIndicator={false}
+            automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          >
         <View style={styles.settingsTabPanel}>
           <View style={styles.settingsAccordionBody}>
             {!canSeeAddEmployee ? (
@@ -2105,8 +2258,152 @@ export default function SettingsScreen() {
                 ios_backgroundColor="#E5E5EA"
               />
             </View>
+            <View style={styles.settingDivider} />
+            <View style={styles.settingItemLTR}>
+              <View style={styles.settingIconLTR}>
+                <Megaphone size={20} color={businessColors.primary} />
+              </View>
+              <View
+                style={{
+                  flex: 1,
+                  paddingRight: 8,
+                  opacity: homeFixedMessageEnabled && canSeeAddEmployee ? 1 : 0.55,
+                }}
+              >
+                <Text style={styles.settingTitleLTR}>
+                  {t('settings.policies.homeFixedMessageTitle', 'Fixed message on client home')}
+                </Text>
+                <Text style={styles.settingSubtitleLTR}>
+                  {t(
+                    'settings.policies.homeFixedMessageSubtitle',
+                    'When on, clients will see your message on the home screen (after you enable it in the app).',
+                  )}
+                </Text>
+              </View>
+              <Switch
+                value={homeFixedMessageEnabled}
+                onValueChange={(v) => {
+                  void handleHomeFixedMessageToggle(v);
+                }}
+                disabled={!canSeeAddEmployee || isSavingProfile}
+                trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                thumbColor={
+                  homeFixedMessageEnabled
+                    ? businessColors.primary
+                    : Platform.OS === 'android'
+                      ? '#f4f3f4'
+                      : undefined
+                }
+                ios_backgroundColor="#E5E5EA"
+              />
+            </View>
+            {homeFixedMessageEnabled && canSeeAddEmployee ? (
+              homeFixedMessageEditorOpen ? (
+                <View style={styles.homeFixedMessageComposer}>
+                  <TextInput
+                    ref={homeFixedMessageInputRef}
+                    style={[
+                      styles.homeFixedMessageInput,
+                      {
+                        borderColor: homeFixedInputFocused
+                          ? `${businessColors.primary}66`
+                          : 'rgba(60,60,67,0.11)',
+                        textAlign: editAdminInputsRtl ? 'right' : 'left',
+                      },
+                    ]}
+                    value={homeFixedMessageText}
+                    onChangeText={setHomeFixedMessageText}
+                    placeholder={t('settings.policies.homeFixedMessagePlaceholder', 'Message for clients…')}
+                    placeholderTextColor={Colors.subtext}
+                    multiline
+                    maxLength={HOME_FIXED_MESSAGE_MAX_LEN}
+                    editable={!isSavingProfile}
+                    textAlignVertical="top"
+                    selectionColor={businessColors.primary}
+                    onFocus={() => {
+                      setHomeFixedInputFocused(true);
+                    }}
+                    onBlur={() => setHomeFixedInputFocused(false)}
+                  />
+                  <View
+                    style={[
+                      styles.homeFixedMessageComposerFooter,
+                      editAdminInputsRtl ? styles.homeFixedMessageComposerFooterRtl : null,
+                    ]}
+                  >
+                    <Text style={styles.homeFixedMessageCounter}>
+                      {homeFixedMessageText.length}/{HOME_FIXED_MESSAGE_MAX_LEN}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.homeFixedMessageSaveButton,
+                      {
+                        backgroundColor: businessColors.primary,
+                        opacity: isSavingProfile ? 0.55 : 1,
+                      },
+                    ]}
+                    onPress={() => {
+                      void handleHomeFixedMessageSavePress();
+                    }}
+                    disabled={isSavingProfile}
+                    activeOpacity={0.88}
+                  >
+                    <Text style={styles.homeFixedMessageSaveButtonText}>
+                      {isSavingProfile
+                        ? t('settings.common.saving', 'Saving...')
+                        : t('settings.policies.homeFixedMessageSave', 'Save message')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.homeFixedMessageSummaryCard,
+                    editAdminInputsRtl ? styles.homeFixedMessageSummaryCardRtl : null,
+                    pressed ? { opacity: 0.88 } : null,
+                  ]}
+                  onPress={() => {
+                    setHomeFixedMessageEditorOpen(true);
+                  }}
+                  disabled={isSavingProfile}
+                >
+                  <View style={styles.homeFixedMessageSummaryTextCol}>
+                    <Text
+                      style={[
+                        styles.homeFixedMessagePreviewText,
+                        editAdminInputsRtl ? styles.homeFixedMessageSummaryTextRtl : null,
+                        homeFixedMessageText.trim().length === 0
+                          ? styles.homeFixedMessagePreviewEmpty
+                          : null,
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {homeFixedMessageText.trim().length > 0
+                        ? homeFixedMessageText.trim()
+                        : t(
+                            'settings.policies.homeFixedMessageNoMessageYet',
+                            'No message yet — tap to add one',
+                          )}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.homeFixedMessageTapToEdit,
+                        editAdminInputsRtl ? styles.homeFixedMessageSummaryTextRtl : null,
+                      ]}
+                    >
+                      {t('settings.policies.homeFixedMessageTapToEdit', 'Tap to edit')}
+                    </Text>
+                  </View>
+                  <View style={styles.homeFixedMessageSummaryIconWrap}>
+                    <Pencil size={18} color={businessColors.primary} strokeWidth={2} />
+                  </View>
+                </Pressable>
+              )
+            ) : null}
           </View>
         </View>
+          </ScrollView>
         )}
 
         {activeSettingsTab === 'services' && (
@@ -4574,6 +4871,121 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 12,
     backgroundColor: SETTINGS_GROUPED_BG,
+  },
+  settingsAppointmentsScroll: {
+    flex: 1,
+  },
+  settingsAppointmentsScrollContent: {
+    flexGrow: 1,
+  },
+  homeFixedMessageComposer: {
+    marginHorizontal: 12,
+    marginTop: 12,
+    marginBottom: 6,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.08)',
+  },
+  homeFixedMessageSummaryCard: {
+    marginHorizontal: 12,
+    marginTop: 12,
+    marginBottom: 6,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.08)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  homeFixedMessageSummaryCardRtl: {
+    flexDirection: 'row-reverse',
+  },
+  homeFixedMessageSummaryTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  homeFixedMessageSummaryTextRtl: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  homeFixedMessagePreviewText: {
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '500',
+    color: Colors.text,
+  },
+  homeFixedMessagePreviewEmpty: {
+    fontWeight: '400',
+    color: Colors.subtext,
+    fontStyle: 'italic',
+  },
+  homeFixedMessageTapToEdit: {
+    marginTop: 6,
+    fontSize: 13,
+    color: Colors.subtext,
+  },
+  homeFixedMessageSummaryIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeFixedMessageInput: {
+    minHeight: 120,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    lineHeight: 22,
+    color: Colors.text,
+    borderRadius: 14,
+    borderWidth: 1,
+    backgroundColor: Colors.white,
+  },
+  homeFixedMessageComposerFooter: {
+    marginTop: 8,
+    flexDirection: 'row',
+    width: '100%',
+    justifyContent: 'flex-end',
+  },
+  homeFixedMessageComposerFooterRtl: {
+    justifyContent: 'flex-start',
+  },
+  homeFixedMessageCounter: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: Colors.subtext,
+    letterSpacing: 0.2,
+  },
+  homeFixedMessageSaveButton: {
+    marginTop: 14,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.12,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  homeFixedMessageSaveButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.white,
   },
   /** Profile header in layout flow (full-width gradient + lava) */
   adminProfileHeaderRoot: {

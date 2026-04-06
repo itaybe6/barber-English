@@ -77,6 +77,8 @@ export const businessProfileApi = {
         client_swap_enabled: true,
         require_client_approval: true,
         show_service_images: true,
+        home_fixed_message_enabled: false,
+        home_fixed_message: null,
       };
 
       const { data, error } = await supabase
@@ -127,6 +129,8 @@ export const businessProfileApi = {
             client_swap_enabled: (updates as any).client_swap_enabled,
             require_client_approval: (updates as any).require_client_approval,
             show_service_images: (updates as any).show_service_images,
+            home_fixed_message_enabled: (updates as any).home_fixed_message_enabled,
+            home_fixed_message: (updates as any).home_fixed_message,
           })
           .eq('id', businessId)
           .select('*')
@@ -164,6 +168,8 @@ export const businessProfileApi = {
           client_swap_enabled: (updates as any).client_swap_enabled ?? true,
           require_client_approval: (updates as any).require_client_approval ?? true,
           show_service_images: (updates as any).show_service_images ?? true,
+          home_fixed_message_enabled: (updates as any).home_fixed_message_enabled ?? false,
+          home_fixed_message: (updates as any).home_fixed_message ?? null,
         })
         .select('*')
         .single();
@@ -175,6 +181,40 @@ export const businessProfileApi = {
       return data as BusinessProfile;
     } catch (err) {
       console.error('Error in upsertProfile:', err);
+      return null;
+    }
+  },
+
+  /**
+   * Client home fixed banner: toggle and/or message text.
+   * When `message` is omitted, the stored text is left unchanged (e.g. turn off without clearing draft in DB).
+   */
+  async updateHomeFixedMessage(opts: {
+    enabled: boolean;
+    message?: string | null;
+  }): Promise<BusinessProfile | null> {
+    try {
+      const businessId = getBusinessId();
+      const payload: Record<string, unknown> = {
+        home_fixed_message_enabled: opts.enabled,
+      };
+      if (opts.message !== undefined) {
+        payload.home_fixed_message = opts.message;
+      }
+      const { data, error } = await supabase
+        .from('business_profile')
+        .update(payload as any)
+        .eq('id', businessId)
+        .select('*')
+        .single();
+
+      if (error) {
+        console.error('Error updating home fixed message:', error);
+        return null;
+      }
+      return (data as BusinessProfile) || null;
+    } catch (e) {
+      console.error('Error in updateHomeFixedMessage:', e);
       return null;
     }
   },

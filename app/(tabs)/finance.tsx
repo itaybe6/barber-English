@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import {
   StyleSheet,
   Text,
@@ -49,6 +49,7 @@ import { GreenInvoiceConnectModal } from '@/components/GreenInvoiceConnectModal'
 import type { BusinessExpense, ExpenseCategory } from '@/lib/supabase';
 import { useAdminFinanceMonthReport } from '@/hooks/useAdminFinanceMonthReport';
 import { useGreenInvoiceDevModeStore } from '@/stores/greenInvoiceDevModeStore';
+import { useAuthStore } from '@/stores/authStore';
 import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
 import {
   ChevronLeft,
@@ -65,6 +66,7 @@ import {
   Receipt,
   CheckCircle2,
   Settings2,
+  Sparkles,
 } from 'lucide-react-native';
 
 const CATEGORIES: ExpenseCategory[] = ['rent', 'supplies', 'equipment', 'marketing', 'other'];
@@ -132,6 +134,8 @@ function lightenHex(hex: string, ratio: number): string {
 
 export default function FinanceScreen() {
   const { t } = useTranslation();
+  const router = useRouter();
+  const isSuperAdmin = useAuthStore((s) => s.isSuperAdmin);
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const { colors: theme } = useBusinessColors();
@@ -253,29 +257,28 @@ export default function FinanceScreen() {
     };
   }, [loading]);
 
-  useEffect(() => {
+  const reloadGiReceiptRows = useCallback(async () => {
     if (!giConnected || loading) {
       setGiReceiptRows([]);
       setSelectedGiAppointmentId(null);
       setGiReceiptSearchQuery('');
       return;
     }
-    let cancelled = false;
     setGiReceiptLoading(true);
-    (async () => {
+    try {
       const rows = await financeApi.listCompletedAppointmentsForReceipts(year, month);
-      if (cancelled) return;
       setGiReceiptRows(rows);
       setSelectedGiAppointmentId((prev) =>
         prev && rows.some((r) => r.id === prev) ? prev : null,
       );
-    })().finally(() => {
-      if (!cancelled) setGiReceiptLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
+    } finally {
+      setGiReceiptLoading(false);
+    }
   }, [giConnected, loading, year, month]);
+
+  useEffect(() => {
+    void reloadGiReceiptRows();
+  }, [reloadGiReceiptRows]);
 
   useEffect(() => {
     setGiReceiptSearchQuery('');
@@ -309,6 +312,11 @@ export default function FinanceScreen() {
     }
   }, [giReceiptFilteredRows, selectedGiAppointmentId]);
 
+  const selectedGiRow = useMemo(
+    () => giReceiptFilteredRows.find((r) => r.id === selectedGiAppointmentId),
+    [giReceiptFilteredRows, selectedGiAppointmentId],
+  );
+
   /** Home tab uses transparent status bar; restore opaque bar + dark icons so top matches header. */
   useFocusEffect(
     useCallback(() => {
@@ -335,6 +343,12 @@ export default function FinanceScreen() {
   };
 
   const giErrorMessage = (code: string, serverMessage?: string) => {
+    if (code === 'receipt_already_issued') {
+      return t(
+        'finance.greenInvoice.errors.receipt_already_issued',
+        'כבר הופקה קבלה לתור זה.',
+      );
+    }
     if (
       serverMessage &&
       (code === 'greeninvoice_auth_failed' || code === 'greeninvoice_document_failed')
@@ -384,6 +398,8 @@ export default function FinanceScreen() {
         });
       }
       Alert.alert(t('finance.greenInvoice.receipt.successTitle'), msg, actions);
+      await reloadGiReceiptRows();
+      loadReport();
     } finally {
       setIssuingGiReceipt(false);
     }
@@ -676,6 +692,47 @@ export default function FinanceScreen() {
             </View>
           </View>
 
+          {isSuperAdmin ? (
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={() =>
+                router.push(
+                  `/(tabs)/finance-month-closure?year=${year}&month=${month}`,
+                )
+              }
+              style={[
+                styles.superAdminClosureCard,
+                {
+                  backgroundColor: theme.surface,
+                  borderColor: `${primaryColor}30`,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="סגירת חודש ושליחה לרואה חשבון"
+            >
+              <LinearGradient
+                colors={[`${primaryColor}24`, `${primaryColor}08`]}
+                start={{ x: 1, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={StyleSheet.absoluteFillObject}
+              />
+              <View style={styles.superAdminClosureInner}>
+                <View style={[styles.superAdminClosureIcon, { backgroundColor: `${primaryColor}18` }]}>
+                  <Sparkles size={22} color={primaryColor} />
+                </View>
+                <View style={styles.superAdminClosureText}>
+                  <RtlText style={[styles.superAdminClosureTitle, { color: theme.text }]}>
+                    סגירת חודש לרואה חשבון
+                  </RtlText>
+                  <RtlText style={[styles.superAdminClosureSub, { color: theme.textSecondary }]}>
+                    בחירה מרובה, הפקת קבלות ומייל עם אקסל והוצאות — למנהל האפליקציה בלבד
+                  </RtlText>
+                </View>
+                <ChevronLeft size={22} color={primaryColor} />
+              </View>
+            </TouchableOpacity>
+          ) : null}
+
           {/* ── Green Invoice (חשבונית ירוקה) ── */}
           <View
             style={[
@@ -931,6 +988,7 @@ export default function FinanceScreen() {
                           >
                             {giReceiptFilteredRows.map((row) => {
                               const selected = selectedGiAppointmentId === row.id;
+                              const issued = row.receipt_issued;
                               const client =
                                 row.client_label.trim() ||
                                 t('finance.greenInvoice.receipt.anonymousClient');
@@ -942,7 +1000,13 @@ export default function FinanceScreen() {
                                   activeOpacity={0.8}
                                   style={[
                                     styles.giReceiptRow,
-                                    selected
+                                    issued
+                                      ? {
+                                          opacity: 0.72,
+                                          backgroundColor: '#F1F5F9',
+                                          borderColor: '#E2E8F0',
+                                        }
+                                      : selected
                                       ? {
                                           backgroundColor: `${greenInvoiceAccent}0D`,
                                           borderColor: `${greenInvoiceAccent}60`,
@@ -978,9 +1042,19 @@ export default function FinanceScreen() {
 
                                     {/* Body */}
                                     <View style={styles.giReceiptRowBody}>
-                                      <RtlText style={[styles.giReceiptRowClient, { color: theme.text }]} numberOfLines={1}>
-                                        {client}
-                                      </RtlText>
+                                      <View style={styles.giReceiptClientRow}>
+                                        <RtlText style={[styles.giReceiptRowClient, { color: theme.text }]} numberOfLines={1}>
+                                          {client}
+                                        </RtlText>
+                                        {issued ? (
+                                          <View style={[styles.giIssuedPill, { backgroundColor: `${greenInvoiceAccent}18` }]}>
+                                            <CheckCircle2 size={12} color={greenInvoiceAccent} strokeWidth={2.4} />
+                                            <RtlText style={[styles.giIssuedPillText, { color: greenInvoiceAccent }]}>
+                                              הופקה
+                                            </RtlText>
+                                          </View>
+                                        ) : null}
+                                      </View>
                                       <View style={styles.giReceiptMetaRow}>
                                         <View
                                           style={[
@@ -1066,14 +1140,25 @@ export default function FinanceScreen() {
 
                     {/* Issue receipt button */}
                     <TouchableOpacity
-                      disabled={!selectedGiAppointmentId || issuingGiReceipt}
+                      disabled={
+                        !selectedGiAppointmentId ||
+                        issuingGiReceipt ||
+                        !!selectedGiRow?.receipt_issued
+                      }
                       onPress={issueGreenInvoiceReceipt}
                       activeOpacity={0.85}
                       accessibilityRole="button"
                       accessibilityLabel={t('finance.greenInvoice.receipt.issueButton')}
                       style={[
                         styles.giReceiptIssueBtnOuter,
-                        { opacity: !selectedGiAppointmentId || issuingGiReceipt ? 0.4 : 1 },
+                        {
+                          opacity:
+                            !selectedGiAppointmentId ||
+                            issuingGiReceipt ||
+                            selectedGiRow?.receipt_issued
+                              ? 0.4
+                              : 1,
+                        },
                       ]}
                     >
                       <LinearGradient
@@ -1614,6 +1699,70 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 
+  superAdminClosureCard: {
+    marginHorizontal: 16,
+    marginTop: 14,
+    borderRadius: 22,
+    borderWidth: 1,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+      },
+      android: { elevation: 3 },
+    }),
+  },
+  superAdminClosureInner: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    padding: 18,
+    gap: 12,
+  },
+  superAdminClosureIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  superAdminClosureText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  superAdminClosureTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  superAdminClosureSub: {
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  giReceiptClientRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+  },
+  giIssuedPill: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  giIssuedPillText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+
   greenInvoiceCardOuter: {
     marginHorizontal: 16,
     marginTop: 16,
@@ -2000,6 +2149,8 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   giReceiptRowClient: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 15,
     fontWeight: '800',
     textAlign: 'right',

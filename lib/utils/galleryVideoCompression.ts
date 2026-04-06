@@ -7,10 +7,26 @@ export const GALLERY_VIDEO_MAX_SIZE_BYTES = 2 * 1024 * 1024;
 const VIDEO_SIZE_LIMIT_ERROR = 'gallery_video_size_limit_exceeded';
 const VIDEO_COMPRESSOR_UNAVAILABLE_ERROR = 'gallery_video_compressor_unavailable';
 const AUDIO_HEADROOM_BPS = 96_000;
-const MIN_VIDEO_BITRATE_BPS = 260_000;
-const MAX_VIDEO_BITRATE_BPS = 2_400_000;
-const BITRATE_ATTEMPT_FACTORS = [1, 0.86, 0.72, 0.58] as const;
-const MAX_SIZE_ATTEMPTS = [960, 720, 540, 480] as const;
+
+/** `aggressive` = gallery **edit** flow: smaller dimensions / bitrates and recompress even when already under 2MB if it reduces size. */
+export type GalleryVideoCompressionPreset = 'standard' | 'aggressive';
+
+const COMPRESSION_PRESET = {
+  standard: {
+    minVideoBitrateBps: 260_000,
+    maxVideoBitrateBps: 2_400_000,
+    bitrateFactors: [1, 0.86, 0.72, 0.58] as const,
+    maxSizeAttempts: [960, 720, 540, 480] as const,
+    budgetVideoShare: 0.84,
+  },
+  aggressive: {
+    minVideoBitrateBps: 160_000,
+    maxVideoBitrateBps: 1_450_000,
+    bitrateFactors: [0.9, 0.76, 0.62, 0.5, 0.38] as const,
+    maxSizeAttempts: [720, 540, 480, 420, 360] as const,
+    budgetVideoShare: 0.7,
+  },
+} as const;
 
 export interface EnsureGalleryVideoWithinSizeLimitInput {
   uri: string;
@@ -18,6 +34,8 @@ export interface EnsureGalleryVideoWithinSizeLimitInput {
   fileName?: string | null;
   fileSize?: number | null;
   mimeType?: string | null;
+  /** Default `standard`. Use `aggressive` when editing an existing gallery item to squeeze more under the same cap. */
+  compressionPreset?: GalleryVideoCompressionPreset;
 }
 
 export interface PreparedGalleryVideoAsset {
@@ -137,27 +155,30 @@ async function safeGetMetadata(
 
 function buildCompressionPlan(
   durationMs: number,
-  sourceMeta: VideoMetadata | null
+  sourceMeta: VideoMetadata | null,
+  preset: GalleryVideoCompressionPreset
 ): CompressOptions[] {
+  const p = COMPRESSION_PRESET[preset];
   const durationSeconds = Math.max(durationMs / 1000, 1);
   const totalBudgetBps = Math.floor((GALLERY_VIDEO_MAX_SIZE_BYTES * 8) / durationSeconds);
   const targetVideoBitrate = clamp(
-    Math.floor((totalBudgetBps - AUDIO_HEADROOM_BPS) * 0.84),
-    MIN_VIDEO_BITRATE_BPS,
-    MAX_VIDEO_BITRATE_BPS
+    Math.floor((totalBudgetBps - AUDIO_HEADROOM_BPS) * p.budgetVideoShare),
+    p.minVideoBitrateBps,
+    p.maxVideoBitrateBps
   );
   const sourceMaxDimension = Math.max(sourceMeta?.width ?? 0, sourceMeta?.height ?? 0);
   const seen = new Set<string>();
   const plan: CompressOptions[] = [];
 
-  for (let i = 0; i < MAX_SIZE_ATTEMPTS.length; i += 1) {
-    const rawMaxSize = MAX_SIZE_ATTEMPTS[i];
+  for (let i = 0; i < p.maxSizeAttempts.length; i += 1) {
+    const rawMaxSize = p.maxSizeAttempts[i];
     const maxSize =
       sourceMaxDimension > 0 ? Math.min(rawMaxSize, sourceMaxDimension) : rawMaxSize;
+    const factor = p.bitrateFactors[Math.min(i, p.bitrateFactors.length - 1)];
     const bitrate = clamp(
-      Math.floor(targetVideoBitrate * BITRATE_ATTEMPT_FACTORS[i]),
-      MIN_VIDEO_BITRATE_BPS,
-      MAX_VIDEO_BITRATE_BPS
+      Math.floor(targetVideoBitrate * factor),
+      p.minVideoBitrateBps,
+      p.maxVideoBitrateBps
     );
     const key = `${maxSize}-${bitrate}`;
     if (seen.has(key)) continue;
@@ -183,6 +204,10 @@ export function isGalleryVideoCompressionUnavailableError(error: unknown): boole
   return error instanceof Error && error.message === VIDEO_COMPRESSOR_UNAVAILABLE_ERROR;
 }
 
+function isAtOrUnderGallerySizeLimit(bytes: unknown): bytes is number {
+  return typeof bytes === 'number' && bytes <= GALLERY_VIDEO_MAX_SIZE_BYTES;
+}
+
 export async function ensureGalleryVideoWithinSizeLimit(
   input: EnsureGalleryVideoWithinSizeLimitInput
 ): Promise<PreparedGalleryVideoAsset> {
@@ -198,19 +223,27 @@ export async function ensureGalleryVideoWithinSizeLimit(
     throw createCompressorUnavailableError();
   }
 
+  const preset: GalleryVideoCompressionPreset = input.compressionPreset ?? 'standard';
+
   const sourceMeta = await safeGetMetadata(compressor, input.uri);
-  if (typeof sourceMeta?.size === 'number' && sourceMeta.size <= GALLERY_VIDEO_MAX_SIZE_BYTES) {
+  const alreadyWithinLimit =
+    isAtOrUnderGallerySizeLimit(sourceMeta?.size) ||
+    (sourceMeta?.size == null && isAtOrUnderGallerySizeLimit(input.fileSize));
+
+  if (preset !== 'aggressive' && alreadyWithinLimit) {
     return buildPreparedVideo(input.uri, sourceMeta, input);
   }
-  if (sourceMeta?.size == null && typeof input.fileSize === 'number' && input.fileSize <= GALLERY_VIDEO_MAX_SIZE_BYTES) {
-    return buildPreparedVideo(input.uri, null, input);
+
+  let smallestCandidate: PreparedGalleryVideoAsset | null = null;
+  if (preset === 'aggressive' && alreadyWithinLimit) {
+    smallestCandidate = buildPreparedVideo(input.uri, sourceMeta, input);
+  } else if (sourceMeta?.size != null) {
+    smallestCandidate = buildPreparedVideo(input.uri, sourceMeta, input);
   }
 
-  let smallestCandidate =
-    sourceMeta?.size != null ? buildPreparedVideo(input.uri, sourceMeta, input) : null;
   let lastCompressionError: unknown = null;
 
-  for (const attempt of buildCompressionPlan(input.durationMs, sourceMeta)) {
+  for (const attempt of buildCompressionPlan(input.durationMs, sourceMeta, preset)) {
     try {
       const compressedUri = await compressor.compress(input.uri, attempt);
       const compressedMeta = await safeGetMetadata(compressor, compressedUri);
@@ -226,6 +259,7 @@ export async function ensureGalleryVideoWithinSizeLimit(
       }
 
       if (
+        preset === 'standard' &&
         typeof prepared.sizeBytes === 'number' &&
         prepared.sizeBytes <= GALLERY_VIDEO_MAX_SIZE_BYTES
       ) {

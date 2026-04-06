@@ -147,6 +147,8 @@ export interface Appointment {
   business_id: string;
   barber_id?: string;
   status: 'confirmed' | 'pending' | 'cancelled' | 'completed' | 'no_show';
+  /** Set after Green Invoice receipt was created for this booking. */
+  receipt_issued?: boolean;
   created_at: string;
   updated_at: string;
   /** Set when automated client reminder notification was created (server cron). */
@@ -228,7 +230,7 @@ export interface Notification {
   id: string;
   title: string;
   content: string;
-  type: 'appointment_reminder' | 'client_reminder' | 'admin_reminder' | 'promotion' | 'general' | 'system';
+  type: 'appointment_reminder' | 'client_reminder' | 'admin_reminder' | 'promotion' | 'general' | 'system' | 'finance_monthly_review';
   recipient_name: string;
   recipient_phone: string;
   // Target user for admin/manager notifications (optional)
@@ -313,6 +315,8 @@ export interface BusinessProfile {
   accountant_report_time?: string;
   /** YYYY-MM of the report month last emailed (deduplication) */
   accountant_report_last_sent_period?: string | null;
+  /** YYYY-MM — last month for which super_admin got the in-app finance closure reminder */
+  finance_monthly_review_reminder_period?: string | null;
   /** Storage folder `branding/<name>/` — matches CLIENT_NAME in pulled .env */
   branding_client_name?: string | null;
   pulseem_user_id?: string | null;

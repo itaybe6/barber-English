@@ -46,6 +46,14 @@ verify_jwt = false
 [functions.greeninvoice-issue-receipt]
 verify_jwt = false
 
+# pg_cron / service role only — validates Bearer === service role in handler.
+[functions.finance-monthly-review-reminder]
+verify_jwt = false
+
+# Super-admin: JWT must match caller_user_id; issues receipts + emails accountant (Resend).
+[functions.finance-accountant-package]
+verify_jwt = true
+
 # Database Webhook on notifications INSERT — Authorization: Bearer <SERVICE_ROLE_KEY>
 [functions.notification-push-sms]
 verify_jwt = true

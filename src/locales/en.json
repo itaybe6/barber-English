@@ -1509,6 +1509,7 @@
         "decrypt_failed": "Could not decrypt stored credentials.",
         "greeninvoice_document_failed": "Green Invoice rejected document creation.",
         "greeninvoice_request_failed": "Request to Green Invoice failed.",
+        "receipt_already_issued": "A receipt was already issued for this appointment.",
         "unknown": "Something went wrong. Try again."
       }
     }

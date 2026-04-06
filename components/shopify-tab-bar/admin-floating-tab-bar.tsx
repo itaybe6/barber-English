@@ -349,7 +349,11 @@ export const AdminFloatingTabBar: React.FC = () => {
     );
   }
 
-  if (currentTab === "finance" || currentTab === "finance-accountant") {
+  if (
+    currentTab === "finance" ||
+    currentTab === "finance-accountant" ||
+    currentTab === "finance-month-closure"
+  ) {
     const labelIncome = t(
       "admin.financeTab.incomeExpenses",
       "הכנסות והוצאות"
@@ -358,7 +362,8 @@ export const AdminFloatingTabBar: React.FC = () => {
       "admin.financeTab.accountant",
       "הגדרות רואה חשבון"
     );
-    const financeMain = currentTab === "finance";
+    const financeMain =
+      currentTab === "finance" || currentTab === "finance-month-closure";
     const financeAcct = currentTab === "finance-accountant";
     return (
       <View
@@ -529,7 +534,9 @@ export const AdminFloatingTabBar: React.FC = () => {
 
           <TabButton
             focused={
-              isActive("finance") || currentTab === "finance-accountant"
+              isActive("finance") ||
+              currentTab === "finance-accountant" ||
+              currentTab === "finance-month-closure"
             }
             activeColor={primary}
             onPress={() => router.push("/(tabs)/finance")}
@@ -537,7 +544,9 @@ export const AdminFloatingTabBar: React.FC = () => {
             <Wallet
               size={22}
               color={
-                isActive("finance") || currentTab === "finance-accountant"
+                isActive("finance") ||
+              currentTab === "finance-accountant" ||
+              currentTab === "finance-month-closure"
                   ? onPrimary
                   : INACTIVE
               }

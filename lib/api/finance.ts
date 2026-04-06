@@ -18,6 +18,7 @@ export interface CompletedAppointmentReceiptRow {
   service_name: string;
   client_label: string;
   price: number;
+  receipt_issued: boolean;
 }
 
 export interface MonthlyReport {
@@ -133,6 +134,7 @@ export const financeApi = {
   async listCompletedAppointmentsForReceipts(
     year: number,
     month: number,
+    options?: { onlyWithoutReceipt?: boolean },
   ): Promise<CompletedAppointmentReceiptRow[]> {
     try {
       const businessId = getBusinessId();
@@ -143,10 +145,10 @@ export const financeApi = {
           : `${year}-${String(month + 1).padStart(2, '0')}-01`;
 
       /** Same eligibility as getMonthlyIncome: booked slots counted as income (confirmed | completed). */
-      const { data: appointments, error: apptErr } = await supabase
+      let apptQuery = supabase
         .from('appointments')
         .select(
-          'id, service_name, service_id, slot_date, slot_time, client_name, user_id, status',
+          'id, service_name, service_id, slot_date, slot_time, client_name, user_id, status, receipt_issued',
         )
         .eq('business_id', businessId)
         .eq('is_available', false)
@@ -155,6 +157,12 @@ export const financeApi = {
         .lt('slot_date', endDate)
         .order('slot_date', { ascending: false })
         .order('slot_time', { ascending: false });
+
+      if (options?.onlyWithoutReceipt) {
+        apptQuery = apptQuery.eq('receipt_issued', false);
+      }
+
+      const { data: appointments, error: apptErr } = await apptQuery;
 
       if (apptErr || !appointments?.length) {
         if (apptErr) {
@@ -231,6 +239,7 @@ export const financeApi = {
           service_name: serviceName,
           client_label: clientLabel,
           price,
+          receipt_issued: !!(appt as { receipt_issued?: boolean }).receipt_issued,
         });
       }
 

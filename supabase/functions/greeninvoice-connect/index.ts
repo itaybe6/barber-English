@@ -125,7 +125,8 @@ serve(async (req) => {
   if (String(urow.business_id).trim() !== businessIdRaw) {
     return json({ ok: false, error: "forbidden_wrong_business" }, 403);
   }
-  if (String(urow.user_type) !== "admin") {
+  const role = String(urow.user_type ?? "");
+  if (role !== "admin" && role !== "super_admin") {
     return json({ ok: false, error: "forbidden_not_admin" }, 403);
   }
 

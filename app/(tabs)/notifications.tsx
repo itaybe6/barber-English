@@ -24,6 +24,7 @@ import {
   CheckCircle,
   Calendar,
   User,
+  Receipt,
 } from 'lucide-react-native';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { formatTimeFromDate } from '@/lib/utils/timeFormat';
@@ -32,6 +33,16 @@ import { formatTimeFromDate } from '@/lib/utils/timeFormat';
 const NOTIFICATIONS_FETCH_MAX_AGE_DAYS = 2;
 
 /** First valid YYYY-MM-DD in title/content (e.g. admin "new appointment" body). */
+/** [[PERIOD:YYYY-MM]] from finance_monthly_review notifications */
+function extractFinanceReviewPeriod(n: Pick<Notification, 'content'>): string | null {
+  const m = (n.content || '').match(/\[\[PERIOD:(\d{4}-\d{2})\]\]/);
+  return m ? m[1] : null;
+}
+
+function isFinanceMonthlyReviewNotification(n: Notification): boolean {
+  return n.type === 'finance_monthly_review';
+}
+
 function extractYyyyMmDdFromNotification(n: Pick<Notification, 'title' | 'content'>): string | null {
   const blob = `${n.title || ''}\n${n.content || ''}`;
   const m = blob.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
@@ -99,7 +110,7 @@ function parseNotificationContentStatic(title: string, content: string) {
 
 type ParsedNotification = ReturnType<typeof parseNotificationContentStatic>;
 
-type NotifKind = 'new' | 'cancel' | 'reminder' | 'waitlist' | 'system' | 'default';
+type NotifKind = 'new' | 'cancel' | 'reminder' | 'waitlist' | 'system' | 'finance' | 'default';
 
 /** Text inside cards must set alignment explicitly; RN does not always inherit RTL for nested Text. */
 function rtlTextStyle(): { textAlign: 'left' | 'right'; writingDirection: 'ltr' | 'rtl' } {
@@ -145,6 +156,12 @@ function getTypeConfig(kind: NotifKind): TypeConfig {
         color: '#8E8E93',
         bg: '#F2F2F7',
         tint: '#F9F9FB',
+      };
+    case 'finance':
+      return {
+        color: '#16A34A',
+        bg: '#DCFCE7',
+        tint: '#F0FDF4',
       };
     default:
       return {
@@ -210,8 +227,14 @@ const NotificationListRow = memo(function NotificationListRow({
           </Text>
         ) : null}
 
-        {(parsed.name || parsed.datePretty || isAdminReminder(notification)) ? (
+        {(parsed.name || parsed.datePretty || isAdminReminder(notification) || kind === 'finance') ? (
           <View style={styles.chipsRow}>
+            {kind === 'finance' ? (
+              <View style={[styles.chip, { backgroundColor: '#DCFCE7' }]}>
+                <Receipt size={11} color="#16A34A" />
+                <Text style={[styles.chipText, { color: '#16A34A' }, rtlText]}>סגירת חודש</Text>
+              </View>
+            ) : null}
             {parsed.name ? (
               <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
                 <User size={11} color={cfg.color} />
@@ -415,6 +438,7 @@ export default function AdminNotificationsScreen() {
     if (isCancellationNotification(n)) return 'cancel';
     if (isNewAppointmentNotification(n)) return 'new';
     if (isWaitlistNotification(n)) return 'waitlist';
+    if (isFinanceMonthlyReviewNotification(n)) return 'finance';
     if (isAdminReminder(n) || n.type === 'client_reminder' || n.type === 'appointment_reminder' || n.type === 'admin_reminder') return 'reminder';
     if (n.type === 'system') return 'system';
     return 'default';
@@ -423,6 +447,17 @@ export default function AdminNotificationsScreen() {
   const resolveNotificationRoute = (n: Notification): string | null => {
     if (isCancellationNotification(n)) return null;
     if (isAdmin) {
+      if (isFinanceMonthlyReviewNotification(n)) {
+        if (!useAuthStore.getState().isSuperAdmin) {
+          return '/(tabs)/finance';
+        }
+        const period = extractFinanceReviewPeriod(n);
+        if (period) {
+          const [y, mo] = period.split('-');
+          return `/(tabs)/finance-month-closure?year=${encodeURIComponent(y)}&month=${encodeURIComponent(mo)}`;
+        }
+        return '/(tabs)/finance-month-closure';
+      }
       if (isPendingClientApprovalNotification(n)) return '/(tabs)?openPendingClients=1';
       if (isWaitlistNotification(n)) return '/(tabs)/waitlist';
       if (isNewAppointmentNotification(n)) {

@@ -369,6 +369,7 @@ export default function EditGalleryScreen() {
           fileName: a.fileName,
           fileSize: a.fileSize ?? null,
           mimeType: a.mimeType || guessMediaMimeFromUri(a.fileName || a.uri),
+          compressionPreset: role === 'edit' ? 'aggressive' : 'standard',
         });
 
         if (role === 'create') {

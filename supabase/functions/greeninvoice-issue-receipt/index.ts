@@ -151,7 +151,8 @@ serve(async (req) => {
   if (String(urow.business_id).trim() !== businessIdRaw) {
     return json({ ok: false, error: "forbidden_wrong_business" }, 403);
   }
-  if (String(urow.user_type) !== "admin") {
+  const role = String(urow.user_type ?? "");
+  if (role !== "admin" && role !== "super_admin") {
     return json({ ok: false, error: "forbidden_not_admin" }, 403);
   }
 
@@ -160,7 +161,7 @@ serve(async (req) => {
   const { data: appt, error: apptErr } = await admin
     .from("appointments")
     .select(
-      "id, business_id, status, service_name, service_id, slot_date, slot_time, client_name, user_id, is_available",
+      "id, business_id, status, service_name, service_id, slot_date, slot_time, client_name, user_id, is_available, receipt_issued",
     )
     .eq("id", appointmentId)
     .eq("business_id", businessId)
@@ -168,6 +169,9 @@ serve(async (req) => {
 
   if (apptErr || !appt) {
     return json({ ok: false, error: "appointment_not_found" }, 404);
+  }
+  if (appt.receipt_issued === true) {
+    return json({ ok: false, error: "receipt_already_issued" }, 400);
   }
   const st = String(appt.status ?? "");
   if (st !== "completed" && st !== "confirmed") {
@@ -339,6 +343,12 @@ serve(async (req) => {
   const d = docBody && typeof docBody === "object"
     ? docBody as Record<string, unknown>
     : {};
+
+  await admin
+    .from("appointments")
+    .update({ receipt_issued: true })
+    .eq("id", appointmentId)
+    .eq("business_id", businessId);
 
   return json({
     ok: true,

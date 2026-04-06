@@ -1472,6 +1472,7 @@
         "decrypt_failed": "שגיאה בפענוח המפתח השמור. פנו לתמיכה.",
         "greeninvoice_document_failed": "חשבונית ירוקה דחתה את יצירת המסמך.",
         "greeninvoice_request_failed": "הבקשה לחשבונית ירוקה נכשלה.",
+        "receipt_already_issued": "כבר הופקה קבלה לתור זה בחשבונית ירוקה.",
         "unknown": "אירעה שגיאה. נסה שוב."
       }
     }

@@ -59,6 +59,17 @@
         "POD_INSTALL_ARGS": "--repo-update",
         "RCT_NEW_ARCH_ENABLED": "1"
       }
+    },
+    "EliyaMoshe": {
+      "node": "20.19.4",
+      "autoIncrement": true,
+      "env": {
+        "CLIENT": "EliyaMoshe",
+        "ENV_FILE": "branding/EliyaMoshe/.env",
+        "EAS_PROJECT_ID": "aa299863-12a9-4766-8a4d-bc882aec2fe8",
+        "POD_INSTALL_ARGS": "--repo-update",
+        "RCT_NEW_ARCH_ENABLED": "1"
+      }
     }
   },
   "submit": {
@@ -80,6 +91,11 @@
       }
     },
     "KetyCooper": {
+      "ios": {
+        "appleId": "itaybenyair99@gmail.com"
+      }
+    },
+    "EliyaMoshe": {
       "ios": {
         "appleId": "itaybenyair99@gmail.com"
       }

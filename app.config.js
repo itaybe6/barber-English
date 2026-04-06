@@ -126,24 +126,37 @@ try {
   appConfig.expo.extra = appConfig.expo.extra || {};
   appConfig.expo.extra.eas = appConfig.expo.extra.eas || {};
 
-  const projectIdFromEnv = process.env.EAS_PROJECT_ID || process.env.EXPO_PUBLIC_PROJECT_ID || appConfig.expo.extra.eas.projectId;
+  const trimPid = (v) => (typeof v === 'string' ? v.trim() : '');
+  const extraEasPid = trimPid(appConfig.expo.extra.eas.projectId);
+  const projectIdFromEnv =
+    trimPid(process.env.EAS_PROJECT_ID) ||
+    trimPid(process.env.EXPO_PUBLIC_PROJECT_ID) ||
+    (extraEasPid || undefined);
+
+  /** לא למשוך EAS_PROJECT_ID מפרופיל של לקוח אחר (מונע slug mismatch מול expo.dev) */
+  const easProjectIdMatchesClient = (env) => {
+    const pid = trimPid(env?.EAS_PROJECT_ID);
+    const profileClient = trimPid(env?.CLIENT);
+    if (!pid || !profileClient) return false;
+    return profileClient === CLIENT;
+  };
 
   let projectIdFromEasJson = undefined;
   if (!projectIdFromEnv) {
     try {
       const easJsonPath = path.join(__dirname, 'eas.json');
       const easJson = JSON.parse(fs.readFileSync(easJsonPath, 'utf8'));
-      // העדפה: פרופיל ה-BUILD הפעיל, ואם אין – production
       const activeProfile = process.env.EAS_BUILD_PROFILE;
-      if (activeProfile && easJson?.build?.[activeProfile]?.env?.EAS_PROJECT_ID) {
-        projectIdFromEasJson = easJson.build[activeProfile].env.EAS_PROJECT_ID;
-      } else if (easJson?.build?.production?.env?.EAS_PROJECT_ID) {
-        projectIdFromEasJson = easJson.build.production.env.EAS_PROJECT_ID;
+      if (activeProfile && easProjectIdMatchesClient(easJson?.build?.[activeProfile]?.env)) {
+        projectIdFromEasJson = trimPid(easJson.build[activeProfile].env.EAS_PROJECT_ID);
+      } else if (easProjectIdMatchesClient(easJson?.build?.production?.env)) {
+        projectIdFromEasJson = trimPid(easJson.build.production.env.EAS_PROJECT_ID);
       } else {
-        // fallback: סריקה של כל הפרופילים ומציאת ה-EAS_PROJECT_ID הראשון
-        const profiles = Object.values(easJson?.build || {});
-        for (const p of profiles) {
-          if (p?.env?.EAS_PROJECT_ID) { projectIdFromEasJson = p.env.EAS_PROJECT_ID; break; }
+        for (const p of Object.values(easJson?.build || {})) {
+          if (easProjectIdMatchesClient(p?.env)) {
+            projectIdFromEasJson = trimPid(p.env.EAS_PROJECT_ID);
+            break;
+          }
         }
       }
     } catch {}

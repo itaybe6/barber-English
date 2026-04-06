@@ -97,13 +97,6 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { t, i18n } = useTranslation();
   const editAdminInputsRtl = isRtlLanguage(i18n.language);
-  const editAdminLabelAlignItems = editAdminInputsRtl
-    ? I18nManager.isRTL
-      ? ('flex-start' as const)
-      : ('flex-end' as const)
-    : I18nManager.isRTL
-      ? ('flex-end' as const)
-      : ('flex-start' as const);
   const expoExtra = useMemo(() => getExpoExtra(), []);
   const googlePlacesKey = useMemo(
     () =>
@@ -3272,7 +3265,12 @@ export default function SettingsScreen() {
 
               <View style={styles.editAdminFormCard}>
                 <View style={styles.editAdminField}>
-                  <View style={[styles.editAdminLabelWrap, { alignItems: editAdminLabelAlignItems }]}>
+                  <View
+                    style={[
+                      styles.editAdminLabelWrap,
+                      { justifyContent: editAdminInputsRtl ? 'flex-end' : 'flex-start' },
+                    ]}
+                  >
                     <Text style={styles.editAdminFieldLabel}>{t('settings.admin.name', 'Admin name')}</Text>
                   </View>
                   <TextInput
@@ -3288,7 +3286,12 @@ export default function SettingsScreen() {
                   />
                 </View>
                 <View style={styles.editAdminFieldLast}>
-                  <View style={[styles.editAdminLabelWrap, { alignItems: editAdminLabelAlignItems }]}>
+                  <View
+                    style={[
+                      styles.editAdminLabelWrap,
+                      { justifyContent: editAdminInputsRtl ? 'flex-end' : 'flex-start' },
+                    ]}
+                  >
                     <Text style={styles.editAdminFieldLabel}>{t('profile.phone', 'Phone number')}</Text>
                   </View>
                   <TextInput
@@ -6102,6 +6105,8 @@ const styles = StyleSheet.create({
   editAdminLabelWrap: {
     width: '100%',
     marginBottom: 8,
+    flexDirection: 'row',
+    direction: 'ltr',
   },
   editAdminFieldLabel: {
     fontSize: 14,

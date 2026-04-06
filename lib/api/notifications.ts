@@ -33,22 +33,40 @@ function recipientPhoneQueryVariants(userPhone: string): string[] {
   return Array.from(variants);
 }
 
+/** ISO timestamp for `created_at >=` — rolling window of the last `maxAgeDays` full days. */
+function minCreatedAtIso(maxAgeDays: number): string {
+  return new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000).toISOString();
+}
+
+export interface GetUserNotificationsOptions {
+  /** Only return rows from the last N days (reduces payload on the notifications screen). */
+  maxAgeDays?: number;
+}
+
 export const notificationsApi = {
   // Push sending moved to server (Supabase Edge Function)
   // Get user's notifications
-  async getUserNotifications(userPhone: string): Promise<Notification[]> {
+  async getUserNotifications(
+    userPhone: string,
+    options?: GetUserNotificationsOptions
+  ): Promise<Notification[]> {
     try {
       const businessId = getBusinessId();
       const variants = recipientPhoneQueryVariants(userPhone);
       if (variants.length === 0) return [];
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('notifications')
         .select('id, title, content, type, is_read, read_at, created_at, recipient_name, recipient_phone, appointment_id, business_id')
         .eq('business_id', businessId)
         .in('recipient_phone', variants)
-        .order('created_at', { ascending: false })
-        .limit(100);
+        .order('created_at', { ascending: false });
+
+      if (options?.maxAgeDays != null && options.maxAgeDays > 0) {
+        query = query.gte('created_at', minCreatedAtIso(options.maxAgeDays));
+      }
+
+      const { data, error } = await query.limit(100);
 
       if (error) {
         console.error('Error fetching user notifications:', error);
@@ -307,16 +325,30 @@ export const notificationsApi = {
   },
 
   // Get unread notifications count
-  async getUnreadCount(userPhone: string): Promise<number> {
+  async getUnreadCount(
+    userPhone: string,
+    options?: GetUserNotificationsOptions
+  ): Promise<number> {
     try {
       const businessId = getBusinessId();
-      
-      const { count, error } = await supabase
+
+      let query = supabase
         .from('notifications')
         .select('*', { count: 'exact', head: true })
-        .eq('business_id', businessId) // Filter by current business
-        .eq('recipient_phone', userPhone)
+        .eq('business_id', businessId)
         .eq('is_read', false);
+
+      if (options?.maxAgeDays != null && options.maxAgeDays > 0) {
+        const variants = recipientPhoneQueryVariants(userPhone);
+        if (variants.length === 0) return 0;
+        query = query
+          .in('recipient_phone', variants)
+          .gte('created_at', minCreatedAtIso(options.maxAgeDays));
+      } else {
+        query = query.eq('recipient_phone', userPhone);
+      }
+
+      const { count, error } = await query;
 
       if (error) {
         console.error('Error getting unread count:', error);

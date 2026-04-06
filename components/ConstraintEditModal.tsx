@@ -606,21 +606,21 @@ export default function ConstraintEditModal({ visible, constraint, onClose, onSa
               contentContainerStyle={styles.scrollContent}
               nestedScrollEnabled
             >
-              <Text style={[styles.title, { writingDirection: rtl ? 'rtl' : 'ltr' }]}>
+              <Text style={[styles.title, rtl && { writingDirection: 'rtl' }]}>
                 {t('admin.calendar.constraintEditTitle', 'Edit blocked time')}
               </Text>
               {isComposite ? (
-                <Text style={[styles.hint, { writingDirection: rtl ? 'rtl' : 'ltr' }]}>
+                <Text style={[styles.hint, rtl && { writingDirection: 'rtl', textAlign: 'right' }]}>
                   {t(
                     'admin.calendar.constraintEditCompositeHint',
                     'Several entries were merged on the calendar. Saving replaces them with one block.'
                   )}
                 </Text>
               ) : null}
-              <Text style={[styles.label, { writingDirection: rtl ? 'rtl' : 'ltr' }]}>
+              <Text style={[styles.label, { writingDirection: rtl ? 'rtl' : 'ltr', textAlign: rtl ? 'right' : 'left' }]}>
                 {t('admin.calendar.constraintEditDate', 'Date')}
               </Text>
-              <Text style={[styles.datePretty, { writingDirection: rtl ? 'rtl' : 'ltr' }]}>{formatDatePretty(dateISO)}</Text>
+              <Text style={[styles.datePretty, rtl && { writingDirection: 'rtl', textAlign: 'right' }]}>{formatDatePretty(dateISO)}</Text>
               <RNCalendar
                 current={dateISO}
                 onDayPress={(d: { dateString: string }) => setDateISO(d.dateString)}
@@ -631,7 +631,12 @@ export default function ConstraintEditModal({ visible, constraint, onClose, onSa
                 theme={calendarTheme as object}
               />
               <View style={[styles.rowBetween, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
-                <Text style={[styles.label, { marginBottom: 0, writingDirection: rtl ? 'rtl' : 'ltr' }]}>
+                <Text
+                  style={[
+                    styles.label,
+                    { marginBottom: 0, writingDirection: rtl ? 'rtl' : 'ltr', textAlign: rtl ? 'right' : 'left' },
+                  ]}
+                >
                   {t('admin.hoursAdmin.allDay', 'All day')}
                 </Text>
                 <Switch
@@ -642,15 +647,15 @@ export default function ConstraintEditModal({ visible, constraint, onClose, onSa
                 />
               </View>
               {!allDay ? (
-                <View style={styles.timeRow}>
+                <View style={[styles.timeRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
                   <View style={styles.timeCol}>
-                    <Text style={[styles.label, { writingDirection: rtl ? 'rtl' : 'ltr' }]}>
+                    <Text style={[styles.label, { writingDirection: rtl ? 'rtl' : 'ltr', textAlign: rtl ? 'right' : 'left' }]}>
                       {t('admin.hoursAdmin.start', 'Start')}
                     </Text>
                     <TouchableOpacity
                       activeOpacity={0.75}
                       onPress={() => setTimePicker('start')}
-                      style={styles.selectField}
+                      style={[styles.selectField, { flexDirection: rtl ? 'row-reverse' : 'row' }]}
                       accessibilityRole="button"
                       accessibilityLabel={t('admin.hoursAdmin.start', 'Start')}
                     >
@@ -659,13 +664,13 @@ export default function ConstraintEditModal({ visible, constraint, onClose, onSa
                     </TouchableOpacity>
                   </View>
                   <View style={styles.timeCol}>
-                    <Text style={[styles.label, { writingDirection: rtl ? 'rtl' : 'ltr' }]}>
+                    <Text style={[styles.label, { writingDirection: rtl ? 'rtl' : 'ltr', textAlign: rtl ? 'right' : 'left' }]}>
                       {t('admin.hoursAdmin.end', 'End')}
                     </Text>
                     <TouchableOpacity
                       activeOpacity={0.75}
                       onPress={() => setTimePicker('end')}
-                      style={styles.selectField}
+                      style={[styles.selectField, { flexDirection: rtl ? 'row-reverse' : 'row' }]}
                       accessibilityRole="button"
                       accessibilityLabel={t('admin.hoursAdmin.end', 'End')}
                     >
@@ -675,7 +680,7 @@ export default function ConstraintEditModal({ visible, constraint, onClose, onSa
                   </View>
                 </View>
               ) : null}
-              <Text style={[styles.label, { writingDirection: rtl ? 'rtl' : 'ltr' }]}>
+              <Text style={[styles.label, { writingDirection: rtl ? 'rtl' : 'ltr', textAlign: rtl ? 'right' : 'left' }]}>
                 {t('admin.calendar.constraintEditReason', 'Reason (optional)')}
               </Text>
               <TextInput
@@ -686,7 +691,11 @@ export default function ConstraintEditModal({ visible, constraint, onClose, onSa
                 style={[styles.input, styles.reasonInput, { textAlign: rtl ? 'right' : 'left', writingDirection: rtl ? 'rtl' : 'ltr' }]}
               />
               {saveConflictMsg ? (
-                <Text style={[styles.saveConflictText, { writingDirection: rtl ? 'rtl' : 'ltr' }]}>{saveConflictMsg}</Text>
+                <Text
+                  style={[styles.saveConflictText, { writingDirection: rtl ? 'rtl' : 'ltr', textAlign: rtl ? 'right' : 'center' }]}
+                >
+                  {saveConflictMsg}
+                </Text>
               ) : null}
               <TouchableOpacity
                 style={[styles.primaryBtn, { backgroundColor: primary, opacity: saving ? 0.7 : 1 }]}
@@ -697,7 +706,7 @@ export default function ConstraintEditModal({ visible, constraint, onClose, onSa
                 {saving ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.primaryBtnText}>{t('admin.calendar.constraintEditSave', 'Save')}</Text>
+                  <Text style={[styles.primaryBtnText, rtl && { writingDirection: 'rtl' }]}>{t('admin.calendar.constraintEditSave', 'Save')}</Text>
                 )}
               </TouchableOpacity>
               <TouchableOpacity
@@ -713,11 +722,11 @@ export default function ConstraintEditModal({ visible, constraint, onClose, onSa
                 {deleting ? (
                   <ActivityIndicator color={UI.danger} />
                 ) : (
-                  <Text style={styles.dangerBtnText}>{t('admin.calendar.constraintEditDelete', 'Delete')}</Text>
+                  <Text style={[styles.dangerBtnText, rtl && { writingDirection: 'rtl' }]}>{t('admin.calendar.constraintEditDelete', 'Delete')}</Text>
                 )}
               </TouchableOpacity>
               <TouchableOpacity style={styles.secondaryBtn} onPress={onClose} disabled={saving || deleting} activeOpacity={0.85}>
-                <Text style={styles.secondaryBtnText}>{t('cancel', 'Cancel')}</Text>
+                <Text style={[styles.secondaryBtnText, rtl && { writingDirection: 'rtl' }]}>{t('cancel', 'Cancel')}</Text>
               </TouchableOpacity>
             </ScrollView>
           </View>

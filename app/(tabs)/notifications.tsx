@@ -8,6 +8,7 @@ import {
   RefreshControl,
   StatusBar,
   FlatList,
+  I18nManager,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,14 +22,14 @@ import {
   Bell,
   Clock,
   CheckCircle,
-  AlertCircle,
   Calendar,
-  XCircle,
   User,
-  ListTodo,
 } from 'lucide-react-native';
 import { useColors } from '@/src/theme/ThemeProvider';
 import { formatTimeFromDate } from '@/lib/utils/timeFormat';
+
+/** Only load notifications from the last N days on this screen (smaller queries). */
+const NOTIFICATIONS_FETCH_MAX_AGE_DAYS = 2;
 
 /** First valid YYYY-MM-DD in title/content (e.g. admin "new appointment" body). */
 function extractYyyyMmDdFromNotification(n: Pick<Notification, 'title' | 'content'>): string | null {
@@ -100,11 +101,17 @@ type ParsedNotification = ReturnType<typeof parseNotificationContentStatic>;
 
 type NotifKind = 'new' | 'cancel' | 'reminder' | 'waitlist' | 'system' | 'default';
 
+/** Text inside cards must set alignment explicitly; RN does not always inherit RTL for nested Text. */
+function rtlTextStyle(): { textAlign: 'left' | 'right'; writingDirection: 'ltr' | 'rtl' } {
+  return I18nManager.isRTL
+    ? { textAlign: 'right', writingDirection: 'rtl' }
+    : { textAlign: 'left', writingDirection: 'ltr' };
+}
+
 interface TypeConfig {
   color: string;
   bg: string;
   tint: string;
-  icon: React.ReactNode;
 }
 
 function getTypeConfig(kind: NotifKind): TypeConfig {
@@ -114,42 +121,36 @@ function getTypeConfig(kind: NotifKind): TypeConfig {
         color: '#007AFF',
         bg: '#EBF4FF',
         tint: '#F0F7FF',
-        icon: <Calendar size={18} color="#007AFF" />,
       };
     case 'cancel':
       return {
         color: '#FF3B30',
         bg: '#FFEEED',
         tint: '#FFF5F5',
-        icon: <XCircle size={18} color="#FF3B30" />,
       };
     case 'reminder':
       return {
         color: '#FF9500',
         bg: '#FFF3E0',
         tint: '#FFFAF0',
-        icon: <Clock size={18} color="#FF9500" />,
       };
     case 'waitlist':
       return {
         color: '#34C759',
         bg: '#E8FAF0',
         tint: '#F3FDF6',
-        icon: <ListTodo size={18} color="#34C759" />,
       };
     case 'system':
       return {
         color: '#8E8E93',
         bg: '#F2F2F7',
         tint: '#F9F9FB',
-        icon: <AlertCircle size={18} color="#8E8E93" />,
       };
     default:
       return {
         color: '#5E5CE6',
         bg: '#EEEEFF',
         tint: '#F5F5FF',
-        icon: <Bell size={18} color="#5E5CE6" />,
       };
   }
 }
@@ -186,55 +187,47 @@ const NotificationListRow = memo(function NotificationListRow({
   const parsed: ParsedNotification = parseNotificationContentStatic(notification.title, notification.content);
   const cfg = getTypeConfig(kind);
   const isUnread = !notification.is_read;
-  const timeAgo = formatRelativeDate((notification as any).created_at || '');
+  const timeAgo = formatRelativeDate((notification as { created_at?: string }).created_at || '');
+  const rtlText = rtlTextStyle();
 
   const cardBody = (
     <View style={styles.cardInner}>
       <View style={[styles.accentBar, { backgroundColor: cfg.color }]} />
-      <View style={[styles.iconAvatar, { backgroundColor: cfg.bg }]}>
-        {cfg.icon}
-      </View>
       <View style={styles.cardContent}>
         <View style={styles.cardTopRow}>
-          <Text style={styles.cardTitle} numberOfLines={2}>
+          <Text style={[styles.cardTitle, rtlText]} numberOfLines={2}>
             {notification.title}
           </Text>
           <View style={styles.cardMeta}>
-            {isUnread && <View style={[styles.unreadDot, { backgroundColor: cfg.color }]} />}
-            {timeAgo ? <Text style={styles.cardTime}>{timeAgo}</Text> : null}
+            {isUnread ? <View style={[styles.unreadDot, { backgroundColor: cfg.color }]} /> : null}
+            {timeAgo ? <Text style={[styles.cardTime, rtlText]}>{timeAgo}</Text> : null}
           </View>
         </View>
 
         {parsed.primary ? (
-          <Text style={styles.cardBody} numberOfLines={3}>
+          <Text style={[styles.cardBody, rtlText]} numberOfLines={3}>
             {parsed.primary}
           </Text>
         ) : null}
 
-        {(parsed.name || parsed.datePretty || parsed.timePretty) ? (
+        {(parsed.name || parsed.datePretty || isAdminReminder(notification)) ? (
           <View style={styles.chipsRow}>
             {parsed.name ? (
               <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
                 <User size={11} color={cfg.color} />
-                <Text style={[styles.chipText, { color: cfg.color }]}>{parsed.name}</Text>
+                <Text style={[styles.chipText, { color: cfg.color }, rtlText]}>{parsed.name}</Text>
               </View>
             ) : null}
             {parsed.datePretty ? (
               <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
                 <Calendar size={11} color={cfg.color} />
-                <Text style={[styles.chipText, { color: cfg.color }]}>{parsed.datePretty}</Text>
-              </View>
-            ) : null}
-            {parsed.timePretty ? (
-              <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
-                <Clock size={11} color={cfg.color} />
-                <Text style={[styles.chipText, { color: cfg.color }]}>{parsed.timePretty}</Text>
+                <Text style={[styles.chipText, { color: cfg.color }, rtlText]}>{parsed.datePretty}</Text>
               </View>
             ) : null}
             {isAdminReminder(notification) ? (
               <View style={[styles.chip, { backgroundColor: '#FFF3E0' }]}>
                 <Clock size={11} color="#FF9500" />
-                <Text style={[styles.chipText, { color: '#FF9500' }]}>תזכורת</Text>
+                <Text style={[styles.chipText, { color: '#FF9500' }, rtlText]}>תזכורת</Text>
               </View>
             ) : null}
           </View>
@@ -243,7 +236,7 @@ const NotificationListRow = memo(function NotificationListRow({
         {(notification as { push_sent?: boolean }).push_sent && (
           <View style={styles.pushBadge}>
             <CheckCircle size={12} color="#34C759" />
-            <Text style={styles.pushBadgeText}>נשלח בהצלחה</Text>
+            <Text style={[styles.pushBadgeText, rtlText]}>נשלח בהצלחה</Text>
           </View>
         )}
       </View>
@@ -269,14 +262,16 @@ const NotificationListRow = memo(function NotificationListRow({
 });
 
 const SkeletonCard = memo(function SkeletonCard() {
+  const rtl = I18nManager.isRTL;
   return (
     <View style={[styles.card, styles.skeletonCard]}>
-      <View style={[styles.accentBar, { backgroundColor: '#E5E5EA' }]} />
-      <View style={[styles.iconAvatar, { backgroundColor: '#F2F2F7' }]} />
-      <View style={styles.cardContent}>
-        <View style={styles.skeletonLine} />
-        <View style={[styles.skeletonLine, { width: '60%', marginTop: 8 }]} />
-        <View style={[styles.skeletonLine, { width: '40%', marginTop: 6, height: 10 }]} />
+      <View style={styles.cardInner}>
+        <View style={[styles.accentBar, { backgroundColor: '#E5E5EA' }]} />
+        <View style={styles.cardContent}>
+          <View style={[styles.skeletonLine, rtl && styles.skeletonLineRtl]} />
+          <View style={[styles.skeletonLine, { width: '60%', marginTop: 8 }, rtl && styles.skeletonLineRtl]} />
+          <View style={[styles.skeletonLine, { width: '40%', marginTop: 6, height: 10 }, rtl && styles.skeletonLineRtl]} />
+        </View>
       </View>
     </View>
   );
@@ -284,6 +279,7 @@ const SkeletonCard = memo(function SkeletonCard() {
 
 export default function AdminNotificationsScreen() {
   const { t } = useTranslation();
+  const rtlText = rtlTextStyle();
   const insets = useSafeAreaInsets();
   const BOTTOM_SPACER = 124;
   const bottomPadding = BOTTOM_SPACER + (insets?.bottom || 0);
@@ -310,9 +306,10 @@ export default function AdminNotificationsScreen() {
     }
     isRefresh ? setRefreshing(true) : setLoading(true);
     try {
+      const listOpts = { maxAgeDays: NOTIFICATIONS_FETCH_MAX_AGE_DAYS };
       const [notificationsData, unreadCountData] = await Promise.all([
-        notificationsApi.getUserNotifications(user.phone),
-        notificationsApi.getUnreadCount(user.phone),
+        notificationsApi.getUserNotifications(user.phone, listOpts),
+        notificationsApi.getUnreadCount(user.phone, listOpts),
       ]);
       setNotifications(notificationsData);
       setUnreadCount(unreadCountData);
@@ -331,9 +328,10 @@ export default function AdminNotificationsScreen() {
     setLoading(true);
     try {
       await notificationsApi.markAllAsReadForUser(user.phone);
+      const listOpts = { maxAgeDays: NOTIFICATIONS_FETCH_MAX_AGE_DAYS };
       const [notificationsData, unreadCountData] = await Promise.all([
-        notificationsApi.getUserNotifications(user.phone),
-        notificationsApi.getUnreadCount(user.phone),
+        notificationsApi.getUserNotifications(user.phone, listOpts),
+        notificationsApi.getUnreadCount(user.phone, listOpts),
       ]);
       setNotifications(notificationsData);
       setUnreadCount(unreadCountData);
@@ -488,15 +486,21 @@ export default function AdminNotificationsScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#F8F8FC" />
 
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>{t('notifications.title', 'התראות')}</Text>
+        <View style={styles.headerCenter}>
+          <Text
+            style={[
+              styles.headerTitle,
+              I18nManager.isRTL ? { writingDirection: 'rtl' } : { writingDirection: 'ltr' },
+            ]}
+          >
+            {t('notifications.title', 'התראות')}
+          </Text>
           {unreadCount > 0 && (
             <View style={styles.headerBadge}>
               <Text style={styles.headerBadgeText}>{unreadCount}</Text>
             </View>
           )}
         </View>
-        <Bell size={22} color="#8E8E93" />
       </View>
 
       {isAdmin && (
@@ -515,7 +519,7 @@ export default function AdminNotificationsScreen() {
                 style={[styles.filterChip, isActive && { backgroundColor: colors.primary, borderColor: colors.primary }]}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.filterChipText, isActive && { color: '#FFFFFF' }]}>
+                <Text style={[styles.filterChipText, rtlText, isActive && { color: '#FFFFFF' }]}>
                   {label}
                 </Text>
               </TouchableOpacity>
@@ -552,8 +556,10 @@ export default function AdminNotificationsScreen() {
               <View style={styles.emptyIconWrap}>
                 <Bell size={36} color="#C7C7CC" />
               </View>
-              <Text style={styles.emptyTitle}>{t('notifications.empty', 'אין התראות')}</Text>
-              <Text style={styles.emptySubtitle}>
+              <Text style={[styles.emptyTitle, I18nManager.isRTL && { writingDirection: 'rtl' }]}>
+                {t('notifications.empty', 'אין התראות')}
+              </Text>
+              <Text style={[styles.emptySubtitle, I18nManager.isRTL && { writingDirection: 'rtl' }]}>
                 {t('notifications.emptySubtitle', 'כשתגיע התראה חדשה, היא תופיע כאן')}
               </Text>
             </View>
@@ -572,14 +578,15 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 12,
   },
-  headerLeft: {
+  headerCenter: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 10,
   },
   headerTitle: {
@@ -587,6 +594,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1C1C1E',
     letterSpacing: -0.5,
+    textAlign: 'center',
   },
   headerBadge: {
     backgroundColor: '#FF3B30',
@@ -652,14 +660,6 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     alignSelf: 'stretch',
     minHeight: 40,
-  },
-  iconAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
   },
   cardContent: {
     flex: 1,
@@ -742,6 +742,9 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     backgroundColor: '#EBEBEB',
     width: '80%',
+  },
+  skeletonLineRtl: {
+    alignSelf: 'flex-end',
   },
   emptyContainer: {
     flex: 1,

@@ -168,10 +168,12 @@ function CardSectionHeader({
 }) {
   if (layoutRtl) {
     return (
-      <View style={styles.cardHeaderRtlExplicit}>
-        <Text style={styles.cardTitleRtlExplicit} numberOfLines={3}>
-          {label}
-        </Text>
+      <View style={{ direction: 'ltr', flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12, width: '100%' }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 16, fontWeight: '800', color: UI.text, textAlign: 'right' }} numberOfLines={3}>
+            {label}
+          </Text>
+        </View>
         <Ionicons name={icon} size={20} color={primary} />
       </View>
     );
@@ -288,6 +290,7 @@ function TimeSlotPickerSheet({
                   style={[
                     styles.timeSheetRowText,
                     { writingDirection: 'ltr' },
+                    layoutRtl && { textAlign: 'right' },
                     on && { color: primary, fontWeight: '800' },
                   ]}
                 >
@@ -338,8 +341,8 @@ function CalendarReminderEditorModalInner({
   const rawLang = (i18n.resolvedLanguage || i18n.language || '').toLowerCase();
   const isHebrew = rawLang.startsWith('he') || rawLang.startsWith('iw');
   const calendarLocale = isHebrew ? 'he' : 'en';
-  /** פריסה שמאלית (LTR): טקסט עברי עם יישור וסדר אלמנטים כמו באנגלית — לפי העדפת מוצר */
-  const layoutRtl = false;
+  /** Modal copy is loaded with `lng: 'he'` (tHe) — always RTL layout for labels and fields */
+  const layoutRtl = true;
 
   if (visible) {
     LocaleConfig.defaultLocale = calendarLocale;
@@ -862,7 +865,7 @@ export default function CalendarReminderEditorModal(props: CalendarReminderEdito
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: UI.bg },
+  root: { flex: 1, backgroundColor: UI.bg, direction: 'ltr' },
   headerSafeWrap: { zIndex: 2 },
   headerRow: {
     flexDirection: 'row',
@@ -888,19 +891,16 @@ const styles = StyleSheet.create({
   },
   scrollFlex: { flex: 1 },
   scrollContent: { paddingBottom: 120 },
-  scrollContentRtl: { flexGrow: 1, width: '100%', alignItems: 'stretch' },
+  scrollContentRtl: { flexGrow: 1, alignItems: 'stretch' },
   headerTitles: { flex: 1, justifyContent: 'center', alignItems: 'flex-start' },
-  /** RTL/Hebrew: stretch so `textAlign: 'right'` anchors to the physical right edge */
-  headerTitlesRtl: { alignSelf: 'stretch', width: '100%', alignItems: 'stretch' },
+  headerTitlesRtl: { alignSelf: 'stretch', alignItems: 'stretch' },
   headerTitle: { fontSize: 20, fontWeight: '800', color: UI.text, letterSpacing: -0.3 },
   headerSubtitle: { fontSize: 13, fontWeight: '600', color: UI.textSecondary, marginTop: 4, lineHeight: 18 },
   hebrewText: { textAlign: 'right', writingDirection: 'rtl' },
-  /** טקסט בלוק מלא — בלי זה `textAlign: 'right'` נשאר צמוד לשמאל ברוחב תוכן */
   hebrewTextBlock: {
     textAlign: 'right',
     writingDirection: 'rtl',
     alignSelf: 'stretch',
-    width: '100%',
   },
   card: {
     marginTop: 14,
@@ -923,7 +923,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   cardHeaderRtlExplicit: {
-    width: '100%',
+    alignSelf: 'stretch',
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 8,
@@ -1038,7 +1038,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: UI.text,
   },
-  fieldRtl: { alignSelf: 'stretch', width: '100%' },
+  fieldRtl: { alignSelf: 'stretch' },
   footer: {
     position: 'absolute',
     left: 0,

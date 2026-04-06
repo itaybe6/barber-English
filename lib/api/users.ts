@@ -149,23 +149,25 @@ export const usersApi = {
   async authenticateUserByPhone(phone: string, password: string): Promise<User | null> {
     try {
       const businessId = getBusinessId();
-      
+      const trimmed = phone.trim();
+
       const { data, error } = await supabase
         .from('users')
         .select('*')
-        .eq('phone', phone)
-        .eq('business_id', businessId) // רק משתמשים מאותו business
-        .single();
+        .eq('business_id', businessId);
 
-      if (error || !data) {
+      if (error || !data?.length) {
         return null;
       }
 
-      // בדיקת סיסמה
+      const row = data.find((u) => userPhoneMatchesRow(u.phone, trimmed));
+      if (!row) {
+        return null;
+      }
+
       const hashedPassword = this.hashPassword(password);
-      if (hashedPassword === data.password_hash) {
-        // if blocked user, still return (caller decides), but include flag
-        return data;
+      if (hashedPassword === row.password_hash) {
+        return row;
       }
 
       return null;

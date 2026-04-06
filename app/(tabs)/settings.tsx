@@ -96,6 +96,14 @@ export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t, i18n } = useTranslation();
+  const editAdminInputsRtl = isRtlLanguage(i18n.language);
+  const editAdminLabelAlignItems = editAdminInputsRtl
+    ? I18nManager.isRTL
+      ? ('flex-start' as const)
+      : ('flex-end' as const)
+    : I18nManager.isRTL
+      ? ('flex-end' as const)
+      : ('flex-start' as const);
   const expoExtra = useMemo(() => getExpoExtra(), []);
   const googlePlacesKey = useMemo(
     () =>
@@ -3264,19 +3272,15 @@ export default function SettingsScreen() {
 
               <View style={styles.editAdminFormCard}>
                 <View style={styles.editAdminField}>
-                  <Text
-                    style={[
-                      styles.editAdminFieldLabel,
-                      I18nManager.isRTL ? styles.editAdminFieldLabelRtl : styles.editAdminFieldLabelLtr,
-                    ]}
-                  >
-                    {t('settings.admin.name', 'Admin name')}
-                  </Text>
+                  <View style={[styles.editAdminLabelWrap, { alignItems: editAdminLabelAlignItems }]}>
+                    <Text style={styles.editAdminFieldLabel}>{t('settings.admin.name', 'Admin name')}</Text>
+                  </View>
                   <TextInput
                     style={[
                       styles.editAdminFieldInput,
-                      I18nManager.isRTL ? styles.editAdminFieldInputRtl : styles.editAdminFieldInputLtr,
+                      editAdminInputsRtl ? styles.editAdminFieldInputRtl : styles.editAdminFieldInputLtr,
                     ]}
+                    textAlign={editAdminInputsRtl ? 'right' : 'left'}
                     value={adminNameDraft}
                     onChangeText={setAdminNameDraft}
                     placeholder={t('profile.edit.namePlaceholder', 'Full Name')}
@@ -3284,22 +3288,20 @@ export default function SettingsScreen() {
                   />
                 </View>
                 <View style={styles.editAdminFieldLast}>
-                  <Text
-                    style={[
-                      styles.editAdminFieldLabel,
-                      I18nManager.isRTL ? styles.editAdminFieldLabelRtl : styles.editAdminFieldLabelLtr,
-                    ]}
-                  >
-                    {t('profile.phone', 'Phone number')}
-                  </Text>
+                  <View style={[styles.editAdminLabelWrap, { alignItems: editAdminLabelAlignItems }]}>
+                    <Text style={styles.editAdminFieldLabel}>{t('profile.phone', 'Phone number')}</Text>
+                  </View>
                   <TextInput
-                    style={[styles.editAdminFieldInput, styles.editAdminPhoneInput]}
+                    style={[
+                      styles.editAdminFieldInput,
+                      editAdminInputsRtl ? styles.editAdminFieldInputRtl : styles.editAdminFieldInputLtr,
+                    ]}
+                    textAlign={editAdminInputsRtl ? 'right' : 'left'}
                     value={adminPhoneDraft}
                     onChangeText={setAdminPhoneDraft}
                     placeholder={t('settings.admin.phonePlaceholder', '(555) 123-4567')}
                     placeholderTextColor={Colors.subtext}
                     keyboardType="phone-pad"
-                    textAlign="left"
                     {...(Platform.OS === 'android' ? { textAlignVertical: 'center' as const } : {})}
                   />
                 </View>
@@ -6070,6 +6072,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   editAdminFormCard: {
+    alignSelf: 'stretch',
+    alignItems: 'stretch',
     backgroundColor: '#FFFFFF',
     borderRadius: 22,
     paddingHorizontal: 18,
@@ -6088,27 +6092,22 @@ const styles = StyleSheet.create({
     }),
   },
   editAdminField: {
+    alignSelf: 'stretch',
     marginBottom: 20,
   },
   editAdminFieldLast: {
+    alignSelf: 'stretch',
     marginBottom: 0,
+  },
+  editAdminLabelWrap: {
+    width: '100%',
+    marginBottom: 8,
   },
   editAdminFieldLabel: {
     fontSize: 14,
     fontWeight: '700',
     color: '#636366',
-    marginBottom: 8,
     letterSpacing: -0.1,
-  },
-  editAdminFieldLabelRtl: {
-    alignSelf: 'stretch',
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  editAdminFieldLabelLtr: {
-    alignSelf: 'stretch',
-    textAlign: 'left',
-    writingDirection: 'ltr',
   },
   editAdminFieldInput: {
     minHeight: 52,
@@ -6126,10 +6125,6 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
   },
   editAdminFieldInputLtr: {
-    textAlign: 'left',
-    writingDirection: 'ltr',
-  },
-  editAdminPhoneInput: {
     textAlign: 'left',
     writingDirection: 'ltr',
   },

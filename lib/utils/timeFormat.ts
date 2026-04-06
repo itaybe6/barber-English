@@ -62,11 +62,23 @@ const formatDateWithLocale = (date: Date | null): string => {
  * - Hebrew → 24-hour clock (HH:MM)
  * - Others → 12-hour clock with AM/PM
  */
+/** HH:MM only (strips seconds / fractional parts) when locale formatting is unavailable */
+const fallbackHHMM = (timeString: string): string => {
+  const s = String(timeString).trim();
+  const base = s.split('.')[0];
+  const parts = base.split(':');
+  if (parts.length >= 2) {
+    return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
+  }
+  return s;
+};
+
 export const formatTime12Hour = (timeString: string): string => {
   if (!timeString) return '';
   const date = createDateFromTime(timeString);
   const formatted = formatDateWithLocale(date);
-  return formatted || timeString;
+  if (formatted) return formatted;
+  return fallbackHHMM(timeString);
 };
 
 export const formatTime12HourWithLeadingZero = (timeString: string): string => {

@@ -4,7 +4,8 @@
   "main": "index.js",
   "private": true,
   "scripts": {
-    "postinstall": "npx patch-package && node scripts/patch-expo-hmr-client-url.cjs",
+    "postinstall": "npx patch-package && node scripts/patch-expo-image-utils-cache.cjs && node scripts/patch-expo-hmr-client-url.cjs",
+    "eas-build-post-install": "node scripts/patch-expo-image-utils-cache.cjs",
     "start": "expo start --tunnel",
     "start:lan": "expo start --lan",
     "start:localhost": "expo start --localhost",

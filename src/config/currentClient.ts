@@ -1,2 +1,4 @@
-// Default for local tooling; EAS/production use expo.extra.CLIENT (see app.config.js + getCurrentClient in theme/assets).
+// Current client configuration
+// This file is automatically updated by the build process (skipped on EAS Build — use expo.extra.CLIENT).
+
 export const CURRENT_CLIENT = 'EliyaMoshe';

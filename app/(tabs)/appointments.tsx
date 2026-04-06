@@ -2186,23 +2186,27 @@ export default function AdminAppointmentsScreen() {
     setSelectedDate(d);
   }, []);
 
+  const topSafeChromeBg = calendarView === 'month' ? '#FFFFFF' : GC_HEADER_CHROME;
+
   return (
-    <View style={[styles.gcRoot, calendarView === 'month' && styles.gcRootMonth]}>
+    <View style={{ flex: 1, backgroundColor: topSafeChromeBg }}>
+      <View style={{ height: insets.top, backgroundColor: topSafeChromeBg }} />
+      <View style={[styles.gcRoot, calendarView === 'month' && styles.gcRootMonth]}>
       {calendarView === 'day' ? (
-        <View style={{ paddingTop: insets.top }}>
+        <View style={styles.gcTopChrome}>
           <DaySelector
             selectedDate={selectedDate}
             onSelectDate={setSelectedDate}
             mode="week"
             markedDates={markedDates}
             fullyBlockedDateKeys={dayStripFullBlockDates}
+            containerBackgroundColor={GC_HEADER_CHROME}
           />
         </View>
       ) : (
         <View
           style={[
             styles.gcTopChrome,
-            { paddingTop: insets.top },
             calendarView === 'month' && styles.gcTopChromeMonth,
           ]}
         >
@@ -3104,6 +3108,7 @@ export default function AdminAppointmentsScreen() {
         onClose={() => setConstraintToEdit(null)}
         onSaved={onCalendarConstraintsChanged}
       />
+    </View>
     </View>
   );
 }

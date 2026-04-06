@@ -210,8 +210,8 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
   const use24hTime = isHebrew;
   const calendarLocale = isHebrew ? 'he' : 'en';
   const dateLocale = isHebrew ? 'he-IL' : 'en-US';
-  /** Layout + text flow: Hebrew UI or system RTL (e.g. device locale). */
-  const rtl = isHebrew || I18nManager.isRTL;
+  /** Layout + text flow: app is Hebrew-first — always RTL. */
+  const rtl = true;
 
   if (visible) {
     LocaleConfig.defaultLocale = calendarLocale;
@@ -596,7 +596,7 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
             style={StyleSheet.absoluteFill}
             pointerEvents="none"
           />
-          <View style={styles.headerRow}>
+          <View style={[styles.headerRow, styles.headerRowRtl]}>
             <TouchableOpacity
               onPress={onClose}
               style={styles.headerIconBtn}
@@ -608,11 +608,11 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
                 <Ionicons name="close" size={22} color={UI.text} />
               </View>
             </TouchableOpacity>
-            <View style={[styles.headerTitles, isHebrew && styles.headerTitlesHebrew]}>
-              <Text style={[styles.headerTitle, isHebrew && styles.hebrewText]} numberOfLines={1}>
+            <View style={[styles.headerTitles, rtl && styles.headerTitlesHebrew]}>
+              <Text style={[styles.headerTitle, rtl && styles.hebrewText]} numberOfLines={1}>
                 {t('admin.hoursAdmin.title', 'Work constraints')}
               </Text>
-              <Text style={[styles.headerSubtitle, isHebrew && styles.hebrewText]} numberOfLines={2}>
+              <Text style={[styles.headerSubtitle, rtl && styles.hebrewText]} numberOfLines={2}>
                 {t('admin.hoursAdmin.constraintsModalSubtitle')}
               </Text>
             </View>
@@ -636,7 +636,7 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.sectionPad}>
-            <Text style={[styles.sectionLabel, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.whatToBlock')}</Text>
+            <Text style={[styles.sectionLabel, rtl && styles.hebrewText]}>{t('admin.hoursAdmin.whatToBlock')}</Text>
             <View style={styles.modeList}>
               {modeOptions.map((opt) => {
                 const active = mode === opt.key;
@@ -645,14 +645,14 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
                     key={opt.key}
                     onPress={() => setMode(opt.key)}
                     activeOpacity={0.85}
-                    style={[styles.modeCard, active && { borderColor: primary, backgroundColor: `${primary}0F`, shadowColor: primary }]}
+                    style={[styles.modeCard, styles.modeCardRtl, active && { borderColor: primary, backgroundColor: `${primary}0F`, shadowColor: primary }]}
                   >
                     <View style={[styles.modeIconWrap, active && { backgroundColor: `${primary}22` }]}>
                       <Ionicons name={opt.icon} size={22} color={active ? primary : UI.textSecondary} />
                     </View>
-                    <View style={[styles.modeTextCol, isHebrew && styles.modeTextColHebrew]}>
-                      <Text style={[styles.modeTitle, active && { color: primary }, isHebrew && styles.hebrewText]}>{opt.label}</Text>
-                      <Text style={[styles.modeHint, isHebrew && styles.hebrewText]}>{opt.hint}</Text>
+                    <View style={[styles.modeTextCol, rtl && styles.modeTextColHebrew]}>
+                      <Text style={[styles.modeTitle, active && { color: primary }, rtl && styles.hebrewText]}>{opt.label}</Text>
+                      <Text style={[styles.modeHint, rtl && styles.hebrewText]}>{opt.hint}</Text>
                     </View>
                     <Ionicons
                       name={active ? 'checkmark-circle' : 'ellipse-outline'}
@@ -668,16 +668,16 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
           {mode === 'hours' && (
             <>
               <View style={styles.card}>
-                <View style={styles.cardHeader}>
+                <View style={[styles.cardHeader, styles.cardHeaderRtl]}>
                   <Ionicons name="calendar-outline" size={20} color={primary} />
-                  <Text style={[styles.cardTitle, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.pickDateShort', 'Pick a date')}</Text>
+                  <Text style={[styles.cardTitle, rtl && styles.hebrewText]}>{t('admin.hoursAdmin.pickDateShort', 'Pick a date')}</Text>
                 </View>
                 <View style={styles.calendarShell}>{renderCalendar('hours')}</View>
               </View>
               <View style={styles.card}>
-                <View style={styles.cardHeader}>
+                <View style={[styles.cardHeader, styles.cardHeaderRtl]}>
                   <Ionicons name="hourglass-outline" size={20} color={primary} />
-                  <Text style={[styles.cardTitle, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.closedHours', 'Closed hours')}</Text>
+                  <Text style={[styles.cardTitle, rtl && styles.hebrewText]}>{t('admin.hoursAdmin.closedHours', 'Closed hours')}</Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => {
@@ -688,17 +688,17 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
                   activeOpacity={0.88}
                   style={[styles.timeRow, { borderColor: UI.border }]}
                 >
-                  <View style={styles.timeRowInner}>
+                  <View style={[styles.timeRowInner, styles.timeRowInnerRtl]}>
                     <View style={[styles.timeBadge, { backgroundColor: `${primary}14` }]}>
                       <Ionicons name="time" size={18} color={primary} />
                     </View>
-                    <View style={[styles.timeRowTextCol, isHebrew && styles.timeRowTextColHebrew]}>
-                      <Text style={[styles.timeRowLabel, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.tapToEditHours')}</Text>
-                      <Text style={[styles.timeRowValue, { writingDirection: 'ltr', textAlign: isHebrew ? 'right' : 'left' }]}>
+                    <View style={[styles.timeRowTextCol, rtl && styles.timeRowTextColHebrew]}>
+                      <Text style={[styles.timeRowLabel, rtl && styles.hebrewText]}>{t('admin.hoursAdmin.tapToEditHours')}</Text>
+                      <Text style={[styles.timeRowValue, { writingDirection: 'ltr', textAlign: 'right' }]}>
                         {displayTimeLabel(startTime)} — {displayTimeLabel(endTime)}
                       </Text>
                     </View>
-                    <Ionicons name={rtl ? 'chevron-back' : 'chevron-forward'} size={20} color={UI.textTertiary} />
+                    <Ionicons name="chevron-back" size={20} color={UI.textTertiary} />
                   </View>
                 </TouchableOpacity>
               </View>
@@ -707,9 +707,9 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
 
           {mode === 'single-day' && (
             <View style={styles.card}>
-              <View style={styles.cardHeader}>
+              <View style={[styles.cardHeader, styles.cardHeaderRtl]}>
                 <Ionicons name="sunny-outline" size={20} color={primary} />
-                <Text style={[styles.cardTitle, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.pickDateAllDay', 'Pick a date (closed all day)')}</Text>
+                <Text style={[styles.cardTitle, rtl && styles.hebrewText]}>{t('admin.hoursAdmin.pickDateAllDay', 'Pick a date (closed all day)')}</Text>
               </View>
               <View style={styles.calendarShell}>{renderCalendar('single')}</View>
             </View>
@@ -717,16 +717,16 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
 
           {mode === 'multi-days' && (
             <View style={styles.card}>
-              <View style={styles.cardHeader}>
+              <View style={[styles.cardHeader, styles.cardHeaderRtl]}>
                 <Ionicons name="git-merge-outline" size={20} color={primary} />
-                <Text style={[styles.cardTitle, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.pickDateRangeAllDay', 'Pick a date range (closed all day)')}</Text>
+                <Text style={[styles.cardTitle, rtl && styles.hebrewText]}>{t('admin.hoursAdmin.pickDateRangeAllDay', 'Pick a date range (closed all day)')}</Text>
               </View>
-              <Text style={[styles.rangeHelp, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.rangeHelp')}</Text>
+              <Text style={[styles.rangeHelp, rtl && styles.hebrewText]}>{t('admin.hoursAdmin.rangeHelp')}</Text>
               <View style={styles.calendarShell}>{renderCalendar('range')}</View>
               {rangeStartISO && rangeEndISO && (
-                <LinearGradient colors={[`${primary}20`, `${primary}08`]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.rangePill}>
+                <LinearGradient colors={[`${primary}20`, `${primary}08`]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.rangePill, styles.rangePillRtl]}>
                   <Ionicons name="checkmark-done" size={18} color={primary} />
-                  <Text style={[styles.rangePillText, isHebrew && styles.hebrewText]}>
+                  <Text style={[styles.rangePillText, rtl && styles.hebrewText]}>
                     {formatISOToMMDDYYYY(rangeStartISO)} — {formatISOToMMDDYYYY(rangeEndISO)}
                   </Text>
                 </LinearGradient>
@@ -735,11 +735,11 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
           )}
 
           <View style={styles.card}>
-            <View style={styles.cardHeader}>
+            <View style={[styles.cardHeader, styles.cardHeaderRtl]}>
               <Ionicons name="chatbubble-ellipses-outline" size={20} color={primary} />
-              <Text style={[styles.cardTitle, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.optionalReason', 'Reason (optional)')}</Text>
+              <Text style={[styles.cardTitle, rtl && styles.hebrewText]}>{t('admin.hoursAdmin.optionalReason', 'Reason (optional)')}</Text>
             </View>
-            <Text style={[styles.reasonHelper, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.reasonHelper')}</Text>
+            <Text style={[styles.reasonHelper, rtl && styles.hebrewText]}>{t('admin.hoursAdmin.reasonHelper')}</Text>
             <View style={[styles.reasonInputShell, { borderColor: reason.trim() ? `${primary}40` : UI.border }]}>
               <TextInput
                 value={reason}
@@ -774,7 +774,7 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
         <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           <LinearGradient colors={[UI.bg, UI.bg]} style={StyleSheet.absoluteFill} />
           <TouchableOpacity
-            style={[styles.saveBtn, { backgroundColor: primary, shadowColor: primary }, isSaving && styles.saveBtnDisabled]}
+            style={[styles.saveBtn, styles.saveBtnRtl, { backgroundColor: primary, shadowColor: primary }, isSaving && styles.saveBtnDisabled]}
             onPress={save}
             disabled={isSaving}
             activeOpacity={0.9}
@@ -783,8 +783,8 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
               <ActivityIndicator color="#FFFFFF" />
             ) : (
               <>
-                <Ionicons name="shield-checkmark-outline" size={22} color="#FFFFFF" style={{ marginEnd: 8 }} />
-                <Text style={[styles.saveBtnText, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.saveCTA', 'Save constraints')}</Text>
+                <Ionicons name="shield-checkmark-outline" size={22} color="#FFFFFF" style={{ marginStart: 8 }} />
+                <Text style={styles.saveBtnText}>{t('admin.hoursAdmin.saveCTA', 'Save constraints')}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -816,7 +816,7 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
                 <Ionicons name="arrow-back" size={22} color={UI.text} style={rtl ? { transform: [{ scaleX: -1 }] } : undefined} />
               </View>
             </TouchableOpacity>
-            <Text style={[styles.listModalTitle, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.upcomingConstraints', 'Upcoming constraints')}</Text>
+            <Text style={[styles.listModalTitle, rtl && { writingDirection: 'rtl' }]}>{t('admin.hoursAdmin.upcomingConstraints', 'Upcoming constraints')}</Text>
             <View style={{ width: 44 }} />
           </View>
           <ScrollView
@@ -825,15 +825,15 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
             showsVerticalScrollIndicator={false}
           >
             {existing.length === 0 ? (
-              <View style={[styles.emptyWrap, isHebrew && styles.emptyWrapHebrew]}>
+              <View style={[styles.emptyWrap, rtl && styles.emptyWrapHebrew]}>
                 <LinearGradient
                   colors={[`${primary}22`, `${primary}08`]}
-                  style={[styles.emptyOrb, isHebrew && styles.emptyOrbCentered]}
+                  style={[styles.emptyOrb, rtl && styles.emptyOrbCentered]}
                 >
                   <Ionicons name="calendar-clear-outline" size={48} color={primary} />
                 </LinearGradient>
-                <Text style={[styles.emptyTitle, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.noUpcomingConstraints', 'No upcoming constraints')}</Text>
-                <Text style={[styles.emptySub, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.emptyListHint')}</Text>
+                <Text style={[styles.emptyTitle, rtl && { writingDirection: 'rtl' }]}>{t('admin.hoursAdmin.noUpcomingConstraints', 'No upcoming constraints')}</Text>
+                <Text style={[styles.emptySub, rtl && { writingDirection: 'rtl' }]}>{t('admin.hoursAdmin.emptyListHint')}</Text>
               </View>
             ) : (
               <View style={styles.listBody}>
@@ -849,13 +849,13 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
                     const last = dates[dates.length - 1];
                     return (
                       <View key={reasonKey} style={styles.groupBlock}>
-                        <View style={styles.groupHeader}>
+                        <View style={[styles.groupHeader, styles.groupHeaderRtl]}>
                           <View style={[styles.groupAccent, { backgroundColor: primary }]} />
-                          <View style={[styles.groupTextCol, isHebrew && styles.groupTextColHebrew]}>
-                            <Text style={[styles.groupReason, isHebrew && styles.hebrewText]} numberOfLines={2}>
+                          <View style={[styles.groupTextCol, rtl && styles.groupTextColHebrew]}>
+                            <Text style={[styles.groupReason, rtl && styles.hebrewText]} numberOfLines={2}>
                               {reasonKey}
                             </Text>
-                            <Text style={[styles.groupDates, isHebrew && styles.hebrewText]}>
+                            <Text style={[styles.groupDates, rtl && styles.hebrewText]}>
                               {dates.length > 1 ? (
                                 <Text style={{ writingDirection: 'ltr' }}>
                                   {formatISOToMMDDYYYY(first)} — {formatISOToMMDDYYYY(last)}
@@ -877,16 +877,16 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
                               const end = String(c.end_time).slice(0, 5);
                               const isFullDay = start === '00:00' && end === '23:59';
                               return (
-                                <View key={c.id} style={[styles.constraintItem, { borderColor: UI.border }]}>
-                                  <View style={[styles.constraintTextBlock, isHebrew && styles.constraintTextBlockHebrew]}>
-                                    <Text style={[styles.constraintDate, isHebrew && styles.hebrewText]}>{formatDatePretty(c.date)}</Text>
-                                    <View style={[styles.timeChipInline, isHebrew && styles.timeChipInlineHebrew]}>
+                                <View key={c.id} style={[styles.constraintItem, styles.constraintItemRtl, { borderColor: UI.border }]}>
+                                  <View style={[styles.constraintTextBlock, rtl && styles.constraintTextBlockHebrew]}>
+                                    <Text style={[styles.constraintDate, rtl && styles.hebrewText]}>{formatDatePretty(c.date)}</Text>
+                                    <View style={[styles.timeChipInline, rtl && styles.timeChipInlineHebrew]}>
                                       <Ionicons name="time-outline" size={15} color={UI.textSecondary} />
                                       <Text
                                         style={[
                                           styles.timeChipInlineText,
                                           use24hTime && { writingDirection: 'ltr' },
-                                          isHebrew && styles.hebrewText,
+                                          rtl && styles.hebrewText,
                                         ]}
                                       >
                                         {isFullDay
@@ -922,17 +922,17 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
       <Modal visible={isHoursModalOpen} transparent animationType="fade" onRequestClose={() => setIsHoursModalOpen(false)}>
         <View style={styles.sheetBackdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsHoursModalOpen(false)} accessibilityRole="button" accessibilityLabel={t('close')} />
-          <View style={[styles.bottomSheet, rtl && styles.rtlRoot, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          <View style={[styles.bottomSheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
             <View style={styles.sheetGrabber} />
-            <Text style={[styles.sheetTitle, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.chooseClosedHours', 'Choose closed hours')}</Text>
+            <Text style={[styles.sheetTitle, rtl && { writingDirection: 'rtl' }]}>{t('admin.hoursAdmin.chooseClosedHours', 'Choose closed hours')}</Text>
             <View style={styles.wheelRow}>
               <View style={styles.wheelCol}>
-                <Text style={[styles.wheelLabel, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.start', 'Start')}</Text>
+                <Text style={[styles.wheelLabel, rtl && styles.hebrewText]}>{t('admin.hoursAdmin.start', 'Start')}</Text>
                 <WheelPicker options={timeOptions} value={tempStartHour} onChange={setTempStartHour} primaryColor={primary} />
               </View>
               <View style={{ width: 12 }} />
               <View style={styles.wheelCol}>
-                <Text style={[styles.wheelLabel, isHebrew && styles.hebrewText]}>{t('admin.hoursAdmin.end', 'End')}</Text>
+                <Text style={[styles.wheelLabel, rtl && styles.hebrewText]}>{t('admin.hoursAdmin.end', 'End')}</Text>
                 <WheelPicker options={timeOptions} value={tempEndHour} onChange={setTempEndHour} primaryColor={primary} />
               </View>
             </View>
@@ -945,7 +945,7 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
               style={[styles.sheetPrimaryBtn, { backgroundColor: primary }]}
               activeOpacity={0.9}
             >
-              <Text style={[styles.sheetPrimaryBtnText, isHebrew && styles.hebrewText]}>{t('save', 'Save')}</Text>
+              <Text style={[styles.sheetPrimaryBtnText, rtl && { writingDirection: 'rtl' }]}>{t('save', 'Save')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -961,7 +961,7 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
         <BookingSuccessAnimatedOverlay
           key={constraintSuccessAnimKey}
           lines={constraintSuccessLines}
-          rtl={isHebrew}
+          rtl={rtl}
           accentColor={primary}
           onDismiss={() => setShowConstraintSuccess(false)}
           gotItLabel={t('booking.gotIt', 'Got it')}
@@ -973,8 +973,7 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: UI.bg },
-  /** Mirrors flex rows + inline layout so Hebrew matches natural RTL (start = right). */
-  rtlRoot: { direction: 'rtl' },
+  rtlRoot: { direction: 'ltr' },
   safeTop: { zIndex: 2 },
   headerRow: {
     flexDirection: 'row',
@@ -983,6 +982,7 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     gap: 12,
   },
+  headerRowRtl: { flexDirection: 'row-reverse' },
   headerIconBtn: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   iconCircle: {
     width: 44,
@@ -1011,12 +1011,10 @@ const styles = StyleSheet.create({
   },
   scrollFlex: { flex: 1 },
   headerTitles: { flex: 1, justifyContent: 'center', alignItems: 'flex-start' },
-  /** Full-width stack so `textAlign: 'right'` anchors to the physical right edge in Hebrew. */
-  headerTitlesHebrew: { alignSelf: 'stretch', width: '100%', alignItems: 'stretch' },
+  headerTitlesHebrew: { alignSelf: 'stretch', alignItems: 'stretch' },
   headerTitle: { fontSize: 20, fontWeight: '800', color: UI.text, letterSpacing: -0.3 },
   headerSubtitle: { fontSize: 13, fontWeight: '600', color: UI.textSecondary, marginTop: 4, lineHeight: 18 },
-  /** Hebrew / RTL copy: flush right (explicit — do not rely on `direction` alone). */
-  hebrewText: { textAlign: 'right', writingDirection: 'rtl' },
+  hebrewText: { textAlign: 'right', writingDirection: 'rtl', alignSelf: 'stretch' },
   sectionPad: { paddingHorizontal: 16, paddingTop: 4 },
   sectionLabel: {
     fontSize: 13,
@@ -1026,8 +1024,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     marginBottom: 10,
     alignSelf: 'stretch',
+    textAlign: 'right',
   },
   modeList: { gap: 10 },
+  modeCardRtl: { flexDirection: 'row-reverse' },
   modeCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1069,6 +1069,7 @@ const styles = StyleSheet.create({
     }),
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  cardHeaderRtl: { flexDirection: 'row-reverse' },
   cardTitle: { fontSize: 16, fontWeight: '800', color: UI.text, flex: 1 },
   calendarShell: {
     borderRadius: 16,
@@ -1088,6 +1089,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignSelf: 'stretch',
   },
+  rangePillRtl: { flexDirection: 'row-reverse' },
   rangePillText: { fontSize: 14, fontWeight: '800', color: UI.text, flex: 1 },
   timeRow: {
     borderRadius: 16,
@@ -1096,8 +1098,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   timeRowInner: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
+  timeRowInnerRtl: { flexDirection: 'row-reverse' },
   timeRowTextCol: { flex: 1, minWidth: 0 },
-  timeRowTextColHebrew: { alignItems: 'flex-end' },
+  timeRowTextColHebrew: { alignItems: 'stretch' },
   timeBadge: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   timeRowLabel: { fontSize: 12, fontWeight: '700', color: UI.textSecondary, marginBottom: 2 },
   timeRowValue: { fontSize: 17, fontWeight: '800', color: UI.text },
@@ -1135,6 +1138,7 @@ const styles = StyleSheet.create({
       android: { elevation: 8 },
     }),
   },
+  saveBtnRtl: { flexDirection: 'row-reverse' },
   saveBtnDisabled: { opacity: 0.65 },
   saveBtnText: { color: '#FFFFFF', fontSize: 17, fontWeight: '800', textAlign: 'center' },
   listModalScroll: { flex: 1 },
@@ -1152,6 +1156,7 @@ const styles = StyleSheet.create({
   listBody: { paddingHorizontal: 16, paddingTop: 16 },
   groupBlock: { marginBottom: 20 },
   groupHeader: { flexDirection: 'row', gap: 12, marginBottom: 10, alignItems: 'flex-start' },
+  groupHeaderRtl: { flexDirection: 'row-reverse' },
   groupAccent: { width: 4, borderRadius: 2, minHeight: 40 },
   groupTextCol: { flex: 1, minWidth: 0 },
   groupTextColHebrew: { alignItems: 'flex-end' },
@@ -1168,6 +1173,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     gap: 10,
   },
+  constraintItemRtl: { flexDirection: 'row-reverse' },
   constraintTextBlock: { flex: 1, minWidth: 0 },
   constraintTextBlockHebrew: { alignItems: 'flex-end' },
   constraintDate: { fontSize: 14, fontWeight: '800', color: UI.textSecondary },
@@ -1214,7 +1220,7 @@ const styles = StyleSheet.create({
   sheetTitle: { fontSize: 18, fontWeight: '800', color: UI.text, marginBottom: 8, textAlign: 'center' },
   wheelRow: { flexDirection: 'row', marginTop: 4 },
   wheelCol: { flex: 1, minWidth: 0 },
-  wheelLabel: { fontSize: 12, fontWeight: '800', color: UI.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
+  wheelLabel: { fontSize: 12, fontWeight: '800', color: UI.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5, textAlign: 'center' },
   sheetPrimaryBtn: {
     marginTop: 8,
     paddingVertical: 16,

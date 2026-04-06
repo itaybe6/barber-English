@@ -6,7 +6,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -16,7 +15,12 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { useTranslation } from 'react-i18next';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  initialWindowMetrics,
+  SafeAreaProvider,
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Calendar as RNCalendar, LocaleConfig } from 'react-native-calendars';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
@@ -168,10 +172,12 @@ function CardSectionHeader({
 }) {
   if (layoutRtl) {
     return (
-      <View style={styles.cardHeaderRtlExplicit}>
-        <Text style={styles.cardTitleRtlExplicit} numberOfLines={3}>
-          {label}
-        </Text>
+      <View style={{ direction: 'ltr', flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12, width: '100%' }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 16, fontWeight: '800', color: UI.text, textAlign: 'right' }} numberOfLines={3}>
+            {label}
+          </Text>
+        </View>
         <Ionicons name={icon} size={20} color={primary} />
       </View>
     );
@@ -288,6 +294,7 @@ function TimeSlotPickerSheet({
                   style={[
                     styles.timeSheetRowText,
                     { writingDirection: 'ltr' },
+                    layoutRtl && { textAlign: 'right' },
                     on && { color: primary, fontWeight: '800' },
                   ]}
                 >
@@ -319,14 +326,7 @@ function CalendarReminderEditorModalInner({
   defaultDate,
 }: CalendarReminderEditorModalProps) {
   const insets = useSafeAreaInsets();
-  const statusBarFallback = Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0;
-  const mergedTop = Math.max(insets.top, statusBarFallback);
-  /** מודאל לפעמים מחזיר insets=0 לפריים ראשון — מינימום סטטוס־בר */
-  const safeTop = mergedTop > 0 ? mergedTop : Platform.OS === 'ios' ? 20 : statusBarFallback;
-  const gutterHorizontal = useMemo(
-    () => ({ marginLeft: 16 + insets.left, marginRight: 16 + insets.right }),
-    [insets.left, insets.right]
-  );
+  const gutterHorizontal = useMemo(() => ({ marginHorizontal: 16 }), []);
   const { colors: businessColors } = useBusinessColors();
   const { user } = useAuthStore();
   const { i18n } = useTranslation();
@@ -338,8 +338,8 @@ function CalendarReminderEditorModalInner({
   const rawLang = (i18n.resolvedLanguage || i18n.language || '').toLowerCase();
   const isHebrew = rawLang.startsWith('he') || rawLang.startsWith('iw');
   const calendarLocale = isHebrew ? 'he' : 'en';
-  /** פריסה שמאלית (LTR): טקסט עברי עם יישור וסדר אלמנטים כמו באנגלית — לפי העדפת מוצר */
-  const layoutRtl = false;
+  /** Modal copy is loaded with `lng: 'he'` (tHe) — always RTL layout for labels and fields */
+  const layoutRtl = true;
 
   if (visible) {
     LocaleConfig.defaultLocale = calendarLocale;
@@ -577,7 +577,7 @@ function CalendarReminderEditorModalInner({
   };
 
   return (
-    <View style={[styles.root, { paddingTop: safeTop }]}>
+    <SafeAreaView style={styles.root} edges={['top', 'left', 'right', 'bottom']}>
       <View style={styles.headerSafeWrap}>
         <LinearGradient
           colors={[`${primary}18`, `${primary}06`, 'transparent']}
@@ -585,13 +585,7 @@ function CalendarReminderEditorModalInner({
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
-        <View
-          style={[
-            styles.headerRow,
-            layoutRtl && styles.headerRowRtl,
-            { paddingLeft: 16 + insets.left, paddingRight: 16 + insets.right },
-          ]}
-        >
+        <View style={[styles.headerRow, layoutRtl && styles.headerRowRtl, styles.headerRowPad]}>
           <TouchableOpacity
             onPress={onClose}
             style={styles.headerIconBtn}
@@ -776,16 +770,7 @@ function CalendarReminderEditorModalInner({
           </View>
       </KeyboardAwareScreenScroll>
 
-        <View
-          style={[
-            styles.footer,
-            {
-              paddingBottom: Math.max(insets.bottom, 12),
-              paddingLeft: 16 + insets.left,
-              paddingRight: 16 + insets.right,
-            },
-          ]}
-        >
+        <View style={[styles.footer, styles.footerPad]}>
           <LinearGradient colors={[UI.bg, UI.bg]} style={StyleSheet.absoluteFill} />
           <TouchableOpacity
             style={[
@@ -847,14 +832,14 @@ function CalendarReminderEditorModalInner({
           onClose={() => setTimePickerWhich(null)}
           insetBottom={insets.bottom}
         />
-    </View>
+    </SafeAreaView>
   );
 }
 
 export default function CalendarReminderEditorModal(props: CalendarReminderEditorModalProps) {
   return (
     <Modal visible={props.visible} animationType="slide" onRequestClose={props.onClose}>
-      <SafeAreaProvider>
+      <SafeAreaProvider initialMetrics={initialWindowMetrics ?? undefined}>
         <CalendarReminderEditorModalInner {...props} />
       </SafeAreaProvider>
     </Modal>
@@ -862,7 +847,7 @@ export default function CalendarReminderEditorModal(props: CalendarReminderEdito
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: UI.bg },
+  root: { flex: 1, backgroundColor: UI.bg, direction: 'ltr' },
   headerSafeWrap: { zIndex: 2 },
   headerRow: {
     flexDirection: 'row',
@@ -872,6 +857,8 @@ const styles = StyleSheet.create({
   },
   /** Physical mirror: כפתור סגירה מימין, כותרות במרכז-שמאל */
   headerRowRtl: { flexDirection: 'row-reverse' },
+  headerRowPad: { paddingHorizontal: 16 },
+  footerPad: { paddingHorizontal: 16, paddingBottom: 12 },
   headerIconBtn: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   iconCircle: {
     width: 44,
@@ -888,19 +875,16 @@ const styles = StyleSheet.create({
   },
   scrollFlex: { flex: 1 },
   scrollContent: { paddingBottom: 120 },
-  scrollContentRtl: { flexGrow: 1, width: '100%', alignItems: 'stretch' },
+  scrollContentRtl: { flexGrow: 1, alignItems: 'stretch' },
   headerTitles: { flex: 1, justifyContent: 'center', alignItems: 'flex-start' },
-  /** RTL/Hebrew: stretch so `textAlign: 'right'` anchors to the physical right edge */
-  headerTitlesRtl: { alignSelf: 'stretch', width: '100%', alignItems: 'stretch' },
+  headerTitlesRtl: { alignSelf: 'stretch', alignItems: 'stretch' },
   headerTitle: { fontSize: 20, fontWeight: '800', color: UI.text, letterSpacing: -0.3 },
   headerSubtitle: { fontSize: 13, fontWeight: '600', color: UI.textSecondary, marginTop: 4, lineHeight: 18 },
   hebrewText: { textAlign: 'right', writingDirection: 'rtl' },
-  /** טקסט בלוק מלא — בלי זה `textAlign: 'right'` נשאר צמוד לשמאל ברוחב תוכן */
   hebrewTextBlock: {
     textAlign: 'right',
     writingDirection: 'rtl',
     alignSelf: 'stretch',
-    width: '100%',
   },
   card: {
     marginTop: 14,
@@ -923,7 +907,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   cardHeaderRtlExplicit: {
-    width: '100%',
+    alignSelf: 'stretch',
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 8,
@@ -1038,7 +1022,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: UI.text,
   },
-  fieldRtl: { alignSelf: 'stretch', width: '100%' },
+  fieldRtl: { alignSelf: 'stretch' },
   footer: {
     position: 'absolute',
     left: 0,

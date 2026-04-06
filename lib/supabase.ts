@@ -296,6 +296,10 @@ export interface BusinessProfile {
   require_client_approval?: boolean;
   /** When false, hide service images in admin service list, add/edit forms, and client booking. Defaults to true if unset. */
   show_service_images?: boolean;
+  /** When true, client home may show `home_fixed_message` (app-enforced). */
+  home_fixed_message_enabled?: boolean;
+  /** Fixed banner text for client home when `home_fixed_message_enabled` is true. */
+  home_fixed_message?: string | null;
   primary_color?: string; // Hex color code for primary UI color
   // Number of days forward to open booking window; defaults to 7 on server (legacy - now use booking_open_days_by_user)
   booking_open_days?: number;

@@ -359,29 +359,22 @@ export default function DesignCarousel({
           <View style={styles.designImageContainer}>
             <View style={styles.designImageWrapper}>
               <DesignCoverImage uri={designUri} style={styles.designImage} />
-              
-              {/* Premium Crown */}
+
               {isPremium && (
                 <View style={styles.premiumCrown}>
                   <Ionicons name="crown" size={16} color="#FFD700" />
                 </View>
               )}
-            </View>
-            
-            {/* Admin Profile Picture Overlay on Bottom Center */}
-            <View style={styles.adminProfileOverlay}>
-              <UploaderAvatar
-                key={`${design.user_id}-${userProfile?.image_url ?? ''}`}
-                imageUrl={userProfile?.image_url}
-                style={styles.adminProfileImage}
-              />
+
+              <View style={styles.adminProfileOverlay} pointerEvents="none">
+                <UploaderAvatar
+                  key={`${design.user_id}-${userProfile?.image_url ?? ''}`}
+                  imageUrl={userProfile?.image_url}
+                  style={styles.adminProfileImage}
+                />
+              </View>
             </View>
           </View>
-          
-          {/* Admin Name Below */}
-          <Text style={styles.adminName} numberOfLines={1}>
-            {userProfile?.name || t('common.user', 'User')}
-          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -533,7 +526,7 @@ const styles = StyleSheet.create({
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
     borderRadius: 16,
-    overflow: 'visible', // Allow profile picture to extend outside
+    overflow: 'hidden',
     position: 'relative',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
@@ -556,22 +549,22 @@ const styles = StyleSheet.create({
   },
   adminProfileOverlay: {
     position: 'absolute',
-    bottom: -25, // Half outside the image (25px is half of 50px profile size)
-    left: '50%',
-    marginLeft: -25, // Center horizontally (half of 50px profile size)
+    top: 10,
+    left: 10,
     zIndex: 3,
   },
   adminProfileImage: {
-    width: 50, // Increased from 40 to 50
-    height: 50, // Increased from 40 to 50
-    borderRadius: 25, // Increased from 20 to 25
-    borderWidth: 4,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
     borderColor: '#FFFFFF',
+    backgroundColor: '#FFFFFF',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 5,
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   premiumCrown: {
     position: 'absolute',
@@ -581,14 +574,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 6,
     zIndex: 5,
-  },
-  adminName: {
-    fontSize: 15, // Slightly larger font
-    fontWeight: '600',
-    color: '#1C1C1E',
-    textAlign: 'center',
-    marginTop: 25, // Account for larger profile picture extending outside
-    maxWidth: CARD_WIDTH,
   },
   // Modal styles
   modalOverlay: {

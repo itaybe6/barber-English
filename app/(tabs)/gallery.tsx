@@ -30,7 +30,7 @@ import type { Design, User } from '@/lib/supabase';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import * as ImagePicker from 'expo-image-picker';
 import { compressImages } from '@/lib/utils/imageCompression';
-import { supabase } from '@/lib/supabase';
+import { supabase, getBusinessId } from '@/lib/supabase';
 import { usersApi } from '@/lib/api/users';
 
 const { width } = Dimensions.get('window');
@@ -45,6 +45,11 @@ type PickedAsset = {
   base64?: string | null;
   mimeType?: string | null;
   fileName?: string | null;
+};
+
+type DesignUploaderProfile = {
+  id: string;
+  image_url?: string | null;
 };
 
 function guessMimeFromUri(uriOrName: string): string {
@@ -139,6 +144,7 @@ export default function GalleryScreen() {
   const [adminUsers, setAdminUsers] = useState<User[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [isCreating, setIsCreating] = useState(false);
+  const [uploaderById, setUploaderById] = useState<Record<string, DesignUploaderProfile>>({});
 
   useEffect(() => {
     let mounted = true;
@@ -151,6 +157,40 @@ export default function GalleryScreen() {
       mounted = false;
     };
   }, [fetchDesigns]);
+
+  useEffect(() => {
+    const loadUploaders = async () => {
+      const ids = Array.from(
+        new Set(
+          designs.map((d) => d.user_id).filter((id): id is string => Boolean(id))
+        )
+      );
+      if (ids.length === 0) {
+        setUploaderById({});
+        return;
+      }
+      try {
+        const businessId = getBusinessId();
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, image_url')
+          .in('id', ids)
+          .eq('business_id', businessId);
+        if (error) {
+          console.error('Gallery uploaders:', error);
+          return;
+        }
+        const map: Record<string, DesignUploaderProfile> = {};
+        (data || []).forEach((u) => {
+          map[u.id] = u as DesignUploaderProfile;
+        });
+        setUploaderById(map);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    loadUploaders();
+  }, [designs]);
 
   const loadAdmins = useCallback(async () => {
     try {
@@ -401,45 +441,49 @@ export default function GalleryScreen() {
               </TouchableOpacity>
             </View>
           }
-          renderItem={({ item }) => (
-            <TouchableOpacity style={[styles.tile, { width: tileSize, height: tileSize }]} onPress={() => {}} activeOpacity={0.92}>
-              <View style={[styles.imageContainer, { borderColor: border }]}>
-                <Image source={{ uri: coverUri(item) }} style={styles.image} resizeMode="cover" />
-                <LinearGradient colors={['transparent', 'rgba(0,0,0,0.72)']} style={styles.gradient}>
-                  <Text style={styles.designName} numberOfLines={2}>
-                    {item.name}
-                  </Text>
-                  <View style={styles.categoryTags}>
-                    {(item.categories || []).slice(0, 2).map((cat, idx) => (
-                      <View key={idx} style={styles.categoryTag}>
-                        <Text style={styles.categoryTagText}>{designCategories.find((c) => c.id === cat)?.name || cat}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </LinearGradient>
-
-                <TouchableOpacity
-                  style={styles.favoriteButton}
-                  onPress={() => toggleFavorite(item.id)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityLabel={t('favorites.toggle', 'Favorite')}
-                >
-                  <Heart size={20} color={Colors.white} fill={favorites.includes(item.id) ? Colors.error : 'transparent'} />
-                </TouchableOpacity>
-
-                <View style={styles.popularityContainer}>
-                  {Array(5)
-                    .fill(0)
-                    .map((_, idx) => (
-                      <View
-                        key={idx}
-                        style={[styles.popularityDot, idx < (item.popularity || 0) && { backgroundColor: primary }]}
+          renderItem={({ item }) => {
+            const uploader = item.user_id ? uploaderById[item.user_id] : null;
+            return (
+              <TouchableOpacity style={[styles.tile, { width: tileSize, height: tileSize }]} onPress={() => {}} activeOpacity={0.92}>
+                <View style={[styles.imageContainer, { borderColor: border }]}>
+                  <Image source={{ uri: coverUri(item) }} style={styles.image} resizeMode="cover" />
+                  {item.user_id ? (
+                    <View style={styles.uploaderAvatarWrap} pointerEvents="none">
+                      <Image
+                        source={
+                          uploader?.image_url
+                            ? { uri: uploader.image_url }
+                            : require('@/assets/images/user.png')
+                        }
+                        style={styles.uploaderAvatarImage}
+                        resizeMode="cover"
                       />
-                    ))}
+                    </View>
+                  ) : null}
+
+                  <TouchableOpacity
+                    style={styles.favoriteButton}
+                    onPress={() => toggleFavorite(item.id)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityLabel={t('favorites.toggle', 'Favorite')}
+                  >
+                    <Heart size={20} color={Colors.white} fill={favorites.includes(item.id) ? Colors.error : 'transparent'} />
+                  </TouchableOpacity>
+
+                  <View style={styles.popularityContainer}>
+                    {Array(5)
+                      .fill(0)
+                      .map((_, idx) => (
+                        <View
+                          key={idx}
+                          style={[styles.popularityDot, idx < (item.popularity || 0) && { backgroundColor: primary }]}
+                        />
+                      ))}
+                  </View>
                 </View>
-              </View>
-            </TouchableOpacity>
-          )}
+              </TouchableOpacity>
+            );
+          }}
         />
       )}
 
@@ -738,50 +782,35 @@ const styles = StyleSheet.create({
   tile: {},
   imageContainer: {
     flex: 1,
-    borderRadius: 16,
+    borderRadius: 22,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
+    position: 'relative',
   },
   image: {
     width: '100%',
     height: '100%',
   },
-  gradient: {
+  uploaderAvatarWrap: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 12,
-    justifyContent: 'flex-end',
+    top: 10,
+    left: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    zIndex: 2,
   },
-  designName: {
-    color: Colors.white,
-    fontSize: 16,
-    textAlign: 'right',
-    marginBottom: 4,
-    fontFamily: 'FbPragmati-Bold',
-  },
-  categoryTags: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    flexWrap: 'wrap',
-  },
-  categoryTag: {
-    backgroundColor: 'rgba(255,255,255,0.28)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginLeft: 4,
-    marginBottom: 4,
-  },
-  categoryTagText: {
-    color: Colors.white,
-    fontSize: 12,
-    fontFamily: 'FbPragmati-Light',
+  uploaderAvatarImage: {
+    width: '100%',
+    height: '100%',
   },
   favoriteButton: {
     position: 'absolute',
-    top: 8,
+    bottom: 8,
     right: 8,
     width: 36,
     height: 36,
@@ -789,11 +818,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 3,
   },
   popularityContainer: {
     position: 'absolute',
-    top: 10,
-    left: 10,
+    bottom: 8,
+    left: 8,
     flexDirection: 'row',
     gap: 3,
   },

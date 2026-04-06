@@ -7,7 +7,6 @@ import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
 import { useDesignsStore } from '@/stores/designsStore';
 import { useProductsStore } from '@/stores/productsStore';
-import { LinearGradient } from 'expo-linear-gradient';
 import { ScrollView } from 'react-native';
 import { supabase, getBusinessId } from '@/lib/supabase';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
@@ -105,12 +104,6 @@ const DesignTile = memo(({ item, onOpen, uploaderUser, businessColors, isProduct
               </View>
             ))}
           </ScrollView>
-          <LinearGradient colors={["transparent", "rgba(0,0,0,0.7)"]} style={styles.gradient}>
-            <Text style={styles.designName}>{item.name}</Text>
-            {isProduct && (item as Product).price && (
-              <Text style={styles.productPrice}>${(item as Product).price}</Text>
-            )}
-          </LinearGradient>
           {urls.length > 1 && (
             <View style={styles.multiBadge}>
               <Ionicons name="images-outline" size={12} color={businessColors.primary} />
@@ -118,28 +111,17 @@ const DesignTile = memo(({ item, onOpen, uploaderUser, businessColors, isProduct
             </View>
           )}
           
-          {/* Manager Profile Circle - Only show for designs */}
           {uploaderUser && !isProduct && (
-            <View style={styles.managerProfileContainer}>
-              <LinearGradient
-                colors={['#000000', '#333333', '#666666']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.managerProfileRing}
-              >
-                <View style={styles.managerProfileInner}>
-                  <Image
-                    source={
-                      uploaderUser.image_url 
-                        ? { uri: uploaderUser.image_url }
-                        : require('@/assets/images/user.png')
-                    }
-                    style={styles.managerProfileImage}
-                    resizeMode="cover"
-                  />
-                </View>
-              </LinearGradient>
-              <View style={styles.staticRing} />
+            <View style={styles.uploaderAvatarWrap} pointerEvents="none">
+              <Image
+                source={
+                  uploaderUser.image_url
+                    ? { uri: uploaderUser.image_url }
+                    : require('@/assets/images/user.png')
+                }
+                style={styles.uploaderAvatarImage}
+                resizeMode="cover"
+              />
             </View>
           )}
         </View>
@@ -537,7 +519,7 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     flex: 1,
-    borderRadius: 12,
+    borderRadius: 22,
     overflow: 'hidden',
     position: 'relative',
     backgroundColor: Colors.card,
@@ -551,66 +533,10 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  gradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 12,
-    justifyContent: 'flex-start',
-  },
-  designName: {
-    color: Colors.white,
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'left',
-    marginBottom: 4,
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  productPrice: {
-    color: Colors.white,
-    fontSize: 12,
-    fontWeight: '500',
-    textAlign: 'left',
-    opacity: 0.9,
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  categoryTags: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    flexWrap: 'wrap',
-  },
-  categoryTag: {
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginLeft: 4,
-    marginBottom: 4,
-  },
-  categoryTagText: {
-    color: Colors.white,
-    fontSize: 10,
-  },
-  favoriteButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   multiBadge: {
     position: 'absolute',
     top: 8,
-    left: 8,
+    right: 8,
     backgroundColor: 'rgba(0,0,0,0.35)',
     borderRadius: 10,
     paddingHorizontal: 6,
@@ -724,50 +650,31 @@ const styles = StyleSheet.create({
   skeletonBlock: {
     flex: 1,
     height: tileSize - 8,
-    borderRadius: 12,
+    borderRadius: 22,
     backgroundColor: Colors.card,
     margin: 4,
   },
-  // Manager Profile Styles
-  managerProfileContainer: {
+  uploaderAvatarWrap: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    zIndex: 20,
-  },
-  managerProfileRing: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    padding: 2,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  managerProfileInner: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    top: 10,
+    left: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    overflow: 'hidden',
     backgroundColor: '#FFFFFF',
-    padding: 1,
+    zIndex: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  managerProfileImage: {
+  uploaderAvatarImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 25,
-  },
-  staticRing: {
-    position: 'absolute',
-    top: -1,
-    left: -1,
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    borderWidth: 1.5,
-    borderColor: '#000000',
-    opacity: 0.7,
   },
   // Toggle Button Styles
   toggleContainer: {

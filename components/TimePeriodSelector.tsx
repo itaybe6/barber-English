@@ -56,6 +56,8 @@ interface TimePeriodSelectorProps {
   onSelectPeriod: (period: TimePeriod) => void;
   disabled?: boolean;
   hideHeader?: boolean;
+  /** When set, only these periods are listed (e.g. same-day: drop windows that already ended). */
+  allowedPeriods?: TimePeriod[] | null;
 }
 
 export default function TimePeriodSelector({
@@ -63,9 +65,15 @@ export default function TimePeriodSelector({
   onSelectPeriod,
   disabled = false,
   hideHeader = false,
+  allowedPeriods = null,
 }: TimePeriodSelectorProps) {
   const { t } = useTranslation();
   const { colors } = useBusinessColors();
+
+  const allowed =
+    allowedPeriods == null ? null : new Set<TimePeriod>(allowedPeriods);
+  const optionsToShow =
+    allowed == null ? timePeriodOptions : timePeriodOptions.filter((o) => allowed.has(o.value));
 
   return (
     <View style={styles.outer}>
@@ -91,7 +99,15 @@ export default function TimePeriodSelector({
       )}
 
       <View style={styles.optionsStack}>
-        {timePeriodOptions.map((option) => {
+        {optionsToShow.length === 0 ? (
+          <Text style={[styles.emptyHint, { color: colors.textSecondary }]}>
+            {t(
+              'waitlist.noPeriodsLeftToday',
+              'אין יותר חלונות זמן היום לפי שעות הפעילות — בחרו תאריך אחר או נסו שוב מחר.'
+            )}
+          </Text>
+        ) : null}
+        {optionsToShow.map((option) => {
           const selected = selectedPeriod === option.value;
           return (
             <TouchableOpacity
@@ -291,5 +307,13 @@ const styles = StyleSheet.create({
   },
   disabledText: {
     opacity: 0.45,
+  },
+  emptyHint: {
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 22,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
   },
 });

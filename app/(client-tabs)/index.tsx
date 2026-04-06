@@ -31,7 +31,6 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import MovingBorderCard from '@/components/MovingBorderCard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import LoginRequiredModal from '@/components/LoginRequiredModal';
 import { Appointment as AvailableTimeSlot } from '@/lib/supabase';
 import { businessProfileApi } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
@@ -413,19 +412,13 @@ export default function ClientHomeScreen() {
 
   // Removed scroll-driven translate animation (normal scroll behavior)
 
-  const requireAuth = (actionDescription: string, onAuthed: () => void) => {
+  const requireAuth = (onAuthed: () => void) => {
     if (!isAuthenticated) {
-      setLoginModal({
-        visible: true,
-        title: t('login.required'),
-        message: t('login.pleaseSignInTo', { action: actionDescription }),
-      });
+      router.push('/login');
       return;
     }
     onAuthed();
   };
-
-  const [loginModal, setLoginModal] = useState<{ visible: boolean; title?: string; message?: string }>({ visible: false });
 
   const SCREEN_W = Dimensions.get('window').width;
   const EMPTY_CARD_WIDTH = Math.max(280, SCREEN_W - 48); // 24px padding on both sides
@@ -994,34 +987,6 @@ export default function ClientHomeScreen() {
             <SafeAreaView edges={['left', 'right']} style={styles.clientHomeSafeArea}>
               <View style={[styles.contentWrapperSheet, { zIndex: 10 }]}>
                 <View style={styles.contentWrapperInner}>
-        {waitlistEntries.length > 0 && (
-          <View style={styles.waitlistInlineHost}>
-            <WaitlistHomeFabPanel
-              entries={waitlistEntries}
-              formatWaitlistDate={formatWaitlistDate}
-              isRemoving={isRemovingFromWaitlist}
-              onRequestRemoveAll={() => {
-                Alert.alert(
-                  t('waitlist.leave.title'),
-                  t('waitlist.leave.message'),
-                  [
-                    { text: t('cancel'), style: 'cancel' },
-                    {
-                      text: t('confirm'),
-                      style: 'destructive',
-                      onPress: () => {
-                        waitlistEntries.forEach((entry) => {
-                          handleRemoveFromWaitlist(entry.id);
-                        });
-                      },
-                    },
-                  ]
-                );
-              }}
-            />
-          </View>
-        )}
-
         {/* Swap Opportunities Section */}
         <SwapOpportunities />
 
@@ -1035,7 +1000,7 @@ export default function ClientHomeScreen() {
             /* ── Next Appointment Card (clean, like admin) ── */
             <TouchableOpacity
               activeOpacity={0.88}
-              onPress={() => requireAuth(t('appointments.title'), () => router.push('/(client-tabs)/appointments'))}
+              onPress={() => requireAuth(() => router.push('/(client-tabs)/appointments'))}
               style={styles.clientNextCard}
             >
               <View style={styles.clientNextHeader}>
@@ -1097,7 +1062,7 @@ export default function ClientHomeScreen() {
               disabled={isBlocked || awaitingApproval}
               onPress={() => {
                 if (!isAuthenticated) {
-                  setLoginModal({ visible: true, title: t('login.required'), message: t('login.pleaseSignInToBook') });
+                  router.push('/login');
                   return;
                 }
                 if (isBlocked) { Alert.alert(t('account.blocked'), t('account.blocked.message')); return; }
@@ -1142,6 +1107,34 @@ export default function ClientHomeScreen() {
               </View>
             </TouchableOpacity>
           )}
+          {waitlistEntries.length > 0 ? (
+            <View style={styles.waitlistTagHost}>
+              <WaitlistHomeFabPanel
+                entries={waitlistEntries}
+                formatWaitlistDate={formatWaitlistDate}
+                isRemoving={isRemovingFromWaitlist}
+                triggerVariant="tag"
+                onRequestRemoveAll={() => {
+                  Alert.alert(
+                    t('waitlist.leave.title'),
+                    t('waitlist.leave.message'),
+                    [
+                      { text: t('cancel'), style: 'cancel' },
+                      {
+                        text: t('confirm'),
+                        style: 'destructive',
+                        onPress: () => {
+                          waitlistEntries.forEach((entry) => {
+                            handleRemoveFromWaitlist(entry.id);
+                          });
+                        },
+                      },
+                    ]
+                  );
+                }}
+              />
+            </View>
+          ) : null}
         </View>
 
         {/* Design Carousel */}
@@ -1151,11 +1144,7 @@ export default function ClientHomeScreen() {
             onDesignPress={(design) => {
               // Handle design press - could navigate to gallery or booking
               if (!isAuthenticated) {
-                setLoginModal({
-                  visible: true,
-                  title: t('login.required', 'Login Required'),
-                  message: t('gallery.loginToView', 'Please sign in to view full designs.'),
-                });
+                router.push('/login');
                 return;
               }
               router.push('/(client-tabs)/gallery');
@@ -1170,11 +1159,7 @@ export default function ClientHomeScreen() {
             onProductPress={(product) => {
               // Handle product press - show product details
               if (!isAuthenticated) {
-                setLoginModal({
-                  visible: true,
-                  title: t('login.required', 'Login Required'),
-                  message: t('products.loginToViewDetails', 'Please sign in to view product details.'),
-                });
+                router.push('/login');
                 return;
               }
               // Product details will be shown in the modal
@@ -1322,37 +1307,9 @@ export default function ClientHomeScreen() {
           </View>
         )}
 
-        {/* Static Map Section under Follow us – removed (moved above) */}
-        
-        {/* Social section merged above with Location */}
-        
-        {/* Footer: Slotlys logo with link */}
-              <View style={styles.footerContainer}>
-                <TouchableOpacity
-                  onPress={() => Linking.openURL('https://slotlys.com/')}
-                  activeOpacity={0.8}
-                  accessibilityLabel={t('common.openWebsite','Open website')}
-                >
-                  <Image
-                    source={require('../../assets/images/ddoown-08.png')}
-                    style={styles.footerLogo}
-                    resizeMode="contain"
-                  />
-                </TouchableOpacity>
-              </View>
                 </View>
               </View>
 
-              <LoginRequiredModal
-                visible={loginModal.visible}
-                title={loginModal.title}
-                message={loginModal.message}
-                onClose={() => setLoginModal({ visible: false })}
-                onLogin={() => {
-                  setLoginModal({ visible: false });
-                  router.push('/login');
-                }}
-              />
             </SafeAreaView>
           </ScrollView>
         </View>
@@ -1681,11 +1638,11 @@ const styles = StyleSheet.create<any>({
     paddingHorizontal: 24,
     marginBottom: 0, // No margin to avoid extra white space
   },
-  waitlistInlineHost: {
-    paddingHorizontal: 24,
+  waitlistTagHost: {
     marginTop: 12,
-    marginBottom: 8,
-    alignItems: 'stretch',
+    width: '100%',
+    alignItems: 'center',
+    paddingHorizontal: 4,
   },
   sectionTopSpacer: {
     marginTop: 4,
@@ -2197,17 +2154,6 @@ const styles = StyleSheet.create<any>({
   whatsappCircleButton: {
     backgroundColor: '#F2F2F7',
   },
-  // Footer developer logo
-  footerContainer: {
-    alignItems: 'center',
-    marginTop: 40, // Increased top margin to create more space from Follow us buttons
-    marginBottom: 0,
-  },
-  footerLogo: {
-    width: 160,
-    height: 32,
-    opacity: 0.9,
-  },
   loadingCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
@@ -2225,7 +2171,7 @@ const styles = StyleSheet.create<any>({
   },
   // ── Lava Lamp Book Card ──
   lavaBookCard: {
-    borderRadius: 20,
+    borderRadius: 9999,
     overflow: 'hidden',
     marginHorizontal: 4,
     position: 'relative',
@@ -2238,8 +2184,9 @@ const styles = StyleSheet.create<any>({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    paddingHorizontal: 18,
     paddingVertical: 18,
+    paddingStart: 26,
+    paddingEnd: 16,
     zIndex: 2,
   },
   lavaBookIconCircle: {
@@ -2268,9 +2215,9 @@ const styles = StyleSheet.create<any>({
     textAlign: 'right',
   },
   lavaBookArrow: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,

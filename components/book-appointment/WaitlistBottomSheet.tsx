@@ -7,6 +7,7 @@ import {
   Platform,
   Alert,
   I18nManager,
+  Modal,
 } from 'react-native';
 import {
   BottomSheetModal,
@@ -25,11 +26,16 @@ import TimePeriodSelector, { TimePeriod } from '@/components/TimePeriodSelector'
 import BookingSuccessAnimatedOverlay, {
   type SuccessLine,
 } from '@/components/book-appointment/BookingSuccessAnimatedOverlay';
-import { toBcp47Locale } from '@/lib/i18nLocale';
+import { isRtlLanguage, toBcp47Locale } from '@/lib/i18nLocale';
+import { bidiIsolateLtrValue, bidiRtlLabelWithColon } from '@/lib/utils/rtlPunctuation';
+import { getSelectableTimePeriodsForDate } from '@/lib/utils/waitlistTimePeriods';
+import { formatWaitlistSuccessSubheadDate } from '@/lib/utils/formatWaitlistSuccessSubheadDate';
 
 interface Props {
   visible: boolean;
   onClose: () => void;
+  /** After fullscreen waitlist success — e.g. go to client home */
+  onWaitlistSuccessGotIt?: () => void;
   selectedDate: string;
   serviceName: string;
   barberId?: string;
@@ -40,6 +46,7 @@ const SNAP_POINTS = ['68%', '92%'];
 export default function WaitlistBottomSheet({
   visible,
   onClose,
+  onWaitlistSuccessGotIt,
   selectedDate,
   serviceName,
   barberId,
@@ -55,26 +62,56 @@ export default function WaitlistBottomSheet({
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successAnimKey, setSuccessAnimKey] = useState(0);
+  /** Snapshot so success copy stays valid if local state resets before the modal paints. */
+  const [successSnapshot, setSuccessSnapshot] = useState<{
+    period: TimePeriod;
+    dateStr: string;
+    service: string;
+  } | null>(null);
+
+  const allowedPeriods = useMemo(
+    () => getSelectableTimePeriodsForDate(selectedDate),
+    [selectedDate]
+  );
 
   // Open / close in response to `visible` prop
   useEffect(() => {
     if (visible) {
       setSelectedPeriod(null);
       setShowSuccess(false);
+      setSuccessSnapshot(null);
       sheetRef.current?.present();
     } else {
       sheetRef.current?.dismiss();
     }
   }, [visible]);
 
+  useEffect(() => {
+    if (!visible) return;
+    if (selectedPeriod && !allowedPeriods.includes(selectedPeriod)) {
+      setSelectedPeriod(null);
+    }
+  }, [visible, allowedPeriods, selectedPeriod]);
+
   const handleDismiss = useCallback(() => {
     onClose();
   }, [onClose]);
 
+  const handleWaitlistSuccessDismiss = useCallback(() => {
+    setShowSuccess(false);
+    setSuccessSnapshot(null);
+    onClose();
+    onWaitlistSuccessGotIt?.();
+  }, [onClose, onWaitlistSuccessGotIt]);
+
   const formatDate = useCallback(
     (dateString: string) => {
       if (!dateString) return '';
-      const date = new Date(dateString);
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateString).trim());
+      const date = m
+        ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+        : new Date(dateString);
+      if (Number.isNaN(date.getTime())) return '';
       return date.toLocaleDateString(toBcp47Locale(i18n?.language), {
         weekday: 'long',
         month: 'long',
@@ -89,36 +126,71 @@ export default function WaitlistBottomSheet({
       ? t('waitlist.anyService', 'Any available service')
       : serviceName;
 
-  const periodLabelKey =
-    selectedPeriod === 'morning'
-      ? 'time_period.morning'
-      : selectedPeriod === 'afternoon'
-        ? 'time_period.afternoon'
-        : selectedPeriod === 'evening'
-          ? 'time_period.evening'
-          : selectedPeriod === 'any'
-            ? 'time_period.any'
-            : '';
+  const successPeriodKey = useMemo(() => {
+    const p = successSnapshot?.period ?? selectedPeriod;
+    if (p === 'morning') return 'time_period.morning';
+    if (p === 'afternoon') return 'time_period.afternoon';
+    if (p === 'evening') return 'time_period.evening';
+    if (p === 'any') return 'time_period.any';
+    return '';
+  }, [successSnapshot?.period, selectedPeriod]);
 
   const successLines = useMemo((): SuccessLine[] => {
-    if (!showSuccess || !selectedDate || !selectedPeriod || !periodLabelKey) return [];
+    const dateStr = successSnapshot?.dateStr ?? selectedDate;
+    const svc =
+      successSnapshot?.service != null
+        ? successSnapshot.service === 'General service' || !successSnapshot.service
+          ? t('waitlist.anyService', 'Any available service')
+          : successSnapshot.service
+        : serviceDisplay;
+    if (!showSuccess || !dateStr || !successPeriodKey) return [];
+    const langRtl = isRtlLanguage(i18n?.language);
+    const serviceLabel = t('booking.field.service', 'Service');
+    const windowLabel = t('waitlist.preferredWindow', 'Preferred time');
+    const periodName = t(successPeriodKey as never);
+    const notifyRaw = t(
+      'waitlist.successAnimatedNotify',
+      "We'll let you know as soon as\na slot opens in the time you chose"
+    );
+
     return [
       { variant: 'headline', text: t('waitlist.successAnimatedHeadline', "You're on the waitlist") },
-      { variant: 'accent', text: `${t('booking.field.service', 'Service')}: ${serviceDisplay}` },
-      { variant: 'body', text: `${t('booking.field.date', 'Date')}: ${formatDate(selectedDate)}` },
       {
-        variant: 'body',
-        text: `${t('waitlist.preferredWindow', 'Preferred time')}: ${t(periodLabelKey as never)}`,
+        variant: 'subheadline',
+        text: t('waitlist.successForDateLine', 'לתאריך {{date}}', {
+          date: formatWaitlistSuccessSubheadDate(dateStr, toBcp47Locale(i18n?.language)),
+        }),
       },
       {
-        variant: 'body',
-        text: t(
-          'waitlist.successAnimatedNotify',
-          "We'll notify you when a slot opens in your preferred window."
-        ),
+        variant: 'detailLabel',
+        text: langRtl ? bidiRtlLabelWithColon(serviceLabel) : `${serviceLabel}:`,
+      },
+      {
+        variant: 'detailValue',
+        text: langRtl ? bidiIsolateLtrValue(svc) : svc,
+      },
+      {
+        variant: 'detailLabel',
+        text: langRtl ? bidiRtlLabelWithColon(windowLabel) : `${windowLabel}:`,
+      },
+      {
+        variant: 'detailValue',
+        text: langRtl ? bidiIsolateLtrValue(periodName) : periodName,
+      },
+      {
+        variant: 'emphasis',
+        text: notifyRaw,
       },
     ];
-  }, [showSuccess, selectedDate, selectedPeriod, periodLabelKey, serviceDisplay, t, formatDate]);
+  }, [
+    showSuccess,
+    successSnapshot,
+    selectedDate,
+    successPeriodKey,
+    serviceDisplay,
+    t,
+    i18n?.language,
+  ]);
 
   const handleSubmit = async () => {
     if (!selectedPeriod) {
@@ -146,8 +218,16 @@ export default function WaitlistBottomSheet({
         barberId || undefined
       );
       if (success) {
+        setSuccessSnapshot({
+          period: selectedPeriod,
+          dateStr: selectedDate,
+          service: serviceName || 'General service',
+        });
         setSuccessAnimKey((k) => k + 1);
         setShowSuccess(true);
+        try {
+          sheetRef.current?.dismiss();
+        } catch {}
       } else {
         Alert.alert(
           t('error.generic', 'Error'),
@@ -269,6 +349,7 @@ export default function WaitlistBottomSheet({
               onSelectPeriod={setSelectedPeriod}
               disabled={isLoading}
               hideHeader
+              allowedPeriods={allowedPeriods}
             />
           </View>
 
@@ -302,20 +383,26 @@ export default function WaitlistBottomSheet({
         </BottomSheetScrollView>
       </BottomSheetModal>
 
-      {/* Full-screen success overlay rendered outside the sheet */}
-      {showSuccess && (
-        <BookingSuccessAnimatedOverlay
-          key={successAnimKey}
-          lines={successLines}
-          rtl={isRTL}
-          accentColor={colors.primary}
-          onDismiss={() => {
-            setShowSuccess(false);
-            sheetRef.current?.dismiss();
-            onClose();
-          }}
-        />
-      )}
+      {/* Full-screen success — must use Modal so it appears above @gorhom/bottom-sheet portal */}
+      <Modal
+        visible={showSuccess}
+        animationType="fade"
+        transparent
+        statusBarTranslucent
+        onRequestClose={handleWaitlistSuccessDismiss}
+      >
+        {showSuccess ? (
+          <BookingSuccessAnimatedOverlay
+            key={successAnimKey}
+            lines={successLines}
+            rtl={isRTL}
+            accentColor={colors.primary}
+            centerMeta
+            gotItLabel={t('booking.gotIt', 'הבנתי')}
+            onDismiss={handleWaitlistSuccessDismiss}
+          />
+        ) : null}
+      </Modal>
     </>
   );
 }

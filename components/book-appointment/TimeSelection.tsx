@@ -5,13 +5,14 @@ import {
   Pressable,
   StyleSheet,
   FlatList,
-  I18nManager,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated from 'react-native-reanimated';
 
 import { getBookingStepBarTopFromBottom } from '@/components/book-appointment/BookingStepTabs';
+import { bookingStepRowEntering } from '@/components/book-appointment/bookingStepListEnterAnimation';
 
 export interface TimeSelectionProps {
   visible: boolean;
@@ -49,27 +50,29 @@ export default function TimeSelection({
     </View>
   );
 
-  const renderItem = ({ item }: { item: string }) => {
+  const renderItem = ({ item, index }: { item: string; index: number }) => {
     const selected = selectedTime === item;
     return (
-      <Pressable
-        onPress={() => onSelectTime(item)}
-        style={({ pressed }) => [
-          localStyles.slotRow,
-          selected && { borderColor: 'transparent', backgroundColor: 'rgba(255,255,255,0.96)' },
-          pressed && { opacity: 0.82, transform: [{ scale: 0.99 }] },
-        ]}
-        accessibilityRole="button"
-        accessibilityState={{ selected }}
-        accessibilityLabel={item}
-      >
-        <Ionicons
-          name={selected ? 'checkmark-circle' : 'time-outline'}
-          size={18}
-          color={selected ? primaryColor : '#9CA3AF'}
-        />
-        <Text style={localStyles.slotTime}>{item}</Text>
-      </Pressable>
+      <Animated.View entering={bookingStepRowEntering(index)}>
+        <Pressable
+          onPress={() => onSelectTime(item)}
+          style={({ pressed }) => [
+            localStyles.slotRow,
+            selected && { borderColor: 'transparent', backgroundColor: 'rgba(255,255,255,0.96)' },
+            pressed && { opacity: 0.82, transform: [{ scale: 0.99 }] },
+          ]}
+          accessibilityRole="button"
+          accessibilityState={{ selected }}
+          accessibilityLabel={item}
+        >
+          <Ionicons
+            name={selected ? 'checkmark-circle' : 'time-outline'}
+            size={18}
+            color={selected ? primaryColor : '#9CA3AF'}
+          />
+          <Text style={localStyles.slotTime}>{item}</Text>
+        </Pressable>
+      </Animated.View>
     );
   };
 

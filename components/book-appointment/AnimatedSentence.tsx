@@ -15,6 +15,10 @@ export type AnimatedSentenceProps = TextProps & {
   fullWidth?: boolean;
   /** With fullWidth, packs each wrapped line (e.g. center the sentence block). */
   rowJustify?: 'flex-start' | 'center' | 'flex-end';
+  /** Keep all words on one row (may clip on tiny screens — pair with shorter copy / smaller font). */
+  nowrap?: boolean;
+  /** Horizontal gap between word chips (default 4). Use a larger value for very large headlines. */
+  wordGap?: number;
 };
 
 export const AnimatedSentence = memo(
@@ -27,6 +31,8 @@ export const AnimatedSentence = memo(
     rtl = false,
     fullWidth = true,
     rowJustify = 'flex-start',
+    nowrap = false,
+    wordGap = 4,
     ...rest
   }: AnimatedSentenceProps) => {
     if (typeof children !== 'string') {
@@ -47,8 +53,8 @@ export const AnimatedSentence = memo(
       <View
         style={{
           flexDirection: 'row',
-          flexWrap: 'wrap',
-          gap: 4,
+          flexWrap: nowrap ? 'nowrap' : 'wrap',
+          gap: wordGap,
           justifyContent: rowJustify,
           ...(rowJustify === 'center' ? { alignContent: 'center' as const } : null),
           ...(fullWidth ? { width: '100%' as const, alignSelf: 'stretch' as const } : { alignSelf: 'flex-start' as const }),

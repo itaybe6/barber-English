@@ -17,7 +17,16 @@ import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-a
 
 export interface SuccessLine {
   text: string;
-  variant?: 'headline' | 'body' | 'accent';
+  variant?:
+    | 'headline'
+    | 'subheadline'
+    | 'body'
+    | 'accent'
+    | 'emphasis'
+    | 'detailLabel'
+    | 'detailValue'
+    /** Horizontal rule; use inside details to split blocks (e.g. after services + stylist name). */
+    | 'sectionDivider';
 }
 
 type Props = {
@@ -31,6 +40,8 @@ type Props = {
   onAddToCalendar?: () => void;
   addToCalendarLabel?: string;
   gotItLabel: string;
+  /** Horizontally center the meta block (date, divider, service, time, closing line) — e.g. waitlist success. */
+  centerMeta?: boolean;
 };
 
 function computeBaseDelays(texts: string[], stagger: number, lineGapMs: number): number[] {
@@ -66,7 +77,7 @@ function lightenHex(hex: string, ratio: number): string {
   return `#${to(mix(r))}${to(mix(g))}${to(mix(b))}`;
 }
 
-/** All copy flush to the physical left; Hebrew word order preserved via AnimatedSentence rtl + shrink-wrap. */
+/** Headline + meta block share `edgeStart` (RTL-aware) so Hebrew lines align the same edge; AnimatedSentence rtl keeps word order. */
 export default function BookingSuccessAnimatedOverlay({
   lines,
   rtl,
@@ -77,10 +88,17 @@ export default function BookingSuccessAnimatedOverlay({
   onAddToCalendar: onAddToCalendarProp,
   addToCalendarLabel: addToCalendarLabelProp,
   gotItLabel,
+  centerMeta = false,
 }: Props) {
   const showCalendar = Boolean(onAddToCalendarProp && addToCalendarLabelProp?.trim());
   const insets = useSafeAreaInsets();
-  const displayLines = useMemo(() => lines.filter((l) => l.text.trim().length > 0), [lines]);
+  const displayLines = useMemo(
+    () =>
+      lines.filter(
+        (l) => l.variant === 'sectionDivider' || l.text.trim().length > 0
+      ),
+    [lines]
+  );
   const texts = useMemo(() => displayLines.map((l) => l.text), [displayLines]);
   const baseDelays = useMemo(
     () => computeBaseDelays(texts, stagger, lineGapMs),
@@ -97,14 +115,34 @@ export default function BookingSuccessAnimatedOverlay({
   /** Physical left edge of the screen (under forceRTL, flex-start is the right side). */
   const edgeStart = I18nManager.isRTL ? ('flex-end' as const) : ('flex-start' as const);
 
-  const headlineLines = displayLines.filter((l) => l.variant === 'headline');
-  const detailLines = displayLines.filter((l) => l.variant !== 'headline');
-  const headlineIndexOffset = 0;
-  const detailIndexOffset = headlineLines.length;
+  const headlineOnly = displayLines.filter((l) => l.variant === 'headline');
+  const subheadlineOnly = displayLines.filter((l) => l.variant === 'subheadline');
+  const detailLines = displayLines.filter(
+    (l) => l.variant !== 'headline' && l.variant !== 'subheadline'
+  );
+  const showLeadingDivider =
+    detailLines.length > 0 && !detailLines.some((l) => l.variant === 'sectionDivider');
+
+  const delayForLine = (line: SuccessLine) => {
+    const idx = displayLines.indexOf(line);
+    if (idx >= 0) return baseDelays[idx] ?? 0;
+    const fallback = displayLines.findIndex(
+      (l) => l.variant === line.variant && l.text === line.text
+    );
+    return fallback >= 0 ? baseDelays[fallback] ?? 0 : 0;
+  };
+
+  const metaCrossAlign = centerMeta ? ('center' as const) : edgeStart;
+  const metaTextAlign: 'center' | 'left' = centerMeta ? 'center' : 'left';
+  const headlineTextAlign: 'center' | 'left' = centerMeta ? 'center' : 'left';
 
   const headlineStyle = [
     styles.headline,
-    { textAlign: 'left' as const, writingDirection, color: '#FFFFFF' },
+    { textAlign: headlineTextAlign, writingDirection, color: '#FFFFFF' },
+  ];
+  const subheadlineStyle = [
+    styles.subheadline,
+    { textAlign: metaTextAlign, writingDirection, color: '#FFFFFF' },
   ];
 
   return (
@@ -133,14 +171,16 @@ export default function BookingSuccessAnimatedOverlay({
         keyboardShouldPersistTaps="handled"
       >
         <View style={[styles.copyBlock, { alignItems: edgeStart }]}>
-          <View style={[styles.headlineBlock, { alignItems: edgeStart }]}>
-            {headlineLines.map((line, i) => {
-              const delay = baseDelays[headlineIndexOffset + i] ?? 0;
+          <View style={[styles.headlineBlock, { alignItems: metaCrossAlign }]}>
+            {headlineOnly.map((line, i) => {
+              const delay = delayForLine(line);
               return (
-                <View key={`h-${i}`} style={[styles.lineWrap, { alignSelf: edgeStart }]}>
+                <View key={`h-${i}`} style={[styles.lineWrap, { alignSelf: metaCrossAlign }]}>
                   <AnimatedSentence
                     rtl={rtl}
                     fullWidth={false}
+                    rowJustify={centerMeta ? 'center' : 'flex-start'}
+                    wordGap={14}
                     stagger={stagger}
                     baseDelay={delay}
                     style={headlineStyle}
@@ -153,45 +193,124 @@ export default function BookingSuccessAnimatedOverlay({
             })}
           </View>
 
-          <View style={[styles.divider, { alignSelf: edgeStart }]} />
+          {/* Date, divider, details — edge-aligned with headline, or centered when `centerMeta` (waitlist). */}
+          <View style={[styles.detailsMetaColumn, { alignItems: metaCrossAlign }]}>
+            {subheadlineOnly.map((line, i) => (
+              <View
+                key={`s-${i}`}
+                style={[styles.subheadlineLineWrap, styles.lineWrap, { alignSelf: metaCrossAlign }]}
+              >
+                <AnimatedSentence
+                  rtl={rtl}
+                  fullWidth={false}
+                  nowrap
+                  rowJustify={centerMeta ? 'center' : 'flex-start'}
+                  stagger={stagger}
+                  baseDelay={delayForLine(line)}
+                  style={subheadlineStyle}
+                  maxFontSizeMultiplier={1.12}
+                >
+                  {line.text}
+                </AnimatedSentence>
+              </View>
+            ))}
 
-          <View style={[styles.detailBlock, { alignItems: edgeStart }]}>
-            {detailLines.map((line, i) => {
-              const delay = baseDelays[detailIndexOffset + i] ?? 0;
-              const variant = line.variant ?? 'body';
-              const detailStyle =
-                variant === 'accent'
-                  ? [
-                      styles.detailAccent,
-                      {
-                        textAlign: 'left' as const,
-                        writingDirection,
-                        color: 'rgba(255,255,255,0.96)',
-                      },
-                    ]
-                  : [
-                      styles.detailBody,
-                      {
-                        textAlign: 'left' as const,
-                        writingDirection,
-                        color: 'rgba(255,255,255,0.82)',
-                      },
-                    ];
-              return (
-                <View key={`d-${i}`} style={[styles.lineWrapDetail, { alignSelf: edgeStart }]}>
-                  <AnimatedSentence
-                    rtl={rtl}
-                    fullWidth={false}
-                    stagger={stagger}
-                    baseDelay={delay}
-                    style={detailStyle}
-                    maxFontSizeMultiplier={1.2}
+            {showLeadingDivider ? (
+              <View style={[styles.divider, { alignSelf: metaCrossAlign }]} />
+            ) : null}
+
+            <View style={[styles.detailBlock, { alignItems: metaCrossAlign }]}>
+              {detailLines.map((line, i) => {
+                const delay = delayForLine(line);
+                const variant = line.variant ?? 'body';
+                if (variant === 'sectionDivider') {
+                  return (
+                    <View
+                      key={`div-${i}`}
+                      style={[
+                        styles.divider,
+                        styles.dividerInSection,
+                        { alignSelf: metaCrossAlign },
+                      ]}
+                    />
+                  );
+                }
+                const detailStyle =
+                  variant === 'accent' || variant === 'detailLabel'
+                    ? [
+                        styles.detailAccent,
+                        {
+                          textAlign: metaTextAlign,
+                          writingDirection,
+                          color: '#FFFFFF',
+                        },
+                      ]
+                    : variant === 'emphasis'
+                      ? [
+                          styles.detailEmphasis,
+                          {
+                            textAlign: metaTextAlign,
+                            writingDirection,
+                            color: 'rgba(255,255,255,0.94)',
+                          },
+                        ]
+                      : variant === 'detailValue'
+                        ? [
+                            styles.detailMetaValue,
+                            {
+                              textAlign: metaTextAlign,
+                              writingDirection,
+                              color: 'rgba(255,255,255,0.94)',
+                            },
+                          ]
+                        : [
+                            styles.detailBody,
+                            {
+                              textAlign: metaTextAlign,
+                              writingDirection,
+                              color: 'rgba(255,255,255,0.82)',
+                            },
+                          ];
+                return (
+                  <View
+                    key={`d-${i}`}
+                    style={[
+                      styles.lineWrapDetail,
+                      variant === 'detailLabel' && styles.detailLabelLineWrap,
+                      variant === 'detailValue' && styles.detailValueLineWrap,
+                      variant === 'emphasis' && styles.emphasisLineWrap,
+                      { alignSelf: metaCrossAlign },
+                    ]}
                   >
-                    {line.text}
-                  </AnimatedSentence>
-                </View>
-              );
-            })}
+                    {variant === 'emphasis' ? (
+                      /* One Text node so BiDi places the final period after the last word (AnimatedSentence splits words and breaks RTL punctuation). */
+                      <Text
+                        style={[
+                          detailStyle,
+                          centerMeta && styles.detailEmphasisTextCenterFill,
+                          !centerMeta && rtl && styles.detailEmphasisTextRtl,
+                        ]}
+                        maxFontSizeMultiplier={1.2}
+                      >
+                        {line.text}
+                      </Text>
+                    ) : (
+                      <AnimatedSentence
+                        rtl={rtl}
+                        fullWidth={false}
+                        rowJustify={centerMeta ? 'center' : 'flex-start'}
+                        stagger={stagger}
+                        baseDelay={delay}
+                        style={detailStyle}
+                        maxFontSizeMultiplier={1.2}
+                      >
+                        {line.text}
+                      </AnimatedSentence>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -201,24 +320,52 @@ export default function BookingSuccessAnimatedOverlay({
         pointerEvents="box-none"
       >
         <View style={styles.footerInner}>
-          {showCalendar ? (
-            <TouchableOpacity
-              style={[styles.btnSecondary, { borderColor: 'rgba(255,255,255,0.55)' }]}
-              onPress={onAddToCalendarProp}
-              activeOpacity={0.82}
-            >
-              <Ionicons name="calendar-outline" size={21} color="#FFFFFF" />
-              <Text style={styles.btnSecondaryText}>{addToCalendarLabelProp}</Text>
-            </TouchableOpacity>
-          ) : null}
           <TouchableOpacity
-            style={[styles.btnSecondary, { borderColor: 'rgba(255,255,255,0.55)' }]}
+            style={
+              centerMeta
+                ? [styles.btnGotItSolidPill, { shadowColor: accentColor }]
+                : [styles.btnSecondary, { borderColor: 'rgba(255,255,255,0.55)' }]
+            }
             onPress={onDismiss}
-            activeOpacity={0.82}
+            activeOpacity={centerMeta ? 0.88 : 0.82}
             accessibilityRole="button"
           >
-            <Text style={styles.btnSecondaryText}>{gotItLabel}</Text>
+            <Text
+              style={[
+                styles.btnSecondaryText,
+                centerMeta && { color: accentColor },
+              ]}
+            >
+              {gotItLabel}
+            </Text>
           </TouchableOpacity>
+          {showCalendar ? (
+            <TouchableOpacity
+              style={
+                centerMeta
+                  ? styles.btnAddCalendarTagPill
+                  : [styles.btnSecondary, { borderColor: 'rgba(255,255,255,0.55)' }]
+              }
+              onPress={onAddToCalendarProp}
+              activeOpacity={centerMeta ? 0.88 : 0.82}
+              accessibilityRole="button"
+            >
+              <Ionicons
+                name="calendar-outline"
+                size={centerMeta ? 17 : 21}
+                color="#FFFFFF"
+              />
+              <Text
+                style={
+                  centerMeta
+                    ? [styles.btnAddCalendarTagText, styles.btnAddCalendarTagTextLight]
+                    : styles.btnSecondaryText
+                }
+              >
+                {addToCalendarLabelProp}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
     </View>
@@ -246,6 +393,24 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 4,
   },
+  subheadlineLineWrap: {
+    marginTop: 4,
+    marginBottom: 10,
+    maxWidth: '100%',
+  },
+  subheadline: {
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: -0.35,
+    lineHeight: 26,
+    textShadowColor: 'rgba(0,0,0,0.18)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+  },
+  detailsMetaColumn: {
+    width: '100%',
+    marginTop: 4,
+  },
   headline: {
     fontSize: 76,
     fontWeight: '900',
@@ -266,21 +431,60 @@ const styles = StyleSheet.create({
     letterSpacing: -0.24,
     lineHeight: 30,
   },
+  /** Waitlist-style value line: regular weight under a bold label */
+  detailMetaValue: {
+    fontSize: 22,
+    fontWeight: '400',
+    letterSpacing: -0.2,
+    lineHeight: 30,
+  },
+  detailLabelLineWrap: {
+    marginBottom: 2,
+  },
+  detailValueLineWrap: {
+    marginBottom: 12,
+  },
   detailAccent: {
     fontSize: 24,
     fontWeight: '800',
     letterSpacing: -0.32,
     lineHeight: 32,
   },
+  detailEmphasis: {
+    fontSize: 23,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+    lineHeight: 31,
+  },
+  /** Override LTR-ish textAlign from shared detail styles so Hebrew wraps with period at true sentence end */
+  detailEmphasisTextRtl: {
+    textAlign: 'right',
+    writingDirection: 'rtl' as const,
+    alignSelf: 'stretch',
+  },
+  detailEmphasisTextCenterFill: {
+    alignSelf: 'stretch',
+    width: '100%',
+    textAlign: 'center',
+  },
+  emphasisLineWrap: {
+    marginTop: 22,
+    paddingTop: 4,
+  },
   divider: {
     height: 3,
     width: 56,
     borderRadius: 2,
-    marginBottom: 22,
+    marginBottom: 14,
+    marginTop: 2,
     backgroundColor: 'rgba(255,255,255,0.55)',
   },
+  dividerInSection: {
+    marginTop: 12,
+    marginBottom: 12,
+  },
   detailBlock: {
-    gap: 6,
+    gap: 4,
     width: '100%',
   },
   footerBar: {
@@ -307,6 +511,57 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     width: '100%',
     backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  /** Waitlist / booking success (`centerMeta`): full white pill, label uses `accentColor` in JSX */
+  btnGotItSolidPill: {
+    borderRadius: 999,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 0,
+    ...Platform.select({
+      ios: {
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.22,
+        shadowRadius: 14,
+      },
+      android: { elevation: 6 },
+    }),
+  },
+  /** Compact pill under «Got it» — frosted white so it reads secondary vs solid primary */
+  btnAddCalendarTagPill: {
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.34)',
+    alignSelf: 'center',
+    maxWidth: '100%',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.55)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
+      },
+      android: { elevation: 3 },
+    }),
+  },
+  btnAddCalendarTagText: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.08,
+  },
+  btnAddCalendarTagTextLight: {
+    color: '#FFFFFF',
   },
   btnSecondaryText: {
     fontSize: 17,

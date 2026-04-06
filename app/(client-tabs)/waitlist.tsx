@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -23,9 +23,12 @@ import BookingSuccessAnimatedOverlay, {
 import TimePeriodSelector, { TimePeriod } from '@/components/TimePeriodSelector';
 import { useWaitlistStore } from '@/stores/waitlistStore';
 import { isRtlLanguage, toBcp47Locale } from '@/lib/i18nLocale';
+import { bidiIsolateLtrValue, bidiRtlLabelWithColon } from '@/lib/utils/rtlPunctuation';
 import { useAuthStore } from '@/stores/authStore';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { getScrollContentPaddingBottomForFloatingClientTabBar } from '@/constants/clientTabBarInsets';
+import { getSelectableTimePeriodsForDate } from '@/lib/utils/waitlistTimePeriods';
+import { formatWaitlistSuccessSubheadDate } from '@/lib/utils/formatWaitlistSuccessSubheadDate';
 
 export default function WaitlistScreen() {
   const router = useRouter();
@@ -49,9 +52,24 @@ export default function WaitlistScreen() {
   const isValidDate = Boolean(selectedDate && selectedDate !== '');
   const displayDate = isValidDate ? selectedDate : new Date().toISOString().split('T')[0];
 
+  const allowedPeriods = useMemo(
+    () => getSelectableTimePeriodsForDate(isValidDate ? selectedDate : ''),
+    [isValidDate, selectedDate]
+  );
+
+  useEffect(() => {
+    if (selectedPeriod && !allowedPeriods.includes(selectedPeriod)) {
+      setSelectedPeriod(null);
+    }
+  }, [allowedPeriods, selectedPeriod]);
+
   const formatDate = useCallback(
     (dateString: string) => {
-      const date = new Date(dateString);
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateString).trim());
+      const date = m
+        ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+        : new Date(dateString);
+      if (Number.isNaN(date.getTime())) return '';
       return date.toLocaleDateString(toBcp47Locale(i18n?.language), {
         weekday: 'long',
         year: 'numeric',
@@ -138,26 +156,44 @@ export default function WaitlistScreen() {
     }
     const svc =
       serviceName === 'General service' ? t('waitlist.anyService', 'Any available service') : serviceName;
+    const langRtl = isRtlLanguage(i18n?.language);
+    const serviceLabel = t('booking.field.service', 'Service');
+    const windowLabel = t('waitlist.preferredWindow', 'Preferred time');
+    const periodName = t(periodLabelKey as never);
+    const notifyRaw = t(
+      'waitlist.successAnimatedNotify',
+      "We'll let you know as soon as\na slot opens in the time you chose"
+    );
     return [
       {
         variant: 'headline',
         text: t('waitlist.successAnimatedHeadline', "You're on the waitlist"),
       },
       {
-        variant: 'accent',
-        text: `${t('booking.field.service', 'Service')}: ${svc}`,
+        variant: 'subheadline',
+        text: t('waitlist.successForDateLine', 'לתאריך {{date}}', {
+          date: formatWaitlistSuccessSubheadDate(selectedDate, toBcp47Locale(i18n?.language)),
+        }),
       },
       {
-        variant: 'body',
-        text: `${t('booking.field.date', 'Date')}: ${formatDate(selectedDate)}`,
+        variant: 'detailLabel',
+        text: langRtl ? bidiRtlLabelWithColon(serviceLabel) : `${serviceLabel}:`,
       },
       {
-        variant: 'body',
-        text: `${t('waitlist.preferredWindow', 'Preferred time')}: ${t(periodLabelKey as never)}`,
+        variant: 'detailValue',
+        text: langRtl ? bidiIsolateLtrValue(svc) : svc,
       },
       {
-        variant: 'body',
-        text: t('waitlist.successAnimatedNotify', "We'll notify you when a slot opens in your preferred window."),
+        variant: 'detailLabel',
+        text: langRtl ? bidiRtlLabelWithColon(windowLabel) : `${windowLabel}:`,
+      },
+      {
+        variant: 'detailValue',
+        text: langRtl ? bidiIsolateLtrValue(periodName) : periodName,
+      },
+      {
+        variant: 'emphasis',
+        text: notifyRaw,
       },
     ];
   }, [
@@ -167,12 +203,12 @@ export default function WaitlistScreen() {
     periodLabelKey,
     serviceName,
     t,
-    formatDate,
+    i18n?.language,
   ]);
 
   const dismissWaitlistSuccess = () => {
     setShowWaitlistSuccessModal(false);
-    router.push('/(client-tabs)/book-appointment');
+    router.replace('/(client-tabs)' as any);
   };
 
   return (
@@ -274,7 +310,12 @@ export default function WaitlistScreen() {
               </View>
             </View>
 
-            <TimePeriodSelector selectedPeriod={selectedPeriod} onSelectPeriod={setSelectedPeriod} disabled={isLoading} />
+            <TimePeriodSelector
+              selectedPeriod={selectedPeriod}
+              onSelectPeriod={setSelectedPeriod}
+              disabled={isLoading}
+              allowedPeriods={allowedPeriods}
+            />
 
             <View style={styles.footer}>
               <TouchableOpacity
@@ -343,6 +384,7 @@ export default function WaitlistScreen() {
               lines={waitlistSuccessLines}
               rtl={isRtlLanguage(i18n?.language)}
               accentColor={colors.primary}
+              centerMeta
               onDismiss={dismissWaitlistSuccess}
               gotItLabel={t('booking.gotIt', 'Got it')}
             />

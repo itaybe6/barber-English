@@ -1,16 +1,12 @@
 import React from "react";
-import { Tabs, useRouter } from "expo-router";
+import { Tabs } from "expo-router";
 import { View } from "react-native";
 import { useTranslation } from "react-i18next";
-import LoginRequiredModal from "@/components/LoginRequiredModal";
 import { MenuProvider } from "@/components/shopify-tab-bar/menu-provider";
 import { AnimatedTabsContainer } from "@/components/shopify-tab-bar/animated-tabs-container";
 import { ClientFloatingTabBar } from "@/components/shopify-tab-bar/client-floating-tab-bar";
 export default function ClientTabsLayout() {
-  const router = useRouter();
   const { t } = useTranslation();
-
-  const [loginModal, setLoginModal] = React.useState<{ visible: boolean; title?: string; message?: string }>({ visible: false });
 
   return (
     <MenuProvider>
@@ -35,18 +31,7 @@ export default function ClientTabsLayout() {
           </Tabs>
         </AnimatedTabsContainer>
 
-        <ClientFloatingTabBar setLoginModal={setLoginModal} />
-
-        <LoginRequiredModal
-          visible={loginModal.visible}
-          title={loginModal.title}
-          message={loginModal.message}
-          onClose={() => setLoginModal({ visible: false })}
-          onLogin={() => {
-            setLoginModal({ visible: false });
-            router.push("/login");
-          }}
-        />
+        <ClientFloatingTabBar />
       </View>
     </MenuProvider>
   );

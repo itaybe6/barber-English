@@ -1,6 +1,9 @@
 import React from 'react';
 import { View, Text, StyleSheet, I18nManager } from 'react-native';
+import Animated from 'react-native-reanimated';
+
 import BookingAnimatedCalendar from '@/components/book-appointment/games-calendar/BookingAnimatedCalendar';
+import { bookingStepRowEntering } from '@/components/book-appointment/bookingStepListEnterAnimation';
 
 type DayObj = { fullDate: Date };
 
@@ -54,32 +57,36 @@ export default function DaySelection({
         </Text>
       </View>
 
-      <View style={[styles.calendarSectionCard, { marginTop: 16 }]}>
-        <View
-          style={[
-            styles.calendarFixedBox,
-            !I18nManager.isRTL && { direction: 'ltr' },
-          ]}
-        >
-          <BookingAnimatedCalendar
-            bookingOpenDays={bookingOpenDays}
-            dayAvailability={dayAvailability}
-            selectedDate={selectedDate}
-            days={days}
-            language={language}
-            primaryColor={primaryColor}
-            onSelectDayIndex={onSelectDayIndex}
-            onClearTime={onClearTime}
-          />
+      <Animated.View entering={bookingStepRowEntering(0)}>
+        <View style={[styles.calendarSectionCard, { marginTop: 16 }]}>
+          <View
+            style={[
+              styles.calendarFixedBox,
+              !I18nManager.isRTL && { direction: 'ltr' },
+            ]}
+          >
+            <BookingAnimatedCalendar
+              bookingOpenDays={bookingOpenDays}
+              dayAvailability={dayAvailability}
+              selectedDate={selectedDate}
+              days={days}
+              language={language}
+              primaryColor={primaryColor}
+              onSelectDayIndex={onSelectDayIndex}
+              onClearTime={onClearTime}
+            />
+          </View>
         </View>
-      </View>
+      </Animated.View>
 
-      {/* Legend */}
-      <View style={localStyles.legend}>
-        <LegendItem dot="#22c55e" label={t('booking.legend.available', 'יש תורים')} />
-        <LegendItem dot="#ef4444" label={t('booking.legend.full', 'מלא')} />
-        <LegendItem dot="#C7C7CC" label={t('booking.legend.closed', 'לא עובד')} />
-      </View>
+      {/* Legend — white pill so labels stay readable on the pink backdrop */}
+      <Animated.View style={localStyles.legendOuter} entering={bookingStepRowEntering(1)}>
+        <View style={localStyles.legendPill}>
+          <LegendItem dot="#22c55e" label={t('booking.legend.available', 'יש תורים')} />
+          <LegendItem dot="#ef4444" label={t('booking.legend.full', 'מלא')} />
+          <LegendItem dot="#C7C7CC" label={t('booking.legend.closed', 'סגור')} />
+        </View>
+      </Animated.View>
     </View>
   );
 }
@@ -115,13 +122,27 @@ const localStyles = StyleSheet.create({
     color: 'rgba(255,255,255,0.78)',
     textAlign: 'center',
   },
-  legend: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 20,
+  legendOuter: {
     marginTop: 14,
     paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  legendPill: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    maxWidth: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   legendItem: {
     flexDirection: 'row',
@@ -136,7 +157,7 @@ const localStyles = StyleSheet.create({
   legendLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.82)',
+    color: '#374151',
     letterSpacing: -0.1,
   },
 });

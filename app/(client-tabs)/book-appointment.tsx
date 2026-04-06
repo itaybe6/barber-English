@@ -424,6 +424,12 @@ export default function BookAppointment() {
   const totalDuration = selectedServices.reduce((sum, s) => sum + (s.duration_minutes ?? 60), 0);
   const totalPrice = selectedServices.reduce((sum, s) => sum + (s.price ?? 0), 0);
   const selectedServicesKey = selectedServices.map(s => s.id).join(',');
+  /** All selected names for waitlist (DB + success UI); matches booking confirm `join(' + ')`. */
+  const waitlistServiceSummary = useMemo(() => {
+    if (selectedServices.length === 0) return 'General service';
+    if (selectedServices.length === 1) return selectedServices[0].name;
+    return selectedServices.map((s) => s.name).join(' + ');
+  }, [selectedServices]);
   const [selectedServiceIndex, setSelectedServiceIndex] = useState<number>(0);
   const [availableServices, setAvailableServices] = useState<Service[]>([]);
   const [isLoadingServices, setIsLoadingServices] = useState<boolean>(false);
@@ -475,7 +481,8 @@ export default function BookAppointment() {
   const finalizeStep2ToDay = React.useCallback(() => {
     try { scrollRef.current?.scrollTo({ y: 0, animated: false }); } catch {}
     setCurrentStep(3);
-    step2Fade.value = 1;
+    // Do NOT reset step2Fade here: it would flash step 2 at full opacity for a frame before React
+    // commits currentStep === 3 (ServiceSelection still mounted until then). Reset when re-entering step 2 (useEffect below).
     hasTriggeredStep3.current = false;
     isTransitioning.current = false;
   }, []);
@@ -1595,26 +1602,26 @@ export default function BookAppointment() {
     }
     lines.push({
       variant: 'accent',
-      text: multi
-        ? `${t('booking.field.services', 'שירותים')}: ${allNames}`
-        : `${t('booking.field.service', 'שירות')}: ${allNames}`,
+      text: allNames,
     });
     if (selectedBarber?.name) {
       lines.push({
         variant: 'body',
-        text: `${t('booking.step.barber', 'ספר/ית')}: ${selectedBarber.name}`,
+        text: selectedBarber.name,
       });
     }
-    lines.push({
-      variant: 'body',
-      text: `${t('booking.field.date', 'תאריך')}: ${dateFormatted}`,
-    });
-    lines.push({
-      variant: 'body',
-      text: multi
-        ? `${t('booking.field.time', 'שעה')}: ${selectedTime} – ${timeEnd}`
-        : `${t('booking.field.time', 'שעה')}: ${selectedTime}`,
-    });
+    lines.push({ variant: 'sectionDivider', text: '' });
+    lines.push(
+      { variant: 'detailLabel', text: t('booking.successLineOnDate', 'בתאריך') },
+      { variant: 'detailValue', text: dateFormatted }
+    );
+    lines.push(
+      { variant: 'detailLabel', text: t('booking.successLineAtTime', 'בשעה') },
+      {
+        variant: 'detailValue',
+        text: multi ? `${selectedTime} – ${timeEnd}` : selectedTime,
+      }
+    );
     if (multi) {
       lines.push({
         variant: 'body',
@@ -1807,8 +1814,9 @@ export default function BookAppointment() {
       <WaitlistBottomSheet
         visible={showWaitlistSheet}
         onClose={() => setShowWaitlistSheet(false)}
+        onWaitlistSuccessGotIt={() => router.replace('/(client-tabs)' as any)}
         selectedDate={selectedDate ? toLocalDateStr(selectedDate) : ''}
-        serviceName={selectedService?.name || 'שירות כללי'}
+        serviceName={waitlistServiceSummary}
         barberId={selectedBarber?.id || ''}
       />
 
@@ -1897,6 +1905,7 @@ export default function BookAppointment() {
             lines={bookingSuccessLines}
             rtl={isRtlLanguage(i18n?.language)}
             accentColor={colors.primary}
+            centerMeta
             onDismiss={() => {
               setShowSuccessModal(false);
               try {

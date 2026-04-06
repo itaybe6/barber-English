@@ -25,13 +25,7 @@ const PLUS_WIGGLE_DEGREES = 18;
 const PLUS_WIGGLE_DURATION = 280;
 const PLUS_WIGGLE_PAUSE = 1500;
 
-type SetLoginModal = (v: { visible: boolean; title?: string; message?: string }) => void;
-
-interface Props {
-  setLoginModal: SetLoginModal;
-}
-
-export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
+export const ClientFloatingTabBar: React.FC = () => {
   const router = useRouter();
   const segments = useSegments();
   const insets = useSafeAreaInsets();
@@ -53,11 +47,7 @@ export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
 
   const navigate = (path: string, requireAuth = false) => {
     if (requireAuth && !isAuthenticated) {
-      setLoginModal({
-        visible: true,
-        title: t("login.required", "Login Required"),
-        message: t("login.pleaseSignInTo", "Please sign in to continue."),
-      });
+      router.push("/login");
       return;
     }
     router.push(path as any);
@@ -65,11 +55,7 @@ export const ClientFloatingTabBar: React.FC<Props> = ({ setLoginModal }) => {
 
   const handleBook = () => {
     if (!isAuthenticated) {
-      setLoginModal({
-        visible: true,
-        title: t("login.required", "Login Required"),
-        message: t("login.pleaseSignInToBook", "Please sign in to book an appointment."),
-      });
+      router.push("/login");
       return;
     }
     if (isBlocked) {

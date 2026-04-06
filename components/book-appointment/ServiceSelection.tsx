@@ -12,6 +12,7 @@ import Animated, { SharedValue } from 'react-native-reanimated';
 
 import type { Service } from '@/lib/supabase';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
+import { bookingStepRowEntering } from '@/components/book-appointment/bookingStepListEnterAnimation';
 
 const THUMB_SIZE = 56;
 
@@ -82,16 +83,20 @@ export default function ServiceSelection({
           </View>
 
           <View style={styles.list}>
-            {services.map((service, index) => (
-              <ServiceRow
-                key={String((service as any).id ?? `svc-${index}`)}
-                service={service}
-                isSelected={isSvcSelected(service)}
-                primaryColor={colors.primary}
-                onPress={() => onSelectService(service, index)}
-                t={t}
-              />
-            ))}
+            {services.map((service, index) => {
+              const rowKey = String((service as any).id ?? `svc-${index}`);
+              return (
+                <Animated.View key={rowKey} entering={bookingStepRowEntering(index)}>
+                  <ServiceRow
+                    service={service}
+                    isSelected={isSvcSelected(service)}
+                    primaryColor={colors.primary}
+                    onPress={() => onSelectService(service, index)}
+                    t={t}
+                  />
+                </Animated.View>
+              );
+            })}
           </View>
         </View>
       ) : (
@@ -159,7 +164,9 @@ function ServiceRow({
         ]}
       >
         {isSelected ? (
-          <Ionicons name="checkmark-circle" size={20} color={primaryColor} style={styles.checkIcon} />
+          <View style={styles.checkSlot}>
+            <Ionicons name="checkmark-circle" size={20} color={primaryColor} />
+          </View>
         ) : null}
         <View style={styles.infoTextBlock}>
           <Text style={styles.serviceName} numberOfLines={2}>
@@ -268,12 +275,14 @@ const styles = StyleSheet.create({
   },
   infoPillSelected: {
     backgroundColor: '#FFFFFF',
-    borderWidth: 0,
+    /* Match idle border so selected/unselected pills keep the same outer size (avoids layout jump). */
+    borderWidth: 1.5,
+    borderColor: 'transparent',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   infoTextBlock: {
     flexShrink: 1,
@@ -298,7 +307,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: -0.1,
   },
-  checkIcon: {
-    marginRight: 2,
+  checkSlot: {
+    width: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

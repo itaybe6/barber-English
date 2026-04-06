@@ -140,24 +140,84 @@ export default function ConfirmBookingSheet({
               <Text style={[styles.cardLabel, { color: colors.textSecondary }]}>
                 {hasMultiple ? t('booking.field.services', 'שירותים') : t('booking.field.service', 'שירות')}
               </Text>
-              {allServices.map((svc, i) => (
-                <View key={i} style={styles.serviceRow}>
-                  <Text style={[styles.cardValue, { color: colors.text }]}>{svc.name}</Text>
-                  <View style={[styles.durationPill, { backgroundColor: `${colors.primary}10` }]}>
+              <View style={styles.serviceChips}>
+                {allServices.map((svc, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.serviceChip,
+                      {
+                        borderColor: `${colors.primary}22`,
+                        backgroundColor: `${colors.primary}0A`,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.serviceChipName,
+                        { color: colors.text, textAlign: isRTL ? 'right' : 'left' },
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {svc.name}
+                    </Text>
+                    <View
+                      style={[
+                        styles.serviceChipDuration,
+                        { backgroundColor: `${colors.primary}14` },
+                      ]}
+                    >
+                      <Ionicons name="time-outline" size={11} color={colors.primary} />
+                      <Text style={[styles.serviceChipDurationText, { color: colors.primary }]}>
+                        {svc.duration_minutes} {t('booking.min', 'ד׳')}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+              {hasMultiple && (
+                <View style={styles.totalsRow}>
+                  <Text style={[styles.totalSummaryLabel, { color: colors.textSecondary }]}>
+                    {t('booking.total', 'סה״כ')}
+                  </Text>
+                  <View
+                    style={[
+                      styles.summaryPill,
+                      { backgroundColor: `${colors.primary}14` },
+                    ]}
+                  >
                     <Ionicons name="time-outline" size={11} color={colors.primary} />
-                    <Text style={[styles.durationText, { color: colors.primary }]}>
-                      {svc.duration_minutes}{t('booking.min', 'ד׳')}
+                    <Text style={[styles.summaryPillText, { color: colors.primary }]}>
+                      {totalDuration ?? 0} {t('booking.min', 'ד׳')}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.summaryPill,
+                      { backgroundColor: `${colors.primary}14` },
+                    ]}
+                  >
+                    <Ionicons name="pricetag-outline" size={11} color={colors.primary} />
+                    <Text style={[styles.summaryPillText, { color: colors.primary }]}>
+                      ₪{totalPrice ?? 0}
                     </Text>
                   </View>
                 </View>
-              ))}
-              {hasMultiple && (
-                <Text style={[styles.totalLine, { color: colors.textSecondary }]}>
-                  {t('booking.total', 'סה״כ')}: {totalDuration}{t('booking.min', 'ד׳')} · ₪{totalPrice}
-                </Text>
               )}
               {!hasMultiple && servicePrice > 0 && (
-                <Text style={[styles.priceChip, { color: colors.primary }]}>₪{servicePrice}</Text>
+                <View style={styles.totalsRow}>
+                  <View
+                    style={[
+                      styles.summaryPill,
+                      { backgroundColor: `${colors.primary}14` },
+                    ]}
+                  >
+                    <Ionicons name="pricetag-outline" size={11} color={colors.primary} />
+                    <Text style={[styles.summaryPillText, { color: colors.primary }]}>
+                      ₪{servicePrice}
+                    </Text>
+                  </View>
+                </View>
               )}
             </View>
           </View>
@@ -194,20 +254,8 @@ export default function ConfirmBookingSheet({
 
         </View>
 
-        {/* Actions */}
-        <View style={[styles.actions, !isRTL && { flexDirection: 'row-reverse' }]}>
-          {/* Cancel */}
-          <TouchableOpacity
-            style={[styles.btnCancel, { borderColor: `${colors.text}18` }]}
-            onPress={onClose}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.btnCancelText, { color: colors.textSecondary }]}>
-              {t('cancel', 'ביטול')}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Confirm */}
+        {/* Actions — force LTR row so order matches screen left/right (sheet often ignores RTL flex) */}
+        <View style={styles.actions}>
           <TouchableOpacity
             style={styles.btnConfirmTouch}
             onPress={onConfirm}
@@ -222,6 +270,15 @@ export default function ConfirmBookingSheet({
               <Ionicons name="checkmark-circle" size={20} color="#FFF" />
               <Text style={styles.btnConfirmText}>{t('confirm', 'אישור')}</Text>
             </LinearGradient>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.btnCancel, { borderColor: `${colors.text}18` }]}
+            onPress={onClose}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.btnCancelText, { color: colors.textSecondary }]}>
+              {t('cancel', 'ביטול')}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -308,34 +365,69 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     letterSpacing: -0.2,
   },
-  serviceRow: {
+  serviceChips: {
+    marginTop: 4,
+    gap: 6,
+    width: '100%',
+    alignItems: 'flex-start',
+  },
+  serviceChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 8,
-    flexWrap: 'wrap',
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: 1,
   },
-  durationPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 100,
-  },
-  durationText: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: -0.1,
-  },
-  priceChip: {
+  serviceChipName: {
+    flexShrink: 1,
     fontSize: 14,
     fontWeight: '700',
     letterSpacing: -0.2,
   },
-  totalLine: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 4,
+  serviceChipDuration: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    flexShrink: 0,
+  },
+  serviceChipDurationText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: -0.15,
+  },
+  totalsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    maxWidth: '100%',
+  },
+  totalSummaryLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+  },
+  summaryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  summaryPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: -0.1,
   },
   divider: {
     height: 1,
@@ -344,6 +436,7 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     gap: 10,
+    direction: 'ltr',
   },
   btnCancel: {
     flex: 1,

@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   I18nManager,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -25,6 +26,8 @@ export interface WaitlistHomeFabPanelProps {
   formatWaitlistDate: (dateString: string) => string;
   onRequestRemoveAll: () => void;
   isRemoving?: boolean;
+  /** `tag` — compact chip (e.g. under Book button). `banner` — full-width prominent row. */
+  triggerVariant?: 'tag' | 'banner';
 }
 
 const SHEET_RADIUS = 24;
@@ -35,6 +38,7 @@ export function WaitlistHomeFabPanel({
   formatWaitlistDate,
   onRequestRemoveAll,
   isRemoving = false,
+  triggerVariant = 'tag',
 }: WaitlistHomeFabPanelProps) {
   const { t } = useTranslation();
   const colors = useColors();
@@ -65,8 +69,50 @@ export function WaitlistHomeFabPanel({
 
   const primaryBorder = `${colors.primary}55`;
 
-  return (
-    <>
+  const trigger =
+    triggerVariant === 'tag' ? (
+      <TouchableOpacity
+        style={[
+          styles.homeTag,
+          {
+            borderColor: `${colors.primary}4D`,
+            backgroundColor: `${colors.primary}14`,
+          },
+        ]}
+        onPress={open}
+        activeOpacity={0.88}
+        accessibilityRole="button"
+        accessibilityLabel={t('waitlist.compactA11y')}
+      >
+        <View
+          style={[
+            styles.homeTagIconWrap,
+            { backgroundColor: `${colors.primary}22` },
+          ]}
+        >
+          <Ionicons name="time" size={17} color={colors.primary} />
+        </View>
+        <View style={styles.homeTagTextCol}>
+          <Text
+            style={[styles.homeTagTitle, { color: colors.primary }]}
+            numberOfLines={1}
+          >
+            {t('waitlist.compactMessage')}
+          </Text>
+          <Text
+            style={[styles.homeTagHint, { color: `${colors.primary}CC` }]}
+            numberOfLines={1}
+          >
+            {t('waitlist.compactHint')}
+          </Text>
+        </View>
+        <Ionicons
+          name={rtl ? 'chevron-forward' : 'chevron-back'}
+          size={18}
+          color={colors.primary}
+        />
+      </TouchableOpacity>
+    ) : (
       <TouchableOpacity
         style={[
           styles.homeChip,
@@ -97,6 +143,11 @@ export function WaitlistHomeFabPanel({
           color="rgba(255,255,255,0.9)"
         />
       </TouchableOpacity>
+    );
+
+  return (
+    <>
+      {trigger}
 
       <Modal
         visible={isOpen}
@@ -252,6 +303,53 @@ export function WaitlistHomeFabPanel({
 }
 
 const styles = StyleSheet.create({
+  homeTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    flexShrink: 1,
+    maxWidth: '100%',
+    paddingVertical: 8,
+    paddingHorizontal: 11,
+    borderRadius: 9999,
+    borderWidth: 1,
+    gap: 7,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
+      },
+      android: { elevation: 2 },
+      default: {},
+    }),
+  },
+  homeTagIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeTagTextCol: {
+    flexShrink: 1,
+    minWidth: 0,
+    alignItems: 'flex-start',
+  },
+  homeTagTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+    textAlign: 'left',
+  },
+  homeTagHint: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
+    letterSpacing: 0.1,
+    textAlign: 'left',
+  },
   homeChip: {
     flexDirection: 'row',
     alignItems: 'center',

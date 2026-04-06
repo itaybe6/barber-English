@@ -5,6 +5,8 @@ import Animated, { SharedValue } from 'react-native-reanimated';
 
 import type { User } from '@/lib/supabase';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
+import { bookingStepRowEntering } from '@/components/book-appointment/bookingStepListEnterAnimation';
+
 const AVATAR_SIZE = 56;
 
 type Props = {
@@ -71,55 +73,60 @@ export default function BarberSelection({
             {barbers.map((barber, index) => {
               const isSelected = String(barber.id ?? '') === String(selectedBarberId ?? '');
               const uri = (barber?.image_url as string | undefined) || '';
+              const rowKey = String(barber.id ?? `barber-${index}`);
 
               return (
-                <Pressable
-                  key={String(barber.id ?? `barber-${index}`)}
-                  onPress={() => onSelectBarber(barber)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: isSelected }}
-                  accessibilityLabel={barber.name || t('booking.step.barber', 'Barber')}
-                  style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                <Animated.View
+                  key={rowKey}
+                  entering={bookingStepRowEntering(index)}
                 >
-                  {/* Avatar — outside the card, right side, white thick border */}
-                  <View style={styles.avatarRing}>
+                  <Pressable
+                    onPress={() => onSelectBarber(barber)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
+                    accessibilityLabel={barber.name || t('booking.step.barber', 'Barber')}
+                    style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                  >
+                    {/* Avatar — outside the card, right side, white thick border */}
+                    <View style={styles.avatarRing}>
+                      <View
+                        style={[
+                          styles.avatarWrap,
+                          !uri && { backgroundColor: `${colors.primary}20` },
+                        ]}
+                      >
+                        {uri ? (
+                          <Image source={{ uri }} style={styles.avatar} resizeMode="cover" />
+                        ) : (
+                          <Ionicons name="person" size={26} color={colors.primary} />
+                        )}
+                      </View>
+                    </View>
+
+                    {/* Name pill — wraps content, not full width */}
                     <View
                       style={[
-                        styles.avatarWrap,
-                        !uri && { backgroundColor: `${colors.primary}20` },
+                        styles.namePill,
+                        isSelected
+                          ? { backgroundColor: 'rgba(255,255,255,0.97)' }
+                          : { backgroundColor: 'rgba(255,255,255,0.92)' },
                       ]}
                     >
-                      {uri ? (
-                        <Image source={{ uri }} style={styles.avatar} resizeMode="cover" />
-                      ) : (
-                        <Ionicons name="person" size={26} color={colors.primary} />
-                      )}
+                      <Text style={styles.name} numberOfLines={1}>
+                        {barber.name || ''}
+                      </Text>
+
+                      {isSelected ? (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={20}
+                          color={colors.primary}
+                          style={styles.checkIcon}
+                        />
+                      ) : null}
                     </View>
-                  </View>
-
-                  {/* Name pill — wraps content, not full width */}
-                  <View
-                    style={[
-                      styles.namePill,
-                      isSelected
-                        ? { backgroundColor: 'rgba(255,255,255,0.97)', borderColor: colors.primary, borderWidth: 1.5 }
-                        : { backgroundColor: 'rgba(255,255,255,0.92)', borderColor: 'transparent', borderWidth: 1.5 },
-                    ]}
-                  >
-                    <Text style={styles.name} numberOfLines={1}>
-                      {barber.name || ''}
-                    </Text>
-
-                    {isSelected && (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={20}
-                        color={colors.primary}
-                        style={styles.checkIcon}
-                      />
-                    )}
-                  </View>
-                </Pressable>
+                  </Pressable>
+                </Animated.View>
               );
             })}
           </View>

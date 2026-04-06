@@ -6,7 +6,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -16,7 +15,12 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { useTranslation } from 'react-i18next';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  initialWindowMetrics,
+  SafeAreaProvider,
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Calendar as RNCalendar, LocaleConfig } from 'react-native-calendars';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
@@ -322,14 +326,7 @@ function CalendarReminderEditorModalInner({
   defaultDate,
 }: CalendarReminderEditorModalProps) {
   const insets = useSafeAreaInsets();
-  const statusBarFallback = Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0;
-  const mergedTop = Math.max(insets.top, statusBarFallback);
-  /** מודאל לפעמים מחזיר insets=0 לפריים ראשון — מינימום סטטוס־בר */
-  const safeTop = mergedTop > 0 ? mergedTop : Platform.OS === 'ios' ? 20 : statusBarFallback;
-  const gutterHorizontal = useMemo(
-    () => ({ marginLeft: 16 + insets.left, marginRight: 16 + insets.right }),
-    [insets.left, insets.right]
-  );
+  const gutterHorizontal = useMemo(() => ({ marginHorizontal: 16 }), []);
   const { colors: businessColors } = useBusinessColors();
   const { user } = useAuthStore();
   const { i18n } = useTranslation();
@@ -580,7 +577,7 @@ function CalendarReminderEditorModalInner({
   };
 
   return (
-    <View style={[styles.root, { paddingTop: safeTop }]}>
+    <SafeAreaView style={styles.root} edges={['top', 'left', 'right', 'bottom']}>
       <View style={styles.headerSafeWrap}>
         <LinearGradient
           colors={[`${primary}18`, `${primary}06`, 'transparent']}
@@ -588,13 +585,7 @@ function CalendarReminderEditorModalInner({
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
-        <View
-          style={[
-            styles.headerRow,
-            layoutRtl && styles.headerRowRtl,
-            { paddingLeft: 16 + insets.left, paddingRight: 16 + insets.right },
-          ]}
-        >
+        <View style={[styles.headerRow, layoutRtl && styles.headerRowRtl, styles.headerRowPad]}>
           <TouchableOpacity
             onPress={onClose}
             style={styles.headerIconBtn}
@@ -779,16 +770,7 @@ function CalendarReminderEditorModalInner({
           </View>
       </KeyboardAwareScreenScroll>
 
-        <View
-          style={[
-            styles.footer,
-            {
-              paddingBottom: Math.max(insets.bottom, 12),
-              paddingLeft: 16 + insets.left,
-              paddingRight: 16 + insets.right,
-            },
-          ]}
-        >
+        <View style={[styles.footer, styles.footerPad]}>
           <LinearGradient colors={[UI.bg, UI.bg]} style={StyleSheet.absoluteFill} />
           <TouchableOpacity
             style={[
@@ -850,14 +832,14 @@ function CalendarReminderEditorModalInner({
           onClose={() => setTimePickerWhich(null)}
           insetBottom={insets.bottom}
         />
-    </View>
+    </SafeAreaView>
   );
 }
 
 export default function CalendarReminderEditorModal(props: CalendarReminderEditorModalProps) {
   return (
     <Modal visible={props.visible} animationType="slide" onRequestClose={props.onClose}>
-      <SafeAreaProvider>
+      <SafeAreaProvider initialMetrics={initialWindowMetrics ?? undefined}>
         <CalendarReminderEditorModalInner {...props} />
       </SafeAreaProvider>
     </Modal>
@@ -875,6 +857,8 @@ const styles = StyleSheet.create({
   },
   /** Physical mirror: כפתור סגירה מימין, כותרות במרכז-שמאל */
   headerRowRtl: { flexDirection: 'row-reverse' },
+  headerRowPad: { paddingHorizontal: 16 },
+  footerPad: { paddingHorizontal: 16, paddingBottom: 12 },
   headerIconBtn: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   iconCircle: {
     width: 44,

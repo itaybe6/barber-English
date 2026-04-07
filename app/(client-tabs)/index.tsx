@@ -17,6 +17,8 @@ import {
   Platform,
   I18nManager,
   LayoutChangeEvent,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
 import Animated, { useSharedValue, useAnimatedScrollHandler, runOnJS } from 'react-native-reanimated';
@@ -393,6 +395,7 @@ export default function ClientHomeScreen() {
       }
     },
   });
+  const [homeFixedMessageDismissed, setHomeFixedMessageDismissed] = useState(false);
   const [mapCoords, setMapCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [osmFailed, setOsmFailed] = useState(false);
   const [googleFailed, setGoogleFailed] = useState(false);
@@ -904,6 +907,16 @@ export default function ClientHomeScreen() {
 
   const nextAppointmentTime = parseFormattedTime(formatTime(nextAppointment?.slot_time ?? ''));
   
+  const homeFixedMessageText = String(businessProfile?.home_fixed_message ?? '').trim();
+  const showHomeFixedMessageSheet =
+    businessProfile?.home_fixed_message_enabled === true &&
+    homeFixedMessageText.length > 0 &&
+    !homeFixedMessageDismissed;
+
+  useEffect(() => {
+    setHomeFixedMessageDismissed(false);
+  }, [businessProfile?.home_fixed_message, businessProfile?.home_fixed_message_enabled]);
+
   const socialLinks = [
     businessProfile?.instagram_url ? { name: 'Instagram', icon: 'logo-instagram', color: '#E4405F', url: businessProfile.instagram_url } : null,
     businessProfile?.facebook_url ? { name: 'Facebook', icon: 'logo-facebook', color: '#1877F2', url: businessProfile.facebook_url } : null,
@@ -1344,6 +1357,59 @@ export default function ClientHomeScreen() {
           <Image source={getCurrentClientLogo()} style={styles.overlayLogo} resizeMode="contain" />
         </View>
       </View>
+
+      <Modal
+        visible={showHomeFixedMessageSheet}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setHomeFixedMessageDismissed(true)}
+      >
+        <View style={styles.homeFixedModalRoot} pointerEvents="box-none">
+          <Pressable
+            style={styles.homeFixedModalBackdrop}
+            onPress={() => setHomeFixedMessageDismissed(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.close', 'Close')}
+          />
+          <View
+            style={[
+              styles.homeFixedModalSheet,
+              {
+                paddingBottom: Math.max(insets.bottom, 16) + 8,
+                maxHeight: SCREEN_HEIGHT * 0.58,
+              },
+            ]}
+          >
+            <View style={styles.homeFixedModalHandle} />
+            <ScrollView
+              style={styles.homeFixedModalScroll}
+              contentContainerStyle={styles.homeFixedModalScrollContent}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
+              <Text
+                style={[
+                  styles.homeFixedModalBody,
+                  { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' },
+                ]}
+              >
+                {homeFixedMessageText}
+              </Text>
+            </ScrollView>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => setHomeFixedMessageDismissed(true)}
+              style={[styles.homeFixedModalButton, { backgroundColor: colors.primary }]}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.homeFixedModalButtonText, { color: onPrimary }]}>
+                {t('home.fixedMessage.gotIt', 'OK')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -2417,5 +2483,61 @@ const styles = StyleSheet.create<any>({
     letterSpacing: -0.5,
   },
   // sectionHeaderModernSimple and sectionSubtitle defined earlier
+  homeFixedModalRoot: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  homeFixedModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  homeFixedModalSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOpacity: 0.2,
+        shadowRadius: 16,
+        shadowOffset: { width: 0, height: -4 },
+      },
+      android: { elevation: 24 },
+    }),
+  },
+  homeFixedModalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#D1D5DB',
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  homeFixedModalScroll: {
+    flexGrow: 0,
+  },
+  homeFixedModalScrollContent: {
+    paddingBottom: 12,
+  },
+  homeFixedModalBody: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: '#1C1C1E',
+    fontWeight: '500',
+    letterSpacing: -0.2,
+  },
+  homeFixedModalButton: {
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeFixedModalButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
 });
 

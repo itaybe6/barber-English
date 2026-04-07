@@ -2360,7 +2360,6 @@ export default function SettingsScreen() {
                 <Pressable
                   style={({ pressed }) => [
                     styles.homeFixedMessageSummaryCard,
-                    editAdminInputsRtl ? styles.homeFixedMessageSummaryCardRtl : null,
                     pressed ? { opacity: 0.88 } : null,
                   ]}
                   onPress={() => {
@@ -4888,6 +4887,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(60,60,67,0.08)',
   },
+  /** direction: 'ltr' fixes physical row order [text | pencil] so RTL text can align right (see finance.tsx rtlRoot / rtlText). */
   homeFixedMessageSummaryCard: {
     marginHorizontal: 12,
     marginTop: 12,
@@ -4898,12 +4898,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.92)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(60,60,67,0.08)',
+    direction: 'ltr',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-  },
-  homeFixedMessageSummaryCardRtl: {
-    flexDirection: 'row-reverse',
   },
   homeFixedMessageSummaryTextCol: {
     flex: 1,
@@ -4912,6 +4910,7 @@ const styles = StyleSheet.create({
   homeFixedMessageSummaryTextRtl: {
     textAlign: 'right',
     writingDirection: 'rtl',
+    alignSelf: 'stretch',
   },
   homeFixedMessagePreviewText: {
     fontSize: 15,

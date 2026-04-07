@@ -19,12 +19,13 @@ const COMPRESSION_PRESET = {
     maxSizeAttempts: [960, 720, 540, 480] as const,
     budgetVideoShare: 0.84,
   },
+  /** Gallery edit: extra passes (down to ~288p) + lower bitrate floor so output tends closer to the minimum that still fits under 2MB. */
   aggressive: {
-    minVideoBitrateBps: 160_000,
-    maxVideoBitrateBps: 1_450_000,
-    bitrateFactors: [0.9, 0.76, 0.62, 0.5, 0.38] as const,
-    maxSizeAttempts: [720, 540, 480, 420, 360] as const,
-    budgetVideoShare: 0.7,
+    minVideoBitrateBps: 105_000,
+    maxVideoBitrateBps: 1_050_000,
+    bitrateFactors: [0.85, 0.7, 0.56, 0.44, 0.34, 0.28, 0.24] as const,
+    maxSizeAttempts: [720, 540, 480, 420, 360, 320, 288] as const,
+    budgetVideoShare: 0.55,
   },
 } as const;
 

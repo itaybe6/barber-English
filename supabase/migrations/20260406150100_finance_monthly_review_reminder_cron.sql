@@ -1,4 +1,5 @@
--- Hourly ping: finance-monthly-review-reminder (sends in-app notification near month-end; Edge filters by Jerusalem calendar).
+-- Daily at 20:00 (pg_cron timezone is usually UTC on Supabase — adjust hour if you need 20:00 Asia/Jerusalem).
+-- Edge function still filters by Jerusalem calendar (last 3 / first 3 days of month).
 
 CREATE OR REPLACE FUNCTION public.invoke_finance_monthly_review_reminder_edge()
 RETURNS void
@@ -40,13 +41,17 @@ DECLARE
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron')
      AND EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_net') THEN
+    SELECT jobid INTO jid FROM cron.job WHERE jobname = 'finance_monthly_review_reminder_daily' LIMIT 1;
+    IF jid IS NOT NULL THEN
+      PERFORM cron.unschedule(jid);
+    END IF;
     SELECT jobid INTO jid FROM cron.job WHERE jobname = 'finance_monthly_review_reminder_hourly' LIMIT 1;
     IF jid IS NOT NULL THEN
       PERFORM cron.unschedule(jid);
     END IF;
     PERFORM cron.schedule(
-      'finance_monthly_review_reminder_hourly',
-      '12 * * * *',
+      'finance_monthly_review_reminder_daily',
+      '0 20 * * *',
       'SELECT public.invoke_finance_monthly_review_reminder_edge()'
     );
   END IF;

@@ -66,7 +66,7 @@ import {
   Receipt,
   CheckCircle2,
   Settings2,
-  Sparkles,
+  FileSpreadsheet,
 } from 'lucide-react-native';
 
 const CATEGORIES: ExpenseCategory[] = ['rent', 'supplies', 'equipment', 'marketing', 'other'];
@@ -693,44 +693,34 @@ export default function FinanceScreen() {
           </View>
 
           {isSuperAdmin ? (
-            <TouchableOpacity
-              activeOpacity={0.88}
-              onPress={() =>
-                router.push(
-                  `/(tabs)/finance-month-closure?year=${year}&month=${month}`,
-                )
-              }
-              style={[
-                styles.superAdminClosureCard,
-                {
-                  backgroundColor: theme.surface,
-                  borderColor: `${primaryColor}30`,
-                },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="סגירת חודש ושליחה לרואה חשבון"
-            >
-              <LinearGradient
-                colors={[`${primaryColor}24`, `${primaryColor}08`]}
-                start={{ x: 1, y: 0 }}
-                end={{ x: 0, y: 1 }}
-                style={StyleSheet.absoluteFillObject}
-              />
-              <View style={styles.superAdminClosureInner}>
-                <View style={[styles.superAdminClosureIcon, { backgroundColor: `${primaryColor}18` }]}>
-                  <Sparkles size={22} color={primaryColor} />
-                </View>
-                <View style={styles.superAdminClosureText}>
-                  <RtlText style={[styles.superAdminClosureTitle, { color: theme.text }]}>
-                    סגירת חודש לרואה חשבון
-                  </RtlText>
-                  <RtlText style={[styles.superAdminClosureSub, { color: theme.textSecondary }]}>
-                    בחירה מרובה, הפקת קבלות ומייל עם אקסל והוצאות — למנהל האפליקציה בלבד
-                  </RtlText>
-                </View>
-                <ChevronLeft size={22} color={primaryColor} />
-              </View>
-            </TouchableOpacity>
+            <View style={styles.monthlyReportCtaSection}>
+              <TouchableOpacity
+                activeOpacity={0.88}
+                onPress={() =>
+                  router.push(
+                    `/(tabs)/finance-month-closure?year=${year}&month=${month}`,
+                  )
+                }
+                accessibilityRole="button"
+                accessibilityLabel="הפק דוח חודשי"
+                style={styles.monthlyReportCtaOuter}
+              >
+                <LinearGradient
+                  colors={['#22C55E', '#16A34A', '#0F6B2C']}
+                  locations={[0, 0.55, 1]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.monthlyReportCtaGradient}
+                >
+                  <FileSpreadsheet size={22} color="#fff" strokeWidth={2.2} />
+                  <RtlText style={styles.monthlyReportCtaText}>הפק דוח חודשי</RtlText>
+                  <ChevronLeft size={20} color="rgba(255,255,255,0.92)" />
+                </LinearGradient>
+              </TouchableOpacity>
+              <RtlText style={[styles.monthlyReportCtaHint, { color: theme.textSecondary }]}>
+                בחירת תורים, קבלות בחשבונית ירוקה ושליחת חבילה לרואה החשבון — למנהל האפליקציה בלבד
+              </RtlText>
+            </View>
           ) : null}
 
           {/* ── Green Invoice (חשבונית ירוקה) ── */}
@@ -1699,49 +1689,43 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 
-  superAdminClosureCard: {
+  monthlyReportCtaSection: {
     marginHorizontal: 16,
     marginTop: 14,
-    borderRadius: 22,
-    borderWidth: 1,
+  },
+  monthlyReportCtaOuter: {
+    borderRadius: 18,
     overflow: 'hidden',
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.08,
+        shadowColor: '#16A34A',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.35,
         shadowRadius: 12,
       },
-      android: { elevation: 3 },
+      android: { elevation: 6 },
     }),
   },
-  superAdminClosureInner: {
+  monthlyReportCtaGradient: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
-    padding: 18,
-    gap: 12,
-  },
-  superAdminClosureIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
   },
-  superAdminClosureText: {
-    flex: 1,
-    minWidth: 0,
+  monthlyReportCtaText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '900',
+    letterSpacing: 0.2,
   },
-  superAdminClosureTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    textAlign: 'right',
-  },
-  superAdminClosureSub: {
+  monthlyReportCtaHint: {
     fontSize: 12,
     lineHeight: 17,
-    textAlign: 'right',
-    marginTop: 4,
+    textAlign: 'center',
+    marginTop: 10,
+    paddingHorizontal: 8,
   },
   giReceiptClientRow: {
     flexDirection: 'row-reverse',

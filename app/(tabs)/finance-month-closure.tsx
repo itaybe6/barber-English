@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
+  Modal,
   Platform,
   Image,
   Linking,
@@ -46,6 +46,18 @@ const MONTH_NAMES_HE = [
 
 /** מקום ל־AdminFloatingTabBar (~56px) + מרווח (~22) מעל ה-safe area */
 const ADMIN_TAB_BAR_CLEARANCE = 92;
+
+interface SheetDialogButton {
+  text: string;
+  variant?: 'cancel' | 'default';
+  onPress?: () => void;
+}
+
+interface SheetDialogState {
+  title: string;
+  message: string;
+  buttons: SheetDialogButton[];
+}
 
 const EXPENSE_CATEGORY_LABEL: Record<string, string> = {
   rent: 'שכירות',
@@ -107,6 +119,9 @@ export default function FinanceMonthClosureScreen() {
   const [acctEmail, setAcctEmail] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
+  const [sheetDialog, setSheetDialog] = useState<SheetDialogState | null>(null);
+
+  const closeSheet = useCallback(() => setSheetDialog(null), []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -164,15 +179,27 @@ export default function FinanceMonthClosureScreen() {
 
   const onConfirmSend = () => {
     if (selected.size === 0) {
-      Alert.alert('בחירה נדרשת', 'סמנו לפחות תור אחד להפקת קבלה.');
+      setSheetDialog({
+        title: 'בחירה נדרשת',
+        message: 'סמנו לפחות תור אחד להפקת קבלה.',
+        buttons: [{ text: 'אישור', onPress: closeSheet }],
+      });
       return;
     }
     if (!giOk) {
-      Alert.alert('חשבונית ירוקה', 'יש להתחבר לחשבונית ירוקה ממסך הפיננסים.');
+      setSheetDialog({
+        title: 'חשבונית ירוקה',
+        message: 'יש להתחבר לחשבונית ירוקה ממסך הפיננסים.',
+        buttons: [{ text: 'אישור', onPress: closeSheet }],
+      });
       return;
     }
     if (!acctEmail) {
-      Alert.alert('רואה חשבון', 'יש להזין אימייל רואה חשבון בהגדרות רואה חשבון.');
+      setSheetDialog({
+        title: 'רואה חשבון',
+        message: 'יש להזין אימייל רואה חשבון בהגדרות רואה חשבון.',
+        buttons: [{ text: 'אישור', onPress: closeSheet }],
+      });
       return;
     }
     const rep = monthReport;
@@ -180,62 +207,73 @@ export default function FinanceMonthClosureScreen() {
       rep != null
         ? `\n\nבאקסל: הכנסות חודש ${formatCurrency(rep.totalIncome)}, הוצאות ${formatCurrency(rep.totalExpenses)}, רווח נקי ${formatCurrency(rep.netProfit)}.`
         : '';
-    Alert.alert(
-      'שליחה לרואה חשבון',
-      `יופקו קבלות ל־${selected.size} תורים (${formatCurrency(selectedTotal)}) ויישלח מייל ל־${acctEmail} כולל אקסל (סיכום + הכנסות + הוצאות) וקבצי הוצאות.${summaryNote}\n\nלהמשיך?`,
-      [
-        { text: 'ביטול', style: 'cancel' },
+    setSheetDialog({
+      title: 'שליחה לרואה חשבון',
+      message: `יופקו קבלות ל־${selected.size} תורים (${formatCurrency(selectedTotal)}) ויישלח מייל ל־${acctEmail} כולל אקסל (סיכום + הכנסות + הוצאות) וקבצי הוצאות.${summaryNote}\n\nלהמשיך?`,
+      buttons: [
+        { text: 'ביטול', variant: 'cancel', onPress: closeSheet },
         {
           text: 'אישור ושליחה',
-          style: 'default',
-          onPress: async () => {
-            setSending(true);
-            try {
-              const res = await financeAccountantPackageApi.sendMonthlyPackage({
-                year,
-                month,
-                appointmentIds: Array.from(selected),
-              });
-              if (!res.ok) {
-                const msg =
-                  res.error === 'email_failed'
-                    ? res.message || 'שליחת המייל נכשלה'
-                    : res.details?.join('\n') || res.message || res.error;
-                Alert.alert('שגיאה', msg);
-                return;
+          onPress: () => {
+            closeSheet();
+            void (async () => {
+              setSending(true);
+              try {
+                const res = await financeAccountantPackageApi.sendMonthlyPackage({
+                  year,
+                  month,
+                  appointmentIds: Array.from(selected),
+                });
+                if (!res.ok) {
+                  const msg =
+                    res.error === 'email_failed'
+                      ? res.message || 'שליחת המייל נכשלה'
+                      : res.details?.join('\n') || res.message || res.error;
+                  setSheetDialog({
+                    title: 'שגיאה',
+                    message: msg,
+                    buttons: [{ text: 'אישור', onPress: closeSheet }],
+                  });
+                  return;
+                }
+                let body = `הופקו ${res.issuedCount} קבלות.`;
+                if (res.emailSent) {
+                  body += '\nהמייל נשלח לרואה החשבון.';
+                } else if (res.emailSkipReason === 'missing_resend_api_key') {
+                  body +=
+                    '\nהמייל לא נשלח: חסר מפתח Resend בשרת.\n' +
+                    'ב-Supabase: Project Settings → Edge Functions → Secrets — הוסף RESEND_API_KEY (מ־resend.com).\n' +
+                    'אופציונלי: MONTHLY_REPORT_FROM_EMAIL (כתובת שולח מאומתת בדומיין ב-Resend).';
+                } else {
+                  body +=
+                    '\nהמייל לא נשלח. אם כבר הגדרת RESEND_API_KEY — ודא דומיין וכתובת שולח ב-Resend, ובדוק לוגים של הפונקציה finance-accountant-package.';
+                }
+                if (res.receiptErrors?.length) {
+                  body += `\n\nאזהרות:\n${res.receiptErrors.join('\n')}`;
+                }
+                setSheetDialog({
+                  title: 'בוצע',
+                  message: body,
+                  buttons: [
+                    {
+                      text: 'אישור',
+                      onPress: () => {
+                        closeSheet();
+                        setSelected(new Set());
+                        void load();
+                        router.push('/(tabs)/finance');
+                      },
+                    },
+                  ],
+                });
+              } finally {
+                setSending(false);
               }
-              let body = `הופקו ${res.issuedCount} קבלות.`;
-              if (res.emailSent) {
-                body += '\nהמייל נשלח לרואה החשבון.';
-              } else if (res.emailSkipReason === 'missing_resend_api_key') {
-                body +=
-                  '\nהמייל לא נשלח: חסר מפתח Resend בשרת.\n' +
-                  'ב-Supabase: Project Settings → Edge Functions → Secrets — הוסף RESEND_API_KEY (מ־resend.com).\n' +
-                  'אופציונלי: MONTHLY_REPORT_FROM_EMAIL (כתובת שולח מאומתת בדומיין ב-Resend).';
-              } else {
-                body +=
-                  '\nהמייל לא נשלח. אם כבר הגדרת RESEND_API_KEY — ודא דומיין וכתובת שולח ב-Resend, ובדוק לוגים של הפונקציה finance-accountant-package.';
-              }
-              if (res.receiptErrors?.length) {
-                body += `\n\nאזהרות:\n${res.receiptErrors.join('\n')}`;
-              }
-              Alert.alert('בוצע', body, [
-                {
-                  text: 'אישור',
-                  onPress: () => {
-                    setSelected(new Set());
-                    void load();
-                    router.push('/(tabs)/finance');
-                  },
-                },
-              ]);
-            } finally {
-              setSending(false);
-            }
+            })();
           },
         },
       ],
-    );
+    });
   };
 
   if (!isAdminUser) {
@@ -566,6 +604,78 @@ export default function FinanceMonthClosureScreen() {
           </TouchableOpacity>
         </LinearGradient>
       </View>
+
+      <Modal
+        visible={sheetDialog != null}
+        transparent
+        animationType="fade"
+        statusBarTranslucent={Platform.OS === 'android'}
+        onRequestClose={() => {
+          const cancelBtn = sheetDialog?.buttons.find((b) => b.variant === 'cancel');
+          if (cancelBtn?.onPress) cancelBtn.onPress();
+          else closeSheet();
+        }}
+      >
+        <View
+          style={[
+            styles.sheetOverlay,
+            {
+              paddingTop: insets.top + 16,
+              paddingBottom: Math.max(insets.bottom, 16) + 8,
+              paddingHorizontal: 20,
+            },
+          ]}
+        >
+          {sheetDialog != null ? (
+            <View
+              style={[
+                styles.sheetCard,
+                {
+                  backgroundColor: theme.surface,
+                  borderColor: `${theme.border}55`,
+                },
+              ]}
+            >
+              <Text style={[styles.sheetTitle, { color: theme.text }]}>{sheetDialog.title}</Text>
+              <ScrollView
+                style={styles.sheetScroll}
+                contentContainerStyle={styles.sheetScrollContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                <Text style={[styles.sheetMessage, { color: theme.textSecondary }]}>
+                  {sheetDialog.message}
+                </Text>
+              </ScrollView>
+              <View style={styles.sheetActions}>
+                {sheetDialog.buttons.map((btn, idx) => (
+                  <TouchableOpacity
+                    key={`${btn.text}-${idx}`}
+                    style={[
+                      styles.sheetBtn,
+                      sheetDialog.buttons.length === 1 ? styles.sheetBtnFull : null,
+                      btn.variant === 'cancel'
+                        ? [styles.sheetBtnGhost, { borderColor: `${theme.border}99` }]
+                        : { backgroundColor: primary },
+                    ]}
+                    onPress={() => btn.onPress?.()}
+                    activeOpacity={0.85}
+                  >
+                    <Text
+                      style={[
+                        styles.sheetBtnText,
+                        { color: btn.variant === 'cancel' ? theme.text : '#fff' },
+                      ]}
+                    >
+                      {btn.text}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -574,6 +684,80 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: '#F0F4F8',
+  },
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+  },
+  sheetCard: {
+    maxHeight: '88%',
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 24,
+      },
+      android: { elevation: 8 },
+    }),
+  },
+  sheetTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    marginBottom: 12,
+  },
+  sheetScroll: {
+    maxHeight: 320,
+  },
+  sheetScrollContent: {
+    paddingBottom: 4,
+  },
+  sheetMessage: {
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  sheetActions: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+    gap: 10,
+    marginTop: 18,
+  },
+  sheetBtn: {
+    minHeight: 46,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexGrow: 1,
+    flexBasis: '40%',
+  },
+  sheetBtnFull: {
+    flexBasis: '100%',
+  },
+  sheetBtnGhost: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+  },
+  sheetBtnText: {
+    fontSize: 16,
+    fontWeight: '800',
+    textAlign: 'center',
+    writingDirection: 'rtl',
   },
   rtlText: {
     textAlign: 'right',

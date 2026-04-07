@@ -35,8 +35,6 @@ type SlideProps = {
 
 // Slide Component
 function Slide({ service, index, scrollX, onPress }: SlideProps) {
-  const imageUri = (service as any)?.image_url || (service as any)?.cover_url || (service as any)?.image || '';
-
   const containerStylez = useAnimatedStyle(() => {
     return {
       transform: [
@@ -100,28 +98,20 @@ function Slide({ service, index, scrollX, onPress }: SlideProps) {
             backgroundColor: 'rgba(0,0,0,0.1)',
           }}
         >
-          {imageUri ? (
-            <Animated.Image
-              source={{ uri: imageUri }}
-              style={[{ flex: 1, borderRadius: 26 }, stylez]}
-              resizeMode="cover"
-            />
-          ) : (
-            <Animated.View
-              style={[
-                {
-                  flex: 1,
-                  borderRadius: 26,
-                  backgroundColor: '#8B5CF6',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                },
-                stylez,
-              ]}
-            >
-              <Ionicons name="cut" size={80} color="rgba(255,255,255,0.5)" />
-            </Animated.View>
-          )}
+          <Animated.View
+            style={[
+              {
+                flex: 1,
+                borderRadius: 26,
+                backgroundColor: '#8B5CF6',
+                alignItems: 'center',
+                justifyContent: 'center',
+              },
+              stylez,
+            ]}
+          >
+            <Ionicons name="cut" size={80} color="rgba(255,255,255,0.5)" />
+          </Animated.View>
         </View>
       </Animated.View>
     </TouchableOpacity>
@@ -138,8 +128,6 @@ function BackdropImage({
   index: number;
   scrollX: SharedValue<number>;
 }) {
-  const imageUri = (service as any)?.image_url || (service as any)?.cover_url || (service as any)?.image || '';
-
   const stylez = useAnimatedStyle(() => {
     return {
       opacity: interpolate(
@@ -150,20 +138,9 @@ function BackdropImage({
     } as any;
   });
 
-  if (!imageUri) {
-    return (
-      <Animated.View
-        style={[StyleSheet.absoluteFillObject as any, { backgroundColor: '#1a1a2e' }, stylez]}
-      />
-    );
-  }
-
   return (
-    <Animated.Image
-      source={{ uri: imageUri }}
-      style={[StyleSheet.absoluteFillObject as any, stylez]}
-      blurRadius={50}
-      resizeMode="cover"
+    <Animated.View
+      style={[StyleSheet.absoluteFillObject as any, { backgroundColor: '#1a1a2e' }, stylez]}
     />
   );
 }

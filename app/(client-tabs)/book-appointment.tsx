@@ -28,7 +28,7 @@ import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
 import { isRtlLanguage, toBcp47Locale } from '@/lib/i18nLocale';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { notificationsApi } from '@/lib/api/notifications';
-import { businessProfileApi, isShowServiceImages, isMultiServiceBookingAllowed } from '@/lib/api/businessProfile';
+import { businessProfileApi, isMultiServiceBookingAllowed } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
 import { User } from '@/lib/supabase';
 import { darkenHex } from '@/lib/colorContrast';
@@ -599,7 +599,6 @@ export default function BookAppointment() {
   }, [selectedBarber?.id]);
 
   const [bookingOpenDays, setBookingOpenDays] = useState<number>(7);
-  const [showServiceImagesBooking, setShowServiceImagesBooking] = useState(true);
   const [allowMultiServiceBooking, setAllowMultiServiceBooking] = useState(false);
   useFocusEffect(
     useCallback(() => {
@@ -608,12 +607,10 @@ export default function BookAppointment() {
         try {
           const p = await businessProfileApi.getProfile();
           if (!cancelled && p) {
-            setShowServiceImagesBooking(isShowServiceImages(p));
             setAllowMultiServiceBooking(isMultiServiceBookingAllowed(p));
           }
         } catch {
           if (!cancelled) {
-            setShowServiceImagesBooking(true);
             setAllowMultiServiceBooking(false);
           }
         }
@@ -1775,7 +1772,6 @@ export default function BookAppointment() {
           services={filteredServices}
           selectedServiceIds={selectedServices.map((s: any) => String(s.id))}
           externalScrollX={serviceBgScrollX}
-          showServiceImages={showServiceImagesBooking}
           multiSelectEnabled={allowMultiServiceBooking}
           t={t}
           onSelectService={(service) => {

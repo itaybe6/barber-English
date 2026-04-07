@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Image,
   Dimensions,
   StyleSheet,
 } from 'react-native';
@@ -29,15 +28,6 @@ const _borderRadius = 12;
 const _itemSize = WIN_HEIGHT * 0.58;
 const _itemFullSize = _itemSize + _spacing * 2;
 
-function getServiceImageUri(service: Service): string | null {
-  return (
-    (service as any)?.image_url ||
-    (service as any)?.cover_url ||
-    (service as any)?.image ||
-    null
-  );
-}
-
 type ServiceAnimatedCardProps = {
   service: Service;
   index: number;
@@ -55,7 +45,6 @@ function ServiceAnimatedCard({
   primaryFallback,
   t,
 }: ServiceAnimatedCardProps) {
-  const uri = getServiceImageUri(service);
   const description = ((service as any)?.description as string | undefined)?.trim?.() || '';
   const duration = service?.duration_minutes ?? 60;
 
@@ -89,44 +78,24 @@ function ServiceAnimatedCard({
             padding: _spacing * 2,
             borderRadius: _borderRadius,
             gap: _spacing * 2,
-            backgroundColor: uri ? 'transparent' : tintBg,
+            backgroundColor: tintBg,
           },
           stylez,
         ]}
       >
-        {uri ? (
-          <>
-            <Image
-              source={{ uri }}
-              style={[StyleSheet.absoluteFillObject, { borderRadius: _borderRadius, opacity: 0.55 }]}
-              blurRadius={50}
-            />
-            <Image
-              source={{ uri }}
-              style={{
-                borderRadius: _borderRadius - _spacing / 2,
-                flex: 1,
-                height: _itemSize * 0.4,
-                margin: -_spacing,
-              }}
-              resizeMode="cover"
-            />
-          </>
-        ) : (
-          <View
-            style={{
-              borderRadius: _borderRadius - _spacing / 2,
-              flex: 1,
-              minHeight: _itemSize * 0.36,
-              margin: -_spacing,
-              backgroundColor: primaryFallback,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Ionicons name="cut" size={48} color="rgba(255,255,255,0.45)" />
-          </View>
-        )}
+        <View
+          style={{
+            borderRadius: _borderRadius - _spacing / 2,
+            flex: 1,
+            minHeight: _itemSize * 0.36,
+            margin: -_spacing,
+            backgroundColor: primaryFallback,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Ionicons name="cut" size={48} color="rgba(255,255,255,0.45)" />
+        </View>
 
         <View style={{ gap: _spacing }}>
           <Text style={styles.cardTitle} numberOfLines={2}>

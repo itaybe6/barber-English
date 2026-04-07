@@ -27,7 +27,6 @@ type Props = {
   selectedServiceId?: string | number | null;
   selectedServiceIds?: string[];
   externalScrollX?: SharedValue<number>;
-  showServiceImages?: boolean;
   /** When false, UI explains single-service selection only (toggle logic lives in parent). */
   multiSelectEnabled?: boolean;
   t: any;
@@ -43,7 +42,6 @@ export default function ServiceSelection({
   services,
   selectedServiceId,
   selectedServiceIds,
-  showServiceImages = true,
   multiSelectEnabled = true,
   t,
   onSelectService,

@@ -1325,10 +1325,9 @@ export const superAdminApi = {
       const storagePathsByBucket = new Map<string, Set<string>>();
       addStorageUrlsFromList(storagePathsByBucket, (profilePeek as any)?.home_hero_images);
 
-      const [designsRes, usersRes, servicesRes, productsRes] = await Promise.all([
+      const [designsRes, usersRes, productsRes] = await Promise.all([
         client.from('designs').select('image_url, image_urls').eq('business_id', businessId),
         client.from('users').select('image_url').eq('business_id', businessId),
-        client.from('services').select('image_url').eq('business_id', businessId),
         client.from('products').select('image_url').eq('business_id', businessId),
       ]);
 
@@ -1342,9 +1341,6 @@ export const superAdminApi = {
         addStorageUrlsFromList(storagePathsByBucket, (row as { image_urls?: string[] }).image_urls);
       }
       for (const row of usersRes.data || []) {
-        addStorageUrlToMap(storagePathsByBucket, (row as { image_url?: string | null }).image_url);
-      }
-      for (const row of servicesRes.data || []) {
         addStorageUrlToMap(storagePathsByBucket, (row as { image_url?: string | null }).image_url);
       }
       for (const row of productsRes.data || []) {

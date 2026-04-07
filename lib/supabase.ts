@@ -100,7 +100,6 @@ export interface Service {
   price: number;
   // Optional in type; DB has default 60 when not provided
   duration_minutes?: number;
-  image_url?: string;
   is_active: boolean;
   business_id: string;
   /** Admin/barber who owns this service (per-worker catalog). */
@@ -296,8 +295,6 @@ export interface BusinessProfile {
   client_swap_enabled?: boolean;
   /** When true, new registrations need admin approval (client_approved=false). Defaults to true if unset. */
   require_client_approval?: boolean;
-  /** When false, hide service images in admin service list, add/edit forms, and client booking. Defaults to true if unset. */
-  show_service_images?: boolean;
   /** When true, clients may select multiple services in one booking. Default false in DB. */
   allow_multi_service_booking?: boolean;
   /** When true, client home may show `home_fixed_message` (app-enforced). */

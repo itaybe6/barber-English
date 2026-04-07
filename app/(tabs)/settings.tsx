@@ -13,7 +13,7 @@ import { servicesApi, updateService, createService, deleteService, updateService
 import type { Service } from '@/lib/supabase';
 import { recurringAppointmentsApi } from '@/lib/api/recurringAppointments';
 import { supabase, getBusinessId } from '@/lib/supabase';
-import { businessProfileApi, isClientApprovalRequired, isClientSwapEnabled, isShowServiceImages, isMultiServiceBookingAllowed } from '@/lib/api/businessProfile';
+import { businessProfileApi, isClientApprovalRequired, isClientSwapEnabled, isMultiServiceBookingAllowed } from '@/lib/api/businessProfile';
 import type { BusinessProfile } from '@/lib/supabase';
 import { 
   LogOut, 
@@ -179,7 +179,6 @@ export default function SettingsScreen() {
   const [homeFixedMessageEditorOpen, setHomeFixedMessageEditorOpen] = useState(false);
   /** Extra ScrollView bottom inset so policies + home-message composer stay above keyboard & tab bar */
   const [settingsKeyboardInset, setSettingsKeyboardInset] = useState(0);
-  const [showServiceImages, setShowServiceImages] = useState(true);
   const [allowMultiServiceBooking, setAllowMultiServiceBooking] = useState(false);
   const [showEditAddressModal, setShowEditAddressModal] = useState(false);
   const [showAddressSheet, setShowAddressSheet] = useState(false);
@@ -295,7 +294,6 @@ export default function SettingsScreen() {
         }
         setClientSwapEnabled(isClientSwapEnabled(p));
         setRequireClientApproval(isClientApprovalRequired(p));
-        setShowServiceImages(isShowServiceImages(p));
         setAllowMultiServiceBooking(isMultiServiceBookingAllowed(p));
         {
           const cr = (p as BusinessProfile)?.client_reminder_minutes;
@@ -555,25 +553,6 @@ export default function SettingsScreen() {
       }
       setProfile(updated);
       setProfileTiktok(updated.tiktok_url || '');
-    } finally {
-      setIsSavingProfile(false);
-    }
-  };
-
-  const handleShowServiceImagesToggle = async (next: boolean) => {
-    if (!canSeeAddEmployee) return;
-    const prev = showServiceImages;
-    setShowServiceImages(next);
-    setIsSavingProfile(true);
-    try {
-      const updated = await businessProfileApi.setShowServiceImages(next);
-      if (!updated) {
-        setShowServiceImages(prev);
-        Alert.alert(t('error.generic', 'Error'), t('settings.services.showImagesSaveFailed', 'Could not save display setting'));
-        return;
-      }
-      setProfile(updated);
-      setShowServiceImages(isShowServiceImages(updated));
     } finally {
       setIsSavingProfile(false);
     }
@@ -1304,14 +1283,6 @@ export default function SettingsScreen() {
   const [editingServiceDurationId, setEditingServiceDurationId] = useState<string | null>(null);
   // category removed
   const [showDurationDropdown, setShowDurationDropdown] = useState(false);
-  // add-service image upload
-  const [addSvcImageUrl, setAddSvcImageUrl] = useState<string | null>(null);
-  const [addSvcUploadingImage, setAddSvcUploadingImage] = useState(false);
-
-  // Uploading indicator for per-service image update
-  const [uploadingServiceId, setUploadingServiceId] = useState<string | null>(null);
-
-
   /** 5 דק׳ עד 3 שעות (180), בקפיצות של 5 דק׳ */
   const durationOptions: number[] = useMemo(
     () => Array.from({ length: (180 - 5) / 5 + 1 }, (_, i) => 5 + i * 5),
@@ -1452,80 +1423,10 @@ export default function SettingsScreen() {
     }
   };
 
-  const uploadServiceImage = async (asset: { uri: string; base64?: string | null; mimeType?: string | null; fileName?: string | null }): Promise<string | null> => {
-    try {
-      let contentType = asset.mimeType || guessMimeFromUri(asset.fileName || asset.uri);
-      let fileBody: Blob | Uint8Array;
-      if (asset.base64) {
-        const bytes = base64ToUint8Array(asset.base64);
-        fileBody = bytes;
-      } else {
-        const response = await fetch(asset.uri, { cache: 'no-store' });
-        const fetched = await response.blob();
-        fileBody = fetched;
-        contentType = fetched.type || contentType;
-      }
-      const extGuess = (contentType.split('/')[1] || 'jpg').toLowerCase();
-      const randomId = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-      const filePath = `services/${Date.now()}_${randomId()}.${extGuess}`;
-      // Upload to new unified bucket 'app_design'
-      const { error } = await supabase.storage.from('app_design').upload(filePath, fileBody as any, { contentType, upsert: false });
-      if (error) {
-        console.error('upload error', error);
-        return null;
-      }
-      const { data } = supabase.storage.from('app_design').getPublicUrl(filePath);
-      return data.publicUrl;
-    } catch (e) {
-      console.error('upload exception', e);
-      return null;
-    }
-  };
-
-  const handlePickServiceImage = async (serviceId: string) => {
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(t('profile.permissionRequired','Permission Required'), t('profile.permissionGallery','Please allow gallery access to pick a profile picture'));
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'images',
-        allowsMultipleSelection: false,
-        quality: 0.9,
-        base64: true,
-      });
-      if (result.canceled || !result.assets?.length) return;
-      const a: any = result.assets[0];
-      setUploadingServiceId(serviceId);
-      const uploadedUrl = await uploadServiceImage({
-        uri: a.uri,
-        base64: a.base64 ?? null,
-        mimeType: a.mimeType ?? null,
-        fileName: a.fileName ?? null,
-      });
-      if (!uploadedUrl) {
-        Alert.alert(t('error.generic','Error'), t('settings.profile.uploadFailed','Image upload failed'));
-        return;
-      }
-      const persisted = await updateService(serviceId, { image_url: uploadedUrl } as any);
-      if (!persisted) {
-        Alert.alert(t('error.generic','Error'), t('settings.services.saveFailed','Failed to save service'));
-        return;
-      }
-      setEditableServices((prev) => prev.map((s) => (s.id === serviceId ? persisted : s)));
-    } catch (e) {
-      Alert.alert(t('error.generic','Error'), t('settings.profile.uploadFailed','Image upload failed'));
-    } finally {
-      setUploadingServiceId(null);
-    }
-  };
-
   const handleOpenAddService = () => {
     setAddSvcName('');
     setAddSvcPrice('0');
     setAddSvcDuration('60');
-    setAddSvcImageUrl(null);
     setIsAddingService(true);
   };
 
@@ -1542,7 +1443,6 @@ export default function SettingsScreen() {
         duration_minutes: parseInt(addSvcDuration, 10) || 60,
         is_active: true,
         worker_id: (user?.id as any) as any,
-        image_url: showServiceImages ? addSvcImageUrl || undefined : undefined,
       } as any);
       if (created) {
         const nextOrder = editableServices.length;
@@ -1553,7 +1453,6 @@ export default function SettingsScreen() {
         setAddSvcName('');
         setAddSvcPrice('0');
         setAddSvcDuration('60');
-        setAddSvcImageUrl(null);
       } else {
         Alert.alert(t('error.generic','Error'), t('settings.services.createFailed','Failed to create service'));
       }
@@ -1600,7 +1499,6 @@ export default function SettingsScreen() {
       const updated = await updateService(service.id, {
         name: service.name,
         price: service.price,
-        image_url: service.image_url,
         duration_minutes: service.duration_minutes,
         is_active: service.is_active,
         worker_id: (user?.id as any) as any,
@@ -2561,87 +2459,6 @@ export default function SettingsScreen() {
                   </View>
                 )}
 
-                {!isLoadingServices && !servicesError && canSeeAddEmployee && (
-                  <View style={[styles.servicesModalFullWidthBlock, styles.serviceImagesPrefOuter]}>
-                    <View
-                      style={[
-                        styles.serviceImagesPrefCard,
-                        Platform.select({
-                          ios: {
-                            shadowColor: businessColors.primary,
-                            shadowOffset: { width: 0, height: 6 },
-                            shadowOpacity: 0.12,
-                            shadowRadius: 16,
-                          },
-                          android: { elevation: 5 },
-                        }),
-                      ]}
-                    >
-                      <LinearGradient
-                        colors={[`${businessColors.primary}`, `${businessColors.primary}99`]}
-                        start={{ x: 0, y: 0.5 }}
-                        end={{ x: 1, y: 0.5 }}
-                        style={styles.serviceImagesPrefAccentBar}
-                      />
-                      <View style={styles.serviceImagesPrefInner}>
-                        <View style={styles.serviceImagesPrefCopy}>
-                          <View style={styles.serviceImagesPrefTitleRow}>
-                            <Text style={styles.serviceImagesPrefTitle} numberOfLines={2}>
-                              {t('settings.services.showImagesTitle', 'Service photos')}
-                            </Text>
-                            <View
-                              style={[
-                                styles.serviceImagesPrefStatusPill,
-                                {
-                                  backgroundColor: showServiceImages
-                                    ? `${businessColors.primary}18`
-                                    : 'rgba(142, 142, 147, 0.16)',
-                                },
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.serviceImagesPrefStatusText,
-                                  { color: showServiceImages ? businessColors.primary : '#636366' },
-                                ]}
-                              >
-                                {showServiceImages
-                                  ? t('settings.services.showImagesOn', 'On')
-                                  : t('settings.services.showImagesOff', 'Off')}
-                              </Text>
-                            </View>
-                          </View>
-                          <Text style={styles.serviceImagesPrefSubtitle}>
-                            {t(
-                              'settings.services.showImagesSubtitle',
-                              'Turn on to show your services with photos',
-                            )}
-                          </Text>
-                        </View>
-                        <View style={styles.serviceImagesPrefSwitchCol}>
-                          {isSavingProfile ? (
-                            <ActivityIndicator size="small" color={businessColors.primary} />
-                          ) : (
-                            <Switch
-                              value={showServiceImages}
-                              onValueChange={handleShowServiceImagesToggle}
-                              trackColor={{ false: '#E8E8ED', true: `${businessColors.primary}55` }}
-                              thumbColor={
-                                showServiceImages
-                                  ? businessColors.primary
-                                  : Platform.OS === 'android'
-                                    ? '#f4f3f4'
-                                    : '#FFFFFF'
-                              }
-                              ios_backgroundColor="#E8E8ED"
-                            />
-                          )}
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-                )}
-
                 {!isLoadingServices && !servicesError && editableServices.length === 0 && !isAddingService && (
                   <View style={[styles.svcEmptyState, styles.servicesModalFullWidthBlock]}>
                     <View style={[styles.svcEmptyIcon, { backgroundColor: `${businessColors.primary}15` }]}>
@@ -2687,17 +2504,9 @@ export default function SettingsScreen() {
                       <View style={[styles.svcCard, styles.svcListCard, justSaved && styles.svcCardSaved, isActive && styles.svcListCardDragging]}>
                         <View style={[styles.svcCardAccent, { backgroundColor: businessColors.primary }]} />
                         {!isExpanded ? (
-                          <View
-                            style={[
-                              styles.svcListCollapsedRow,
-                              !showServiceImages && styles.svcListCollapsedRowNoThumb,
-                            ]}
-                          >
+                          <View style={styles.svcListCollapsedRow}>
                             <TouchableOpacity
-                              style={[
-                                styles.svcListChevronHit,
-                                !showServiceImages && styles.svcListChevronHitNoThumb,
-                              ]}
+                              style={styles.svcListChevronHit}
                               activeOpacity={0.85}
                               onPress={() => setExpandedServiceId(prev => (prev === svc.id ? null : svc.id))}
                             >
@@ -2741,30 +2550,6 @@ export default function SettingsScreen() {
                                 </View>
                               </View>
                             </TouchableOpacity>
-                            {showServiceImages ? (
-                              <View style={styles.svcListThumbOuter}>
-                                <TouchableOpacity
-                                  onPress={() => handlePickServiceImage(svc.id)}
-                                  activeOpacity={0.85}
-                                  style={styles.svcListThumbWrap}
-                                >
-                                  {svc.image_url ? (
-                                    <Image source={{ uri: svc.image_url }} style={styles.svcListThumb} resizeMode="cover" />
-                                  ) : (
-                                    <View style={[styles.svcListThumbPlaceholder, { backgroundColor: `${businessColors.primary}15` }]}>
-                                      <Text style={[styles.svcListThumbPlaceholderText, { color: businessColors.primary }]}>
-                                        {(svc.name || '?').charAt(0).toUpperCase()}
-                                      </Text>
-                                    </View>
-                                  )}
-                                  {uploadingServiceId === svc.id && (
-                                    <View style={styles.svcListThumbUploadOverlay}>
-                                      <ActivityIndicator size="small" color="#fff" />
-                                    </View>
-                                  )}
-                                </TouchableOpacity>
-                              </View>
-                            ) : null}
                           </View>
                         ) : (
                           <>
@@ -2786,41 +2571,6 @@ export default function SettingsScreen() {
                                 )}
                               </TouchableOpacity>
                             </View>
-
-                            {showServiceImages ? (
-                              <View style={[styles.svcAddImageBandArea, { backgroundColor: `${businessColors.primary}08` }]}>
-                                <TouchableOpacity
-                                  style={styles.svcAddImageCircleBtn}
-                                  onPress={() => handlePickServiceImage(svc.id)}
-                                  activeOpacity={0.85}
-                                  disabled={uploadingServiceId === svc.id}
-                                >
-                                  {svc.image_url ? (
-                                    <>
-                                      <Image source={{ uri: svc.image_url }} style={styles.svcAddImageCircleFull} resizeMode="cover" />
-                                      <View style={styles.svcAddImageChangeOverlay}>
-                                        <Ionicons name="camera-outline" size={22} color="#fff" />
-                                      </View>
-                                    </>
-                                  ) : (
-                                    <View style={[styles.svcAddImageCirclePlaceholder, { borderColor: `${businessColors.primary}40` }]}>
-                                      {uploadingServiceId === svc.id ? (
-                                        <ActivityIndicator size="large" color={businessColors.primary} />
-                                      ) : (
-                                        <>
-                                          <View style={[styles.svcAddImageIconWrap, { backgroundColor: `${businessColors.primary}20` }]}>
-                                            <Ionicons name="camera-outline" size={28} color={businessColors.primary} />
-                                          </View>
-                                          <Text style={[styles.svcAddImageDashedLabel, { color: businessColors.primary, marginTop: 8 }]}>
-                                            {t('settings.services.changeImage','החלף תמונה')}
-                                          </Text>
-                                        </>
-                                      )}
-                                    </View>
-                                  )}
-                                </TouchableOpacity>
-                              </View>
-                            ) : null}
 
                             <View style={styles.svcAddFieldsArea}>
                               <View style={[styles.formGroup, { marginBottom: 10 }]}>
@@ -4706,53 +4456,6 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Image picker — only when business shows service images */}
-              {showServiceImages ? (
-                <View style={[styles.svcAddImageBandArea, { backgroundColor: `${businessColors.primary}08` }]}>
-                  <TouchableOpacity
-                    style={styles.svcAddImageCircleBtn}
-                    onPress={async () => {
-                      try {
-                        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-                        if (status !== 'granted') { Alert.alert(t('permission.required','Permission Required'), t('settings.common.galleryPermissionImage','Please allow gallery access')); return; }
-                        const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', allowsMultipleSelection: false, quality: 0.9, base64: true });
-                        if (result.canceled || !result.assets?.length) return;
-                        const a: any = result.assets[0];
-                        setAddSvcUploadingImage(true);
-                        const uploadedUrl = await uploadServiceImage({ uri: a.uri, base64: a.base64 ?? null, mimeType: a.mimeType ?? null, fileName: a.fileName ?? null });
-                        if (uploadedUrl) setAddSvcImageUrl(uploadedUrl);
-                      } catch { } finally { setAddSvcUploadingImage(false); }
-                    }}
-                    activeOpacity={0.85}
-                    disabled={addSvcUploadingImage}
-                  >
-                    {addSvcImageUrl ? (
-                      <>
-                        <Image source={{ uri: addSvcImageUrl }} style={styles.svcAddImageCircleFull} resizeMode="cover" />
-                        <View style={styles.svcAddImageChangeOverlay}>
-                          <Ionicons name="camera-outline" size={22} color="#fff" />
-                        </View>
-                      </>
-                    ) : (
-                      <View style={[styles.svcAddImageCirclePlaceholder, { borderColor: `${businessColors.primary}40` }]}>
-                        {addSvcUploadingImage ? (
-                          <ActivityIndicator size="large" color={businessColors.primary} />
-                        ) : (
-                          <>
-                            <View style={[styles.svcAddImageIconWrap, { backgroundColor: `${businessColors.primary}20` }]}>
-                              <Ionicons name="camera-outline" size={28} color={businessColors.primary} />
-                            </View>
-                            <Text style={[styles.svcAddImageDashedLabel, { color: businessColors.primary, marginTop: 8 }]}>
-                              {t('settings.services.uploadImage','העלה תמונה')}
-                            </Text>
-                          </>
-                        )}
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              ) : null}
-
               {/* Fields area */}
               <View style={styles.svcAddFieldsArea}>
               {/* Service name */}
@@ -4807,9 +4510,9 @@ export default function SettingsScreen() {
                   <Text style={styles.svcCancelButtonText}>{t('cancel','ביטול')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.svcSaveButton, { backgroundColor: businessColors.primary, opacity: (addSvcIsSaving || addSvcUploadingImage) ? 0.7 : 1 }]}
+                  style={[styles.svcSaveButton, { backgroundColor: businessColors.primary, opacity: addSvcIsSaving ? 0.7 : 1 }]}
                   onPress={handleCreateService}
-                  disabled={addSvcIsSaving || addSvcUploadingImage}
+                  disabled={addSvcIsSaving}
                   activeOpacity={0.85}
                 >
                   <Text style={styles.svcSaveButtonText}>
@@ -6806,70 +6509,6 @@ const styles = StyleSheet.create({
   servicesModalFullWidthBlock: {
     width: '100%',
   },
-  serviceImagesPrefOuter: {
-    paddingHorizontal: 2,
-    marginBottom: 14,
-  },
-  serviceImagesPrefCard: {
-    width: '100%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(60, 60, 67, 0.10)',
-  },
-  serviceImagesPrefAccentBar: {
-    width: '100%',
-    height: 4,
-  },
-  serviceImagesPrefInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    paddingTop: 17,
-  },
-  serviceImagesPrefCopy: {
-    flex: 1,
-    minWidth: 0,
-    marginInlineEnd: 14,
-  },
-  serviceImagesPrefTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    marginBottom: 6,
-    gap: 8,
-  },
-  serviceImagesPrefTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: Colors.text,
-    letterSpacing: -0.35,
-    lineHeight: 22,
-    flexShrink: 1,
-  },
-  serviceImagesPrefStatusPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  serviceImagesPrefStatusText: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.15,
-  },
-  serviceImagesPrefSubtitle: {
-    fontSize: 13,
-    color: '#636366',
-    lineHeight: 19,
-    letterSpacing: -0.08,
-  },
-  serviceImagesPrefSwitchCol: {
-    minWidth: 51,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   svcListCell: {
     width: '100%',
     marginBottom: 10,
@@ -6886,76 +6525,26 @@ const styles = StyleSheet.create({
     direction: 'ltr',
     alignItems: 'center',
     paddingVertical: 14,
-    paddingLeft: 10,
-    paddingRight: 8,
-    gap: 10,
-  },
-  /** Extra inset on chevron side when service thumbnails are hidden */
-  svcListCollapsedRowNoThumb: {
     paddingLeft: 28,
     paddingRight: 12,
-  },
-  svcListThumbOuter: {
-    position: 'relative',
-    width: 70,
-    height: 70,
-  },
-  svcListThumbWrap: {
-    width: 70,
-    height: 70,
-    borderRadius: 14,
-    overflow: 'hidden',
-    backgroundColor: '#F0F0F5',
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4 },
-      android: { elevation: 2 },
-    }),
-  },
-  svcListThumb: {
-    width: 70,
-    height: 70,
-    borderRadius: 14,
-  },
-  svcListThumbPlaceholder: {
-    width: 70,
-    height: 70,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  svcListThumbPlaceholderText: {
-    fontSize: 24,
-    fontWeight: '700',
-  },
-  svcListThumbUploadOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
+    gap: 10,
   },
   svcListCollapsedMain: {
     flex: 1,
     minWidth: 0,
     justifyContent: 'center',
   },
-  /** Exact thumb height; justifyContent centers title+chips (must not use flex:1 on inner svcCardInfo) */
   svcListCollapsedTextCol: {
-    height: 70,
+    minHeight: 44,
     justifyContent: 'center',
     width: '100%',
   },
   svcListChevronHit: {
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 28,
-    minHeight: 44,
-    paddingHorizontal: 2,
-  },
-  svcListChevronHitNoThumb: {
-    paddingLeft: 8,
-    paddingRight: 8,
     minWidth: 40,
+    minHeight: 44,
+    paddingHorizontal: 8,
   },
   inputContainer: {
     marginBottom: 24,
@@ -7528,72 +7117,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: Colors.text,
-  },
-  svcAddImageBandArea: {
-    alignItems: 'center',
-    paddingVertical: 24,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E5EA',
-  },
-  svcAddImageCircleBtn: {
-    width: 120,
-    height: 120,
-    borderRadius: 20,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  svcAddImageCirclePlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#FAFAFA',
-  },
-  svcAddImageIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  svcAddImageCircleFull: {
-    width: 120,
-    height: 120,
-    borderRadius: 20,
-  },
-  svcAddImageDashedBox: {
-    width: 110,
-    height: 110,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#C7C7CC',
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#FAFAFA',
-  },
-  svcAddImageDashedLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  svcAddImageFull: {
-    width: 110,
-    height: 110,
-    borderRadius: 16,
-  },
-  svcAddImageChangeOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 20,
   },
   svcAddFieldsArea: {
     paddingHorizontal: 18,

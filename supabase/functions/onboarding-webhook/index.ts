@@ -50,8 +50,7 @@
  *   הלוגו העסקי נשאר בנתיב branding (logo.png) — לא מערבבים עם hero אלא אם נשלח גם במערך hero.
  *
  * שירותים (אופציונלי): services | service_list | offered_services | שירותים — מערך ללא הגבלת כמות:
- *   { name | שם_שירות, price | מחיר, duration | duration_minutes | משך | משך_בדקות,
- *     תמונה אופציונלית: image_url | image | service_image | תמונה | אובייקט image: { url | base64 } }
+ *   { name | שם_שירות, price | מחיר, duration | duration_minutes | משך | משך_בדקות }
  *   אם ריק — נוצרים 3 שירותי ברירת מחדל כמו בסופר־אדמין.
  *
  * פולסים: pulseemFromNumber, pulseem_from_number (ברירת מחדל clientName), pulseemSubPassword
@@ -379,41 +378,17 @@ async function uploadHeroImagesToStorage(
   return urls;
 }
 
-function pickServiceImageInput(o: Record<string, unknown>): string {
-  const direct = pickStr(o, [
-    "image_url",
-    "imageUrl",
-    "image",
-    "service_image",
-    "serviceImage",
-    "photo",
-    "picture",
-    "תמונה",
-    "תמונת_שירות",
-    "service_image_url",
-  ]);
-  if (direct) return direct;
-  const img = subObject(o, "image");
-  if (img) {
-    const nested = pickStr(img, ["url", "src", "base64", "data", "dataUrl"]);
-    if (nested) return nested;
-  }
-  return pickImageField(o, ["image_base64", "imageBase64"]);
-}
-
-/** טיוטות שירותים — ללא הגבלת כמות; תמונה אופציונלית; sort_order → order_index. */
+/** טיוטות שירותים — ללא הגבלת כמות; sort_order → order_index. */
 function buildServiceDrafts(p: Record<string, unknown>): Array<{
   name: string;
   price: number;
   duration_minutes: number;
-  imageInput?: string;
   order_index?: number;
 }> {
   const defaults: Array<{
     name: string;
     price: number;
     duration_minutes: number;
-    imageInput?: string;
     order_index?: number;
   }> = [
     { name: "שירות 1", price: 150, duration_minutes: 60 },
@@ -429,7 +404,6 @@ function buildServiceDrafts(p: Record<string, unknown>): Array<{
     name: string;
     price: number;
     duration_minutes: number;
-    imageInput?: string;
     order_index?: number;
   }> = [];
 
@@ -460,14 +434,12 @@ function buildServiceDrafts(p: Record<string, unknown>): Array<{
       30,
     );
     dur = Math.max(5, Math.min(480, dur || 30));
-    const imageInput = pickServiceImageInput(o);
     const sortOrder = pickNumber(o, ["sort_order", "order_index", "order"], -1);
     const row: (typeof rows)[0] = {
       name,
       price,
       duration_minutes: dur,
     };
-    if (imageInput) row.imageInput = imageInput;
     if (sortOrder >= 0) row.order_index = Math.floor(sortOrder);
     rows.push(row);
   }
@@ -1028,25 +1000,10 @@ serve(async (req) => {
     is_active: boolean;
     business_id: string;
     worker_id: string;
-    image_url?: string;
     order_index?: number;
   }> = [];
 
-  let svcSeq = 0;
   for (const d of serviceDrafts) {
-    let image_url: string | undefined;
-    if (d.imageInput) {
-      const b = await imageInputToBytes(d.imageInput);
-      if (b?.length) {
-        const ct = guessImageContentType(b);
-        const ext = extFromContentType(ct);
-        const path = `services/${Date.now()}_${svcSeq++}_${
-          crypto.randomUUID().replace(/-/g, "").slice(0, 10)
-        }.${ext}`;
-        const u = await uploadBytesGetPublicUrl(admin, path, b, ct);
-        if (u) image_url = u;
-      }
-    }
     const row: (typeof serviceRows)[0] = {
       name: d.name,
       price: d.price,
@@ -1055,7 +1012,6 @@ serve(async (req) => {
       business_id: businessId,
       worker_id: adminUserId,
     };
-    if (image_url) row.image_url = image_url;
     if (typeof d.order_index === "number") row.order_index = d.order_index;
     serviceRows.push(row);
   }

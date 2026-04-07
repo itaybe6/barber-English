@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, I18nManager } from 'react-native';
+import React, { forwardRef, useImperativeHandle, useRef } from 'react';
+import { View, Text, StyleSheet, I18nManager, type View as RNView } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import BookingAnimatedCalendar from '@/components/book-appointment/games-calendar/BookingAnimatedCalendar';
@@ -23,19 +23,53 @@ type Props = {
   onClearTime: () => void;
 };
 
-export default function DaySelection({
-  visible,
-  styles,
-  days,
-  bookingOpenDays,
-  selectedDate,
-  dayAvailability,
-  language,
-  primaryColor,
-  t,
-  onSelectDayIndex,
-  onClearTime,
-}: Props) {
+export interface DaySelectionHandle {
+  measureSelectedDayCellInWindow: (
+    callback: (rect: { x: number; y: number; width: number; height: number } | null) => void
+  ) => void;
+}
+
+const DaySelection = forwardRef<DaySelectionHandle, Props>(function DaySelection(
+  {
+    visible,
+    styles,
+    days,
+    bookingOpenDays,
+    selectedDate,
+    dayAvailability,
+    language,
+    primaryColor,
+    t,
+    onSelectDayIndex,
+    onClearTime,
+  },
+  ref
+) {
+  const selectedDayCellRef = useRef<RNView>(null);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      measureSelectedDayCellInWindow(callback) {
+        requestAnimationFrame(() => {
+          const node = selectedDayCellRef.current;
+          if (!node) {
+            callback(null);
+            return;
+          }
+          node.measureInWindow((x, y, w, h) => {
+            if (typeof w !== 'number' || typeof h !== 'number' || w < 8 || h < 8) {
+              callback(null);
+              return;
+            }
+            callback({ x, y, width: w, height: h });
+          });
+        });
+      },
+    }),
+    []
+  );
+
   if (!visible) return null;
 
   return (
@@ -74,6 +108,7 @@ export default function DaySelection({
               primaryColor={primaryColor}
               onSelectDayIndex={onSelectDayIndex}
               onClearTime={onClearTime}
+              selectedDayCellRef={selectedDayCellRef}
             />
           </View>
         </View>
@@ -89,7 +124,9 @@ export default function DaySelection({
       </Animated.View>
     </View>
   );
-}
+});
+
+export default DaySelection;
 
 function LegendItem({ dot, label }: { dot: string; label: string }) {
   return (

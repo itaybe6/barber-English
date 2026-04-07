@@ -1,4 +1,4 @@
-import React, { useCallback, useImperativeHandle, useMemo, useRef, forwardRef } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useRef, forwardRef } from 'react';
 import {
   View,
   Text,
@@ -6,28 +6,29 @@ import {
   StyleSheet,
   ActivityIndicator,
   Image,
-  Platform,
   useWindowDimensions,
+  Animated as RNAnimated,
+  I18nManager,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { SharedValue } from 'react-native-reanimated';
+import Reanimated, { type SharedValue } from 'react-native-reanimated';
 
 import type { User } from '@/lib/supabase';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { bookingStepRowEntering } from '@/components/book-appointment/bookingStepListEnterAnimation';
 
-const GRID_H_PADDING = 14;
-const GRID_GAP = 18;
-const CARD_HEIGHT_RATIO = 1.11;
 const CARD_CORNER = 56;
-const CARD_BG_UNSELECTED = 'rgba(255,255,255,0.16)';
-const CARD_BORDER_UNSELECTED = 'rgba(255,255,255,0.34)';
-const CARD_BORDER_SELECTED = 'rgba(255,255,255,0.95)';
-const CARD_BORDER_WIDTH_SELECTED = 5;
-/** Pill sits on bottom frame; this much extends below the card */
-const NAME_PILL_OUTSIDE = 20;
-const NAME_PILL_H_PAD = 18;
-const NAME_PILL_V_PAD = 10;
+const CARD_BG_PLACEHOLDER = 'rgba(255,255,255,0.08)';
+/** Carousel: portrait card like Nike-style paging strip */
+const ITEM_WIDTH_RATIO = 0.72;
+const ITEM_HEIGHT_RATIO = 1.52;
+const NAME_STRIP_SPACING = 16;
+const NAME_STRIP_HEIGHT = 40;
+const DOT_SIZE = 7;
+const DOT_GAP = 10;
+const DOT_ACTIVE_SCALE = 1.35;
 
 type Props = {
   visible: boolean;
@@ -80,6 +81,12 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
   const { colors } = useBusinessColors();
   const { width: winW } = useWindowDimensions();
   const selectedFaceRef = useRef<View>(null);
+  const flatListRef = useRef<InstanceType<typeof RNAnimated.FlatList<User>> | null>(null);
+  const scrollX = useRef(new RNAnimated.Value(0)).current;
+
+  const pageWidth = winW;
+  const itemW = Math.round(pageWidth * ITEM_WIDTH_RATIO);
+  const itemH = Math.round(itemW * ITEM_HEIGHT_RATIO);
 
   const reportFaceFrame = useCallback(() => {
     const node = selectedFaceRef.current;
@@ -124,24 +131,57 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
     [onSelectedFaceWindowFrame, reportFaceFrame]
   );
 
-  const { cardW, cardH } = useMemo(() => {
-    const inner = winW - GRID_H_PADDING * 2 - GRID_GAP;
-    const w = Math.max(120, Math.floor(inner / 2));
-    const h = Math.round(w * CARD_HEIGHT_RATIO);
-    return { cardW: w, cardH: h };
-  }, [winW]);
+  useEffect(() => {
+    if (!visible || barbers.length === 0) return;
+    const idx = barbers.findIndex((b) => String(b.id ?? '') === String(selectedBarberId ?? ''));
+    if (idx < 0) return;
+    const id = requestAnimationFrame(() => {
+      flatListRef.current?.scrollToIndex({ index: idx, animated: false });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [visible, barbers, selectedBarberId]);
+
+  const getItemLayout = useCallback(
+    (_: unknown, index: number) => ({
+      length: pageWidth,
+      offset: pageWidth * index,
+      index,
+    }),
+    [pageWidth]
+  );
+
+  const syncSelectionFromOffset = useCallback(
+    (x: number) => {
+      const index = Math.round(x / pageWidth);
+      const barber = barbers[index];
+      if (!barber) return;
+      if (String(barber.id ?? '') !== String(selectedBarberId ?? '')) {
+        onSelectBarber(barber);
+      }
+      requestAnimationFrame(reportFaceFrame);
+    },
+    [barbers, onSelectBarber, pageWidth, reportFaceFrame, selectedBarberId]
+  );
+
+  const onMomentumScrollEnd = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      syncSelectionFromOffset(e.nativeEvent.contentOffset.x);
+    },
+    [syncSelectionFromOffset]
+  );
 
   if (!visible) return null;
 
   return (
-    <Animated.View
+    <Reanimated.View
       style={[
         parentStyles.section,
         introFadeStyle,
         {
-          marginTop: Math.max(topOffset + 12, 16),
+          marginTop: Math.max(topOffset - 20, 2),
           marginBottom: 0,
           marginHorizontal: 0,
+          backgroundColor: 'transparent',
         },
       ]}
     >
@@ -164,95 +204,177 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
               {t('booking.selectStaffTitle', 'Choose your stylist')}
             </Text>
             <Text style={styles.subtitle}>
-              {t('booking.selectStaffSubtitle', 'Tap a team member below to continue')}
+              {t(
+                'booking.selectStaffSubtitle',
+                'Swipe or tap a team member to continue'
+              )}
             </Text>
           </View>
 
-          <View
-            style={[
-              styles.grid,
-              { paddingHorizontal: GRID_H_PADDING, gap: GRID_GAP, direction: 'rtl' },
-            ]}
-          >
-            {barbers.map((barber, index) => {
-              const isSelected = String(barber.id ?? '') === String(selectedBarberId ?? '');
-              const uri = (barber?.image_url as string | undefined) || '';
-              const rowKey = String(barber.id ?? `barber-${index}`);
-
-              return (
-                <Animated.View
-                  key={rowKey}
-                  entering={bookingStepRowEntering(index)}
-                  style={[styles.cardSlot, { width: cardW, marginBottom: NAME_PILL_OUTSIDE + 10 }]}
-                >
-                  <Pressable
-                    onPress={() => onSelectBarber(barber)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isSelected }}
-                    accessibilityLabel={barber.name || t('booking.step.barber', 'Barber')}
-                    android_ripple={{ color: primaryWithAlpha(colors.primary, '28') }}
-                    style={({ pressed }) => [styles.cardPressable, { transform: [{ scale: pressed ? 0.97 : 1 }] }]}
+          <Reanimated.View entering={bookingStepRowEntering(0)} style={styles.carouselShell}>
+            <View style={styles.dotsRow} accessibilityLabel={t('booking.staffCarouselDots', 'Staff carousel pagination')}>
+              {barbers.map((_, index) => {
+                const pageProgress = RNAnimated.divide(scrollX, pageWidth);
+                const opacity = pageProgress.interpolate({
+                  inputRange: [index - 0.6, index, index + 0.6],
+                  outputRange: [0.35, 1, 0.35],
+                  extrapolate: 'clamp',
+                });
+                const scale = pageProgress.interpolate({
+                  inputRange: [index - 0.55, index, index + 0.55],
+                  outputRange: [1, DOT_ACTIVE_SCALE, 1],
+                  extrapolate: 'clamp',
+                });
+                return (
+                  <RNAnimated.View
+                    key={`dot-${index}`}
+                    style={[
+                      styles.dotWrap,
+                      {
+                        marginHorizontal: DOT_GAP / 2,
+                        opacity,
+                        transform: [{ scale }],
+                      },
+                    ]}
                   >
-                    <View style={[styles.cardSlotInner, { width: cardW, height: cardH }]}>
-                      <View
-                        ref={isSelected ? selectedFaceRef : undefined}
-                        collapsable={false}
-                        onLayout={
-                          isSelected
-                            ? () => {
-                                requestAnimationFrame(reportFaceFrame);
-                              }
-                            : undefined
-                        }
-                        style={[
-                          styles.cardFace,
-                          {
-                            width: cardW,
-                            height: cardH,
-                            backgroundColor: isSelected ? '#FFFFFF' : CARD_BG_UNSELECTED,
-                            borderWidth: isSelected ? CARD_BORDER_WIDTH_SELECTED : 1,
-                            borderColor: isSelected ? CARD_BORDER_SELECTED : CARD_BORDER_UNSELECTED,
-                            shadowColor: isSelected ? colors.primary : '#000',
-                            shadowOpacity: isSelected ? 0.2 : 0.16,
-                            shadowRadius: isSelected ? 14 : 10,
-                            elevation: Platform.OS === 'android' ? (isSelected ? 6 : 4) : 0,
-                          },
+                    <View style={styles.dot} />
+                  </RNAnimated.View>
+                );
+              })}
+            </View>
+
+            {/* LTR scroll so swipe direction and scrollX math match the Nike-style strip */}
+            <View style={styles.carouselLtr}>
+              <RNAnimated.FlatList
+                ref={flatListRef}
+                data={barbers}
+                horizontal
+                pagingEnabled
+                nestedScrollEnabled
+                showsHorizontalScrollIndicator={false}
+                scrollEventThrottle={16}
+                keyboardShouldPersistTaps="handled"
+                keyExtractor={(item, index) => String(item.id ?? `barber-${index}`)}
+                getItemLayout={getItemLayout}
+                onScroll={RNAnimated.event(
+                  [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+                  { useNativeDriver: true }
+                )}
+                onMomentumScrollEnd={onMomentumScrollEnd}
+                onScrollToIndexFailed={({ index }) => {
+                  setTimeout(() => {
+                    flatListRef.current?.scrollToIndex({ index, animated: false });
+                  }, 80);
+                }}
+                renderItem={({ item: barber, index }) => {
+                  const isSelected = String(barber.id ?? '') === String(selectedBarberId ?? '');
+                  const uri = (barber?.image_url as string | undefined) || '';
+
+                  return (
+                    <RNAnimated.View
+                      style={[
+                        styles.carouselPage,
+                        {
+                          width: pageWidth,
+                          shadowColor: 'transparent',
+                          shadowOpacity: 0,
+                          elevation: 0,
+                        },
+                      ]}
+                    >
+                      <Pressable
+                        onPress={() => {
+                          flatListRef.current?.scrollToIndex({ index, animated: true });
+                          onSelectBarber(barber);
+                          requestAnimationFrame(reportFaceFrame);
+                        }}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isSelected }}
+                        accessibilityLabel={barber.name || t('booking.step.barber', 'Barber')}
+                        android_ripple={{ color: primaryWithAlpha(colors.primary, '28') }}
+                        style={({ pressed }) => [
+                          styles.carouselPressable,
+                          { transform: [{ scale: pressed ? 0.97 : 1 }] },
                         ]}
                       >
-                        {uri ? (
-                          <Image source={{ uri }} style={styles.imageFill} resizeMode="cover" />
-                        ) : (
-                          <View style={styles.imagePlaceholder}>
-                            <Ionicons
-                              name="person"
-                              size={Math.round(cardH * 0.22)}
-                              color="rgba(255,255,255,0.35)"
-                            />
-                          </View>
-                        )}
-                      </View>
-
-                      <View style={styles.namePillWrap} pointerEvents="none">
                         <View
+                          ref={isSelected ? selectedFaceRef : undefined}
+                          collapsable={false}
+                          onLayout={
+                            isSelected
+                              ? () => {
+                                  requestAnimationFrame(reportFaceFrame);
+                                }
+                              : undefined
+                          }
                           style={[
-                            styles.namePill,
-                            isSelected && styles.namePillSelected,
+                            styles.cardFace,
+                            {
+                              width: itemW,
+                              height: itemH,
+                              backgroundColor: 'transparent',
+                              borderWidth: 0,
+                              shadowOpacity: 0,
+                              elevation: 0,
+                            },
                           ]}
                         >
-                          <Text
-                            style={[styles.namePillText, { color: colors.primary }]}
-                            numberOfLines={2}
-                          >
-                            {barber.name || ''}
-                          </Text>
+                          {uri ? (
+                            <Image source={{ uri }} style={styles.imageFill} resizeMode="cover" />
+                          ) : (
+                            <View style={[styles.imagePlaceholder, { backgroundColor: CARD_BG_PLACEHOLDER }]}>
+                              <Ionicons
+                                name="person"
+                                size={Math.round(itemH * 0.22)}
+                                color="rgba(255,255,255,0.35)"
+                              />
+                            </View>
+                          )}
                         </View>
-                      </View>
-                    </View>
-                  </Pressable>
-                </Animated.View>
-              );
-            })}
-          </View>
+                      </Pressable>
+                    </RNAnimated.View>
+                  );
+                }}
+              />
+            </View>
+
+            <View
+              style={[
+                styles.nameStrip,
+                {
+                  height: NAME_STRIP_HEIGHT,
+                  marginHorizontal: NAME_STRIP_SPACING,
+                  marginTop: NAME_STRIP_SPACING,
+                  width: itemW,
+                  alignSelf: 'center',
+                },
+              ]}
+            >
+              {barbers.map((barber, index) => {
+                const opacity = RNAnimated.divide(scrollX, pageWidth).interpolate({
+                  inputRange: [index - 0.8, index, index + 1],
+                  outputRange: [0, 1, 0],
+                  extrapolate: 'clamp',
+                });
+                return (
+                  <RNAnimated.Text
+                    key={String(barber.id ?? `name-${index}`)}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    style={[
+                      styles.nameStripText,
+                      {
+                        opacity,
+                        writingDirection: I18nManager.isRTL ? 'rtl' : 'ltr',
+                      },
+                    ]}
+                  >
+                    {barber.name || ''}
+                  </RNAnimated.Text>
+                );
+              })}
+            </View>
+          </Reanimated.View>
         </View>
       ) : (
         <View style={styles.loadingState}>
@@ -272,7 +394,7 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
           </Text>
         </View>
       )}
-    </Animated.View>
+    </Reanimated.View>
   );
 });
 
@@ -280,7 +402,7 @@ export default BarberSelection;
 
 const styles = StyleSheet.create({
   shell: {
-    gap: 22,
+    gap: 14,
   },
   loadingState: {
     minHeight: 220,
@@ -307,26 +429,59 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignContent: 'flex-start',
+  carouselShell: {
     width: '100%',
+    paddingBottom: 4,
+    backgroundColor: 'transparent',
   },
-  cardSlot: {
-    overflow: 'visible',
+  dotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+    backgroundColor: 'transparent',
   },
-  cardPressable: {
-    overflow: 'visible',
+  dotWrap: {
+    width: DOT_SIZE + 4,
+    height: DOT_SIZE + 4,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  cardSlotInner: {
-    position: 'relative',
-    overflow: 'visible',
+  dot: {
+    width: DOT_SIZE,
+    height: DOT_SIZE,
+    borderRadius: DOT_SIZE / 2,
+    backgroundColor: '#FFFFFF',
+  },
+  carouselLtr: {
+    width: '100%',
+    direction: 'ltr',
+  },
+  carouselPage: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  carouselPressable: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nameStrip: {
+    overflow: 'hidden',
+    justifyContent: 'center',
+  },
+  nameStripText: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontWeight: '800',
+    fontSize: 28,
+    letterSpacing: -0.5,
+    color: '#FFFFFF',
   },
   cardFace: {
     borderRadius: CARD_CORNER,
     overflow: 'hidden',
-    shadowOffset: { width: 0, height: 4 },
   },
   imageFill: {
     ...StyleSheet.absoluteFillObject,
@@ -337,38 +492,5 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(28,28,36,1)',
-  },
-  namePillWrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: -NAME_PILL_OUTSIDE,
-    alignItems: 'center',
-    paddingHorizontal: 12,
-  },
-  namePill: {
-    maxWidth: '100%',
-    backgroundColor: '#FFFFFF',
-    paddingVertical: NAME_PILL_V_PAD,
-    paddingHorizontal: NAME_PILL_H_PAD,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    elevation: 5,
-  },
-  namePillSelected: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(0,0,0,0.08)',
-  },
-  namePillText: {
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: -0.2,
-    textAlign: 'center',
   },
 });

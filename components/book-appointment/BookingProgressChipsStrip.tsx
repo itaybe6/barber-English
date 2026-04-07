@@ -28,12 +28,15 @@ export interface BookingProgressChipModel {
   imageUri?: string;
 }
 
-/** Moti `from` for the barber cell inner layer (flight from card). */
-export interface BarberChipEntrance {
+/** Moti `from` for chip “flight” from a measured on-screen rect (barber face, service row, day cell). */
+export interface ChipFlightEntrance {
   translateX: number;
   translateY: number;
   scale: number;
 }
+
+/** @deprecated Use ChipFlightEntrance — kept for existing imports */
+export type BarberChipEntrance = ChipFlightEntrance;
 
 function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
@@ -58,26 +61,39 @@ export function slotCenterX(
 }
 
 /**
- * Delta from measured card face (window coords) to first chip slot center (step 2, single chip).
+ * Delta from measured source rect (window coords) to chip slot `slotIndex` when the strip shows `slotCount` chips.
  */
-export function computeBarberEntranceFromRect(
+export function computeChipFlightEntranceFromRect(
   rect: { x: number; y: number; width: number; height: number },
   windowWidth: number,
   safeAreaTop: number,
-  rtl: boolean
-): BarberChipEntrance {
+  rtl: boolean,
+  slotCount: number,
+  slotIndex: number,
+  scaleMax = 5.5
+): ChipFlightEntrance {
   const cx = rect.x + rect.width / 2;
   const cy = rect.y + rect.height / 2;
   const stripTop = safeAreaTop + BOOKING_PROGRESS_STRIP_TOP_GAP;
   const endCy = stripTop + BOOKING_PROGRESS_STRIP_HEIGHT / 2;
-  const endCx = slotCenterX(1, 0, windowWidth, H_PAD, GAP, rtl);
+  const endCx = slotCenterX(slotCount, slotIndex, windowWidth, H_PAD, GAP, rtl);
   const cellInner = BOOKING_PROGRESS_STRIP_HEIGHT - 14;
-  const scale = clamp(Math.max(rect.width, rect.height) / cellInner, 1.04, 5.5);
+  const scale = clamp(Math.max(rect.width, rect.height) / cellInner, 1.04, scaleMax);
   return {
     translateX: cx - endCx,
     translateY: cy - endCy,
     scale,
   };
+}
+
+/** Barber only on strip (step 2): one slot. */
+export function computeBarberEntranceFromRect(
+  rect: { x: number; y: number; width: number; height: number },
+  windowWidth: number,
+  safeAreaTop: number,
+  rtl: boolean
+): ChipFlightEntrance {
+  return computeChipFlightEntranceFromRect(rect, windowWidth, safeAreaTop, rtl, 1, 0);
 }
 
 interface Props {
@@ -86,9 +102,13 @@ interface Props {
   primaryColor: string;
   chips: BookingProgressChipModel[];
   /** Set when advancing from barber step with a measured face rect; cleared when not used */
-  barberEntrance: BarberChipEntrance | null;
+  barberEntrance: ChipFlightEntrance | null;
   /** Bump to replay barber entrance (e.g. 1 → 2) */
   barberEntranceKey: number;
+  serviceEntrance?: ChipFlightEntrance | null;
+  serviceEntranceKey?: number;
+  dayEntrance?: ChipFlightEntrance | null;
+  dayEntranceKey?: number;
 }
 
 export default function BookingProgressChipsStrip({
@@ -98,6 +118,10 @@ export default function BookingProgressChipsStrip({
   chips,
   barberEntrance,
   barberEntranceKey,
+  serviceEntrance = null,
+  serviceEntranceKey = 0,
+  dayEntrance = null,
+  dayEntranceKey = 0,
 }: Props) {
   const { width: winW } = useWindowDimensions();
   const rtl = I18nManager.isRTL;
@@ -120,13 +144,32 @@ export default function BookingProgressChipsStrip({
         },
       ]}
     >
-      <View style={[styles.row, { flexDirection: rtl ? 'row-reverse' : 'row', gap: GAP }]}>
+      <View
+        style={[styles.row, { flexDirection: rtl ? 'row-reverse' : 'row', gap: GAP }]}
+        collapsable={false}
+      >
         <AnimatePresence>
           {chips.map((chip, index) => {
             const fromTx = (winW * index) / 4;
             const squeezeFromX = rtl ? fromTx : -fromTx;
             const exitTx = rtl ? fromTx : -fromTx;
             const isBarber = chip.kind === 'barber';
+            const cellOverflow = isBarber || chip.kind === 'service' || chip.kind === 'day';
+
+            const textChipBody = (
+              <>
+                {chip.kind === 'service' ? (
+                  <Ionicons name="cut-outline" size={18} color={primaryColor} style={styles.kindIcon} />
+                ) : chip.kind === 'day' ? (
+                  <Ionicons name="calendar-outline" size={18} color={primaryColor} style={styles.kindIcon} />
+                ) : (
+                  <Ionicons name="time-outline" size={18} color={primaryColor} style={styles.kindIcon} />
+                )}
+                <Text style={styles.cellLabel} numberOfLines={2}>
+                  {chip.label}
+                </Text>
+              </>
+            );
 
             return (
               <MotiView
@@ -147,6 +190,7 @@ export default function BookingProgressChipsStrip({
                 transition={{ type: 'timing', duration: 380 }}
                 style={[
                   styles.cell,
+                  cellOverflow ? styles.cellFlight : styles.cellClip,
                   {
                     height: BOOKING_PROGRESS_STRIP_HEIGHT,
                     borderRadius: INNER_RADIUS,
@@ -181,19 +225,44 @@ export default function BookingProgressChipsStrip({
                       </View>
                     )}
                   </MotiView>
+                ) : chip.kind === 'service' ? (
+                  <MotiView
+                    key={serviceEntrance ? `se-${serviceEntranceKey}` : 'se-static'}
+                    from={
+                      serviceEntrance
+                        ? {
+                            translateX: serviceEntrance.translateX,
+                            translateY: serviceEntrance.translateY,
+                            scale: serviceEntrance.scale,
+                          }
+                        : { translateX: 0, translateY: 0, scale: 1 }
+                    }
+                    animate={{ translateX: 0, translateY: 0, scale: 1 }}
+                    transition={{ type: 'timing', duration: 560 }}
+                    style={styles.textCellFlyInner}
+                  >
+                    <View style={styles.textCell}>{textChipBody}</View>
+                  </MotiView>
+                ) : chip.kind === 'day' ? (
+                  <MotiView
+                    key={dayEntrance ? `de-${dayEntranceKey}` : 'de-static'}
+                    from={
+                      dayEntrance
+                        ? {
+                            translateX: dayEntrance.translateX,
+                            translateY: dayEntrance.translateY,
+                            scale: dayEntrance.scale,
+                          }
+                        : { translateX: 0, translateY: 0, scale: 1 }
+                    }
+                    animate={{ translateX: 0, translateY: 0, scale: 1 }}
+                    transition={{ type: 'timing', duration: 560 }}
+                    style={styles.textCellFlyInner}
+                  >
+                    <View style={styles.textCell}>{textChipBody}</View>
+                  </MotiView>
                 ) : (
-                  <View style={styles.textCell}>
-                    {chip.kind === 'service' ? (
-                      <Ionicons name="cut-outline" size={18} color={primaryColor} style={styles.kindIcon} />
-                    ) : chip.kind === 'day' ? (
-                      <Ionicons name="calendar-outline" size={18} color={primaryColor} style={styles.kindIcon} />
-                    ) : (
-                      <Ionicons name="time-outline" size={18} color={primaryColor} style={styles.kindIcon} />
-                    )}
-                    <Text style={styles.cellLabel} numberOfLines={2}>
-                      {chip.label}
-                    </Text>
-                  </View>
+                  <View style={styles.textCell}>{textChipBody}</View>
                 )}
               </MotiView>
             );
@@ -208,12 +277,31 @@ const styles = StyleSheet.create({
   shell: {
     position: 'absolute',
     zIndex: 30,
+    overflow: 'visible',
   },
   row: {
     alignItems: 'stretch',
+    overflow: 'visible',
+  },
+  /** Flight animation scales/moves outside the chip (barber / service / day). */
+  cellFlight: {
+    overflow: 'visible',
+    zIndex: 50,
+    ...Platform.select({
+      android: { elevation: 14 },
+      default: {},
+    }),
+  },
+  textCellFlyInner: {
+    flex: 1,
+    overflow: 'visible',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cellClip: {
+    overflow: 'hidden',
   },
   cell: {
-    overflow: 'hidden',
     backgroundColor: 'rgba(255,255,255,0.18)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.35)',
@@ -232,6 +320,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
   },
   barberImage: {
     width: BOOKING_PROGRESS_STRIP_HEIGHT - 14,

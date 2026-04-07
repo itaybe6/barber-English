@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, LayoutChangeEvent, Dimensions, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { View, Text, LayoutChangeEvent, Dimensions, StyleSheet, type View as RNView } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { CalendarAnimatedProvider, useBookingCalendarContext } from './animated-context';
 import { ScrollContainer } from './scroll-container';
@@ -33,6 +33,8 @@ export type BookingAnimatedCalendarProps = {
   onAdminVisibleMonthChange?: (monthFirstDay: Date) => void;
   adminMonthsBack?: number;
   adminMonthsForward?: number;
+  /** Booking: measure selected day cell for progress-strip flight animation */
+  selectedDayCellRef?: RefObject<RNView | null>;
 };
 
 function CalendarShell({
@@ -52,6 +54,7 @@ function CalendarShell({
   onAdminVisibleMonthChange,
   initialLogicalIndex,
   displayMode,
+  selectedDayCellRef,
 }: {
   variant: 'booking' | 'admin';
   calendarData: MonthEntry[];
@@ -69,6 +72,7 @@ function CalendarShell({
   onAdminVisibleMonthChange?: (monthFirstDay: Date) => void;
   initialLogicalIndex: number;
   displayMode: 'availability' | 'count';
+  selectedDayCellRef?: RefObject<RNView | null>;
 }) {
   const { t } = useTranslation();
   const { pageWidth, scrollViewRef } = useBookingCalendarContext();
@@ -201,6 +205,7 @@ function CalendarShell({
                 displayMode={displayMode}
                 showHebrewDates={isAdmin}
                 formatAppointmentBadge={formatAppointmentBadge}
+                selectedDayCellRef={selectedDayCellRef}
               />
             </View>
           ))
@@ -263,6 +268,7 @@ export default function BookingAnimatedCalendar({
   onAdminVisibleMonthChange,
   adminMonthsBack = 12,
   adminMonthsForward = 12,
+  selectedDayCellRef,
 }: BookingAnimatedCalendarProps) {
   const calendarData = useMemo(() => {
     if (variant === 'admin') {
@@ -335,6 +341,7 @@ export default function BookingAnimatedCalendar({
         onAdminVisibleMonthChange={onAdminVisibleMonthChange}
         initialLogicalIndex={initialLogicalIndex}
         displayMode={displayMode}
+        selectedDayCellRef={selectedDayCellRef}
       />
     </CalendarAnimatedProvider>
   );

@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { forwardRef, useImperativeHandle, useRef } from 'react';
 import {
   View,
   Text,
   Pressable,
   StyleSheet,
   ActivityIndicator,
+  type View as RNView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Clock3 } from 'lucide-react-native';
@@ -33,20 +34,53 @@ type Props = {
   onSelectService: (service: Service, index: number) => void;
 };
 
-export default function ServiceSelection({
-  visible,
-  styles: parentStyles,
-  step2FadeStyle,
-  topOffset = 0,
-  isLoading,
-  services,
-  selectedServiceId,
-  selectedServiceIds,
-  multiSelectEnabled = true,
-  t,
-  onSelectService,
-}: Props) {
+export interface ServiceSelectionHandle {
+  measureSelectedRowInWindow: (
+    callback: (rect: { x: number; y: number; width: number; height: number } | null) => void
+  ) => void;
+}
+
+const ServiceSelection = forwardRef<ServiceSelectionHandle, Props>(function ServiceSelection(
+  {
+    visible,
+    styles: parentStyles,
+    step2FadeStyle,
+    topOffset = 0,
+    isLoading,
+    services,
+    selectedServiceId,
+    selectedServiceIds,
+    multiSelectEnabled = true,
+    t,
+    onSelectService,
+  },
+  ref
+) {
   const { colors } = useBusinessColors();
+  const selectedRowRef = useRef<RNView>(null);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      measureSelectedRowInWindow(callback) {
+        requestAnimationFrame(() => {
+          const node = selectedRowRef.current;
+          if (!node) {
+            callback(null);
+            return;
+          }
+          node.measureInWindow((x, y, w, h) => {
+            if (typeof w !== 'number' || typeof h !== 'number' || w < 8 || h < 8) {
+              callback(null);
+              return;
+            }
+            callback({ x, y, width: w, height: h });
+          });
+        });
+      },
+    }),
+    []
+  );
 
   if (!visible) return null;
 
@@ -90,20 +124,26 @@ export default function ServiceSelection({
           </View>
 
           <View style={styles.list}>
-            {services.map((service, index) => {
+            {(() => {
+              const firstSelectedIndex = services.findIndex((s) => isSvcSelected(s));
+              return services.map((service, index) => {
               const rowKey = String((service as any).id ?? `svc-${index}`);
+              const selected = isSvcSelected(service);
+              const attachMeasureRef = selected && index === firstSelectedIndex;
               return (
                 <Animated.View key={rowKey} entering={bookingStepRowEntering(index)}>
                   <ServiceRow
+                    ref={attachMeasureRef ? selectedRowRef : undefined}
                     service={service}
-                    isSelected={isSvcSelected(service)}
+                    isSelected={selected}
                     primaryColor={colors.primary}
                     onPress={() => onSelectService(service, index)}
                     t={t}
                   />
                 </Animated.View>
               );
-            })}
+            });
+            })()}
           </View>
         </View>
       ) : (
@@ -116,7 +156,9 @@ export default function ServiceSelection({
       )}
     </Animated.View>
   );
-}
+});
+
+export default ServiceSelection;
 
 type RowProps = {
   service: Service;
@@ -126,19 +168,18 @@ type RowProps = {
   t: any;
 };
 
-function ServiceRow({
-  service,
-  isSelected,
-  primaryColor,
-  onPress,
-  t,
-}: RowProps) {
+const ServiceRow = React.forwardRef<RNView, RowProps>(function ServiceRow(
+  { service, isSelected, primaryColor, onPress, t },
+  ref
+) {
   const duration = (service as any)?.duration_minutes ?? 60;
   const price = (service as any)?.price ?? 0;
   const name = String((service as any)?.name || '');
 
   return (
     <Pressable
+      ref={ref}
+      collapsable={false}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected: isSelected }}
@@ -189,7 +230,7 @@ function ServiceRow({
       </View>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   shell: {

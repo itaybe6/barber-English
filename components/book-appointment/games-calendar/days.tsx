@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { View, Text, Pressable, Platform, StyleSheet } from 'react-native';
+import React, { useMemo, type RefObject } from 'react';
+import { View, Text, Pressable, Platform, StyleSheet, type View as RNView } from 'react-native';
 import { getMonthWeeks, formatHebrewDay, type MonthEntry } from './utils';
 
 type DaysProps = {
@@ -23,6 +23,8 @@ type DaysProps = {
   showWeekSeparators?: boolean;
   /** Admin only: label for days with bookings, e.g. "3 תורים" */
   formatAppointmentBadge?: (count: number) => string;
+  /** When set, attached to the Pressable of the currently selected day (booking flight animation). */
+  selectedDayCellRef?: RefObject<RNView | null>;
 };
 
 const TODAY = new Date();
@@ -175,6 +177,7 @@ type DayCellProps = {
   formatAppointmentBadge?: (count: number) => string;
   constraintPillLabel?: string;
   onDayPress: (date: Date) => void;
+  selectionRef?: RefObject<RNView | null>;
 };
 
 const DayCell = React.memo(function DayCell({
@@ -193,6 +196,7 @@ const DayCell = React.memo(function DayCell({
   formatAppointmentBadge,
   constraintPillLabel,
   onDayPress,
+  selectionRef,
 }: DayCellProps) {
   const circleSize = Math.min(cellSize - 4, 36);
 
@@ -240,6 +244,8 @@ const DayCell = React.memo(function DayCell({
 
   return (
     <Pressable
+      ref={isSel && selectionRef ? selectionRef : undefined}
+      collapsable={false}
       disabled={isDisabled}
       onPress={() => onDayPress(date)}
       style={({ pressed }) => ({
@@ -400,6 +406,7 @@ export function Days({
   showHebrewDates = false,
   showWeekSeparators = false,
   formatAppointmentBadge,
+  selectedDayCellRef,
 }: DaysProps) {
   const weeks = getMonthWeeks(data);
 
@@ -473,6 +480,7 @@ export function Days({
                   formatAppointmentBadge={formatAppointmentBadge}
                   constraintPillLabel={constraintPillLabel}
                   onDayPress={onDayPress}
+                  selectionRef={selectedDayCellRef}
                 />
               );
             })}

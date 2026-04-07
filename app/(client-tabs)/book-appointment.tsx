@@ -8,7 +8,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import BarberSelection from '@/components/book-appointment/BarberSelection';
+import BarberSelection, { type BarberSelectionHandle } from '@/components/book-appointment/BarberSelection';
 import ServiceSelection from '@/components/book-appointment/ServiceSelection';
 import DaySelection from '@/components/book-appointment/DaySelection';
 import TimeSelection, { type TimeSelectionProps } from '@/components/book-appointment/TimeSelection';
@@ -16,6 +16,12 @@ import BookingSuccessAnimatedOverlay, {
   type SuccessLine,
 } from '@/components/book-appointment/BookingSuccessAnimatedOverlay';
 import BookingStepTabs, { getBookingStepBarTopFromBottom } from '@/components/book-appointment/BookingStepTabs';
+import BookingProgressChipsStrip, {
+  BOOKING_PROGRESS_STRIP_INSET,
+  computeBarberEntranceFromRect,
+  type BarberChipEntrance,
+  type BookingProgressChipModel,
+} from '@/components/book-appointment/BookingProgressChipsStrip';
 import WaitlistBottomSheet from '@/components/book-appointment/WaitlistBottomSheet';
 import ConfirmBookingSheet from '@/components/book-appointment/ConfirmBookingSheet';
 
@@ -436,6 +442,21 @@ export default function BookAppointment() {
   const [availableServices, setAvailableServices] = useState<Service[]>([]);
   const [isLoadingServices, setIsLoadingServices] = useState<boolean>(false);
   const [selectedBarber, setSelectedBarber] = useState<User | null>(null);
+  const [barberFlightAnimKey, setBarberFlightAnimKey] = useState(0);
+  const [barberChipEntrance, setBarberChipEntrance] = useState<BarberChipEntrance | null>(null);
+  const barberSelectionRef = React.useRef<BarberSelectionHandle>(null);
+  const lastBarberFaceRectRef = React.useRef<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const onSelectedFaceWindowFrame = React.useCallback(
+    (rect: { x: number; y: number; width: number; height: number } | null) => {
+      lastBarberFaceRectRef.current = rect;
+    },
+    []
+  );
   const [availableBarbers, setAvailableBarbers] = useState<User[]>([]);
   const [isLoadingBarbers, setIsLoadingBarbers] = useState<boolean>(false);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
@@ -521,6 +542,8 @@ export default function BookAppointment() {
 
   useEffect(() => {
     if (currentStep === 1) {
+      setBarberChipEntrance(null);
+      lastBarberFaceRectRef.current = null;
       introFade.value = 1;
       hasTriggeredStep2.current = false;
       isTransitioning.current = false;
@@ -649,7 +672,52 @@ export default function BookAppointment() {
   const days = getNextNDays(bookingOpenDays);
   const selectedDate = selectedDay !== null ? days[selectedDay]?.fullDate : null;
   const contentBottomPadding = Math.max(96, bookingBarTopFromBottom + 40);
-  
+
+  const bookingProgressChips = useMemo((): BookingProgressChipModel[] => {
+    const out: BookingProgressChipModel[] = [];
+    if (currentStep >= 2 && selectedBarber) {
+      out.push({
+        key: 'barber',
+        kind: 'barber',
+        label: selectedBarber.name || '',
+        imageUri: (selectedBarber.image_url as string) || '',
+      });
+    }
+    if (currentStep >= 3 && selectedService) {
+      out.push({
+        key: 'service',
+        kind: 'service',
+        label:
+          selectedServices.length > 1
+            ? selectedServices.map((s) => s.name).join(' + ')
+            : selectedService.name || '',
+      });
+    }
+    if (currentStep >= 4 && selectedDay !== null && days[selectedDay]) {
+      const d = days[selectedDay];
+      out.push({
+        key: 'day',
+        kind: 'day',
+        label: `${d.dayName} ${d.date}`,
+      });
+    }
+    if (currentStep === 4 && selectedTime) {
+      out.push({ key: 'time', kind: 'time', label: selectedTime });
+    }
+    return out;
+  }, [
+    currentStep,
+    selectedBarber,
+    selectedService,
+    selectedServices,
+    selectedDay,
+    selectedTime,
+    days,
+  ]);
+
+  const bookingStripTopInset =
+    currentStep >= 2 && selectedBarber ? BOOKING_PROGRESS_STRIP_INSET : 0;
+
   // Compute available start times dynamically for the selected service and date using business_hours
   const getAvailableTimeSlotsForDate = () => {
     if (!selectedDate) return [];
@@ -1541,7 +1609,28 @@ export default function BookAppointment() {
 
   const advanceToNextStep = React.useCallback(() => {
     if (currentStep === 1 && selectedBarber) {
-      setCurrentStep(2);
+      const winW = Dimensions.get('window').width;
+      const applyStep2 = (rect: { x: number; y: number; width: number; height: number } | null) => {
+        const r =
+          rect && rect.width >= 12 && rect.height >= 12
+            ? rect
+            : lastBarberFaceRectRef.current;
+        if (r && r.width >= 12 && r.height >= 12) {
+          setBarberChipEntrance(
+            computeBarberEntranceFromRect(r, winW, safeAreaInsets.top, I18nManager.isRTL)
+          );
+        } else {
+          setBarberChipEntrance(null);
+        }
+        setBarberFlightAnimKey((k) => k + 1);
+        setCurrentStep(2);
+      };
+      const handle = barberSelectionRef.current;
+      if (handle) {
+        handle.measureSelectedFaceInWindow(applyStep2);
+      } else {
+        applyStep2(null);
+      }
       return;
     }
     if (currentStep === 2 && selectedServices.length > 0) {
@@ -1559,7 +1648,21 @@ export default function BookAppointment() {
     if (currentStep === 3 && selectedDay !== null) {
       setCurrentStep(4);
     }
-  }, [currentStep, selectedBarber, selectedServices.length, selectedDay, finalizeStep2ToDay, abortStep2Transition]);
+  }, [
+    currentStep,
+    selectedBarber,
+    selectedServices.length,
+    selectedDay,
+    finalizeStep2ToDay,
+    abortStep2Transition,
+    safeAreaInsets.top,
+  ]);
+
+  useEffect(() => {
+    if (currentStep !== 2 && barberChipEntrance !== null) {
+      setBarberChipEntrance(null);
+    }
+  }, [currentStep, barberChipEntrance]);
 
   const selectedDayDateStr = selectedDate ? toLocalDateStr(selectedDate) : '';
   const selectedDayHasAvail =
@@ -1574,7 +1677,7 @@ export default function BookAppointment() {
     visible:
       Number(currentStep) === 4 && !!selectedBarber && !!selectedService && selectedDay !== null,
     styles,
-    topOffset: TOP_OFFSET,
+    topOffset: TOP_OFFSET + bookingStripTopInset,
     listBottomPadding: bookingBarTopFromBottom + 16,
     availableTimeSlots: (availableTimeSlots || []) as any,
     selectedTime: selectedTime as any,
@@ -1724,7 +1827,14 @@ export default function BookAppointment() {
           ]}
           showsVerticalScrollIndicator={false}
             refreshControl={currentStep >= 3 ? <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#000" /> : undefined}
-            onScroll={currentStep >= 3 ? handleScrollTransitions : undefined}
+            onScroll={(e) => {
+              if (currentStep === 1) {
+                barberSelectionRef.current?.syncSelectedFaceFrame?.();
+              }
+              if (currentStep >= 3) {
+                handleScrollTransitions(e);
+              }
+            }}
             alwaysBounceVertical={currentStep >= 3}
             bounces={currentStep >= 3}
             scrollEnabled={currentStep < 4}
@@ -1735,10 +1845,11 @@ export default function BookAppointment() {
         >
 
         {/* Spacer below status bar / safe top */}
-        <View style={{ height: TOP_OFFSET + 12 }} />
+        <View style={{ height: TOP_OFFSET + 12 + bookingStripTopInset }} />
 
         {/* Step 1: Barber Selection */}
         <BarberSelection
+          ref={barberSelectionRef}
           visible={currentStep === 1}
           styles={styles}
           introFadeStyle={introFadeStyle}
@@ -1749,6 +1860,7 @@ export default function BookAppointment() {
           selectedBarberId={selectedBarber?.id}
           externalScrollX={barberBgScrollX}
           t={t}
+          onSelectedFaceWindowFrame={onSelectedFaceWindowFrame}
           onSelectBarber={(barber) => {
             setSelectedBarber(barber);
             setSelectedServices([]);
@@ -1766,7 +1878,7 @@ export default function BookAppointment() {
           visible={currentStep === 2 && !!selectedBarber}
           styles={styles}
           step2FadeStyle={step2FadeStyle}
-          topOffset={TOP_OFFSET}
+          topOffset={TOP_OFFSET + bookingStripTopInset}
           safeAreaBottom={safeAreaInsets.bottom}
           isLoading={isLoadingServices}
           services={filteredServices}
@@ -1823,6 +1935,15 @@ export default function BookAppointment() {
 
       {/* Step 4: Revolutionary Time Selection with Liquid Glass (outside ScrollView) */}
       <TimeSelection {...timeSelectionProps} />
+
+      <BookingProgressChipsStrip
+        visible={currentStep >= 2 && !!selectedBarber}
+        safeAreaTop={safeAreaInsets.top}
+        primaryColor={colors.primary}
+        chips={bookingProgressChips}
+        barberEntrance={barberChipEntrance}
+        barberEntranceKey={barberFlightAnimKey}
+      />
 
       {/* Waitlist button is now embedded in BookingStepTabs (variant='waitlist') — no separate footer needed */}
 

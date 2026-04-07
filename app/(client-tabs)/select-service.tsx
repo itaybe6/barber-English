@@ -17,6 +17,7 @@ import { servicesApi, filterServicesForBookingBarber } from '@/lib/api/services'
 import { Service } from '@/lib/supabase';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { getCurrentClientLogo } from '@/src/theme/assets';
+import BookingProgressChipsStrip from '@/components/book-appointment/BookingProgressChipsStrip';
 
 // Constants
 const { width, height } = Dimensions.get('window');
@@ -287,6 +288,7 @@ export default function SelectServiceScreen() {
 
   const barberId = params.barberId as string;
   const barberName = params.barberName as string;
+  const barberImageUrl = typeof params.barberImageUrl === 'string' ? params.barberImageUrl : '';
   const multiBarber = params.multiBarber === '1';
 
   const [services, setServices] = useState<Service[]>([]);
@@ -481,6 +483,24 @@ export default function SelectServiceScreen() {
           <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
+
+      {!!barberId ? (
+        <BookingProgressChipsStrip
+          visible
+          safeAreaTop={insets.top}
+          primaryColor={colors.primary}
+          chips={[
+            {
+              key: 'barber',
+              kind: 'barber',
+              label: barberName || '',
+              imageUri: barberImageUrl || '',
+            },
+          ]}
+          barberEntrance={null}
+          barberEntranceKey={0}
+        />
+      ) : null}
     </View>
   );
 }

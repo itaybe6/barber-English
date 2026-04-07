@@ -7,6 +7,7 @@ type FnOk = {
   ok: true;
   issued_count: number;
   email_sent: boolean;
+  email_skip_reason?: string;
   receipt_errors?: string[];
   expense_attachments?: number;
 };
@@ -30,7 +31,14 @@ export const financeAccountantPackageApi = {
     month: number;
     appointmentIds: string[];
   }): Promise<
-    | { ok: true; issuedCount: number; emailSent: boolean; receiptErrors?: string[]; expenseAttachments?: number }
+    | {
+        ok: true;
+        issuedCount: number;
+        emailSent: boolean;
+        emailSkipReason?: string;
+        receiptErrors?: string[];
+        expenseAttachments?: number;
+      }
     | { ok: false; error: string; message?: string; details?: string[] }
   > {
     const userId = useAuthStore.getState().user?.id?.trim();
@@ -90,6 +98,7 @@ export const financeAccountantPackageApi = {
         ok: true,
         issuedCount: p.issued_count,
         emailSent: !!p.email_sent,
+        emailSkipReason: p.email_skip_reason,
         receiptErrors: p.receipt_errors,
         expenseAttachments: p.expense_attachments,
       };

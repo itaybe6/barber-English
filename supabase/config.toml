@@ -54,7 +54,7 @@ verify_jwt = false
 [functions.pulseem-low-balance-reminder]
 verify_jwt = false
 
-# Admin / super_admin: handler validates Bearer + getUser() === caller_user_id (same pattern as greeninvoice-issue-receipt).
+# Admin / super_admin: validates caller via users table (service role); issues receipts via shared core (no Edge→Edge HTTP).
 [functions.finance-accountant-package]
 verify_jwt = false
 

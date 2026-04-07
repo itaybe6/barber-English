@@ -9,6 +9,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import * as XLSX from "npm:xlsx@0.18.5";
+import { handleGreenInvoiceIssueReceiptBody } from "../_shared/greeninvoiceIssueReceiptCore.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -87,13 +88,13 @@ async function sendResendEmail(
   subject: string,
   html: string,
   attachments?: EmailAttachment[],
-): Promise<{ ok: boolean }> {
+): Promise<{ ok: boolean; skip?: string }> {
   const resendApiKey = Deno.env.get("RESEND_API_KEY");
   const fromEmail =
     Deno.env.get("MONTHLY_REPORT_FROM_EMAIL") || "onboarding@resend.dev";
   if (!resendApiKey) {
     console.warn("[finance-accountant-package] Missing RESEND_API_KEY");
-    return { ok: false };
+    return { ok: false, skip: "missing_resend_api_key" };
   }
   const payload: Record<string, unknown> = {
     from: fromEmail,
@@ -115,35 +116,6 @@ async function sendResendEmail(
     throw new Error(`Resend ${resp.status}: ${errText}`);
   }
   return { ok: true };
-}
-
-async function issueReceiptHttp(
-  supabaseUrl: string,
-  serviceRole: string,
-  appointmentId: string,
-  businessId: string,
-  callerUserId: string,
-  useSandbox: boolean,
-): Promise<Record<string, unknown>> {
-  const res = await fetch(`${supabaseUrl}/functions/v1/greeninvoice-issue-receipt`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${serviceRole}`,
-      apikey: serviceRole,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      appointment_id: appointmentId,
-      business_id: businessId,
-      caller_user_id: callerUserId,
-      use_sandbox: useSandbox,
-    }),
-  });
-  try {
-    return await res.json();
-  } catch {
-    return { ok: false, error: "invalid_json" };
-  }
 }
 
 function buildWorkbook(
@@ -373,17 +345,27 @@ serve(async (req) => {
   const issueErrors: string[] = [];
 
   for (const aid of appointmentIds) {
-    const gi = await issueReceiptHttp(
-      supabaseUrl,
-      serviceRole,
-      aid,
-      businessId,
-      callerUserId,
-      useSandbox,
-    );
+    /** In-process — avoids Edge→Edge HTTP + Supabase JWT gateway 401 on greeninvoice-issue-receipt */
+    let gi: Record<string, unknown>;
+    try {
+      const res = await handleGreenInvoiceIssueReceiptBody({
+        appointment_id: aid,
+        business_id: businessId,
+        caller_user_id: callerUserId,
+        use_sandbox: useSandbox,
+      });
+      gi = await res.json() as Record<string, unknown>;
+    } catch {
+      issueErrors.push(`${aid.slice(0, 8)}…: issue_receipt_parse_failed`);
+      continue;
+    }
     if (!gi.ok) {
+      const code = String(gi.error ?? "unknown");
+      const hint = typeof gi.message === "string" && gi.message.trim()
+        ? gi.message.trim()
+        : "";
       issueErrors.push(
-        `${aid.slice(0, 8)}…: ${String(gi.error ?? "unknown")}`,
+        hint ? `${aid.slice(0, 8)}…: ${code} — ${hint}` : `${aid.slice(0, 8)}…: ${code}`,
       );
       continue;
     }
@@ -612,9 +594,11 @@ serve(async (req) => {
     `חבילת פיננסים — ${bizName} — ${monthName} ${year}`;
 
   let emailOk = false;
+  let emailSkipReason: string | undefined;
   try {
     const r = await sendResendEmail(accountantEmail, subject, html, attachments);
     emailOk = r.ok;
+    if (!r.ok && r.skip) emailSkipReason = r.skip;
   } catch (e) {
     console.error("[finance-accountant-package] email", e);
     return json({
@@ -630,6 +614,7 @@ serve(async (req) => {
     ok: true,
     issued_count: issuedLines.length,
     email_sent: emailOk,
+    email_skip_reason: emailSkipReason,
     receipt_errors: issueErrors.length ? issueErrors : undefined,
     expense_attachments: attCount,
   });

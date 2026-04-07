@@ -205,8 +205,17 @@ export default function FinanceMonthClosureScreen() {
                 return;
               }
               let body = `הופקו ${res.issuedCount} קבלות.`;
-              if (res.emailSent) body += '\nהמייל נשלח לרואה החשבון.';
-              else body += '\nהמייל לא נשלח (בדוק הגדרות שרת).';
+              if (res.emailSent) {
+                body += '\nהמייל נשלח לרואה החשבון.';
+              } else if (res.emailSkipReason === 'missing_resend_api_key') {
+                body +=
+                  '\nהמייל לא נשלח: חסר מפתח Resend בשרת.\n' +
+                  'ב-Supabase: Project Settings → Edge Functions → Secrets — הוסף RESEND_API_KEY (מ־resend.com).\n' +
+                  'אופציונלי: MONTHLY_REPORT_FROM_EMAIL (כתובת שולח מאומתת בדומיין ב-Resend).';
+              } else {
+                body +=
+                  '\nהמייל לא נשלח. אם כבר הגדרת RESEND_API_KEY — ודא דומיין וכתובת שולח ב-Resend, ובדוק לוגים של הפונקציה finance-accountant-package.';
+              }
               if (res.receiptErrors?.length) {
                 body += `\n\nאזהרות:\n${res.receiptErrors.join('\n')}`;
               }

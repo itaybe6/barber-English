@@ -1,4 +1,4 @@
-/** AES-256-GCM for secrets at rest (DB). Same as greeninvoice-connect / Pulseem functions. */
+/** AES-256-GCM for secrets at rest (DB). Shared by Green Invoice Edge functions. */
 export const PULSEEM_ENC_PREFIX = "enc:v1:";
 
 function b64ToBytes(b64: string): Uint8Array {

@@ -1477,7 +1477,7 @@
       "comingSoon": "You can issue a receipt for a completed appointment in the section below.",
       "manageConnection": "Manage API connection",
       "receipt": {
-        "sectionTitle": "Issue receipt (Green Invoice)",
+        "sectionTitle": "Issue receipt",
         "sectionSubtitle": "Pick a confirmed or completed appointment in the month shown above (same as income breakdown), then issue a receipt.",
         "listCount": "{{count}} appointments billable this month",
         "listFiltered": "Showing {{shown}} of {{total}}",

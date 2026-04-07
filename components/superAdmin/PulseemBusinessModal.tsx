@@ -51,19 +51,6 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
   const extra = getExpoExtra();
   const hasPulseemMainKeyInApp = !!String(extra.PULSEEM_MAIN_API_KEY ?? '').replace(/^\uFEFF/, '').trim();
 
-  /** מתחת ל־50 קרדיטי Direct SMS — יוצר התראת מערכת למנהלי העסק (דה-דופ בשרת). */
-  const maybeNotifyLowDirectSms = useCallback(
-    async (creditsStr: string) => {
-      if (!business?.id) return;
-      await superAdminApi.notifyAdminsPulseemLowDirectSmsIfNeeded(
-        business.id,
-        creditsStr,
-        business.display_name,
-      );
-    },
-    [business?.id, business?.display_name],
-  );
-
   const resetFields = useCallback(() => {
     setUserId('');
     setPassword('');
@@ -112,7 +99,6 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
           if (bal.ok) {
             setDirectSmsBalance(bal.directSmsCredits);
             setBalanceError(null);
-            void maybeNotifyLowDirectSms(bal.directSmsCredits);
           } else {
             setBalanceError(bal.message);
           }
@@ -123,7 +109,7 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
     return () => {
       cancelled = true;
     };
-  }, [visible, business?.id, resetFields, business, maybeNotifyLowDirectSms]);
+  }, [visible, business?.id, resetFields, business]);
 
   const refreshDirectSmsBalance = useCallback(async () => {
     if (!business?.pulseemHasApiKey) return;
@@ -136,14 +122,13 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
       if (bal.ok) {
         setDirectSmsBalance(bal.directSmsCredits);
         setBalanceError(null);
-        void maybeNotifyLowDirectSms(bal.directSmsCredits);
       } else {
         setBalanceError(bal.message);
       }
     } finally {
       setBalanceRefreshing(false);
     }
-  }, [business?.id, business?.pulseemHasApiKey, pulseSubAccountName, maybeNotifyLowDirectSms]);
+  }, [business?.id, business?.pulseemHasApiKey, pulseSubAccountName]);
 
   const handleTest = async () => {
     if (!business) return;
@@ -169,7 +154,6 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
       if (result.directSmsCredits != null) {
         setDirectSmsBalance(result.directSmsCredits);
         setBalanceError(null);
-        void maybeNotifyLowDirectSms(result.directSmsCredits);
       }
       Alert.alert('חיבור תקין', lines.join('\n'));
     } else if ('message' in result) {
@@ -211,7 +195,6 @@ export function PulseemBusinessModal({ visible, business, onClose, onSaved }: Pu
             if (balAfter.ok) {
               setDirectSmsBalance(balAfter.directSmsCredits);
               setBalanceError(null);
-              void maybeNotifyLowDirectSms(balAfter.directSmsCredits);
             }
             const state = await superAdminApi.getPulseemEditorState(business.id);
             if (state) {

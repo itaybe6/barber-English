@@ -44,8 +44,8 @@ const MONTH_NAMES_HE = [
   'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר',
 ];
 
-/** מקום ל־AdminFloatingTabBar (~56px) + מרווח (~16) מעל ה-safe area */
-const ADMIN_TAB_BAR_CLEARANCE = 78;
+/** מקום ל־AdminFloatingTabBar (~56px) + מרווח (~22) מעל ה-safe area */
+const ADMIN_TAB_BAR_CLEARANCE = 92;
 
 const EXPENSE_CATEGORY_LABEL: Record<string, string> = {
   rent: 'שכירות',
@@ -154,6 +154,11 @@ export default function FinanceMonthClosureScreen() {
     return s;
   }, [rows, selected]);
 
+  const summaryNetForSelection = useMemo(() => {
+    const exp = monthReport?.totalExpenses ?? 0;
+    return selectedTotal - exp;
+  }, [selectedTotal, monthReport?.totalExpenses]);
+
   const formatCurrency = (n: number) =>
     `₪${Math.round(n).toLocaleString('he-IL')}`;
 
@@ -246,9 +251,7 @@ export default function FinanceMonthClosureScreen() {
     insets.bottom + ADMIN_TAB_BAR_CLEARANCE + 120;
 
   const reportExpenses = monthReport?.expenses ?? [];
-  const reportTotalIncome = monthReport?.totalIncome ?? 0;
   const reportTotalExpenses = monthReport?.totalExpenses ?? 0;
-  const reportNet = monthReport?.netProfit ?? 0;
 
   return (
     <View style={styles.root}>
@@ -309,16 +312,16 @@ export default function FinanceMonthClosureScreen() {
       </LinearGradient>
 
       <View style={[styles.toolbar, { backgroundColor: theme.surface }]}>
-        <TouchableOpacity onPress={selectAll} style={[styles.toolBtn, { borderColor: `${primary}44` }]}>
-          <Text style={[styles.toolBtnText, { color: primary }]}>בחר הכל</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={clearAll} style={[styles.toolBtn, { borderColor: `${theme.border}66` }]}>
-          <Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>נקה</Text>
-        </TouchableOpacity>
-        <View style={styles.toolbarSpacer} />
         <Text style={[styles.toolbarSum, { color: theme.text }]}>
           {selected.size} נבחרו · {formatCurrency(selectedTotal)}
         </Text>
+        <View style={styles.toolbarSpacer} />
+        <TouchableOpacity onPress={clearAll} style={[styles.toolBtn, { borderColor: `${theme.border}66` }]}>
+          <Text style={[styles.toolBtnText, { color: theme.textSecondary }]}>נקה</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={selectAll} style={[styles.toolBtn, { borderColor: `${primary}44` }]}>
+          <Text style={[styles.toolBtnText, { color: primary }]}>בחר הכל</Text>
+        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -487,14 +490,14 @@ export default function FinanceMonthClosureScreen() {
               <Scale size={20} color={primary} />
             </View>
             <Text style={[styles.sectionHint, { color: theme.textSecondary }]}>
-              כמו בגיליון «סיכום» באקסל שיישלח לרואה החשבון (הכנסות = כל התורים בחודש).
+              הכנסות והרווח כאן לפי הסימון בלבד. הוצאות — כל החודש (כבאקסל). בגיליון «סיכום» באקסל נשארות הכנסות כל התורים בחודש.
             </Text>
             <View style={styles.balanceRow}>
               <Text style={[styles.balanceVal, { color: theme.text }]}>
-                {formatCurrency(reportTotalIncome)}
+                {formatCurrency(selectedTotal)}
               </Text>
               <Text style={[styles.balanceLabel, { color: theme.textSecondary }]}>
-                סה״כ הכנסות בחודש
+                הכנסות לפי תורים מסומנים
               </Text>
             </View>
             <View style={styles.balanceRow}>
@@ -509,23 +512,12 @@ export default function FinanceMonthClosureScreen() {
               <Text
                 style={[
                   styles.balanceValNet,
-                  { color: reportNet >= 0 ? '#15803D' : theme.error },
+                  { color: summaryNetForSelection >= 0 ? '#15803D' : theme.error },
                 ]}
               >
-                {formatCurrency(reportNet)}
+                {formatCurrency(summaryNetForSelection)}
               </Text>
-              <Text style={[styles.balanceLabelNet, { color: theme.text }]}>רווח נקי</Text>
-            </View>
-            <View style={[styles.dividerSoft, { backgroundColor: `${theme.border}44` }]} />
-            <View style={styles.balanceRow}>
-              <Text style={[styles.balanceVal, { color: primary }]}>
-                {rows.length === 0
-                  ? '—'
-                  : `${selected.size} · ${formatCurrency(selectedTotal)}`}
-              </Text>
-              <Text style={[styles.balanceLabel, { color: theme.textSecondary }]}>
-                קבלות שיופקו עכשיו (נבחרו)
-              </Text>
+              <Text style={[styles.balanceLabelNet, { color: theme.text }]}>רווח נקי (לפי הסימון)</Text>
             </View>
           </View>
         </ScrollView>

@@ -67,6 +67,7 @@ import {
   CheckCircle2,
   Settings2,
   FileSpreadsheet,
+  Pencil,
 } from 'lucide-react-native';
 
 const CATEGORIES: ExpenseCategory[] = ['rent', 'supplies', 'equipment', 'marketing', 'other'];
@@ -745,6 +746,21 @@ export default function FinanceScreen() {
               style={[styles.giDecoCircle, { backgroundColor: `${greenInvoiceAccent}0C` }]}
             />
             <View style={styles.greenInvoiceCardInner}>
+              <TouchableOpacity
+                onPress={openGreenInvoiceModal}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  giConnected ? t('finance.greenInvoice.manageConnection') : t('finance.greenInvoice.connectButton')
+                }
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={[
+                  styles.greenInvoiceEditBtn,
+                  { backgroundColor: `${theme.border}14` },
+                ]}
+              >
+                <Pencil size={18} color={greenInvoiceAccent} strokeWidth={2.2} />
+              </TouchableOpacity>
               {/* Header row */}
               <View style={styles.greenInvoiceCardTop}>
                 <View style={[styles.greenInvoiceIconWrap, { backgroundColor: `${greenInvoiceAccent}1C` }]}>
@@ -787,32 +803,6 @@ export default function FinanceScreen() {
                   </RtlText>
                 </View>
               </View>
-
-              {/* CTA — gradient button */}
-              <TouchableOpacity
-                onPress={openGreenInvoiceModal}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  giConnected ? t('finance.greenInvoice.manageConnection') : t('finance.greenInvoice.connectButton')
-                }
-                style={styles.greenInvoiceBtnOuter}
-              >
-                <LinearGradient
-                  colors={['#22C55E', greenInvoiceAccent, '#0F6B2C']}
-                  locations={[0, 0.55, 1]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.greenInvoiceBtnGradient}
-                >
-                  {giConnected
-                    ? <Settings2 size={20} color="#fff" strokeWidth={2.2} />
-                    : <Receipt size={20} color="#fff" strokeWidth={2.2} />}
-                  <RtlText style={styles.greenInvoiceBtnText}>
-                    {giConnected ? t('finance.greenInvoice.manageConnection') : t('finance.greenInvoice.connectButton')}
-                  </RtlText>
-                </LinearGradient>
-              </TouchableOpacity>
 
               {/* Sandbox / Dev-mode toggle */}
               <View
@@ -879,9 +869,6 @@ export default function FinanceScreen() {
                 <View style={styles.giReceiptCardHeaderText}>
                   <RtlText style={[styles.giReceiptCardHeaderTitle, { color: theme.text }]}>
                     {t('finance.greenInvoice.receipt.sectionTitle')}
-                  </RtlText>
-                  <RtlText style={[styles.giReceiptCardHeaderSub, { color: theme.textSecondary }]}>
-                    {t('finance.greenInvoice.receipt.sectionSubtitle')}
                   </RtlText>
                 </View>
                 {giReceiptRows.length > 0 && (
@@ -1020,14 +1007,14 @@ export default function FinanceScreen() {
                                           : { backgroundColor: '#EEF2F5' },
                                       ]}
                                     >
-                                      <RtlText
+                                      <Text
                                         style={[
                                           styles.giReceiptAvatarChar,
                                           { color: selected ? '#fff' : '#6B7280' },
                                         ]}
                                       >
                                         {initial}
-                                      </RtlText>
+                                      </Text>
                                     </View>
 
                                     {/* Body */}
@@ -1193,9 +1180,9 @@ export default function FinanceScreen() {
                   >
                     <View style={styles.incomeLeftBlock}>
                       <View style={[styles.incomeBadge, { backgroundColor: `${primaryColor}18` }]}>
-                        <RtlText style={[styles.incomeBadgeText, { color: primaryColor }]}>
+                        <Text style={[styles.incomeBadgeText, { color: primaryColor }]}>
                           {item.count}
-                        </RtlText>
+                        </Text>
                       </View>
                       <RtlText style={styles.incomeServiceName} numberOfLines={1}>
                         {item.service_name}
@@ -1788,12 +1775,25 @@ const styles = StyleSheet.create({
   greenInvoiceCardInner: {
     padding: 20,
     direction: 'ltr',
+    position: 'relative',
+  },
+  greenInvoiceEditBtn: {
+    position: 'absolute',
+    left: 14,
+    top: 16,
+    zIndex: 2,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   greenInvoiceCardTop: {
     flexDirection: 'row-reverse',
     alignItems: 'flex-start',
     gap: 14,
     marginBottom: 16,
+    paddingLeft: 44,
   },
   greenInvoiceIconWrap: {
     width: 58,
@@ -1844,41 +1844,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     textAlign: 'right',
-  },
-  greenInvoiceBtnOuter: {
-    borderRadius: 18,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#16A34A',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.35,
-        shadowRadius: 12,
-      },
-      android: { elevation: 6 },
-    }),
-  },
-  greenInvoiceBtnGradient: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-  },
-  greenInvoiceBtn: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 16,
-  },
-  greenInvoiceBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 0.2,
   },
   giSandboxPanel: {
     marginTop: 14,
@@ -1963,12 +1928,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textAlign: 'right',
     letterSpacing: -0.2,
-    marginBottom: 3,
-  },
-  giReceiptCardHeaderSub: {
-    fontSize: 12,
-    lineHeight: 17,
-    textAlign: 'right',
   },
   giReceiptCountBadge: {
     paddingHorizontal: 10,
@@ -2176,10 +2135,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+    overflow: 'hidden',
   },
   giReceiptAvatarChar: {
     fontSize: 17,
     fontWeight: '900',
+    textAlign: 'center',
+    ...Platform.select({
+      android: {
+        textAlignVertical: 'center',
+        includeFontPadding: false,
+      },
+    }),
   },
   giReceiptIssueBtnOuter: {
     marginTop: 14,
@@ -2296,15 +2263,24 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   incomeBadge: {
-    width: 34,
+    minWidth: 34,
     height: 34,
+    paddingHorizontal: 6,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   incomeBadgeText: {
     fontSize: 14,
     fontWeight: '800',
+    textAlign: 'center',
+    ...Platform.select({
+      android: {
+        textAlignVertical: 'center',
+        includeFontPadding: false,
+      },
+    }),
   },
   incomeServiceName: {
     flex: 1,

@@ -1,10 +1,10 @@
 // @ts-nocheck
 /**
- * Super-admin only: issue Green Invoice receipts for selected appointments, then email accountant
+ * Admin / super_admin: issue Green Invoice receipts for selected appointments, then email accountant
  * (Resend) with monthly XLSX, HTML summary, links to issued receipts, and expense receipt images.
  *
  * Body: { business_id, caller_user_id, year, month, appointment_ids: string[], use_sandbox?: boolean }
- * Auth: verify_jwt=true — JWT must match caller_user_id; user must be admin or super_admin for business_id.
+ * Auth: verify_jwt=false — same as greeninvoice-issue-receipt: service role validates users row (admin + tenant).
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -287,22 +287,7 @@ serve(async (req) => {
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const authHeader = (req.headers.get("Authorization") ?? "").trim();
-  const bearer = authHeader.replace(/^Bearer\s+/i, "").trim();
-  if (!bearer || !anonKey) {
-    return json({ ok: false, error: "missing_auth" }, 401);
-  }
-  const userSb = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: `Bearer ${bearer}` } },
-  });
-  const { data: authData, error: authErr } = await userSb.auth.getUser();
-  const authUid = authData?.user?.id?.trim();
-  if (authErr || !authUid || authUid !== callerUserId) {
-    return json({ ok: false, error: "unauthorized" }, 401);
-  }
-
   const admin = createClient(supabaseUrl, serviceRole);
 
   const { data: urow, error: uErr } = await admin

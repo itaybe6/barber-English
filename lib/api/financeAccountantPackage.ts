@@ -39,6 +39,7 @@ export const financeAccountantPackageApi = {
       return { ok: false, error: 'invalid_session' };
     }
     const useSandbox = useGreenInvoiceDevModeStore.getState().useSandboxApi;
+    /** אין Supabase Auth session באפליקציה (כניסה דרך users + Zustand) — הפונקציה מאמתת caller_user_id בשרת כמו greeninvoice-issue-receipt */
     const { data, error } = await supabase.functions.invoke('finance-accountant-package', {
       body: {
         business_id: businessId,
@@ -67,6 +68,13 @@ export const financeAccountantPackageApi = {
       }
       if (status === 404) {
         return { ok: false, error: 'edge_function_not_deployed' };
+      }
+      if (status === 401) {
+        return {
+          ok: false,
+          error: 'unauthorized',
+          message: 'אימות נכשל (401). נסו להתחבר מחדש או לעדכן את האפליקציה.',
+        };
       }
     }
 

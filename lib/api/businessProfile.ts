@@ -16,6 +16,11 @@ export function isShowServiceImages(profile: BusinessProfile | null | undefined)
   return profile?.show_service_images !== false;
 }
 
+/** True only when the business explicitly allows multi-service booking (single service otherwise). */
+export function isMultiServiceBookingAllowed(profile: BusinessProfile | null | undefined): boolean {
+  return profile?.allow_multi_service_booking === true;
+}
+
 export const businessProfileApi = {
   async getProfile(): Promise<BusinessProfile | null> {
     try {
@@ -79,6 +84,7 @@ export const businessProfileApi = {
         show_service_images: true,
         home_fixed_message_enabled: false,
         home_fixed_message: null,
+        allow_multi_service_booking: false,
       };
 
       const { data, error } = await supabase
@@ -131,6 +137,7 @@ export const businessProfileApi = {
             show_service_images: (updates as any).show_service_images,
             home_fixed_message_enabled: (updates as any).home_fixed_message_enabled,
             home_fixed_message: (updates as any).home_fixed_message,
+            allow_multi_service_booking: (updates as any).allow_multi_service_booking,
           })
           .eq('id', businessId)
           .select('*')
@@ -170,6 +177,7 @@ export const businessProfileApi = {
           show_service_images: (updates as any).show_service_images ?? true,
           home_fixed_message_enabled: (updates as any).home_fixed_message_enabled ?? false,
           home_fixed_message: (updates as any).home_fixed_message ?? null,
+          allow_multi_service_booking: (updates as any).allow_multi_service_booking ?? false,
         })
         .select('*')
         .single();
@@ -215,6 +223,28 @@ export const businessProfileApi = {
       return (data as BusinessProfile) || null;
     } catch (e) {
       console.error('Error in updateHomeFixedMessage:', e);
+      return null;
+    }
+  },
+
+  /** Updates only `allow_multi_service_booking` (client booking multi-select). */
+  async setAllowMultiServiceBooking(allow: boolean): Promise<BusinessProfile | null> {
+    try {
+      const businessId = getBusinessId();
+      const { data, error } = await supabase
+        .from('business_profile')
+        .update({ allow_multi_service_booking: allow })
+        .eq('id', businessId)
+        .select('*')
+        .single();
+
+      if (error) {
+        console.error('Error updating allow_multi_service_booking:', error);
+        return null;
+      }
+      return (data as BusinessProfile) || null;
+    } catch (e) {
+      console.error('Error in setAllowMultiServiceBooking:', e);
       return null;
     }
   },

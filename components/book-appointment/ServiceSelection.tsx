@@ -28,6 +28,8 @@ type Props = {
   selectedServiceIds?: string[];
   externalScrollX?: SharedValue<number>;
   showServiceImages?: boolean;
+  /** When false, UI explains single-service selection only (toggle logic lives in parent). */
+  multiSelectEnabled?: boolean;
   t: any;
   onSelectService: (service: Service, index: number) => void;
 };
@@ -42,6 +44,7 @@ export default function ServiceSelection({
   selectedServiceId,
   selectedServiceIds,
   showServiceImages = true,
+  multiSelectEnabled = true,
   t,
   onSelectService,
 }: Props) {
@@ -76,9 +79,15 @@ export default function ServiceSelection({
       ) : services.length > 0 ? (
         <View style={styles.shell}>
           <View style={styles.header}>
-            <Text style={styles.title}>{t('booking.selectServices', 'Select Services')}</Text>
+            <Text style={styles.title}>
+              {multiSelectEnabled
+                ? t('booking.selectServices', 'Select Services')
+                : t('booking.selectServiceTitle', 'Select a Service')}
+            </Text>
             <Text style={styles.subtitle}>
-              {t('booking.selectMultipleHint', 'Tap to select one or more services')}
+              {multiSelectEnabled
+                ? t('booking.selectMultipleHint', 'Tap to select one or more services')
+                : t('booking.selectSingleServiceHint', 'Tap to choose one service')}
             </Text>
           </View>
 

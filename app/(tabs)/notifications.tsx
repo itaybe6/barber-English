@@ -448,9 +448,6 @@ export default function AdminNotificationsScreen() {
     if (isCancellationNotification(n)) return null;
     if (isAdmin) {
       if (isFinanceMonthlyReviewNotification(n)) {
-        if (!useAuthStore.getState().isSuperAdmin) {
-          return '/(tabs)/finance';
-        }
         const period = extractFinanceReviewPeriod(n);
         if (period) {
           const [y, mo] = period.split('-');

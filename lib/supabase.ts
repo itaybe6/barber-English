@@ -298,6 +298,8 @@ export interface BusinessProfile {
   require_client_approval?: boolean;
   /** When false, hide service images in admin service list, add/edit forms, and client booking. Defaults to true if unset. */
   show_service_images?: boolean;
+  /** When true, clients may select multiple services in one booking. Default false in DB. */
+  allow_multi_service_booking?: boolean;
   /** When true, client home may show `home_fixed_message` (app-enforced). */
   home_fixed_message_enabled?: boolean;
   /** Fixed banner text for client home when `home_fixed_message_enabled` is true. */

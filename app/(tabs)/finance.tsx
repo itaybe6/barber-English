@@ -135,7 +135,7 @@ function lightenHex(hex: string, ratio: number): string {
 export default function FinanceScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const isSuperAdmin = useAuthStore((s) => s.isSuperAdmin);
+  const isAdminUser = useAuthStore((s) => s.isAdmin);
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const { colors: theme } = useBusinessColors();
@@ -677,6 +677,37 @@ export default function FinanceScreen() {
                     </View>
                   </View>
                 ) : null}
+
+                {isAdminUser ? (
+                  <View style={styles.monthlyReportCtaInHero}>
+                    <TouchableOpacity
+                      activeOpacity={0.88}
+                      onPress={() =>
+                        router.push(
+                          `/(tabs)/finance-month-closure?year=${year}&month=${month}`,
+                        )
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel="הפק דוח חודשי"
+                      style={styles.monthlyReportCtaOuter}
+                    >
+                      <LinearGradient
+                        colors={['#FFFFFF', '#F0FDF4']}
+                        locations={[0, 1]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={styles.monthlyReportCtaGradientHero}
+                      >
+                        <FileSpreadsheet size={22} color="#16A34A" strokeWidth={2.2} />
+                        <RtlText style={styles.monthlyReportCtaTextHero}>הפק דוח חודשי</RtlText>
+                        <ChevronLeft size={20} color="#16A34A" />
+                      </LinearGradient>
+                    </TouchableOpacity>
+                    <RtlText style={styles.monthlyReportCtaHintHero}>
+                      קבלות נבחרות ושליחה לרואה החשבון
+                    </RtlText>
+                  </View>
+                ) : null}
               </View>
               {reportRefreshing ? (
                 <View
@@ -691,37 +722,6 @@ export default function FinanceScreen() {
               ) : null}
             </View>
           </View>
-
-          {isSuperAdmin ? (
-            <View style={styles.monthlyReportCtaSection}>
-              <TouchableOpacity
-                activeOpacity={0.88}
-                onPress={() =>
-                  router.push(
-                    `/(tabs)/finance-month-closure?year=${year}&month=${month}`,
-                  )
-                }
-                accessibilityRole="button"
-                accessibilityLabel="הפק דוח חודשי"
-                style={styles.monthlyReportCtaOuter}
-              >
-                <LinearGradient
-                  colors={['#22C55E', '#16A34A', '#0F6B2C']}
-                  locations={[0, 0.55, 1]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.monthlyReportCtaGradient}
-                >
-                  <FileSpreadsheet size={22} color="#fff" strokeWidth={2.2} />
-                  <RtlText style={styles.monthlyReportCtaText}>הפק דוח חודשי</RtlText>
-                  <ChevronLeft size={20} color="rgba(255,255,255,0.92)" />
-                </LinearGradient>
-              </TouchableOpacity>
-              <RtlText style={[styles.monthlyReportCtaHint, { color: theme.textSecondary }]}>
-                בחירת תורים, קבלות בחשבונית ירוקה ושליחת חבילה לרואה החשבון — למנהל האפליקציה בלבד
-              </RtlText>
-            </View>
-          ) : null}
 
           {/* ── Green Invoice (חשבונית ירוקה) ── */}
           <View
@@ -1689,43 +1689,48 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 
-  monthlyReportCtaSection: {
-    marginHorizontal: 16,
-    marginTop: 14,
+  monthlyReportCtaInHero: {
+    marginTop: 20,
+    alignSelf: 'stretch',
+    width: '100%',
   },
   monthlyReportCtaOuter: {
-    borderRadius: 18,
+    borderRadius: 16,
     overflow: 'hidden',
     ...Platform.select({
       ios: {
-        shadowColor: '#16A34A',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.35,
-        shadowRadius: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 5 },
+        shadowOpacity: 0.22,
+        shadowRadius: 10,
       },
-      android: { elevation: 6 },
+      android: { elevation: 5 },
     }),
   },
-  monthlyReportCtaGradient: {
+  monthlyReportCtaGradientHero: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.45)',
   },
-  monthlyReportCtaText: {
-    color: '#fff',
-    fontSize: 17,
+  monthlyReportCtaTextHero: {
+    color: '#0F6B2C',
+    fontSize: 16,
     fontWeight: '900',
     letterSpacing: 0.2,
   },
-  monthlyReportCtaHint: {
-    fontSize: 12,
-    lineHeight: 17,
+  monthlyReportCtaHintHero: {
+    fontSize: 11,
+    fontWeight: '600',
     textAlign: 'center',
-    marginTop: 10,
-    paddingHorizontal: 8,
+    marginTop: 8,
+    color: 'rgba(255,255,255,0.82)',
+    lineHeight: 15,
   },
   giReceiptClientRow: {
     flexDirection: 'row-reverse',

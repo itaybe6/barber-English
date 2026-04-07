@@ -79,7 +79,7 @@ export default function FinanceMonthClosureScreen() {
 
   const { colors: theme } = useBusinessColors();
   const primary = theme.primary || '#0D9488';
-  const isSuperAdmin = useAuthStore((s) => s.isSuperAdmin);
+  const isAdminUser = useAuthStore((s) => s.isAdmin);
 
   const [rows, setRows] = useState<CompletedAppointmentReceiptRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -197,7 +197,7 @@ export default function FinanceMonthClosureScreen() {
     );
   };
 
-  if (!isSuperAdmin) {
+  if (!isAdminUser) {
     return (
       <View style={[styles.root, { paddingTop: insets.top + 24, backgroundColor: theme.surface }]}>
         <TouchableOpacity
@@ -207,9 +207,9 @@ export default function FinanceMonthClosureScreen() {
         >
           <ChevronRight size={26} color={primary} />
         </TouchableOpacity>
-        <Text style={[styles.deniedTitle, { color: theme.text }]}>גישה למנהל האפליקציה בלבד</Text>
+        <Text style={[styles.deniedTitle, { color: theme.text }]}>גישה למנהלים בלבד</Text>
         <Text style={[styles.deniedSub, { color: theme.textSecondary }]}>
-          מסך סגירת החודש והשליחה לרואה החשבון זמין רק למנהל על.
+          מסך סגירת החודש והשליחה לרואה החשבון זמין רק למשתמשי ניהול.
         </Text>
       </View>
     );

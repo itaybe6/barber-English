@@ -13,7 +13,7 @@ import { servicesApi, updateService, createService, deleteService, updateService
 import type { Service } from '@/lib/supabase';
 import { recurringAppointmentsApi } from '@/lib/api/recurringAppointments';
 import { supabase, getBusinessId } from '@/lib/supabase';
-import { businessProfileApi, isClientApprovalRequired, isClientSwapEnabled, isShowServiceImages } from '@/lib/api/businessProfile';
+import { businessProfileApi, isClientApprovalRequired, isClientSwapEnabled, isShowServiceImages, isMultiServiceBookingAllowed } from '@/lib/api/businessProfile';
 import type { BusinessProfile } from '@/lib/supabase';
 import { 
   LogOut, 
@@ -36,6 +36,7 @@ import {
   Bell,
   Camera,
   Megaphone,
+  Layers,
 } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -179,6 +180,7 @@ export default function SettingsScreen() {
   /** Extra ScrollView bottom inset so policies + home-message composer stay above keyboard & tab bar */
   const [settingsKeyboardInset, setSettingsKeyboardInset] = useState(0);
   const [showServiceImages, setShowServiceImages] = useState(true);
+  const [allowMultiServiceBooking, setAllowMultiServiceBooking] = useState(false);
   const [showEditAddressModal, setShowEditAddressModal] = useState(false);
   const [showAddressSheet, setShowAddressSheet] = useState(false);
   const [showEditInstagramModal, setShowEditInstagramModal] = useState(false);
@@ -294,6 +296,7 @@ export default function SettingsScreen() {
         setClientSwapEnabled(isClientSwapEnabled(p));
         setRequireClientApproval(isClientApprovalRequired(p));
         setShowServiceImages(isShowServiceImages(p));
+        setAllowMultiServiceBooking(isMultiServiceBookingAllowed(p));
         {
           const cr = (p as BusinessProfile)?.client_reminder_minutes;
           const n = cr === null || cr === undefined ? NaN : Number(cr);
@@ -571,6 +574,28 @@ export default function SettingsScreen() {
       }
       setProfile(updated);
       setShowServiceImages(isShowServiceImages(updated));
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleAllowMultiServiceBookingToggle = async (next: boolean) => {
+    if (!canSeeAddEmployee) return;
+    const prev = allowMultiServiceBooking;
+    setAllowMultiServiceBooking(next);
+    setIsSavingProfile(true);
+    try {
+      const updated = await businessProfileApi.setAllowMultiServiceBooking(next);
+      if (!updated) {
+        setAllowMultiServiceBooking(prev);
+        Alert.alert(
+          t('error.generic', 'Error'),
+          t('settings.policies.allowMultiServiceBookingSaveFailed', 'Could not save this setting'),
+        );
+        return;
+      }
+      setProfile(updated);
+      setAllowMultiServiceBooking(isMultiServiceBookingAllowed(updated));
     } finally {
       setIsSavingProfile(false);
     }
@@ -2250,6 +2275,46 @@ export default function SettingsScreen() {
                 trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
                 thumbColor={
                   clientSwapEnabled
+                    ? businessColors.primary
+                    : Platform.OS === 'android'
+                      ? '#f4f3f4'
+                      : undefined
+                }
+                ios_backgroundColor="#E5E5EA"
+              />
+            </View>
+            <View style={styles.settingDivider} />
+            <View style={styles.settingItemLTR}>
+              <View style={styles.settingIconLTR}>
+                <Layers size={20} color={businessColors.primary} />
+              </View>
+              <View
+                style={{
+                  flex: 1,
+                  paddingRight: 8,
+                  opacity: allowMultiServiceBooking && canSeeAddEmployee ? 1 : 0.55,
+                }}
+              >
+                <Text style={styles.settingTitleLTR}>
+                  {t(
+                    'settings.policies.allowMultiServiceBookingTitle',
+                    'Several services in one visit',
+                  )}
+                </Text>
+                <Text style={styles.settingSubtitleLTR}>
+                  {t(
+                    'settings.policies.allowMultiServiceBookingSubtitle',
+                    'Off: one service per booking. On: clients can pick multiple services as one continuous slot.',
+                  )}
+                </Text>
+              </View>
+              <Switch
+                value={allowMultiServiceBooking}
+                onValueChange={handleAllowMultiServiceBookingToggle}
+                disabled={!canSeeAddEmployee || isSavingProfile}
+                trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                thumbColor={
+                  allowMultiServiceBooking
                     ? businessColors.primary
                     : Platform.OS === 'android'
                       ? '#f4f3f4'

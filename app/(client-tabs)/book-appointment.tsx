@@ -28,7 +28,7 @@ import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
 import { isRtlLanguage, toBcp47Locale } from '@/lib/i18nLocale';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { notificationsApi } from '@/lib/api/notifications';
-import { businessProfileApi, isShowServiceImages } from '@/lib/api/businessProfile';
+import { businessProfileApi, isShowServiceImages, isMultiServiceBookingAllowed } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
 import { User } from '@/lib/supabase';
 import { darkenHex } from '@/lib/colorContrast';
@@ -600,15 +600,22 @@ export default function BookAppointment() {
 
   const [bookingOpenDays, setBookingOpenDays] = useState<number>(7);
   const [showServiceImagesBooking, setShowServiceImagesBooking] = useState(true);
+  const [allowMultiServiceBooking, setAllowMultiServiceBooking] = useState(false);
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
       (async () => {
         try {
           const p = await businessProfileApi.getProfile();
-          if (!cancelled && p) setShowServiceImagesBooking(isShowServiceImages(p));
+          if (!cancelled && p) {
+            setShowServiceImagesBooking(isShowServiceImages(p));
+            setAllowMultiServiceBooking(isMultiServiceBookingAllowed(p));
+          }
         } catch {
-          if (!cancelled) setShowServiceImagesBooking(true);
+          if (!cancelled) {
+            setShowServiceImagesBooking(true);
+            setAllowMultiServiceBooking(false);
+          }
         }
       })();
       return () => {
@@ -616,6 +623,12 @@ export default function BookAppointment() {
       };
     }, []),
   );
+
+  useEffect(() => {
+    if (!allowMultiServiceBooking) {
+      setSelectedServices((prev) => (prev.length <= 1 ? prev : [prev[0]]));
+    }
+  }, [allowMultiServiceBooking]);
 
   useEffect(() => {
     let isMounted = true;
@@ -1763,11 +1776,16 @@ export default function BookAppointment() {
           selectedServiceIds={selectedServices.map((s: any) => String(s.id))}
           externalScrollX={serviceBgScrollX}
           showServiceImages={showServiceImagesBooking}
+          multiSelectEnabled={allowMultiServiceBooking}
           t={t}
           onSelectService={(service) => {
             setSelectedServices(prev => {
               const id = String((service as any).id);
               const exists = prev.find((s: any) => String(s.id) === id);
+              if (!allowMultiServiceBooking) {
+                if (exists) return [];
+                return [service];
+              }
               if (exists) return prev.filter((s: any) => String(s.id) !== id);
               return [...prev, service];
             });

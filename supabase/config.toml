@@ -50,7 +50,7 @@ verify_jwt = false
 [functions.finance-monthly-review-reminder]
 verify_jwt = false
 
-# Super-admin: JWT must match caller_user_id; issues receipts + emails accountant (Resend).
+# Admin / super_admin: JWT must match caller_user_id; issues receipts + emails accountant (Resend).
 [functions.finance-accountant-package]
 verify_jwt = true
 

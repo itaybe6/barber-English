@@ -126,7 +126,7 @@ serve(async (req) => {
       .from("users")
       .select("id, name, phone")
       .eq("business_id", bid)
-      .eq("user_type", "super_admin")
+      .in("user_type", ["admin", "super_admin"])
       .not("phone", "is", null);
 
     if (uErr || !supers?.length) {

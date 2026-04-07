@@ -1280,7 +1280,7 @@ export default function HomeScreen() {
                 accessibilityRole="button"
               >
                 <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
-                  <Ionicons name="megaphone-outline" size={24} color={primaryOnSurface} />
+                  <Ionicons name="chatbubble-ellipses-outline" size={24} color={primaryOnSurface} />
                 </View>
                 <Text style={[styles.quickTileLabel, { color: colors.text }]} numberOfLines={2}>
                   {t('admin.home.broadcastTile')}

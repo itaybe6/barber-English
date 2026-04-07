@@ -4,7 +4,7 @@
  * (Resend) with monthly XLSX, HTML summary, links to issued receipts, and expense receipt images.
  *
  * Body: { business_id, caller_user_id, year, month, appointment_ids: string[], use_sandbox?: boolean }
- * Auth: verify_jwt=false — validates caller_user_id is super_admin for business_id.
+ * Auth: verify_jwt=true — JWT must match caller_user_id; user must be admin or super_admin for business_id.
  */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -317,8 +317,9 @@ serve(async (req) => {
   if (String(urow.business_id).trim() !== businessId) {
     return json({ ok: false, error: "forbidden_wrong_business" }, 403);
   }
-  if (String(urow.user_type) !== "super_admin") {
-    return json({ ok: false, error: "forbidden_not_super_admin" }, 403);
+  const role = String(urow.user_type ?? "");
+  if (role !== "admin" && role !== "super_admin") {
+    return json({ ok: false, error: "forbidden_not_admin" }, 403);
   }
 
   const { data: profile, error: pErr } = await admin

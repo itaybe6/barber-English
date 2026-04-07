@@ -1647,7 +1647,6 @@ export default function SettingsScreen() {
   const settingsScreenTabs = useMemo(
     () => {
       const list: { id: string; label: string }[] = [];
-      /** LTR array order: account → … → appointments. SettingsScreenTabs reverses in RTL for correct visual + indicator. */
       if (user) {
         list.push({
           id: 'account',
@@ -1674,6 +1673,20 @@ export default function SettingsScreen() {
         id: 'appointments',
         label: t('settings.sections.appointments', 'Appointments'),
       });
+      const generalTab = {
+        id: 'general',
+        label: t('settings.sections.general', 'General'),
+      };
+      /**
+       * Visual order uses `flexDirection: 'row'` + LTR. `SettingsScreenTabs` reverses the whole list in RTL.
+       * RTL: prepend `general` → after reverse it renders last → physically right (Hebrew “start”).
+       * LTR: append `general` → last → physically right.
+       */
+      if (I18nManager.isRTL) {
+        list.unshift(generalTab);
+      } else {
+        list.push(generalTab);
+      }
       return list;
     },
     [canSeeAddEmployee, user, t],
@@ -1700,7 +1713,7 @@ export default function SettingsScreen() {
   }, [settingsScreenTabs, activeSettingsTab]);
 
   useEffect(() => {
-    if (activeSettingsTab !== 'appointments') {
+    if (activeSettingsTab !== 'appointments' && activeSettingsTab !== 'general') {
       Keyboard.dismiss();
     }
   }, [activeSettingsTab]);
@@ -2023,10 +2036,223 @@ export default function SettingsScreen() {
             style={[
               styles.settingsBelowTabs,
               {
-                paddingBottom: activeSettingsTab === 'appointments' ? 0 : insets.bottom + 100,
+                paddingBottom:
+                  activeSettingsTab === 'appointments' || activeSettingsTab === 'general'
+                    ? 0
+                    : insets.bottom + 100,
               },
             ]}
           >
+        {activeSettingsTab === 'general' && (
+          <ScrollView
+            style={styles.settingsAppointmentsScroll}
+            contentContainerStyle={[
+              styles.settingsAppointmentsScrollContent,
+              {
+                paddingBottom:
+                  insets.bottom +
+                  120 +
+                  (Platform.OS === 'android' ? settingsKeyboardInset : 0),
+              },
+            ]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+            showsVerticalScrollIndicator={false}
+            automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          >
+            <View style={styles.settingsTabPanel}>
+              <View style={styles.settingsAccordionBody}>
+                {!canSeeAddEmployee ? (
+                  <Text style={[styles.settingSubtitleLTR, { paddingHorizontal: 16, paddingBottom: 12 }]}>
+                    {t(
+                      'settings.policies.ownerOnlyEditHint',
+                      'Only the business owner (account linked to the business phone) can change these policies.',
+                    )}
+                  </Text>
+                ) : null}
+                <View style={styles.settingItemLTR}>
+                  <View style={styles.settingIconLTR}>
+                    <User size={20} color={businessColors.primary} />
+                  </View>
+                  <View
+                    style={{
+                      flex: 1,
+                      paddingRight: 8,
+                      opacity: requireClientApproval && canSeeAddEmployee ? 1 : 0.55,
+                    }}
+                  >
+                    <Text style={styles.settingTitleLTR}>
+                      {t('settings.policies.requireClientApprovalTitle', 'Approve new clients')}
+                    </Text>
+                    <Text style={styles.settingSubtitleLTR}>
+                      {t(
+                        'settings.policies.requireClientApprovalSubtitle',
+                        'When on, new sign-ups wait for your approval before booking',
+                      )}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={requireClientApproval}
+                    onValueChange={handleRequireClientApprovalToggle}
+                    disabled={!canSeeAddEmployee || isSavingProfile}
+                    trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                    thumbColor={
+                      requireClientApproval
+                        ? businessColors.primary
+                        : Platform.OS === 'android'
+                          ? '#f4f3f4'
+                          : undefined
+                    }
+                    ios_backgroundColor="#E5E5EA"
+                  />
+                </View>
+                <View style={styles.settingDivider} />
+                <View style={styles.settingItemLTR}>
+                  <View style={styles.settingIconLTR}>
+                    <Megaphone size={20} color={businessColors.primary} />
+                  </View>
+                  <View
+                    style={{
+                      flex: 1,
+                      paddingRight: 8,
+                      opacity: homeFixedMessageEnabled && canSeeAddEmployee ? 1 : 0.55,
+                    }}
+                  >
+                    <Text style={styles.settingTitleLTR}>
+                      {t('settings.policies.homeFixedMessageTitle', 'Fixed message on client home')}
+                    </Text>
+                    <Text style={styles.settingSubtitleLTR}>
+                      {t(
+                        'settings.policies.homeFixedMessageSubtitle',
+                        'When on, clients will see your message on the home screen (after you enable it in the app).',
+                      )}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={homeFixedMessageEnabled}
+                    onValueChange={(v) => {
+                      void handleHomeFixedMessageToggle(v);
+                    }}
+                    disabled={!canSeeAddEmployee || isSavingProfile}
+                    trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                    thumbColor={
+                      homeFixedMessageEnabled
+                        ? businessColors.primary
+                        : Platform.OS === 'android'
+                          ? '#f4f3f4'
+                          : undefined
+                    }
+                    ios_backgroundColor="#E5E5EA"
+                  />
+                </View>
+                {homeFixedMessageEnabled && canSeeAddEmployee ? (
+                  homeFixedMessageEditorOpen ? (
+                    <View style={styles.homeFixedMessageComposer}>
+                      <TextInput
+                        ref={homeFixedMessageInputRef}
+                        style={[
+                          styles.homeFixedMessageInput,
+                          {
+                            borderColor: homeFixedInputFocused
+                              ? `${businessColors.primary}66`
+                              : 'rgba(60,60,67,0.11)',
+                            textAlign: editAdminInputsRtl ? 'right' : 'left',
+                          },
+                        ]}
+                        value={homeFixedMessageText}
+                        onChangeText={setHomeFixedMessageText}
+                        placeholder={t('settings.policies.homeFixedMessagePlaceholder', 'Message for clients…')}
+                        placeholderTextColor={Colors.subtext}
+                        multiline
+                        maxLength={HOME_FIXED_MESSAGE_MAX_LEN}
+                        editable={!isSavingProfile}
+                        textAlignVertical="top"
+                        selectionColor={businessColors.primary}
+                        onFocus={() => {
+                          setHomeFixedInputFocused(true);
+                        }}
+                        onBlur={() => setHomeFixedInputFocused(false)}
+                      />
+                      <View
+                        style={[
+                          styles.homeFixedMessageComposerFooter,
+                          editAdminInputsRtl ? styles.homeFixedMessageComposerFooterRtl : null,
+                        ]}
+                      >
+                        <Text style={styles.homeFixedMessageCounter}>
+                          {homeFixedMessageText.length}/{HOME_FIXED_MESSAGE_MAX_LEN}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={[
+                          styles.homeFixedMessageSaveButton,
+                          {
+                            backgroundColor: businessColors.primary,
+                            opacity: isSavingProfile ? 0.55 : 1,
+                          },
+                        ]}
+                        onPress={() => {
+                          void handleHomeFixedMessageSavePress();
+                        }}
+                        disabled={isSavingProfile}
+                        activeOpacity={0.88}
+                      >
+                        <Text style={styles.homeFixedMessageSaveButtonText}>
+                          {isSavingProfile
+                            ? t('settings.common.saving', 'Saving...')
+                            : t('settings.policies.homeFixedMessageSave', 'Save message')}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.homeFixedMessageSummaryCard,
+                        pressed ? { opacity: 0.88 } : null,
+                      ]}
+                      onPress={() => {
+                        setHomeFixedMessageEditorOpen(true);
+                      }}
+                      disabled={isSavingProfile}
+                    >
+                      <View style={styles.homeFixedMessageSummaryTextCol}>
+                        <Text
+                          style={[
+                            styles.homeFixedMessagePreviewText,
+                            editAdminInputsRtl ? styles.homeFixedMessageSummaryTextRtl : null,
+                            homeFixedMessageText.trim().length === 0
+                              ? styles.homeFixedMessagePreviewEmpty
+                              : null,
+                          ]}
+                          numberOfLines={2}
+                        >
+                          {homeFixedMessageText.trim().length > 0
+                            ? homeFixedMessageText.trim()
+                            : t(
+                                'settings.policies.homeFixedMessageNoMessageYet',
+                                'No message yet — tap to add one',
+                              )}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.homeFixedMessageTapToEdit,
+                            editAdminInputsRtl ? styles.homeFixedMessageSummaryTextRtl : null,
+                          ]}
+                        >
+                          {t('settings.policies.homeFixedMessageTapToEdit', 'Tap to edit')}
+                        </Text>
+                      </View>
+                      <View style={styles.homeFixedMessageSummaryIconWrap}>
+                        <Pencil size={18} color={businessColors.primary} strokeWidth={2} />
+                      </View>
+                    </Pressable>
+                  )
+                ) : null}
+              </View>
+            </View>
+          </ScrollView>
+        )}
+
         {activeSettingsTab === 'appointments' && (
           <ScrollView
             style={styles.settingsAppointmentsScroll}
@@ -2215,43 +2441,6 @@ export default function SettingsScreen() {
             <View style={styles.settingDivider} />
             <View style={styles.settingItemLTR}>
               <View style={styles.settingIconLTR}>
-                <User size={20} color={businessColors.primary} />
-              </View>
-              <View
-                style={{
-                  flex: 1,
-                  paddingRight: 8,
-                  opacity: requireClientApproval && canSeeAddEmployee ? 1 : 0.55,
-                }}
-              >
-                <Text style={styles.settingTitleLTR}>
-                  {t('settings.policies.requireClientApprovalTitle', 'Approve new clients')}
-                </Text>
-                <Text style={styles.settingSubtitleLTR}>
-                  {t(
-                    'settings.policies.requireClientApprovalSubtitle',
-                    'When on, new sign-ups wait for your approval before booking',
-                  )}
-                </Text>
-              </View>
-              <Switch
-                value={requireClientApproval}
-                onValueChange={handleRequireClientApprovalToggle}
-                disabled={!canSeeAddEmployee || isSavingProfile}
-                trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
-                thumbColor={
-                  requireClientApproval
-                    ? businessColors.primary
-                    : Platform.OS === 'android'
-                      ? '#f4f3f4'
-                      : undefined
-                }
-                ios_backgroundColor="#E5E5EA"
-              />
-            </View>
-            <View style={styles.settingDivider} />
-            <View style={styles.settingItemLTR}>
-              <View style={styles.settingIconLTR}>
                 <Ionicons name="swap-horizontal" size={20} color={businessColors.primary} />
               </View>
               <View
@@ -2323,148 +2512,6 @@ export default function SettingsScreen() {
                 ios_backgroundColor="#E5E5EA"
               />
             </View>
-            <View style={styles.settingDivider} />
-            <View style={styles.settingItemLTR}>
-              <View style={styles.settingIconLTR}>
-                <Megaphone size={20} color={businessColors.primary} />
-              </View>
-              <View
-                style={{
-                  flex: 1,
-                  paddingRight: 8,
-                  opacity: homeFixedMessageEnabled && canSeeAddEmployee ? 1 : 0.55,
-                }}
-              >
-                <Text style={styles.settingTitleLTR}>
-                  {t('settings.policies.homeFixedMessageTitle', 'Fixed message on client home')}
-                </Text>
-                <Text style={styles.settingSubtitleLTR}>
-                  {t(
-                    'settings.policies.homeFixedMessageSubtitle',
-                    'When on, clients will see your message on the home screen (after you enable it in the app).',
-                  )}
-                </Text>
-              </View>
-              <Switch
-                value={homeFixedMessageEnabled}
-                onValueChange={(v) => {
-                  void handleHomeFixedMessageToggle(v);
-                }}
-                disabled={!canSeeAddEmployee || isSavingProfile}
-                trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
-                thumbColor={
-                  homeFixedMessageEnabled
-                    ? businessColors.primary
-                    : Platform.OS === 'android'
-                      ? '#f4f3f4'
-                      : undefined
-                }
-                ios_backgroundColor="#E5E5EA"
-              />
-            </View>
-            {homeFixedMessageEnabled && canSeeAddEmployee ? (
-              homeFixedMessageEditorOpen ? (
-                <View style={styles.homeFixedMessageComposer}>
-                  <TextInput
-                    ref={homeFixedMessageInputRef}
-                    style={[
-                      styles.homeFixedMessageInput,
-                      {
-                        borderColor: homeFixedInputFocused
-                          ? `${businessColors.primary}66`
-                          : 'rgba(60,60,67,0.11)',
-                        textAlign: editAdminInputsRtl ? 'right' : 'left',
-                      },
-                    ]}
-                    value={homeFixedMessageText}
-                    onChangeText={setHomeFixedMessageText}
-                    placeholder={t('settings.policies.homeFixedMessagePlaceholder', 'Message for clients…')}
-                    placeholderTextColor={Colors.subtext}
-                    multiline
-                    maxLength={HOME_FIXED_MESSAGE_MAX_LEN}
-                    editable={!isSavingProfile}
-                    textAlignVertical="top"
-                    selectionColor={businessColors.primary}
-                    onFocus={() => {
-                      setHomeFixedInputFocused(true);
-                    }}
-                    onBlur={() => setHomeFixedInputFocused(false)}
-                  />
-                  <View
-                    style={[
-                      styles.homeFixedMessageComposerFooter,
-                      editAdminInputsRtl ? styles.homeFixedMessageComposerFooterRtl : null,
-                    ]}
-                  >
-                    <Text style={styles.homeFixedMessageCounter}>
-                      {homeFixedMessageText.length}/{HOME_FIXED_MESSAGE_MAX_LEN}
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    style={[
-                      styles.homeFixedMessageSaveButton,
-                      {
-                        backgroundColor: businessColors.primary,
-                        opacity: isSavingProfile ? 0.55 : 1,
-                      },
-                    ]}
-                    onPress={() => {
-                      void handleHomeFixedMessageSavePress();
-                    }}
-                    disabled={isSavingProfile}
-                    activeOpacity={0.88}
-                  >
-                    <Text style={styles.homeFixedMessageSaveButtonText}>
-                      {isSavingProfile
-                        ? t('settings.common.saving', 'Saving...')
-                        : t('settings.policies.homeFixedMessageSave', 'Save message')}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.homeFixedMessageSummaryCard,
-                    pressed ? { opacity: 0.88 } : null,
-                  ]}
-                  onPress={() => {
-                    setHomeFixedMessageEditorOpen(true);
-                  }}
-                  disabled={isSavingProfile}
-                >
-                  <View style={styles.homeFixedMessageSummaryTextCol}>
-                    <Text
-                      style={[
-                        styles.homeFixedMessagePreviewText,
-                        editAdminInputsRtl ? styles.homeFixedMessageSummaryTextRtl : null,
-                        homeFixedMessageText.trim().length === 0
-                          ? styles.homeFixedMessagePreviewEmpty
-                          : null,
-                      ]}
-                      numberOfLines={2}
-                    >
-                      {homeFixedMessageText.trim().length > 0
-                        ? homeFixedMessageText.trim()
-                        : t(
-                            'settings.policies.homeFixedMessageNoMessageYet',
-                            'No message yet — tap to add one',
-                          )}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.homeFixedMessageTapToEdit,
-                        editAdminInputsRtl ? styles.homeFixedMessageSummaryTextRtl : null,
-                      ]}
-                    >
-                      {t('settings.policies.homeFixedMessageTapToEdit', 'Tap to edit')}
-                    </Text>
-                  </View>
-                  <View style={styles.homeFixedMessageSummaryIconWrap}>
-                    <Pencil size={18} color={businessColors.primary} strokeWidth={2} />
-                  </View>
-                </Pressable>
-              )
-            ) : null}
           </View>
         </View>
           </ScrollView>

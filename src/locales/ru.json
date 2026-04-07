@@ -937,6 +937,7 @@
       "heroUploadHomeButton": "Дом"
     },
     "sections": {
+      "general": "Общие",
       "notifications": "Уведомления",
       "notificationsMessages": "Уведомления и сообщения",
       "services": "Услуги",

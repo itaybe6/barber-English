@@ -942,6 +942,7 @@
       "heroUploadHomeButton": "بيت"
     },
     "sections": {
+      "general": "عام",
       "notifications": "إشعارات",
       "notificationsMessages": "الإخطارات والرسائل",
       "services": "خدمات",

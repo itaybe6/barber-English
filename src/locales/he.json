@@ -821,6 +821,7 @@
       "heroUploadHomeButton": "דף הבית"
     },
     "sections": {
+      "general": "כללי",
       "notifications": "התראות",
       "notificationsMessages": "התראות והודעות",
       "services": "שירותים",

@@ -59,6 +59,19 @@ function getAdminSupabaseClient(): SupabaseClient | null {
 const MSG_PULSEEM_401 =
   'הרשאה נדחתה (401): ב־branding/<CLIENT>/.env הגדר EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY — מפתח service_role מאותו פרויקט כמו ה־URL (JWT שמתחיל ב־eyJ… או מפתח סוד חדש מ־API). לא anon. אחרי שינוי — npx expo start -c.';
 
+/** יתרת Direct SMS נמוכה — סף התראה למנהלי העסק (קרדיטי «חבילת SMS בAPI» בפולסים). */
+const PULSEEM_LOW_DIRECT_SMS_THRESHOLD = 50;
+/** סימון בתוכן ההתראה לדה-דופ (לא למחוק — משמש like ב־SQL). */
+const PULSEEM_LOW_BALANCE_NOTIF_MARKER = '[pulseem_direct_sms_low_balance]';
+const PULSEEM_LOW_BALANCE_DEDUPE_DAYS = 7;
+
+function parsePulseemDirectSmsCreditsNumber(raw: string): number | null {
+  const t = String(raw).replace(/,/g, '.').trim();
+  const n = parseFloat(t);
+  if (!Number.isFinite(n)) return null;
+  return n;
+}
+
 /** Encrypts Pulseem secrets server-side (AES-GCM); DB never stores plaintext for new writes. */
 async function invokePulseemCredentialsAdmin<T extends Record<string, unknown>>(
   body: Record<string, unknown>,
@@ -654,6 +667,87 @@ export const superAdminApi = {
       return { ok: true, directSmsCredits: result.directSmsCredits };
     }
     return { ok: false, message: result.message || 'לא ניתן לטעון יתרה' };
+  },
+
+  /**
+   * כשיתרת Direct SMS של העסק נמוכה מסף — יוצר התראת `system` לכל מנהלי העסק (טלפון חובה).
+   * דה-דופ: לא יוצר שוב אם כבר נשלחה התראה עם אותו סימון ב־`business_id` ב־N הימים האחרונים.
+   */
+  async notifyAdminsPulseemLowDirectSmsIfNeeded(
+    businessId: string,
+    directSmsCreditsRaw: string,
+    businessDisplayName?: string | null,
+  ): Promise<{ created: boolean; skippedReason?: string }> {
+    const credits = parsePulseemDirectSmsCreditsNumber(directSmsCreditsRaw);
+    if (credits == null || credits < 0) {
+      return { created: false, skippedReason: 'unparseable_or_negative' };
+    }
+    if (credits >= PULSEEM_LOW_DIRECT_SMS_THRESHOLD) {
+      return { created: false, skippedReason: 'above_threshold' };
+    }
+
+    const db = getAdminSupabaseClient();
+    if (!db) {
+      return { created: false, skippedReason: 'no_service_role' };
+    }
+
+    const since = new Date(
+      Date.now() - PULSEEM_LOW_BALANCE_DEDUPE_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    const { data: existing } = await db
+      .from('notifications')
+      .select('id')
+      .eq('business_id', businessId)
+      .eq('type', 'system')
+      .gte('created_at', since)
+      .like('content', `%${PULSEEM_LOW_BALANCE_NOTIF_MARKER}%`)
+      .limit(1)
+      .maybeSingle();
+
+    if (existing?.id) {
+      return { created: false, skippedReason: 'recent_duplicate' };
+    }
+
+    const { data: admins, error: adminsError } = await db
+      .from('users')
+      .select('name, phone')
+      .eq('business_id', businessId)
+      .eq('user_type', 'admin')
+      .not('phone', 'is', null)
+      .neq('phone', '');
+
+    if (adminsError) {
+      console.error('[notifyAdminsPulseemLowDirectSmsIfNeeded] admins fetch', adminsError);
+      return { created: false, skippedReason: 'admins_fetch_failed' };
+    }
+    if (!admins?.length) {
+      return { created: false, skippedReason: 'no_admins' };
+    }
+
+    const bizLabel = (businessDisplayName ?? '').trim() || 'העסק';
+    const creditsLine = String(directSmsCreditsRaw).trim();
+    const bodyLines = [
+      PULSEEM_LOW_BALANCE_NOTIF_MARKER,
+      `יתרת חבילת ה-SMS API (פולסים Direct) ב«${bizLabel}»: ${creditsLine}.`,
+      'מומלץ להטעין קרדיטים לפני שייגמרו — דרך סופר־אדמין (פולסים SMS) או לפי ההסכם שלכם עם פולסים.',
+    ];
+    const content = bodyLines.join('\n');
+
+    const rows = admins.map((a: { name?: string | null; phone?: string | null }) => ({
+      title: 'תזכורת: יתרת SMS API נמוכה',
+      content,
+      type: 'system' as const,
+      recipient_name: (a.name || 'מנהל').trim() || 'מנהל',
+      recipient_phone: String(a.phone || '').trim(),
+      business_id: businessId,
+    }));
+
+    const { error: insertError } = await db.from('notifications').insert(rows);
+    if (insertError) {
+      console.error('[notifyAdminsPulseemLowDirectSmsIfNeeded] insert', insertError);
+      return { created: false, skippedReason: 'insert_failed' };
+    }
+    return { created: true };
   },
 
   async getPulseemEditorState(businessId: string): Promise<{

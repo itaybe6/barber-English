@@ -178,8 +178,6 @@ const ServiceRow = React.forwardRef<RNView, RowProps>(function ServiceRow(
 
   return (
     <Pressable
-      ref={ref}
-      collapsable={false}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected: isSelected }}
@@ -188,8 +186,10 @@ const ServiceRow = React.forwardRef<RNView, RowProps>(function ServiceRow(
           ? `${name}, ${duration} ${t('booking.min', 'min')}, ₪${price}`
           : `${name}, ${duration} ${t('booking.min', 'min')}`
       }
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      style={({ pressed }) => [styles.rowPressable, pressed && styles.rowPressed]}
     >
+      {/* Measure only the row content (not full touch width) — smoother flight scale */}
+      <View ref={ref} collapsable={false} style={styles.row}>
       {/* Price circle */}
       <View style={styles.priceRing}>
         <View style={styles.priceInner}>
@@ -228,6 +228,7 @@ const ServiceRow = React.forwardRef<RNView, RowProps>(function ServiceRow(
           </View>
         </View>
       </View>
+      </View>
     </Pressable>
   );
 });
@@ -263,6 +264,9 @@ const styles = StyleSheet.create({
     gap: 24,
     paddingHorizontal: 20,
     alignItems: 'center',
+  },
+  rowPressable: {
+    alignSelf: 'center',
   },
   row: {
     flexDirection: 'row',

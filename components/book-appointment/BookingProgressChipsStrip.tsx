@@ -9,6 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { AnimatePresence, MotiView } from 'moti';
+import { Easing } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 
 export const BOOKING_PROGRESS_STRIP_HEIGHT = 78;
@@ -26,7 +27,16 @@ export interface BookingProgressChipModel {
   kind: 'barber' | 'service' | 'day' | 'time';
   label: string;
   imageUri?: string;
+  /** Service chip: show name + price (matches list row flight). */
+  serviceName?: string;
+  servicePriceText?: string;
 }
+
+export type ChipFlightComputeOptions = {
+  scaleMax?: number;
+  /** Wide rows: use `min` or `height` so scale stays subtle (avoids huge zoom / digit jitter). */
+  scaleBasis?: 'max' | 'height' | 'min';
+};
 
 /** Moti `from` for chip “flight” from a measured on-screen rect (barber face, service row, day cell). */
 export interface ChipFlightEntrance {
@@ -70,7 +80,7 @@ export function computeChipFlightEntranceFromRect(
   rtl: boolean,
   slotCount: number,
   slotIndex: number,
-  scaleMax = 5.5
+  options?: ChipFlightComputeOptions
 ): ChipFlightEntrance {
   const cx = rect.x + rect.width / 2;
   const cy = rect.y + rect.height / 2;
@@ -78,7 +88,15 @@ export function computeChipFlightEntranceFromRect(
   const endCy = stripTop + BOOKING_PROGRESS_STRIP_HEIGHT / 2;
   const endCx = slotCenterX(slotCount, slotIndex, windowWidth, H_PAD, GAP, rtl);
   const cellInner = BOOKING_PROGRESS_STRIP_HEIGHT - 14;
-  const scale = clamp(Math.max(rect.width, rect.height) / cellInner, 1.04, scaleMax);
+  const scaleMax = options?.scaleMax ?? 5.5;
+  const basis = options?.scaleBasis ?? 'max';
+  const dim =
+    basis === 'height'
+      ? rect.height
+      : basis === 'min'
+        ? Math.min(rect.width, rect.height)
+        : Math.max(rect.width, rect.height);
+  const scale = clamp(dim / cellInner, 1.06, scaleMax);
   return {
     translateX: cx - endCx,
     translateY: cy - endCy,
@@ -155,6 +173,8 @@ export default function BookingProgressChipsStrip({
             const exitTx = rtl ? fromTx : -fromTx;
             const isBarber = chip.kind === 'barber';
             const cellOverflow = isBarber || chip.kind === 'service' || chip.kind === 'day';
+            /** Barber / service / day use inner “flight” from measured rect — no sideways squeeze on outer cell. */
+            const skipHorizontalSqueeze = cellOverflow;
 
             const textChipBody = (
               <>
@@ -176,7 +196,7 @@ export default function BookingProgressChipsStrip({
                 key={chip.key}
                 from={{
                   width: fullW,
-                  ...(isBarber ? {} : { translateX: squeezeFromX }),
+                  ...(skipHorizontalSqueeze ? {} : { translateX: squeezeFromX }),
                 }}
                 animate={{
                   width: finalW,
@@ -184,10 +204,14 @@ export default function BookingProgressChipsStrip({
                 }}
                 exit={{
                   width: 0,
-                  ...(isBarber ? {} : { translateX: exitTx }),
+                  ...(skipHorizontalSqueeze ? {} : { translateX: exitTx }),
                   opacity: 0,
                 }}
-                transition={{ type: 'timing', duration: 380 }}
+                transition={
+                  skipHorizontalSqueeze
+                    ? { type: 'timing', duration: 420, easing: Easing.out(Easing.cubic) }
+                    : { type: 'timing', duration: 380 }
+                }
                 style={[
                   styles.cell,
                   cellOverflow ? styles.cellFlight : styles.cellClip,
@@ -210,7 +234,7 @@ export default function BookingProgressChipsStrip({
                         : { translateX: 0, translateY: 0, scale: 1 }
                     }
                     animate={{ translateX: 0, translateY: 0, scale: 1 }}
-                    transition={{ type: 'timing', duration: 560 }}
+                    transition={{ type: 'timing', duration: 600, easing: Easing.out(Easing.cubic) }}
                     style={styles.barberInner}
                   >
                     {chip.imageUri ? (
@@ -238,10 +262,25 @@ export default function BookingProgressChipsStrip({
                         : { translateX: 0, translateY: 0, scale: 1 }
                     }
                     animate={{ translateX: 0, translateY: 0, scale: 1 }}
-                    transition={{ type: 'timing', duration: 560 }}
+                    transition={{ type: 'timing', duration: 620, easing: Easing.out(Easing.cubic) }}
                     style={styles.textCellFlyInner}
                   >
-                    <View style={styles.textCell}>{textChipBody}</View>
+                    <View style={styles.serviceFlyRoot}>
+                      <View style={styles.serviceFlyPriceBubble}>
+                        <Text
+                          style={[styles.serviceFlyPriceText, { color: primaryColor }]}
+                          numberOfLines={1}
+                        >
+                          {chip.servicePriceText ?? '—'}
+                        </Text>
+                      </View>
+                      <Text
+                        style={styles.serviceFlyNameText}
+                        numberOfLines={2}
+                      >
+                        {chip.serviceName ?? chip.label}
+                      </Text>
+                    </View>
                   </MotiView>
                 ) : chip.kind === 'day' ? (
                   <MotiView
@@ -256,7 +295,7 @@ export default function BookingProgressChipsStrip({
                         : { translateX: 0, translateY: 0, scale: 1 }
                     }
                     animate={{ translateX: 0, translateY: 0, scale: 1 }}
-                    transition={{ type: 'timing', duration: 560 }}
+                    transition={{ type: 'timing', duration: 600, easing: Easing.out(Easing.cubic) }}
                     style={styles.textCellFlyInner}
                   >
                     <View style={styles.textCell}>{textChipBody}</View>
@@ -357,5 +396,41 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     textAlign: 'center',
+  },
+  /** Mini copy of service list row: price bubble + name (flight + settled chip). */
+  serviceFlyRoot: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 2,
+    direction: 'ltr',
+  },
+  serviceFlyPriceBubble: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    flexShrink: 0,
+  },
+  serviceFlyPriceText: {
+    fontSize: 10,
+    fontWeight: '800',
+    textAlign: 'center',
+    letterSpacing: -0.2,
+  },
+  serviceFlyNameText: {
+    flex: 1,
+    minWidth: 0,
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+    textAlign: 'center',
+    letterSpacing: -0.15,
+    lineHeight: 13,
   },
 });

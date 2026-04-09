@@ -58,6 +58,7 @@ import { SettingsScreenTabs } from '@/components/settings/SettingsScreenTabs';
 import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
 import { BookingDaysRuler, type BookingDaysRulerHandle } from '@/components/BookingDaysRuler';
 import { getExpoExtra } from '@/lib/getExtra';
+import { getHomeLogoSource } from '@/src/theme/assets';
 
 // Helper for shadow style
 const shadowStyle = Platform.select({
@@ -216,6 +217,7 @@ export default function SettingsScreen() {
   const [adminPhoneDraft, setAdminPhoneDraft] = useState('');
   const [isSavingAdmin, setIsSavingAdmin] = useState(false);
   const [isUploadingAdminAvatar, setIsUploadingAdminAvatar] = useState(false);
+  const [isUploadingHomeLogo, setIsUploadingHomeLogo] = useState(false);
   const [adminProfileLavaLayout, setAdminProfileLavaLayout] = useState({ w: 0, h: 0 });
   const onAdminProfileLavaLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -1398,6 +1400,113 @@ export default function SettingsScreen() {
     } finally {
       setIsUploadingAdminAvatar(false);
     }
+  };
+
+  const uploadHomeScreenLogo = async (asset: {
+    uri: string;
+    base64?: string | null;
+    mimeType?: string | null;
+    fileName?: string | null;
+  }): Promise<string | null> => {
+    try {
+      let contentType = asset.mimeType || guessMimeFromUri(asset.fileName || asset.uri);
+      let fileBody: Blob | Uint8Array;
+      if (asset.base64) {
+        const bytes = base64ToUint8Array(asset.base64);
+        fileBody = bytes;
+      } else {
+        const response = await fetch(asset.uri, { cache: 'no-store' });
+        const fetched = await response.blob();
+        fileBody = fetched;
+        contentType = fetched.type || contentType;
+      }
+      const extGuess = (contentType.split('/')[1] || 'png').toLowerCase();
+      const randomId = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+      const bid = getBusinessId();
+      const filePath = `home-logos/${bid}/${Date.now()}_${randomId()}.${extGuess}`;
+      const { error: uploadError } = await supabase.storage
+        .from('app_design')
+        .upload(filePath, fileBody as any, { contentType, upsert: false });
+      if (uploadError) {
+        console.error('home logo upload error', uploadError);
+        return null;
+      }
+      const { data } = supabase.storage.from('app_design').getPublicUrl(filePath);
+      return data.publicUrl;
+    } catch (e) {
+      console.error('home logo upload exception', e);
+      return null;
+    }
+  };
+
+  const handlePickHomeScreenLogo = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          t('profile.permissionRequired', 'Permission Required'),
+          t('profile.permissionGallery', 'Please allow gallery access to pick a profile picture'),
+        );
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images',
+        allowsMultipleSelection: false,
+        quality: 0.92,
+        base64: true,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const a: any = result.assets[0];
+      setIsUploadingHomeLogo(true);
+      const uploadedUrl = await uploadHomeScreenLogo({
+        uri: a.uri,
+        base64: a.base64 ?? null,
+        mimeType: a.mimeType ?? null,
+        fileName: a.fileName ?? null,
+      });
+      if (!uploadedUrl) {
+        Alert.alert(t('error.generic', 'Error'), t('settings.profile.homeLogoUploadFailed', 'Logo upload failed'));
+        return;
+      }
+      const updated = await businessProfileApi.updateHomeLogoUrl(uploadedUrl);
+      if (!updated) {
+        Alert.alert(t('error.generic', 'Error'), t('settings.profile.homeLogoSaveFailed', 'Failed to save logo'));
+        return;
+      }
+      setProfile(updated);
+    } catch (e) {
+      console.error('pick/upload home logo failed', e);
+      Alert.alert(t('error.generic', 'Error'), t('settings.profile.homeLogoUploadFailed', 'Logo upload failed'));
+    } finally {
+      setIsUploadingHomeLogo(false);
+    }
+  };
+
+  const handleRemoveHomeScreenLogo = () => {
+    const url = String(profile?.home_logo_url ?? '').trim();
+    if (!/^https?:\/\//i.test(url)) return;
+    Alert.alert(
+      t('settings.profile.homeLogoRemoveTitle', 'Use default logo?'),
+      t(
+        'settings.profile.homeLogoRemoveMessage',
+        'The logo from the app package will be shown again on the home screen.',
+      ),
+      [
+        { text: t('cancel', 'Cancel'), style: 'cancel' },
+        {
+          text: t('settings.profile.homeLogoRemoveButton', 'Use default'),
+          style: 'destructive',
+          onPress: async () => {
+            const updated = await businessProfileApi.updateHomeLogoUrl(null);
+            if (!updated) {
+              Alert.alert(t('error.generic', 'Error'), t('settings.profile.homeLogoSaveFailed', 'Failed to save logo'));
+              return;
+            }
+            setProfile(updated);
+          },
+        },
+      ],
+    );
   };
 
   const uploadBusinessVideo = async (asset: { uri: string; mimeType?: string | null; fileName?: string | null }): Promise<string | null> => {
@@ -2732,6 +2841,65 @@ export default function SettingsScreen() {
                   currentColor={profile?.primary_color || '#000000'}
                   returnSettingsTab="design"
                 />
+              </View>
+              <View style={styles.homeLogoDesignBlock}>
+                <Text style={styles.settingsAppointmentsSubsectionTitle}>
+                  {t('settings.profile.homeLogoRowTitle', 'Home screen logo')}
+                </Text>
+                <Text style={styles.homeLogoDesignSubtitle}>
+                  {t(
+                    'settings.profile.homeLogoRowSubtitle',
+                    'Shown at the top of the manager and client home screens. Leave unset to use the app’s default logo.',
+                  )}
+                </Text>
+                <View style={styles.homeLogoDesignRow}>
+                  <View style={styles.homeLogoPreviewWrap}>
+                    <Image
+                      source={getHomeLogoSource(profile)}
+                      style={styles.homeLogoPreviewImage}
+                      resizeMode="contain"
+                    />
+                    {isUploadingHomeLogo ? (
+                      <View style={styles.homeLogoPreviewLoading}>
+                        <ActivityIndicator size="small" color={businessColors.primary} />
+                      </View>
+                    ) : null}
+                  </View>
+                  <View style={styles.homeLogoDesignActions}>
+                    <TouchableOpacity
+                      style={[
+                        styles.homeLogoActionBtn,
+                        { borderColor: `${businessColors.primary}40`, backgroundColor: `${businessColors.primary}12` },
+                      ]}
+                      onPress={handlePickHomeScreenLogo}
+                      activeOpacity={0.88}
+                      disabled={isUploadingHomeLogo}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('settings.profile.homeLogoUploadButton', 'Upload logo')}
+                    >
+                      <Camera size={18} color={businessColors.primary} strokeWidth={2.2} />
+                      <Text style={[styles.homeLogoActionBtnText, { color: businessColors.primary }]}>
+                        {isUploadingHomeLogo
+                          ? t('settings.common.uploading', 'Uploading...')
+                          : t('settings.profile.homeLogoUploadButton', 'Upload logo')}
+                      </Text>
+                    </TouchableOpacity>
+                    {/^https?:\/\//i.test(String(profile?.home_logo_url ?? '').trim()) ? (
+                      <TouchableOpacity
+                        style={[styles.homeLogoActionBtn, styles.homeLogoActionBtnGhost]}
+                        onPress={handleRemoveHomeScreenLogo}
+                        activeOpacity={0.88}
+                        disabled={isUploadingHomeLogo}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('settings.profile.homeLogoRemoveButton', 'Use default logo')}
+                      >
+                        <Text style={[styles.homeLogoActionBtnText, { color: Colors.subtext }]}>
+                          {t('settings.profile.homeLogoRemoveButton', 'Use default logo')}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                </View>
               </View>
               {renderSettingItemLTR(
                 <Ionicons name="images-outline" size={20} color={businessColors.primary} />,
@@ -5098,6 +5266,66 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 4,
+  },
+  homeLogoDesignBlock: {
+    paddingBottom: 8,
+  },
+  homeLogoDesignSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Colors.subtext,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    textAlign: 'left',
+  },
+  homeLogoDesignRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    gap: 14,
+  },
+  homeLogoPreviewWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60, 60, 67, 0.18)',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeLogoPreviewImage: {
+    width: '82%',
+    height: '82%',
+  },
+  homeLogoPreviewLoading: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeLogoDesignActions: {
+    flex: 1,
+    gap: 10,
+  },
+  homeLogoActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  homeLogoActionBtnGhost: {
+    borderColor: 'rgba(60, 60, 67, 0.2)',
+    backgroundColor: 'rgba(142, 142, 147, 0.08)',
+  },
+  homeLogoActionBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
   },
   addressSheetContainer: {
     position: 'absolute',

@@ -1,5 +1,7 @@
+import type { ImageSourcePropType } from 'react-native';
 import Constants from 'expo-constants';
 import { CURRENT_CLIENT } from '../config/currentClient';
+import type { BusinessProfile } from '@/lib/supabase';
 
 // Logo mapping — every path must exist (Metro resolves at bundle time).
 export const clientLogos = {
@@ -47,6 +49,19 @@ export const getCurrentClientLogo = () => {
   const client = getCurrentClient();
   return clientLogos[client];
 };
+
+/** Remote logo URL from `business_profile.home_logo_url`, else bundled branding asset. */
+export function getHomeLogoSourceFromUrl(url: string | null | undefined): ImageSourcePropType {
+  const u = typeof url === 'string' ? url.trim() : '';
+  if (u.length > 0 && /^https?:\/\//i.test(u)) {
+    return { uri: u };
+  }
+  return getCurrentClientLogo();
+}
+
+export function getHomeLogoSource(profile: BusinessProfile | null | undefined): ImageSourcePropType {
+  return getHomeLogoSourceFromUrl(profile?.home_logo_url);
+}
 
 export const getLogoByClient = (clientName: string) => {
   if (clientName && clientName in clientLogos) {

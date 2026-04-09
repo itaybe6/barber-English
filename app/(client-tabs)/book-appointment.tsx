@@ -452,6 +452,8 @@ export default function BookAppointment() {
   const barberSelectionRef = React.useRef<BarberSelectionHandle>(null);
   const serviceSelectionRef = React.useRef<ServiceSelectionHandle>(null);
   const daySelectionRef = React.useRef<DaySelectionHandle>(null);
+  /** Filled during step 2 measure; applied in finalizeStep2ToDay so useEffect doesn’t wipe it while step===2. */
+  const pendingServiceFlightRef = React.useRef<BarberChipEntrance | null>(null);
   const lastBarberFaceRectRef = React.useRef<{
     x: number;
     y: number;
@@ -510,6 +512,10 @@ export default function BookAppointment() {
   /** Must run on JS thread: setState + shared value reset + refs (Reanimated completion runs on UI runtime). */
   const finalizeStep2ToDay = React.useCallback(() => {
     try { scrollRef.current?.scrollTo({ y: 0, animated: false }); } catch {}
+    const entrance = pendingServiceFlightRef.current;
+    pendingServiceFlightRef.current = null;
+    setServiceChipEntrance(entrance);
+    setServiceFlightAnimKey((k) => k + 1);
     setCurrentStep(3);
     // Do NOT reset step2Fade here: it would flash step 2 at full opacity for a frame before React
     // commits currentStep === 3 (ServiceSelection still mounted until then). Reset when re-entering step 2 (useEffect below).
@@ -520,6 +526,7 @@ export default function BookAppointment() {
     step2Fade.value = 1;
     hasTriggeredStep3.current = false;
     isTransitioning.current = false;
+    pendingServiceFlightRef.current = null;
   }, []);
 
   /** Service row → chip flight, then fade to day step (continue button or scroll). */
@@ -528,7 +535,7 @@ export default function BookAppointment() {
     const winW = Dimensions.get('window').width;
     const runFade = () => {
       isTransitioning.current = true;
-      step2Fade.value = withTiming(0, { duration: 280, easing: Easing.out(Easing.cubic) }, (finished) => {
+      step2Fade.value = withTiming(0, { duration: 320, easing: Easing.out(Easing.cubic) }, (finished) => {
         if (finished === false) {
           runOnJS(abortStep2Transition)();
         } else {
@@ -540,25 +547,22 @@ export default function BookAppointment() {
     if (svcHandle) {
       svcHandle.measureSelectedRowInWindow((rect) => {
         if (rect && rect.width >= 8 && rect.height >= 8) {
-          setServiceChipEntrance(
-            computeChipFlightEntranceFromRect(
-              rect,
-              winW,
-              safeAreaInsets.top,
-              I18nManager.isRTL,
-              2,
-              1
-            )
+          pendingServiceFlightRef.current = computeChipFlightEntranceFromRect(
+            rect,
+            winW,
+            safeAreaInsets.top,
+            I18nManager.isRTL,
+            2,
+            1,
+            { scaleBasis: 'min', scaleMax: 2.35 }
           );
         } else {
-          setServiceChipEntrance(null);
+          pendingServiceFlightRef.current = null;
         }
-        setServiceFlightAnimKey((k) => k + 1);
         runFade();
       });
     } else {
-      setServiceChipEntrance(null);
-      setServiceFlightAnimKey((k) => k + 1);
+      pendingServiceFlightRef.current = null;
       runFade();
     }
   }, [abortStep2Transition, finalizeStep2ToDay, safeAreaInsets.top, step2Fade]);
@@ -584,6 +588,9 @@ export default function BookAppointment() {
   useEffect(() => {
     if (currentStep === 1) {
       setBarberChipEntrance(null);
+      setServiceChipEntrance(null);
+      setDayChipEntrance(null);
+      pendingServiceFlightRef.current = null;
       lastBarberFaceRectRef.current = null;
       introFade.value = 1;
       hasTriggeredStep2.current = false;
@@ -594,6 +601,8 @@ export default function BookAppointment() {
       }, 100);
     }
     if (currentStep === 2) {
+      setServiceChipEntrance(null);
+      pendingServiceFlightRef.current = null;
       hasTriggeredStep3.current = false;
       isTransitioning.current = false;
       step2Fade.value = 1;
@@ -603,6 +612,7 @@ export default function BookAppointment() {
       }, 100);
     }
     if (currentStep === 3) {
+      setDayChipEntrance(null);
       try { scrollRef.current?.scrollTo({ y: 0, animated: false }); } catch {}
     }
   }, [currentStep]);
@@ -727,13 +737,16 @@ export default function BookAppointment() {
       });
     }
     if (currentStep >= 3 && selectedService) {
+      const multi = selectedServices.length > 1;
+      const namesJoined = multi ? selectedServices.map((s) => s.name).join(' + ') : selectedService.name || '';
+      const totalPrice = selectedServices.reduce((sum, s) => sum + ((s as any).price ?? 0), 0);
+      const priceLabel = totalPrice > 0 ? `₪${totalPrice}` : '—';
       out.push({
         key: 'service',
         kind: 'service',
-        label:
-          selectedServices.length > 1
-            ? selectedServices.map((s) => s.name).join(' + ')
-            : selectedService.name || '',
+        label: namesJoined,
+        serviceName: namesJoined,
+        servicePriceText: priceLabel,
       });
     }
     if (currentStep >= 4 && selectedDay !== null && days[selectedDay]) {
@@ -1716,18 +1729,6 @@ export default function BookAppointment() {
       setBarberChipEntrance(null);
     }
   }, [currentStep, barberChipEntrance]);
-
-  useEffect(() => {
-    if (currentStep !== 3 && serviceChipEntrance !== null) {
-      setServiceChipEntrance(null);
-    }
-  }, [currentStep, serviceChipEntrance]);
-
-  useEffect(() => {
-    if (currentStep !== 4 && dayChipEntrance !== null) {
-      setDayChipEntrance(null);
-    }
-  }, [currentStep, dayChipEntrance]);
 
   const selectedDayDateStr = selectedDate ? toLocalDateStr(selectedDate) : '';
   const selectedDayHasAvail =

@@ -14,9 +14,10 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { servicesApi, filterServicesForBookingBarber } from '@/lib/api/services';
+import { businessProfileApi } from '@/lib/api/businessProfile';
 import { Service } from '@/lib/supabase';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
-import { getCurrentClientLogo } from '@/src/theme/assets';
+import { getHomeLogoSourceFromUrl } from '@/src/theme/assets';
 import BookingProgressChipsStrip from '@/components/book-appointment/BookingProgressChipsStrip';
 
 // Constants
@@ -294,8 +295,21 @@ export default function SelectServiceScreen() {
   const [services, setServices] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [homeLogoUrl, setHomeLogoUrl] = useState<string | null>(null);
 
   const scrollX = useSharedValue(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    businessProfileApi.getProfile().then((p) => {
+      if (cancelled) return;
+      const raw = String(p?.home_logo_url ?? '').trim();
+      setHomeLogoUrl(/^https?:\/\//i.test(raw) ? raw : null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Load services filtered by barber
   useEffect(() => {
@@ -396,7 +410,7 @@ export default function SelectServiceScreen() {
 
           <View style={styles.headerTitleWrapper}>
             <Image
-              source={getCurrentClientLogo()}
+              source={getHomeLogoSourceFromUrl(homeLogoUrl)}
               style={styles.headerLogo}
               resizeMode="contain"
             />

@@ -282,6 +282,8 @@ export interface BusinessProfile {
   tiktok_url?: string;
   // Home page marquee / hero images (public URLs)
   home_hero_images?: string[];
+  /** Public URL for home header logo (Storage); unset = bundled client branding logo */
+  home_logo_url?: string | null;
   // Legacy global break minutes (int column named "break" in DB)
   break?: number;
   // New per-barber break minutes map: { [userId: string]: number }

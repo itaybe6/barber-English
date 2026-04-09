@@ -42,7 +42,7 @@ import ProductCarousel from '@/components/ProductCarousel';
 import { useDesignsStore } from '@/stores/designsStore';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { useProductsStore } from '@/stores/productsStore';
-import { getCurrentClientLogo } from '@/src/theme/assets';
+import { getHomeLogoSource } from '@/src/theme/assets';
 import { useColors, usePrimaryContrast } from '@/src/theme/ThemeProvider';
 import { StatusBar, setStatusBarStyle, setStatusBarBackgroundColor } from 'expo-status-bar';
 import { useTranslation } from 'react-i18next';
@@ -1247,7 +1247,7 @@ export default function ClientHomeScreen() {
                     shadowColor: '#000000',
                   }]}>
                     <Image
-                      source={getCurrentClientLogo()}
+                      source={getHomeLogoSource(businessProfile)}
                       style={styles.mapBalloonLogo}
                       resizeMode="contain"
                     />
@@ -1354,7 +1354,7 @@ export default function ClientHomeScreen() {
         style={[styles.overlayHeaderLogoOnly, { top: insets.top - 15 }]}
       >
         <View style={styles.headerLogoInner}>
-          <Image source={getCurrentClientLogo()} style={styles.overlayLogo} resizeMode="contain" />
+          <Image source={getHomeLogoSource(businessProfile)} style={styles.overlayLogo} resizeMode="contain" />
         </View>
       </View>
 

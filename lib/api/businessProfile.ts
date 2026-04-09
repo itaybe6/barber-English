@@ -189,6 +189,27 @@ export const businessProfileApi = {
    * Client home fixed banner: toggle and/or message text.
    * When `message` is omitted, the stored text is left unchanged (e.g. turn off without clearing draft in DB).
    */
+  async updateHomeLogoUrl(home_logo_url: string | null): Promise<BusinessProfile | null> {
+    try {
+      const businessId = getBusinessId();
+      const { data, error } = await supabase
+        .from('business_profile')
+        .update({ home_logo_url })
+        .eq('id', businessId)
+        .select('*')
+        .single();
+
+      if (error) {
+        console.error('Error updating home logo URL:', error);
+        return null;
+      }
+      return (data as BusinessProfile) || null;
+    } catch (e) {
+      console.error('Error in updateHomeLogoUrl:', e);
+      return null;
+    }
+  },
+
   async updateHomeFixedMessage(opts: {
     enabled: boolean;
     message?: string | null;

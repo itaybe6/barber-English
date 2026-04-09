@@ -48,7 +48,7 @@ import { useDesignsStore } from '@/stores/designsStore';
 import DailySchedule from '@/components/DailySchedule';
 import { useAuthStore } from '@/stores/authStore';
 import { useNotificationsStore } from '@/stores/notificationsStore';
-import { getCurrentClientLogo } from '@/src/theme/assets';
+import { getHomeLogoSourceFromUrl } from '@/src/theme/assets';
 import { useColors, usePrimaryContrast } from '@/src/theme/ThemeProvider';
 import { useProductsStore } from '@/stores/productsStore';
 import { StatusBar, setStatusBarStyle, setStatusBarBackgroundColor } from 'expo-status-bar';
@@ -228,14 +228,18 @@ export default function HomeScreen() {
   const isRTL = I18nManager.isRTL;
 
   const [heroImages, setHeroImages] = useState<string[] | null>(null);
+  const [homeLogoUrl, setHomeLogoUrl] = useState<string | null>(null);
 
   const loadHeroImages = useCallback(async () => {
     try {
       const p = await businessProfileApi.getProfile();
       const list = sanitizeUrlArray((p as any)?.home_hero_images);
       setHeroImages(list.length > 0 ? list : null);
+      const rawLogo = String(p?.home_logo_url ?? '').trim();
+      setHomeLogoUrl(/^https?:\/\//i.test(rawLogo) ? rawLogo : null);
     } catch {
       setHeroImages(null);
+      setHomeLogoUrl(null);
     }
   }, []);
 
@@ -1687,7 +1691,7 @@ export default function HomeScreen() {
         style={[styles.overlayLogoWrapper, { top: insets.top + ADMIN_HOME_LOGO_TOP_OFFSET }]}
       >
         <View style={styles.overlayLogoInner}>
-          <Image source={getCurrentClientLogo()} style={styles.overlayLogo} resizeMode="contain" />
+          <Image source={getHomeLogoSourceFromUrl(homeLogoUrl)} style={styles.overlayLogo} resizeMode="contain" />
         </View>
       </View>
 

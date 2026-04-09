@@ -284,6 +284,8 @@ export interface BusinessProfile {
   home_hero_images?: string[];
   /** Public URL for home header logo (Storage); unset = bundled client branding logo */
   home_logo_url?: string | null;
+  /** When true (default), home header shows logo; when false, shows `display_name` text. */
+  home_header_show_logo?: boolean;
   // Legacy global break minutes (int column named "break" in DB)
   break?: number;
   // New per-barber break minutes map: { [userId: string]: number }

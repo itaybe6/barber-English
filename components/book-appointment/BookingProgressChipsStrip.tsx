@@ -38,7 +38,7 @@ export type ChipFlightComputeOptions = {
   scaleBasis?: 'max' | 'height' | 'min';
 };
 
-/** Moti `from` for chip “flight” from a measured on-screen rect (barber face, service row, day cell). */
+/** Moti `from` for chip "flight" from a measured on-screen rect (barber face, service row, day cell). */
 export interface ChipFlightEntrance {
   translateX: number;
   translateY: number;
@@ -142,7 +142,6 @@ export default function BookingProgressChipsStrip({
   dayEntranceKey = 0,
 }: Props) {
   const { width: winW } = useWindowDimensions();
-  const rtl = I18nManager.isRTL;
   const fullW = Math.max(0, winW - H_PAD * 2);
   const n = chips.length;
 
@@ -163,18 +162,12 @@ export default function BookingProgressChipsStrip({
       ]}
     >
       <View
-        style={[styles.row, { flexDirection: rtl ? 'row-reverse' : 'row', gap: GAP }]}
+        style={[styles.row, { flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row', gap: GAP }]}
         collapsable={false}
       >
         <AnimatePresence>
-          {chips.map((chip, index) => {
-            const fromTx = (winW * index) / 4;
-            const squeezeFromX = rtl ? fromTx : -fromTx;
-            const exitTx = rtl ? fromTx : -fromTx;
-            const isBarber = chip.kind === 'barber';
-            const cellOverflow = isBarber || chip.kind === 'service' || chip.kind === 'day';
-            /** Barber / service / day use inner “flight” from measured rect — no sideways squeeze on outer cell. */
-            const skipHorizontalSqueeze = cellOverflow;
+          {chips.map((chip) => {
+            const hasFlight = chip.kind === 'barber' || chip.kind === 'service' || chip.kind === 'day';
 
             const textChipBody = (
               <>
@@ -194,27 +187,13 @@ export default function BookingProgressChipsStrip({
             return (
               <MotiView
                 key={chip.key}
-                from={{
-                  width: fullW,
-                  ...(skipHorizontalSqueeze ? {} : { translateX: squeezeFromX }),
-                }}
-                animate={{
-                  width: finalW,
-                  translateX: 0,
-                }}
-                exit={{
-                  width: 0,
-                  ...(skipHorizontalSqueeze ? {} : { translateX: exitTx }),
-                  opacity: 0,
-                }}
-                transition={
-                  skipHorizontalSqueeze
-                    ? { type: 'timing', duration: 420, easing: Easing.out(Easing.cubic) }
-                    : { type: 'timing', duration: 380 }
-                }
+                from={{ opacity: 0 }}
+                animate={{ width: finalW, opacity: 1 }}
+                exit={{ opacity: 0, width: 0 }}
+                transition={{ type: 'timing', duration: 440, easing: Easing.out(Easing.cubic) }}
                 style={[
                   styles.cell,
-                  cellOverflow ? styles.cellFlight : styles.cellClip,
+                  hasFlight ? styles.cellFlight : styles.cellClip,
                   {
                     height: BOOKING_PROGRESS_STRIP_HEIGHT,
                     borderRadius: INNER_RADIUS,
@@ -263,7 +242,7 @@ export default function BookingProgressChipsStrip({
                     }
                     animate={{ translateX: 0, translateY: 0, scale: 1 }}
                     transition={{ type: 'timing', duration: 620, easing: Easing.out(Easing.cubic) }}
-                    style={styles.textCellFlyInner}
+                    style={styles.flightInner}
                   >
                     <View style={styles.serviceFlyRoot}>
                       <View style={styles.serviceFlyPriceBubble}>
@@ -274,10 +253,7 @@ export default function BookingProgressChipsStrip({
                           {chip.servicePriceText ?? '—'}
                         </Text>
                       </View>
-                      <Text
-                        style={styles.serviceFlyNameText}
-                        numberOfLines={2}
-                      >
+                      <Text style={styles.serviceFlyNameText} numberOfLines={2}>
                         {chip.serviceName ?? chip.label}
                       </Text>
                     </View>
@@ -296,7 +272,7 @@ export default function BookingProgressChipsStrip({
                     }
                     animate={{ translateX: 0, translateY: 0, scale: 1 }}
                     transition={{ type: 'timing', duration: 600, easing: Easing.out(Easing.cubic) }}
-                    style={styles.textCellFlyInner}
+                    style={styles.flightInner}
                   >
                     <View style={styles.textCell}>{textChipBody}</View>
                   </MotiView>
@@ -322,7 +298,7 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     overflow: 'visible',
   },
-  /** Flight animation scales/moves outside the chip (barber / service / day). */
+  /** Flight animation scales/moves outside the chip (barber, service, day). */
   cellFlight: {
     overflow: 'visible',
     zIndex: 50,
@@ -331,7 +307,7 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
-  textCellFlyInner: {
+  flightInner: {
     flex: 1,
     overflow: 'visible',
     alignItems: 'center',
@@ -397,14 +373,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
-  /** Mini copy of service list row: price bubble + name (flight + settled chip). */
+  /** Mini copy of service list row: price bubble + name. */
   serviceFlyRoot: {
     flex: 1,
     minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 2,
+    paddingHorizontal: 8,
     direction: 'ltr',
   },
   serviceFlyPriceBubble: {

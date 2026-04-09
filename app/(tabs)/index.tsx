@@ -229,6 +229,8 @@ export default function HomeScreen() {
 
   const [heroImages, setHeroImages] = useState<string[] | null>(null);
   const [homeLogoUrl, setHomeLogoUrl] = useState<string | null>(null);
+  const [homeHeaderShowLogo, setHomeHeaderShowLogo] = useState(true);
+  const [homeHeaderDisplayName, setHomeHeaderDisplayName] = useState('');
 
   const loadHeroImages = useCallback(async () => {
     try {
@@ -237,9 +239,13 @@ export default function HomeScreen() {
       setHeroImages(list.length > 0 ? list : null);
       const rawLogo = String(p?.home_logo_url ?? '').trim();
       setHomeLogoUrl(/^https?:\/\//i.test(rawLogo) ? rawLogo : null);
+      setHomeHeaderShowLogo(p?.home_header_show_logo !== false);
+      setHomeHeaderDisplayName(String(p?.display_name ?? '').trim());
     } catch {
       setHeroImages(null);
       setHomeLogoUrl(null);
+      setHomeHeaderShowLogo(true);
+      setHomeHeaderDisplayName('');
     }
   }, []);
 
@@ -1690,9 +1696,22 @@ export default function HomeScreen() {
         pointerEvents="none"
         style={[styles.overlayLogoWrapper, { top: insets.top + ADMIN_HOME_LOGO_TOP_OFFSET }]}
       >
-        <View style={styles.overlayLogoInner}>
-          <Image source={getHomeLogoSourceFromUrl(homeLogoUrl)} style={styles.overlayLogo} resizeMode="contain" />
-        </View>
+        {homeHeaderShowLogo ? (
+          <View style={styles.overlayLogoInner}>
+            <Image
+              source={getHomeLogoSourceFromUrl(homeLogoUrl)}
+              style={[styles.overlayLogo, !homeLogoUrl && styles.overlayLogoBundledWhite]}
+              resizeMode="contain"
+            />
+          </View>
+        ) : (
+          <View style={styles.overlayNameInner}>
+            <Text style={styles.overlayBusinessName} numberOfLines={2}>
+              {homeHeaderDisplayName ||
+                t('settings.profile.displayNameFallbackShort', 'Business')}
+            </Text>
+          </View>
+        )}
       </View>
 
        {/* Image Preview Modal for Admin */}
@@ -2651,6 +2670,9 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
   overlayLogo: {
     width: '100%',
     height: '100%',
+  },
+  /** Bundled asset is template-style; remote uploads are full-color — do not tint those. */
+  overlayLogoBundledWhite: {
     tintColor: '#FFFFFF',
   },
   overlayLogoWrapper: {
@@ -2666,6 +2688,24 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     height: ADMIN_HOME_LOGO_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  overlayNameInner: {
+    maxWidth: Math.min(ADMIN_HOME_LOGO_WIDTH + 100, SCREEN_WIDTH - 40),
+    minHeight: ADMIN_HOME_LOGO_HEIGHT,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  overlayBusinessName: {
+    color: '#FFFFFF',
+    fontSize: 26,
+    fontWeight: '800',
+    textAlign: 'center',
+    lineHeight: 30,
+    letterSpacing: -0.5,
+    textShadowColor: 'rgba(0,0,0,0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
   fullScreenHeroContent: {
     position: 'absolute',

@@ -411,7 +411,7 @@ export default function SelectServiceScreen() {
           <View style={styles.headerTitleWrapper}>
             <Image
               source={getHomeLogoSourceFromUrl(homeLogoUrl)}
-              style={styles.headerLogo}
+              style={[styles.headerLogo, !homeLogoUrl && styles.headerLogoBundledWhite]}
               resizeMode="contain"
             />
           </View>
@@ -573,6 +573,8 @@ const styles = StyleSheet.create({
   headerLogo: {
     width: 140,
     height: 50,
+  },
+  headerLogoBundledWhite: {
     tintColor: '#FFFFFF',
   },
   barberIndicator: {

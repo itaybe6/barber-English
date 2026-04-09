@@ -42,7 +42,9 @@ type Props = {
   externalScrollX?: SharedValue<number>;
   t: any;
   onSelectBarber: (barber: User) => void;
-  /** Keeps parent in sync for “continue” (measureInWindow after layout / scroll). */
+  /** Fires only on card tap (not swipe) — parent handles measurement + step advance. */
+  onBarberTap?: (barber: User) => void;
+  /** Keeps parent in sync for "continue" (measureInWindow after layout / scroll). */
   onSelectedFaceWindowFrame?: (
     rect: { x: number; y: number; width: number; height: number } | null
   ) => void;
@@ -53,7 +55,7 @@ export interface BarberSelectionHandle {
   measureSelectedFaceInWindow: (
     callback: (rect: { x: number; y: number; width: number; height: number } | null) => void
   ) => void;
-  /** Re-measure after scroll so “continue” uses the current on-screen position. */
+  /** Re-measure after scroll so "continue" uses the current on-screen position. */
   syncSelectedFaceFrame: () => void;
 }
 
@@ -74,6 +76,7 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
     selectedBarberId,
     t,
     onSelectBarber,
+    onBarberTap,
     onSelectedFaceWindowFrame,
   },
   ref
@@ -285,8 +288,8 @@ const BarberSelection = forwardRef<BarberSelectionHandle, Props>(function Barber
                       <Pressable
                         onPress={() => {
                           flatListRef.current?.scrollToIndex({ index, animated: true });
-                          onSelectBarber(barber);
                           requestAnimationFrame(reportFaceFrame);
+                          onBarberTap?.(barber);
                         }}
                         accessibilityRole="button"
                         accessibilityState={{ selected: isSelected }}
@@ -494,4 +497,3 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
-

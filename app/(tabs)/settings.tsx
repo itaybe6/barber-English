@@ -1482,6 +1482,23 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleHomeHeaderShowLogoToggle = async (next: boolean) => {
+    setIsSavingProfile(true);
+    try {
+      const updated = await businessProfileApi.updateHomeHeaderShowLogo(next);
+      if (!updated) {
+        Alert.alert(
+          t('error.generic', 'Error'),
+          t('settings.profile.homeHeaderShowLogoSaveFailed', 'Could not save this setting'),
+        );
+        return;
+      }
+      setProfile(updated);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   const handleRemoveHomeScreenLogo = () => {
     const url = String(profile?.home_logo_url ?? '').trim();
     if (!/^https?:\/\//i.test(url)) return;
@@ -2852,6 +2869,35 @@ export default function SettingsScreen() {
                     'Shown at the top of the manager and client home screens. Leave unset to use the app’s default logo.',
                   )}
                 </Text>
+                <View style={styles.homeHeaderLogoToggleRow}>
+                  <View style={{ flex: 1, paddingRight: 12 }}>
+                    <Text style={styles.settingTitleLTR}>
+                      {t('settings.profile.homeHeaderShowLogoTitle', 'Show logo on home')}
+                    </Text>
+                    <Text style={styles.settingSubtitleLTR}>
+                      {t(
+                        'settings.profile.homeHeaderShowLogoSubtitle',
+                        'When off, your business display name is shown in large text instead (manager and client home).',
+                      )}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={profile?.home_header_show_logo !== false}
+                    onValueChange={(v) => {
+                      void handleHomeHeaderShowLogoToggle(v);
+                    }}
+                    disabled={isUploadingHomeLogo || isSavingProfile}
+                    trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                    thumbColor={
+                      profile?.home_header_show_logo !== false
+                        ? businessColors.primary
+                        : Platform.OS === 'android'
+                          ? '#f4f3f4'
+                          : undefined
+                    }
+                    ios_backgroundColor="#E5E5EA"
+                  />
+                </View>
                 <View style={styles.homeLogoDesignRow}>
                   <View style={styles.homeLogoPreviewWrap}>
                     <Image
@@ -5269,6 +5315,13 @@ const styles = StyleSheet.create({
   },
   homeLogoDesignBlock: {
     paddingBottom: 8,
+  },
+  homeHeaderLogoToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 14,
   },
   homeLogoDesignSubtitle: {
     fontSize: 13,

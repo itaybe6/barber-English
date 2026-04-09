@@ -80,43 +80,45 @@ export default function BookingStepTabs({
     >
       <View style={[styles.root, styles.barDirection]} pointerEvents="box-none">
 
-        {/* Wide action button — המשך / confirm */}
-        <View style={[styles.pill, styles.center, styles.border, styles.pillBooking, styles.shadow]}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !enabled || isLoading }}
-            disabled={isLoading}
-            onPress={handleAdvance}
-            style={({ pressed }) => [styles.advancePressable, { opacity: pressed ? 0.82 : 1 }]}
-          >
-            <View style={styles.advanceFill}>
-              {isLoading ? (
-                <ActivityIndicator color={primary} />
-              ) : isConfirm ? (
-                <>
-                  <Text style={[styles.advanceText, { color: enabled ? primary : DISABLED }]}>
-                    {continueLabel}
-                  </Text>
-                  <Check size={20} color={enabled ? primary : DISABLED} strokeWidth={2.6} />
-                </>
-              ) : isWaitlist ? (
-                <>
-                  <Text style={[styles.advanceText, styles.advanceTextSmall, { color: primary }]}>
-                    {continueLabel}
-                  </Text>
-                  <Clock size={18} color={primary} strokeWidth={2.4} />
-                </>
-              ) : (
-                <>
-                  <ChevronLeft size={20} color={enabled ? primary : DISABLED} strokeWidth={2.5} />
-                  <Text style={[styles.advanceText, { color: enabled ? primary : DISABLED }]}>
-                    {continueLabel}
-                  </Text>
-                </>
-              )}
-            </View>
-          </Pressable>
-        </View>
+        {/* Wide action button — waitlist / confirm only (steps 1-3 use scroll to advance) */}
+        {advanceNext && (
+          <View style={[styles.pill, styles.center, styles.border, styles.pillBooking, styles.shadow]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !enabled || isLoading }}
+              disabled={isLoading}
+              onPress={handleAdvance}
+              style={({ pressed }) => [styles.advancePressable, { opacity: pressed ? 0.82 : 1 }]}
+            >
+              <View style={styles.advanceFill}>
+                {isLoading ? (
+                  <ActivityIndicator color={primary} />
+                ) : isConfirm ? (
+                  <>
+                    <Text style={[styles.advanceText, { color: enabled ? primary : DISABLED }]}>
+                      {continueLabel}
+                    </Text>
+                    <Check size={20} color={enabled ? primary : DISABLED} strokeWidth={2.6} />
+                  </>
+                ) : isWaitlist ? (
+                  <>
+                    <Text style={[styles.advanceText, styles.advanceTextSmall, { color: primary }]}>
+                      {continueLabel}
+                    </Text>
+                    <Clock size={18} color={primary} strokeWidth={2.4} />
+                  </>
+                ) : (
+                  <>
+                    <ChevronLeft size={20} color={enabled ? primary : DISABLED} strokeWidth={2.5} />
+                    <Text style={[styles.advanceText, { color: enabled ? primary : DISABLED }]}>
+                      {continueLabel}
+                    </Text>
+                  </>
+                )}
+              </View>
+            </Pressable>
+          </View>
+        )}
 
         {/* Right pill — Home on step 1, back arrow on steps 2-4 */}
         <View style={[styles.pill, styles.single, styles.border, styles.pillBooking, styles.shadow]}>

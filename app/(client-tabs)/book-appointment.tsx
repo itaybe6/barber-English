@@ -568,21 +568,10 @@ export default function BookAppointment() {
   }, [abortStep2Transition, finalizeStep2ToDay, safeAreaInsets.top, step2Fade]);
 
   const handleScrollTransitions = React.useCallback(
-    (e: any) => {
-      try {
-        if (isTransitioning.current) return;
-        const y = Number(e?.nativeEvent?.contentOffset?.y || 0);
-        if (currentStep === 1) {
-          return;
-        } else if (currentStep === 2) {
-          if (y > 16 && selectedServices.length > 0 && !hasTriggeredStep3.current) {
-            hasTriggeredStep3.current = true;
-            startStep2ToDayTransition();
-          }
-        }
-      } catch {}
+    (_e: any) => {
+      // Navigation is now tap-based; scroll transitions removed
     },
-    [currentStep, selectedServices.length, startStep2ToDayTransition]
+    []
   );
 
   useEffect(() => {
@@ -1724,6 +1713,63 @@ export default function BookAppointment() {
     }
   }, [currentStep, selectedBarber, selectedServices.length, selectedDay, startStep2ToDayTransition, safeAreaInsets.top]);
 
+  /** Called on barber card tap — includes all state resets + step-1 advance animation. */
+  const advanceFromBarberTap = React.useCallback((barber: User) => {
+    setSelectedBarber(barber);
+    setSelectedServices([]);
+    setSelectedServiceIndex(0);
+    setSelectedDay(null);
+    setSelectedTime(null);
+    setAvailableSlots([]);
+    setIsLoadingSlots(false);
+    setDayAvailability({});
+    const winW = Dimensions.get('window').width;
+    const applyStep2 = (rect: { x: number; y: number; width: number; height: number } | null) => {
+      const r = rect && rect.width >= 12 && rect.height >= 12 ? rect : lastBarberFaceRectRef.current;
+      if (r && r.width >= 12 && r.height >= 12) {
+        setBarberChipEntrance(computeBarberEntranceFromRect(r, winW, safeAreaInsets.top, I18nManager.isRTL));
+      } else {
+        setBarberChipEntrance(null);
+      }
+      setBarberFlightAnimKey((k) => k + 1);
+      setCurrentStep(2);
+    };
+    const handle = barberSelectionRef.current;
+    if (handle) {
+      handle.measureSelectedFaceInWindow(applyStep2);
+    } else {
+      applyStep2(null);
+    }
+  }, [safeAreaInsets.top]);
+
+  /** Called when a day cell is tapped — advances to time selection if the day has availability. */
+  const advanceFromDaySelect = React.useCallback((dayIndex: number) => {
+    setSelectedDay(dayIndex);
+    const day = days[dayIndex];
+    if (!day) return;
+    const dateStr = toLocalDateStr(day.fullDate);
+    const avail = dayAvailability[dateStr] ?? -1;
+    if (avail <= 0) return; // no slots available — waitlist button will appear via advanceNext prop
+    const winW = Dimensions.get('window').width;
+    const applyDayStep = (rect: { x: number; y: number; width: number; height: number } | null) => {
+      if (rect && rect.width >= 8 && rect.height >= 8) {
+        setDayChipEntrance(
+          computeChipFlightEntranceFromRect(rect, winW, safeAreaInsets.top, I18nManager.isRTL, 3, 2)
+        );
+      } else {
+        setDayChipEntrance(null);
+      }
+      setDayFlightAnimKey((k) => k + 1);
+      setCurrentStep(4);
+    };
+    const dayHandle = daySelectionRef.current;
+    if (dayHandle) {
+      dayHandle.measureSelectedDayCellInWindow(applyDayStep);
+    } else {
+      applyDayStep(null);
+    }
+  }, [days, dayAvailability, safeAreaInsets.top]);
+
   useEffect(() => {
     if (currentStep !== 2 && barberChipEntrance !== null) {
       setBarberChipEntrance(null);
@@ -1857,18 +1903,16 @@ export default function BookAppointment() {
           onHome={handleBookingHome}
           onChangeStep={(step) => setCurrentStep(Number(step) as any)}
           advanceNext={
-            currentStep === 1
-              ? { enabled: !!selectedBarber, onPress: advanceToNextStep }
-              : currentStep === 3 && selectedDay !== null && !selectedDayHasAvail && selectedDayDateStr && (dayAvailability[selectedDayDateStr] ?? -1) === 0
-                ? { enabled: true, onPress: () => setShowWaitlistSheet(true), variant: 'waitlist' as const }
-                : currentStep < 4
-                  ? { enabled: bookingAdvanceNextEnabled, onPress: advanceToNextStep }
-                  : {
-                      enabled: !!selectedTime,
-                      loading: isCheckingAppointments,
-                      onPress: handleBookAppointment,
-                      variant: 'confirm' as const,
-                    }
+            currentStep === 3 && selectedDay !== null && !selectedDayHasAvail && selectedDayDateStr && (dayAvailability[selectedDayDateStr] ?? -1) === 0
+              ? { enabled: true, onPress: () => setShowWaitlistSheet(true), variant: 'waitlist' as const }
+              : currentStep === 4
+                ? {
+                    enabled: !!selectedTime,
+                    loading: isCheckingAppointments,
+                    onPress: handleBookAppointment,
+                    variant: 'confirm' as const,
+                  }
+                : undefined
           }
         />
       {/* Header removed on steps 3-4 per request */}
@@ -1896,9 +1940,6 @@ export default function BookAppointment() {
             onScroll={(e) => {
               if (currentStep === 1) {
                 barberSelectionRef.current?.syncSelectedFaceFrame?.();
-              }
-              if (currentStep >= 3) {
-                handleScrollTransitions(e);
               }
             }}
             alwaysBounceVertical={currentStep >= 3}
@@ -1935,6 +1976,7 @@ export default function BookAppointment() {
           t={t}
           onSelectedFaceWindowFrame={onSelectedFaceWindowFrame}
           onSelectBarber={(barber) => {
+            // Swipe-only update (no advance) — tap advance is handled by onBarberTap
             setSelectedBarber(barber);
             setSelectedServices([]);
             setSelectedServiceIndex(0);
@@ -1944,6 +1986,7 @@ export default function BookAppointment() {
             setIsLoadingSlots(false);
             setDayAvailability({});
           }}
+          onBarberTap={advanceFromBarberTap}
         />
 
         {/* Step 2: Service Selection - Multi-select grid */}
@@ -1961,16 +2004,17 @@ export default function BookAppointment() {
           multiSelectEnabled={allowMultiServiceBooking}
           t={t}
           onSelectService={(service) => {
-            setSelectedServices(prev => {
-              const id = String((service as any).id);
-              const exists = prev.find((s: any) => String(s.id) === id);
-              if (!allowMultiServiceBooking) {
-                if (exists) return [];
-                return [service];
-              }
-              if (exists) return prev.filter((s: any) => String(s.id) !== id);
-              return [...prev, service];
-            });
+            const id = String((service as any).id);
+            const exists = selectedServices.find((s: any) => String(s.id) === id);
+            let newServices: typeof selectedServices;
+            if (!allowMultiServiceBooking) {
+              newServices = exists ? [] : [service];
+            } else {
+              newServices = exists
+                ? selectedServices.filter((s: any) => String(s.id) !== id)
+                : [...selectedServices, service];
+            }
+            setSelectedServices(newServices);
             setSelectedDay(null);
             setSelectedTime(null);
             setAvailableSlots([]);
@@ -1978,6 +2022,10 @@ export default function BookAppointment() {
             setShowConfirmModal(false);
             setShowReplaceModal(false);
             setExistingAppointment(null);
+            // Auto-advance to day selection when a service is chosen
+            if (newServices.length > 0) {
+              startStep2ToDayTransition();
+            }
           }}
         />
 
@@ -1996,7 +2044,7 @@ export default function BookAppointment() {
               language={i18n?.language || 'he'}
               primaryColor={colors.primary}
               t={t}
-              onSelectDayIndex={(idx) => setSelectedDay(idx)}
+              onSelectDayIndex={(idx) => { if (idx !== null) advanceFromDaySelect(idx); else setSelectedDay(null); }}
               onClearTime={() => setSelectedTime(null)}
             />
           </Animated.View>

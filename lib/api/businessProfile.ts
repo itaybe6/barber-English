@@ -210,6 +210,27 @@ export const businessProfileApi = {
     }
   },
 
+  async updateHomeHeaderShowLogo(home_header_show_logo: boolean): Promise<BusinessProfile | null> {
+    try {
+      const businessId = getBusinessId();
+      const { data, error } = await supabase
+        .from('business_profile')
+        .update({ home_header_show_logo })
+        .eq('id', businessId)
+        .select('*')
+        .single();
+
+      if (error) {
+        console.error('Error updating home_header_show_logo:', error);
+        return null;
+      }
+      return (data as BusinessProfile) || null;
+    } catch (e) {
+      console.error('Error in updateHomeHeaderShowLogo:', e);
+      return null;
+    }
+  },
+
   async updateHomeFixedMessage(opts: {
     enabled: boolean;
     message?: string | null;

@@ -8,6 +8,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import BarberSelection, { type BarberSelectionHandle } from '@/components/book-appointment/BarberSelection';
 import ServiceSelection, { type ServiceSelectionHandle } from '@/components/book-appointment/ServiceSelection';
 import DaySelection, { type DaySelectionHandle } from '@/components/book-appointment/DaySelection';
@@ -24,7 +25,6 @@ import BookingProgressChipsStrip, {
   GAP,
   slotCenterX,
   computeBarberEntranceFromRect,
-  computeChipFlightEntranceFromRect,
   type BarberChipEntrance,
   type BookingProgressChipModel,
 } from '@/components/book-appointment/BookingProgressChipsStrip';
@@ -401,6 +401,17 @@ const getNextNDays = (n: number) => {
   return days;
 };
 
+/** Morning / afternoon / evening line under the clock in the booking strip (24h hour). */
+function daypartLabelFromHour24(
+  hour24: number,
+  t: (key: string, defaultValue?: string) => string
+): string {
+  const h = ((Math.floor(hour24) % 24) + 24) % 24;
+  if (h >= 5 && h < 12) return t('booking.daypart.morning', 'בוקר');
+  if (h >= 12 && h < 17) return t('booking.daypart.afternoon', 'צהריים');
+  return t('booking.daypart.evening', 'ערב');
+}
+
 // Circular slider constants
 const AVATAR_SIZE = 68;
 const ITEM_SPACING = 16;
@@ -418,8 +429,8 @@ const SERVICE_ITEM_SIZE = SERVICE_CARD_WIDTH + ITEM_SPACING;
 const FLIGHT_CHIP_SIZE = BOOKING_PROGRESS_STRIP_HEIGHT - 14;
 
 /**
- * Absolutely-positioned ghost circle that flies from the tapped service row
- * to the service chip slot in the progress strip.
+ * Absolutely-positioned ghost circle that flies from a tapped element
+ * to the chip slot in the progress strip.
  * Rendered at the screen root so it is completely independent of any flex layout.
  */
 function ServiceFlightGhost({
@@ -519,7 +530,10 @@ export default function BookAppointment() {
   const [serviceGhost, setServiceGhost] = useState<{
     srcCX: number; srcCY: number; dstCX: number; dstCY: number;
   } | null>(null);
-  const [dayChipEntrance, setDayChipEntrance] = useState<BarberChipEntrance | null>(null);
+  /** Ghost circle that flies from the tapped day cell to the strip slot. */
+  const [dayGhost, setDayGhost] = useState<{
+    srcCX: number; srcCY: number; dstCX: number; dstCY: number;
+  } | null>(null);
   const [dayFlightAnimKey, setDayFlightAnimKey] = useState(0);
   const barberSelectionRef = React.useRef<BarberSelectionHandle>(null);
   const serviceSelectionRef = React.useRef<ServiceSelectionHandle>(null);
@@ -658,7 +672,7 @@ export default function BookAppointment() {
       setBarberChipEntrance(null);
       setServiceChipVisible(false);
       setServiceChipEntrance(null);
-      setDayChipEntrance(null);
+      setDayGhost(null);
       pendingServiceFlightRef.current = null;
       lastBarberFaceRectRef.current = null;
       introFade.value = 1;
@@ -672,6 +686,7 @@ export default function BookAppointment() {
     if (currentStep === 2) {
       setServiceChipVisible(false);
       setServiceChipEntrance(null);
+      setDayGhost(null);
       pendingServiceFlightRef.current = null;
       hasTriggeredStep3.current = false;
       isTransitioning.current = false;
@@ -682,7 +697,6 @@ export default function BookAppointment() {
       }, 100);
     }
     if (currentStep === 3) {
-      setDayChipEntrance(null);
       try { scrollRef.current?.scrollTo({ y: 0, animated: false }); } catch {}
     }
   }, [currentStep]);
@@ -712,7 +726,7 @@ export default function BookAppointment() {
       setSelectedServiceIndex(0);
       setServiceChipVisible(false);
       setServiceChipEntrance(null);
-      setDayChipEntrance(null);
+      setDayGhost(null);
       setSelectedBarber(null);
       setSelectedDay(null);
       setSelectedTime(null);
@@ -822,14 +836,29 @@ export default function BookAppointment() {
     }
     if (currentStep >= 4 && selectedDay !== null && days[selectedDay]) {
       const d = days[selectedDay];
+      const loc = toBcp47Locale(i18n?.language);
+      const dateLine = d.fullDate.toLocaleDateString(loc, {
+        day: 'numeric',
+        month: 'numeric',
+        year: '2-digit',
+      });
       out.push({
         key: 'day',
         kind: 'day',
         label: `${d.dayName} ${d.date}`,
+        dayWeekday: d.dayName,
+        dayDateLine: dateLine,
       });
     }
     if (currentStep === 4 && selectedTime) {
-      out.push({ key: 'time', kind: 'time', label: selectedTime });
+      const hRaw = Number(selectedTime.split(':')[0]);
+      const hour = Number.isFinite(hRaw) ? hRaw : 12;
+      out.push({
+        key: 'time',
+        kind: 'time',
+        label: selectedTime,
+        timeDaypart: daypartLabelFromHour24(hour, t),
+      });
     }
     return out;
   }, [
@@ -841,7 +870,32 @@ export default function BookAppointment() {
     selectedDay,
     selectedTime,
     days,
+    i18n?.language,
+    t,
   ]);
+
+  const handleProgressStripChipPress = useCallback(
+    (kind: BookingProgressChipModel['kind']) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      switch (kind) {
+        case 'barber':
+          setCurrentStep(1);
+          break;
+        case 'service':
+          if (selectedBarber) setCurrentStep(2);
+          break;
+        case 'day':
+          if (selectedBarber && selectedService) setCurrentStep(3);
+          break;
+        case 'time':
+          if (selectedBarber && selectedService && selectedDay !== null) setCurrentStep(4);
+          break;
+        default:
+          break;
+      }
+    },
+    [selectedBarber, selectedService, selectedDay]
+  );
 
   const bookingStripTopInset =
     currentStep >= 2 && selectedBarber ? BOOKING_PROGRESS_STRIP_INSET : 0;
@@ -1731,10 +1785,6 @@ export default function BookAppointment() {
 
   const TOP_OFFSET = Math.round(safeAreaInsets.top + 8);
 
-  const handleBookingHome = React.useCallback(() => {
-    router.replace('/(client-tabs)' as any);
-  }, [router]);
-
   const advanceToNextStep = React.useCallback(() => {
     if (currentStep === 1 && selectedBarber) {
       const winW = Dimensions.get('window').width;
@@ -1767,31 +1817,8 @@ export default function BookAppointment() {
       return;
     }
     if (currentStep === 3 && selectedDay !== null) {
-      const winW = Dimensions.get('window').width;
-      const applyDayStep = (rect: { x: number; y: number; width: number; height: number } | null) => {
-        if (rect && rect.width >= 8 && rect.height >= 8) {
-          setDayChipEntrance(
-            computeChipFlightEntranceFromRect(
-              rect,
-              winW,
-              safeAreaInsets.top,
-              I18nManager.isRTL,
-              3,
-              2
-            )
-          );
-        } else {
-          setDayChipEntrance(null);
-        }
-        setDayFlightAnimKey((k) => k + 1);
-        setCurrentStep(4);
-      };
-      const dayHandle = daySelectionRef.current;
-      if (dayHandle) {
-        dayHandle.measureSelectedDayCellInWindow(applyDayStep);
-      } else {
-        applyDayStep(null);
-      }
+      setDayFlightAnimKey((k) => k + 1);
+      setCurrentStep(4);
       return;
     }
   }, [currentStep, selectedBarber, selectedServices.length, selectedDay, startStep2ToDayTransition, safeAreaInsets.top]);
@@ -1834,22 +1861,22 @@ export default function BookAppointment() {
     const avail = dayAvailability[dateStr] ?? -1;
     if (avail <= 0) return; // no slots available — waitlist button will appear via advanceNext prop
     const winW = Dimensions.get('window').width;
-    const applyDayStep = (rect: { x: number; y: number; width: number; height: number } | null) => {
-      if (rect && rect.width >= 8 && rect.height >= 8) {
-        setDayChipEntrance(
-          computeChipFlightEntranceFromRect(rect, winW, safeAreaInsets.top, I18nManager.isRTL, 3, 2)
-        );
-      } else {
-        setDayChipEntrance(null);
-      }
-      setDayFlightAnimKey((k) => k + 1);
-      setCurrentStep(4);
-    };
+    const dstCX = slotCenterX(3, 2, winW, H_PAD, GAP, I18nManager.isRTL);
+    const dstCY = safeAreaInsets.top + BOOKING_PROGRESS_STRIP_TOP_GAP + BOOKING_PROGRESS_STRIP_HEIGHT / 2;
     const dayHandle = daySelectionRef.current;
     if (dayHandle) {
-      dayHandle.measureSelectedDayCellInWindow(applyDayStep);
+      dayHandle.measureSelectedDayCellInWindow((rect) => {
+        if (rect && rect.width >= 8 && rect.height >= 8) {
+          const srcCX = rect.x + rect.width / 2;
+          const srcCY = rect.y + rect.height / 2;
+          setDayGhost({ srcCX, srcCY, dstCX, dstCY });
+        }
+        setDayFlightAnimKey((k) => k + 1);
+        setCurrentStep(4);
+      });
     } else {
-      applyDayStep(null);
+      setDayFlightAnimKey((k) => k + 1);
+      setCurrentStep(4);
     }
   }, [days, dayAvailability, safeAreaInsets.top]);
 
@@ -1971,7 +1998,6 @@ export default function BookAppointment() {
 
       <SafeAreaView style={styles.container} edges={[]}>
         <BookingStepTabs
-          currentStep={currentStep}
           safeAreaBottom={safeAreaInsets.bottom}
           labels={{
             barber: t('booking.step.barber', 'Barber'),
@@ -1980,11 +2006,6 @@ export default function BookAppointment() {
             time: t('booking.step.time', 'Time'),
             continue: t('booking.continue', 'המשך'),
           }}
-          canGoService={!!selectedBarber && currentStep >= 2}
-          canGoDay={!!selectedService}
-          canGoTime={selectedDay !== null}
-          onHome={handleBookingHome}
-          onChangeStep={(step) => setCurrentStep(Number(step) as any)}
           advanceNext={
             currentStep === 3 && selectedDay !== null && !selectedDayHasAvail && selectedDayDateStr && (dayAvailability[selectedDayDateStr] ?? -1) === 0
               ? { enabled: true, onPress: () => setShowWaitlistSheet(true), variant: 'waitlist' as const }
@@ -2017,6 +2038,8 @@ export default function BookAppointment() {
               /* Same bottom inset for steps 1–3 avoids a layout jump when leaving service step */
               paddingBottom: contentBottomPadding,
             },
+            /* Short service grid was sitting mid-screen; fill height and pin content to the top */
+            currentStep === 2 ? { flexGrow: 1, justifyContent: 'flex-start' as const } : null,
           ]}
           showsVerticalScrollIndicator={false}
             refreshControl={currentStep >= 3 ? <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#000" /> : undefined}
@@ -2040,7 +2063,9 @@ export default function BookAppointment() {
             height:
               currentStep === 1
                 ? TOP_OFFSET + 2 + bookingStripTopInset
-                : TOP_OFFSET + 12 + bookingStripTopInset,
+                : currentStep === 2
+                  ? TOP_OFFSET + 4 + bookingStripTopInset
+                  : TOP_OFFSET + 12 + bookingStripTopInset,
           }}
         />
 
@@ -2149,10 +2174,7 @@ export default function BookAppointment() {
         chips={bookingProgressChips}
         barberEntrance={barberChipEntrance}
         barberEntranceKey={barberFlightAnimKey}
-        serviceEntrance={serviceChipEntrance}
-        serviceEntranceKey={serviceFlightAnimKey}
-        dayEntrance={dayChipEntrance}
-        dayEntranceKey={dayFlightAnimKey}
+        onChipPress={handleProgressStripChipPress}
       />
 
       {/* Ghost circle that flies from the tapped service button to the strip slot */}
@@ -2163,6 +2185,17 @@ export default function BookAppointment() {
           dstCX={serviceGhost.dstCX}
           dstCY={serviceGhost.dstCY}
           onDone={() => setServiceGhost(null)}
+        />
+      )}
+
+      {/* Ghost circle that flies from the tapped day cell to the strip slot */}
+      {dayGhost && (
+        <ServiceFlightGhost
+          srcCX={dayGhost.srcCX}
+          srcCY={dayGhost.srcCY}
+          dstCX={dayGhost.dstCX}
+          dstCY={dayGhost.dstCY}
+          onDone={() => setDayGhost(null)}
         />
       )}
 

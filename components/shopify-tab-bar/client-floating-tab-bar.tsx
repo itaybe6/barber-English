@@ -39,7 +39,6 @@ export const ClientFloatingTabBar: React.FC = () => {
   const plusWiggle = useSharedValue(0);
 
   const currentTab = segments[1] as string | undefined;
-  const shouldHideTabBar = currentTab === "book-appointment";
 
   const isActive = (tab: string) => currentTab === tab || (tab === "index" && !currentTab);
 
@@ -116,10 +115,6 @@ export const ClientFloatingTabBar: React.FC = () => {
       ],
     };
   });
-
-  if (shouldHideTabBar) {
-    return null;
-  }
 
   return (
     <View

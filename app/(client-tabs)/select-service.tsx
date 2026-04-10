@@ -513,6 +513,7 @@ export default function SelectServiceScreen() {
           ]}
           barberEntrance={null}
           barberEntranceKey={0}
+          onChipPress={() => router.back()}
         />
       ) : null}
     </View>

@@ -71,22 +71,12 @@ const DaySelection = forwardRef<DaySelectionHandle, Props>(function DaySelection
       style={{
         width: '100%',
         justifyContent: 'flex-start',
-        paddingTop: 32,
+        paddingTop: 8,
         paddingBottom: 12,
       }}
     >
-      {/* Header — matches BarberSelection / ServiceSelection style */}
-      <View style={localStyles.header}>
-        <Text style={localStyles.title}>
-          {t('booking.selectDayTitle', 'בחירת תאריך')}
-        </Text>
-        <Text style={localStyles.subtitle}>
-          {t('booking.selectDaySubtitle', 'בחר את היום המועדף עליך')}
-        </Text>
-      </View>
-
       <Animated.View entering={bookingStepRowEntering(0)}>
-        <View style={[styles.calendarSectionCard, { marginTop: 16 }]}>
+        <View style={[styles.calendarSectionCard, { marginTop: 8 }]}>
           <View
             style={[
               styles.calendarFixedBox,
@@ -135,25 +125,6 @@ function LegendItem({ dot, label }: { dot: string; label: string }) {
 const DOT_SIZE = 8;
 
 const localStyles = StyleSheet.create({
-  header: {
-    gap: 8,
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 4,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    textAlign: 'center',
-    letterSpacing: -0.4,
-  },
-  subtitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.78)',
-    textAlign: 'center',
-  },
   legendOuter: {
     marginTop: 14,
     paddingHorizontal: 16,

@@ -1,23 +1,16 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
-import { Check, ChevronLeft, ChevronRight, Home, Clock } from 'lucide-react-native';
+import { Check, ChevronLeft, Clock } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-
-import { TabButton } from '@/components/shopify-tab-bar/tab-button';
-import { getClientTabBarBottomInset } from '@/constants/clientTabBarInsets';
+import {
+  CLIENT_FLOATING_TAB_BAR_HEIGHT,
+  getClientTabBarBottomInset,
+} from '@/constants/clientTabBarInsets';
 import { useColors } from '@/src/theme/ThemeProvider';
 
-type Step = 1 | 2 | 3 | 4;
-
 type Props = {
-  currentStep: Step;
-  onChangeStep: (step: Step) => void;
-  onHome: () => void;
   safeAreaBottom: number;
   labels: { barber: string; service: string; day: string; time: string; continue?: string };
-  canGoService: boolean;
-  canGoDay: boolean;
-  canGoTime: boolean;
   /**
    * Steps 1–3: chevron advances to next step.
    * Step 4: confirm variant = checkmark; gray until a time is chosen.
@@ -36,20 +29,32 @@ const DISABLED = '#c4c7cf';
 // Side pills plus center icon-only step pill — keep in sync with layout
 export const BOOKING_TABS_HEIGHT = 62;
 
-/** Distance from screen bottom to top edge of booking bar (matches ClientFloatingTabBar inset). */
+/** Gap between client floating tab bar and booking step row (confirm / waitlist). */
+const BOOKING_STEP_BAR_GAP_ABOVE_TAB = 8;
+
+/**
+ * Total bottom inset for scroll/time layers: client tab bar + gap + booking step bar.
+ * Keeps content clear when both bars are visible (e.g. on book-appointment).
+ */
 export function getBookingStepBarTopFromBottom(safeAreaBottom: number): number {
-  return getClientTabBarBottomInset(safeAreaBottom) + BOOKING_TABS_HEIGHT;
+  return (
+    getClientTabBarBottomInset(safeAreaBottom) +
+    CLIENT_FLOATING_TAB_BAR_HEIGHT +
+    BOOKING_STEP_BAR_GAP_ABOVE_TAB +
+    BOOKING_TABS_HEIGHT
+  );
 }
 
 export default function BookingStepTabs({
-  currentStep,
-  onChangeStep,
-  onHome,
   safeAreaBottom,
   labels,
   advanceNext,
 }: Props) {
-  const bottomInset = getClientTabBarBottomInset(safeAreaBottom);
+  /** Stack booking actions above `ClientFloatingTabBar` (same screen). */
+  const bottomInset =
+    getClientTabBarBottomInset(safeAreaBottom) +
+    CLIENT_FLOATING_TAB_BAR_HEIGHT +
+    BOOKING_STEP_BAR_GAP_ABOVE_TAB;
   const { primary } = useColors();
 
   const enabled = !!advanceNext?.enabled;
@@ -64,14 +69,11 @@ export default function BookingStepTabs({
     advanceNext.onPress();
   };
 
-  const handleBack = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (currentStep === 1) {
-      onHome();
-    } else {
-      onChangeStep((currentStep - 1) as Step);
-    }
-  };
+  const showAdvance = !!advanceNext;
+
+  if (!showAdvance) {
+    return null;
+  }
 
   return (
     <View
@@ -80,8 +82,8 @@ export default function BookingStepTabs({
     >
       <View style={[styles.root, styles.barDirection]} pointerEvents="box-none">
 
-        {/* Wide action button — waitlist / confirm only (steps 1-3 use scroll to advance) */}
-        {advanceNext && (
+        {/* Waitlist / confirm — steps 3–4 when applicable */}
+        {showAdvance && (
           <View style={[styles.pill, styles.center, styles.border, styles.pillBooking, styles.shadow]}>
             <Pressable
               accessibilityRole="button"
@@ -119,17 +121,6 @@ export default function BookingStepTabs({
             </Pressable>
           </View>
         )}
-
-        {/* Right pill — Home on step 1, back arrow on steps 2-4 */}
-        <View style={[styles.pill, styles.single, styles.border, styles.pillBooking, styles.shadow]}>
-          <TabButton focused={false} activeColor={primary} onPress={handleBack}>
-            {currentStep === 1 ? (
-              <Home size={22} color="#6b7280" />
-            ) : (
-              <ChevronRight size={22} color="#6b7280" strokeWidth={2.2} />
-            )}
-          </TabButton>
-        </View>
 
       </View>
     </View>

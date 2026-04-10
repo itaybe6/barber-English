@@ -81,27 +81,15 @@ function getPeriod(timeStr: string): TimePeriod {
   return 'evening';
 }
 
-function getPeriodIcon(period: TimePeriod): React.ComponentProps<typeof Ionicons>['name'] {
-  return PERIODS.find((p) => p.key === period)!.icon;
-}
-
-function getPeriodIconColor(period: TimePeriod): string {
-  return PERIODS.find((p) => p.key === period)!.iconColor;
-}
-
 interface SlotGridProps {
   slots: string[];
-  period: TimePeriod;
   selectedTime: string | null;
   primaryColor: string;
   onSelectTime: (time: string) => void;
   baseDelay: number;
 }
 
-function SlotGrid({ slots, period, selectedTime, primaryColor, onSelectTime, baseDelay }: SlotGridProps) {
-  const icon = getPeriodIcon(period);
-  const iconColor = getPeriodIconColor(period);
-
+function SlotGrid({ slots, selectedTime, primaryColor, onSelectTime, baseDelay }: SlotGridProps) {
   const rows: string[][] = [];
   for (let i = 0; i < slots.length; i += 3) {
     rows.push(slots.slice(i, i + 3));
@@ -131,13 +119,7 @@ function SlotGrid({ slots, period, selectedTime, primaryColor, onSelectTime, bas
                     pressed && { opacity: 0.82, transform: [{ scale: 0.95 }] },
                   ]}
                 >
-                  <Ionicons
-                    name={icon}
-                    size={14}
-                    color={selected ? '#FFFFFF' : iconColor}
-                    style={gridStyles.cellIcon}
-                  />
-                  <Text style={[gridStyles.cellTime, selected && { color: '#FFFFFF' }]}>
+                  <Text style={[gridStyles.cellTime, selected && { color: '#FFFFFF' }]} numberOfLines={1}>
                     {slot}
                   </Text>
                 </Pressable>
@@ -229,7 +211,6 @@ export default function TimeSelection({
 
                   <SlotGrid
                     slots={slots}
-                    period={period.key}
                     selectedTime={selectedTime}
                     primaryColor={primaryColor}
                     onSelectTime={onSelectTime}
@@ -333,9 +314,9 @@ const gridStyles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 14,
-    paddingHorizontal: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 6,
+    minHeight: 52,
     borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.10)',
     borderWidth: 1.5,
@@ -350,14 +331,11 @@ const gridStyles = StyleSheet.create({
       android: { elevation: 2 },
     }),
   },
-  cellIcon: {
-    marginBottom: 2,
-  },
   cellTime: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 19,
+    fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: -0.2,
+    letterSpacing: -0.35,
     textAlign: 'center',
   },
 });

@@ -5,7 +5,8 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
-  type GestureResponderEvent,
+  useWindowDimensions,
+  I18nManager,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Clock3 } from 'lucide-react-native';
@@ -17,7 +18,12 @@ import type { Service } from '@/lib/supabase';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { bookingStepRowEntering } from '@/components/book-appointment/bookingStepListEnterAnimation';
 
-const THUMB_SIZE = 56;
+const GRID_H_PAD = 14;
+const GRID_GAP = 12;
+const CARD_RADIUS = 28;
+const TAGS_OVERLAP = 16;
+/** Card width vs max half-column (higher = wider cards) */
+const CARD_WIDTH_FRACTION = 0.97;
 
 type Props = {
   visible: boolean;
@@ -47,19 +53,22 @@ const ServiceSelection = forwardRef<ServiceSelectionHandle, Props>(function Serv
     visible,
     styles: parentStyles,
     step2FadeStyle,
-    topOffset = 0,
+    topOffset: _topOffset = 0,
     isLoading,
     services,
     selectedServiceId,
     selectedServiceIds,
-    multiSelectEnabled = true,
+    multiSelectEnabled: _multiSelectEnabled = true,
     t,
     onSelectService,
   },
   ref
 ) {
   const { colors } = useBusinessColors();
+  const { width: winW } = useWindowDimensions();
   const pendingTapRectRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+  const maxHalf = Math.floor((winW - GRID_H_PAD * 2 - GRID_GAP) / 2);
+  const cardWidth = Math.max(120, Math.round(maxHalf * CARD_WIDTH_FRACTION));
 
   useImperativeHandle(
     ref,
@@ -85,6 +94,11 @@ const ServiceSelection = forwardRef<ServiceSelectionHandle, Props>(function Serv
     return svcId === String(selectedServiceId ?? '');
   };
 
+  const serviceRows: Service[][] = [];
+  for (let i = 0; i < services.length; i += 2) {
+    serviceRows.push(services.slice(i, i + 2));
+  }
+
   return (
     <Animated.View
       entering={stepSlideUp}
@@ -92,7 +106,8 @@ const ServiceSelection = forwardRef<ServiceSelectionHandle, Props>(function Serv
         parentStyles.section,
         step2FadeStyle,
         {
-          marginTop: Math.max(topOffset + 12, 16),
+          /* ScrollView spacer already clears status bar + progress strip; avoid stacking topOffset again (was pushing grid to screen center). */
+          marginTop: 4,
           marginBottom: 0,
         },
       ]}
@@ -106,37 +121,66 @@ const ServiceSelection = forwardRef<ServiceSelectionHandle, Props>(function Serv
         </View>
       ) : services.length > 0 ? (
         <View style={styles.shell}>
-          <View style={styles.header}>
-            <Text style={styles.title}>
-              {multiSelectEnabled
-                ? t('booking.selectServices', 'Select Services')
-                : t('booking.selectServiceTitle', 'Select a Service')}
-            </Text>
-            <Text style={styles.subtitle}>
-              {multiSelectEnabled
-                ? t('booking.selectMultipleHint', 'Tap to select one or more services')
-                : t('booking.selectSingleServiceHint', 'Tap to choose one service')}
-            </Text>
-          </View>
+          <View style={styles.grid}>
+            {serviceRows.map((row, rowIndex) => {
+              const rowTrackW = cardWidth * 2 + GRID_GAP;
+              const colPlaceholder = (
+                <View
+                  key={`ph-${rowIndex}`}
+                  style={{ width: cardWidth }}
+                  pointerEvents="none"
+                  importantForAccessibility="no-hide-descendants"
+                />
+              );
 
-          <View style={styles.list}>
-            {services.map((service, index) => {
-              const rowKey = String((service as any).id ?? `svc-${index}`);
-              const selected = isSvcSelected(service);
+              const renderCell = (service: Service, index: number) => {
+                const rowKey = String((service as any).id ?? `svc-${index}`);
+                const selected = isSvcSelected(service);
+                return (
+                  <Animated.View
+                    key={rowKey}
+                    entering={bookingStepRowEntering(index)}
+                    style={[styles.gridCell, { width: cardWidth }]}
+                  >
+                    <ServiceRow
+                      service={service}
+                      isSelected={selected}
+                      primaryColor={colors.primary}
+                      cardWidth={cardWidth}
+                      tapRectRef={pendingTapRectRef}
+                      onSelect={() => onSelectService(service, index)}
+                      t={t}
+                    />
+                  </Animated.View>
+                );
+              };
+
               return (
-                <Animated.View key={rowKey} entering={bookingStepRowEntering(index)}>
-                  <ServiceRow
-                    service={service}
-                    isSelected={selected}
-                    primaryColor={colors.primary}
-                    onPress={(e) => {
-                      const { pageX, pageY } = e.nativeEvent;
-                      pendingTapRectRef.current = { x: pageX - 30, y: pageY - 22, width: 60, height: 44 };
-                      onSelectService(service, index);
-                    }}
-                    t={t}
-                  />
-                </Animated.View>
+                <View key={`svc-row-${rowIndex}`} style={styles.gridRow}>
+                  <View
+                    style={[
+                      styles.gridRowTrack,
+                      {
+                        width: rowTrackW,
+                        gap: GRID_GAP,
+                        /* RTL mirrors row() so [ph][card] would put the card on the LEFT; force LTR for the orphan row only so the card stays in the right column (under the right-hand service of the row above). */
+                        ...(row.length === 1 ? { direction: 'ltr' as const } : null),
+                      },
+                    ]}
+                  >
+                    {row.length === 2 ? (
+                      <>
+                        {renderCell(row[0], rowIndex * 2)}
+                        {renderCell(row[1], rowIndex * 2 + 1)}
+                      </>
+                    ) : (
+                      <>
+                        {colPlaceholder}
+                        {renderCell(row[0], rowIndex * 2)}
+                      </>
+                    )}
+                  </View>
+                </View>
               );
             })}
           </View>
@@ -159,202 +203,240 @@ type RowProps = {
   service: Service;
   isSelected: boolean;
   primaryColor: string;
-  onPress: (e: GestureResponderEvent) => void;
+  cardWidth: number;
+  tapRectRef: React.MutableRefObject<{ x: number; y: number; width: number; height: number } | null>;
+  onSelect: () => void;
   t: any;
 };
 
 const ServiceRow = React.memo(function ServiceRow(
-  { service, isSelected, primaryColor, onPress, t }: RowProps
+  { service, isSelected, primaryColor, cardWidth, tapRectRef, onSelect, t }: RowProps
 ) {
+  const pricePillRef = useRef<View>(null);
   const duration = (service as any)?.duration_minutes ?? 60;
   const price = (service as any)?.price ?? 0;
   const name = String((service as any)?.name || '');
+  const rtl = I18nManager.isRTL;
+
+  const captureRectAndSelect = () => {
+    requestAnimationFrame(() => {
+      const node = pricePillRef.current;
+      if (node) {
+        node.measureInWindow((x, y, w, h) => {
+          if (typeof w === 'number' && typeof h === 'number' && w >= 8 && h >= 8) {
+            tapRectRef.current = { x, y, width: w, height: h };
+          }
+          onSelect();
+        });
+      } else {
+        onSelect();
+      }
+    });
+  };
+
+  const innerCardW = cardWidth - (isSelected ? 6 : 0);
 
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected: isSelected }}
-      accessibilityLabel={
-        price > 0
-          ? `${name}, ${duration} ${t('booking.min', 'min')}, ₪${price}`
-          : `${name}, ${duration} ${t('booking.min', 'min')}`
-      }
-      style={({ pressed }) => [styles.rowPressable, pressed && styles.rowPressed]}
-    >
-      <View style={styles.row}>
-      {/* Price circle */}
-      <View style={styles.priceRing}>
-        <View style={styles.priceInner}>
-          <Text
-            style={[styles.priceText, { color: price > 0 ? primaryColor : '#9CA3AF' }]}
-            numberOfLines={2}
-            adjustsFontSizeToFit
-            minimumFontScale={0.75}
-          >
-            {price > 0 ? `₪${price}` : '—'}
-          </Text>
-        </View>
-      </View>
-
-      <View
-        style={[
-          styles.infoPill,
-          isSelected ? styles.infoPillSelected : styles.infoPillIdle,
-        ]}
+    <View style={styles.cardSlot}>
+      <Pressable
+        onPress={captureRectAndSelect}
+        accessibilityRole="button"
+        accessibilityState={{ selected: isSelected }}
+        accessibilityLabel={
+          price > 0
+            ? `${name}, ${duration} ${t('booking.min', 'min')}, ₪${price}`
+            : `${name}, ${duration} ${t('booking.min', 'min')}`
+        }
+        style={({ pressed }) => [pressed && styles.cardPressed]}
       >
-        {isSelected ? (
-          <View style={styles.checkSlot}>
-            <Ionicons name="checkmark-circle" size={20} color={primaryColor} />
-          </View>
-        ) : null}
-        <View style={styles.infoTextBlock}>
-          <Text style={styles.serviceName} numberOfLines={2}>
-            {name}
-          </Text>
-          <View style={styles.durationBadge}>
-            <Clock3 size={12} color={primaryColor} strokeWidth={2.2} />
-            <Text style={[styles.durationText, { color: primaryColor }]} numberOfLines={1}>
-              {duration} {t('booking.min', "דק'")}
-            </Text>
+        <View
+          style={[
+            styles.cardFrame,
+            isSelected && { padding: 3, backgroundColor: primaryColor, borderRadius: CARD_RADIUS + 3 },
+          ]}
+        >
+          <View
+            style={[
+              styles.cardFace,
+              {
+                width: innerCardW,
+                borderRadius: CARD_RADIUS,
+                borderWidth: isSelected ? 0 : StyleSheet.hairlineWidth,
+                borderColor: 'rgba(15,23,42,0.06)',
+              },
+            ]}
+          >
+            {isSelected ? (
+              <View style={[styles.selectedCheck, rtl ? { left: 10 } : { right: 10 }]}>
+                <Ionicons name="checkmark-circle" size={22} color={primaryColor} />
+              </View>
+            ) : null}
+
+            <View style={styles.cardBody}>
+              <Text
+                style={[styles.cardServiceName, rtl ? { writingDirection: 'rtl' } : { writingDirection: 'ltr' }]}
+                numberOfLines={3}
+              >
+                {name}
+              </Text>
+              <View style={styles.durationRow}>
+                <Clock3 size={14} color={primaryColor} strokeWidth={2.2} />
+                <Text
+                  style={[
+                    styles.durationText,
+                    { color: primaryColor },
+                    rtl ? { writingDirection: 'rtl' } : { writingDirection: 'ltr' },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {duration} {t('booking.min', "דק'")}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.priceTagWrap} pointerEvents="box-none">
+              <View
+                ref={pricePillRef}
+                collapsable={false}
+                style={[styles.priceTag, { backgroundColor: primaryColor }]}
+              >
+                <Text
+                  style={[
+                    styles.priceTagText,
+                    price <= 0 && styles.priceTagTextMuted,
+                    rtl ? { writingDirection: 'rtl' } : { writingDirection: 'ltr' },
+                  ]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.82}
+                >
+                  {price > 0 ? `₪${price}` : '—'}
+                </Text>
+              </View>
+            </View>
           </View>
         </View>
-      </View>
-      </View>
-    </Pressable>
+      </Pressable>
+    </View>
   );
 });
 
 const styles = StyleSheet.create({
   shell: {
-    gap: 36,
+    gap: 0,
   },
   loadingState: {
     minHeight: 220,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  header: {
-    gap: 8,
+  grid: {
+    width: '100%',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    gap: 0,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    textAlign: 'center',
-    letterSpacing: -0.4,
-  },
-  subtitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.78)',
-    textAlign: 'center',
-  },
-  list: {
-    gap: 24,
-    paddingHorizontal: 20,
+  gridRow: {
+    width: '100%',
     alignItems: 'center',
+    paddingHorizontal: GRID_H_PAD,
+    marginBottom: TAGS_OVERLAP + 8,
   },
-  rowPressable: {
-    alignSelf: 'center',
-  },
-  row: {
+  gridRowTrack: {
     flexDirection: 'row',
-    alignItems: 'center',
-    direction: 'ltr',
-    gap: 10,
+    alignItems: 'flex-start',
   },
-  rowPressed: {
-    opacity: 0.88,
-    transform: [{ scale: 0.97 }],
+  gridCell: {
+    flexShrink: 0,
   },
-  priceRing: {
-    width: THUMB_SIZE + 6,
-    height: THUMB_SIZE + 6,
-    borderRadius: (THUMB_SIZE + 6) / 2,
+  cardSlot: {
+    alignItems: 'stretch',
+  },
+  cardPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.98 }],
+  },
+  cardFrame: {
+    borderRadius: CARD_RADIUS,
+  },
+  cardFace: {
     backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
+    overflow: 'visible',
+    flexDirection: 'column',
+    minHeight: 124,
+    paddingBottom: TAGS_OVERLAP + 10,
+    paddingTop: 12,
+    paddingHorizontal: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.14,
-    shadowRadius: 8,
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
     elevation: 5,
   },
-  priceInner: {
-    width: THUMB_SIZE,
-    height: THUMB_SIZE,
-    borderRadius: THUMB_SIZE / 2,
-    backgroundColor: '#F8FAFC',
+  cardBody: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 4,
+    paddingBottom: TAGS_OVERLAP + 4,
+    paddingTop: 6,
+  },
+  cardServiceName: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#111827',
+    letterSpacing: -0.28,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  durationRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  priceText: {
-    fontSize: 14,
-    fontWeight: '800',
-    textAlign: 'center',
-    letterSpacing: -0.3,
-  },
-  infoPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
     alignSelf: 'center',
-    borderRadius: 999,
-    paddingVertical: 13,
-    paddingHorizontal: 20,
-    gap: 8,
-  },
-  infoPillIdle: {
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  infoPillSelected: {
-    backgroundColor: '#FFFFFF',
-    /* Match idle border so selected/unselected pills keep the same outer size (avoids layout jump). */
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  infoTextBlock: {
-    flexShrink: 1,
-    minWidth: 0,
+    width: '100%',
     gap: 5,
-  },
-  serviceName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-    letterSpacing: -0.2,
-    textAlign: 'right',
-  },
-  durationBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    alignSelf: 'flex-end',
+    marginTop: 2,
   },
   durationText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
     letterSpacing: -0.1,
   },
-  checkSlot: {
-    width: 22,
-    height: 22,
+  selectedCheck: {
+    position: 'absolute',
+    top: 8,
+    zIndex: 2,
+  },
+  priceTagWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: -TAGS_OVERLAP,
+    alignItems: 'center',
+    zIndex: 3,
+  },
+  priceTag: {
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    minWidth: 72,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  priceTagText: {
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    textAlign: 'center',
+    color: '#FFFFFF',
+  },
+  priceTagTextMuted: {
+    opacity: 0.88,
   },
 });

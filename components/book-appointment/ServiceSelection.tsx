@@ -5,11 +5,13 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
-  type View as RNView,
+  type GestureResponderEvent,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Clock3 } from 'lucide-react-native';
-import Animated, { SharedValue } from 'react-native-reanimated';
+import Animated, { SharedValue, Easing, FadeIn } from 'react-native-reanimated';
+
+const stepSlideUp = FadeIn.duration(400).easing(Easing.out(Easing.cubic)).withInitialValues({ opacity: 0, transform: [{ translateY: 60 }] });
 
 import type { Service } from '@/lib/supabase';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
@@ -57,26 +59,19 @@ const ServiceSelection = forwardRef<ServiceSelectionHandle, Props>(function Serv
   ref
 ) {
   const { colors } = useBusinessColors();
-  const selectedRowRef = useRef<RNView>(null);
+  const pendingTapRectRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
 
   useImperativeHandle(
     ref,
     () => ({
       measureSelectedRowInWindow(callback) {
-        requestAnimationFrame(() => {
-          const node = selectedRowRef.current;
-          if (!node) {
-            callback(null);
-            return;
-          }
-          node.measureInWindow((x, y, w, h) => {
-            if (typeof w !== 'number' || typeof h !== 'number' || w < 8 || h < 8) {
-              callback(null);
-              return;
-            }
-            callback({ x, y, width: w, height: h });
-          });
-        });
+        const cached = pendingTapRectRef.current;
+        pendingTapRectRef.current = null;
+        if (cached && cached.width >= 8 && cached.height >= 8) {
+          callback(cached);
+          return;
+        }
+        callback(null);
       },
     }),
     []
@@ -92,6 +87,7 @@ const ServiceSelection = forwardRef<ServiceSelectionHandle, Props>(function Serv
 
   return (
     <Animated.View
+      entering={stepSlideUp}
       style={[
         parentStyles.section,
         step2FadeStyle,
@@ -124,26 +120,25 @@ const ServiceSelection = forwardRef<ServiceSelectionHandle, Props>(function Serv
           </View>
 
           <View style={styles.list}>
-            {(() => {
-              const firstSelectedIndex = services.findIndex((s) => isSvcSelected(s));
-              return services.map((service, index) => {
+            {services.map((service, index) => {
               const rowKey = String((service as any).id ?? `svc-${index}`);
               const selected = isSvcSelected(service);
-              const attachMeasureRef = selected && index === firstSelectedIndex;
               return (
                 <Animated.View key={rowKey} entering={bookingStepRowEntering(index)}>
                   <ServiceRow
-                    ref={attachMeasureRef ? selectedRowRef : undefined}
                     service={service}
                     isSelected={selected}
                     primaryColor={colors.primary}
-                    onPress={() => onSelectService(service, index)}
+                    onPress={(e) => {
+                      const { pageX, pageY } = e.nativeEvent;
+                      pendingTapRectRef.current = { x: pageX - 30, y: pageY - 22, width: 60, height: 44 };
+                      onSelectService(service, index);
+                    }}
                     t={t}
                   />
                 </Animated.View>
               );
-            });
-            })()}
+            })}
           </View>
         </View>
       ) : (
@@ -164,13 +159,12 @@ type RowProps = {
   service: Service;
   isSelected: boolean;
   primaryColor: string;
-  onPress: () => void;
+  onPress: (e: GestureResponderEvent) => void;
   t: any;
 };
 
-const ServiceRow = React.forwardRef<RNView, RowProps>(function ServiceRow(
-  { service, isSelected, primaryColor, onPress, t },
-  ref
+const ServiceRow = React.memo(function ServiceRow(
+  { service, isSelected, primaryColor, onPress, t }: RowProps
 ) {
   const duration = (service as any)?.duration_minutes ?? 60;
   const price = (service as any)?.price ?? 0;
@@ -188,8 +182,7 @@ const ServiceRow = React.forwardRef<RNView, RowProps>(function ServiceRow(
       }
       style={({ pressed }) => [styles.rowPressable, pressed && styles.rowPressed]}
     >
-      {/* Measure only the row content (not full touch width) — smoother flight scale */}
-      <View ref={ref} collapsable={false} style={styles.row}>
+      <View style={styles.row}>
       {/* Price circle */}
       <View style={styles.priceRing}>
         <View style={styles.priceInner}>
@@ -204,7 +197,6 @@ const ServiceRow = React.forwardRef<RNView, RowProps>(function ServiceRow(
         </View>
       </View>
 
-      {/* Info pill */}
       <View
         style={[
           styles.infoPill,

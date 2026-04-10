@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type RefObject } from 'react';
 import { View, Text, LayoutChangeEvent, Dimensions, StyleSheet, type View as RNView } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { CalendarAnimatedProvider, useBookingCalendarContext } from './animated-context';
@@ -35,6 +35,8 @@ export type BookingAnimatedCalendarProps = {
   adminMonthsForward?: number;
   /** Booking: measure selected day cell for progress-strip flight animation */
   selectedDayCellRef?: RefObject<RNView | null>;
+  /** Stores press-in rect of the tapped day cell for immediate (no-rAF) measurement */
+  pendingTapRectRef?: MutableRefObject<{ x: number; y: number; width: number; height: number } | null>;
 };
 
 function CalendarShell({
@@ -55,6 +57,7 @@ function CalendarShell({
   initialLogicalIndex,
   displayMode,
   selectedDayCellRef,
+  pendingTapRectRef,
 }: {
   variant: 'booking' | 'admin';
   calendarData: MonthEntry[];
@@ -73,6 +76,7 @@ function CalendarShell({
   initialLogicalIndex: number;
   displayMode: 'availability' | 'count';
   selectedDayCellRef?: RefObject<RNView | null>;
+  pendingTapRectRef?: MutableRefObject<{ x: number; y: number; width: number; height: number } | null>;
 }) {
   const { t } = useTranslation();
   const { pageWidth, scrollViewRef } = useBookingCalendarContext();
@@ -206,6 +210,7 @@ function CalendarShell({
                 showHebrewDates={isAdmin}
                 formatAppointmentBadge={formatAppointmentBadge}
                 selectedDayCellRef={selectedDayCellRef}
+                pendingTapRectRef={pendingTapRectRef}
               />
             </View>
           ))
@@ -269,6 +274,7 @@ export default function BookingAnimatedCalendar({
   adminMonthsBack = 12,
   adminMonthsForward = 12,
   selectedDayCellRef,
+  pendingTapRectRef,
 }: BookingAnimatedCalendarProps) {
   const calendarData = useMemo(() => {
     if (variant === 'admin') {
@@ -342,6 +348,7 @@ export default function BookingAnimatedCalendar({
         initialLogicalIndex={initialLogicalIndex}
         displayMode={displayMode}
         selectedDayCellRef={selectedDayCellRef}
+        pendingTapRectRef={pendingTapRectRef}
       />
     </CalendarAnimatedProvider>
   );

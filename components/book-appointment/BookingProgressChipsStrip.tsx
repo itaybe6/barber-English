@@ -18,8 +18,8 @@ export const BOOKING_PROGRESS_STRIP_TOP_GAP = 6;
 export const BOOKING_PROGRESS_STRIP_INSET =
   BOOKING_PROGRESS_STRIP_TOP_GAP + BOOKING_PROGRESS_STRIP_HEIGHT + 8;
 
-const H_PAD = 14;
-const GAP = 6;
+export const H_PAD = 14;
+export const GAP = 6;
 const INNER_RADIUS = 14;
 
 export interface BookingProgressChipModel {
@@ -229,35 +229,28 @@ export default function BookingProgressChipsStrip({
                     )}
                   </MotiView>
                 ) : chip.kind === 'service' ? (
-                  <MotiView
-                    key={serviceEntrance ? `se-${serviceEntranceKey}` : 'se-static'}
-                    from={
-                      serviceEntrance
-                        ? {
-                            translateX: serviceEntrance.translateX,
-                            translateY: serviceEntrance.translateY,
-                            scale: serviceEntrance.scale,
-                          }
-                        : { translateX: 0, translateY: 0, scale: 1 }
-                    }
-                    animate={{ translateX: 0, translateY: 0, scale: 1 }}
-                    transition={{ type: 'timing', duration: 620, easing: Easing.out(Easing.cubic) }}
-                    style={styles.flightInner}
-                  >
-                    <View style={styles.serviceFlyRoot}>
-                      <View style={styles.serviceFlyPriceBubble}>
-                        <Text
-                          style={[styles.serviceFlyPriceText, { color: primaryColor }]}
-                          numberOfLines={1}
-                        >
-                          {chip.servicePriceText ?? '—'}
-                        </Text>
-                      </View>
-                      <Text style={styles.serviceFlyNameText} numberOfLines={2}>
+                  // Ghost overlay (in book-appointment.tsx) handles the flight animation.
+                  // The chip itself just fades in at its final strip position.
+                  <View style={styles.flightInner}>
+                    <View style={styles.serviceCircle}>
+                      <Text
+                        style={[styles.serviceCirclePrice, { color: primaryColor }]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.7}
+                      >
+                        {chip.servicePriceText ?? '—'}
+                      </Text>
+                      <Text
+                        style={styles.serviceCircleName}
+                        numberOfLines={2}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.6}
+                      >
                         {chip.serviceName ?? chip.label}
                       </Text>
                     </View>
-                  </MotiView>
+                  </View>
                 ) : chip.kind === 'day' ? (
                   <MotiView
                     key={dayEntrance ? `de-${dayEntranceKey}` : 'de-static'}
@@ -373,40 +366,41 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
-  /** Mini copy of service list row: price bubble + name. */
-  serviceFlyRoot: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 8,
-    direction: 'ltr',
-  },
-  serviceFlyPriceBubble: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  /** Single circle chip — mirrors barber photo circle with price + name stacked inside. */
+  serviceCircle: {
+    width: BOOKING_PROGRESS_STRIP_HEIGHT - 14,
+    height: BOOKING_PROGRESS_STRIP_HEIGHT - 14,
+    borderRadius: (BOOKING_PROGRESS_STRIP_HEIGHT - 14) / 2,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 3,
-    flexShrink: 0,
+    paddingHorizontal: 6,
+    borderWidth: 2.5,
+    borderColor: 'rgba(255,255,255,0.9)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 6,
+      },
+      android: { elevation: 5 },
+      default: {},
+    }),
   },
-  serviceFlyPriceText: {
-    fontSize: 10,
+  serviceCirclePrice: {
+    fontSize: 11,
     fontWeight: '800',
     textAlign: 'center',
     letterSpacing: -0.2,
   },
-  serviceFlyNameText: {
-    flex: 1,
-    minWidth: 0,
-    color: '#FFFFFF',
-    fontSize: 10,
+  serviceCircleName: {
+    fontSize: 8,
     fontWeight: '700',
+    color: '#374151',
     textAlign: 'center',
-    letterSpacing: -0.15,
-    lineHeight: 13,
+    letterSpacing: -0.1,
+    lineHeight: 10,
+    marginTop: 1,
   },
 });

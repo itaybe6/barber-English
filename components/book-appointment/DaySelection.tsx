@@ -1,4 +1,4 @@
-import React, { forwardRef, useImperativeHandle, useRef } from 'react';
+import React, { forwardRef, useImperativeHandle, useRef, type MutableRefObject } from 'react';
 import { View, Text, StyleSheet, I18nManager, type View as RNView } from 'react-native';
 import Animated from 'react-native-reanimated';
 
@@ -46,25 +46,19 @@ const DaySelection = forwardRef<DaySelectionHandle, Props>(function DaySelection
   ref
 ) {
   const selectedDayCellRef = useRef<RNView>(null);
+  const pendingTapRectRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
 
   useImperativeHandle(
     ref,
     () => ({
       measureSelectedDayCellInWindow(callback) {
-        requestAnimationFrame(() => {
-          const node = selectedDayCellRef.current;
-          if (!node) {
-            callback(null);
-            return;
-          }
-          node.measureInWindow((x, y, w, h) => {
-            if (typeof w !== 'number' || typeof h !== 'number' || w < 8 || h < 8) {
-              callback(null);
-              return;
-            }
-            callback({ x, y, width: w, height: h });
-          });
-        });
+        const cached = pendingTapRectRef.current;
+        pendingTapRectRef.current = null;
+        if (cached && cached.width >= 8 && cached.height >= 8) {
+          callback(cached);
+          return;
+        }
+        callback(null);
       },
     }),
     []
@@ -109,6 +103,7 @@ const DaySelection = forwardRef<DaySelectionHandle, Props>(function DaySelection
               onSelectDayIndex={onSelectDayIndex}
               onClearTime={onClearTime}
               selectedDayCellRef={selectedDayCellRef}
+              pendingTapRectRef={pendingTapRectRef}
             />
           </View>
         </View>

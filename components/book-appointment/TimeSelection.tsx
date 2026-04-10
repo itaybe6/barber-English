@@ -9,7 +9,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, Easing, FadeIn } from 'react-native-reanimated';
+
+const stepSlideUp = FadeIn.duration(400).easing(Easing.out(Easing.cubic)).withInitialValues({ opacity: 0, transform: [{ translateY: 60 }] });
 
 import { getBookingStepBarTopFromBottom } from '@/components/book-appointment/BookingStepTabs';
 import { bookingStepRowEntering } from '@/components/book-appointment/bookingStepListEnterAnimation';
@@ -181,7 +183,8 @@ export default function TimeSelection({
   let runningDelay = 0;
 
   return (
-    <View
+    <Animated.View
+      entering={stepSlideUp}
       pointerEvents="box-none"
       style={[StyleSheet.absoluteFillObject, { bottom: barBottom, zIndex: 2 }]}
     >
@@ -253,7 +256,7 @@ export default function TimeSelection({
           </View>
         )}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 

@@ -18,6 +18,11 @@ import BookingSuccessAnimatedOverlay, {
 import BookingStepTabs, { getBookingStepBarTopFromBottom } from '@/components/book-appointment/BookingStepTabs';
 import BookingProgressChipsStrip, {
   BOOKING_PROGRESS_STRIP_INSET,
+  BOOKING_PROGRESS_STRIP_HEIGHT,
+  BOOKING_PROGRESS_STRIP_TOP_GAP,
+  H_PAD,
+  GAP,
+  slotCenterX,
   computeBarberEntranceFromRect,
   computeChipFlightEntranceFromRect,
   type BarberChipEntrance,
@@ -40,7 +45,8 @@ import { usersApi } from '@/lib/api/users';
 import { User } from '@/lib/supabase';
 import { darkenHex } from '@/lib/colorContrast';
 import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
-import Animated, { useSharedValue, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, Easing, FadeIn } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, interpolate, Extrapolate, runOnJS, withTiming, withDelay, Easing, FadeIn } from 'react-native-reanimated';
+const stepSlideUp = FadeIn.duration(400).easing(Easing.out(Easing.cubic)).withInitialValues({ opacity: 0, transform: [{ translateY: 60 }] });
 import type { SharedValue } from 'react-native-reanimated';
 
 
@@ -408,6 +414,66 @@ const SERVICE_CARD_WIDTH = Math.min(SCREEN.width * 0.78, 320);
 const SERVICE_CARD_HEIGHT = 200;
 const SERVICE_ITEM_SIZE = SERVICE_CARD_WIDTH + ITEM_SPACING;
 
+/** Size of the circle chip in the progress strip (same as barber photo circle). */
+const FLIGHT_CHIP_SIZE = BOOKING_PROGRESS_STRIP_HEIGHT - 14;
+
+/**
+ * Absolutely-positioned ghost circle that flies from the tapped service row
+ * to the service chip slot in the progress strip.
+ * Rendered at the screen root so it is completely independent of any flex layout.
+ */
+function ServiceFlightGhost({
+  srcCX, srcCY, dstCX, dstCY, onDone,
+}: {
+  srcCX: number; srcCY: number;
+  dstCX: number; dstCY: number;
+  onDone: () => void;
+}) {
+  const tx = useSharedValue(srcCX - dstCX);
+  const ty = useSharedValue(srcCY - dstCY);
+  const opacity = useSharedValue(1);
+
+  React.useEffect(() => {
+    tx.value = withTiming(0, { duration: 520, easing: Easing.out(Easing.cubic) });
+    ty.value = withTiming(0, { duration: 520, easing: Easing.out(Easing.cubic) });
+    opacity.value = withDelay(380, withTiming(0, { duration: 180 }, (done) => {
+      if (done) runOnJS(onDone)();
+    }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateX: tx.value }, { translateY: ty.value }],
+  }));
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        {
+          position: 'absolute',
+          top: dstCY - FLIGHT_CHIP_SIZE / 2,
+          left: dstCX - FLIGHT_CHIP_SIZE / 2,
+          width: FLIGHT_CHIP_SIZE,
+          height: FLIGHT_CHIP_SIZE,
+          borderRadius: FLIGHT_CHIP_SIZE / 2,
+          backgroundColor: '#FFFFFF',
+          borderWidth: 2.5,
+          borderColor: 'rgba(255,255,255,0.85)',
+          zIndex: 999,
+          elevation: 10,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.22,
+          shadowRadius: 10,
+        },
+        animStyle,
+      ]}
+    />
+  );
+}
+
 export default function BookAppointment() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
@@ -447,6 +513,12 @@ export default function BookAppointment() {
   const [barberChipEntrance, setBarberChipEntrance] = useState<BarberChipEntrance | null>(null);
   const [serviceChipEntrance, setServiceChipEntrance] = useState<BarberChipEntrance | null>(null);
   const [serviceFlightAnimKey, setServiceFlightAnimKey] = useState(0);
+  /** True only from when the service chip flight starts until the user goes back to step 2. */
+  const [serviceChipVisible, setServiceChipVisible] = useState(false);
+  /** Ghost circle that flies from the tapped service pill to the strip slot. */
+  const [serviceGhost, setServiceGhost] = useState<{
+    srcCX: number; srcCY: number; dstCX: number; dstCY: number;
+  } | null>(null);
   const [dayChipEntrance, setDayChipEntrance] = useState<BarberChipEntrance | null>(null);
   const [dayFlightAnimKey, setDayFlightAnimKey] = useState(0);
   const barberSelectionRef = React.useRef<BarberSelectionHandle>(null);
@@ -512,10 +584,9 @@ export default function BookAppointment() {
   /** Must run on JS thread: setState + shared value reset + refs (Reanimated completion runs on UI runtime). */
   const finalizeStep2ToDay = React.useCallback(() => {
     try { scrollRef.current?.scrollTo({ y: 0, animated: false }); } catch {}
-    const entrance = pendingServiceFlightRef.current;
     pendingServiceFlightRef.current = null;
-    setServiceChipEntrance(entrance);
-    setServiceFlightAnimKey((k) => k + 1);
+    // serviceChipEntrance + serviceFlightAnimKey already set at flight start — do NOT re-set here
+    // (setting again would replay the flight animation a second time after the fade)
     setCurrentStep(3);
     // Do NOT reset step2Fade here: it would flash step 2 at full opacity for a frame before React
     // commits currentStep === 3 (ServiceSelection still mounted until then). Reset when re-entering step 2 (useEffect below).
@@ -524,10 +595,12 @@ export default function BookAppointment() {
   }, []);
   const abortStep2Transition = React.useCallback(() => {
     step2Fade.value = 1;
+    setServiceChipVisible(false);
+    setServiceChipEntrance(null);
     hasTriggeredStep3.current = false;
     isTransitioning.current = false;
     pendingServiceFlightRef.current = null;
-  }, []);
+  }, [step2Fade]);
 
   /** Service row → chip flight, then fade to day step (continue button or scroll). */
   const startStep2ToDayTransition = React.useCallback(() => {
@@ -547,22 +620,28 @@ export default function BookAppointment() {
     if (svcHandle) {
       svcHandle.measureSelectedRowInWindow((rect) => {
         if (rect && rect.width >= 8 && rect.height >= 8) {
-          pendingServiceFlightRef.current = computeChipFlightEntranceFromRect(
-            rect,
-            winW,
-            safeAreaInsets.top,
-            I18nManager.isRTL,
-            2,
-            1,
-            { scaleBasis: 'min', scaleMax: 2.35 }
-          );
-        } else {
-          pendingServiceFlightRef.current = null;
+          // Compute the target slot center in window coordinates
+          const dstCX = slotCenterX(2, 1, winW, H_PAD, GAP, I18nManager.isRTL);
+          const dstCY = safeAreaInsets.top + BOOKING_PROGRESS_STRIP_TOP_GAP + BOOKING_PROGRESS_STRIP_HEIGHT / 2;
+          // Source = center of the tapped info pill
+          const srcCX = rect.x + rect.width / 2;
+          const srcCY = rect.y + rect.height / 2;
+          // Launch an absolutely-positioned ghost that flies from source to target.
+          // This is fully independent of the strip's flex layout, so coordinates are exact.
+          setServiceGhost({ srcCX, srcCY, dstCX, dstCY });
         }
+        pendingServiceFlightRef.current = null;
+        // Strip chip fades in at its final position — the ghost handles the visual flight.
+        setServiceChipVisible(true);
+        setServiceChipEntrance(null);
+        setServiceFlightAnimKey((k) => k + 1);
         runFade();
       });
     } else {
       pendingServiceFlightRef.current = null;
+      setServiceChipVisible(true);
+      setServiceChipEntrance(null);
+      setServiceFlightAnimKey((k) => k + 1);
       runFade();
     }
   }, [abortStep2Transition, finalizeStep2ToDay, safeAreaInsets.top, step2Fade]);
@@ -577,6 +656,7 @@ export default function BookAppointment() {
   useEffect(() => {
     if (currentStep === 1) {
       setBarberChipEntrance(null);
+      setServiceChipVisible(false);
       setServiceChipEntrance(null);
       setDayChipEntrance(null);
       pendingServiceFlightRef.current = null;
@@ -590,6 +670,7 @@ export default function BookAppointment() {
       }, 100);
     }
     if (currentStep === 2) {
+      setServiceChipVisible(false);
       setServiceChipEntrance(null);
       pendingServiceFlightRef.current = null;
       hasTriggeredStep3.current = false;
@@ -629,6 +710,7 @@ export default function BookAppointment() {
       setCurrentStep(1);
       setSelectedServices([]);
       setSelectedServiceIndex(0);
+      setServiceChipVisible(false);
       setServiceChipEntrance(null);
       setDayChipEntrance(null);
       setSelectedBarber(null);
@@ -725,7 +807,7 @@ export default function BookAppointment() {
         imageUri: (selectedBarber.image_url as string) || '',
       });
     }
-    if (currentStep >= 3 && selectedService) {
+    if ((currentStep >= 3 || (currentStep === 2 && serviceChipVisible)) && selectedService) {
       const multi = selectedServices.length > 1;
       const namesJoined = multi ? selectedServices.map((s) => s.name).join(' + ') : selectedService.name || '';
       const totalPrice = selectedServices.reduce((sum, s) => sum + ((s as any).price ?? 0), 0);
@@ -752,6 +834,7 @@ export default function BookAppointment() {
     return out;
   }, [
     currentStep,
+    serviceChipVisible,
     selectedBarber,
     selectedService,
     selectedServices,
@@ -2031,7 +2114,7 @@ export default function BookAppointment() {
 
         {/* Step 3: Day Selection — fade-in avoids a visual jump after service fade-out */}
         {currentStep === 3 && !!selectedBarber && !!selectedService && (
-          <Animated.View entering={FadeIn.duration(320).delay(40)}>
+          <Animated.View entering={stepSlideUp}>
             <DaySelection
               ref={daySelectionRef}
               visible
@@ -2071,6 +2154,17 @@ export default function BookAppointment() {
         dayEntrance={dayChipEntrance}
         dayEntranceKey={dayFlightAnimKey}
       />
+
+      {/* Ghost circle that flies from the tapped service button to the strip slot */}
+      {serviceGhost && (
+        <ServiceFlightGhost
+          srcCX={serviceGhost.srcCX}
+          srcCY={serviceGhost.srcCY}
+          dstCX={serviceGhost.dstCX}
+          dstCY={serviceGhost.dstCY}
+          onDone={() => setServiceGhost(null)}
+        />
+      )}
 
       {/* Waitlist button is now embedded in BookingStepTabs (variant='waitlist') — no separate footer needed */}
 

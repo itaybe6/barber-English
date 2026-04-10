@@ -1,4 +1,4 @@
-import React, { useMemo, type RefObject } from 'react';
+import React, { useMemo, useRef, type MutableRefObject, type RefObject } from 'react';
 import { View, Text, Pressable, Platform, StyleSheet, type View as RNView } from 'react-native';
 import { getMonthWeeks, formatHebrewDay, type MonthEntry } from './utils';
 
@@ -25,6 +25,8 @@ type DaysProps = {
   formatAppointmentBadge?: (count: number) => string;
   /** When set, attached to the Pressable of the currently selected day (booking flight animation). */
   selectedDayCellRef?: RefObject<RNView | null>;
+  /** Stores the press-in rect of the tapped cell for immediate measurement (no rAF delay). */
+  pendingTapRectRef?: MutableRefObject<{ x: number; y: number; width: number; height: number } | null>;
 };
 
 const TODAY = new Date();
@@ -178,6 +180,7 @@ type DayCellProps = {
   constraintPillLabel?: string;
   onDayPress: (date: Date) => void;
   selectionRef?: RefObject<RNView | null>;
+  pendingTapRectRef?: MutableRefObject<{ x: number; y: number; width: number; height: number } | null>;
 };
 
 const DayCell = React.memo(function DayCell({
@@ -197,7 +200,9 @@ const DayCell = React.memo(function DayCell({
   constraintPillLabel,
   onDayPress,
   selectionRef,
+  pendingTapRectRef,
 }: DayCellProps) {
+  const pressableRef = useRef<React.ElementRef<typeof Pressable>>(null);
   const circleSize = Math.min(cellSize - 4, 36);
 
   const showBookingGreen =
@@ -244,10 +249,22 @@ const DayCell = React.memo(function DayCell({
 
   return (
     <Pressable
-      ref={isSel && selectionRef ? selectionRef : undefined}
+      ref={(node) => {
+        (pressableRef as MutableRefObject<React.ElementRef<typeof Pressable> | null>).current = node;
+        if (isSel && selectionRef) {
+          (selectionRef as MutableRefObject<RNView | null>).current = node;
+        }
+      }}
       collapsable={false}
       disabled={isDisabled}
-      onPress={() => onDayPress(date)}
+      onPress={(e) => {
+        if (pendingTapRectRef && !isDisabled) {
+          const { pageX, pageY } = e.nativeEvent;
+          const half = cellSize / 2;
+          pendingTapRectRef.current = { x: pageX - half, y: pageY - half, width: cellSize, height: cellSize };
+        }
+        onDayPress(date);
+      }}
       style={({ pressed }) => ({
         width: cellSize,
         alignItems: 'center',
@@ -407,6 +424,7 @@ export function Days({
   showWeekSeparators = false,
   formatAppointmentBadge,
   selectedDayCellRef,
+  pendingTapRectRef,
 }: DaysProps) {
   const weeks = getMonthWeeks(data);
 
@@ -481,6 +499,7 @@ export function Days({
                   constraintPillLabel={constraintPillLabel}
                   onDayPress={onDayPress}
                   selectionRef={selectedDayCellRef}
+                  pendingTapRectRef={pendingTapRectRef}
                 />
               );
             })}

@@ -29,7 +29,7 @@ import BookingProgressChipsStrip, {
   type BookingProgressChipModel,
 } from '@/components/book-appointment/BookingProgressChipsStrip';
 import WaitlistBottomSheet from '@/components/book-appointment/WaitlistBottomSheet';
-import ConfirmBookingSheet from '@/components/book-appointment/ConfirmBookingSheet';
+import BookingTimeConfirmPanel from '@/components/book-appointment/BookingTimeConfirmPanel';
 
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { Service } from '@/lib/supabase';
@@ -559,10 +559,9 @@ export default function BookAppointment() {
   const [showWaitlistSheet, setShowWaitlistSheet] = useState(false);
   const [isBooking, setIsBooking] = useState(false);
   const [isCheckingAppointments, setIsCheckingAppointments] = useState(false);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [timeConfirmPanelVisible, setTimeConfirmPanelVisible] = useState(false);
   const [showReplaceModal, setShowReplaceModal] = useState(false);
   const [existingAppointment, setExistingAppointment] = useState<any>(null);
-  const [modalType, setModalType] = useState<'confirm' | 'replace'>('confirm');
   const [availableSlots, setAvailableSlots] = useState<any[]>([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [dayAvailability, setDayAvailability] = useState<Record<string, number>>({});
@@ -732,7 +731,7 @@ export default function BookAppointment() {
       setSelectedTime(null);
       setAvailableSlots([]);
       setIsLoadingSlots(false);
-      setShowConfirmModal(false);
+      setTimeConfirmPanelVisible(false);
       setShowReplaceModal(false);
       setExistingAppointment(null);
       setDayAvailability({});
@@ -1216,7 +1215,7 @@ export default function BookAppointment() {
       setSelectedTime(null);
       setAvailableSlots([]);
       setIsLoadingSlots(false);
-      setShowConfirmModal(false);
+      setTimeConfirmPanelVisible(false);
       setShowReplaceModal(false);
       setExistingAppointment(null);
       setDayAvailability({});
@@ -1242,10 +1241,17 @@ export default function BookAppointment() {
     setSelectedTime(null);
     setAvailableSlots([]);
     setIsLoadingSlots(false);
-    setShowConfirmModal(false);
     setShowReplaceModal(false);
     setExistingAppointment(null);
   }, [selectedServicesKey]);
+
+  useEffect(() => {
+    if (currentStep !== 4) setTimeConfirmPanelVisible(false);
+  }, [currentStep]);
+
+  useEffect(() => {
+    if (selectedTime === null) setTimeConfirmPanelVisible(false);
+  }, [selectedTime]);
 
   // If navigated back from select-time asking to open dates screen
   useEffect(() => {
@@ -1744,40 +1750,32 @@ export default function BookAppointment() {
     }
   };
 
-  // Move the booking logic to execute only after confirmation in the modal
+  /** Same-day conflict → replace modal; otherwise book immediately (time summary panel replaces Confirm sheet). */
   const handleBookAppointment = async () => {
-    
     if (selectedServices.length === 0 || selectedTime === null || selectedDay === null) {
       Alert.alert(t('error.generic', 'Error'), t('booking.selectAllBeforeBooking', 'Please select a date, time, and service before booking the appointment'));
       return;
     }
 
     const dateString = selectedDate ? toLocalDateStr(selectedDate) : undefined;
-    const slotToBook = availableSlots.find(
-      slot => slot.slot_date === dateString && 
-              slot.slot_time === selectedTime && 
-              slot.is_available &&
-              (selectedBarber?.id ? slot.barber_id === selectedBarber.id : !slot.barber_id)
-    );
 
     setIsCheckingAppointments(true);
-    
-    // Check if user has an existing appointment on the selected day
+
     try {
       const sameDayAppointments = await checkUserAppointmentsOnDate(dateString!);
       if (sameDayAppointments.length > 0) {
         const existing = sameDayAppointments[0];
         setExistingAppointment(existing);
-        setModalType('replace');
+        setTimeConfirmPanelVisible(false);
         setShowReplaceModal(true);
       } else {
-        setModalType('confirm');
-        setShowConfirmModal(true);
+        setTimeConfirmPanelVisible(false);
+        await proceedWithBooking();
       }
     } catch (error) {
       console.error('Error checking same-day appointments:', error);
-      setModalType('confirm');
-      setShowConfirmModal(true);
+      setTimeConfirmPanelVisible(false);
+      await proceedWithBooking();
     } finally {
       setIsCheckingAppointments(false);
     }
@@ -1890,6 +1888,22 @@ export default function BookAppointment() {
   const selectedDayHasAvail =
     selectedDayDateStr ? (dayAvailability[selectedDayDateStr] ?? -1) > 0 : false;
 
+  const bookingTimePanelDateLine = useMemo(() => {
+    if (selectedDay === null || !days[selectedDay]) return '';
+    const d = days[selectedDay];
+    return `${d.dayName}, ${d.fullDate.toLocaleDateString(toBcp47Locale(i18n?.language), {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    })}`;
+  }, [selectedDay, days, i18n?.language]);
+
+  const bookingTimePanelTimeLine = useMemo(() => {
+    if (selectedTime === null) return '';
+    if (selectedServices.length <= 1) return selectedTime;
+    return `${selectedTime} – ${_toHHMM(_toMinutes(selectedTime) + totalDuration)}`;
+  }, [selectedTime, selectedServices.length, totalDuration]);
+
   const bookingAdvanceNextEnabled =
     (currentStep === 1 && !!selectedBarber) ||
     (currentStep === 2 && selectedServices.length > 0) ||
@@ -1905,7 +1919,10 @@ export default function BookAppointment() {
     selectedTime: selectedTime as any,
     primaryColor: colors.primary,
     t,
-    onSelectTime: (time) => setSelectedTime(time as any),
+    onSelectTime: (time) => {
+      setSelectedTime(time as any);
+      setTimeConfirmPanelVisible(true);
+    },
   };
 
   const bookingSuccessLines = useMemo((): SuccessLine[] => {
@@ -2009,14 +2026,7 @@ export default function BookAppointment() {
           advanceNext={
             currentStep === 3 && selectedDay !== null && !selectedDayHasAvail && selectedDayDateStr && (dayAvailability[selectedDayDateStr] ?? -1) === 0
               ? { enabled: true, onPress: () => setShowWaitlistSheet(true), variant: 'waitlist' as const }
-              : currentStep === 4
-                ? {
-                    enabled: !!selectedTime,
-                    loading: isCheckingAppointments,
-                    onPress: handleBookAppointment,
-                    variant: 'confirm' as const,
-                  }
-                : undefined
+              : undefined
           }
         />
       {/* Header removed on steps 3-4 per request */}
@@ -2127,7 +2137,7 @@ export default function BookAppointment() {
             setSelectedTime(null);
             setAvailableSlots([]);
             setIsLoadingSlots(false);
-            setShowConfirmModal(false);
+            setTimeConfirmPanelVisible(false);
             setShowReplaceModal(false);
             setExistingAppointment(null);
             // Auto-advance to day selection when a service is chosen
@@ -2166,6 +2176,35 @@ export default function BookAppointment() {
 
       {/* Step 4: Revolutionary Time Selection with Liquid Glass (outside ScrollView) */}
       <TimeSelection {...timeSelectionProps} />
+
+      <BookingTimeConfirmPanel
+        visible={
+          timeConfirmPanelVisible &&
+          currentStep === 4 &&
+          selectedTime !== null &&
+          selectedDay !== null &&
+          selectedServices.length > 0
+        }
+        staffName={selectedBarber?.name}
+        serviceSummary={waitlistServiceSummary}
+        dateLine={bookingTimePanelDateLine}
+        timeLine={bookingTimePanelTimeLine}
+        durationMinutes={totalDuration}
+        totalPrice={totalPrice}
+        primaryColor={colors.primary}
+        cardBackground={colors.surface}
+        textColor={colors.text}
+        textSecondary={colors.textSecondary}
+        confirmLoading={isCheckingAppointments}
+        t={t}
+        onChangeTime={() => {
+          setTimeConfirmPanelVisible(false);
+          setSelectedTime(null);
+        }}
+        onConfirm={() => {
+          void handleBookAppointment();
+        }}
+      />
 
       <BookingProgressChipsStrip
         visible={currentStep >= 2 && !!selectedBarber}
@@ -2209,24 +2248,6 @@ export default function BookAppointment() {
         selectedDate={selectedDate ? toLocalDateStr(selectedDate) : ''}
         serviceName={waitlistServiceSummary}
         barberId={selectedBarber?.id || ''}
-      />
-
-      {/* Confirmation Bottom Sheet */}
-      <ConfirmBookingSheet
-        visible={showConfirmModal}
-        onClose={() => setShowConfirmModal(false)}
-        onConfirm={() => { setShowConfirmModal(false); proceedWithBooking(); }}
-        serviceName={selectedService?.name || ''}
-        serviceDuration={(selectedService as any)?.duration_minutes ?? 60}
-        servicePrice={(selectedService as any)?.price ?? 0}
-        date={selectedDay !== null ? (() => {
-          const d = days[selectedDay].fullDate;
-          return `${days[selectedDay].dayName}, ${d.toLocaleDateString(toBcp47Locale(i18n?.language), { day: 'numeric', month: 'long', year: 'numeric' })}`;
-        })() : ''}
-        time={selectedTime || ''}
-        extraServices={selectedServices.slice(1).map(s => ({ name: s.name, duration_minutes: (s as any).duration_minutes ?? 60 }))}
-        totalDuration={totalDuration}
-        totalPrice={totalPrice}
       />
 
       {/* Replace Confirmation Modal */}

@@ -17,6 +17,7 @@ import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-a
 import { supabase } from '@/lib/supabase';
 import { usersApi } from '@/lib/api/users';
 import { normalizeAppLanguage, isRtlLanguage } from '@/lib/i18nLocale';
+import { persistAppUiLanguage } from '@/lib/appLanguagePreference';
 
 const PROFILE_GROUPED_BG = '#F2F2F7';
 
@@ -606,9 +607,10 @@ export default function ClientProfileScreen() {
                 onPress={async () => {
                   try {
                     await i18n.changeLanguage('en');
+                    await persistAppUiLanguage('en');
                     if (user?.id) {
-                      const updated = await usersApi.updateUser(user.id, { language: 'en' } as any);
-                      if (updated) updateUserProfile({ language: 'en' } as any);
+                      await usersApi.updateUser(user.id, { language: 'en' } as any);
+                      updateUserProfile({ language: 'en' } as any);
                     }
                   } finally {
                     setIsLanguageOpen(false);
@@ -624,9 +626,10 @@ export default function ClientProfileScreen() {
                 onPress={async () => {
                   try {
                     await i18n.changeLanguage('he');
+                    await persistAppUiLanguage('he');
                     if (user?.id) {
-                      const updated = await usersApi.updateUser(user.id, { language: 'he' } as any);
-                      if (updated) updateUserProfile({ language: 'he' } as any);
+                      await usersApi.updateUser(user.id, { language: 'he' } as any);
+                      updateUserProfile({ language: 'he' } as any);
                     }
                   } finally {
                     setIsLanguageOpen(false);
@@ -642,9 +645,10 @@ export default function ClientProfileScreen() {
                 onPress={async () => {
                   try {
                     await i18n.changeLanguage('ar');
+                    await persistAppUiLanguage('ar');
                     if (user?.id) {
-                      const updated = await usersApi.updateUser(user.id, { language: 'ar' } as any);
-                      if (updated) updateUserProfile({ language: 'ar' } as any);
+                      await usersApi.updateUser(user.id, { language: 'ar' } as any);
+                      updateUserProfile({ language: 'ar' } as any);
                     }
                   } finally {
                     setIsLanguageOpen(false);
@@ -660,9 +664,10 @@ export default function ClientProfileScreen() {
                 onPress={async () => {
                   try {
                     await i18n.changeLanguage('ru');
+                    await persistAppUiLanguage('ru');
                     if (user?.id) {
-                      const updated = await usersApi.updateUser(user.id, { language: 'ru' } as any);
-                      if (updated) updateUserProfile({ language: 'ru' } as any);
+                      await usersApi.updateUser(user.id, { language: 'ru' } as any);
+                      updateUserProfile({ language: 'ru' } as any);
                     }
                   } finally {
                     setIsLanguageOpen(false);

@@ -597,6 +597,7 @@ export default function RegisterScreen() {
         user_type: authUser.user_type,
         block: authUser.block ?? false,
         client_approved: authUser.client_approved !== false,
+        language: authUser.language ?? null,
         ...(birthIsoForStore ? { birth_date: birthIsoForStore } : {}),
       } as any;
 

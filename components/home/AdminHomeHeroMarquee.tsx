@@ -4,17 +4,6 @@ import { Marquee } from '@animatereactnative/marquee';
 import { manicureImages } from '@/src/constants/manicureImages';
 import { ManicureMarqueeTile } from '@/components/ManicureMarqueeTile';
 
-function chunkArray<T>(array: T[], size: number): T[][] {
-  const chunked: T[][] = [];
-  let index = 0;
-  const safeSize = Math.max(1, Math.floor(size));
-  while (index < array.length) {
-    chunked.push(array.slice(index, safeSize + index));
-    index += safeSize;
-  }
-  return chunked;
-}
-
 const HERO_MARQUEE_TRANSLATE_Y = 0;
 const MARQUEE_TILT_Z = I18nManager.isRTL ? '3.2deg' : '-3.2deg';
 const MARQUEE_PLANE_SCALE = 1.075;
@@ -28,14 +17,30 @@ function heroItemSize(layoutWidth: number) {
 }
 
 /**
- * Matches admin home hero (`app/(tabs)/index.tsx`): custom https URLs first, then bundled stock
- * so the marquee never runs empty.
+ * Hero image URLs: tenant https uploads only when at least one exists; otherwise bundled stock
+ * so the hero is never empty. We do **not** append stock after uploads — that mixed defaults into the animation.
  */
 export function resolveAdminHeroMarqueeImages(raw: string[]): string[] {
   const web = raw.filter((u) => typeof u === 'string' && /^https?:\/\//i.test(u.trim()));
   const stock = [...manicureImages];
   if (web.length === 0) return stock;
-  return [...web, ...stock];
+  return web;
+}
+
+/**
+ * Split URLs across the 3 horizontal marquee rows (round-robin) so each row gets a similar mix.
+ */
+export function distributeHeroMarqueeUrlsToRows(urls: string[]): string[][] {
+  const cols: string[][] = [[], [], []];
+  if (urls.length === 0) return cols;
+  for (let i = 0; i < urls.length; i++) {
+    cols[i % 3]!.push(urls[i]!);
+  }
+  const fallback = urls[0]!;
+  for (let c = 0; c < 3; c++) {
+    if (cols[c]!.length === 0) cols[c]!.push(fallback);
+  }
+  return cols;
 }
 
 export interface AdminHomeHeroMarqueeProps {
@@ -61,10 +66,7 @@ export const AdminHomeHeroMarquee = React.memo(function AdminHomeHeroMarquee({
 
   const HERO_ITEM_SIZE = heroItemSize(W);
 
-  const columns = useMemo(() => {
-    const perColumn = Math.ceil(images.length / 3);
-    return chunkArray(images, Math.max(1, perColumn));
-  }, [images]);
+  const columns = useMemo(() => distributeHeroMarqueeUrlsToRows(images), [images]);
 
   const rootStyle = useMemo(
     () => ({

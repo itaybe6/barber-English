@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { Text, View } from 'react-native';
 import i18n from '@/src/config/i18n';
 import { normalizeAppLanguage } from '@/lib/i18nLocale';
+import { persistAppUiLanguage, readPersistedAppUiLanguage } from '@/lib/appLanguagePreference';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -108,18 +109,36 @@ export default function RootLayout() {
     };
   }, []);
 
-  // When user changes, adopt their saved language if present
+  // After auth hydration: prefer language from user row, then local fallback (last i18n choice), else device default from i18n init.
   useEffect(() => {
-    try {
-      const userLang: unknown = (user as any)?.language;
-      if (typeof userLang === 'string' && userLang.length > 0) {
-        const normalized = normalizeAppLanguage(userLang);
-        if (i18n.language !== normalized) {
-          i18n.changeLanguage(normalized).catch(() => {});
+    if (!storeHydrated) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        if (isAuthenticated && user) {
+          const userLang: unknown = (user as any)?.language;
+          if (typeof userLang === 'string' && userLang.trim().length > 0) {
+            const normalized = normalizeAppLanguage(userLang);
+            if (!cancelled && normalizeAppLanguage(i18n.language) !== normalized) {
+              await i18n.changeLanguage(normalized);
+              await persistAppUiLanguage(normalized);
+            }
+            return;
+          }
+          const stored = await readPersistedAppUiLanguage();
+          if (!cancelled && stored && normalizeAppLanguage(i18n.language) !== stored) {
+            await i18n.changeLanguage(stored);
+            await persistAppUiLanguage(stored);
+          }
         }
+      } catch {
+        /* ignore */
       }
-    } catch {}
-  }, [user]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [storeHydrated, isAuthenticated, user]);
 
   // Handle font loading errors gracefully - DO NOT THROW IN PRODUCTION
   useEffect(() => {

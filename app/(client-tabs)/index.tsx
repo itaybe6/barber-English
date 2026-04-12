@@ -49,6 +49,7 @@ import { useTranslation } from 'react-i18next';
 import { Marquee } from '@animatereactnative/marquee';
 import { manicureImages } from '@/src/constants/manicureImages';
 import { ManicureMarqueeTile } from '@/components/ManicureMarqueeTile';
+import { distributeHeroMarqueeUrlsToRows, resolveAdminHeroMarqueeImages } from '@/components/home/AdminHomeHeroMarquee';
 import SwapOpportunities from '@/components/SwapOpportunities';
 import { WaitlistHomeFabPanel } from '@/components/WaitlistHomeFabPanel';
 import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
@@ -98,26 +99,6 @@ function sanitizeUrlArray(value: unknown): string[] {
     .filter((x) => x.length > 0);
 }
 
-/** Only http(s) from DB; always append stock manicure URLs so failed custom URLs still leave visible tiles. */
-function resolveHeroImageUrls(profile: BusinessProfile | null): string[] {
-  const list = sanitizeUrlArray((profile as any)?.home_hero_images);
-  const web = list.filter((u) => /^https?:\/\//i.test(u));
-  const stock = [...manicureImages];
-  if (web.length === 0) return stock;
-  return [...web, ...stock];
-}
-
-function chunkArray<T>(array: T[], size: number): T[][] {
-  const chunked: T[][] = [];
-  let index = 0;
-  const safeSize = Math.max(1, Math.floor(size));
-  while (index < array.length) {
-    chunked.push(array.slice(index, safeSize + index));
-    index += safeSize;
-  }
-  return chunked;
-}
-
 function hexToRgba(hex: string, a: number): string {
   const h = hex.replace('#', '');
   if (h.length < 6) return `rgba(0,0,0,${a})`;
@@ -131,10 +112,7 @@ function hexToRgba(hex: string, a: number): string {
 const ManicureMarqueeHero = React.memo(({ images }: { images: string[] }) => {
   const safeImages = images.length > 0 ? images : manicureImages;
 
-  const columns = useMemo(() => {
-    const perColumn = Math.ceil(safeImages.length / 3);
-    return chunkArray(safeImages, perColumn);
-  }, [safeImages]);
+  const columns = useMemo(() => distributeHeroMarqueeUrlsToRows(safeImages), [safeImages]);
 
   return (
     <View style={manicureHeroRootStyle} pointerEvents="box-none">
@@ -331,7 +309,10 @@ export default function ClientHomeScreen() {
   const [cardWidth, setCardWidth] = useState(0);
   const [lavaCardLayout, setLavaCardLayout] = useState<{ w: number; h: number } | null>(null);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
-  const heroImages = useMemo(() => resolveHeroImageUrls(businessProfile), [businessProfile]);
+  const heroImages = useMemo(
+    () => resolveAdminHeroMarqueeImages(sanitizeUrlArray((businessProfile as any)?.home_hero_images)),
+    [businessProfile],
+  );
 
   /** Remote header logo only when toggle allows it and `home_logo_url` is http(s); otherwise show title (like admin). */
   const clientHomeHeaderShowsRemoteLogo = useMemo(() => {

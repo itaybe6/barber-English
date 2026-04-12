@@ -637,6 +637,12 @@ async function findUserByPhoneFlexible(
   );
 }
 
+function pickUserLanguage(row: { language?: unknown } | null | undefined): string {
+  const v = typeof row?.language === "string" ? row.language.trim().toLowerCase() : "";
+  if (v === "he" || v === "ar" || v === "ru" || v === "en") return v;
+  return "he";
+}
+
 function userExistsForRegister(
   rows: { phone: string }[],
   phoneRaw: string,
@@ -810,7 +816,7 @@ serve(async (req) => {
       if (imageUrl) profileFields.image_url = imageUrl;
 
       const userSelect =
-        "id, name, phone, user_type, image_url, client_approved, block";
+        "id, name, phone, user_type, image_url, client_approved, block, language";
 
       let displayName = name;
       let displayPhone = regPhone;
@@ -823,6 +829,7 @@ serve(async (req) => {
         image_url: string | null;
         client_approved: boolean;
         block: boolean;
+        language: string;
       };
 
       if (tok.user_id) {
@@ -850,6 +857,7 @@ serve(async (req) => {
           image_url: updatedUser.image_url ?? null,
           client_approved: updatedUser.client_approved !== false,
           block: !!updatedUser.block,
+          language: pickUserLanguage(updatedUser),
         };
       } else {
         if (!regPhone) {
@@ -905,6 +913,7 @@ serve(async (req) => {
           image_url: inserted.image_url ?? null,
           client_approved: inserted.client_approved !== false,
           block: !!inserted.block,
+          language: pickUserLanguage(inserted),
         };
       }
 
@@ -941,6 +950,7 @@ serve(async (req) => {
           image_url: sessionUser.image_url,
           client_approved: sessionUser.client_approved,
           block: sessionUser.block,
+          language: sessionUser.language,
         },
       });
     }
@@ -1116,6 +1126,7 @@ serve(async (req) => {
           image_url: user.image_url ?? null,
           client_approved: user.client_approved !== false,
           block: !!user.block,
+          language: pickUserLanguage(user),
         },
       });
     }

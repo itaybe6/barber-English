@@ -54,6 +54,7 @@ import { formatTimeToAMPM } from '@/lib/hooks/useAdminAddAppointmentForm';
 import { ADMIN_RECURRING_APPOINTMENTS_CHANGED } from '@/constants/adminCalendarEvents';
 import { useTranslation } from 'react-i18next';
 import { normalizeAppLanguage, isRtlLanguage, toBcp47Locale } from '@/lib/i18nLocale';
+import { persistAppUiLanguage } from '@/lib/appLanguagePreference';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import { SettingsScreenTabs } from '@/components/settings/SettingsScreenTabs';
 import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
@@ -1522,33 +1523,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleRemoveHomeScreenLogo = () => {
-    const url = String(profile?.home_logo_url ?? '').trim();
-    if (!/^https?:\/\//i.test(url)) return;
-    Alert.alert(
-      t('settings.profile.homeLogoRemoveTitle', 'Use default logo?'),
-      t(
-        'settings.profile.homeLogoRemoveMessage',
-        'The logo from the app package will be shown again on the home screen.',
-      ),
-      [
-        { text: t('cancel', 'Cancel'), style: 'cancel' },
-        {
-          text: t('settings.profile.homeLogoRemoveButton', 'Use default'),
-          style: 'destructive',
-          onPress: async () => {
-            const updated = await businessProfileApi.updateHomeLogoUrl(null);
-            if (!updated) {
-              Alert.alert(t('error.generic', 'Error'), t('settings.profile.homeLogoSaveFailed', 'Failed to save logo'));
-              return;
-            }
-            setProfile(updated);
-          },
-        },
-      ],
-    );
-  };
-
   const uploadBusinessVideo = async (asset: { uri: string; mimeType?: string | null; fileName?: string | null }): Promise<string | null> => {
     try {
       let contentType = asset.mimeType || guessMimeFromUriForAny(asset.fileName || asset.uri);
@@ -1705,19 +1679,22 @@ export default function SettingsScreen() {
         id: 'appointments',
         label: t('settings.sections.appointments', 'Appointments'),
       });
-      const generalTab = {
-        id: 'general',
-        label: t('settings.sections.general', 'General'),
-      };
-      /**
-       * Visual order uses `flexDirection: 'row'` + LTR. `SettingsScreenTabs` reverses the whole list in RTL.
-       * RTL: prepend `general` → after reverse it renders last → physically right (Hebrew “start”).
-       * LTR: append `general` → last → physically right.
-       */
-      if (I18nManager.isRTL) {
-        list.unshift(generalTab);
-      } else {
-        list.push(generalTab);
+      /** Owner-only policies; managers without matching business phone have nothing to show here. */
+      if (canSeeAddEmployee) {
+        const generalTab = {
+          id: 'general',
+          label: t('settings.sections.general', 'General'),
+        };
+        /**
+         * Visual order uses `flexDirection: 'row'` + LTR. `SettingsScreenTabs` reverses the whole list in RTL.
+         * RTL: prepend `general` → after reverse it renders last → physically right (Hebrew “start”).
+         * LTR: append `general` → last → physically right.
+         */
+        if (I18nManager.isRTL) {
+          list.unshift(generalTab);
+        } else {
+          list.push(generalTab);
+        }
       }
       return list;
     },
@@ -2150,14 +2127,6 @@ export default function SettingsScreen() {
           >
             <View style={styles.settingsTabPanel}>
               <View style={styles.settingsAccordionBody}>
-                {!canSeeAddEmployee ? (
-                  <Text style={[styles.settingSubtitleLTR, { paddingHorizontal: 16, paddingBottom: 12 }]}>
-                    {t(
-                      'settings.policies.ownerOnlyEditHint',
-                      'Only the business owner (account linked to the business phone) can change these policies.',
-                    )}
-                  </Text>
-                ) : null}
                 <View style={styles.settingItemLTR}>
                   <View style={styles.settingIconLTR}>
                     <User size={20} color={businessColors.primary} />
@@ -2166,7 +2135,7 @@ export default function SettingsScreen() {
                     style={{
                       flex: 1,
                       paddingRight: 8,
-                      opacity: requireClientApproval && canSeeAddEmployee ? 1 : 0.55,
+                      opacity: requireClientApproval ? 1 : 0.55,
                     }}
                   >
                     <Text style={styles.settingTitleLTR}>
@@ -2182,7 +2151,7 @@ export default function SettingsScreen() {
                   <Switch
                     value={requireClientApproval}
                     onValueChange={handleRequireClientApprovalToggle}
-                    disabled={!canSeeAddEmployee || isSavingProfile}
+                    disabled={isSavingProfile}
                     trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
                     thumbColor={
                       requireClientApproval
@@ -2203,7 +2172,7 @@ export default function SettingsScreen() {
                     style={{
                       flex: 1,
                       paddingRight: 8,
-                      opacity: homeFixedMessageEnabled && canSeeAddEmployee ? 1 : 0.55,
+                      opacity: homeFixedMessageEnabled ? 1 : 0.55,
                     }}
                   >
                     <Text style={styles.settingTitleLTR}>
@@ -2221,7 +2190,7 @@ export default function SettingsScreen() {
                     onValueChange={(v) => {
                       void handleHomeFixedMessageToggle(v);
                     }}
-                    disabled={!canSeeAddEmployee || isSavingProfile}
+                    disabled={isSavingProfile}
                     trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
                     thumbColor={
                       homeFixedMessageEnabled
@@ -2233,7 +2202,7 @@ export default function SettingsScreen() {
                     ios_backgroundColor="#E5E5EA"
                   />
                 </View>
-                {homeFixedMessageEnabled && canSeeAddEmployee ? (
+                {homeFixedMessageEnabled ? (
                   homeFixedMessageEditorOpen ? (
                     <View style={styles.homeFixedMessageComposer}>
                       <TextInput
@@ -2365,14 +2334,6 @@ export default function SettingsScreen() {
           >
         <View style={styles.settingsTabPanel}>
           <View style={styles.settingsAccordionBody}>
-            {!canSeeAddEmployee ? (
-              <Text style={[styles.settingSubtitleLTR, { paddingHorizontal: 16, paddingBottom: 12 }]}>
-                {t(
-                  'settings.policies.ownerOnlyEditHint',
-                  'Only the business owner (account linked to the business phone) can change these policies.',
-                )}
-              </Text>
-            ) : null}
             {canSeeAddEmployee
               ? renderSettingItemLTR(
                   <Calendar size={20} color={businessColors.primary} />,
@@ -2416,66 +2377,70 @@ export default function SettingsScreen() {
                   !user?.id,
                 )
               : null}
-            <View style={styles.settingItemLTR}>
-              <View style={styles.settingIconLTR}>
-                <Clock size={20} color={businessColors.primary} />
-              </View>
-              <Pressable
-                style={({ pressed }) => [
-                  { flex: 1, paddingRight: 8, opacity: cancellationLimitActive && canSeeAddEmployee ? 1 : 0.55 },
-                  pressed && cancellationLimitActive && canSeeAddEmployee ? { opacity: 0.88 } : null,
-                ]}
-                onPress={() => {
-                  if (cancellationLimitActive && canSeeAddEmployee) openCancellationEditor(false);
-                }}
-                disabled={!cancellationLimitActive || !canSeeAddEmployee}
-              >
-                <Text style={styles.settingTitleLTR}>
-                  {t('settings.policies.minCancellationRowTitle', 'Appointment cancellation time')}
-                </Text>
-                {cancellationLimitActive ? (
-                  profileMinCancellationHours > 0 ? (
-                    <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
-                      {t('settings.policies.cancellationLimitActiveSubtitle', {
-                        count: profileMinCancellationHours,
-                        unit:
-                          profileMinCancellationHours === 1
-                            ? t('settings.policies.hour', 'hour')
-                            : t('settings.policies.hours', 'hours'),
-                      })}
+            {canSeeAddEmployee ? (
+              <>
+                <View style={styles.settingItemLTR}>
+                  <View style={styles.settingIconLTR}>
+                    <Clock size={20} color={businessColors.primary} />
+                  </View>
+                  <Pressable
+                    style={({ pressed }) => [
+                      { flex: 1, paddingRight: 8, opacity: cancellationLimitActive ? 1 : 0.55 },
+                      pressed && cancellationLimitActive ? { opacity: 0.88 } : null,
+                    ]}
+                    onPress={() => {
+                      if (cancellationLimitActive) openCancellationEditor(false);
+                    }}
+                    disabled={!cancellationLimitActive}
+                  >
+                    <Text style={styles.settingTitleLTR}>
+                      {t('settings.policies.minCancellationRowTitle', 'Appointment cancellation time')}
                     </Text>
-                  ) : (
-                    <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
-                      {t('settings.policies.minCancellationTapToEdit', 'Tap to edit the time')}
-                    </Text>
-                  )
-                ) : (
-                  <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
-                    {t(
-                      'settings.policies.cancellationLimitOffSubtitle',
-                      'Off — appointments can be cancelled anytime',
+                    {cancellationLimitActive ? (
+                      profileMinCancellationHours > 0 ? (
+                        <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
+                          {t('settings.policies.cancellationLimitActiveSubtitle', {
+                            count: profileMinCancellationHours,
+                            unit:
+                              profileMinCancellationHours === 1
+                                ? t('settings.policies.hour', 'hour')
+                                : t('settings.policies.hours', 'hours'),
+                          })}
+                        </Text>
+                      ) : (
+                        <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
+                          {t('settings.policies.minCancellationTapToEdit', 'Tap to edit the time')}
+                        </Text>
+                      )
+                    ) : (
+                      <Text style={[styles.settingSubtitleLTR, { marginTop: 4 }]}>
+                        {t(
+                          'settings.policies.cancellationLimitOffSubtitle',
+                          'Off — appointments can be cancelled anytime',
+                        )}
+                      </Text>
                     )}
-                  </Text>
-                )}
-              </Pressable>
-              <Switch
-                value={cancellationLimitActive}
-                onValueChange={(v) => {
-                  void handleCancellationSwitchToggle(v);
-                }}
-                disabled={!canSeeAddEmployee || isSavingProfile}
-                trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
-                thumbColor={
-                  cancellationLimitActive
-                    ? businessColors.primary
-                    : Platform.OS === 'android'
-                      ? '#f4f3f4'
-                      : undefined
-                }
-                ios_backgroundColor="#E5E5EA"
-              />
-            </View>
-            <View style={styles.settingDivider} />
+                  </Pressable>
+                  <Switch
+                    value={cancellationLimitActive}
+                    onValueChange={(v) => {
+                      void handleCancellationSwitchToggle(v);
+                    }}
+                    disabled={isSavingProfile}
+                    trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                    thumbColor={
+                      cancellationLimitActive
+                        ? businessColors.primary
+                        : Platform.OS === 'android'
+                          ? '#f4f3f4'
+                          : undefined
+                    }
+                    ios_backgroundColor="#E5E5EA"
+                  />
+                </View>
+                <View style={styles.settingDivider} />
+              </>
+            ) : null}
             <View style={styles.settingItemLTR}>
               <View style={styles.settingIconLTR}>
                 <Clock size={20} color={businessColors.primary} />
@@ -2526,80 +2491,84 @@ export default function SettingsScreen() {
                 ios_backgroundColor="#E5E5EA"
               />
             </View>
-            <View style={styles.settingDivider} />
-            <View style={styles.settingItemLTR}>
-              <View style={styles.settingIconLTR}>
-                <Ionicons name="swap-horizontal" size={20} color={businessColors.primary} />
-              </View>
-              <View
-                style={{
-                  flex: 1,
-                  paddingRight: 8,
-                  opacity: clientSwapEnabled && canSeeAddEmployee ? 1 : 0.55,
-                }}
-              >
-                <Text style={styles.settingTitleLTR}>
-                  {t('settings.policies.clientSwapTitle', 'Client appointment swap')}
-                </Text>
-                <Text style={styles.settingSubtitleLTR}>
-                  {t('settings.policies.clientSwapSubtitle', 'Allow clients to exchange time slots with each other')}
-                </Text>
-              </View>
-              <Switch
-                value={clientSwapEnabled}
-                onValueChange={handleClientSwapToggle}
-                disabled={!canSeeAddEmployee || isSavingProfile}
-                trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
-                thumbColor={
-                  clientSwapEnabled
-                    ? businessColors.primary
-                    : Platform.OS === 'android'
-                      ? '#f4f3f4'
-                      : undefined
-                }
-                ios_backgroundColor="#E5E5EA"
-              />
-            </View>
-            <View style={styles.settingDivider} />
-            <View style={styles.settingItemLTR}>
-              <View style={styles.settingIconLTR}>
-                <Layers size={20} color={businessColors.primary} />
-              </View>
-              <View
-                style={{
-                  flex: 1,
-                  paddingRight: 8,
-                  opacity: allowMultiServiceBooking && canSeeAddEmployee ? 1 : 0.55,
-                }}
-              >
-                <Text style={styles.settingTitleLTR}>
-                  {t(
-                    'settings.policies.allowMultiServiceBookingTitle',
-                    'Several services in one visit',
-                  )}
-                </Text>
-                <Text style={styles.settingSubtitleLTR}>
-                  {t(
-                    'settings.policies.allowMultiServiceBookingSubtitle',
-                    'Off: one service per booking. On: clients can pick multiple services as one continuous slot.',
-                  )}
-                </Text>
-              </View>
-              <Switch
-                value={allowMultiServiceBooking}
-                onValueChange={handleAllowMultiServiceBookingToggle}
-                disabled={!canSeeAddEmployee || isSavingProfile}
-                trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
-                thumbColor={
-                  allowMultiServiceBooking
-                    ? businessColors.primary
-                    : Platform.OS === 'android'
-                      ? '#f4f3f4'
-                      : undefined
-                }
-                ios_backgroundColor="#E5E5EA"
-              />
-            </View>
+            {canSeeAddEmployee ? (
+              <>
+                <View style={styles.settingDivider} />
+                <View style={styles.settingItemLTR}>
+                  <View style={styles.settingIconLTR}>
+                    <Ionicons name="swap-horizontal" size={20} color={businessColors.primary} />
+                  </View>
+                  <View
+                    style={{
+                      flex: 1,
+                      paddingRight: 8,
+                      opacity: clientSwapEnabled ? 1 : 0.55,
+                    }}
+                  >
+                    <Text style={styles.settingTitleLTR}>
+                      {t('settings.policies.clientSwapTitle', 'Client appointment swap')}
+                    </Text>
+                    <Text style={styles.settingSubtitleLTR}>
+                      {t('settings.policies.clientSwapSubtitle', 'Allow clients to exchange time slots with each other')}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={clientSwapEnabled}
+                    onValueChange={handleClientSwapToggle}
+                    disabled={isSavingProfile}
+                    trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                    thumbColor={
+                      clientSwapEnabled
+                        ? businessColors.primary
+                        : Platform.OS === 'android'
+                          ? '#f4f3f4'
+                          : undefined
+                    }
+                    ios_backgroundColor="#E5E5EA"
+                  />
+                </View>
+                <View style={styles.settingDivider} />
+                <View style={styles.settingItemLTR}>
+                  <View style={styles.settingIconLTR}>
+                    <Layers size={20} color={businessColors.primary} />
+                  </View>
+                  <View
+                    style={{
+                      flex: 1,
+                      paddingRight: 8,
+                      opacity: allowMultiServiceBooking ? 1 : 0.55,
+                    }}
+                  >
+                    <Text style={styles.settingTitleLTR}>
+                      {t(
+                        'settings.policies.allowMultiServiceBookingTitle',
+                        'Several services in one visit',
+                      )}
+                    </Text>
+                    <Text style={styles.settingSubtitleLTR}>
+                      {t(
+                        'settings.policies.allowMultiServiceBookingSubtitle',
+                        'Off: one service per booking. On: clients can pick multiple services as one continuous slot.',
+                      )}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={allowMultiServiceBooking}
+                    onValueChange={handleAllowMultiServiceBookingToggle}
+                    disabled={isSavingProfile}
+                    trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                    thumbColor={
+                      allowMultiServiceBooking
+                        ? businessColors.primary
+                        : Platform.OS === 'android'
+                          ? '#f4f3f4'
+                          : undefined
+                    }
+                    ios_backgroundColor="#E5E5EA"
+                  />
+                </View>
+              </>
+            ) : null}
           </View>
         </View>
           </ScrollView>
@@ -2939,16 +2908,17 @@ export default function SettingsScreen() {
                   returnSettingsTab="design"
                 />
               </View>
+              <View style={styles.settingDivider} />
+              {renderSettingItemLTR(
+                <Ionicons name="images-outline" size={20} color={businessColors.primary} />,
+                t('settings.profile.homeAnimationRowTitle', 'Home animation images'),
+                t('settings.profile.homeAnimationRowSubtitle', 'Edit the images in the top home animation'),
+                undefined,
+                () => router.push('/(tabs)/edit-home-hero'),
+                false,
+                false
+              )}
               <View style={styles.homeLogoDesignBlock}>
-                <Text style={styles.settingsAppointmentsSubsectionTitle}>
-                  {t('settings.profile.homeLogoRowTitle', 'Home screen logo')}
-                </Text>
-                <Text style={styles.homeLogoDesignSubtitle}>
-                  {t(
-                    'settings.profile.homeLogoRowSubtitle',
-                    'Shown at the top of the manager and client home screens. Leave unset to use the app’s default logo.',
-                  )}
-                </Text>
                 <View style={styles.homeHeaderLogoToggleRow}>
                   <View style={{ flex: 1, paddingRight: 12 }}>
                     <Text style={styles.settingTitleLTR}>
@@ -2961,136 +2931,121 @@ export default function SettingsScreen() {
                       )}
                     </Text>
                   </View>
-                  <Switch
-                    value={profile?.home_header_show_logo !== false}
-                    onValueChange={(v) => {
-                      void handleHomeHeaderShowLogoToggle(v);
-                    }}
-                    disabled={isUploadingHomeLogo || isSavingProfile}
-                    trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
-                    thumbColor={
-                      profile?.home_header_show_logo !== false
-                        ? businessColors.primary
-                        : Platform.OS === 'android'
-                          ? '#f4f3f4'
-                          : undefined
-                    }
-                    ios_backgroundColor="#E5E5EA"
-                  />
+                  {/* RN Switch keeps LTR thumb semantics in RTL rows — mirror so “on” matches Hebrew expectations */}
+                  <View style={editAdminInputsRtl ? styles.homeHeaderShowLogoSwitchRtl : undefined}>
+                    <Switch
+                      value={profile?.home_header_show_logo !== false}
+                      onValueChange={(v) => {
+                        void handleHomeHeaderShowLogoToggle(v);
+                      }}
+                      disabled={isUploadingHomeLogo || isSavingProfile}
+                      trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                      thumbColor={
+                        profile?.home_header_show_logo !== false
+                          ? businessColors.primary
+                          : Platform.OS === 'android'
+                            ? '#f4f3f4'
+                            : undefined
+                      }
+                      ios_backgroundColor="#E5E5EA"
+                    />
+                  </View>
                 </View>
                 {profile?.home_header_show_logo === false ? (
-                  <View style={styles.homeHeaderNoLogoTitleBlock}>
-                    <Text style={styles.homeHeaderNoLogoTitleLabel}>
-                      {t('settings.profile.homeHeaderNoLogoTitleLabel', 'Name at top of home (no logo)')}
-                    </Text>
-                    <Text style={styles.homeHeaderNoLogoTitleHint}>
-                      {t(
-                        'settings.profile.homeHeaderNoLogoTitleHint',
-                        'Leave empty to use the business display name from business details.',
-                      )}
-                    </Text>
-                    <TextInput
-                      style={[
-                        styles.homeHeaderNoLogoTitleInput,
-                        {
-                          textAlign: editAdminInputsRtl ? 'right' : 'left',
-                          writingDirection: editAdminInputsRtl ? 'rtl' : 'ltr',
-                        },
-                      ]}
-                      value={homeHeaderNoLogoTitleDraft}
-                      onChangeText={setHomeHeaderNoLogoTitleDraft}
-                      onBlur={() => void saveHomeHeaderTextWithoutLogoIfChanged()}
-                      placeholder={
-                        (profileDisplayName || '').trim() ||
-                        t('settings.profile.displayNameFallbackShort', 'Business')
-                      }
-                      placeholderTextColor="#8E8E93"
-                      maxLength={120}
-                      editable={!isSavingProfile && !isUploadingHomeLogo}
-                    />
-                    <TouchableOpacity
-                      style={[
-                        styles.homeFixedMessageSaveButton,
-                        {
-                          backgroundColor: businessColors.primary,
-                          opacity: isSavingProfile || isUploadingHomeLogo ? 0.55 : 1,
-                        },
-                      ]}
-                      onPress={async () => {
-                        await saveHomeHeaderTextWithoutLogoIfChanged();
-                        Keyboard.dismiss();
-                      }}
-                      disabled={isSavingProfile || isUploadingHomeLogo}
-                      activeOpacity={0.88}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('save', 'Save')}
-                    >
-                      <Text style={styles.homeFixedMessageSaveButtonText}>
-                        {isSavingProfile
-                          ? t('settings.common.saving', 'Saving...')
-                          : t('save', 'Save')}
+                  <>
+                    <View style={styles.settingDivider} />
+                    <View style={styles.homeHeaderNoLogoCard}>
+                      <Text style={styles.homeHeaderNoLogoTitleLabel}>
+                        {t('settings.profile.homeHeaderNoLogoTitleLabel', 'Name at top of home (no logo)')}
                       </Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-                <View style={styles.homeLogoDesignRow}>
-                  <View style={styles.homeLogoPreviewWrap}>
-                    <Image
-                      source={getHomeLogoSource(profile)}
-                      style={styles.homeLogoPreviewImage}
-                      resizeMode="contain"
-                    />
-                    {isUploadingHomeLogo ? (
-                      <View style={styles.homeLogoPreviewLoading}>
-                        <ActivityIndicator size="small" color={businessColors.primary} />
-                      </View>
-                    ) : null}
-                  </View>
-                  <View style={styles.homeLogoDesignActions}>
-                    <TouchableOpacity
-                      style={[
-                        styles.homeLogoActionBtn,
-                        { borderColor: `${businessColors.primary}40`, backgroundColor: `${businessColors.primary}12` },
-                      ]}
-                      onPress={handlePickHomeScreenLogo}
-                      activeOpacity={0.88}
-                      disabled={isUploadingHomeLogo}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('settings.profile.homeLogoUploadButton', 'Upload logo')}
-                    >
-                      <Camera size={18} color={businessColors.primary} strokeWidth={2.2} />
-                      <Text style={[styles.homeLogoActionBtnText, { color: businessColors.primary }]}>
-                        {isUploadingHomeLogo
-                          ? t('settings.common.uploading', 'Uploading...')
-                          : t('settings.profile.homeLogoUploadButton', 'Upload logo')}
+                      <Text style={styles.homeHeaderNoLogoTitleHint}>
+                        {t(
+                          'settings.profile.homeHeaderNoLogoTitleHint',
+                          'Leave empty to use the business display name from business details.',
+                        )}
                       </Text>
-                    </TouchableOpacity>
-                    {/^https?:\/\//i.test(String(profile?.home_logo_url ?? '').trim()) ? (
+                      <TextInput
+                        style={[
+                          styles.homeHeaderNoLogoTitleInput,
+                          {
+                            textAlign: editAdminInputsRtl ? 'right' : 'left',
+                            writingDirection: editAdminInputsRtl ? 'rtl' : 'ltr',
+                          },
+                        ]}
+                        value={homeHeaderNoLogoTitleDraft}
+                        onChangeText={setHomeHeaderNoLogoTitleDraft}
+                        onBlur={() => void saveHomeHeaderTextWithoutLogoIfChanged()}
+                        placeholder={
+                          (profileDisplayName || '').trim() ||
+                          t('settings.profile.displayNameFallbackShort', 'Business')
+                        }
+                        placeholderTextColor="#8E8E93"
+                        maxLength={120}
+                        editable={!isSavingProfile && !isUploadingHomeLogo}
+                      />
                       <TouchableOpacity
-                        style={[styles.homeLogoActionBtn, styles.homeLogoActionBtnGhost]}
-                        onPress={handleRemoveHomeScreenLogo}
+                        style={[
+                          styles.homeFixedMessageSaveButton,
+                          {
+                            backgroundColor: businessColors.primary,
+                            opacity: isSavingProfile || isUploadingHomeLogo ? 0.55 : 1,
+                          },
+                        ]}
+                        onPress={async () => {
+                          await saveHomeHeaderTextWithoutLogoIfChanged();
+                          Keyboard.dismiss();
+                        }}
+                        disabled={isSavingProfile || isUploadingHomeLogo}
+                        activeOpacity={0.88}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('save', 'Save')}
+                      >
+                        <Text style={styles.homeFixedMessageSaveButtonText}>
+                          {isSavingProfile
+                            ? t('settings.common.saving', 'Saving...')
+                            : t('save', 'Save')}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                ) : null}
+                {profile?.home_header_show_logo !== false ? (
+                  <View style={styles.homeLogoDesignRow}>
+                    <View style={styles.homeLogoPreviewWrap}>
+                      <Image
+                        source={getHomeLogoSource(profile)}
+                        style={styles.homeLogoPreviewImage}
+                        resizeMode="contain"
+                      />
+                      {isUploadingHomeLogo ? (
+                        <View style={styles.homeLogoPreviewLoading}>
+                          <ActivityIndicator size="small" color={businessColors.primary} />
+                        </View>
+                      ) : null}
+                    </View>
+                    <View style={styles.homeLogoDesignActions}>
+                      <TouchableOpacity
+                        style={[
+                          styles.homeLogoActionBtn,
+                          { borderColor: `${businessColors.primary}40`, backgroundColor: `${businessColors.primary}12` },
+                        ]}
+                        onPress={handlePickHomeScreenLogo}
                         activeOpacity={0.88}
                         disabled={isUploadingHomeLogo}
                         accessibilityRole="button"
-                        accessibilityLabel={t('settings.profile.homeLogoRemoveButton', 'Use default logo')}
+                        accessibilityLabel={t('settings.profile.homeLogoUploadButton', 'Upload logo')}
                       >
-                        <Text style={[styles.homeLogoActionBtnText, { color: Colors.subtext }]}>
-                          {t('settings.profile.homeLogoRemoveButton', 'Use default logo')}
+                        <Camera size={18} color={businessColors.primary} strokeWidth={2.2} />
+                        <Text style={[styles.homeLogoActionBtnText, { color: businessColors.primary }]}>
+                          {isUploadingHomeLogo
+                            ? t('settings.common.uploading', 'Uploading...')
+                            : t('settings.profile.homeLogoUploadButton', 'Upload logo')}
                         </Text>
                       </TouchableOpacity>
-                    ) : null}
+                    </View>
                   </View>
-                </View>
+                ) : null}
               </View>
-              {renderSettingItemLTR(
-                <Ionicons name="images-outline" size={20} color={businessColors.primary} />,
-                t('settings.profile.homeAnimationRowTitle', 'Home animation images'),
-                t('settings.profile.homeAnimationRowSubtitle', 'Edit the images in the top home animation'),
-                undefined,
-                () => router.push('/(tabs)/edit-home-hero'),
-                false,
-                false
-              )}
           </View>
         </View>
           </ScrollView>
@@ -4948,9 +4903,10 @@ export default function SettingsScreen() {
                 onPress={async () => {
                   try {
                     await i18n.changeLanguage('en');
+                    await persistAppUiLanguage('en');
                     if (user?.id) {
-                      const updated = await usersApi.updateUser(user.id, { language: 'en' } as any);
-                      if (updated) updateUserProfile({ language: 'en' } as any);
+                      await usersApi.updateUser(user.id, { language: 'en' } as any);
+                      updateUserProfile({ language: 'en' } as any);
                     }
                   } finally {
                     setIsLanguageOpen(false);
@@ -4966,9 +4922,10 @@ export default function SettingsScreen() {
                 onPress={async () => {
                   try {
                     await i18n.changeLanguage('he');
+                    await persistAppUiLanguage('he');
                     if (user?.id) {
-                      const updated = await usersApi.updateUser(user.id, { language: 'he' } as any);
-                      if (updated) updateUserProfile({ language: 'he' } as any);
+                      await usersApi.updateUser(user.id, { language: 'he' } as any);
+                      updateUserProfile({ language: 'he' } as any);
                     }
                   } finally {
                     setIsLanguageOpen(false);
@@ -4984,9 +4941,10 @@ export default function SettingsScreen() {
                 onPress={async () => {
                   try {
                     await i18n.changeLanguage('ar');
+                    await persistAppUiLanguage('ar');
                     if (user?.id) {
-                      const updated = await usersApi.updateUser(user.id, { language: 'ar' } as any);
-                      if (updated) updateUserProfile({ language: 'ar' } as any);
+                      await usersApi.updateUser(user.id, { language: 'ar' } as any);
+                      updateUserProfile({ language: 'ar' } as any);
                     }
                   } finally {
                     setIsLanguageOpen(false);
@@ -5002,9 +4960,10 @@ export default function SettingsScreen() {
                 onPress={async () => {
                   try {
                     await i18n.changeLanguage('ru');
+                    await persistAppUiLanguage('ru');
                     if (user?.id) {
-                      const updated = await usersApi.updateUser(user.id, { language: 'ru' } as any);
-                      if (updated) updateUserProfile({ language: 'ru' } as any);
+                      await usersApi.updateUser(user.id, { language: 'ru' } as any);
+                      updateUserProfile({ language: 'ru' } as any);
                     }
                   } finally {
                     setIsLanguageOpen(false);
@@ -5486,6 +5445,7 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   homeLogoDesignBlock: {
+    paddingTop: 8,
     paddingBottom: 8,
   },
   homeHeaderLogoToggleRow: {
@@ -5493,19 +5453,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingTop: 4,
-    paddingBottom: 14,
-  },
-  homeLogoDesignSubtitle: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: Colors.subtext,
-    paddingHorizontal: 16,
     paddingBottom: 12,
-    textAlign: 'left',
   },
-  homeHeaderNoLogoTitleBlock: {
-    paddingHorizontal: 16,
-    paddingBottom: 14,
+  homeHeaderShowLogoSwitchRtl: {
+    transform: [{ scaleX: -1 }],
+  },
+  homeHeaderNoLogoCard: {
+    marginHorizontal: 16,
+    marginBottom: 14,
+    padding: 16,
+    borderRadius: 14,
+    backgroundColor: 'rgba(142, 142, 147, 0.08)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60, 60, 67, 0.12)',
   },
   homeHeaderNoLogoTitleLabel: {
     fontSize: 14,
@@ -5536,6 +5496,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 4,
     gap: 14,
   },
   homeLogoPreviewWrap: {
@@ -5572,10 +5534,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-  },
-  homeLogoActionBtnGhost: {
-    borderColor: 'rgba(60, 60, 67, 0.2)',
-    backgroundColor: 'rgba(142, 142, 147, 0.08)',
   },
   homeLogoActionBtnText: {
     fontSize: 15,

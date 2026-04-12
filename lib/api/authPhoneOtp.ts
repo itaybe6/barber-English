@@ -10,6 +10,7 @@ export interface OtpAuthUserPayload {
   image_url: string | null;
   client_approved: boolean;
   block: boolean;
+  language?: string | null;
 }
 
 type FnResponse = {

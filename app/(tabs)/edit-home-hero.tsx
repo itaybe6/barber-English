@@ -37,6 +37,8 @@ const BUCKET = 'app_design';
  * There is no app cap on total images stored — the marquee uses the full list from the profile.
  */
 const HERO_IMAGE_SELECTION_LIMIT = 0;
+/** Shown above the live hero preview on the edit screen */
+const HERO_EDIT_RECOMMENDED_UPLOAD_COUNT = 20;
 
 function sanitizeUrlArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -136,6 +138,16 @@ function createStyles(colors: ThemeColors) {
     },
     listContentEmpty: {
       flexGrow: 1,
+    },
+    /** Recommendation line above the live hero preview */
+    heroEditRecommendation: {
+      fontSize: 15,
+      lineHeight: 22,
+      fontWeight: '600',
+      color: colors.textSecondary,
+      textAlign: 'center',
+      marginBottom: 12,
+      paddingHorizontal: 8,
     },
     statusRow: {
       flexDirection: 'row',
@@ -497,6 +509,10 @@ export default function EditHomeHeroScreen() {
             </View>
           </View>
         ) : null}
+
+        <Text style={styles.heroEditRecommendation}>
+          {t('settings.profile.heroEditRecommendedUploadLine', { count: HERO_EDIT_RECOMMENDED_UPLOAD_COUNT })}
+        </Text>
 
         <View
           style={[styles.heroPreviewHost, { height: heroPreviewPixelHeight }]}

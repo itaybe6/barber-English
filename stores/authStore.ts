@@ -2,6 +2,7 @@ import { create } from 'zustand/react';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, UserType } from '@/constants/auth';
+import { clearPersistedAppUiLanguage } from '@/lib/appLanguagePreference';
 
 interface AuthState {
   user: User | null;
@@ -48,6 +49,7 @@ export const useAuthStore = create<AuthState>()(
         set({ user: null, isAuthenticated: false, isAdmin: false, isSuperAdmin: false, notificationsEnabled: true });
         // Proactively clear persisted auth to avoid race conditions when the app is killed quickly
         AsyncStorage.removeItem('auth-storage').catch(() => {});
+        void clearPersistedAppUiLanguage();
       },
       isAdminUser: () => {
         const { user } = get();

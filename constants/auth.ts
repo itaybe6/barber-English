@@ -23,6 +23,8 @@ export interface User {
   /** false when client is waiting for admin approval */
   client_approved?: boolean;
   block?: boolean;
+  /** UI locale persisted on `users` and mirrored in auth store */
+  language?: 'he' | 'en' | 'ar' | 'ru' | string | null;
 }
 
 // משתמשים לדוגמה - בפועל זה יהיה מהשרת

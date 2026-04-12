@@ -352,6 +352,7 @@ export default function LoginScreen() {
           email: authUser.email ?? null, image_url: authUser.image_url ?? null,
           user_type: authUser.user_type, block: (authUser as any)?.block ?? false,
           client_approved: (authUser as any).client_approved !== false,
+          language: (authUser as any)?.language ?? null,
         } as any;
         login(appUser);
         router.replace(appUser.type === 'admin' ? '/(tabs)' : '/(client-tabs)');

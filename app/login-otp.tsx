@@ -276,6 +276,7 @@ export default function LoginOtpScreen() {
           user_type: authUser.user_type,
           block: authUser.block ?? false,
           client_approved: authUser.client_approved !== false,
+          language: authUser.language ?? null,
         } as any;
         login(appUser);
         router.replace(appUser.type === 'admin' ? '/(tabs)' : '/(client-tabs)');

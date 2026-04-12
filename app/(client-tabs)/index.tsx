@@ -333,6 +333,13 @@ export default function ClientHomeScreen() {
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const heroImages = useMemo(() => resolveHeroImageUrls(businessProfile), [businessProfile]);
 
+  /** Remote header logo only when toggle allows it and `home_logo_url` is http(s); otherwise show title (like admin). */
+  const clientHomeHeaderShowsRemoteLogo = useMemo(() => {
+    const showLogo = businessProfile?.home_header_show_logo !== false;
+    const hasRemoteLogo = /^https?:\/\//i.test(String(businessProfile?.home_logo_url ?? '').trim());
+    return Boolean(showLogo && hasRemoteLogo);
+  }, [businessProfile?.home_header_show_logo, businessProfile?.home_logo_url]);
+
   const [managerPhone, setManagerPhone] = useState<string | null>(null);
   const [businessPhone, setBusinessPhone] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -1353,7 +1360,7 @@ export default function ClientHomeScreen() {
         pointerEvents="none"
         style={[styles.overlayHeaderLogoOnly, { top: insets.top - 15 }]}
       >
-        {businessProfile?.home_header_show_logo !== false ? (
+        {clientHomeHeaderShowsRemoteLogo ? (
           <View style={styles.headerLogoInner}>
             <Image source={getHomeLogoSource(businessProfile)} style={styles.overlayLogo} resizeMode="contain" />
           </View>

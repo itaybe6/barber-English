@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Pressable,
   Modal,
+  useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -136,19 +137,12 @@ function createStyles(colors: ThemeColors) {
     listContentEmpty: {
       flexGrow: 1,
     },
-    intro: {
-      fontSize: 15,
-      lineHeight: 22,
-      color: colors.textSecondary,
-      marginBottom: 16,
-      textAlign: 'center',
-    },
     statusRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: 8,
-      marginBottom: 16,
+      marginBottom: 12,
       minHeight: 28,
     },
     statusPill: {
@@ -167,16 +161,13 @@ function createStyles(colors: ThemeColors) {
       fontWeight: '600',
       color: colors.textSecondary,
     },
-    /** Live admin-home-style marquee; same geometry rules as full-screen hero, scaled by measured width */
+    /** Live admin-home-style marquee — height set inline from window (~closer to real hero band) */
     heroPreviewHost: {
       width: '100%',
-      aspectRatio: 16 / 9,
       borderRadius: 16,
       overflow: 'hidden',
       marginBottom: 18,
       backgroundColor: colors.background,
-      borderWidth: 1,
-      borderColor: colors.border,
     },
     primaryCta: {
       flexDirection: 'row',
@@ -307,6 +298,7 @@ export default function EditHomeHeroScreen() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const colors = useColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const isAdmin = useAuthStore((s) => s.isAdmin);
@@ -318,6 +310,15 @@ export default function EditHomeHeroScreen() {
   const [showUploadSuccessModal, setShowUploadSuccessModal] = useState(false);
   const [uploadSuccessAnimKey, setUploadSuccessAnimKey] = useState(0);
   const [heroPreviewLayout, setHeroPreviewLayout] = useState<{ w: number; h: number } | null>(null);
+
+  /** Taller preview strip (~admin hero proportions) without crowding the whole screen */
+  const heroPreviewPixelHeight = useMemo(
+    () =>
+      Math.round(
+        Math.min(windowHeight * 0.56, Math.max(340, (windowWidth - 32) * 1.52)),
+      ),
+    [windowHeight, windowWidth],
+  );
 
   const items: HeroImage[] = useMemo(() => images.map((url) => ({ url })), [images]);
   const busy = isUploading || isSaving;
@@ -484,31 +485,21 @@ export default function EditHomeHeroScreen() {
   const listHeader = useMemo(
     () => (
       <View>
-        <Text style={styles.intro}>{t('settings.profile.homeHeroSubtitle')}</Text>
-
-        <View style={styles.statusRow}>
-          {isUploading ? (
+        {isUploading || isSaving ? (
+          <View style={styles.statusRow}>
             <View style={styles.statusPill}>
               <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={styles.statusPillText}>{t('settings.common.uploading', 'Uploading...')}</Text>
-            </View>
-          ) : isSaving ? (
-            <View style={styles.statusPill}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={styles.statusPillText}>{t('settings.common.saving', 'Saving...')}</Text>
-            </View>
-          ) : images.length > 0 ? (
-            <View style={styles.statusPill}>
-              <Ionicons name="images-outline" size={18} color={colors.textSecondary} />
               <Text style={styles.statusPillText}>
-                {t('settings.profile.heroImagesCount', { count: images.length })}
+                {isUploading
+                  ? t('settings.common.uploading', 'Uploading...')
+                  : t('settings.common.saving', 'Saving...')}
               </Text>
             </View>
-          ) : null}
-        </View>
+          </View>
+        ) : null}
 
         <View
-          style={styles.heroPreviewHost}
+          style={[styles.heroPreviewHost, { height: heroPreviewPixelHeight }]}
           onLayout={(e) => {
             const w = e.nativeEvent.layout.width;
             const h = e.nativeEvent.layout.height;
@@ -555,11 +546,11 @@ export default function EditHomeHeroScreen() {
       busy,
       colors.background,
       colors.primary,
-      colors.textSecondary,
       images,
       isSaving,
       isUploading,
       heroPreviewLayout,
+      heroPreviewPixelHeight,
       styles,
       t,
       pickAndUpload,

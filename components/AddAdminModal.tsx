@@ -172,15 +172,8 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
       );
 
       if (result.ok) {
-        Alert.alert(t('success.generic', 'Success'), t('settings.admin.addSuccess', 'Admin user added successfully'), [
-          {
-            text: t('ok', 'OK'),
-            onPress: () => {
-              handleClose();
-              onSuccess();
-            },
-          },
-        ]);
+        handleClose();
+        onSuccess();
       } else {
         const dup =
           result.code === '23505' || /duplicate|unique constraint/i.test(String(result.error || ''));
@@ -289,9 +282,6 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
                         returnKeyType="next"
                         accessibilityLabel={t('settings.admin.fullNameLabel', 'Full name')}
                       />
-                      <Text style={[styles.profileNameRequiredStar, { color: businessColors.error }]} accessibilityElementsHidden>
-                        *
-                      </Text>
                     </View>
 
                     <View
@@ -319,12 +309,9 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
                         onBlur={() => setPhoneFocused(false)}
                         returnKeyType="next"
                       />
-                      <Text style={[styles.profileNameRequiredStar, { color: businessColors.error }]} accessibilityElementsHidden>
-                        *
-                      </Text>
                     </View>
                     {phone.trim().length > 0 && !canonicalPhone ? (
-                      <Text style={[styles.errorOnHero, { color: businessColors.error, textAlign: inputAlign }]}>
+                      <Text style={[styles.errorOnHero, styles.errorOnHeroPhoneInvalid, { textAlign: inputAlign }]}>
                         {t('settings.admin.phoneInvalid', 'Invalid phone number')}
                       </Text>
                     ) : null}
@@ -355,9 +342,6 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
                         autoComplete="off"
                         textContentType="password"
                       />
-                      <Text style={[styles.profileNameRequiredStar, { color: businessColors.error }]} accessibilityElementsHidden>
-                        *
-                      </Text>
                     </View>
                     <Text style={[styles.softHint, { color: heroMuted }]}>{t('settings.admin.passwordHint', 'At least 6 characters')}</Text>
 
@@ -388,9 +372,6 @@ export default function AddAdminModal({ visible, onClose, onSuccess }: AddAdminM
                         autoComplete="off"
                         textContentType="password"
                       />
-                      <Text style={[styles.profileNameRequiredStar, { color: businessColors.error }]} accessibilityElementsHidden>
-                        *
-                      </Text>
                     </View>
                     {confirmPassword.length > 0 && password !== confirmPassword ? (
                       <Text style={[styles.errorOnHero, { color: businessColors.error, textAlign: inputAlign }]}>
@@ -534,14 +515,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     margin: 0,
   },
-  profileNameRequiredStar: {
-    fontSize: 20,
-    fontWeight: '800',
-    lineHeight: 24,
-    paddingBottom: 6,
-    marginLeft: 4,
-    marginRight: 4,
-  },
   softHint: {
     fontSize: 14,
     textAlign: 'center',
@@ -552,6 +525,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 8,
     width: '100%',
+  },
+  /** Softer on dark purple gradient than `businessColors.error` */
+  errorOnHeroPhoneInvalid: {
+    color: '#fecaca',
+    fontWeight: '600',
   },
   btnWrap: {
     marginTop: 10,

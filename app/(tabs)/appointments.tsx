@@ -401,23 +401,6 @@ function _isAppointmentFullyInPast(apt: AvailableTimeSlot): boolean {
   return end < Date.now();
 }
 
-function _adminAppointmentStatusLabel(status: string, tHe: (key: string, fallback: string) => string) {
-  switch (status) {
-    case 'confirmed':
-      return tHe('admin.appointments.statusConfirmed', 'מאושר');
-    case 'pending':
-      return tHe('admin.appointments.statusPending', 'ממתין');
-    case 'cancelled':
-      return tHe('admin.appointments.statusCancelled', 'בוטל');
-    case 'completed':
-      return tHe('admin.appointments.statusCompleted', 'הושלם');
-    case 'no_show':
-      return tHe('admin.appointments.statusNoShow', 'לא הגיע/ה');
-    default:
-      return status || '—';
-  }
-}
-
 function _clientInitials(name: string) {
   const parts = String(name || '')
     .trim()
@@ -426,24 +409,6 @@ function _clientInitials(name: string) {
   if (parts.length === 0) return '?';
   if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
   return `${parts[0]![0] ?? ''}${parts[parts.length - 1]![0] ?? ''}`.toUpperCase() || '?';
-}
-
-/** תג סטטוס על רקע בהיר מעל גרדיאנט */
-function _appointmentStatusPillColors(status: string): { bg: string; text: string } {
-  switch (status) {
-    case 'confirmed':
-      return { bg: 'rgba(255,255,255,0.94)', text: '#166534' };
-    case 'pending':
-      return { bg: 'rgba(255,255,255,0.94)', text: '#B45309' };
-    case 'cancelled':
-      return { bg: 'rgba(255,255,255,0.88)', text: '#64748B' };
-    case 'completed':
-      return { bg: 'rgba(255,255,255,0.94)', text: '#1D4ED8' };
-    case 'no_show':
-      return { bg: 'rgba(255,255,255,0.94)', text: '#B91C1C' };
-    default:
-      return { bg: 'rgba(255,255,255,0.9)', text: '#334155' };
-  }
 }
 
 function _formatGregorianMonthYear(date: Date) {
@@ -1041,6 +1006,7 @@ export default function AdminAppointmentsScreen() {
     appointment: AvailableTimeSlot | null;
     anchor: AnchorRect | null;
   }>({ open: false, appointment: null, anchor: null });
+  const [actionsAnchorSheetContentH, setActionsAnchorSheetContentH] = useState(0);
 
   /** Open confirm dialog only after anchor sheet Modal unmounts — avoids invisible layer / wrong z-order (esp. Android). */
   const pendingDeleteAppointmentRef = useRef<AvailableTimeSlot | null>(null);
@@ -1848,6 +1814,10 @@ export default function AdminAppointmentsScreen() {
   const resetActionsModal = useCallback(() => {
     setActionsModal({ open: false, appointment: null, anchor: null });
   }, []);
+
+  useEffect(() => {
+    setActionsAnchorSheetContentH(0);
+  }, [actionsModal.appointment?.id]);
 
   const beginDeleteAppointmentFromSheet = useCallback(
     (apt: AvailableTimeSlot) => {
@@ -2750,6 +2720,7 @@ export default function AdminAppointmentsScreen() {
           anchor={actionsModal.anchor}
           onRequestClose={requestCloseActionsModal}
           onDismissed={onAnchorSheetFullyDismissed}
+          contentHeight={actionsAnchorSheetContentH}
         >
           <ScrollView
             style={styles.actionsSheetScroll}
@@ -2757,6 +2728,9 @@ export default function AdminAppointmentsScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             bounces={false}
+            onContentSizeChange={(_, h) => {
+              if (h > 0) setActionsAnchorSheetContentH(h);
+            }}
           >
             {actionsModal.appointment ? (
               (() => {
@@ -2773,7 +2747,6 @@ export default function AdminAppointmentsScreen() {
                 const phoneLine = (apt.client_phone || '').trim();
                 const dateLine = _formatSlotDateLine(apt.slot_date);
                 const initials = _clientInitials(clientLine === dash ? '' : clientLine);
-                const statusPill = _appointmentStatusPillColors(apt.status);
                 const chipRowDir = isRtl ? 'row-reverse' : 'row';
                 const heroChip = (icon: React.ComponentProps<typeof Ionicons>['name'], text: string, chipKey: string) => (
                   <View
@@ -2788,9 +2761,6 @@ export default function AdminAppointmentsScreen() {
                 );
                 return (
                   <>
-                    <View style={styles.actionsSheetHandleWrap}>
-                      <View style={styles.actionsSheetHandle} />
-                    </View>
                     <View style={styles.actionsHeroOuter}>
                       <LinearGradient
                         colors={[calendarPrimary, calendarSecondary]}
@@ -2843,89 +2813,82 @@ export default function AdminAppointmentsScreen() {
                               'dur'
                             )}
                           </View>
-                          <View
-                            style={[
-                              styles.actionsHeroStatusPill,
-                              { backgroundColor: statusPill.bg },
-                              { alignSelf: 'flex-start' },
-                            ]}
-                          >
-                            <Text style={[styles.actionsHeroStatusText, { color: statusPill.text }]}>
-                              {_adminAppointmentStatusLabel(apt.status, tHe)}
-                            </Text>
-                          </View>
                         </View>
                       </LinearGradient>
                     </View>
 
+                    <View style={styles.actionsSheetBody}>
                     {phoneLine ? (
-                      <View style={styles.actionsPhoneCard}>
-                        <View style={[styles.actionsPhoneIconWrap, { backgroundColor: _primaryOnWhite(calendarPrimary, 0.14) }]}>
-                          <Ionicons name="call-outline" size={20} color={calendarPrimary} />
-                        </View>
-                        <View style={styles.actionsPhoneTextCol}>
-                          <Text style={[styles.actionsPhoneLabel, { textAlign: 'left' }]}>
-                            {tHe('admin.appointments.phoneCardLabel', 'טלפון לחיוג')}
-                          </Text>
-                          <Text
-                            style={[styles.actionsPhoneValue, { textAlign: 'left' }]}
-                            selectable
+                      <View
+                        style={[
+                          styles.actionsSecondaryActionsRow,
+                          { flexDirection: isRtl ? 'row-reverse' : 'row' },
+                        ]}
+                      >
+                        <PressableScale
+                          style={[styles.actionsSecondaryCard, styles.actionsSecondaryCardInRow]}
+                          accessibilityLabel={tHe('admin.appointments.callClient', 'חייג ללקוח')}
+                          onPress={async () => {
+                            const phone = actionsModal.appointment?.client_phone;
+                            requestCloseActionsModal();
+                            if (phone) await startPhoneCall(phone);
+                          }}
+                        >
+                          <View
+                            style={[
+                              styles.actionsSecondaryIconPrimary,
+                              { backgroundColor: _primaryOnWhite(calendarPrimary, 0.14) },
+                            ]}
                           >
-                            {phoneLine}
-                          </Text>
-                        </View>
+                            <Ionicons name="call-outline" size={16} color={calendarPrimary} />
+                          </View>
+                          <View style={styles.actionsSecondaryTitleWrap}>
+                            <Text
+                              style={[styles.actionsSecondaryTitlePrimary, { color: calendarPrimary }]}
+                              numberOfLines={1}
+                            >
+                              {tHe('admin.appointments.callClient', 'חייג ללקוח')}
+                            </Text>
+                          </View>
+                        </PressableScale>
+                        <PressableScale
+                          style={[styles.actionsSecondaryCard, styles.actionsSecondaryCardInRow]}
+                          accessibilityLabel={tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
+                          onPress={() => {
+                            const a = actionsModal.appointment;
+                            if (a) beginDeleteAppointmentFromSheet(a);
+                          }}
+                        >
+                          <View style={styles.actionsSecondaryIconDanger}>
+                            <Ionicons name="trash-outline" size={16} color={Colors.error} />
+                          </View>
+                          <View style={styles.actionsSecondaryTitleWrap}>
+                            <Text style={styles.actionsSecondaryTitleDanger} numberOfLines={1}>
+                              {tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
+                            </Text>
+                          </View>
+                        </PressableScale>
                       </View>
-                    ) : null}
-
-                    <Text
-                      style={[styles.actionsSectionLabel, { textAlign: 'left' }]}
-                    >
-                      {tHe('admin.appointments.actionsSection', 'פעולות')}
-                    </Text>
-
-                    {phoneLine ? (
+                    ) : (
                       <PressableScale
-                        style={styles.actionsPrimaryBtnWrap}
-                        accessibilityLabel={tHe('admin.appointments.callClient', 'חייג ללקוח')}
-                        onPress={async () => {
-                          const phone = actionsModal.appointment?.client_phone;
-                          requestCloseActionsModal();
-                          if (phone) await startPhoneCall(phone);
+                        style={styles.actionsSecondaryCard}
+                        accessibilityLabel={tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
+                        onPress={() => {
+                          const a = actionsModal.appointment;
+                          if (a) beginDeleteAppointmentFromSheet(a);
                         }}
                       >
-                        <LinearGradient
-                          colors={[calendarPrimary, calendarSecondary]}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 0 }}
-                          style={styles.actionsPrimaryBtnGradient}
-                        >
-                          <Ionicons name="call" size={18} color="#FFFFFF" />
-                          <Text style={styles.actionsPrimaryBtnText}>{tHe('admin.appointments.callClient', 'חייג ללקוח')}</Text>
-                        </LinearGradient>
+                        <View style={styles.actionsSecondaryIconDanger}>
+                          <Ionicons name="trash-outline" size={16} color={Colors.error} />
+                        </View>
+                        <View style={styles.actionsSecondaryTitleWrap}>
+                          <Text style={styles.actionsSecondaryTitleDanger} numberOfLines={1}>
+                            {tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
+                          </Text>
+                        </View>
                       </PressableScale>
-                    ) : null}
-
-                    <PressableScale
-                      style={styles.actionsSecondaryCard}
-                      accessibilityLabel={tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
-                      onPress={() => {
-                        const a = actionsModal.appointment;
-                        if (a) beginDeleteAppointmentFromSheet(a);
-                      }}
-                    >
-                      <View style={styles.actionsSecondaryIconDanger}>
-                        <Ionicons name="trash-outline" size={18} color={Colors.error} />
-                      </View>
-                      <Text style={styles.actionsSecondaryTitleDanger}>{tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}</Text>
-                    </PressableScale>
-
-                    <PressableScale
-                      style={styles.actionsDismissBtn}
-                      accessibilityLabel={tHe('close', 'סגור')}
-                      onPress={requestCloseActionsModal}
-                    >
-                      <Text style={[styles.actionsDismissBtnText, { color: calendarPrimary }]}>{tHe('close', 'סגור')}</Text>
-                    </PressableScale>
+                    )}
+                    </View>
                   </>
                 );
               })()
@@ -3858,21 +3821,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   actionsSheetScrollContent: {
-    paddingBottom: 12,
-    flexGrow: 1,
-  },
-  actionsSheetHandleWrap: {
-    alignItems: 'center',
-    paddingTop: 6,
-    paddingBottom: 4,
-  },
-  actionsSheetHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(148,163,184,0.45)',
+    paddingBottom: 6,
   },
   actionsHeroOuter: {
+    marginTop: 12,
     marginHorizontal: 10,
     borderRadius: 16,
     overflow: 'hidden',
@@ -3889,8 +3841,8 @@ const styles = StyleSheet.create({
   },
   actionsHeroGradient: {
     borderRadius: 16,
-    paddingTop: 14,
-    paddingBottom: 12,
+    paddingTop: 12,
+    paddingBottom: 10,
     paddingHorizontal: 14,
   },
   actionsHeroCloseBtn: {
@@ -3952,7 +3904,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-    marginTop: 10,
+    marginTop: 8,
     alignItems: 'center',
   },
   actionsHeroChip: {
@@ -3972,113 +3924,35 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.98)',
     flexShrink: 1,
   },
-  actionsHeroStatusPill: {
-    marginTop: 8,
-    paddingVertical: 5,
-    paddingHorizontal: 11,
-    borderRadius: 16,
+  actionsSheetBody: {
+    paddingTop: 26,
+    paddingBottom: 8,
   },
-  actionsHeroStatusText: {
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.15,
-  },
-  actionsPhoneCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 10,
+  actionsSecondaryActionsRow: {
     marginHorizontal: 14,
-    padding: 11,
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: 'rgba(15,23,42,0.06)',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0f172a',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.06,
-        shadowRadius: 12,
-      },
-      android: { elevation: 2 },
-      default: {},
-    }),
+    marginTop: 0,
+    gap: 8,
+    alignItems: 'stretch',
   },
-  actionsPhoneIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionsPhoneTextCol: {
+  actionsSecondaryCardInRow: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
-  },
-  actionsPhoneLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.subtext,
-    letterSpacing: 0.2,
-  },
-  actionsPhoneValue: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: Colors.text,
-    letterSpacing: 0.2,
-  },
-  actionsSectionLabel: {
-    marginTop: 12,
-    marginBottom: 6,
-    marginHorizontal: 16,
-    fontSize: 12,
-    fontWeight: '800',
-    color: Colors.subtext,
-    letterSpacing: 0.8,
-  },
-  actionsPrimaryBtnWrap: {
-    marginHorizontal: 14,
-    borderRadius: 14,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0f172a',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.15,
-        shadowRadius: 10,
-      },
-      android: { elevation: 4 },
-      default: {},
-    }),
-  },
-  actionsPrimaryBtnGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  actionsPrimaryBtnText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.15,
+    marginHorizontal: 0,
+    marginTop: 0,
   },
   actionsSecondaryCard: {
     marginHorizontal: 14,
-    marginTop: 6,
+    marginTop: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 11,
-    paddingHorizontal: 12,
+    gap: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 11,
     borderRadius: 14,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: 'rgba(15,23,42,0.07)',
+    direction: 'ltr',
   },
   actionsSecondaryIconWarn: {
     width: 38,
@@ -4089,11 +3963,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   actionsSecondaryIconDanger: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     backgroundColor: '#FEF2F2',
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionsSecondaryIconPrimary: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionsSecondaryTitleWrap: {
+    flex: 1,
+    minWidth: 0,
     justifyContent: 'center',
   },
   actionsSecondaryTitleWarn: {
@@ -4103,23 +3989,17 @@ const styles = StyleSheet.create({
     color: '#C2410C',
   },
   actionsSecondaryTitleDanger: {
-    flex: 1,
-    fontSize: 15,
+    width: '100%',
+    fontSize: 14,
     fontWeight: '700',
     color: Colors.error,
+    textAlign: 'right',
   },
-  actionsDismissBtn: {
-    marginTop: 8,
-    marginHorizontal: 14,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: 'rgba(15,23,42,0.04)',
-  },
-  actionsDismissBtnText: {
-    fontSize: 15,
-    fontWeight: '800',
+  actionsSecondaryTitlePrimary: {
+    width: '100%',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'right',
   },
   moreButton: {
     width: 28,

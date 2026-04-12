@@ -25,6 +25,7 @@ import { supabase } from '@/lib/supabase';
 import { compressImages } from '@/lib/utils/imageCompression';
 import { useAuthStore } from '@/stores/authStore';
 import { useColors, type ThemeColors } from '@/src/theme/ThemeProvider';
+import { AdminHomeHeroMarquee } from '@/components/home/AdminHomeHeroMarquee';
 
 type HeroImage = { url: string };
 
@@ -142,21 +143,6 @@ function createStyles(colors: ThemeColors) {
       marginBottom: 16,
       textAlign: 'center',
     },
-    tipsCard: {
-      backgroundColor: colors.background,
-      borderRadius: 16,
-      paddingVertical: 14,
-      paddingHorizontal: 16,
-      marginBottom: 20,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    heroUploadHintSingle: {
-      fontSize: 15,
-      lineHeight: 22,
-      color: colors.text,
-      textAlign: 'center',
-    },
     statusRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -181,31 +167,16 @@ function createStyles(colors: ThemeColors) {
       fontWeight: '600',
       color: colors.textSecondary,
     },
-    previewCard: {
+    /** Live admin-home-style marquee; same geometry rules as full-screen hero, scaled by measured width */
+    heroPreviewHost: {
+      width: '100%',
+      aspectRatio: 16 / 9,
       borderRadius: 16,
       overflow: 'hidden',
       marginBottom: 18,
-      backgroundColor: colors.border,
+      backgroundColor: colors.background,
       borderWidth: 1,
       borderColor: colors.border,
-    },
-    previewImage: {
-      width: '100%',
-      aspectRatio: 16 / 9,
-    },
-    previewLabel: {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      paddingVertical: 10,
-      paddingHorizontal: 14,
-      backgroundColor: 'rgba(0,0,0,0.5)',
-    },
-    previewLabelText: {
-      color: '#fff',
-      fontSize: 13,
-      fontWeight: '600',
     },
     primaryCta: {
       flexDirection: 'row',
@@ -225,18 +196,6 @@ function createStyles(colors: ThemeColors) {
     },
     primaryCtaDisabled: {
       opacity: 0.45,
-    },
-    resetPressable: {
-      alignSelf: 'center',
-      marginTop: 14,
-      marginBottom: 8,
-      paddingVertical: 10,
-      paddingHorizontal: 16,
-    },
-    resetText: {
-      fontSize: 15,
-      fontWeight: '600',
-      color: colors.error,
     },
     sectionLabelRow: {
       flexDirection: 'row',
@@ -358,6 +317,7 @@ export default function EditHomeHeroScreen() {
   const [isUploading, setIsUploading] = useState(false);
   const [showUploadSuccessModal, setShowUploadSuccessModal] = useState(false);
   const [uploadSuccessAnimKey, setUploadSuccessAnimKey] = useState(0);
+  const [heroPreviewLayout, setHeroPreviewLayout] = useState<{ w: number; h: number } | null>(null);
 
   const items: HeroImage[] = useMemo(() => images.map((url) => ({ url })), [images]);
   const busy = isUploading || isSaving;
@@ -521,33 +481,10 @@ export default function EditHomeHeroScreen() {
     [images, save]
   );
 
-  const resetToDefault = useCallback(async () => {
-    if (busy) return;
-    Alert.alert(t('settings.profile.heroResetAlertTitle', 'Reset'), t('settings.profile.resetHeroConfirm'), [
-      { text: t('cancel', 'Cancel'), style: 'cancel' },
-      {
-        text: t('confirm', 'Confirm'),
-        style: 'destructive',
-        onPress: async () => {
-          await save([]);
-        },
-      },
-    ]);
-  }, [busy, save, t]);
-
   const listHeader = useMemo(
     () => (
       <View>
         <Text style={styles.intro}>{t('settings.profile.homeHeroSubtitle')}</Text>
-
-        <View style={styles.tipsCard}>
-          <Text style={styles.heroUploadHintSingle}>
-            {t(
-              'settings.profile.heroAnimationUploadHint',
-              'The animation needs at least one image. Select up to your device’s maximum each time, and add more in further uploads if you want.'
-            )}
-          </Text>
-        </View>
 
         <View style={styles.statusRow}>
           {isUploading ? (
@@ -570,14 +507,26 @@ export default function EditHomeHeroScreen() {
           ) : null}
         </View>
 
-        {images.length > 0 && (
-          <View style={styles.previewCard}>
-            <Image source={{ uri: images[0] }} style={styles.previewImage} contentFit="cover" />
-            <View style={styles.previewLabel}>
-              <Text style={styles.previewLabelText}>{t('settings.profile.heroPreviewLabel')}</Text>
-            </View>
-          </View>
-        )}
+        <View
+          style={styles.heroPreviewHost}
+          onLayout={(e) => {
+            const w = e.nativeEvent.layout.width;
+            const h = e.nativeEvent.layout.height;
+            if (w > 0 && h > 0) {
+              setHeroPreviewLayout((prev) => (prev?.w === w && prev?.h === h ? prev : { w, h }));
+            }
+          }}
+        >
+          {heroPreviewLayout ? (
+            <AdminHomeHeroMarquee
+              customImageUrls={images}
+              layoutWidth={heroPreviewLayout.w}
+              layoutHeight={heroPreviewLayout.h}
+              keyPrefix="edit-home-hero"
+              marqueePointerEvents="none"
+            />
+          ) : null}
+        </View>
 
         <Pressable
           onPress={pickAndUpload}
@@ -595,12 +544,6 @@ export default function EditHomeHeroScreen() {
         </Pressable>
 
         {images.length > 0 && (
-          <Pressable onPress={resetToDefault} disabled={busy} style={styles.resetPressable}>
-            <Text style={[styles.resetText, busy && { opacity: 0.45 }]}>{t('settings.profile.resetToDefault')}</Text>
-          </Pressable>
-        )}
-
-        {images.length > 0 && (
           <View style={styles.sectionLabelRow}>
             <Text style={styles.sectionTitle}>{t('settings.profile.heroYourImages')}</Text>
             <Text style={styles.sectionCount}>{t('settings.profile.heroImagesCount', { count: images.length })}</Text>
@@ -616,10 +559,10 @@ export default function EditHomeHeroScreen() {
       images,
       isSaving,
       isUploading,
+      heroPreviewLayout,
       styles,
       t,
       pickAndUpload,
-      resetToDefault,
     ]
   );
 

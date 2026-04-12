@@ -34,7 +34,7 @@ import MovingBorderCard from '@/components/MovingBorderCard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Appointment as AvailableTimeSlot } from '@/lib/supabase';
-import { businessProfileApi } from '@/lib/api/businessProfile';
+import { businessProfileApi, getHomeHeaderTitleWhenLogoHidden } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
 import type { BusinessProfile, WaitlistEntry } from '@/lib/supabase';
 import DesignCarousel from '@/components/DesignCarousel';
@@ -1353,9 +1353,18 @@ export default function ClientHomeScreen() {
         pointerEvents="none"
         style={[styles.overlayHeaderLogoOnly, { top: insets.top - 15 }]}
       >
-        <View style={styles.headerLogoInner}>
-          <Image source={getHomeLogoSource(businessProfile)} style={styles.overlayLogo} resizeMode="contain" />
-        </View>
+        {businessProfile?.home_header_show_logo !== false ? (
+          <View style={styles.headerLogoInner}>
+            <Image source={getHomeLogoSource(businessProfile)} style={styles.overlayLogo} resizeMode="contain" />
+          </View>
+        ) : (
+          <View style={styles.clientHomeHeaderTitleNoLogoWrap}>
+            <Text style={styles.clientHomeHeaderTitleNoLogo} numberOfLines={2}>
+              {getHomeHeaderTitleWhenLogoHidden(businessProfile) ||
+                t('settings.profile.displayNameFallbackShort', 'Business')}
+            </Text>
+          </View>
+        )}
       </View>
 
       <Modal
@@ -1603,6 +1612,28 @@ const styles = StyleSheet.create<any>({
     height: CLIENT_HOME_LOGO_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  /** Taller box when showing title instead of logo (matches admin name header) */
+  clientHomeHeaderTitleNoLogoWrap: {
+    minWidth: Math.min(CLIENT_HOME_LOGO_WIDTH, SCREEN_WIDTH - 36),
+    maxWidth: SCREEN_WIDTH - 32,
+    minHeight: Math.max(CLIENT_HOME_LOGO_HEIGHT, 104),
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  /** Same typography as admin `overlayBusinessName` when logo is hidden */
+  clientHomeHeaderTitleNoLogo: {
+    color: '#FFFFFF',
+    fontSize: Platform.select({ ios: 36, android: 34, default: 34 }),
+    fontWeight: '800',
+    fontFamily: Platform.select({ ios: 'Avenir Next', default: undefined }),
+    textAlign: 'center',
+    lineHeight: Platform.select({ ios: 42, android: 40, default: 40 }),
+    letterSpacing: Platform.select({ ios: -1.1, android: -0.7, default: -0.8 }),
+    textShadowColor: 'rgba(0,0,0,0.48)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 10,
   },
   /** Full-width safe area so the sheet is not inset from screen edges (admin home is edge-to-edge white). */
   clientHomeSafeArea: {

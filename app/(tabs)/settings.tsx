@@ -28,6 +28,7 @@ import {
   Facebook,
   MapPin,
   Calendar,
+  Phone,
   Home,
   Clock,
   User,
@@ -143,7 +144,11 @@ export default function SettingsScreen() {
   // Notification modal states
   // Add admin modal state
   const [showAddAdminModal, setShowAddAdminModal] = useState(false);
-  
+  const [removeEmployeeDialog, setRemoveEmployeeDialog] = useState<{ id: string; name: string } | null>(null);
+  const [removeEmployeeLoading, setRemoveEmployeeLoading] = useState(false);
+  const [deleteServiceDialog, setDeleteServiceDialog] = useState<{ id: string } | null>(null);
+  const [deleteServiceLoading, setDeleteServiceLoading] = useState(false);
+
   // Delete account modal state
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
   const [isLanguageOpen, setIsLanguageOpen] = useState(false);
@@ -165,6 +170,8 @@ export default function SettingsScreen() {
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileDisplayName, setProfileDisplayName] = useState('');
+  /** Custom home header line when logo is hidden (saved to `home_header_text_without_logo`). */
+  const [homeHeaderNoLogoTitleDraft, setHomeHeaderNoLogoTitleDraft] = useState('');
   const [profileAddress, setProfileAddress] = useState('');
   const [profileInstagram, setProfileInstagram] = useState('');
   const [profileFacebook, setProfileFacebook] = useState('');
@@ -188,10 +195,6 @@ export default function SettingsScreen() {
   const [showEditTiktokModal, setShowEditTiktokModal] = useState(false);
   const [showEditCancellationModal, setShowEditCancellationModal] = useState(false);
   const [showBookingWindowModal, setShowBookingWindowModal] = useState(false);
-  const [bookingSaveSuccessDialog, setBookingSaveSuccessDialog] = useState<{
-    title: string;
-    message: string;
-  } | null>(null);
   const [bookingWindowDraft, setBookingWindowDraft] = useState('7');
   const bookingDaysRulerRef = useRef<BookingDaysRulerHandle>(null);
   const clientReminderHoursRulerRef = useRef<BookingDaysRulerHandle>(null);
@@ -323,6 +326,10 @@ export default function SettingsScreen() {
       loadBusinessProfile();
     }, [loadBusinessProfile])
   );
+
+  useEffect(() => {
+    setHomeHeaderNoLogoTitleDraft(String(profile?.home_header_text_without_logo ?? ''));
+  }, [profile?.home_header_text_without_logo]);
 
   useEffect(() => {
     (async () => {
@@ -778,10 +785,6 @@ export default function SettingsScreen() {
     const ok = await persistBookingOpenDays(bookingWindowDraft);
     if (ok) {
       setShowBookingWindowModal(false);
-      setBookingSaveSuccessDialog({
-        title: t('success.generic', 'Success'),
-        message: t('settings.profile.bookingWindowSaved', 'Booking window updated successfully'),
-      });
     }
   };
 
@@ -1499,6 +1502,26 @@ export default function SettingsScreen() {
     }
   };
 
+  const saveHomeHeaderTextWithoutLogoIfChanged = async () => {
+    const raw = homeHeaderNoLogoTitleDraft.trim();
+    const stored = String(profile?.home_header_text_without_logo ?? '').trim();
+    if (raw === stored) return;
+    setIsSavingProfile(true);
+    try {
+      const updated = await businessProfileApi.updateHomeHeaderTextWithoutLogo(raw.length > 0 ? raw : null);
+      if (!updated) {
+        Alert.alert(
+          t('error.generic', 'Error'),
+          t('settings.profile.homeHeaderNoLogoTitleSaveFailed', 'Could not save header text'),
+        );
+        return;
+      }
+      setProfile(updated);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   const handleRemoveHomeScreenLogo = () => {
     const url = String(profile?.home_logo_url ?? '').trim();
     if (!/^https?:\/\//i.test(url)) return;
@@ -1590,22 +1613,7 @@ export default function SettingsScreen() {
   };
 
   const handleDeleteService = (id: string) => {
-    Alert.alert(t('settings.services.deleteTitle','Delete service'), t('settings.services.deleteConfirm','Are you sure you want to delete this service?'), [
-      { text: t('cancel','Cancel'), style: 'cancel' },
-      {
-        text: t('settings.services.delete','Delete'), 
-        style: 'destructive',
-        onPress: async () => {
-          const ok = await deleteService(id);
-          if (ok) {
-            setEditableServices(prev => prev.filter(s => s.id !== id));
-            if (expandedServiceId === id) setExpandedServiceId(null);
-          } else {
-            Alert.alert(t('error.generic','Error'), t('settings.services.deleteFailed','Failed to delete service'));
-          }
-        }
-      }
-    ]);
+    setDeleteServiceDialog({ id });
   };
 
   const handleServicesDragEnd = useCallback(({ data: next }: { data: Service[] }) => {
@@ -1831,6 +1839,62 @@ export default function SettingsScreen() {
     }
     void loadAdminEmployeesForTab();
   }, [activeSettingsTab, canSeeAddEmployee, loadAdminEmployeesForTab]);
+
+  const openRemoveEmployeeDialog = useCallback(
+    (adm: any) => {
+      if (adm?.id === user?.id) {
+        Alert.alert(
+          t('settings.admin.actionNotAllowed', 'Action not allowed'),
+          t('settings.admin.cannotRemoveSelf', 'You cannot remove yourself.'),
+        );
+        return;
+      }
+      setRemoveEmployeeDialog({
+        id: adm.id,
+        name: String(adm.name || t('settings.admin.thisEmployee', 'this employee')),
+      });
+    },
+    [user?.id, t],
+  );
+
+  const confirmRemoveEmployee = useCallback(async () => {
+    if (!removeEmployeeDialog) return;
+    const targetId = removeEmployeeDialog.id;
+    setRemoveEmployeeLoading(true);
+    try {
+      const ok = await usersApi.deleteUserAndAllDataById(targetId);
+      if (ok) {
+        setRemoveEmployeeDialog(null);
+        setAdminUsers((prev) => prev.filter((u) => u.id !== targetId));
+      } else {
+        Alert.alert(t('error.generic', 'Error'), t('settings.admin.removeFailed', 'Failed to remove employee'));
+      }
+    } catch {
+      Alert.alert(t('error.generic', 'Error'), t('settings.admin.removeFailed', 'Failed to remove employee'));
+    } finally {
+      setRemoveEmployeeLoading(false);
+    }
+  }, [removeEmployeeDialog, t]);
+
+  const confirmDeleteService = useCallback(async () => {
+    if (!deleteServiceDialog) return;
+    const targetId = deleteServiceDialog.id;
+    setDeleteServiceLoading(true);
+    try {
+      const ok = await deleteService(targetId);
+      if (ok) {
+        setDeleteServiceDialog(null);
+        setEditableServices((prev) => prev.filter((s) => s.id !== targetId));
+        setExpandedServiceId((e) => (e === targetId ? null : e));
+      } else {
+        Alert.alert(t('error.generic', 'Error'), t('settings.services.deleteFailed', 'Failed to delete service'));
+      }
+    } catch {
+      Alert.alert(t('error.generic', 'Error'), t('settings.services.deleteFailed', 'Failed to delete service'));
+    } finally {
+      setDeleteServiceLoading(false);
+    }
+  }, [deleteServiceDialog, t]);
 
   const renderSettingItem = (
     icon: React.ReactNode,
@@ -2779,7 +2843,7 @@ export default function SettingsScreen() {
                   styles.servicesAddFab,
                   {
                     backgroundColor: businessColors.primary,
-                    bottom: insets.bottom + 20,
+                    bottom: insets.bottom + 8,
                     right: Math.max(16, insets.right + 8),
                   },
                 ]}
@@ -2851,6 +2915,22 @@ export default function SettingsScreen() {
         )}
 
         {canSeeAddEmployee && activeSettingsTab === 'design' && (
+          <ScrollView
+            style={styles.settingsAppointmentsScroll}
+            contentContainerStyle={[
+              styles.settingsAppointmentsScrollContent,
+              {
+                paddingBottom:
+                  insets.bottom +
+                  120 +
+                  (Platform.OS === 'android' ? settingsKeyboardInset : 0),
+              },
+            ]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+            showsVerticalScrollIndicator={false}
+            automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          >
         <View style={styles.settingsTabPanel}>
           <View style={styles.settingsAccordionBody}>
               <View style={styles.colorPickerWrapper}>
@@ -2877,7 +2957,7 @@ export default function SettingsScreen() {
                     <Text style={styles.settingSubtitleLTR}>
                       {t(
                         'settings.profile.homeHeaderShowLogoSubtitle',
-                        'When off, your business display name is shown in large text instead (manager and client home).',
+                        'When off, set a custom name for the top of the home screen (manager and client). Leave blank to use the business display name.',
                       )}
                     </Text>
                   </View>
@@ -2898,6 +2978,61 @@ export default function SettingsScreen() {
                     ios_backgroundColor="#E5E5EA"
                   />
                 </View>
+                {profile?.home_header_show_logo === false ? (
+                  <View style={styles.homeHeaderNoLogoTitleBlock}>
+                    <Text style={styles.homeHeaderNoLogoTitleLabel}>
+                      {t('settings.profile.homeHeaderNoLogoTitleLabel', 'Name at top of home (no logo)')}
+                    </Text>
+                    <Text style={styles.homeHeaderNoLogoTitleHint}>
+                      {t(
+                        'settings.profile.homeHeaderNoLogoTitleHint',
+                        'Leave empty to use the business display name from business details.',
+                      )}
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.homeHeaderNoLogoTitleInput,
+                        {
+                          textAlign: editAdminInputsRtl ? 'right' : 'left',
+                          writingDirection: editAdminInputsRtl ? 'rtl' : 'ltr',
+                        },
+                      ]}
+                      value={homeHeaderNoLogoTitleDraft}
+                      onChangeText={setHomeHeaderNoLogoTitleDraft}
+                      onBlur={() => void saveHomeHeaderTextWithoutLogoIfChanged()}
+                      placeholder={
+                        (profileDisplayName || '').trim() ||
+                        t('settings.profile.displayNameFallbackShort', 'Business')
+                      }
+                      placeholderTextColor="#8E8E93"
+                      maxLength={120}
+                      editable={!isSavingProfile && !isUploadingHomeLogo}
+                    />
+                    <TouchableOpacity
+                      style={[
+                        styles.homeFixedMessageSaveButton,
+                        {
+                          backgroundColor: businessColors.primary,
+                          opacity: isSavingProfile || isUploadingHomeLogo ? 0.55 : 1,
+                        },
+                      ]}
+                      onPress={async () => {
+                        await saveHomeHeaderTextWithoutLogoIfChanged();
+                        Keyboard.dismiss();
+                      }}
+                      disabled={isSavingProfile || isUploadingHomeLogo}
+                      activeOpacity={0.88}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('save', 'Save')}
+                    >
+                      <Text style={styles.homeFixedMessageSaveButtonText}>
+                        {isSavingProfile
+                          ? t('settings.common.saving', 'Saving...')
+                          : t('save', 'Save')}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
                 <View style={styles.homeLogoDesignRow}>
                   <View style={styles.homeLogoPreviewWrap}>
                     <Image
@@ -2958,6 +3093,7 @@ export default function SettingsScreen() {
               )}
           </View>
         </View>
+          </ScrollView>
         )}
 
         {canSeeAddEmployee && activeSettingsTab === 'employees' && (
@@ -2994,32 +3130,7 @@ export default function SettingsScreen() {
                                 <TouchableOpacity
                                   style={styles.swipeDeleteAction}
                                   activeOpacity={0.85}
-                                  onPress={() => {
-                                    if (adm.id === user?.id) {
-                                      Alert.alert(t('settings.admin.actionNotAllowed', 'Action not allowed'), t('settings.admin.cannotRemoveSelf', 'You cannot remove yourself.'));
-                                      return;
-                                    }
-                                    Alert.alert(
-                                      t('settings.admin.removeEmployeeTitle', 'Remove employee'),
-                                      `${t('settings.admin.removeEmployeeConfirm', 'Are you sure you want to remove')} ${adm.name || t('settings.admin.thisEmployee', 'this employee')}?`,
-                                      [
-                                        { text: t('cancel', 'Cancel'), style: 'cancel' },
-                                        {
-                                          text: t('settings.admin.remove', 'Remove'),
-                                          style: 'destructive',
-                                          onPress: async () => {
-                                            const ok = await usersApi.deleteUserAndAllDataById(adm.id);
-                                            if (ok) {
-                                              setAdminUsers((prev) => prev.filter((u) => u.id !== adm.id));
-                                              Alert.alert(t('success.generic', 'Success'), t('settings.admin.removeSuccess', 'Employee deleted successfully'));
-                                            } else {
-                                              Alert.alert(t('error.generic', 'Error'), t('settings.admin.removeFailed', 'Failed to remove employee'));
-                                            }
-                                          },
-                                        },
-                                      ],
-                                    );
-                                  }}
+                                  onPress={() => openRemoveEmployeeDialog(adm)}
                                   accessibilityRole="button"
                                   accessibilityLabel={t('settings.services.a11yDelete', 'Delete service')}
                                 >
@@ -3044,32 +3155,7 @@ export default function SettingsScreen() {
                                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                                     <TouchableOpacity
                                       style={[styles.iconActionButton, { backgroundColor: '#FFECEC', borderColor: '#FFD1D1' }]}
-                                      onPress={() => {
-                                        if (adm.id === user?.id) {
-                                          Alert.alert(t('settings.admin.actionNotAllowed', 'Action not allowed'), t('settings.admin.cannotRemoveSelf', 'You cannot remove yourself.'));
-                                          return;
-                                        }
-                                        Alert.alert(
-                                          t('settings.admin.removeEmployeeTitle', 'Remove employee'),
-                                          `${t('settings.admin.removeEmployeeConfirm', 'Are you sure you want to remove')} ${adm.name || t('settings.admin.thisEmployee', 'this employee')}?`,
-                                          [
-                                            { text: t('cancel', 'Cancel'), style: 'cancel' },
-                                            {
-                                              text: t('settings.admin.remove', 'Remove'),
-                                              style: 'destructive',
-                                              onPress: async () => {
-                                                const ok = await usersApi.deleteUserAndAllDataById(adm.id);
-                                                if (ok) {
-                                                  setAdminUsers((prev) => prev.filter((u) => u.id !== adm.id));
-                                                  Alert.alert(t('success.generic', 'Success'), t('settings.admin.removeSuccess', 'Employee deleted successfully'));
-                                                } else {
-                                                  Alert.alert(t('error.generic', 'Error'), t('settings.admin.removeFailed', 'Failed to remove employee'));
-                                                }
-                                              },
-                                            },
-                                          ],
-                                        );
-                                      }}
+                                      onPress={() => openRemoveEmployeeDialog(adm)}
                                       accessibilityRole="button"
                                       accessibilityLabel={t('settings.recurring.a11yDelete', 'Delete')}
                                     >
@@ -3091,7 +3177,7 @@ export default function SettingsScreen() {
                   styles.servicesAddFab,
                   {
                     backgroundColor: businessColors.primary,
-                    bottom: insets.bottom + 20,
+                    bottom: insets.bottom + 8,
                     right: Math.max(16, insets.right + 8),
                   },
                 ]}
@@ -3177,7 +3263,6 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         ) : null}
 
-        <Text style={styles.versionText}>{t('settings.sections.version', 'Version')} 1.0.0</Text>
           </View>
         </View>
       </View>
@@ -3208,6 +3293,118 @@ export default function SettingsScreen() {
                 onPress={confirmLogout}
               >
                 <Text style={styles.logoutDialogConfirmText}>{t('profile.logout.confirm', 'Log out')}</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Remove employee — custom sheet (Hebrew RTL text; LTR `direction` on card avoids mirror + textAlign clash) */}
+      <Modal
+        visible={removeEmployeeDialog !== null}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => {
+          if (!removeEmployeeLoading) setRemoveEmployeeDialog(null);
+        }}
+      >
+        <Pressable
+          style={styles.removeEmployeeOverlay}
+          onPress={() => {
+            if (!removeEmployeeLoading) setRemoveEmployeeDialog(null);
+          }}
+        >
+          {/*
+            Force LTR layout on the card so `textAlign: 'right'` is visually the right edge even when
+            the app uses `I18nManager.forceRTL` (avoids double-RTL with `direction: 'rtl'` on the card).
+          */}
+          <Pressable style={[styles.removeEmployeeCard, { direction: 'ltr' }]} onPress={() => {}}>
+            <Text style={styles.removeEmployeeTitle} maxFontSizeMultiplier={1.35}>
+              {t('settings.admin.removeEmployeeTitle', 'Remove employee')}
+            </Text>
+            <Text style={styles.removeEmployeeMessage} maxFontSizeMultiplier={1.35}>
+              {removeEmployeeDialog
+                ? `${t('settings.admin.removeEmployeeConfirm', 'Are you sure you want to remove')} ${removeEmployeeDialog.name}?`
+                : ''}
+            </Text>
+            <View style={styles.removeEmployeeButtonsRow}>
+              <TouchableOpacity
+                style={styles.removeEmployeeBtnCancel}
+                onPress={() => !removeEmployeeLoading && setRemoveEmployeeDialog(null)}
+                disabled={removeEmployeeLoading}
+                activeOpacity={0.88}
+                accessibilityRole="button"
+                accessibilityLabel={t('cancel', 'Cancel')}
+              >
+                <Text style={styles.removeEmployeeBtnCancelText}>{t('cancel', 'Cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.removeEmployeeBtnRemove}
+                onPress={() => void confirmRemoveEmployee()}
+                disabled={removeEmployeeLoading}
+                activeOpacity={0.88}
+                accessibilityRole="button"
+                accessibilityLabel={t('settings.admin.remove', 'Remove')}
+              >
+                {removeEmployeeLoading ? (
+                  <ActivityIndicator size="small" color="#FF3B30" />
+                ) : (
+                  <Text style={styles.removeEmployeeBtnRemoveText}>{t('settings.admin.remove', 'Remove')}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Delete service — same layout as remove-employee confirm */}
+      <Modal
+        visible={deleteServiceDialog !== null}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => {
+          if (!deleteServiceLoading) setDeleteServiceDialog(null);
+        }}
+      >
+        <Pressable
+          style={styles.removeEmployeeOverlay}
+          onPress={() => {
+            if (!deleteServiceLoading) setDeleteServiceDialog(null);
+          }}
+        >
+          <Pressable style={[styles.removeEmployeeCard, { direction: 'ltr' }]} onPress={() => {}}>
+            <Text style={styles.removeEmployeeTitle} maxFontSizeMultiplier={1.35}>
+              {t('settings.services.deleteTitle', 'Delete service')}
+            </Text>
+            <Text style={styles.removeEmployeeMessage} maxFontSizeMultiplier={1.35}>
+              {t('settings.services.deleteConfirm', 'Are you sure you want to delete this service?')}
+            </Text>
+            <View style={styles.removeEmployeeButtonsRow}>
+              <TouchableOpacity
+                style={styles.removeEmployeeBtnCancel}
+                onPress={() => !deleteServiceLoading && setDeleteServiceDialog(null)}
+                disabled={deleteServiceLoading}
+                activeOpacity={0.88}
+                accessibilityRole="button"
+                accessibilityLabel={t('cancel', 'Cancel')}
+              >
+                <Text style={styles.removeEmployeeBtnCancelText}>{t('cancel', 'Cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.removeEmployeeBtnRemove}
+                onPress={() => void confirmDeleteService()}
+                disabled={deleteServiceLoading}
+                activeOpacity={0.88}
+                accessibilityRole="button"
+                accessibilityLabel={t('settings.services.delete', 'Delete')}
+              >
+                {deleteServiceLoading ? (
+                  <ActivityIndicator size="small" color="#FF3B30" />
+                ) : (
+                  <Text style={styles.removeEmployeeBtnRemoveText}>{t('settings.services.delete', 'Delete')}</Text>
+                )}
               </TouchableOpacity>
             </View>
           </Pressable>
@@ -4449,57 +4646,6 @@ export default function SettingsScreen() {
         </SafeAreaView>
       </Modal>
 
-      {/* Booking window save — custom modal (Alert RTL/layout quirks; styled like system success sheet) */}
-      <Modal
-        visible={bookingSaveSuccessDialog !== null}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={() => setBookingSaveSuccessDialog(null)}
-      >
-        <View style={styles.bookingSaveSuccessOverlay} pointerEvents="box-none">
-          <Pressable
-            style={StyleSheet.absoluteFillObject}
-            onPress={() => setBookingSaveSuccessDialog(null)}
-            accessibilityRole="button"
-            accessibilityLabel={t('cancel', 'Close')}
-          />
-          <View
-            style={styles.bookingSaveSuccessCard}
-            accessibilityViewIsModal
-            accessibilityRole="alert"
-          >
-            <View style={styles.bookingSaveSuccessTextBlock}>
-              <Text
-                style={[
-                  styles.bookingSaveSuccessTitle,
-                  isRtlLanguage(i18n.language) ? styles.bookingSaveSuccessTextRtl : styles.bookingSaveSuccessTextLtr,
-                ]}
-              >
-                {bookingSaveSuccessDialog?.title}
-              </Text>
-              <Text
-                style={[
-                  styles.bookingSaveSuccessMessage,
-                  isRtlLanguage(i18n.language) ? styles.bookingSaveSuccessTextRtl : styles.bookingSaveSuccessTextLtr,
-                ]}
-              >
-                {bookingSaveSuccessDialog?.message}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.bookingSaveSuccessOkBtn}
-              onPress={() => setBookingSaveSuccessDialog(null)}
-              activeOpacity={0.88}
-              accessibilityRole="button"
-              accessibilityLabel={t('ok', 'OK')}
-            >
-              <Text style={styles.bookingSaveSuccessOkText}>{t('ok', 'OK')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
       {/* Time selection now uses inline dropdown below the field (no nested modal) */}
       {/* Manage Recurring Appointments Modal */}
       <Modal
@@ -4549,49 +4695,74 @@ export default function SettingsScreen() {
                         <Text style={{ textAlign: 'center', color: Colors.subtext }}>{t('settings.recurring.empty','No recurring appointments')}</Text>
                       ) : (
                         recurringList.map((item, idx) => (
-                          <View key={item.id}>
-                        <View style={[styles.manageItemRow]}> 
-                          <View style={{ backgroundColor: Colors.white, borderRadius: 16, padding: 18, ...shadowStyle }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <View style={{ flex: 1, alignItems: 'flex-start' }}>
-                                <Text style={styles.previewNotificationTitle}>{item.client_name}</Text>
-                                <Text style={styles.previewNotificationContent}>{item.client_phone}</Text>
-                                <Text style={styles.previewNotificationContent}>{item.service_name}</Text>
-                                <Text style={styles.previewNotificationContent}>
-                                  {t(
-                                    `day.${RECURRING_DOW_KEYS[Math.min(Math.max(0, item.day_of_week), 6)]}`,
-                                  )}{' '}
-                                  · {formatTimeToAMPM(String(item.slot_time).slice(0, 5))}
-                                </Text>
-                                {!!item.repeat_interval && (
-                                  <Text style={styles.previewNotificationContent}>
-                                    {t('settings.recurring.listRepeat', 'Repeats {{label}}', {
-                                      label:
-                                        item.repeat_interval === 1
-                                          ? t('settings.recurring.everyWeek', 'every week')
-                                          : t('settings.recurring.everyNWeeks', 'every {{count}} weeks', {
-                                              count: item.repeat_interval,
-                                            }),
-                                    })}
+                          <View key={item.id} style={idx > 0 ? styles.recurringHubItemSpacing : undefined}>
+                            <View
+                              style={[
+                                styles.recurringHubItemCard,
+                                { borderStartColor: businessColors.primary },
+                              ]}
+                            >
+                              <View style={styles.recurringHubItemRow}>
+                                <View style={styles.recurringHubItemBody}>
+                                  <Text style={styles.recurringHubItemName} numberOfLines={1}>
+                                    {item.client_name}
                                   </Text>
-                                )}
+                                  <View style={styles.recurringHubMetaStack}>
+                                    <View style={styles.recurringHubMetaRow}>
+                                      <Text style={styles.recurringHubMetaText} numberOfLines={1}>
+                                        {item.client_phone}
+                                      </Text>
+                                      <Phone size={15} color={Colors.subtext} strokeWidth={2.2} />
+                                    </View>
+                                    <View style={styles.recurringHubMetaRow}>
+                                      <Text style={styles.recurringHubMetaText} numberOfLines={2}>
+                                        {item.service_name}
+                                      </Text>
+                                      <Layers size={15} color={Colors.subtext} strokeWidth={2.2} />
+                                    </View>
+                                    <View style={styles.recurringHubMetaRow}>
+                                      <Text style={styles.recurringHubMetaText} numberOfLines={1}>
+                                        {t(`day.${RECURRING_DOW_KEYS[Math.min(Math.max(0, item.day_of_week), 6)]}`)} ·{' '}
+                                        {formatTimeToAMPM(String(item.slot_time).slice(0, 5))}
+                                      </Text>
+                                      <Calendar size={15} color={Colors.subtext} strokeWidth={2.2} />
+                                    </View>
+                                    {!!item.repeat_interval && (
+                                      <View style={styles.recurringHubMetaRow}>
+                                        <Text style={styles.recurringHubMetaTextMuted} numberOfLines={2}>
+                                          {t('settings.recurring.listRepeat', 'Repeats {{label}}', {
+                                            label:
+                                              item.repeat_interval === 1
+                                                ? t('settings.recurring.everyWeek', 'every week')
+                                                : t('settings.recurring.everyNWeeks', 'every {{count}} weeks', {
+                                                    count: item.repeat_interval,
+                                                  }),
+                                          })}
+                                        </Text>
+                                        <Repeat size={15} color={Colors.subtext} strokeWidth={2.2} />
+                                      </View>
+                                    )}
+                                  </View>
+                                </View>
+                                <TouchableOpacity
+                                  style={styles.recurringHubDeleteBtn}
+                                  onPress={async () => {
+                                    const ok = await recurringAppointmentsApi.delete(item.id);
+                                    if (ok) setRecurringList((prev) => prev.filter((x) => x.id !== item.id));
+                                    else
+                                      Alert.alert(
+                                        t('error.generic', 'Error'),
+                                        t('settings.recurring.deleteFailed', 'Failed to delete appointment'),
+                                      );
+                                  }}
+                                  accessibilityRole="button"
+                                  accessibilityLabel={t('settings.recurring.a11yDelete', 'Delete')}
+                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                >
+                                  <Trash2 size={18} color="#FF3B30" strokeWidth={2.2} />
+                                </TouchableOpacity>
                               </View>
-                              <TouchableOpacity
-                                style={[styles.iconActionButton, { backgroundColor: '#FFECEC', borderColor: '#FFD1D1' }]}
-                                onPress={async () => {
-                                  const ok = await recurringAppointmentsApi.delete(item.id);
-                                  if (ok) setRecurringList((prev) => prev.filter((x) => x.id !== item.id));
-                                  else Alert.alert(t('error.generic','Error'), t('settings.recurring.deleteFailed','Failed to delete appointment'));
-                                }}
-                                accessibilityRole="button"
-                                accessibilityLabel={t('settings.recurring.a11yDelete','Delete')}
-                              >
-                                <Trash2 size={18} color="#FF3B30" />
-                              </TouchableOpacity>
                             </View>
-                          </View>
-                        </View>
-                            {idx < recurringList.length - 1 && <View style={styles.manageDivider} />}
                           </View>
                         ))
                       )}
@@ -4746,6 +4917,7 @@ export default function SettingsScreen() {
         visible={showAddAdminModal}
         onClose={() => setShowAddAdminModal(false)}
         onSuccess={() => {
+          setActiveSettingsTab('employees');
           void loadAdminEmployeesForTab();
         }}
       />
@@ -5331,6 +5503,35 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     textAlign: 'left',
   },
+  homeHeaderNoLogoTitleBlock: {
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+  },
+  homeHeaderNoLogoTitleLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.text,
+    marginBottom: 4,
+    textAlign: 'left',
+  },
+  homeHeaderNoLogoTitleHint: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: Colors.subtext,
+    marginBottom: 10,
+    textAlign: 'left',
+  },
+  homeHeaderNoLogoTitleInput: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60, 60, 67, 0.22)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+    backgroundColor: '#FFFFFF',
+  },
   homeLogoDesignRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -5731,6 +5932,92 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
 
+  removeEmployeeOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  removeEmployeeCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: Colors.white,
+    borderRadius: 20,
+    paddingHorizontal: 22,
+    paddingTop: 22,
+    paddingBottom: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.06)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.14,
+        shadowRadius: 22,
+      },
+      android: { elevation: 10 },
+    }),
+  },
+  removeEmployeeTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: Colors.text,
+    letterSpacing: -0.35,
+    width: '100%',
+    alignSelf: 'stretch',
+    marginBottom: 8,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  removeEmployeeMessage: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: Colors.subtext,
+    lineHeight: 22,
+    width: '100%',
+    alignSelf: 'stretch',
+    marginBottom: 22,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  removeEmployeeButtonsRow: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: 10,
+  },
+  removeEmployeeBtnCancel: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F2F2F7',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.06)',
+  },
+  removeEmployeeBtnCancelText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  removeEmployeeBtnRemove: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFECEC',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#FFD0D0',
+    minHeight: 48,
+  },
+  removeEmployeeBtnRemoveText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#FF3B30',
+  },
+
   logoutOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
@@ -5807,15 +6094,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.white,
     letterSpacing: 0.2,
-  },
-
-  versionText: {
-    fontSize: 11.5,
-    color: '#8E8E93',
-    textAlign: 'center',
-    marginTop: 10,
-    marginBottom: 8,
-    letterSpacing: 0.3,
   },
 
   // Modal Styles
@@ -6326,72 +6604,6 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: 17,
     fontWeight: '700',
-  },
-  bookingSaveSuccessOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  bookingSaveSuccessCard: {
-    width: '100%',
-    maxWidth: 320,
-    backgroundColor: '#1C1C1E',
-    borderRadius: 22,
-    paddingHorizontal: 22,
-    paddingTop: 22,
-    paddingBottom: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.08)',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 14 },
-        shadowOpacity: 0.35,
-        shadowRadius: 28,
-      },
-      android: { elevation: 12 },
-    }),
-  },
-  bookingSaveSuccessTextBlock: {
-    width: '100%',
-    alignSelf: 'stretch',
-  },
-  bookingSaveSuccessTextRtl: {
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  bookingSaveSuccessTextLtr: {
-    textAlign: 'left',
-    writingDirection: 'ltr',
-  },
-  bookingSaveSuccessTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-  },
-  bookingSaveSuccessMessage: {
-    marginTop: 10,
-    color: 'rgba(255,255,255,0.92)',
-    fontSize: 16,
-    lineHeight: 23,
-    fontWeight: '400',
-  },
-  bookingSaveSuccessOkBtn: {
-    marginTop: 20,
-    backgroundColor: '#3A3A3C',
-    borderRadius: 999,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bookingSaveSuccessOkText: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '600',
   },
   modalContent: {
     flex: 1,
@@ -6947,6 +7159,83 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.primary,
     borderStyle: 'dashed',
     marginVertical: 8,
+  },
+  recurringHubItemSpacing: {
+    marginTop: 12,
+  },
+  recurringHubItemCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderStartWidth: 3,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderEndWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.06)',
+    borderEndColor: 'rgba(0,0,0,0.06)',
+    borderBottomColor: 'rgba(0,0,0,0.06)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+      },
+      android: { elevation: 3 },
+    }),
+  },
+  recurringHubItemRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  recurringHubItemBody: {
+    flex: 1,
+    minWidth: 0,
+    paddingEnd: 4,
+  },
+  recurringHubItemName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.text,
+    letterSpacing: -0.25,
+    marginBottom: 4,
+  },
+  recurringHubMetaStack: {
+    marginTop: 4,
+    gap: 8,
+  },
+  recurringHubMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  recurringHubMetaText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text,
+    lineHeight: 20,
+  },
+  recurringHubMetaTextMuted: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    fontWeight: '500',
+    color: Colors.subtext,
+    lineHeight: 18,
+  },
+  recurringHubDeleteBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFECEC',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#FFD1D1',
+    marginStart: 10,
   },
   itemActions: {
     flexDirection: 'row',

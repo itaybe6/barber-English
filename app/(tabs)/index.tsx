@@ -28,7 +28,7 @@ import { services } from '@/constants/services';
 import { clients } from '@/constants/clients';
 // import { AvailableTimeSlot } from '@/lib/supabase'; // Not used in this file
 import { supabase } from '@/lib/supabase';
-import { businessProfileApi } from '@/lib/api/businessProfile';
+import { businessProfileApi, getHomeHeaderTitleWhenLogoHidden } from '@/lib/api/businessProfile';
 import Card from '@/components/Card';
 import { Calendar, Clock, ChevronLeft, ChevronRight, Star, Pencil } from 'lucide-react-native';
 import DaySelector from '@/components/DaySelector';
@@ -53,9 +53,7 @@ import { useColors, usePrimaryContrast } from '@/src/theme/ThemeProvider';
 import { useProductsStore } from '@/stores/productsStore';
 import { StatusBar, setStatusBarStyle, setStatusBarBackgroundColor } from 'expo-status-bar';
 import { useTranslation } from 'react-i18next';
-import { Marquee } from '@animatereactnative/marquee';
-import { manicureImages } from '@/src/constants/manicureImages';
-import { ManicureMarqueeTile } from '@/components/ManicureMarqueeTile';
+import { AdminHomeHeroMarquee } from '@/components/home/AdminHomeHeroMarquee';
 import MonthlyInsightsCard from '@/components/MonthlyInsightsCard';
 import { PendingClientApprovalsCard, PendingClientApprovalsCardHandle } from '@/components/admin/PendingClientApprovalsCard';
 import WaitlistHomePreviewAvatars from '@/components/admin/WaitlistHomePreviewAvatars';
@@ -74,13 +72,8 @@ const ADMIN_PRODUCT_CAROUSEL_STRIDE = ADMIN_PRODUCT_TILE_WIDTH + ADMIN_PRODUCT_T
 const HERO_TOP_SCHEDULE_BAND_HEIGHT = Math.round(
   Math.max(196, Math.min(SCREEN_HEIGHT * 0.23, 226))
 );
-/** Marquee starts flush from top (under status bar) — scrim + logo sit on top */
-const HERO_MARQUEE_TRANSLATE_Y = 0;
 /** Bottom corner radius of the hero schedule band (matches DailySchedule banner feel) */
 const HERO_TOP_SCHEDULE_BAND_BOTTOM_RADIUS = 32;
-/** Tile size — smaller tiles so the grid feels less “zoomed in” */
-const HERO_ITEM_SIZE = Platform.OS === 'web' ? SCREEN_WIDTH * 0.255 : SCREEN_WIDTH * 0.35;
-const HERO_SPACING = Platform.OS === 'web' ? 12 : 6;
 /** Logical hero height (scroll padding / snap math) */
 const HERO_HEIGHT = Math.round(SCREEN_HEIGHT * 0.82);
 /** Taller marquee layer so tiles can extend under the white sheet (z-index below sheet) */
@@ -90,10 +83,6 @@ const HERO_MARQUEE_HOST_HEIGHT = HERO_HEIGHT + HERO_MARQUEE_BOTTOM_BLEED;
 const HERO_OVERLAP = 214;
 /** Extra pull: negative margin so the sheet covers the tilted marquee’s lower wedge */
 const HERO_SHEET_PULL_UP = 64;
-/** Subtle tilt + scale; nudge pushes grid down into the bleed zone under the sheet */
-const MARQUEE_TILT_Z = I18nManager.isRTL ? '3.2deg' : '-3.2deg';
-const MARQUEE_PLANE_SCALE = 1.075;
-const MARQUEE_POST_TRANSFORM_NUDGE_Y = 48;
 /** Logo overlay (align with `overlayLogoWrapper` top + `overlayLogoInner` height) */
 const ADMIN_HOME_LOGO_TOP_OFFSET = -15;
 const ADMIN_HOME_LOGO_HEIGHT = 78;
@@ -101,73 +90,6 @@ const ADMIN_HOME_LOGO_WIDTH = 200;
 const OUTER_INNER_HANDOFF_ON_PX = 4;
 /** Wider band reduces handoff flutter when flinging the sheet down */
 const OUTER_INNER_HANDOFF_OFF_PX = 36;
-function chunkArray<T>(array: T[], size: number): T[][] {
-  const chunked: T[][] = [];
-  let index = 0;
-  const safeSize = Math.max(1, Math.floor(size));
-  while (index < array.length) {
-    chunked.push(array.slice(index, safeSize + index));
-    index += safeSize;
-  }
-  return chunked;
-}
-
-const manicureHeroRootStyle = {
-  position: 'absolute' as const,
-  left: -SCREEN_WIDTH * 0.18,
-  right: -SCREEN_WIDTH * 0.18,
-  top: -SCREEN_HEIGHT * 0.02,
-  bottom: -SCREEN_HEIGHT * 0.07,
-  overflow: 'hidden' as const,
-};
-
-const ManicureMarqueeHero = React.memo(({ images }: { images: string[] }) => {
-  const columns = useMemo(() => {
-    const perColumn = Math.ceil(images.length / 3);
-    return chunkArray(images, perColumn);
-  }, [images]);
-
-  return (
-    <View style={manicureHeroRootStyle} pointerEvents="box-none">
-      <View
-        style={{
-          flex: 1,
-          gap: HERO_SPACING,
-          transform: [
-            { perspective: 1000 },
-            { rotateZ: MARQUEE_TILT_Z },
-            { scale: MARQUEE_PLANE_SCALE },
-            { translateY: HERO_MARQUEE_TRANSLATE_Y + MARQUEE_POST_TRANSFORM_NUDGE_Y },
-          ],
-        }}
-        pointerEvents="auto"
-      >
-        {columns.map((column, columnIndex) => (
-          <Marquee
-            key={`manicure-marquee-admin-${columnIndex}`}
-            speed={Platform.OS === 'web' ? 1 : 0.25}
-            spacing={HERO_SPACING}
-            reverse={columnIndex % 2 !== 0}
-          >
-            <View style={{ flexDirection: 'row', gap: HERO_SPACING }}>
-              {column.map((image, index) => (
-                <ManicureMarqueeTile
-                  key={`manicure-image-admin-${columnIndex}-${index}-${image}`}
-                  uri={image}
-                  itemSize={HERO_ITEM_SIZE}
-                  borderRadius={HERO_SPACING}
-                  columnIndex={columnIndex}
-                  index={index}
-                />
-              ))}
-            </View>
-          </Marquee>
-        ))}
-      </View>
-    </View>
-  );
-});
-
 function sanitizeUrlArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -240,7 +162,7 @@ export default function HomeScreen() {
       const rawLogo = String(p?.home_logo_url ?? '').trim();
       setHomeLogoUrl(/^https?:\/\//i.test(rawLogo) ? rawLogo : null);
       setHomeHeaderShowLogo(p?.home_header_show_logo !== false);
-      setHomeHeaderDisplayName(String(p?.display_name ?? '').trim());
+      setHomeHeaderDisplayName(getHomeHeaderTitleWhenLogoHidden(p));
     } catch {
       setHeroImages(null);
       setHomeLogoUrl(null);
@@ -283,14 +205,6 @@ export default function HomeScreen() {
       }
     }, [params.openPendingClients, router])
   );
-
-  const heroImagesResolved = useMemo(() => {
-    const raw = heroImages ?? [];
-    const web = raw.filter((u) => typeof u === 'string' && /^https?:\/\//i.test(u.trim()));
-    const stock = [...manicureImages];
-    if (web.length === 0) return stock;
-    return [...web, ...stock];
-  }, [heroImages]);
 
   useEffect(() => {
     if (user?.phone) {
@@ -1177,7 +1091,12 @@ export default function HomeScreen() {
         pointerEvents="box-none"
         collapsable={false}
       >
-        <ManicureMarqueeHero images={heroImagesResolved} />
+        <AdminHomeHeroMarquee
+          customImageUrls={heroImages ?? []}
+          layoutWidth={SCREEN_WIDTH}
+          layoutHeight={HERO_MARQUEE_HOST_HEIGHT}
+          keyPrefix="admin-home"
+        />
       </Animated.View>
 
       {/* Sheet + outer scroll only moves the white panel; background stays visually independent */}

@@ -12,6 +12,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+
+function isHebrewLocale(lang: string | undefined): boolean {
+  if (typeof lang !== 'string') return false;
+  const l = lang.toLowerCase();
+  return l.startsWith('he') || l.startsWith('iw');
+}
 
 const WIN_W = Dimensions.get('window').width;
 const WIN_H = Dimensions.get('window').height;
@@ -43,6 +50,7 @@ function DetailCard({
   subColor,
   tint,
   emphasize,
+  rtlLayout,
 }: {
   icon: React.ComponentProps<typeof Ionicons>['name'];
   label: string;
@@ -51,23 +59,32 @@ function DetailCard({
   subColor: string;
   tint: string;
   emphasize?: boolean;
+  rtlLayout: boolean;
 }) {
+  const textAlign = rtlLayout ? 'right' : 'left';
+  const writingDirection = rtlLayout ? ('rtl' as const) : ('ltr' as const);
   return (
     <View
       style={[
         rowStyles.card,
-        { borderColor: `${textColor}10`, backgroundColor: emphasize ? `${tint}12` : `${textColor}06` },
+        {
+          flexDirection: rtlLayout ? 'row-reverse' : 'row',
+          borderColor: `${textColor}10`,
+          backgroundColor: emphasize ? `${tint}12` : `${textColor}06`,
+        },
       ]}
     >
       <View style={[rowStyles.iconWrap, { backgroundColor: `${tint}18` }]}>
         <Ionicons name={icon} size={18} color={tint} />
       </View>
-      <View style={rowStyles.cardText}>
-        <Text style={[rowStyles.label, { color: subColor }]}>{label}</Text>
+      <View style={[rowStyles.cardText, { alignItems: rtlLayout ? 'flex-end' : 'flex-start' }]}>
+        <Text style={[rowStyles.label, { color: subColor, textAlign, writingDirection, alignSelf: 'stretch' }]}>
+          {label}
+        </Text>
         <Text
           style={[
             rowStyles.value,
-            { color: textColor },
+            { color: textColor, textAlign, writingDirection, alignSelf: 'stretch' },
             emphasize && { fontSize: 18, fontWeight: '900', color: tint },
           ]}
           numberOfLines={3}
@@ -81,7 +98,6 @@ function DetailCard({
 
 const rowStyles = StyleSheet.create({
   card: {
-    flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 12,
     paddingVertical: 12,
@@ -98,11 +114,10 @@ const rowStyles = StyleSheet.create({
   },
   cardText: {
     flex: 1,
-    alignItems: 'flex-end',
     gap: 4,
   },
-  label: { fontSize: 11, fontWeight: '800', letterSpacing: 0.3, textAlign: 'right', alignSelf: 'stretch' },
-  value: { fontSize: 15, fontWeight: '800', letterSpacing: -0.25, textAlign: 'right', alignSelf: 'stretch' },
+  label: { fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
+  value: { fontSize: 15, fontWeight: '800', letterSpacing: -0.25 },
 });
 
 export default function BookingTimeConfirmPanel({
@@ -123,6 +138,10 @@ export default function BookingTimeConfirmPanel({
   t,
 }: BookingTimeConfirmPanelProps) {
   const insets = useSafeAreaInsets();
+  const { i18n } = useTranslation();
+  const activeLang = String(i18n.resolvedLanguage || i18n.language || '');
+  /** Under forceRTL, flex directions mirror again; LTR shell + explicit row-reverse matches Hebrew (see app/(tabs)/finance.tsx rtlRoot). */
+  const layoutRtl = I18nManager.isRTL || isHebrewLocale(activeLang);
   const durationLine =
     totalPrice > 0
       ? `${durationMinutes} ${t('booking.min', 'דק׳')} · ₪${totalPrice}`
@@ -146,6 +165,7 @@ export default function BookingTimeConfirmPanel({
                 maxHeight: WIN_H * 0.78,
                 backgroundColor: cardBackground,
                 borderColor: `${textColor}12`,
+                direction: 'ltr',
               },
             ]}
           >
@@ -161,8 +181,19 @@ export default function BookingTimeConfirmPanel({
               >
                 <Ionicons name="close" size={22} color={textSecondary} />
               </Pressable>
-              <View style={styles.headerTextCol}>
-                <Text style={[styles.title, { color: textColor }]}>{t('booking.timePanel.title', 'סיכום תור')}</Text>
+              <View style={[styles.headerTextCol, { alignItems: layoutRtl ? 'flex-end' : 'flex-start' }]}>
+                <Text
+                  style={[
+                    styles.title,
+                    {
+                      color: textColor,
+                      textAlign: layoutRtl ? 'right' : 'left',
+                      writingDirection: layoutRtl ? 'rtl' : 'ltr',
+                    },
+                  ]}
+                >
+                  {t('booking.timePanel.title', 'סיכום תור')}
+                </Text>
               </View>
             </View>
 
@@ -177,6 +208,7 @@ export default function BookingTimeConfirmPanel({
                   textColor={textColor}
                   subColor={textSecondary}
                   tint={primaryColor}
+                  rtlLayout={layoutRtl}
                 />
               ) : null}
               <DetailCard
@@ -186,6 +218,7 @@ export default function BookingTimeConfirmPanel({
                 textColor={textColor}
                 subColor={textSecondary}
                 tint={primaryColor}
+                rtlLayout={layoutRtl}
               />
               <DetailCard
                 icon="calendar-outline"
@@ -194,6 +227,7 @@ export default function BookingTimeConfirmPanel({
                 textColor={textColor}
                 subColor={textSecondary}
                 tint={primaryColor}
+                rtlLayout={layoutRtl}
               />
               <DetailCard
                 icon="time-outline"
@@ -202,6 +236,7 @@ export default function BookingTimeConfirmPanel({
                 textColor={textColor}
                 subColor={textSecondary}
                 tint={primaryColor}
+                rtlLayout={layoutRtl}
                 emphasize
               />
               <DetailCard
@@ -211,6 +246,7 @@ export default function BookingTimeConfirmPanel({
                 textColor={textColor}
                 subColor={textSecondary}
                 tint={primaryColor}
+                rtlLayout={layoutRtl}
               />
             </View>
 
@@ -297,9 +333,9 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 4,
   },
   headerBlock: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     alignItems: 'flex-start',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     gap: 12,
     paddingLeft: 4,
   },
@@ -313,14 +349,12 @@ const styles = StyleSheet.create({
   },
   headerTextCol: {
     flex: 1,
-    alignItems: 'flex-end',
     gap: 4,
   },
   title: {
     fontSize: 22,
     fontWeight: '900',
     letterSpacing: -0.5,
-    textAlign: 'right',
     alignSelf: 'stretch',
   },
   divider: {

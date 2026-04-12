@@ -16,6 +16,13 @@ export function isMultiServiceBookingAllowed(profile: BusinessProfile | null | u
   return profile?.allow_multi_service_booking === true;
 }
 
+/** Text for home header when `home_header_show_logo` is false: custom line, else `display_name`. */
+export function getHomeHeaderTitleWhenLogoHidden(profile: BusinessProfile | null | undefined): string {
+  const custom = String(profile?.home_header_text_without_logo ?? '').trim();
+  if (custom.length > 0) return custom;
+  return String(profile?.display_name ?? '').trim();
+}
+
 export const businessProfileApi = {
   async getProfile(): Promise<BusinessProfile | null> {
     try {
@@ -131,6 +138,7 @@ export const businessProfileApi = {
             home_fixed_message_enabled: (updates as any).home_fixed_message_enabled,
             home_fixed_message: (updates as any).home_fixed_message,
             allow_multi_service_booking: (updates as any).allow_multi_service_booking,
+            home_header_text_without_logo: (updates as any).home_header_text_without_logo,
           })
           .eq('id', businessId)
           .select('*')
@@ -227,6 +235,27 @@ export const businessProfileApi = {
       return (data as BusinessProfile) || null;
     } catch (e) {
       console.error('Error in updateHomeHeaderShowLogo:', e);
+      return null;
+    }
+  },
+
+  async updateHomeHeaderTextWithoutLogo(home_header_text_without_logo: string | null): Promise<BusinessProfile | null> {
+    try {
+      const businessId = getBusinessId();
+      const { data, error } = await supabase
+        .from('business_profile')
+        .update({ home_header_text_without_logo })
+        .eq('id', businessId)
+        .select('*')
+        .single();
+
+      if (error) {
+        console.error('Error updating home_header_text_without_logo:', error);
+        return null;
+      }
+      return (data as BusinessProfile) || null;
+    } catch (e) {
+      console.error('Error in updateHomeHeaderTextWithoutLogo:', e);
       return null;
     }
   },

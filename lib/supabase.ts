@@ -286,6 +286,8 @@ export interface BusinessProfile {
   home_logo_url?: string | null;
   /** When true (default), home header shows logo; when false, shows `display_name` text. */
   home_header_show_logo?: boolean;
+  /** When logo is hidden: optional header title; empty/null uses `display_name`. */
+  home_header_text_without_logo?: string | null;
   // Legacy global break minutes (int column named "break" in DB)
   break?: number;
   // New per-barber break minutes map: { [userId: string]: number }

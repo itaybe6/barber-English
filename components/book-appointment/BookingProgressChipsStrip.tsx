@@ -15,9 +15,21 @@ import { Ionicons } from '@expo/vector-icons';
 
 export const BOOKING_PROGRESS_STRIP_HEIGHT = 78;
 export const BOOKING_PROGRESS_STRIP_TOP_GAP = 6;
-/** Total vertical space to reserve below status bar (strip + gap) */
+/**
+ * How far the white caption badge overlaps the bottom of the frosted chip (sits “on” the frame).
+ * Keep in sync with `captionSlot` `marginTop`.
+ */
+export const BOOKING_PROGRESS_STRIP_CAPTION_OVERLAP = 11;
+/**
+ * Inner height budget for caption row (single-line tags; avoids oversized name strip when many chips).
+ */
+export const BOOKING_PROGRESS_STRIP_CAPTION_HEIGHT = 30;
+/** Total vertical space to reserve below status bar (chips + captions + padding). */
 export const BOOKING_PROGRESS_STRIP_INSET =
-  BOOKING_PROGRESS_STRIP_TOP_GAP + BOOKING_PROGRESS_STRIP_HEIGHT + 8;
+  BOOKING_PROGRESS_STRIP_TOP_GAP +
+  BOOKING_PROGRESS_STRIP_HEIGHT +
+  (BOOKING_PROGRESS_STRIP_CAPTION_HEIGHT - BOOKING_PROGRESS_STRIP_CAPTION_OVERLAP) +
+  8;
 
 export const H_PAD = 14;
 export const GAP = 6;
@@ -25,6 +37,8 @@ const INNER_RADIUS = 14;
 
 function StripMetaCard(props: {
   kind: 'service' | 'day' | 'time';
+  /** When true, chip shows only the main surface (captions live in `ChipCaption` below). */
+  chipSurfaceOnly?: boolean;
   /** Day / time: main label. Service: fallback title if `serviceTitle` missing. */
   primary: string;
   /** Service only: price line (e.g. ₪120). */
@@ -38,11 +52,20 @@ function StripMetaCard(props: {
   /** Time only: בוקר / צהריים / ערב under the clock. */
   timeDaypart?: string;
 }) {
-  const { kind, primary, price, serviceTitle, dayWeekday, dayDateLine, timeDaypart } = props;
+  const { kind, primary, price, serviceTitle, dayWeekday, dayDateLine, timeDaypart, chipSurfaceOnly } = props;
 
   if (kind === 'service') {
-    const priceLine = price ?? '—';
     const title = (serviceTitle ?? primary).trim() || '—';
+    if (chipSurfaceOnly) {
+      return (
+        <View style={styles.metaCard}>
+          <Text style={styles.metaServiceTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.62}>
+            {title}
+          </Text>
+        </View>
+      );
+    }
+    const priceLine = price ?? '—';
     return (
       <View style={styles.metaCard}>
         <Text style={styles.metaServiceTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.62}>
@@ -55,30 +78,53 @@ function StripMetaCard(props: {
     );
   }
 
-  if (kind === 'day' && dayWeekday && dayDateLine) {
-    return (
-      <View style={styles.metaCard}>
-        <Text style={styles.metaDayWeekday} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
-          {dayWeekday}
-        </Text>
-        <Text style={styles.metaDayDateLine} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.68}>
-          {dayDateLine}
-        </Text>
-      </View>
-    );
+  if (kind === 'day') {
+    if (chipSurfaceOnly) {
+      const dateOnly = (dayDateLine ?? primary).trim() || '—';
+      return (
+        <View style={styles.metaCard}>
+          <Text style={styles.metaDayDatePrimary} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.65}>
+            {dateOnly}
+          </Text>
+        </View>
+      );
+    }
+    if (dayWeekday && dayDateLine) {
+      return (
+        <View style={styles.metaCard}>
+          <Text style={styles.metaDayWeekday} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
+            {dayWeekday}
+          </Text>
+          <Text style={styles.metaDayDateLine} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.68}>
+            {dayDateLine}
+          </Text>
+        </View>
+      );
+    }
   }
 
-  if (kind === 'time' && timeDaypart) {
-    return (
-      <View style={styles.metaCard}>
-        <Text style={styles.metaDayWeekday} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
-          {primary}
-        </Text>
-        <Text style={styles.metaDayDateLine} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.68}>
-          {timeDaypart}
-        </Text>
-      </View>
-    );
+  if (kind === 'time') {
+    if (chipSurfaceOnly) {
+      return (
+        <View style={styles.metaCard}>
+          <Text style={styles.metaDayWeekday} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
+            {primary}
+          </Text>
+        </View>
+      );
+    }
+    if (timeDaypart) {
+      return (
+        <View style={styles.metaCard}>
+          <Text style={styles.metaDayWeekday} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
+            {primary}
+          </Text>
+          <Text style={styles.metaDayDateLine} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.68}>
+            {timeDaypart}
+          </Text>
+        </View>
+      );
+    }
   }
 
   return (
@@ -88,6 +134,99 @@ function StripMetaCard(props: {
       </Text>
     </View>
   );
+}
+
+function CaptionWhiteBadge(props: { children: React.ReactNode; variant?: 'default' | 'barber' }) {
+  const variant = props.variant ?? 'default';
+  return (
+    <View
+      style={[
+        styles.captionWhiteBadge,
+        variant === 'barber' && styles.captionWhiteBadgeBarber,
+      ]}
+    >
+      {props.children}
+    </View>
+  );
+}
+
+function ChipCaption(props: { chip: BookingProgressChipModel; primaryColor: string }) {
+  const { chip, primaryColor } = props;
+  const tagColor = { color: primaryColor };
+
+  const slot = (inner: React.ReactNode, variant: 'default' | 'barber' = 'default') => (
+    <View style={styles.captionSlot}>
+      <CaptionWhiteBadge variant={variant}>{inner}</CaptionWhiteBadge>
+    </View>
+  );
+
+  if (chip.kind === 'barber') {
+    const name = (chip.label || '').trim();
+    if (!name) {
+      return <View style={[styles.captionSlot, styles.captionSlotSpacer]} />;
+    }
+    return slot(
+      <Text
+        style={[styles.captionOnWhiteText, styles.captionBarberNameOnWhite, tagColor]}
+        numberOfLines={1}
+        ellipsizeMode="tail"
+      >
+        {name}
+      </Text>,
+      'barber'
+    );
+  }
+
+  if (chip.kind === 'service') {
+    const promo = (chip.servicePromoTag || '').trim();
+    const pill = (chip.servicePriceText || '').trim();
+    if (!promo && !pill) {
+      return <View style={[styles.captionSlot, styles.captionSlotSpacer]} />;
+    }
+    return slot(
+      <>
+        {promo ? (
+          <Text style={[styles.captionOnWhiteText, styles.captionPromoOnWhite, tagColor]} numberOfLines={1}>
+            {promo}
+          </Text>
+        ) : null}
+        {pill ? (
+          <Text
+            style={[styles.captionPriceOnWhite, tagColor, { marginTop: promo ? 2 : 0 }]}
+            numberOfLines={1}
+          >
+            {pill}
+          </Text>
+        ) : null}
+      </>
+    );
+  }
+
+  if (chip.kind === 'day') {
+    const day = (chip.dayWeekday || '').trim();
+    if (!day) {
+      return <View style={[styles.captionSlot, styles.captionSlotSpacer]} />;
+    }
+    return slot(
+      <Text style={[styles.captionOnWhiteText, tagColor]} numberOfLines={1}>
+        {day}
+      </Text>
+    );
+  }
+
+  if (chip.kind === 'time') {
+    const part = (chip.timeDaypart || '').trim();
+    if (!part) {
+      return <View style={[styles.captionSlot, styles.captionSlotSpacer]} />;
+    }
+    return slot(
+      <Text style={[styles.captionOnWhiteText, tagColor]} numberOfLines={1}>
+        {part}
+      </Text>
+    );
+  }
+
+  return <View style={[styles.captionSlot, styles.captionSlotSpacer]} />;
 }
 
 export interface BookingProgressChipModel {
@@ -104,6 +243,11 @@ export interface BookingProgressChipModel {
   dayDateLine?: string;
   /** Time chip: daypart under clock (e.g. בוקר). */
   timeDaypart?: string;
+  /**
+   * Optional line above the price pill under the service chip (e.g. on-sale label).
+   * When empty, only the price pill is shown in the caption row.
+   */
+  servicePromoTag?: string;
 }
 
 export type ChipFlightComputeOptions = {
@@ -206,8 +350,10 @@ function chipAccessibilityLabel(chip: BookingProgressChipModel): string {
   switch (chip.kind) {
     case 'barber':
       return chip.label || 'Staff';
-    case 'service':
-      return chip.serviceName || chip.label || 'Service';
+    case 'service': {
+      const parts = [chip.serviceName || chip.label, chip.servicePromoTag, chip.servicePriceText].filter(Boolean);
+      return parts.join(', ') || 'Service';
+    }
     case 'day':
       return chip.dayWeekday ? `${chip.dayWeekday} ${chip.dayDateLine ?? ''}`.trim() : chip.label;
     case 'time':
@@ -220,7 +366,7 @@ function chipAccessibilityLabel(chip: BookingProgressChipModel): string {
 export default function BookingProgressChipsStrip({
   visible,
   safeAreaTop,
-  primaryColor: _primaryColor,
+  primaryColor,
   chips,
   barberEntrance,
   barberEntranceKey,
@@ -253,7 +399,8 @@ export default function BookingProgressChipsStrip({
         <AnimatePresence>
           {chips.map((chip) => {
             const hasFlight = chip.kind === 'barber' || chip.kind === 'service' || chip.kind === 'day';
-            /** Wide strip + `cover` crops faces vertically; use a centered square ≤ cell so the portrait stays framed. */
+            /** Step 1 only: centered square thumbnail. From service onward (`n >= 2`): photo fills the chip cell (cover). */
+            const barberPhotoFillCell = n >= 2;
             const barberPhotoSide = Math.max(
               40,
               Math.min(finalW - 4, BOOKING_PROGRESS_STRIP_HEIGHT - 4)
@@ -275,17 +422,19 @@ export default function BookingProgressChipsStrip({
                   }
                   animate={{ translateX: 0, translateY: 0, scale: 1 }}
                   transition={{ type: 'timing', duration: 600, easing: Easing.out(Easing.cubic) }}
-                  style={styles.barberInner}
+                  style={[styles.barberInner, barberPhotoFillCell && styles.barberInnerFillCell]}
                 >
                   {chip.imageUri ? (
                     <View
                       style={[
                         styles.barberPhotoSlot,
-                        {
-                          width: barberPhotoSide,
-                          height: barberPhotoSide,
-                          borderRadius: Math.min(INNER_RADIUS, barberPhotoSide / 2),
-                        },
+                        barberPhotoFillCell
+                          ? styles.barberPhotoSlotFillCell
+                          : {
+                              width: barberPhotoSide,
+                              height: barberPhotoSide,
+                              borderRadius: Math.min(INNER_RADIUS, barberPhotoSide / 2),
+                            },
                       ]}
                     >
                       <Image
@@ -298,20 +447,27 @@ export default function BookingProgressChipsStrip({
                     <View
                       style={[
                         styles.barberPlaceholder,
-                        {
-                          width: barberPhotoSide,
-                          height: barberPhotoSide,
-                          borderRadius: Math.min(INNER_RADIUS, barberPhotoSide / 2),
-                        },
+                        barberPhotoFillCell
+                          ? styles.barberPhotoSlotFillCell
+                          : {
+                              width: barberPhotoSide,
+                              height: barberPhotoSide,
+                              borderRadius: Math.min(INNER_RADIUS, barberPhotoSide / 2),
+                            },
                       ]}
                     >
-                      <Ionicons name="person" size={Math.round(barberPhotoSide * 0.38)} color="rgba(255,255,255,0.45)" />
+                      <Ionicons
+                        name="person"
+                        size={Math.round((barberPhotoFillCell ? BOOKING_PROGRESS_STRIP_HEIGHT : barberPhotoSide) * 0.38)}
+                        color="rgba(255,255,255,0.45)"
+                      />
                     </View>
                   )}
                 </MotiView>
               ) : chip.kind === 'service' ? (
                 <View style={styles.flightInner}>
                   <StripMetaCard
+                    chipSurfaceOnly
                     kind="service"
                     primary={chip.label}
                     price={chip.servicePriceText}
@@ -321,6 +477,7 @@ export default function BookingProgressChipsStrip({
               ) : chip.kind === 'day' ? (
                 <View style={styles.flightInner}>
                   <StripMetaCard
+                    chipSurfaceOnly
                     kind="day"
                     primary={chip.label}
                     dayWeekday={chip.dayWeekday}
@@ -329,9 +486,16 @@ export default function BookingProgressChipsStrip({
                 </View>
               ) : (
                 <View style={styles.flightInner}>
-                  <StripMetaCard kind="time" primary={chip.label} timeDaypart={chip.timeDaypart} />
+                  <StripMetaCard
+                    chipSurfaceOnly
+                    kind="time"
+                    primary={chip.label}
+                    timeDaypart={chip.timeDaypart}
+                  />
                 </View>
               );
+
+            const caption = <ChipCaption chip={chip} primaryColor={primaryColor} />;
 
             return (
               <MotiView
@@ -340,14 +504,7 @@ export default function BookingProgressChipsStrip({
                 animate={{ width: finalW, opacity: 1 }}
                 exit={{ opacity: 0, width: 0 }}
                 transition={{ type: 'timing', duration: 440, easing: Easing.out(Easing.cubic) }}
-                style={[
-                  styles.cell,
-                  hasFlight ? styles.cellFlight : styles.cellClip,
-                  {
-                    height: BOOKING_PROGRESS_STRIP_HEIGHT,
-                    borderRadius: INNER_RADIUS,
-                  },
-                ]}
+                style={styles.chipColumnOuter}
               >
                 {pressable ? (
                   <Pressable
@@ -355,16 +512,41 @@ export default function BookingProgressChipsStrip({
                     accessibilityLabel={chipAccessibilityLabel(chip)}
                     onPress={() => onChipPress?.(chip.kind)}
                     style={({ pressed }) => [
-                      styles.chipPressable,
-                      chip.kind === 'barber' && styles.chipPressableBarberFlight,
+                      styles.chipColumnPressable,
                       pressed && styles.chipPressablePressed,
                     ]}
-                    android_ripple={{ color: 'rgba(255,255,255,0.25)', borderless: false }}
+                    android_ripple={{ color: 'rgba(255,255,255,0.18)', borderless: false }}
                   >
-                    {cellBody}
+                    <View
+                      style={[
+                        styles.cell,
+                        hasFlight ? styles.cellFlight : styles.cellClip,
+                        {
+                          height: BOOKING_PROGRESS_STRIP_HEIGHT,
+                          borderRadius: INNER_RADIUS,
+                        },
+                      ]}
+                    >
+                      {cellBody}
+                    </View>
+                    {caption}
                   </Pressable>
                 ) : (
-                  cellBody
+                  <View style={styles.chipColumnPressable}>
+                    <View
+                      style={[
+                        styles.cell,
+                        hasFlight ? styles.cellFlight : styles.cellClip,
+                        {
+                          height: BOOKING_PROGRESS_STRIP_HEIGHT,
+                          borderRadius: INNER_RADIUS,
+                        },
+                      ]}
+                    >
+                      {cellBody}
+                    </View>
+                    {caption}
+                  </View>
                 )}
               </MotiView>
             );
@@ -385,6 +567,13 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     overflow: 'visible',
   },
+  chipColumnOuter: {
+    overflow: 'visible',
+  },
+  chipColumnPressable: {
+    width: '100%',
+    alignItems: 'stretch',
+  },
   /** Flight animation scales/moves outside the chip (barber, service, day). */
   cellFlight: {
     overflow: 'visible',
@@ -403,20 +592,11 @@ const styles = StyleSheet.create({
   cellClip: {
     overflow: 'hidden',
   },
-  chipPressable: {
-    flex: 1,
-    minWidth: 0,
-    borderRadius: INNER_RADIUS,
-    overflow: 'hidden',
-  },
-  /** Barber entrance scales past the cell; must not clip the Moti flight. */
-  chipPressableBarberFlight: {
-    overflow: 'visible',
-  },
   chipPressablePressed: {
     opacity: 0.88,
   },
   cell: {
+    width: '100%',
     backgroundColor: 'rgba(255,255,255,0.18)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.35)',
@@ -439,9 +619,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'visible',
   },
+  /** Barber chip when service+ chips exist: stretch photo to cell edges. */
+  barberInnerFillCell: {
+    alignItems: 'stretch',
+    justifyContent: 'center',
+  },
   barberPhotoSlot: {
     overflow: 'hidden',
     backgroundColor: 'rgba(0,0,0,0.12)',
+  },
+  barberPhotoSlotFillCell: {
+    flex: 1,
+    width: '100%',
+    minHeight: 0,
+    borderRadius: INNER_RADIUS,
   },
   barberImageCover: {
     ...StyleSheet.absoluteFillObject,
@@ -487,6 +678,18 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
+  /** Day chip surface: numeric date only (weekday is in caption below). */
+  metaDayDatePrimary: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    textAlign: 'center',
+    letterSpacing: -0.35,
+    width: '100%',
+    textShadowColor: 'rgba(0,0,0,0.25)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
   /** Time chip: no icon, slightly larger type. */
   metaPrimaryDayTime: {
     color: '#FFFFFF',
@@ -525,5 +728,72 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.2)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
+  },
+  captionSlot: {
+    marginTop: -BOOKING_PROGRESS_STRIP_CAPTION_OVERLAP,
+    minHeight: BOOKING_PROGRESS_STRIP_CAPTION_HEIGHT,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingHorizontal: 4,
+    /** Above `cellFlight` (50) so the badge overlaps the bottom of the frosted chip on screen. */
+    zIndex: 60,
+  },
+  /** Keeps column height when a chip has no caption text. */
+  captionSlotSpacer: {
+    minHeight: Math.max(0, BOOKING_PROGRESS_STRIP_CAPTION_HEIGHT - BOOKING_PROGRESS_STRIP_CAPTION_OVERLAP),
+  },
+  captionWhiteBadge: {
+    alignSelf: 'center',
+    maxWidth: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.06)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.12,
+        shadowRadius: 4,
+      },
+      /** Above frosted chip flight (`cellFlight` elevation 14) so overlap reads correctly. */
+      android: { elevation: 16 },
+      default: {},
+    }),
+  },
+  /** Narrow columns: keep name tag pill-sized, not full chip width / tall block. */
+  captionWhiteBadgeBarber: {
+    maxWidth: '78%',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  /** Text color comes from `primaryColor` at runtime (ChipCaption). */
+  captionOnWhiteText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    textAlign: 'center',
+    letterSpacing: -0.2,
+  },
+  captionBarberNameOnWhite: {
+    fontSize: 11,
+    maxWidth: '100%',
+  },
+  captionPromoOnWhite: {
+    marginBottom: 3,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  /** Price on same white badge as promo — no nested purple pill (avoids “double background”). */
+  captionPriceOnWhite: {
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+    letterSpacing: -0.2,
   },
 });

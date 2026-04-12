@@ -161,45 +161,13 @@ function ChipCaption(props: { chip: BookingProgressChipModel; primaryColor: stri
   );
 
   if (chip.kind === 'barber') {
-    const name = (chip.label || '').trim();
-    if (!name) {
-      return <View style={[styles.captionSlot, styles.captionSlotSpacer]} />;
-    }
-    return slot(
-      <Text
-        style={[styles.captionOnWhiteText, styles.captionBarberNameOnWhite, tagColor]}
-        numberOfLines={1}
-        ellipsizeMode="tail"
-      >
-        {name}
-      </Text>,
-      'barber'
-    );
+    // Name is shown inside the chip cell — just keep a spacer for layout consistency
+    return <View style={[styles.captionSlot, styles.captionSlotSpacer]} />;
   }
 
   if (chip.kind === 'service') {
-    const promo = (chip.servicePromoTag || '').trim();
-    const pill = (chip.servicePriceText || '').trim();
-    if (!promo && !pill) {
-      return <View style={[styles.captionSlot, styles.captionSlotSpacer]} />;
-    }
-    return slot(
-      <>
-        {promo ? (
-          <Text style={[styles.captionOnWhiteText, styles.captionPromoOnWhite, tagColor]} numberOfLines={1}>
-            {promo}
-          </Text>
-        ) : null}
-        {pill ? (
-          <Text
-            style={[styles.captionPriceOnWhite, tagColor, { marginTop: promo ? 2 : 0 }]}
-            numberOfLines={1}
-          >
-            {pill}
-          </Text>
-        ) : null}
-      </>
-    );
+    // Name + price are shown inside the chip pill — keep a spacer for layout consistency
+    return <View style={[styles.captionSlot, styles.captionSlotSpacer]} />;
   }
 
   if (chip.kind === 'day') {
@@ -237,8 +205,12 @@ export interface BookingProgressChipModel {
   /** Service chip: name + price in strip. */
   serviceName?: string;
   servicePriceText?: string;
-  /** Day chip: weekday on top line. */
+  /** Service chip: total duration in minutes (multi-service summed). */
+  serviceDurationMinutes?: number;
+  /** Day chip: weekday on top line (short, e.g. strip peek). */
   dayWeekday?: string;
+  /** Day chip: long weekday for expanded summary (locale-aware). */
+  dayWeekdayLong?: string;
   /** Day chip: date line under weekday. */
   dayDateLine?: string;
   /** Time chip: daypart under clock (e.g. בוקר). */
@@ -380,6 +352,13 @@ export default function BookingProgressChipsStrip({
 
   const finalW = n > 0 ? (fullW - (n - 1) * GAP) / n : fullW;
 
+  /** Barber + service chips are compact pills — center them as a group instead of spreading full-width */
+  const isPillKind = (kind: BookingProgressChipModel['kind']) =>
+    kind === 'barber' || kind === 'service';
+  const pillMode = chips.every(c => isPillKind(c.kind));
+  const MAX_PILL_W = 158;
+  const chipW = pillMode ? Math.min(finalW, MAX_PILL_W) : finalW;
+
   return (
     <View
       pointerEvents="box-none"
@@ -393,20 +372,21 @@ export default function BookingProgressChipsStrip({
       ]}
     >
       <View
-        style={[styles.row, { flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row', gap: GAP }]}
+        style={[
+          styles.row,
+          {
+            flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row',
+            gap: GAP,
+            justifyContent: pillMode ? 'center' : 'flex-start',
+          },
+        ]}
         collapsable={false}
       >
         <AnimatePresence>
           {chips.map((chip) => {
             const hasFlight = chip.kind === 'barber' || chip.kind === 'service' || chip.kind === 'day';
-            /** Step 1 only: centered square thumbnail. From service onward (`n >= 2`): photo fills the chip cell (cover). */
-            const barberPhotoFillCell = n >= 2;
-            const barberPhotoSide = Math.max(
-              40,
-              Math.min(finalW - 4, BOOKING_PROGRESS_STRIP_HEIGHT - 4)
-            );
-
             const pressable = !!onChipPress;
+            const showBarberName = !!(chip.label && chip.label.trim());
             const cellBody =
               chip.kind === 'barber' ? (
                 <MotiView
@@ -422,57 +402,75 @@ export default function BookingProgressChipsStrip({
                   }
                   animate={{ translateX: 0, translateY: 0, scale: 1 }}
                   transition={{ type: 'timing', duration: 600, easing: Easing.out(Easing.cubic) }}
-                  style={[styles.barberInner, barberPhotoFillCell && styles.barberInnerFillCell]}
+                  style={styles.barberInnerRow}
                 >
-                  {chip.imageUri ? (
-                    <View
-                      style={[
-                        styles.barberPhotoSlot,
-                        barberPhotoFillCell
-                          ? styles.barberPhotoSlotFillCell
-                          : {
-                              width: barberPhotoSide,
-                              height: barberPhotoSide,
-                              borderRadius: Math.min(INNER_RADIUS, barberPhotoSide / 2),
-                            },
-                      ]}
-                    >
-                      <Image
-                        source={{ uri: chip.imageUri }}
-                        style={styles.barberImageCover}
-                        resizeMode="cover"
-                      />
+                  <View
+                    style={[
+                      styles.barberPill,
+                      {
+                        flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row',
+                        paddingLeft: I18nManager.isRTL ? 14 : 5,
+                        paddingRight: I18nManager.isRTL ? 5 : 14,
+                      },
+                    ]}
+                  >
+                    <View style={styles.barberCircleFrame}>
+                      {chip.imageUri ? (
+                        <Image
+                          source={{ uri: chip.imageUri }}
+                          style={styles.barberCircleImg}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <Ionicons name="person" size={22} color="rgba(255,255,255,0.55)" />
+                      )}
                     </View>
-                  ) : (
-                    <View
-                      style={[
-                        styles.barberPlaceholder,
-                        barberPhotoFillCell
-                          ? styles.barberPhotoSlotFillCell
-                          : {
-                              width: barberPhotoSide,
-                              height: barberPhotoSide,
-                              borderRadius: Math.min(INNER_RADIUS, barberPhotoSide / 2),
-                            },
-                      ]}
-                    >
-                      <Ionicons
-                        name="person"
-                        size={Math.round((barberPhotoFillCell ? BOOKING_PROGRESS_STRIP_HEIGHT : barberPhotoSide) * 0.38)}
-                        color="rgba(255,255,255,0.45)"
-                      />
-                    </View>
-                  )}
+                    {showBarberName && (
+                      <Text
+                        style={[
+                          styles.barberNameInChip,
+                          { textAlign: I18nManager.isRTL ? 'right' : 'left' },
+                        ]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {chip.label.trim()}
+                      </Text>
+                    )}
+                  </View>
                 </MotiView>
               ) : chip.kind === 'service' ? (
                 <View style={styles.flightInner}>
-                  <StripMetaCard
-                    chipSurfaceOnly
-                    kind="service"
-                    primary={chip.label}
-                    price={chip.servicePriceText}
-                    serviceTitle={chip.serviceName ?? chip.label}
-                  />
+                  <View
+                    style={[
+                      styles.barberPill,
+                      {
+                        flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row',
+                        paddingLeft: I18nManager.isRTL ? 14 : 5,
+                        paddingRight: I18nManager.isRTL ? 5 : 14,
+                      },
+                    ]}
+                  >
+                    <View style={styles.serviceIconCircle}>
+                      {chip.servicePriceText ? (
+                        <Text style={styles.servicePriceInCircle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                          {chip.servicePriceText}
+                        </Text>
+                      ) : (
+                        <Ionicons name="pricetag" size={18} color="rgba(255,255,255,0.85)" />
+                      )}
+                    </View>
+                    <Text
+                      style={[
+                        styles.barberNameInChip,
+                        { textAlign: I18nManager.isRTL ? 'right' : 'left' },
+                      ]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      {(chip.serviceName ?? chip.label).trim()}
+                    </Text>
+                  </View>
                 </View>
               ) : chip.kind === 'day' ? (
                 <View style={styles.flightInner}>
@@ -501,7 +499,7 @@ export default function BookingProgressChipsStrip({
               <MotiView
                 key={chip.key}
                 from={{ opacity: 0 }}
-                animate={{ width: finalW, opacity: 1 }}
+                animate={{ width: chipW, opacity: 1 }}
                 exit={{ opacity: 0, width: 0 }}
                 transition={{ type: 'timing', duration: 440, easing: Easing.out(Easing.cubic) }}
                 style={styles.chipColumnOuter}
@@ -521,6 +519,7 @@ export default function BookingProgressChipsStrip({
                       style={[
                         styles.cell,
                         hasFlight ? styles.cellFlight : styles.cellClip,
+                        (chip.kind === 'barber' || chip.kind === 'service') && styles.cellBarber,
                         {
                           height: BOOKING_PROGRESS_STRIP_HEIGHT,
                           borderRadius: INNER_RADIUS,
@@ -537,6 +536,7 @@ export default function BookingProgressChipsStrip({
                       style={[
                         styles.cell,
                         hasFlight ? styles.cellFlight : styles.cellClip,
+                        (chip.kind === 'barber' || chip.kind === 'service') && styles.cellBarber,
                         {
                           height: BOOKING_PROGRESS_STRIP_HEIGHT,
                           borderRadius: INNER_RADIUS,
@@ -611,39 +611,70 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
-  barberInner: {
+  /** Barber chip: no frosted rectangle — avatar circle is the only visual container. */
+  cellBarber: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    borderWidth: 0,
+    ...Platform.select({
+      ios: { shadowOpacity: 0 },
+      android: { elevation: 0 },
+      default: {},
+    }),
+  },
+  barberInnerRow: {
     flex: 1,
     width: '100%',
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
   },
-  /** Barber chip when service+ chips exist: stretch photo to cell edges. */
-  barberInnerFillCell: {
-    alignItems: 'stretch',
-    justifyContent: 'center',
+  barberPill: {
+    alignSelf: 'center',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.35)',
+    paddingVertical: 5,
+    maxWidth: '90%',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.18,
+        shadowRadius: 6,
+      },
+      android: { elevation: 5 },
+      default: {},
+    }),
   },
-  barberPhotoSlot: {
+  barberCircleFrame: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     overflow: 'hidden',
-    backgroundColor: 'rgba(0,0,0,0.12)',
+    backgroundColor: 'rgba(0,0,0,0.22)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.8)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
-  barberPhotoSlotFillCell: {
-    flex: 1,
-    width: '100%',
-    minHeight: 0,
-    borderRadius: INNER_RADIUS,
-  },
-  barberImageCover: {
-    ...StyleSheet.absoluteFillObject,
+  barberCircleImg: {
     width: '100%',
     height: '100%',
   },
-  barberPlaceholder: {
-    overflow: 'hidden',
-    backgroundColor: 'rgba(0,0,0,0.22)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  barberNameInChip: {
+    flexShrink: 1,
+    color: '#FFFFFF',
+    fontSize: 13.5,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    textShadowColor: 'rgba(0,0,0,0.28)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   /** Shared layout for service / date / time — full cell, no inner circle. */
   metaCard: {
@@ -795,5 +826,28 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textAlign: 'center',
     letterSpacing: -0.2,
+  },
+  serviceIconCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.8)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    paddingHorizontal: 3,
+  },
+  servicePriceInCircle: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
 });

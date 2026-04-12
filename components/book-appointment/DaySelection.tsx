@@ -5,6 +5,8 @@ import Animated from 'react-native-reanimated';
 import BookingAnimatedCalendar from '@/components/book-appointment/games-calendar/BookingAnimatedCalendar';
 import { bookingStepRowEntering } from '@/components/book-appointment/bookingStepListEnterAnimation';
 
+const LIST_H_PAD = 16;
+
 type DayObj = { fullDate: Date };
 
 type Props = {
@@ -21,6 +23,8 @@ type Props = {
   t: (key: string, fallback: string) => string;
   onSelectDayIndex: (index: number | null) => void;
   onClearTime: () => void;
+  /** Nudge block up so legend clears the docked summary strip (px). */
+  contentLiftPx?: number;
 };
 
 export interface DaySelectionHandle {
@@ -42,6 +46,7 @@ const DaySelection = forwardRef<DaySelectionHandle, Props>(function DaySelection
     t,
     onSelectDayIndex,
     onClearTime,
+    contentLiftPx = 0,
   },
   ref
 ) {
@@ -71,12 +76,22 @@ const DaySelection = forwardRef<DaySelectionHandle, Props>(function DaySelection
       style={{
         width: '100%',
         justifyContent: 'flex-start',
-        paddingTop: 8,
+        paddingTop: contentLiftPx > 0 ? 6 : 8,
         paddingBottom: 12,
+        ...(contentLiftPx > 0 ? { transform: [{ translateY: -contentLiftPx }] } : null),
       }}
     >
       <Animated.View entering={bookingStepRowEntering(0)}>
-        <View style={[styles.calendarSectionCard, { marginTop: 8 }]}>
+        <View style={localStyles.shell}>
+          <View style={localStyles.header}>
+            <Text style={localStyles.title} maxFontSizeMultiplier={1.35}>
+              {t('booking.selectDateTitle', 'Choose a date')}
+            </Text>
+            <Text style={localStyles.subtitle} maxFontSizeMultiplier={1.3}>
+              {t('booking.selectDateSubtitle', 'Colors show availability — tap a day to continue')}
+            </Text>
+          </View>
+          <View style={[styles.calendarSectionCard, { marginTop: 12, marginHorizontal: 0 }]}>
           <View
             style={[
               styles.calendarFixedBox,
@@ -97,10 +112,17 @@ const DaySelection = forwardRef<DaySelectionHandle, Props>(function DaySelection
             />
           </View>
         </View>
+        </View>
       </Animated.View>
 
       {/* Legend — white pill so labels stay readable on the pink backdrop */}
-      <Animated.View style={localStyles.legendOuter} entering={bookingStepRowEntering(1)}>
+      <Animated.View
+        style={[
+          localStyles.legendOuter,
+          contentLiftPx > 0 ? localStyles.legendOuterBelowCalendar : null,
+        ]}
+        entering={bookingStepRowEntering(1)}
+      >
         <View style={localStyles.legendPill}>
           <LegendItem dot="#22c55e" label={t('booking.legend.available', 'יש תורים')} />
           <LegendItem dot="#ef4444" label={t('booking.legend.full', 'מלא')} />
@@ -125,10 +147,41 @@ function LegendItem({ dot, label }: { dot: string; label: string }) {
 const DOT_SIZE = 8;
 
 const localStyles = StyleSheet.create({
+  shell: {
+    gap: 14,
+    paddingHorizontal: LIST_H_PAD,
+  },
+  header: {
+    gap: 6,
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    marginBottom: 2,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    letterSpacing: -0.5,
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+  },
+  subtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.72)',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
   legendOuter: {
-    marginTop: 14,
+    marginTop: 16,
     paddingHorizontal: 16,
     alignItems: 'center',
+  },
+  /** Extra air between the white calendar card and the legend pill (date step). */
+  legendOuterBelowCalendar: {
+    marginTop: 24,
   },
   legendPill: {
     flexDirection: 'row',

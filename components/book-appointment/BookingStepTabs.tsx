@@ -10,6 +10,8 @@ import { useColors } from '@/src/theme/ThemeProvider';
 
 type Props = {
   safeAreaBottom: number;
+  /** Override bottom inset (e.g. when client tab bar is hidden on this screen). */
+  bottomInsetOverride?: number;
   labels: { barber: string; service: string; day: string; time: string; continue?: string };
   /**
    * Steps 1–3: chevron advances to next step.
@@ -45,16 +47,28 @@ export function getBookingStepBarTopFromBottom(safeAreaBottom: number): number {
   );
 }
 
+/** Same but without the client floating tab bar (use when tab bar is hidden on the screen). */
+export function getBookingStepBarTopFromBottomNoTabBar(safeAreaBottom: number): number {
+  return safeAreaBottom + BOOKING_STEP_BAR_GAP_ABOVE_TAB + BOOKING_TABS_HEIGHT;
+}
+
+/** Bottom inset for BookingStepTabs when tab bar is hidden. */
+export function getBookingStepBarBottomInsetNoTabBar(safeAreaBottom: number): number {
+  return safeAreaBottom + BOOKING_STEP_BAR_GAP_ABOVE_TAB;
+}
+
 export default function BookingStepTabs({
   safeAreaBottom,
+  bottomInsetOverride,
   labels,
   advanceNext,
 }: Props) {
-  /** Stack booking actions above `ClientFloatingTabBar` (same screen). */
   const bottomInset =
-    getClientTabBarBottomInset(safeAreaBottom) +
-    CLIENT_FLOATING_TAB_BAR_HEIGHT +
-    BOOKING_STEP_BAR_GAP_ABOVE_TAB;
+    bottomInsetOverride !== undefined
+      ? bottomInsetOverride
+      : getClientTabBarBottomInset(safeAreaBottom) +
+        CLIENT_FLOATING_TAB_BAR_HEIGHT +
+        BOOKING_STEP_BAR_GAP_ABOVE_TAB;
   const { primary } = useColors();
 
   const enabled = !!advanceNext?.enabled;

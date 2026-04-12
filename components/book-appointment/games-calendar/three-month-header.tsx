@@ -76,20 +76,28 @@ export function ThreeMonthHeader({ data, activeIndex, primaryColor, onGoToIndex 
         <ChevronLeft size={22} color={primaryColor} strokeWidth={2.5} />
       </Pressable>
 
-      {/* Month name + Year — large iOS Calendar style */}
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+      {/* Month name + Year — large iOS Calendar style (avoid adjustsFontSizeToFit in flex: it shrinks Hebrew month to illegible size). */}
+      <View
+        style={{
+          flex: 1,
+          minWidth: 0,
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingHorizontal: 2,
+        }}
+      >
         <Text
           numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.75}
+          ellipsizeMode="tail"
           style={{
-            fontSize: 26,
+            width: '100%',
+            fontSize: 23,
             fontWeight: '700',
             color: '#1C1C1E',
-            letterSpacing: -0.5,
+            letterSpacing: -0.35,
             textAlign: 'center',
             includeFontPadding: false,
-            lineHeight: 30,
+            lineHeight: 28,
             ...Platform.select({
               ios: { fontFamily: 'System' },
               android: { fontFamily: 'sans-serif-medium' },
@@ -100,13 +108,14 @@ export function ThreeMonthHeader({ data, activeIndex, primaryColor, onGoToIndex 
         </Text>
         <Text
           style={{
-            fontSize: 13,
-            fontWeight: '400',
+            width: '100%',
+            fontSize: 14,
+            fontWeight: '500',
             color: '#8E8E93',
             textAlign: 'center',
-            marginTop: 1,
+            marginTop: 2,
             includeFontPadding: false,
-            lineHeight: 16,
+            lineHeight: 18,
           }}
         >
           {yearStr}

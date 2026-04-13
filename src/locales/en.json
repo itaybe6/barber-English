@@ -1436,6 +1436,7 @@
     "execute": "Swap",
     "swapSuccess": "Appointments have been swapped successfully!",
     "swapFailed": "Failed to swap appointments",
+    "infoText": "When a client with a matching slot confirms the swap once, appointments update. You get a notification with your new time — no extra approval step on your side.",
     "interested": {
       "title": "Swap interest",
       "subOne": "One client wants your appointment slot",

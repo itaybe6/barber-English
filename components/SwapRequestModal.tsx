@@ -15,11 +15,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { swapRequestsApi } from '@/lib/api/swapRequests';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
+import { formatDateToYMDLocal } from '@/lib/utils/localDate';
 import type { Appointment } from '@/lib/supabase';
 
-const PRIMARY      = '#534AB7';
-const PRIMARY_PALE = '#EAE8FB';
-const INFO_BG      = '#EEEDFE';
+const PRIMARY = '#534AB7';
+const INFO_BG   = '#EEEDFE';
 const INFO_TEXT    = '#3C3489';
 
 // ── ימי השבוע ללא שבת (RTL: א מופיע ראשון = ימין) ──────────────────────
@@ -32,10 +32,11 @@ const DAYS = [
   { label: 'ו', dayIndex: 5 },
 ] as const;
 
+/** Same period emojis + windows as `book-appointment/TimeSelection` + `time_period.range.*` */
 const TIME_SLOTS = [
-  { id: 'morning',   label: 'בוקר',   range: '08:00 – 12:00', icon: 'partly-sunny-outline' as const, from: '08:00', to: '12:00' },
-  { id: 'afternoon', label: 'צהריים', range: '12:00 – 16:00', icon: 'sunny-outline'         as const, from: '12:00', to: '16:00' },
-  { id: 'evening',   label: 'ערב',    range: '16:00 – 20:00', icon: 'moon-outline'          as const, from: '16:00', to: '20:00' },
+  { id: 'morning',   emoji: '☀️',  labelKey: 'time_period.morning',   rangeKey: 'time_period.range.morning',   from: '08:00', to: '12:00' },
+  { id: 'afternoon', emoji: '🌤', labelKey: 'time_period.afternoon', rangeKey: 'time_period.range.afternoon', from: '12:00', to: '16:00' },
+  { id: 'evening',   emoji: '🌙', labelKey: 'time_period.evening',   rangeKey: 'time_period.range.evening',   from: '16:00', to: '20:00' },
 ] as const;
 
 interface SwapRequestModalProps {
@@ -54,7 +55,7 @@ function datesForDayIndices(dayIndices: number[], horizonDays = 28): string[] {
   for (let i = 1; i <= horizonDays; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
-    if (dayIndices.includes(d.getDay())) result.push(d.toISOString().split('T')[0]);
+    if (dayIndices.includes(d.getDay())) result.push(formatDateToYMDLocal(d));
   }
   return result;
 }
@@ -268,36 +269,28 @@ export default function SwapRequestModal({
             {/* ── Time slots ──────────────────────────────────────────────── */}
             <Text style={s.sectionLabel}>{t('swap.selectTime', 'באיזה שעות?')}</Text>
 
-            <View style={s.slotsCol}>
+            <View style={s.slotsRow}>
               {TIME_SLOTS.map(slot => {
                 const active = selectedSlots.includes(slot.id);
                 return (
                   <TouchableOpacity
                     key={slot.id}
-                    style={[s.slotPill, active && s.slotPillActive]}
+                    style={[s.slotCube, active && s.slotCubeActive]}
                     onPress={() => toggleSlot(slot.id)}
                     activeOpacity={0.72}
                   >
-                    {/*
-                      row + rtl + space-between:
-                      ① slotRight (label+icon) = ימין
-                      ② range text            = שמאל
-                    */}
-                    <View style={s.slotRight}>
-                      {/* row + rtl → ① label=ימין  ② icon=שמאל */}
-                      <Text style={[s.slotLabel, active && s.slotLabelActive]}>
-                        {slot.label}
-                      </Text>
-                      <View style={[s.slotIconBubble, active && s.slotIconBubbleActive]}>
-                        <Ionicons
-                          name={slot.icon}
-                          size={15}
-                          color={active ? PRIMARY : '#8E8E93'}
-                        />
-                      </View>
-                    </View>
-                    <Text style={[s.slotRange, active && s.slotRangeActive]}>
-                      {slot.range}
+                    <Text style={s.slotCubeEmoji}>{slot.emoji}</Text>
+                    <Text
+                      style={[s.slotCubeLabel, active && s.slotCubeLabelActive]}
+                      numberOfLines={1}
+                    >
+                      {t(slot.labelKey as never)}
+                    </Text>
+                    <Text
+                      style={[s.slotCubeRange, active && s.slotCubeRangeActive]}
+                      numberOfLines={2}
+                    >
+                      {t(slot.rangeKey as never)}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -310,7 +303,7 @@ export default function SwapRequestModal({
               <Text style={s.infoText}>
                 {t(
                   'swap.infoText',
-                  'אם לקוח עם תור בטווח הזמנים שבחרת יאשר את ההחלפה, תקבל התראה ותתבקש לאשר סופית'
+                  'כשנמצא לקוח עם תור מתאים, הוא מאשר את ההחלפה פעם אחת והתורים מתעדכנים. תקבל התראה עם הזמן החדש — בלי אישור נוסף ממך.'
                 )}
               </Text>
               <Ionicons name="information-circle-outline" size={17} color={INFO_TEXT} style={s.infoIcon} />
@@ -616,70 +609,71 @@ const s = StyleSheet.create({
     marginBottom: 20,
   },
 
-  // ── Time slots ───────────────────────────────────────────────────────────
-  slotsCol: {
-    gap: 10,
+  // ── Time slots (one row — same cube feel as book-appointment TimeSelection grid) ──
+  slotsRow: {
+    flexDirection: 'row',
+    gap: 9,
     marginBottom: 22,
-    marginTop: 12,
+    marginTop: 4,
   },
-  slotPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: '#E2E2E8',
-    backgroundColor: '#FFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  slotPillActive: {
-    borderColor: PRIMARY,
-    borderWidth: 2,
-    shadowColor: PRIMARY,
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  slotRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  slotLabel: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#2C2C3E',
-    textAlign: 'right',
-  },
-  slotLabelActive: {
-    color: PRIMARY,
-  },
-  slotIconBubble: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
-    backgroundColor: '#F2F2F7',
+  slotCube: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    minHeight: 102,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: 'rgba(255,255,255,0.98)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.13,
+        shadowRadius: 8,
+      },
+      android: { elevation: 3 },
+    }),
   },
-  slotIconBubbleActive: {
-    backgroundColor: PRIMARY_PALE,
+  slotCubeActive: {
+    backgroundColor: PRIMARY,
+    borderColor: PRIMARY,
+    ...Platform.select({
+      ios: {
+        shadowColor: PRIMARY,
+        shadowOpacity: 0.28,
+        shadowRadius: 10,
+      },
+      android: { elevation: 5 },
+    }),
   },
-  slotRange: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#8E8E93',
-    textAlign: 'left',
+  slotCubeEmoji: {
+    fontSize: 20,
+    lineHeight: 26,
+    marginBottom: 4,
   },
-  slotRangeActive: {
-    color: PRIMARY,
+  slotCubeLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#1C1C1E',
+    textAlign: 'center',
+    letterSpacing: -0.2,
+  },
+  slotCubeLabelActive: {
+    color: '#FFF',
+  },
+  slotCubeRange: {
+    marginTop: 4,
+    fontSize: 10,
     fontWeight: '600',
+    color: '#8E8E93',
+    textAlign: 'center',
+    lineHeight: 13,
+  },
+  slotCubeRangeActive: {
+    color: 'rgba(255,255,255,0.88)',
   },
 
   // ── Info box ──────────────────────────────────────────────────────────────

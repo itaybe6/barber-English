@@ -4,6 +4,7 @@ import { notificationsApi } from './notifications';
 import { businessProfileApi, isClientSwapEnabled } from './businessProfile';
 import i18n from '@/src/config/i18n';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
+import { formatDateToYMDLocal } from '@/lib/utils/localDate';
 
 function swapNotifDateLocale(): string {
   const lng = String(i18n.language || 'en').toLowerCase();
@@ -96,7 +97,7 @@ export const swapRequestsApi = {
   async getActiveSwapRequests(): Promise<SwapRequest[]> {
     try {
       const businessId = getBusinessId();
-      const today = new Date().toISOString().split('T')[0];
+      const today = formatDateToYMDLocal(new Date());
 
       const { data, error } = await supabase
         .from('swap_requests')

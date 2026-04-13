@@ -19,10 +19,8 @@ try {
   require('./src/config/i18n');
 } catch {}
 
-// Fallback: hide splash after 5s even if React tree didn't mount
-setTimeout(() => {
-  SplashScreen.hideAsync().catch(() => {});
-}, 5000);
+// Do not call SplashScreen.hideAsync() here — RootLayout handles it once.
+// Extra hides (e.g. after delay) caused iOS "No native splash screen registered" when combined with onLayout + effects.
 
 // Minimal boot logs to device console in production
 try {

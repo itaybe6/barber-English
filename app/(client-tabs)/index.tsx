@@ -17,8 +17,6 @@ import {
   Platform,
   I18nManager,
   LayoutChangeEvent,
-  Modal,
-  Pressable,
 } from 'react-native';
 import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-animation';
 import Animated, { useSharedValue, useAnimatedScrollHandler, runOnJS } from 'react-native-reanimated';
@@ -51,6 +49,7 @@ import { manicureImages } from '@/src/constants/manicureImages';
 import { ManicureMarqueeTile } from '@/components/ManicureMarqueeTile';
 import { distributeHeroMarqueeUrlsToRows, resolveAdminHeroMarqueeImages } from '@/components/home/AdminHomeHeroMarquee';
 import { WaitlistHomeFabPanel } from '@/components/WaitlistHomeFabPanel';
+import HomeFixedMessageSheet from '@/components/HomeFixedMessageSheet';
 import InterestedSwapModal from '@/components/InterestedSwapModal';
 import { swapRequestsApi } from '@/lib/api/swapRequests';
 import type { SwapRequest } from '@/lib/supabase';
@@ -75,9 +74,10 @@ const MARQUEE_TILT_Z = I18nManager.isRTL ? '3.2deg' : '-3.2deg';
 const MARQUEE_PLANE_SCALE = 1.075;
 const MARQUEE_POST_TRANSFORM_NUDGE_Y = 48;
 /** Hero header logo frame — same as admin `ADMIN_HOME_LOGO_*` (`app/(tabs)/index.tsx`). */
-const CLIENT_HOME_LOGO_WIDTH = 200;
-const CLIENT_HOME_LOGO_HEIGHT = 78;
-const CLIENT_HOME_LOGO_TOP_OFFSET = -15;
+const CLIENT_HOME_LOGO_WIDTH = 138;
+const CLIENT_HOME_LOGO_HEIGHT = 52;
+/** Positive = more space below status bar / Dynamic Island (was −15, too tight). */
+const CLIENT_HOME_LOGO_TOP_OFFSET = 8;
 
 const HERO_BG = '#FFFFFF';
 /** Top scrim over hero images — matches admin home primary fade (readability for status bar / header). */
@@ -1364,7 +1364,7 @@ export default function ClientHomeScreen() {
           <View style={styles.headerLogoInner}>
             <Image
               source={getHomeLogoSourceFromUrl(homeLogoUrlForHeader)}
-              style={[styles.overlayLogo, !homeLogoUrlForHeader && styles.overlayLogoBundledWhite]}
+              style={[styles.overlayLogo, styles.overlayLogoHeroWhite]}
               resizeMode="contain"
             />
           </View>
@@ -1390,75 +1390,11 @@ export default function ClientHomeScreen() {
         }}
       />
 
-      <Modal
+      <HomeFixedMessageSheet
         visible={showHomeFixedMessageModal}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={() => setHomeFixedMessageDismissed(true)}
-      >
-        <View style={styles.homeFixedModalRoot} pointerEvents="box-none">
-          <Pressable
-            style={styles.homeFixedModalBackdrop}
-            onPress={() => setHomeFixedMessageDismissed(true)}
-            accessibilityRole="button"
-            accessibilityLabel={t('common.close', 'Close')}
-          />
-          <View
-            style={[
-              styles.homeFixedModalTopPanel,
-              {
-                marginTop:
-                  insets.top + Math.round(SCREEN_HEIGHT * 0.3),
-                maxHeight: SCREEN_HEIGHT * 0.52,
-                paddingBottom: Math.max(insets.bottom, 14),
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.homeFixedModalHeaderRow,
-                { flexDirection: isRTL ? 'row-reverse' : 'row' },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.homeFixedModalTitle,
-                  { textAlign: isRTL ? 'right' : 'left' },
-                ]}
-                numberOfLines={1}
-              >
-                {t('home.fixedMessage.title', 'Notice')}
-              </Text>
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={() => setHomeFixedMessageDismissed(true)}
-                style={styles.homeFixedModalCloseButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                accessibilityRole="button"
-                accessibilityLabel={t('common.close', 'Close')}
-              >
-                <Ionicons name="close" size={26} color="#3C3C43" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView
-              style={styles.homeFixedModalScroll}
-              contentContainerStyle={styles.homeFixedModalScrollContent}
-              showsVerticalScrollIndicator={false}
-              bounces={false}
-            >
-              <Text
-                style={[
-                  styles.homeFixedModalBody,
-                  { textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' },
-                ]}
-              >
-                {homeFixedMessageText}
-              </Text>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+        message={homeFixedMessageText}
+        onDismiss={() => setHomeFixedMessageDismissed(true)}
+      />
     </View>
   );
 }
@@ -1557,8 +1493,8 @@ const styles = StyleSheet.create<any>({
     width: '100%',
     height: '100%',
   },
-  /** Bundled asset is template-style; remote uploads are full-color — do not tint those (admin home). */
-  overlayLogoBundledWhite: {
+  /** White on hero scrim — same treatment as admin home (`overlayLogoHeroWhite`). */
+  overlayLogoHeroWhite: {
     tintColor: '#FFFFFF',
   },
   fullScreenHeroContent: {
@@ -2559,71 +2495,6 @@ const styles = StyleSheet.create<any>({
     letterSpacing: -0.5,
   },
   // sectionHeaderModernSimple and sectionSubtitle defined earlier
-  homeFixedModalRoot: {
-    flex: 1,
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-  },
-  homeFixedModalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  homeFixedModalTopPanel: {
-    width: '100%',
-    maxWidth: 520,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    paddingHorizontal: 18,
-    paddingTop: 14,
-    borderCurve: 'continuous',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOpacity: 0.22,
-        shadowRadius: 24,
-        shadowOffset: { width: 0, height: 10 },
-      },
-      android: { elevation: 18 },
-    }),
-  },
-  homeFixedModalHeaderRow: {
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 12,
-    paddingBottom: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E5EA',
-  },
-  homeFixedModalTitle: {
-    flex: 1,
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#1C1C1E',
-    letterSpacing: -0.3,
-  },
-  homeFixedModalCloseButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F2F2F7',
-  },
-  homeFixedModalScroll: {
-    flexGrow: 0,
-  },
-  homeFixedModalScrollContent: {
-    paddingBottom: 4,
-  },
-  homeFixedModalBody: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#1C1C1E',
-    fontWeight: '500',
-    letterSpacing: -0.2,
-  },
 
   // ── Interested swap footer inside appointment card ──
   clientNextInterestedRow: {

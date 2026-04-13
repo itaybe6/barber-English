@@ -39,6 +39,8 @@ interface Props {
   selectedDate: string;
   serviceName: string;
   barberId?: string;
+  /** Periods that already have available slots — excluded from the waitlist options. */
+  unavailablePeriods?: TimePeriod[];
 }
 
 const SNAP_POINTS = ['68%', '92%'];
@@ -50,6 +52,7 @@ export default function WaitlistBottomSheet({
   selectedDate,
   serviceName,
   barberId,
+  unavailablePeriods,
 }: Props) {
   const { t, i18n } = useTranslation();
   const { colors } = useBusinessColors();
@@ -69,10 +72,19 @@ export default function WaitlistBottomSheet({
     service: string;
   } | null>(null);
 
-  const allowedPeriods = useMemo(
-    () => getSelectableTimePeriodsForDate(selectedDate),
-    [selectedDate]
-  );
+  const allowedPeriods = useMemo(() => {
+    const base = getSelectableTimePeriodsForDate(selectedDate);
+    if (!unavailablePeriods || unavailablePeriods.length === 0) return base;
+    // Remove periods that already have available slots — no point joining waitlist for those.
+    // Keep 'any' only if at least one period is actually unavailable (i.e., not all are covered).
+    const filtered = base.filter((p) => !unavailablePeriods.includes(p));
+    // If every specific period is covered, also remove 'any' since all windows are available.
+    const specificCovered = (['morning', 'afternoon', 'evening'] as TimePeriod[]).every(
+      (p) => unavailablePeriods.includes(p) || !base.includes(p)
+    );
+    if (specificCovered) return filtered.filter((p) => p !== 'any');
+    return filtered;
+  }, [selectedDate, unavailablePeriods]);
 
   // Open / close in response to `visible` prop
   useEffect(() => {

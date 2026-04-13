@@ -72,6 +72,7 @@
   "booking.bookAppointment": "Book Appointment",
   "booking.summary.staffLabel": "Staff member",
   "booking.summary.goBack": "Edit",
+  "booking.summary.goHome": "Home — leave booking",
   "booking.field.service": "Service",
   "booking.field.date": "Date",
   "booking.field.time": "Time",
@@ -508,6 +509,7 @@
   "common.searchByNamePhoneEmail": "Search by name, phone, or email",
   "common.close": "Close",
   "home.fixedMessage.gotIt": "OK",
+  "home.fixedMessage.title": "Message from the salon",
   "category": { "gel": "Gel polish", "feet": "Pedicure polish", "manicure": "Manicure" },
   "admin2": { "hoursAdmin": { "title": "Work constraints", "segment": { "hours": "Hours", "singleDay": "Single day", "multiDays": "Multiple days" }, "pickDateShort": "Pick a date", "closedHours": "Closed hours", "pickDateAllDay": "Pick a date (closed all day)", "pickDateRangeAllDay": "Pick a date range (closed all day)", "selectedRange": "Selected range:", "allDay": "All day", "chooseClosedHours": "Choose closed hours", "start": "Start", "end": "End", "upcomingConstraints": "Upcoming constraints", "noUpcomingConstraints": "No upcoming constraints", "noReason": "No reason", "saveCTA": "Save constraints" } },
   "login": {
@@ -1433,7 +1435,29 @@
     "confirmMessage": "Swap your appointment on {{myDate}} at {{myTime}} with the appointment on {{theirDate}} at {{theirTime}}?",
     "execute": "Swap",
     "swapSuccess": "Appointments have been swapped successfully!",
-    "swapFailed": "Failed to swap appointments"
+    "swapFailed": "Failed to swap appointments",
+    "infoText": "When a client with a matching slot confirms the swap once, appointments update. You get a notification with your new time — no extra approval step on your side.",
+    "interested": {
+      "title": "Swap interest",
+      "subOne": "One client wants your appointment slot",
+      "subMany": "{{n}} clients want your appointment slot",
+      "banner": "Pick who to swap with — both of you get a notification and your new time",
+      "yourSlot": "Your appointment",
+      "theirSlot": "Their appointment",
+      "confirmBtn": "Confirm swap"
+    },
+    "confirm": {
+      "title": "Confirm swap",
+      "lead": "wants to swap with you.",
+      "yourSlot": "Your appointment:",
+      "willMove": "You will move to:",
+      "question": "Confirm?",
+      "yes": "Yes, confirm"
+    },
+    "notification": {
+      "title": "Appointment swapped",
+      "body": "Your appointment on {{fromDate}} at {{fromTime}} was swapped. Your new appointment is on {{toDate}} at {{toTime}}."
+    }
   },
   "finance": {
     "title": "Finance",

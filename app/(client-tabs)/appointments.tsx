@@ -15,6 +15,7 @@ import { usersApi } from '@/lib/api/users';
 import { servicesApi } from '@/lib/api/services';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
+import { formatDateToYMDLocal } from '@/lib/utils/localDate';
 import SwapRequestModal from '@/components/SwapRequestModal';
 import { toBcp47Locale } from '@/lib/i18nLocale';
 
@@ -311,8 +312,7 @@ export default function ClientAppointmentsScreen() {
     for (let i = -7; i <= horizonDays; i++) {
       const date = new Date(today);
       date.setDate(today.getDate() + i);
-      const dateString = date.toISOString().split('T')[0];
-      dates.push(dateString);
+      dates.push(formatDateToYMDLocal(date));
     }
     
     try {
@@ -333,38 +333,7 @@ export default function ClientAppointmentsScreen() {
         setServiceIdList(ids);
         setServiceNameList(names);
       } catch {}
-      // Debug: compare appointment services against current business services
-      try {
-        const services = await servicesApi.getAllServices();
-        const idSet = new Set((services || []).map((s: any) => String(s.id)));
-        const nameSet = new Set((services || []).map((s: any) => String((s.name || '').trim().toLowerCase())));
-        (appointments || []).forEach((a) => {
-          const byId = a.service_id ? idSet.has(String(a.service_id)) : false;
-          const byName = a.service_name ? nameSet.has(String(String(a.service_name).trim().toLowerCase())) : false;
-          console.log('[AppointmentsDebug] service check', {
-            id: (a as any).id,
-            service_id: (a as any).service_id,
-            service_name: (a as any).service_name,
-            inCurrentServicesById: byId,
-            inCurrentServicesByName: byName,
-          });
-        });
-      } catch (e) {
-        console.log('[AppointmentsDebug] error while checking services against current list', e);
-      }
-      // Debug: log fetched business_ids vs current app business_id
-      try {
-        const currentBusinessId = String(getBusinessId());
-        const fetchedBusinessIds = Array.from(new Set((appointments || []).map(a => String((a as any).business_id))));
-        const mismatches = (appointments || [])
-          .filter(a => String((a as any).business_id) !== currentBusinessId)
-          .slice(0, 5)
-          .map(a => ({ id: (a as any).id, business_id: (a as any).business_id }));
-        console.log('[AppointmentsDebug] currentBusinessId=', currentBusinessId, 'fetchedBusinessIds=', fetchedBusinessIds, 'mismatchSamples=', mismatches);
-      } catch (e) {
-        console.log('[AppointmentsDebug] error while logging business ids', e);
-      }
-      
+
       setUserAppointments(appointments);
     } catch (error) {
       console.error('Error loading user appointments:', error);
@@ -434,13 +403,6 @@ export default function ClientAppointmentsScreen() {
       return String(slot.business_id) === String(businessId);
     });
 
-    // Debug: log incoming and scoped business ids
-    try {
-      const inputBizIds = Array.from(new Set(userAppointments.map(s => String((s as any).business_id))));
-      const scopedBizIds = Array.from(new Set(scopedByBusiness.map(s => String((s as any).business_id))));
-      console.log('[AppointmentsDebug] memo inputBizIds=', inputBizIds, 'scopedBizIds=', scopedBizIds, 'currentBusinessId=', String(businessId), 'counts:', { input: userAppointments.length, scoped: scopedByBusiness.length });
-    } catch {}
-
     const isAdminUser = user?.user_type === 'admin';
 
     if (isAdminUser) {
@@ -458,7 +420,6 @@ export default function ClientAppointmentsScreen() {
         const byName = sname ? serviceNameList.includes(sname) : false;
         return byId || byName;
       });
-      try { console.log('[AppointmentsDebug] admin filtered count=', filtered.length, 'serviceFiltered=', serviceFiltered.length); } catch {}
       return serviceFiltered;
     }
 
@@ -484,7 +445,6 @@ export default function ClientAppointmentsScreen() {
       const byName = sname ? serviceNameList.includes(sname) : false;
       return byId || byName;
     });
-    try { console.log('[AppointmentsDebug] client filtered count=', clientFiltered.length, 'serviceFiltered=', serviceFiltered.length); } catch {}
     return serviceFiltered;
   }, [userAppointments, user?.id, user?.name, user?.phone, user?.user_type, serviceIdList, serviceNameList]);
 
@@ -588,25 +548,6 @@ export default function ClientAppointmentsScreen() {
 
   const currentAppointments = activeTab === 'upcoming' ? displayedUpcomingAppointments : pastAppointments;
   const groupedAppointments = groupAppointmentsByDate(currentAppointments);
-
-  // Debug: log each displayed appointment's business_id vs current app business_id
-  useEffect(() => {
-    try {
-      const currentBusinessId = String(getBusinessId());
-      (currentAppointments || []).forEach((a) => {
-        const bid = String((a as any).business_id);
-        console.log('[AppointmentsDebug] item business_id check', {
-          id: (a as any).id,
-          business_id: bid,
-          matches: bid === currentBusinessId,
-          date: a.slot_date,
-          time: a.slot_time,
-        });
-      });
-    } catch (e) {
-      console.log('[AppointmentsDebug] error while logging per-item business ids', e);
-    }
-  }, [currentAppointments, activeTab]);
 
   // Date Header Component
   const DateHeader: React.FC<{ date: string; forceFull?: boolean }> = React.useCallback(({ date, forceFull = false }) => {

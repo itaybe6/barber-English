@@ -95,7 +95,7 @@
     "@expo-google-fonts/inter": "^0.2.3",
     "@expo/metro-runtime": "~6.1.2",
     "@expo/vector-icons": "^15.0.2",
-    "@faker-js/faker": "^9.9.0",
+    "@faker-js/faker": "^9.2.0",
     "@gorhom/bottom-sheet": "^5.2.6",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",

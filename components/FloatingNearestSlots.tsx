@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
+import { formatDateToYMDLocal } from '@/lib/utils/localDate';
 
 export default function FloatingNearestSlots() {
   const router = useRouter();
@@ -23,7 +24,7 @@ export default function FloatingNearestSlots() {
       for (let i = 0; i <= 14; i++) {
         const d = new Date(today);
         d.setDate(today.getDate() + i);
-        dateStrings.push(d.toISOString().split('T')[0]);
+        dateStrings.push(formatDateToYMDLocal(d));
       }
 
       const { data, error } = await supabase

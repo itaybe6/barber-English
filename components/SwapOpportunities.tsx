@@ -18,6 +18,7 @@ import { supabase, getBusinessId } from '@/lib/supabase';
 import type { SwapRequest, Appointment } from '@/lib/supabase';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { toBcp47Locale } from '@/lib/i18nLocale';
+import { formatDateToYMDLocal } from '@/lib/utils/localDate';
 
 interface SwapOpportunity {
   swapRequest: SwapRequest;
@@ -49,7 +50,7 @@ export default function SwapOpportunities() {
       for (let i = 0; i <= 14; i++) {
         const d = new Date(today);
         d.setDate(today.getDate() + i);
-        dates.push(d.toISOString().split('T')[0]);
+        dates.push(formatDateToYMDLocal(d));
       }
 
       const { data, error } = await supabase

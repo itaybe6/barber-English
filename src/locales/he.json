@@ -73,6 +73,7 @@
   "booking.bookAppointment": "קבע תור",
   "booking.summary.staffLabel": "איש צוות",
   "booking.summary.goBack": "חזור לשלב",
+  "booking.summary.goHome": "בית — יציאה מקביעת תור",
   "booking.field.service": "שירות",
   "booking.field.date": "תאריך",
   "booking.field.time": "שעה",
@@ -531,6 +532,7 @@
   "common.searchByNamePhoneEmail": "חפש לפי שם, טלפון או אימייל",
   "common.close": "סגור",
   "home.fixedMessage.gotIt": "הבנתי",
+  "home.fixedMessage.title": "הודעה מהמספרה",
   "category": { "gel": "לק ג'ל", "feet": "לק ברגליים", "manicure": "מניקור" },
   "admin2": { "hoursAdmin": { "title": "אילוצי עבודה", "segment": { "hours": "שעות", "singleDay": "יום אחד", "multiDays": "מספר ימים" }, "pickDateShort": "בחר/י תאריך", "closedHours": "שעות סגורות", "pickDateAllDay": "בחירת תאריך (סגור כל היום)", "pickDateRangeAllDay": "בחירת טווח תאריכים (סגור כל היום)", "selectedRange": "טווח נבחר:", "allDay": "כל היום", "chooseClosedHours": "בחר/י שעות סגורות", "start": "התחלה", "end": "סיום", "upcomingConstraints": "אילוצים קרובים", "noUpcomingConstraints": "אין אילוצים קרובים", "noReason": "ללא סיבה", "saveCTA": "שמור אילוצים" } },
   "login": {
@@ -1434,7 +1436,29 @@
     "confirmMessage": "להחליף את התור שלך ב-{{myDate}} בשעה {{myTime}} עם התור ב-{{theirDate}} בשעה {{theirTime}}?",
     "execute": "החלף",
     "swapSuccess": "התורים הוחלפו בהצלחה!",
-    "swapFailed": "החלפת התורים נכשלה"
+    "swapFailed": "החלפת התורים נכשלה",
+    "infoText": "כשנמצא לקוח עם תור מתאים, הוא מאשר את ההחלפה פעם אחת והתורים מתעדכנים. תקבל התראה עם הזמן החדש — בלי אישור נוסף ממך.",
+    "interested": {
+      "title": "מעוניינים להחלפה",
+      "subOne": "לקוח אחד מבקש לקחת את התור שלך",
+      "subMany": "{{n}} לקוחות מבקשים לקחת את התור שלך",
+      "banner": "בחר עם מי להחליף — שניכם תקבלו עדכון ותור חדש",
+      "yourSlot": "התור שלך",
+      "theirSlot": "התור שלהם",
+      "confirmBtn": "אשר החלפה"
+    },
+    "confirm": {
+      "title": "אישור החלפה",
+      "lead": "רוצה שתחליף איתו/ה.",
+      "yourSlot": "התור שלך:",
+      "willMove": "יעבור ל:",
+      "question": "האם לאשר?",
+      "yes": "כן, אשר"
+    },
+    "notification": {
+      "title": "תור הוחלף",
+      "body": "התור שלך ביום {{fromDate}} בשעה {{fromTime}} הוחלף. התור החדש שלך: {{toDate}} בשעה {{toTime}}."
+    }
   },
   "finance": {
     "title": "פיננסים",

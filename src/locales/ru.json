@@ -65,6 +65,7 @@
   "booking.bookAppointment": "Записаться",
   "booking.summary.staffLabel": "Сотрудник",
   "booking.summary.goBack": "Изменить",
+  "booking.summary.goHome": "Домой — выйти из записи",
   "booking.field.service": "Услуга",
   "booking.field.date": "Дата",
   "booking.field.time": "Время",
@@ -1584,7 +1585,12 @@
     "confirmMessage": "Поменять встречу на {{myDate}} в {{myTime}} на встречу на {{theirDate}} в {{irTime}}?",
     "execute": "Менять",
     "swapSuccess": "Встречи успешно заменены!",
-    "swapFailed": "Не удалось поменять встречи."
+    "swapFailed": "Не удалось поменять встречи.",
+    "infoText": "Когда клиент с подходящим слотом один раз подтверждает обмен, записи обновляются. Вы получите уведомление с новым временем — без дополнительного подтверждения с вашей стороны.",
+    "notification": {
+      "title": "Встреча обменена",
+      "body": "Ваша встреча {{fromDate}} в {{fromTime}} была перенесена. Новая встреча: {{toDate}} в {{toTime}}."
+    }
   },
   "finance": {
     "title": "Финансы",

@@ -65,6 +65,7 @@
   "booking.bookAppointment": "احجز موعداً",
   "booking.summary.staffLabel": "عضو فريق",
   "booking.summary.goBack": "تعديل",
+  "booking.summary.goHome": "الرئيسية — مغادرة الحجز",
   "booking.field.service": "خدمة",
   "booking.field.date": "تاريخ",
   "booking.field.time": "وقت",
@@ -1592,7 +1593,12 @@
     "confirmMessage": "هل تريد تبديل موعدك في {{myDate}} في {{myTime}} بالموعد في {{theirDate}} في {{theirTime}}؟",
     "execute": "تبديل",
     "swapSuccess": "لقد تم تبديل المواعيد بنجاح!",
-    "swapFailed": "فشل في تبديل المواعيد"
+    "swapFailed": "فشل في تبديل المواعيد",
+    "infoText": "عندما يجد عميل موعدًا مناسبًا ويؤكد التبديل مرة واحدة، تُحدَّث المواعيد. ستصلك إشعار بالوقت الجديد — دون موافقة إضافية منك.",
+    "notification": {
+      "title": "تم تبديل الموعد",
+      "body": "تم تبديل موعدك في {{fromDate}} الساعة {{fromTime}}. موعدك الجديد: {{toDate}} الساعة {{toTime}}."
+    }
   },
   "finance": {
     "title": "تمويل",

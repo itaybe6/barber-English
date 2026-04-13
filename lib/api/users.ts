@@ -9,6 +9,32 @@ function userPhoneMatchesRow(storedPhone: string, rawPhone: string): boolean {
   return storedDigits === digits || String(storedPhone || '').trim() === trimmed;
 }
 
+/**
+ * When several `users` rows share the same phone (and same demo hash), `.find` + password
+ * on the first phone match can pick the wrong row. Prefer exact stored phone, then `client`.
+ */
+function pickUserWhenPhoneAndPasswordAmbiguous(matches: User[], trimmedPhone: string): User {
+  if (matches.length === 1) return matches[0];
+
+  const exactPhone = matches.filter((u) => String(u.phone || '').trim() === trimmedPhone);
+  let pool = exactPhone.length > 0 ? exactPhone : matches;
+
+  const clients = pool.filter(
+    (u) => String((u as any).user_type || '').trim().toLowerCase() === 'client',
+  );
+  if (clients.length > 0) pool = clients;
+
+  pool.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  const chosen = pool[0];
+  console.warn(
+    '[usersApi] authenticateUserByPhone: multiple users matched phone+password for this business; picked',
+    chosen?.id,
+    (chosen as any)?.user_type,
+    `(candidates=${matches.length})`,
+  );
+  return chosen;
+}
+
 export const usersApi = {
   // Simple hash function for passwords (for demo purposes)
   hashPassword(password: string): string {
@@ -160,17 +186,16 @@ export const usersApi = {
         return null;
       }
 
-      const row = data.find((u) => userPhoneMatchesRow(u.phone, trimmed));
-      if (!row) {
+      const hashedPassword = this.hashPassword(password);
+      const phoneMatches = data.filter((u) => userPhoneMatchesRow(u.phone, trimmed));
+      const passwordMatches = phoneMatches.filter((u) => hashedPassword === u.password_hash);
+      if (passwordMatches.length === 0) {
         return null;
       }
-
-      const hashedPassword = this.hashPassword(password);
-      if (hashedPassword === row.password_hash) {
-        return row;
+      if (passwordMatches.length === 1) {
+        return passwordMatches[0];
       }
-
-      return null;
+      return pickUserWhenPhoneAndPasswordAmbiguous(passwordMatches, trimmed);
     } catch (error) {
       console.error('Error authenticating user by phone:', error);
       return null;

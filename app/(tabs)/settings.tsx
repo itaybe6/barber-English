@@ -1653,12 +1653,6 @@ export default function SettingsScreen() {
   const settingsScreenTabs = useMemo(
     () => {
       const list: { id: string; label: string }[] = [];
-      if (user) {
-        list.push({
-          id: 'account',
-          label: t('settings.sections.accountManagement', 'Account Management'),
-        });
-      }
       list.push({
         id: 'security',
         label: t('settings.sections.securitySupport', 'Security & support'),
@@ -1679,8 +1673,8 @@ export default function SettingsScreen() {
         id: 'appointments',
         label: t('settings.sections.appointments', 'Appointments'),
       });
-      /** Owner-only policies; managers without matching business phone have nothing to show here. */
-      if (canSeeAddEmployee) {
+      /** General: owner policies + language / delete account (all signed-in admins). */
+      if (user || canSeeAddEmployee) {
         const generalTab = {
           id: 'general',
           label: t('settings.sections.general', 'General'),
@@ -1701,16 +1695,17 @@ export default function SettingsScreen() {
     [canSeeAddEmployee, user, t],
   );
 
-  const [activeSettingsTab, setActiveSettingsTab] = useState<string>('appointments');
+  const [activeSettingsTab, setActiveSettingsTab] = useState<string>('general');
   const { tab: settingsDeepTabParam } = useLocalSearchParams<{ tab?: string | string[] }>();
 
   useEffect(() => {
     const raw = settingsDeepTabParam;
     const tab = Array.isArray(raw) ? raw[0] : raw;
     if (!tab || typeof tab !== 'string') return;
+    const resolved = tab === 'account' ? 'general' : tab;
     const ids = settingsScreenTabs.map((x) => x.id);
-    if (!ids.includes(tab)) return;
-    setActiveSettingsTab(tab);
+    if (!ids.includes(resolved)) return;
+    setActiveSettingsTab(resolved);
     router.setParams({ tab: undefined });
   }, [settingsDeepTabParam, settingsScreenTabs, router]);
 
@@ -2101,10 +2096,9 @@ export default function SettingsScreen() {
             style={[
               styles.settingsBelowTabs,
               {
+                /** Appointments: full scroll padding lives on the ScrollView. General: logout sits below the scroll — reserve space for the floating tab bar. */
                 paddingBottom:
-                  activeSettingsTab === 'appointments' || activeSettingsTab === 'general'
-                    ? 0
-                    : insets.bottom + 100,
+                  activeSettingsTab === 'appointments' ? 0 : insets.bottom + 100,
               },
             ]}
           >
@@ -2127,6 +2121,8 @@ export default function SettingsScreen() {
           >
             <View style={styles.settingsTabPanel}>
               <View style={styles.settingsAccordionBody}>
+                {canSeeAddEmployee ? (
+                <>
                 <View style={styles.settingItemLTR}>
                   <View style={styles.settingIconLTR}>
                     <User size={20} color={businessColors.primary} />
@@ -2304,6 +2300,38 @@ export default function SettingsScreen() {
                       </View>
                     </Pressable>
                   )
+                ) : null}
+                </>
+                ) : null}
+                {user ? (
+                  <>
+                    {canSeeAddEmployee ? <View style={styles.settingDivider} /> : null}
+                    {renderSettingItem(
+                      <Ionicons name="globe-outline" size={20} color={businessColors.primary} />,
+                      t('profile.language.title', 'Language'),
+                      (() => {
+                        switch (normalizeAppLanguage(i18n.language)) {
+                          case 'he':
+                            return t('profile.language.hebrew', 'Hebrew');
+                          case 'ar':
+                            return t('profile.language.arabic', 'Arabic');
+                          case 'ru':
+                            return t('profile.language.russian', 'Russian');
+                          default:
+                            return t('profile.language.english', 'English');
+                        }
+                      })(),
+                      undefined,
+                      () => setIsLanguageOpen(true),
+                    )}
+                    {renderSettingItem(
+                      <Trash2 size={20} color="#FF3B30" />,
+                      t('profile.delete.title', 'Delete Account'),
+                      t('profile.delete.subtitle', 'Permanently delete your account'),
+                      undefined,
+                      () => setShowDeleteAccountModal(true),
+                    )}
+                  </>
                 ) : null}
               </View>
             </View>
@@ -3179,39 +3207,7 @@ export default function SettingsScreen() {
         </View>
         )}
 
-        {user && activeSettingsTab === 'account' && (
-        <View style={styles.settingsTabPanel}>
-          <View style={styles.settingsAccordionBody}>
-              {renderSettingItem(
-                <Ionicons name="globe-outline" size={20} color={businessColors.primary} />,
-                t('profile.language.title', 'Language'),
-                (() => {
-                  switch (normalizeAppLanguage(i18n.language)) {
-                    case 'he':
-                      return t('profile.language.hebrew', 'Hebrew');
-                    case 'ar':
-                      return t('profile.language.arabic', 'Arabic');
-                    case 'ru':
-                      return t('profile.language.russian', 'Russian');
-                    default:
-                      return t('profile.language.english', 'English');
-                  }
-                })(),
-                undefined,
-                () => setIsLanguageOpen(true)
-              )}
-              {renderSettingItem(
-                <Trash2 size={20} color="#FF3B30" />,
-                t('profile.delete.title', 'Delete Account'),
-                t('profile.delete.subtitle', 'Permanently delete your account'),
-                undefined,
-                () => setShowDeleteAccountModal(true)
-              )}
-          </View>
-        </View>
-        )}
-
-        {user && activeSettingsTab === 'account' ? (
+        {user && activeSettingsTab === 'general' ? (
           <TouchableOpacity style={[styles.logoutButton, { backgroundColor: businessColors.primary }]} onPress={handleLogout}>
             <LogOut size={20} color={Colors.white} />
             <Text style={styles.logoutText}>{t('settings.sections.logoutLabel', 'Logout')}</Text>

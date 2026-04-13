@@ -2,6 +2,33 @@ import { supabase, getBusinessId } from '../supabase';
 import type { SwapRequest, Appointment } from '../supabase';
 import { notificationsApi } from './notifications';
 import { businessProfileApi, isClientSwapEnabled } from './businessProfile';
+import i18n from '@/src/config/i18n';
+import { formatTime12Hour } from '@/lib/utils/timeFormat';
+import { formatDateToYMDLocal } from '@/lib/utils/localDate';
+
+function swapNotifDateLocale(): string {
+  const lng = String(i18n.language || 'en').toLowerCase();
+  if (lng.startsWith('he')) return 'he-IL';
+  if (lng.startsWith('ar')) return 'ar';
+  if (lng.startsWith('ru')) return 'ru-RU';
+  return 'en-US';
+}
+
+function formatSwapNotifDate(isoDate: string): string {
+  const d = String(isoDate || '').split('T')[0];
+  const parts = d.split('-').map((x) => parseInt(x, 10));
+  if (parts.length < 3 || parts.some((n) => Number.isNaN(n))) return d;
+  const [y, m, day] = parts;
+  return new Date(y, m - 1, day).toLocaleDateString(swapNotifDateLocale(), {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+}
+
+function formatSwapNotifTime(time: string | undefined): string {
+  return formatTime12Hour(String(time ?? '').trim());
+}
 
 async function assertClientSwapAllowed(): Promise<boolean> {
   const profile = await businessProfileApi.getProfile();
@@ -70,7 +97,7 @@ export const swapRequestsApi = {
   async getActiveSwapRequests(): Promise<SwapRequest[]> {
     try {
       const businessId = getBusinessId();
-      const today = new Date().toISOString().split('T')[0];
+      const today = formatDateToYMDLocal(new Date());
 
       const { data, error } = await supabase
         .from('swap_requests')
@@ -151,11 +178,36 @@ export const swapRequestsApi = {
       if (!(await assertClientSwapAllowed())) {
         return [];
       }
+      const businessId = getBusinessId();
       const allRequests = await this.getActiveSwapRequests();
       const opportunities: Array<{ swapRequest: SwapRequest; myAppointment: Appointment }> = [];
 
+      /** Requester's booked slot (authoritative barber + duration vs row snapshot). */
+      const requesterAptIds = [...new Set(allRequests.map((r) => r.appointment_id).filter(Boolean))] as string[];
+      const requesterAptById = new Map<string, { duration_minutes: number | null; barber_id: string | null }>();
+      if (requesterAptIds.length > 0) {
+        const { data: reqApts, error: reqAptErr } = await supabase
+          .from('appointments')
+          .select('id, duration_minutes, barber_id')
+          .eq('business_id', businessId)
+          .in('id', requesterAptIds);
+        if (!reqAptErr) {
+          for (const row of reqApts || []) {
+            requesterAptById.set(String(row.id), {
+              duration_minutes: row.duration_minutes != null ? Number(row.duration_minutes) : null,
+              barber_id: row.barber_id != null ? String(row.barber_id) : null,
+            });
+          }
+        }
+      }
+
       for (const req of allRequests) {
         if (req.requester_phone === userPhone) continue;
+
+        const reqAptMeta = requesterAptById.get(req.appointment_id);
+        const requesterDuration =
+          reqAptMeta?.duration_minutes ?? req.original_duration_minutes ?? 60;
+        const requesterBarberId = reqAptMeta?.barber_id ?? req.original_barber_id ?? '';
 
         for (const apt of userAppointments) {
           if (!apt.slot_date || !apt.slot_time) continue;
@@ -169,13 +221,11 @@ export const swapRequestsApi = {
           const toMinutes = timeToMinutes(req.preferred_time_to);
           if (aptTimeMinutes < fromMinutes || aptTimeMinutes > toMinutes) continue;
 
-          const sameBarberId =
-            (req.original_barber_id || '') === (apt.barber_id || '');
+          const sameBarberId = (requesterBarberId || '') === (apt.barber_id || '');
           if (!sameBarberId) continue;
 
-          const sameDuration =
-            req.original_duration_minutes === (apt.duration_minutes || 60);
-          if (!sameDuration) continue;
+          const myDuration = apt.duration_minutes ?? 60;
+          if (requesterDuration !== myDuration) continue;
 
           opportunities.push({ swapRequest: req, myAppointment: apt });
         }
@@ -265,11 +315,18 @@ export const swapRequestsApi = {
         .eq('id', swapRequest.id)
         .eq('business_id', businessId);
 
-      // Notify requester
-      const requesterNotifTitle = 'Appointment Swapped';
-      const requesterNotifContent = `Your appointment on ${swapRequest.original_date} at ${swapRequest.original_time} has been swapped to ${myAppointment.slot_date} at ${myAppointment.slot_time}.`;
+      const notifTitle = i18n.t('swap.notification.title', 'תור הוחלף');
+
+      // Requester: from their old slot → to the acceptor's slot
+      const requesterNotifContent = i18n.t('swap.notification.body', {
+        fromDate: formatSwapNotifDate(swapRequest.original_date),
+        fromTime: formatSwapNotifTime(swapRequest.original_time),
+        toDate: formatSwapNotifDate(myAppointment.slot_date),
+        toTime: formatSwapNotifTime(myAppointment.slot_time),
+      });
+
       await notificationsApi.createNotification({
-        title: requesterNotifTitle,
+        title: notifTitle,
         content: requesterNotifContent,
         type: 'system',
         recipient_name: swapRequest.requester_name || '',
@@ -277,11 +334,16 @@ export const swapRequestsApi = {
         business_id: businessId,
       }).catch(() => {});
 
-      // Notify acceptor
-      const acceptorNotifTitle = 'Appointment Swapped';
-      const acceptorNotifContent = `Your appointment on ${myAppointment.slot_date} at ${myAppointment.slot_time} has been swapped to ${swapRequest.original_date} at ${swapRequest.original_time}.`;
+      // Acceptor: from their old slot → to the requester's slot
+      const acceptorNotifContent = i18n.t('swap.notification.body', {
+        fromDate: formatSwapNotifDate(myAppointment.slot_date),
+        fromTime: formatSwapNotifTime(myAppointment.slot_time),
+        toDate: formatSwapNotifDate(swapRequest.original_date),
+        toTime: formatSwapNotifTime(swapRequest.original_time),
+      });
+
       await notificationsApi.createNotification({
-        title: acceptorNotifTitle,
+        title: notifTitle,
         content: acceptorNotifContent,
         type: 'system',
         recipient_name: myAppointment.client_name || '',

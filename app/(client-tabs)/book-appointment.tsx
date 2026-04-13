@@ -637,17 +637,6 @@ export default function BookAppointment() {
     const svcHandle = serviceSelectionRef.current;
     if (svcHandle) {
       svcHandle.measureSelectedRowInWindow((rect) => {
-        if (rect && rect.width >= 8 && rect.height >= 8) {
-          // Compute the target slot center in window coordinates
-          const dstCX = slotCenterX(2, 1, winW, H_PAD, GAP, I18nManager.isRTL);
-          const dstCY = safeAreaInsets.top + BOOKING_PROGRESS_STRIP_TOP_GAP + BOOKING_PROGRESS_STRIP_HEIGHT / 2;
-          // Source = center of the tapped info pill
-          const srcCX = rect.x + rect.width / 2;
-          const srcCY = rect.y + rect.height / 2;
-          // Launch an absolutely-positioned ghost that flies from source to target.
-          // This is fully independent of the strip's flex layout, so coordinates are exact.
-          setServiceGhost({ srcCX, srcCY, dstCX, dstCY });
-        }
         pendingServiceFlightRef.current = null;
         // Strip chip fades in at its final position — the ghost handles the visual flight.
         setServiceChipVisible(true);
@@ -911,6 +900,16 @@ export default function BookAppointment() {
     [selectedBarber, selectedService, selectedDay]
   );
 
+  const handleBookingGoHome = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setBookingSuccessData(null);
+    try {
+      (router as any).replace?.('/(client-tabs)/');
+    } catch {
+      router.back();
+    }
+  }, [router]);
+
   const bookingStripTopInset = 0;
 
   // Compute available start times dynamically for the selected service and date using business_hours
@@ -1038,6 +1037,19 @@ export default function BookAppointment() {
   };
   
   const availableTimeSlots = getAvailableTimeSlotsForDate();
+
+  /** Periods that have at least one available slot — excluded from waitlist options. */
+  const availableSlotPeriods = useMemo(() => {
+    const slots = availableTimeSlots || [];
+    const periods = new Set<string>();
+    slots.forEach((slot: string) => {
+      const hour = parseInt(slot.split(':')[0], 10);
+      if (hour <= 11) periods.add('morning');
+      else if (hour <= 16) periods.add('afternoon');
+      else periods.add('evening');
+    });
+    return Array.from(periods) as ('morning' | 'afternoon' | 'evening')[];
+  }, [availableTimeSlots]);
 
   // Check if user has any booked appointment on a specific date (match by phone variants; fallback to name)
   const checkUserAppointmentsOnDate = async (dateString: string) => {
@@ -1891,12 +1903,7 @@ export default function BookAppointment() {
     const dstCY = safeAreaInsets.top + BOOKING_PROGRESS_STRIP_TOP_GAP + BOOKING_PROGRESS_STRIP_HEIGHT / 2;
     const dayHandle = daySelectionRef.current;
     if (dayHandle) {
-      dayHandle.measureSelectedDayCellInWindow((rect) => {
-        if (rect && rect.width >= 8 && rect.height >= 8) {
-          const srcCX = rect.x + rect.width / 2;
-          const srcCY = rect.y + rect.height / 2;
-          setDayGhost({ srcCX, srcCY, dstCX, dstCY });
-        }
+      dayHandle.measureSelectedDayCellInWindow((_rect) => {
         setDayFlightAnimKey((k) => k + 1);
         setCurrentStep(4);
       });
@@ -1952,6 +1959,7 @@ export default function BookAppointment() {
       // Expand the summary sheet after the chip renders (slight delay)
       setTimeout(() => summarySheetRef.current?.expand(), 160);
     },
+    onWaitlist: () => setShowWaitlistSheet(true),
   };
 
   const bookingSuccessLines = useMemo((): SuccessLine[] => {
@@ -2043,6 +2051,26 @@ export default function BookAppointment() {
       ) : null}
 
       <SafeAreaView style={styles.container} edges={[]}>
+        {/* `direction: 'ltr'` on the row keeps the control on physical left under forceRTL */}
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.bookingHomeFabWrap,
+            { top: Math.max(safeAreaInsets.top, 8) + 4 },
+          ]}
+        >
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={t('booking.summary.goHome', 'Home — leave booking')}
+            hitSlop={{ top: 10, bottom: 10, left: 12, right: 12 }}
+            onPress={handleBookingGoHome}
+            activeOpacity={0.82}
+            style={styles.bookingHomeFab}
+          >
+            <Ionicons name="home-outline" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+
         <BookingStepTabs
           safeAreaBottom={safeAreaInsets.bottom}
           bottomInsetOverride={getBookingStepBarBottomInsetNoTabBar(safeAreaInsets.bottom)}
@@ -2305,27 +2333,6 @@ export default function BookAppointment() {
         gotItLabel={t('booking.gotIt', 'הבנתי')}
       />
 
-      {/* Ghost circle that flies from the tapped service button to the strip slot */}
-      {serviceGhost && (
-        <ServiceFlightGhost
-          srcCX={serviceGhost.srcCX}
-          srcCY={serviceGhost.srcCY}
-          dstCX={serviceGhost.dstCX}
-          dstCY={serviceGhost.dstCY}
-          onDone={() => setServiceGhost(null)}
-        />
-      )}
-
-      {/* Ghost circle that flies from the tapped day cell to the strip slot */}
-      {dayGhost && (
-        <ServiceFlightGhost
-          srcCX={dayGhost.srcCX}
-          srcCY={dayGhost.srcCY}
-          dstCX={dayGhost.dstCX}
-          dstCY={dayGhost.dstCY}
-          onDone={() => setDayGhost(null)}
-        />
-      )}
 
       {/* Waitlist button is now embedded in BookingStepTabs (variant='waitlist') — no separate footer needed */}
 
@@ -2337,6 +2344,7 @@ export default function BookAppointment() {
         selectedDate={selectedDate ? toLocalDateStr(selectedDate) : ''}
         serviceName={waitlistServiceSummary}
         barberId={selectedBarber?.id || ''}
+        unavailablePeriods={currentStep === 4 ? availableSlotPeriods : undefined}
       />
 
       {/* Replace Confirmation Modal */}
@@ -3385,7 +3393,40 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   container: {
     flex: 1,
+    position: 'relative',
     backgroundColor: 'transparent',
+  },
+  bookingHomeFabWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 200,
+    height: 48,
+    flexDirection: 'row',
+    direction: 'ltr',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+    paddingLeft: 12,
+  },
+  bookingHomeFab: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.42)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+      },
+      android: { elevation: 6 },
+      default: {},
+    }),
   },
   topSafeArea: {
     backgroundColor: '#FFFFFF',

@@ -37,12 +37,12 @@ import { Appointment as AvailableTimeSlot } from '@/lib/supabase';
 import { businessProfileApi, getHomeHeaderTitleWhenLogoHidden } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
 import type { BusinessProfile, WaitlistEntry } from '@/lib/supabase';
+import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import DesignCarousel from '@/components/DesignCarousel';
 import ProductCarousel from '@/components/ProductCarousel';
 import { useDesignsStore } from '@/stores/designsStore';
-import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { useProductsStore } from '@/stores/productsStore';
-import { getHomeLogoSource } from '@/src/theme/assets';
+import { getHomeLogoSource, getHomeLogoSourceFromUrl } from '@/src/theme/assets';
 import { useColors, usePrimaryContrast } from '@/src/theme/ThemeProvider';
 import { StatusBar, setStatusBarStyle, setStatusBarBackgroundColor } from 'expo-status-bar';
 import { useTranslation } from 'react-i18next';
@@ -50,8 +50,10 @@ import { Marquee } from '@animatereactnative/marquee';
 import { manicureImages } from '@/src/constants/manicureImages';
 import { ManicureMarqueeTile } from '@/components/ManicureMarqueeTile';
 import { distributeHeroMarqueeUrlsToRows, resolveAdminHeroMarqueeImages } from '@/components/home/AdminHomeHeroMarquee';
-import SwapOpportunities from '@/components/SwapOpportunities';
 import { WaitlistHomeFabPanel } from '@/components/WaitlistHomeFabPanel';
+import InterestedSwapModal from '@/components/InterestedSwapModal';
+import { swapRequestsApi } from '@/lib/api/swapRequests';
+import type { SwapRequest } from '@/lib/supabase';
 import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
 import { toBcp47Locale } from '@/lib/i18nLocale';
 
@@ -75,6 +77,7 @@ const MARQUEE_POST_TRANSFORM_NUDGE_Y = 48;
 /** Hero header logo frame — same as admin `ADMIN_HOME_LOGO_*` (`app/(tabs)/index.tsx`). */
 const CLIENT_HOME_LOGO_WIDTH = 200;
 const CLIENT_HOME_LOGO_HEIGHT = 78;
+const CLIENT_HOME_LOGO_TOP_OFFSET = -15;
 
 const HERO_BG = '#FFFFFF';
 /** Top scrim over hero images — matches admin home primary fade (readability for status bar / header). */
@@ -97,16 +100,6 @@ function sanitizeUrlArray(value: unknown): string[] {
   return value
     .map((x) => (typeof x === 'string' ? x.trim() : ''))
     .filter((x) => x.length > 0);
-}
-
-function hexToRgba(hex: string, a: number): string {
-  const h = hex.replace('#', '');
-  if (h.length < 6) return `rgba(0,0,0,${a})`;
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return `rgba(0,0,0,${a})`;
-  return `rgba(${r},${g},${b},${a})`;
 }
 
 const ManicureMarqueeHero = React.memo(({ images }: { images: string[] }) => {
@@ -174,7 +167,7 @@ const clientHomeApi = {
       
       let query = supabase
         .from('appointments')
-        .select('id, slot_date, slot_time, client_name, client_phone, service_name, barber_id, status, business_id, user_id')
+        .select('id, slot_date, slot_time, client_name, client_phone, service_name, barber_id, status, business_id, user_id, duration_minutes')
         .eq('business_id', businessId)
         .in('slot_date', dates)
         .eq('is_available', false)
@@ -306,6 +299,8 @@ export default function ClientHomeScreen() {
   const [waitlistEntries, setWaitlistEntries] = useState<WaitlistEntry[]>([]);
   const [isLoadingWaitlist, setIsLoadingWaitlist] = useState(false);
   const [isRemovingFromWaitlist, setIsRemovingFromWaitlist] = useState(false);
+  const [interestedOpportunities, setInterestedOpportunities] = useState<Array<{ swapRequest: SwapRequest; myAppointment: AvailableTimeSlot }>>([]);
+  const [showInterestedModal, setShowInterestedModal] = useState(false);
   const [cardWidth, setCardWidth] = useState(0);
   const [lavaCardLayout, setLavaCardLayout] = useState<{ w: number; h: number } | null>(null);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
@@ -314,12 +309,12 @@ export default function ClientHomeScreen() {
     [businessProfile],
   );
 
-  /** Remote header logo only when toggle allows it and `home_logo_url` is http(s); otherwise show title (like admin). */
-  const clientHomeHeaderShowsRemoteLogo = useMemo(() => {
-    const showLogo = businessProfile?.home_header_show_logo !== false;
-    const hasRemoteLogo = /^https?:\/\//i.test(String(businessProfile?.home_logo_url ?? '').trim());
-    return Boolean(showLogo && hasRemoteLogo);
-  }, [businessProfile?.home_header_show_logo, businessProfile?.home_logo_url]);
+  /** http(s) logo URL for hero — matches admin `homeLogoUrl` (`app/(tabs)/index.tsx`). */
+  const homeLogoUrlForHeader = useMemo(() => {
+    const raw = String(businessProfile?.home_logo_url ?? '').trim();
+    return /^https?:\/\//i.test(raw) ? raw : null;
+  }, [businessProfile?.home_logo_url]);
+  const clientHomeHeaderShowLogo = businessProfile?.home_header_show_logo !== false;
 
   const [managerPhone, setManagerPhone] = useState<string | null>(null);
   const [businessPhone, setBusinessPhone] = useState<string | null>(null);
@@ -393,13 +388,8 @@ export default function ClientHomeScreen() {
     (extra as any)?.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY ||
     '';
 
-  
-
-  // Designs store
-  const { designs, isLoading: isLoadingDesigns, fetchDesigns } = useDesignsStore();
-  
-  // Products store
-  const { products, isLoading: isLoadingProducts, fetchProducts } = useProductsStore();
+  const { designs, fetchDesigns } = useDesignsStore();
+  const { products, fetchProducts } = useProductsStore();
 
   // Removed scroll-driven translate animation (normal scroll behavior)
 
@@ -636,6 +626,19 @@ export default function ClientHomeScreen() {
     }
   };
 
+  // Fetch active swap requests from OTHER users that want MY next appointment slot
+  useEffect(() => {
+    if (!nextAppointment || !user?.phone) {
+      setInterestedOpportunities([]);
+      return;
+    }
+    let cancelled = false;
+    swapRequestsApi.findSwapOpportunities(user.phone, [nextAppointment as any]).then((opps) => {
+      if (!cancelled) setInterestedOpportunities(opps as any);
+    });
+    return () => { cancelled = true; };
+  }, [nextAppointment?.id, user?.phone]);
+
   // Fetch appointments when component mounts
   useEffect(() => {
     fetchUserAppointments();
@@ -646,12 +649,10 @@ export default function ClientHomeScreen() {
     fetchWaitlistEntries();
   }, [fetchWaitlistEntries]);
 
-  // Fetch designs on mount
   useEffect(() => {
     fetchDesigns();
   }, [fetchDesigns]);
 
-  // Fetch products on mount
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
@@ -896,7 +897,7 @@ export default function ClientHomeScreen() {
   const nextAppointmentTime = parseFormattedTime(formatTime(nextAppointment?.slot_time ?? ''));
   
   const homeFixedMessageText = String(businessProfile?.home_fixed_message ?? '').trim();
-  const showHomeFixedMessageSheet =
+  const showHomeFixedMessageModal =
     businessProfile?.home_fixed_message_enabled === true &&
     homeFixedMessageText.length > 0 &&
     !homeFixedMessageDismissed;
@@ -988,9 +989,6 @@ export default function ClientHomeScreen() {
             <SafeAreaView edges={['left', 'right']} style={styles.clientHomeSafeArea}>
               <View style={[styles.contentWrapperSheet, { zIndex: 10 }]}>
                 <View style={styles.contentWrapperInner}>
-        {/* Swap Opportunities Section */}
-        <SwapOpportunities />
-
         {/* Appointment / Book Card */}
         <View style={[styles.sectionContainer, { marginTop: 16 }]}>
           {isLoading ? (
@@ -1054,6 +1052,25 @@ export default function ClientHomeScreen() {
                   ) : null}
                 </View>
               </View>
+              {/* Interested swap footer — only when others want this slot */}
+              {interestedOpportunities.length > 0 && (
+                <>
+                  <View style={styles.clientNextDivider} />
+                  <View style={styles.clientNextInterestedRow}>
+                    <TouchableOpacity
+                      style={styles.interestedBadge}
+                      onPress={() => setShowInterestedModal(true)}
+                      activeOpacity={0.75}
+                    >
+                      <Ionicons name="people" size={13} color="#534AB7" />
+                      <Text style={styles.interestedBadgeText}>
+                        {t('swap.interested.badge', 'מעוניינים להחלפה')} · {interestedOpportunities.length}
+                      </Text>
+                      <Ionicons name="chevron-forward" size={12} color="#534AB7" />
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
             </TouchableOpacity>
           ) : (
             /* ── Lava Lamp Book Appointment Card ── */
@@ -1109,12 +1126,12 @@ export default function ClientHomeScreen() {
             </TouchableOpacity>
           )}
           {waitlistEntries.length > 0 ? (
-            <View style={styles.waitlistTagHost}>
+            <View style={styles.waitlistCardHost}>
               <WaitlistHomeFabPanel
                 entries={waitlistEntries}
                 formatWaitlistDate={formatWaitlistDate}
                 isRemoving={isRemovingFromWaitlist}
-                triggerVariant="tag"
+                triggerVariant="card"
                 onRequestRemoveAll={() => {
                   Alert.alert(
                     t('waitlist.leave.title'),
@@ -1143,12 +1160,13 @@ export default function ClientHomeScreen() {
           <DesignCarousel
             designs={designs}
             onDesignPress={(design) => {
-              // Handle design press - could navigate to gallery or booking
               if (!isAuthenticated) {
                 router.push('/login');
                 return;
               }
-              router.push('/(client-tabs)/gallery');
+              router.push(
+                `/(client-tabs)/gallery?tab=designs&designId=${encodeURIComponent(design.id)}` as any
+              );
             }}
           />
         )}
@@ -1158,12 +1176,13 @@ export default function ClientHomeScreen() {
           <ProductCarousel
             products={products}
             onProductPress={(product) => {
-              // Handle product press - show product details
               if (!isAuthenticated) {
                 router.push('/login');
                 return;
               }
-              // Product details will be shown in the modal
+              router.push(
+                `/(client-tabs)/gallery?tab=products&productId=${encodeURIComponent(product.id)}` as any
+              );
             }}
           />
         )}
@@ -1339,11 +1358,15 @@ export default function ClientHomeScreen() {
 
       <View
         pointerEvents="none"
-        style={[styles.overlayHeaderLogoOnly, { top: insets.top - 15 }]}
+        style={[styles.overlayHeaderLogoOnly, { top: insets.top + CLIENT_HOME_LOGO_TOP_OFFSET }]}
       >
-        {clientHomeHeaderShowsRemoteLogo ? (
+        {clientHomeHeaderShowLogo ? (
           <View style={styles.headerLogoInner}>
-            <Image source={getHomeLogoSource(businessProfile)} style={styles.overlayLogo} resizeMode="contain" />
+            <Image
+              source={getHomeLogoSourceFromUrl(homeLogoUrlForHeader)}
+              style={[styles.overlayLogo, !homeLogoUrlForHeader && styles.overlayLogoBundledWhite]}
+              resizeMode="contain"
+            />
           </View>
         ) : (
           <View style={styles.clientHomeHeaderTitleNoLogoWrap}>
@@ -1355,8 +1378,20 @@ export default function ClientHomeScreen() {
         )}
       </View>
 
+      {/* Interested swap requests modal */}
+      <InterestedSwapModal
+        visible={showInterestedModal}
+        opportunities={interestedOpportunities}
+        onClose={() => setShowInterestedModal(false)}
+        onSwapSuccess={() => {
+          setShowInterestedModal(false);
+          fetchUserAppointments();
+          setInterestedOpportunities([]);
+        }}
+      />
+
       <Modal
-        visible={showHomeFixedMessageSheet}
+        visible={showHomeFixedMessageModal}
         transparent
         animationType="fade"
         statusBarTranslucent
@@ -1371,14 +1406,41 @@ export default function ClientHomeScreen() {
           />
           <View
             style={[
-              styles.homeFixedModalSheet,
+              styles.homeFixedModalTopPanel,
               {
-                paddingBottom: Math.max(insets.bottom, 16) + 8,
-                maxHeight: SCREEN_HEIGHT * 0.58,
+                marginTop:
+                  insets.top + Math.round(SCREEN_HEIGHT * 0.3),
+                maxHeight: SCREEN_HEIGHT * 0.52,
+                paddingBottom: Math.max(insets.bottom, 14),
               },
             ]}
           >
-            <View style={styles.homeFixedModalHandle} />
+            <View
+              style={[
+                styles.homeFixedModalHeaderRow,
+                { flexDirection: isRTL ? 'row-reverse' : 'row' },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.homeFixedModalTitle,
+                  { textAlign: isRTL ? 'right' : 'left' },
+                ]}
+                numberOfLines={1}
+              >
+                {t('home.fixedMessage.title', 'Notice')}
+              </Text>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => setHomeFixedMessageDismissed(true)}
+                style={styles.homeFixedModalCloseButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityRole="button"
+                accessibilityLabel={t('common.close', 'Close')}
+              >
+                <Ionicons name="close" size={26} color="#3C3C43" />
+              </TouchableOpacity>
+            </View>
             <ScrollView
               style={styles.homeFixedModalScroll}
               contentContainerStyle={styles.homeFixedModalScrollContent}
@@ -1394,16 +1456,6 @@ export default function ClientHomeScreen() {
                 {homeFixedMessageText}
               </Text>
             </ScrollView>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => setHomeFixedMessageDismissed(true)}
-              style={[styles.homeFixedModalButton, { backgroundColor: colors.primary }]}
-              accessibilityRole="button"
-            >
-              <Text style={[styles.homeFixedModalButtonText, { color: onPrimary }]}>
-                {t('home.fixedMessage.gotIt', 'OK')}
-              </Text>
-            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1500,10 +1552,13 @@ const styles = StyleSheet.create<any>({
     alignItems: 'center',
     justifyContent: 'flex-start',
   },
-  /** White logo on hero scrim — same as admin home `overlayLogo` (fills `headerLogoInner`) */
+  /** Fills `headerLogoInner` — same as admin `overlayLogo`. */
   overlayLogo: {
     width: '100%',
     height: '100%',
+  },
+  /** Bundled asset is template-style; remote uploads are full-color — do not tint those (admin home). */
+  overlayLogoBundledWhite: {
     tintColor: '#FFFFFF',
   },
   fullScreenHeroContent: {
@@ -1601,27 +1656,25 @@ const styles = StyleSheet.create<any>({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  /** Taller box when showing title instead of logo (matches admin name header) */
+  /** When `home_header_show_logo` is false — matches admin `overlayNameInner` */
   clientHomeHeaderTitleNoLogoWrap: {
-    minWidth: Math.min(CLIENT_HOME_LOGO_WIDTH, SCREEN_WIDTH - 36),
-    maxWidth: SCREEN_WIDTH - 32,
-    minHeight: Math.max(CLIENT_HOME_LOGO_HEIGHT, 104),
-    paddingHorizontal: 10,
+    maxWidth: Math.min(CLIENT_HOME_LOGO_WIDTH + 100, SCREEN_WIDTH - 40),
+    minHeight: CLIENT_HOME_LOGO_HEIGHT,
+    paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  /** Same typography as admin `overlayBusinessName` when logo is hidden */
+  /** Matches admin `overlayBusinessName` when logo is hidden */
   clientHomeHeaderTitleNoLogo: {
     color: '#FFFFFF',
-    fontSize: Platform.select({ ios: 36, android: 34, default: 34 }),
+    fontSize: 26,
     fontWeight: '800',
-    fontFamily: Platform.select({ ios: 'Avenir Next', default: undefined }),
     textAlign: 'center',
-    lineHeight: Platform.select({ ios: 42, android: 40, default: 40 }),
-    letterSpacing: Platform.select({ ios: -1.1, android: -0.7, default: -0.8 }),
-    textShadowColor: 'rgba(0,0,0,0.48)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 10,
+    lineHeight: 30,
+    letterSpacing: -0.5,
+    textShadowColor: 'rgba(0,0,0,0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
   /** Full-width safe area so the sheet is not inset from screen edges (admin home is edge-to-edge white). */
   clientHomeSafeArea: {
@@ -1728,6 +1781,10 @@ const styles = StyleSheet.create<any>({
     width: '100%',
     alignItems: 'center',
     paddingHorizontal: 4,
+  },
+  waitlistCardHost: {
+    marginTop: 12,
+    width: '100%',
   },
   sectionTopSpacer: {
     marginTop: 4,
@@ -2504,41 +2561,61 @@ const styles = StyleSheet.create<any>({
   // sectionHeaderModernSimple and sectionSubtitle defined earlier
   homeFixedModalRoot: {
     flex: 1,
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    paddingHorizontal: 16,
   },
   homeFixedModalBackdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
-  homeFixedModalSheet: {
+  homeFixedModalTopPanel: {
+    width: '100%',
+    maxWidth: 520,
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    paddingHorizontal: 20,
-    paddingTop: 10,
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    borderCurve: 'continuous',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOpacity: 0.2,
-        shadowRadius: 16,
-        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.22,
+        shadowRadius: 24,
+        shadowOffset: { width: 0, height: 10 },
       },
-      android: { elevation: 24 },
+      android: { elevation: 18 },
     }),
   },
-  homeFixedModalHandle: {
+  homeFixedModalHeaderRow: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 12,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E5EA',
+  },
+  homeFixedModalTitle: {
+    flex: 1,
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    letterSpacing: -0.3,
+  },
+  homeFixedModalCloseButton: {
     width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#D1D5DB',
-    alignSelf: 'center',
-    marginBottom: 14,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F2F2F7',
   },
   homeFixedModalScroll: {
     flexGrow: 0,
   },
   homeFixedModalScrollContent: {
-    paddingBottom: 12,
+    paddingBottom: 4,
   },
   homeFixedModalBody: {
     fontSize: 16,
@@ -2547,16 +2624,29 @@ const styles = StyleSheet.create<any>({
     fontWeight: '500',
     letterSpacing: -0.2,
   },
-  homeFixedModalButton: {
-    borderRadius: 14,
-    paddingVertical: 14,
+
+  // ── Interested swap footer inside appointment card ──
+  clientNextInterestedRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
-  homeFixedModalButtonText: {
-    fontSize: 16,
+  interestedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#EEEDFE',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  interestedBadgeText: {
+    fontSize: 13,
     fontWeight: '700',
-    letterSpacing: -0.2,
+    color: '#534AB7',
+    letterSpacing: -0.1,
   },
 });
 

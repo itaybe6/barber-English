@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Dimensions, Image, StyleSheet, View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import {
+  Dimensions,
+  Image,
+  StyleSheet,
+  View,
+  Text,
+  TouchableOpacity,
+  ActivityIndicator,
+  I18nManager,
+} from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -18,7 +27,8 @@ import { businessProfileApi } from '@/lib/api/businessProfile';
 import { Service } from '@/lib/supabase';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { getHomeLogoSourceFromUrl } from '@/src/theme/assets';
-import BookingProgressChipsStrip from '@/components/book-appointment/BookingProgressChipsStrip';
+import BookingSummarySheet from '@/components/book-appointment/BookingSummarySheet';
+import { CLIENT_FLOATING_TAB_BAR_HEIGHT } from '@/constants/clientTabBarInsets';
 
 // Constants
 const { width, height } = Dimensions.get('window');
@@ -33,10 +43,25 @@ type SlideProps = {
   index: number;
   scrollX: SharedValue<number>;
   onPress: () => void;
+  isSelected: boolean;
+  primaryColor: string;
+  textColor: string;
+  textMuted: string;
+  durationLabel: string;
 };
 
-// Slide Component
-function Slide({ service, index, scrollX, onPress }: SlideProps) {
+// Slide Component — white product card + price pill (aligned with staff-picker polish)
+function Slide({
+  service,
+  index,
+  scrollX,
+  onPress,
+  isSelected,
+  primaryColor,
+  textColor,
+  textMuted,
+  durationLabel,
+}: SlideProps) {
   const containerStylez = useAnimatedStyle(() => {
     return {
       transform: [
@@ -76,15 +101,15 @@ function Slide({ service, index, scrollX, onPress }: SlideProps) {
   });
 
   return (
-    <TouchableOpacity activeOpacity={0.95} onPress={onPress}>
+    <TouchableOpacity activeOpacity={0.92} onPress={onPress}>
       <Animated.View
         style={[
           {
             shadowColor: '#000',
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: 0.6,
-            shadowRadius: 20,
-            elevation: 7,
+            shadowOffset: { width: 0, height: 10 },
+            shadowOpacity: isSelected ? 0.22 : 0.12,
+            shadowRadius: 22,
+            elevation: isSelected ? 12 : 7,
             borderRadius: 28,
           },
           containerStylez,
@@ -95,25 +120,69 @@ function Slide({ service, index, scrollX, onPress }: SlideProps) {
             width: _slideWidth,
             height: _slideHeight,
             borderRadius: 28,
-            overflow: 'hidden',
-            padding: 2,
-            backgroundColor: 'rgba(0,0,0,0.1)',
+            backgroundColor: '#FFFFFF',
+            borderWidth: isSelected ? 2.5 : 1,
+            borderColor: isSelected ? primaryColor : 'rgba(0,0,0,0.07)',
+            overflow: 'visible',
+            paddingHorizontal: 14,
+            paddingTop: 18,
+            paddingBottom: 28,
           }}
         >
+          {isSelected && (
+            <View
+              style={[
+                styles.slideSelectedBadge,
+                I18nManager.isRTL ? { left: 10 } : { right: 10 },
+                { backgroundColor: primaryColor },
+              ]}
+            >
+              <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+            </View>
+          )}
+
           <Animated.View
             style={[
               {
                 flex: 1,
-                borderRadius: 26,
-                backgroundColor: '#8B5CF6',
                 alignItems: 'center',
-                justifyContent: 'center',
               },
               stylez,
             ]}
           >
-            <Ionicons name="cut" size={80} color="rgba(255,255,255,0.5)" />
+            <View
+              style={[
+                styles.slideIconRing,
+                { backgroundColor: `${primaryColor}18` },
+              ]}
+            >
+              <Ionicons name="cut-outline" size={30} color={primaryColor} />
+            </View>
+
+            <Text
+              style={[styles.slideServiceName, { color: textColor }]}
+              numberOfLines={3}
+            >
+              {service?.name || ''}
+            </Text>
+
+            {!!durationLabel && (
+              <View style={styles.slideDurationRow}>
+                <Ionicons name="time-outline" size={16} color={textMuted} />
+                <Text style={[styles.slideDurationText, { color: textMuted }]}>
+                  {durationLabel}
+                </Text>
+              </View>
+            )}
           </Animated.View>
+
+          {typeof service?.price === 'number' && (
+            <View style={styles.slidePricePillWrap} pointerEvents="none">
+              <View style={[styles.slidePricePill, { backgroundColor: primaryColor }]}>
+                <Text style={styles.slidePricePillText}>₪{service.price}</Text>
+              </View>
+            </View>
+          )}
         </View>
       </Animated.View>
     </TouchableOpacity>
@@ -195,7 +264,7 @@ function ServiceDetails({
     >
       <Text
         style={{
-          fontSize: 26,
+          fontSize: 24,
           color: 'white',
           fontWeight: '800',
           textAlign: 'center',
@@ -207,57 +276,6 @@ function ServiceDetails({
       >
         {service?.name || ''}
       </Text>
-      
-      {/* Price and Duration */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 20, marginTop: 4 }}>
-        {typeof service?.price === 'number' && (
-          <View style={{
-            backgroundColor: 'rgba(255,255,255,0.2)',
-            paddingVertical: 10,
-            paddingHorizontal: 20,
-            borderRadius: 20,
-            borderWidth: 1,
-            borderColor: 'rgba(255,255,255,0.3)',
-          }}>
-            <Text
-              style={{
-                color: '#fff',
-                fontSize: 22,
-                fontWeight: '800',
-                textShadowColor: 'rgba(0,0,0,0.3)',
-                textShadowOffset: { width: 0, height: 1 },
-                textShadowRadius: 4,
-              }}
-            >
-              ₪{service.price}
-            </Text>
-          </View>
-        )}
-        {typeof service?.duration_minutes === 'number' && (
-          <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-            backgroundColor: 'rgba(255,255,255,0.2)',
-            paddingVertical: 10,
-            paddingHorizontal: 16,
-            borderRadius: 20,
-            borderWidth: 1,
-            borderColor: 'rgba(255,255,255,0.3)',
-          }}>
-            <Ionicons name="time-outline" size={18} color="#fff" />
-            <Text
-              style={{
-                color: '#fff',
-                fontSize: 16,
-                fontWeight: '600',
-              }}
-            >
-              {service.duration_minutes} min
-            </Text>
-          </View>
-        )}
-      </View>
 
       {/* Description if available */}
       {(service as any)?.description && (
@@ -397,7 +415,7 @@ export default function SelectServiceScreen() {
         <View style={styles.overlay} />
       </View>
 
-      {/* Header */}
+      {/* Header — logo row + title/subtitle (same rhythm as select-staff) */}
       <SafeAreaView edges={['top']} style={styles.header}>
         <View style={[styles.headerContent, { paddingTop: 8 }]}>
           <TouchableOpacity
@@ -419,17 +437,30 @@ export default function SelectServiceScreen() {
           <View style={styles.headerButton} />
         </View>
 
-        {/* Barber indicator */}
-        {barberName && (
-          <View style={styles.barberIndicator}>
-            <Ionicons name="person" size={14} color="rgba(255,255,255,0.8)" />
-            <Text style={styles.barberIndicatorText}>{barberName}</Text>
-          </View>
-        )}
+        <View style={styles.heroTextBlock}>
+          <Text
+            style={styles.heroTitle}
+            maxFontSizeMultiplier={1.35}
+          >
+            {t('booking.selectServiceTitle', 'Select a Service')}
+          </Text>
+          <Text
+            style={styles.heroSubtitle}
+            maxFontSizeMultiplier={1.3}
+          >
+            {t('booking.selectServiceSubtitle', 'Swipe through the cards and tap one to choose')}
+          </Text>
+          {!!barberName && (
+            <View style={styles.barberIndicator}>
+              <Ionicons name="person" size={14} color="rgba(255,255,255,0.9)" />
+              <Text style={styles.barberIndicatorText}>{barberName}</Text>
+            </View>
+          )}
+        </View>
       </SafeAreaView>
 
       {/* Service Details in Top Area */}
-      <View style={[styles.detailsContainer, { height: _topSpacing * 0.45, marginTop: height * 0.12 }]}>
+      <View style={[styles.detailsContainer, { height: _topSpacing * 0.38, marginTop: height * 0.02 }]}>
         {services.map((service, index) => (
           <ServiceDetails
             key={`details-${service.id}`}
@@ -445,7 +476,7 @@ export default function SelectServiceScreen() {
       <Animated.FlatList
         data={services}
         keyExtractor={(item) => String(item.id)}
-        style={{ opacity: 1, marginTop: -_topSpacing * 0.3 }}
+        style={{ opacity: 1, marginTop: -_topSpacing * 0.22 }}
         contentContainerStyle={{
           gap: _spacing,
           paddingHorizontal: (width - _slideWidth) / 2,
@@ -457,6 +488,15 @@ export default function SelectServiceScreen() {
             index={index}
             service={item}
             scrollX={scrollX}
+            isSelected={activeIndex === index}
+            primaryColor={colors.primary}
+            textColor={colors.text}
+            textMuted={colors.textSecondary}
+            durationLabel={
+              typeof item.duration_minutes === 'number'
+                ? `${item.duration_minutes} ${t('booking.min', 'min')}`
+                : ''
+            }
             onPress={() => {
               setActiveIndex(index);
             }}
@@ -498,24 +538,20 @@ export default function SelectServiceScreen() {
         </TouchableOpacity>
       </View>
 
-      {!!barberId ? (
-        <BookingProgressChipsStrip
-          visible
-          safeAreaTop={insets.top}
-          primaryColor={colors.primary}
-          chips={[
-            {
-              key: 'barber',
-              kind: 'barber',
-              label: barberName || '',
-              imageUri: barberImageUrl || '',
-            },
-          ]}
-          barberEntrance={null}
-          barberEntranceKey={0}
-          onChipPress={() => router.back()}
-        />
-      ) : null}
+      <BookingSummarySheet
+        visible={!!barberId}
+        chips={
+          barberId
+            ? [{ key: 'barber', kind: 'barber', label: barberName || '', imageUri: barberImageUrl || '' }]
+            : []
+        }
+        primaryColor={colors.primary}
+        bottomOffset={insets.bottom + CLIENT_FLOATING_TAB_BAR_HEIGHT}
+        onChipPress={(kind) => {
+          if (kind === 'barber') router.back();
+          /* Already on service selection — service/day placeholders are visual hints only */
+        }}
+      />
     </View>
   );
 }
@@ -578,24 +614,117 @@ const styles = StyleSheet.create({
   headerLogoBundledWhite: {
     tintColor: '#FFFFFF',
   },
+  heroTextBlock: {
+    paddingHorizontal: 22,
+    paddingBottom: 10,
+    alignItems: 'center',
+  },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    letterSpacing: -0.6,
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 10,
+  },
+  heroSubtitle: {
+    marginTop: 8,
+    fontSize: 15,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.9)',
+    textAlign: 'center',
+    lineHeight: 22,
+    letterSpacing: -0.2,
+  },
   barberIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    marginTop: 8,
+    marginTop: 12,
     paddingVertical: 6,
     paddingHorizontal: 14,
     backgroundColor: 'rgba(255,255,255,0.15)',
     borderRadius: 20,
     alignSelf: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(255,255,255,0.22)',
   },
   barberIndicatorText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  slideSelectedBadge: {
+    position: 'absolute',
+    top: 10,
+    zIndex: 4,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  slideIconRing: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  slideServiceName: {
+    marginTop: 12,
+    fontSize: 17,
+    fontWeight: '800',
+    textAlign: 'center',
+    lineHeight: 22,
+    letterSpacing: -0.35,
+    paddingHorizontal: 4,
+    flex: 1,
+    minHeight: 44,
+  },
+  slideDurationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  slideDurationText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  slidePricePillWrap: {
+    position: 'absolute',
+    bottom: -11,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 6,
+  },
+  slidePricePill: {
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 999,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  slidePricePillText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: -0.3,
   },
   detailsContainer: {
     justifyContent: 'center',

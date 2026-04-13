@@ -39,6 +39,7 @@ export const ClientFloatingTabBar: React.FC = () => {
   const plusWiggle = useSharedValue(0);
 
   const currentTab = segments[1] as string | undefined;
+  const isHiddenOnBooking = currentTab === 'book-appointment';
 
   const isActive = (tab: string) => currentTab === tab || (tab === "index" && !currentTab);
 
@@ -115,6 +116,9 @@ export const ClientFloatingTabBar: React.FC = () => {
       ],
     };
   });
+
+  // Hide entirely on the booking screen — it has its own bottom bar (all hooks called above)
+  if (isHiddenOnBooking) return null;
 
   return (
     <View

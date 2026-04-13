@@ -6,12 +6,15 @@ import {
   StyleSheet,
   ScrollView,
   Platform,
+  I18nManager,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, { FadeIn, Easing } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeInDown, Easing, FadeIn } from 'react-native-reanimated';
 
-const stepSlideUp = FadeIn.duration(400).easing(Easing.out(Easing.cubic)).withInitialValues({ opacity: 0, transform: [{ translateY: 60 }] });
+const stepSlideUp = FadeIn.duration(380)
+  .easing(Easing.out(Easing.cubic))
+  .withInitialValues({ opacity: 0, transform: [{ translateY: 55 }] });
 
 import { getBookingStepBarTopFromBottom } from '@/components/book-appointment/BookingStepTabs';
 import { bookingStepRowEntering } from '@/components/book-appointment/bookingStepListEnterAnimation';
@@ -34,9 +37,7 @@ interface PeriodConfig {
   key: TimePeriod;
   labelKey: string;
   labelFallback: string;
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  iconColor: string;
-  headerGradient: string;
+  emoji: string;
   fromHour: number;
   toHour: number;
 }
@@ -46,9 +47,7 @@ const PERIODS: PeriodConfig[] = [
     key: 'morning',
     labelKey: 'booking.timePeriod.morning',
     labelFallback: 'בוקר',
-    icon: 'sunny',
-    iconColor: '#F59E0B',
-    headerGradient: 'rgba(251,191,36,0.18)',
+    emoji: '☀️',
     fromHour: 0,
     toHour: 11,
   },
@@ -56,9 +55,7 @@ const PERIODS: PeriodConfig[] = [
     key: 'afternoon',
     labelKey: 'booking.timePeriod.afternoon',
     labelFallback: 'צהריים',
-    icon: 'partly-sunny',
-    iconColor: '#F97316',
-    headerGradient: 'rgba(249,115,22,0.16)',
+    emoji: '🌤',
     fromHour: 12,
     toHour: 16,
   },
@@ -66,9 +63,7 @@ const PERIODS: PeriodConfig[] = [
     key: 'evening',
     labelKey: 'booking.timePeriod.evening',
     labelFallback: 'ערב',
-    icon: 'moon',
-    iconColor: '#818CF8',
-    headerGradient: 'rgba(129,140,248,0.18)',
+    emoji: '🌙',
     fromHour: 17,
     toHour: 23,
   },
@@ -96,7 +91,7 @@ function SlotGrid({ slots, selectedTime, primaryColor, onSelectTime, baseDelay }
   }
 
   return (
-    <View style={gridStyles.gridContainer}>
+    <View style={gridStyles.container}>
       {rows.map((row, rowIdx) => (
         <View key={`row-${rowIdx}`} style={gridStyles.row}>
           {row.map((slot, colIdx) => {
@@ -115,18 +110,23 @@ function SlotGrid({ slots, selectedTime, primaryColor, onSelectTime, baseDelay }
                   accessibilityLabel={slot}
                   style={({ pressed }) => [
                     gridStyles.cell,
-                    selected && { backgroundColor: primaryColor, borderColor: primaryColor },
-                    pressed && { opacity: 0.82, transform: [{ scale: 0.95 }] },
+                    selected && { backgroundColor: primaryColor },
+                    pressed && gridStyles.cellPressed,
                   ]}
                 >
-                  <Text style={[gridStyles.cellTime, selected && { color: '#FFFFFF' }]} numberOfLines={1}>
+                  <Text
+                    style={[
+                      gridStyles.cellTime,
+                      selected && gridStyles.cellTimeSelected,
+                    ]}
+                    numberOfLines={1}
+                  >
                     {slot}
                   </Text>
                 </Pressable>
               </Animated.View>
             );
           })}
-          {/* Fill empty cells in last row */}
           {row.length < 3 &&
             Array.from({ length: 3 - row.length }).map((_, i) => (
               <View key={`empty-${i}`} style={gridStyles.cellWrap} />
@@ -136,6 +136,8 @@ function SlotGrid({ slots, selectedTime, primaryColor, onSelectTime, baseDelay }
     </View>
   );
 }
+
+const LIST_H_PAD = 18;
 
 export default function TimeSelection({
   visible,
@@ -159,10 +161,11 @@ export default function TimeSelection({
   }, [availableTimeSlots]);
 
   const hasSlots = (availableTimeSlots || []).length > 0;
+  const activePeriods = PERIODS.filter((p) => grouped[p.key].length > 0);
 
   if (!visible) return null;
 
-  let runningDelay = 0;
+  let runningDelay = 1;
 
   return (
     <Animated.View
@@ -170,7 +173,7 @@ export default function TimeSelection({
       pointerEvents="box-none"
       style={[StyleSheet.absoluteFillObject, { bottom: barBottom, zIndex: 2 }]}
     >
-      <View style={[localStyles.fillColumn, { paddingTop: Math.max(0, topOffset + 12) }]}>
+      <View style={[localStyles.fillColumn, { paddingTop: Math.max(0, topOffset + 8) }]}>
         {hasSlots ? (
           <ScrollView
             showsVerticalScrollIndicator={false}
@@ -179,42 +182,44 @@ export default function TimeSelection({
               { paddingBottom: Math.max(listBottomPadding, 32) },
             ]}
           >
-            {PERIODS.map((period) => {
+            {/* Title + subtitle – same pattern as other steps */}
+            <Animated.View entering={bookingStepRowEntering(0)} style={localStyles.header}>
+              <Text style={localStyles.title} maxFontSizeMultiplier={1.35}>
+                {t('booking.selectTimeTitle', 'Choose a time')}
+              </Text>
+              <Text style={localStyles.subtitle} maxFontSizeMultiplier={1.3}>
+                {t('booking.selectTimeSubtitle', 'Pick an available slot below')}
+              </Text>
+            </Animated.View>
+
+            {/* Sections – floating on the purple background */}
+            {activePeriods.map((period) => {
               const slots = grouped[period.key];
-              if (slots.length === 0) return null;
               const sectionDelay = runningDelay;
               runningDelay += Math.ceil(slots.length / 3) * 3 + 2;
+
               return (
                 <Animated.View
                   key={period.key}
-                  entering={FadeInDown.delay(sectionDelay * 40).springify().damping(18)}
+                  entering={bookingStepRowEntering(sectionDelay)}
                   style={localStyles.section}
                 >
-                  {/* Section header */}
-                  <View
-                    style={[
-                      localStyles.sectionHeader,
-                      { backgroundColor: period.headerGradient },
-                    ]}
-                  >
-                    <View style={localStyles.sectionHeaderInner}>
-                      <Ionicons
-                        name={period.icon}
-                        size={22}
-                        color={period.iconColor}
-                      />
-                      <Text style={localStyles.sectionTitle}>
-                        {t(period.labelKey, period.labelFallback)}
-                      </Text>
-                    </View>
+                  {/* Compact period label */}
+                  <View style={localStyles.sectionLabelRow}>
+                    <Text style={localStyles.sectionEmoji}>{period.emoji}</Text>
+                    <Text style={localStyles.sectionLabel}>
+                      {t(period.labelKey, period.labelFallback)}
+                    </Text>
+                    <View style={localStyles.sectionLine} />
                   </View>
 
+                  {/* Slot grid */}
                   <SlotGrid
                     slots={slots}
                     selectedTime={selectedTime}
                     primaryColor={primaryColor}
                     onSelectTime={onSelectTime}
-                    baseDelay={sectionDelay}
+                    baseDelay={sectionDelay + 1}
                   />
                 </Animated.View>
               );
@@ -246,37 +251,61 @@ const localStyles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: LIST_H_PAD,
     gap: 20,
   },
-  section: {
-    gap: 12,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
+
+  /* ── Header ── */
+  header: {
+    gap: 6,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 13,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.14)',
+    paddingHorizontal: 6,
+    marginBottom: 4,
   },
-  sectionHeaderInner: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: -0.3,
-    textAlign: 'center',
+  title: {
+    fontSize: 26,
+    fontWeight: '800',
     color: '#FFFFFF',
+    textAlign: 'center',
+    letterSpacing: -0.5,
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
+  subtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.72)',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+
+  /* ── Period section ── */
+  section: {
+    gap: 10,
+  },
+  sectionLabelRow: {
+    flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  sectionEmoji: {
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.85)',
+    letterSpacing: 0.3,
+  },
+  sectionLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+
+  /* ── Empty state ── */
   emptyBody: {
     flex: 1,
     justifyContent: 'center',
@@ -300,12 +329,12 @@ const localStyles = StyleSheet.create({
 });
 
 const gridStyles = StyleSheet.create({
-  gridContainer: {
-    gap: 10,
+  container: {
+    gap: 9,
   },
   row: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 9,
   },
   cellWrap: {
     flex: 1,
@@ -314,28 +343,34 @@ const gridStyles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 6,
+    paddingVertical: 15,
+    paddingHorizontal: 4,
     minHeight: 52,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.93)',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.12,
-        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.13,
+        shadowRadius: 8,
       },
-      android: { elevation: 2 },
+      android: { elevation: 3 },
     }),
   },
+  cellPressed: {
+    opacity: 0.78,
+    transform: [{ scale: 0.94 }],
+  },
   cellTime: {
-    fontSize: 19,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: -0.35,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    letterSpacing: -0.3,
     textAlign: 'center',
+  },
+  cellTimeSelected: {
+    color: '#FFFFFF',
+    fontWeight: '800',
   },
 });

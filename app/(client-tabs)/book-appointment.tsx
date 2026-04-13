@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Image, Modal, RefreshControl, Linking, Platform, Dimensions, FlatList, PanResponder, I18nManager } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { BlurView } from 'expo-blur';
@@ -16,9 +16,11 @@ import TimeSelection, { type TimeSelectionProps } from '@/components/book-appoin
 import BookingSuccessAnimatedOverlay, {
   type SuccessLine,
 } from '@/components/book-appointment/BookingSuccessAnimatedOverlay';
-import BookingStepTabs, { getBookingStepBarTopFromBottom } from '@/components/book-appointment/BookingStepTabs';
-import BookingProgressChipsStrip, {
-  BOOKING_PROGRESS_STRIP_INSET,
+import BookingStepTabs, {
+  getBookingStepBarTopFromBottomNoTabBar,
+  getBookingStepBarBottomInsetNoTabBar,
+} from '@/components/book-appointment/BookingStepTabs';
+import {
   BOOKING_PROGRESS_STRIP_HEIGHT,
   BOOKING_PROGRESS_STRIP_TOP_GAP,
   H_PAD,
@@ -28,6 +30,7 @@ import BookingProgressChipsStrip, {
   type BarberChipEntrance,
   type BookingProgressChipModel,
 } from '@/components/book-appointment/BookingProgressChipsStrip';
+import BookingSummarySheet, { type BookingSummarySheetHandle, type BookingSuccessData } from '@/components/book-appointment/BookingSummarySheet';
 import WaitlistBottomSheet from '@/components/book-appointment/WaitlistBottomSheet';
 import BookingTimeConfirmPanel from '@/components/book-appointment/BookingTimeConfirmPanel';
 
@@ -499,7 +502,7 @@ export default function BookAppointment() {
   const safeAreaInsets = useSafeAreaInsets();
   const styles = createStyles(colors);
   const rtl = I18nManager.isRTL;
-  const bookingBarTopFromBottom = getBookingStepBarTopFromBottom(safeAreaInsets.bottom);
+  const bookingBarTopFromBottom = getBookingStepBarTopFromBottomNoTabBar(safeAreaInsets.bottom);
   const footerBottom = bookingBarTopFromBottom + 12;
   const params = (router as any).useLocalSearchParams?.() || {};
   // Top animated tabs replace the old grey hero/stepper
@@ -538,6 +541,7 @@ export default function BookAppointment() {
   const barberSelectionRef = React.useRef<BarberSelectionHandle>(null);
   const serviceSelectionRef = React.useRef<ServiceSelectionHandle>(null);
   const daySelectionRef = React.useRef<DaySelectionHandle>(null);
+  const summarySheetRef = React.useRef<BookingSummarySheetHandle>(null);
   /** Filled during step 2 measure; applied in finalizeStep2ToDay so useEffect doesn’t wipe it while step===2. */
   const pendingServiceFlightRef = React.useRef<BarberChipEntrance | null>(null);
   const lastBarberFaceRectRef = React.useRef<{
@@ -571,6 +575,7 @@ export default function BookAppointment() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successWasReplace, setSuccessWasReplace] = useState(false);
   const [successAnimKey, setSuccessAnimKey] = useState(0);
+  const [bookingSuccessData, setBookingSuccessData] = useState<BookingSuccessData | null>(null);
   const scrollRef = React.useRef<ScrollView | null>(null);
   // Step 1 → Step 2 animated transition on initial scroll
   const introFade = useSharedValue(1);
@@ -808,7 +813,12 @@ export default function BookAppointment() {
 
   const days = getNextNDays(bookingOpenDays);
   const selectedDate = selectedDay !== null ? days[selectedDay]?.fullDate : null;
-  const contentBottomPadding = Math.max(96, bookingBarTopFromBottom + 40);
+  /** Space for collapsed `BookingSummarySheet` + home indicator so calendar/legend are not covered. */
+  const bookingDockClearance =
+    currentStep >= 2 && selectedBarber
+      ? safeAreaInsets.bottom + (currentStep === 3 ? 236 : 200)
+      : 0;
+  const contentBottomPadding = Math.max(96, bookingBarTopFromBottom + 48, bookingDockClearance);
 
   const bookingProgressChips = useMemo((): BookingProgressChipModel[] => {
     const out: BookingProgressChipModel[] = [];
@@ -831,6 +841,7 @@ export default function BookAppointment() {
         label: namesJoined,
         serviceName: namesJoined,
         servicePriceText: priceLabel,
+        serviceDurationMinutes: totalDuration || 60,
       });
     }
     if (currentStep >= 4 && selectedDay !== null && days[selectedDay]) {
@@ -841,11 +852,13 @@ export default function BookAppointment() {
         month: 'numeric',
         year: '2-digit',
       });
+      const dayWeekdayLong = d.fullDate.toLocaleDateString(loc, { weekday: 'long' });
       out.push({
         key: 'day',
         kind: 'day',
         label: `${d.dayName} ${d.date}`,
         dayWeekday: d.dayName,
+        dayWeekdayLong,
         dayDateLine: dateLine,
       });
     }
@@ -871,6 +884,7 @@ export default function BookAppointment() {
     days,
     i18n?.language,
     t,
+    totalDuration,
   ]);
 
   const handleProgressStripChipPress = useCallback(
@@ -885,6 +899,7 @@ export default function BookAppointment() {
           break;
         case 'day':
           if (selectedBarber && selectedService) setCurrentStep(3);
+          else if (selectedBarber) setCurrentStep(2);
           break;
         case 'time':
           if (selectedBarber && selectedService && selectedDay !== null) setCurrentStep(4);
@@ -896,8 +911,7 @@ export default function BookAppointment() {
     [selectedBarber, selectedService, selectedDay]
   );
 
-  const bookingStripTopInset =
-    currentStep >= 2 && selectedBarber ? BOOKING_PROGRESS_STRIP_INSET : 0;
+  const bookingStripTopInset = 0;
 
   // Compute available start times dynamically for the selected service and date using business_hours
   const getAvailableTimeSlotsForDate = () => {
@@ -1697,7 +1711,21 @@ export default function BookAppointment() {
         const allNames = selectedServices.map(s => s.name).join(' + ');
         setSuccessWasReplace(!!existingAppointmentToCancel);
         setSuccessAnimKey((k) => k + 1);
-        setShowSuccessModal(true);
+        // Build in-sheet success data
+        const _loc = toBcp47Locale(i18n?.language);
+        const _dateLabel = selectedDate
+          ? selectedDate.toLocaleDateString(_loc, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+          : '';
+        const _endTime = selectedTime && totalDuration
+          ? _toHHMM(_toMinutes(selectedTime) + totalDuration)
+          : null;
+        const _timeLabel = _endTime ? `${selectedTime} \u2013 ${_endTime}` : (selectedTime ?? '');
+        setBookingSuccessData({
+          serviceName: allNames,
+          barberName: selectedBarber?.name ?? undefined,
+          dateLabel: _dateLabel,
+          timeLabel: _timeLabel,
+        });
 
         void usersApi.ensureClientApprovedAfterBooking(user?.id);
 
@@ -1921,7 +1949,8 @@ export default function BookAppointment() {
     t,
     onSelectTime: (time) => {
       setSelectedTime(time as any);
-      setTimeConfirmPanelVisible(true);
+      // Expand the summary sheet after the chip renders (slight delay)
+      setTimeout(() => summarySheetRef.current?.expand(), 160);
     },
   };
 
@@ -2016,6 +2045,7 @@ export default function BookAppointment() {
       <SafeAreaView style={styles.container} edges={[]}>
         <BookingStepTabs
           safeAreaBottom={safeAreaInsets.bottom}
+          bottomInsetOverride={getBookingStepBarBottomInsetNoTabBar(safeAreaInsets.bottom)}
           labels={{
             barber: t('booking.step.barber', 'Barber'),
             service: t('booking.step.service', 'Service'),
@@ -2048,8 +2078,16 @@ export default function BookAppointment() {
               /* Same bottom inset for steps 1–3 avoids a layout jump when leaving service step */
               paddingBottom: contentBottomPadding,
             },
-            /* Short service grid was sitting mid-screen; fill height and pin content to the top */
-            currentStep === 2 ? { flexGrow: 1, justifyContent: 'flex-start' as const } : null,
+            /* Step 2 / 3: breathing room below status bar (step 3 uses less top pad so date UI sits higher above summary strip). */
+            currentStep === 2 || currentStep === 3
+              ? {
+                  flexGrow: 1,
+                  justifyContent: 'flex-start' as const,
+                  paddingTop: Math.round(
+                    Dimensions.get('window').height * (currentStep === 3 ? 0.042 : 0.065),
+                  ),
+                }
+              : null,
           ]}
           showsVerticalScrollIndicator={false}
             refreshControl={currentStep >= 3 ? <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#000" /> : undefined}
@@ -2073,8 +2111,8 @@ export default function BookAppointment() {
             height:
               currentStep === 1
                 ? TOP_OFFSET + 2 + bookingStripTopInset
-                : currentStep === 2
-                  ? TOP_OFFSET + 4 + bookingStripTopInset
+                : currentStep === 2 || currentStep === 3
+                  ? TOP_OFFSET + 4 + bookingStripTopInset + (currentStep === 3 ? 4 : 0)
                   : TOP_OFFSET + 12 + bookingStripTopInset,
           }}
         />
@@ -2120,6 +2158,7 @@ export default function BookAppointment() {
           selectedServiceIds={selectedServices.map((s: any) => String(s.id))}
           externalScrollX={serviceBgScrollX}
           multiSelectEnabled={allowMultiServiceBooking}
+          onContinueMulti={allowMultiServiceBooking ? () => advanceToNextStep() : undefined}
           t={t}
           onSelectService={(service) => {
             const id = String((service as any).id);
@@ -2140,8 +2179,8 @@ export default function BookAppointment() {
             setTimeConfirmPanelVisible(false);
             setShowReplaceModal(false);
             setExistingAppointment(null);
-            // Auto-advance to day selection when a service is chosen
-            if (newServices.length > 0) {
+            // Single-service: advance immediately. Multi-service: pick several, then tap "Continue".
+            if (newServices.length > 0 && !allowMultiServiceBooking) {
               startStep2ToDayTransition();
             }
           }}
@@ -2162,6 +2201,7 @@ export default function BookAppointment() {
               language={i18n?.language || 'he'}
               primaryColor={colors.primary}
               t={t}
+              contentLiftPx={44}
               onSelectDayIndex={(idx) => { if (idx !== null) advanceFromDaySelect(idx); else setSelectedDay(null); }}
               onClearTime={() => setSelectedTime(null)}
             />
@@ -2206,14 +2246,63 @@ export default function BookAppointment() {
         }}
       />
 
-      <BookingProgressChipsStrip
+      <BookingSummarySheet
+        ref={summarySheetRef}
         visible={currentStep >= 2 && !!selectedBarber}
-        safeAreaTop={safeAreaInsets.top}
-        primaryColor={colors.primary}
         chips={bookingProgressChips}
-        barberEntrance={barberChipEntrance}
-        barberEntranceKey={barberFlightAnimKey}
+        primaryColor={colors.primary}
+        bottomOffset={0}
+        safeAreaBottom={safeAreaInsets.bottom}
         onChipPress={handleProgressStripChipPress}
+        onConfirm={() => { void handleBookAppointment(); }}
+        confirmLoading={isCheckingAppointments}
+        successData={bookingSuccessData ?? undefined}
+        onSuccessDismiss={() => {
+          setBookingSuccessData(null);
+          try {
+            (router as any).replace?.('/(client-tabs)/');
+          } catch {
+            router.back();
+          }
+        }}
+        onAddToCalendar={async () => {
+          try {
+            const duration = totalDuration || 60;
+            const dateStr = selectedDate ? toLocalDateStr(selectedDate) : '';
+            const timeStr = selectedTime || '00:00';
+            const start = new Date(`${dateStr}T${timeStr}:00`);
+            const end = new Date(start.getTime() + duration * 60000);
+            const perm = await Calendar.requestCalendarPermissionsAsync();
+            if (perm.status !== 'granted') {
+              Alert.alert(t('booking.permissionsRequired', 'נדרש אישור'), t('booking.calendarPermissionMessage', 'נדרש אישור גישה ליומן כדי להוסיף אירוע.'));
+              return;
+            }
+            let calendarId: string | undefined;
+            if (Platform.OS === 'ios') {
+              const defCal = await Calendar.getDefaultCalendarAsync();
+              calendarId = defCal?.id;
+            } else {
+              const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+              calendarId = cals.find((c: any) => (c.allowsModifications || c.accessLevel === Calendar.CalendarAccessLevel.OWNER))?.id || cals[0]?.id;
+            }
+            if (!calendarId) {
+              Alert.alert(t('error.generic', 'שגיאה'), t('booking.noCalendar', 'לא נמצא יומן שניתן לכתוב אליו.'));
+              return;
+            }
+            const allNames = selectedServices.map(s => s.name).join(' + ');
+            await Calendar.createEventAsync(calendarId, {
+              title: allNames || t('booking.calendarEventTitle', 'Appointment'),
+              startDate: start,
+              endDate: end,
+              notes: t('booking.calendarNotes', 'Booked via the app'),
+            });
+            Alert.alert(t('booking.added', 'נוסף'), t('booking.eventAdded', 'האירוע נוסף ליומן שלך.'));
+          } catch {
+            Alert.alert(t('error.generic', 'שגיאה'), t('booking.eventAddFailed', 'לא ניתן להוסיף את האירוע ליומן.'));
+          }
+        }}
+        addToCalendarLabel={t('booking.addToCalendar', 'הוסף ליומן')}
+        gotItLabel={t('booking.gotIt', 'הבנתי')}
       />
 
       {/* Ghost circle that flies from the tapped service button to the strip slot */}
@@ -2332,75 +2421,6 @@ export default function BookAppointment() {
         </Modal>
       )}
 
-      {/* Success: word-by-word SlideInDown (see BookingSuccessAnimatedOverlay) */}
-      {showSuccessModal && (
-        <Modal
-          visible={showSuccessModal}
-          animationType="fade"
-          transparent
-          statusBarTranslucent
-          onRequestClose={() => setShowSuccessModal(false)}
-        >
-          <BookingSuccessAnimatedOverlay
-            key={successAnimKey}
-            lines={bookingSuccessLines}
-            rtl={isRtlLanguage(i18n?.language)}
-            accentColor={colors.primary}
-            centerMeta
-            onDismiss={() => {
-              setShowSuccessModal(false);
-              try {
-                (router as any).replace?.('/(client-tabs)/appointments');
-              } catch {
-                router.back();
-              }
-            }}
-            onAddToCalendar={async () => {
-              try {
-                const duration = totalDuration || 60;
-                const dateStr = selectedDate ? toLocalDateStr(selectedDate) : '';
-                const timeStr = selectedTime || '00:00';
-                const start = new Date(`${dateStr}T${timeStr}:00`);
-                const end = new Date(start.getTime() + duration * 60000);
-
-                const perm = await Calendar.requestCalendarPermissionsAsync();
-                if (perm.status !== 'granted') {
-                  Alert.alert(t('booking.permissionsRequired', 'נדרש אישור'), t('booking.calendarPermissionMessage', 'נדרש אישור גישה ליומן כדי להוסיף אירוע.'));
-                  return;
-                }
-
-                let calendarId: string | undefined;
-                if (Platform.OS === 'ios') {
-                  const defCal = await Calendar.getDefaultCalendarAsync();
-                  calendarId = defCal?.id;
-                } else {
-                  const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
-                  calendarId = cals.find((c: any) => (c.allowsModifications || c.accessLevel === Calendar.CalendarAccessLevel.OWNER))?.id || cals[0]?.id;
-                }
-
-                if (!calendarId) {
-                  Alert.alert(t('error.generic', 'שגיאה'), t('booking.noCalendar', 'לא נמצא יומן שניתן לכתוב אליו.'));
-                  return;
-                }
-
-                const allNames = selectedServices.map(s => s.name).join(' + ');
-                await Calendar.createEventAsync(calendarId, {
-                  title: allNames || t('booking.calendarEventTitle','Appointment'),
-                  startDate: start,
-                  endDate: end,
-                  notes: t('booking.calendarNotes','Booked via the app'),
-                });
-
-                Alert.alert(t('booking.added', 'נוסף'), t('booking.eventAdded', 'האירוע נוסף ליומן שלך.'));
-              } catch (e) {
-                Alert.alert(t('error.generic', 'שגיאה'), t('booking.eventAddFailed', 'לא ניתן להוסיף את האירוע ליומן.'));
-              }
-            }}
-            addToCalendarLabel={t('booking.addToCalendar', 'Add to Calendar')}
-            gotItLabel={t('booking.gotIt', 'Got it')}
-          />
-        </Modal>
-      )}
     </SafeAreaView>
   </View>
   );

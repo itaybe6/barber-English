@@ -37,10 +37,10 @@ import { Appointment as AvailableTimeSlot } from '@/lib/supabase';
 import { businessProfileApi, getHomeHeaderTitleWhenLogoHidden } from '@/lib/api/businessProfile';
 import { usersApi } from '@/lib/api/users';
 import type { BusinessProfile, WaitlistEntry } from '@/lib/supabase';
+import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import DesignCarousel from '@/components/DesignCarousel';
 import ProductCarousel from '@/components/ProductCarousel';
 import { useDesignsStore } from '@/stores/designsStore';
-import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { useProductsStore } from '@/stores/productsStore';
 import { getHomeLogoSource } from '@/src/theme/assets';
 import { useColors, usePrimaryContrast } from '@/src/theme/ThemeProvider';
@@ -97,16 +97,6 @@ function sanitizeUrlArray(value: unknown): string[] {
   return value
     .map((x) => (typeof x === 'string' ? x.trim() : ''))
     .filter((x) => x.length > 0);
-}
-
-function hexToRgba(hex: string, a: number): string {
-  const h = hex.replace('#', '');
-  if (h.length < 6) return `rgba(0,0,0,${a})`;
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return `rgba(0,0,0,${a})`;
-  return `rgba(${r},${g},${b},${a})`;
 }
 
 const ManicureMarqueeHero = React.memo(({ images }: { images: string[] }) => {
@@ -393,13 +383,8 @@ export default function ClientHomeScreen() {
     (extra as any)?.EXPO_PUBLIC_GOOGLE_STATIC_MAPS_KEY ||
     '';
 
-  
-
-  // Designs store
-  const { designs, isLoading: isLoadingDesigns, fetchDesigns } = useDesignsStore();
-  
-  // Products store
-  const { products, isLoading: isLoadingProducts, fetchProducts } = useProductsStore();
+  const { designs, fetchDesigns } = useDesignsStore();
+  const { products, fetchProducts } = useProductsStore();
 
   // Removed scroll-driven translate animation (normal scroll behavior)
 
@@ -646,12 +631,10 @@ export default function ClientHomeScreen() {
     fetchWaitlistEntries();
   }, [fetchWaitlistEntries]);
 
-  // Fetch designs on mount
   useEffect(() => {
     fetchDesigns();
   }, [fetchDesigns]);
 
-  // Fetch products on mount
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
@@ -1143,12 +1126,13 @@ export default function ClientHomeScreen() {
           <DesignCarousel
             designs={designs}
             onDesignPress={(design) => {
-              // Handle design press - could navigate to gallery or booking
               if (!isAuthenticated) {
                 router.push('/login');
                 return;
               }
-              router.push('/(client-tabs)/gallery');
+              router.push(
+                `/(client-tabs)/gallery?tab=designs&designId=${encodeURIComponent(design.id)}` as any
+              );
             }}
           />
         )}
@@ -1158,12 +1142,13 @@ export default function ClientHomeScreen() {
           <ProductCarousel
             products={products}
             onProductPress={(product) => {
-              // Handle product press - show product details
               if (!isAuthenticated) {
                 router.push('/login');
                 return;
               }
-              // Product details will be shown in the modal
+              router.push(
+                `/(client-tabs)/gallery?tab=products&productId=${encodeURIComponent(product.id)}` as any
+              );
             }}
           />
         )}

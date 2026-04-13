@@ -1,30 +1,50 @@
-import React, { useState, useEffect, useRef, memo } from 'react';
-import { StyleSheet, View, FlatList, Text, TouchableOpacity, Dimensions, Image, Modal, Animated, PanResponder, Pressable, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useRef, memo, useCallback, useMemo } from 'react';
+import {
+  StyleSheet,
+  View,
+  Text,
+  TouchableOpacity,
+  Dimensions,
+  Image,
+  Modal,
+  Animated as RNAnimated,
+  PanResponder,
+  Pressable,
+  RefreshControl,
+  ImageBackground,
+  I18nManager,
+  ScrollView,
+  useWindowDimensions,
+} from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
+import type { TFunction } from 'i18next';
+import { SafeAreaView, SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar, setStatusBarStyle, setStatusBarBackgroundColor } from 'expo-status-bar';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/colors';
 import { useDesignsStore } from '@/stores/designsStore';
 import { useProductsStore } from '@/stores/productsStore';
-import { ScrollView } from 'react-native';
-import { supabase, getBusinessId } from '@/lib/supabase';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { Product } from '@/lib/api/products';
 import { isVideoUrl } from '@/lib/utils/mediaUrl';
 import { GalleryLoopVideo } from '@/components/GalleryLoopVideo';
 import { Video, ResizeMode } from 'expo-av';
+import Animated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
+import type { SharedValue } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
-const numColumns = 2;
-const horizontalPadding = 16;
-const interItemGap = 8;
-const rawTileSize = (width - horizontalPadding * 2 - interItemGap) / numColumns;
-const tileSize = Math.round(rawTileSize);
-const usedWidth = tileSize * numColumns + interItemGap + horizontalPadding * 2;
-const remainderSpace = Math.max(0, width - usedWidth);
-const effectiveContentPadding = horizontalPadding + remainderSpace / 2;
-const slideSize = tileSize - 8; // account for tile padding
+
+const _indicatorSize = 4;
+const _spacing = 14;
+const _buttonSize = 56;
 
 type DesignItem = {
   id: string;
@@ -34,119 +54,457 @@ type DesignItem = {
   popularity?: number;
   categories?: string[];
   user_id?: string;
+  description?: string;
 };
 
 type GalleryItem = DesignItem | Product;
 
-const SkeletonTile = memo(() => {
-  const opacity = useRef(new Animated.Value(0.6)).current;
+function normalizeTabParam(value: string | string[] | undefined): 'designs' | 'products' | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (raw === 'products') return 'products';
+  if (raw === 'designs') return 'designs';
+  return null;
+}
+
+function normalizeIdParam(value: string | string[] | undefined): string | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (typeof raw === 'string' && raw.trim().length > 0) return raw.trim();
+  return null;
+}
+
+function getGalleryMediaUrls(item: GalleryItem, isProduct: boolean): string[] {
+  if (isProduct) {
+    const p = item as Product;
+    return p.image_url ? [p.image_url] : [];
+  }
+  const d = item as DesignItem;
+  const urls =
+    d.image_urls && d.image_urls.length > 0 ? d.image_urls : d.image_url ? [d.image_url] : [];
+  return urls.map((u) => String(u || '').trim()).filter(Boolean);
+}
+
+function formatProductPrice(price: number): string {
+  const whole = Math.abs((price * 100) % 100) < 0.5;
+  return `₪${whole ? price.toFixed(0) : price.toFixed(2)}`;
+}
+
+function gallerySubtitle(item: GalleryItem, isProduct: boolean, t: TFunction): string {
+  if (isProduct) {
+    const p = item as Product;
+    return (p.description && p.description.trim()) || t('gallery.subtitle', 'Discover our designs and products');
+  }
+  const d = item as DesignItem;
+  if (d.description && d.description.trim()) return d.description.trim();
+  const cats = (d.categories || []).filter(Boolean);
+  if (cats.length > 0) return cats.slice(0, 3).join(' · ');
+  return t('gallery.detailDesignTagline', 'Swipe for inspiration');
+}
+
+function galleryMetaLine(item: GalleryItem, isProduct: boolean, t: TFunction): string {
+  if (isProduct) return formatProductPrice((item as Product).price);
+  const d = item as DesignItem;
+  if (typeof d.popularity === 'number' && d.popularity > 0) {
+    return `${t('gallery.detailTrending', 'Trending')} · ${d.popularity}`;
+  }
+  return t('gallery.designs', 'Designs').toUpperCase();
+}
+
+const SkeletonTile = memo(({ fullBleed }: { fullBleed?: boolean }) => {
+  const opacity = useRef(new RNAnimated.Value(0.6)).current;
   useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 1, duration: 700, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.6, duration: 700, useNativeDriver: true }),
+    const loop = RNAnimated.loop(
+      RNAnimated.sequence([
+        RNAnimated.timing(opacity, { toValue: 1, duration: 700, useNativeDriver: true }),
+        RNAnimated.timing(opacity, { toValue: 0.6, duration: 700, useNativeDriver: true }),
       ])
     );
     loop.start();
     return () => loop.stop();
   }, [opacity]);
   return (
-    <View style={styles.tile}>
-      <Animated.View style={[styles.skeletonBlock, { opacity }]} />
+    <View style={[styles.skeletonPage, fullBleed && styles.skeletonPageFullBleed]}>
+      <RNAnimated.View style={[styles.skeletonFill, { opacity }]} />
     </View>
   );
 });
 
-const DesignTile = memo(({ item, onOpen, uploaderUser, businessColors, isProduct = false }: { item: GalleryItem; onOpen: (images: string[]) => void; uploaderUser: AdminUser | null; businessColors: any; isProduct?: boolean }) => {
-  const scale = useRef(new Animated.Value(1)).current;
-  const imageOpacity = useRef(new Animated.Value(0)).current;
-  const onPressIn = () => {
-    Animated.spring(scale, { toValue: 0.97, useNativeDriver: true }).start();
-  };
-  const onPressOut = () => {
-    Animated.spring(scale, { toValue: 1, friction: 5, tension: 120, useNativeDriver: true }).start();
-  };
-  const onLoad = () => {
-    Animated.timing(imageOpacity, { toValue: 1, duration: 250, useNativeDriver: true }).start();
-  };
-  const urls = (item as DesignItem).image_urls && (item as DesignItem).image_urls.length > 0 ? (item as DesignItem).image_urls : [item.image_url];
+const Details = memo(
+  ({
+    scrollY,
+    item,
+    index,
+    subtitle,
+    meta,
+    stackSize,
+  }: {
+    scrollY: SharedValue<number>;
+    item: GalleryItem;
+    index: number;
+    subtitle: string;
+    meta: string;
+    stackSize: number;
+  }) => {
+    const stylez = useAnimatedStyle(() => {
+      return {
+        opacity: interpolate(
+          scrollY.value,
+          [index - 1, index, index + 1],
+          [0, 1, 0],
+          Extrapolation.CLAMP
+        ),
+        transform: [
+          {
+            translateY: interpolate(
+              scrollY.value,
+              [index - 1, index, index + 1],
+              [20, 0, -20],
+              Extrapolation.CLAMP
+            ),
+          },
+        ],
+      };
+    });
+    const rtl = I18nManager.isRTL;
+    const textAlign = rtl ? 'right' : 'left';
+    return (
+      <View style={[styles.detailsSlot, { zIndex: stackSize - index }]}>
+        <Animated.View style={stylez}>
+          <Text style={[styles.pagerTitle, { textAlign }]}>{item.name}</Text>
+          <Text style={[styles.pagerDescription, { textAlign }]} numberOfLines={3}>
+            {subtitle}
+          </Text>
+          <Text style={[styles.pagerMeta, { textAlign }]}>{meta}</Text>
+        </Animated.View>
+      </View>
+    );
+  }
+);
+
+const PaginationDot = memo(({ scrollY, index }: { scrollY: SharedValue<number>; index: number }) => {
+  const stylez = useAnimatedStyle(() => ({
+    height: interpolate(
+      scrollY.value,
+      [index - 1, index, index + 1],
+      [_indicatorSize, _indicatorSize * 6, _indicatorSize],
+      Extrapolation.CLAMP
+    ),
+  }));
   return (
-    <Animated.View style={[styles.tile, { transform: [{ scale }] }]}> 
-      <Pressable
-        onPressIn={onPressIn}
-        onPressOut={onPressOut}
-        onPress={() => onOpen(urls)}
-        android_ripple={{ color: 'rgba(0,0,0,0.06)' }}
-        style={{ flex: 1 }}
-      >
-        <View style={styles.imageContainer}>
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            nestedScrollEnabled
-            style={{ flex: 1 }}
-          >
-            {urls.map((url, idx) => (
-              <View key={`${item.id}-img-${idx}`} style={{ width: slideSize, height: slideSize }}>
-                {isVideoUrl(url) ? (
-                  <View style={[styles.image, { backgroundColor: '#1C1C1E', justifyContent: 'center', alignItems: 'center' }]}>
-                    <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.9)" />
-                  </View>
-                ) : (
-                  <Animated.Image
-                    source={{ uri: url }}
-                    style={[styles.image, { opacity: imageOpacity }]}
-                    resizeMode="cover"
-                    onLoad={onLoad}
-                  />
-                )}
-              </View>
-            ))}
-          </ScrollView>
-          {urls.length > 1 && (
-            <View style={styles.multiBadge}>
-              <Ionicons name="images-outline" size={12} color={businessColors.primary} />
-              <Text style={styles.multiBadgeText}>{urls.length}</Text>
-            </View>
-          )}
-          
-          {uploaderUser && !isProduct && (
-            <View style={styles.uploaderAvatarWrap} pointerEvents="none">
-              <Image
-                source={
-                  uploaderUser.image_url
-                    ? { uri: uploaderUser.image_url }
-                    : require('@/assets/images/user.png')
-                }
-                style={styles.uploaderAvatarImage}
-                resizeMode="cover"
-              />
-            </View>
-          )}
-        </View>
-      </Pressable>
-    </Animated.View>
+    <Animated.View
+      style={[
+        {
+          width: _indicatorSize,
+          height: _indicatorSize,
+          borderRadius: _indicatorSize / 2,
+          backgroundColor: 'white',
+          marginBottom: _indicatorSize / 2,
+        },
+        stylez,
+      ]}
+    />
   );
 });
 
-interface AdminUser {
-  id: string;
-  name: string;
-  image_url?: string;
+const PagerItem = memo(
+  ({
+    item,
+    pageHeight,
+    isProduct,
+    windowWidth,
+  }: {
+    item: GalleryItem;
+    pageHeight: number;
+    isProduct: boolean;
+    windowWidth: number;
+  }) => {
+    const urls = useMemo(() => getGalleryMediaUrls(item, isProduct), [item, isProduct]);
+    const cover = urls[0];
+
+    if (!cover) {
+      return (
+        <View style={[styles.pagerPage, { height: pageHeight, width: windowWidth, backgroundColor: '#0a0a0a' }]}>
+          <Ionicons name="image-outline" size={48} color="rgba(255,255,255,0.35)" />
+        </View>
+      );
+    }
+
+    if (isVideoUrl(cover)) {
+      return (
+        <View style={[styles.pagerPage, { height: pageHeight, width: windowWidth, backgroundColor: '#000' }]}>
+          <GalleryLoopVideo uri={cover} style={StyleSheet.absoluteFill} resizeMode={ResizeMode.COVER} />
+          <LinearGradient
+            colors={['rgba(0,0,0,0.2)', 'rgba(0,0,0,0.78)']}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+        </View>
+      );
+    }
+
+    return (
+      <ImageBackground
+        source={{ uri: cover }}
+        style={[styles.pagerPage, { height: pageHeight, width: windowWidth, backgroundColor: '#000' }]}
+        imageStyle={{ resizeMode: 'cover' }}
+      >
+        <LinearGradient
+          colors={['rgba(0,0,0,0.12)', 'rgba(0,0,0,0.72)']}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+      </ImageBackground>
+    );
+  }
+);
+
+function GalleryVerticalPager({
+  data,
+  isProduct,
+  pageHeight,
+  windowWidth,
+  businessColors,
+  refreshing,
+  onRefresh,
+  onOpenUrls,
+  t,
+  bottomInset = 0,
+  topInset = 0,
+  initialFocusItemId = null,
+}: {
+  data: GalleryItem[];
+  isProduct: boolean;
+  pageHeight: number;
+  windowWidth: number;
+  businessColors: { primary: string };
+  refreshing: boolean;
+  onRefresh: () => void;
+  onOpenUrls: (urls: string[]) => void;
+  t: TFunction;
+  bottomInset?: number;
+  topInset?: number;
+  initialFocusItemId?: string | null;
+}) {
+  const scrollY = useSharedValue(0);
+  const pageHShared = useSharedValue(pageHeight);
+  const [focusedIndex, setFocusedIndex] = useState(0);
+  const isRTL = I18nManager.isRTL;
+  const verticalListRef = useRef<{ scrollToOffset: (o: { offset: number; animated?: boolean }) => void } | null>(
+    null
+  );
+
+  useEffect(() => {
+    pageHShared.value = pageHeight;
+  }, [pageHeight, pageHShared]);
+
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (ev) => {
+      const h = pageHShared.value;
+      if (h > 0) {
+        scrollY.value = ev.contentOffset.y / h;
+      }
+    },
+    onMomentumEnd: (ev) => {
+      const h = pageHShared.value;
+      if (h > 0) {
+        scrollY.value = Math.floor(ev.contentOffset.y / h);
+      }
+    },
+  });
+
+  const snapToIndex = useCallback(
+    (y: number) => {
+      if (pageHeight <= 0) return;
+      const idx = Math.round(y / pageHeight);
+      setFocusedIndex(Math.max(0, Math.min(data.length - 1, idx)));
+    },
+    [pageHeight, data.length]
+  );
+
+  useEffect(() => {
+    setFocusedIndex((i) => Math.min(i, Math.max(0, data.length - 1)));
+  }, [data.length]);
+
+  useEffect(() => {
+    if (!initialFocusItemId || pageHeight <= 0 || data.length === 0) return;
+    const idx = data.findIndex((d) => d.id === initialFocusItemId);
+    if (idx < 0) return;
+    const offset = idx * pageHeight;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        verticalListRef.current?.scrollToOffset({ offset, animated: false });
+      });
+    });
+    scrollY.value = idx;
+    setFocusedIndex(idx);
+  }, [initialFocusItemId, pageHeight, data]);
+
+  const stackSize = data.length;
+
+  if (pageHeight <= 0) {
+    return <View style={styles.feedFlex} />;
+  }
+
+  if (data.length === 0) {
+    return (
+      <View style={[styles.feedFlex, styles.emptyState]}>
+        <View style={styles.emptyIconWrap}>
+          <Ionicons
+            name={isProduct ? 'cube-outline' : 'images-outline'}
+            size={26}
+            color="rgba(255,255,255,0.9)"
+          />
+        </View>
+        <Text style={styles.emptyTitle}>
+          {isProduct ? t('gallery.empty.products', 'No products yet') : t('gallery.empty.designs', 'No designs yet')}
+        </Text>
+        <Text style={styles.emptySubtitle}>
+          {isProduct
+            ? t('gallery.emptySubtitle.products', 'When you add products, they will appear here')
+            : t('gallery.emptySubtitle.designs', 'When you add designs, they will appear here')}
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.pagerHost}>
+      <Animated.FlatList
+        ref={verticalListRef}
+        data={data}
+        keyExtractor={(i) => i.id}
+        renderItem={({ item }) => (
+          <PagerItem item={item} pageHeight={pageHeight} isProduct={isProduct} windowWidth={windowWidth} />
+        )}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        pagingEnabled
+        nestedScrollEnabled
+        decelerationRate="fast"
+        bounces={false}
+        showsVerticalScrollIndicator={false}
+        snapToInterval={pageHeight}
+        snapToAlignment="start"
+        getItemLayout={(_, index) => ({
+          length: pageHeight,
+          offset: pageHeight * index,
+          index,
+        })}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={businessColors.primary} />
+        }
+        onMomentumScrollEnd={(e) => snapToIndex(e.nativeEvent.contentOffset.y)}
+        style={styles.feedFlex}
+      />
+      <View
+        style={[
+          styles.paginationColumn,
+          isRTL ? { right: _spacing } : { left: _spacing },
+          { paddingTop: topInset + 8 },
+        ]}
+        pointerEvents="none"
+      >
+        {data.map((_, index) => (
+          <PaginationDot key={`pd-${index}`} scrollY={scrollY} index={index} />
+        ))}
+      </View>
+      <View
+        style={[
+          styles.detailsWrapper,
+          isRTL
+            ? { right: _spacing * 2 + _indicatorSize, left: _spacing }
+            : { left: _spacing * 2 + _indicatorSize, right: _spacing },
+          { paddingBottom: bottomInset + 8, paddingTop: topInset + 4 },
+        ]}
+        pointerEvents="none"
+      >
+        {data.map((item, index) => (
+          <Details
+            key={`det-${item.id}`}
+            scrollY={scrollY}
+            item={item}
+            index={index}
+            subtitle={gallerySubtitle(item, isProduct, t)}
+            meta={galleryMetaLine(item, isProduct, t)}
+            stackSize={stackSize}
+          />
+        ))}
+      </View>
+      <Pressable
+        onPress={() => {
+          const item = data[focusedIndex];
+          if (!item) return;
+          onOpenUrls(getGalleryMediaUrls(item, isProduct));
+        }}
+        style={[
+          styles.pagerFab,
+          { bottom: _spacing * 4 + bottomInset },
+          isRTL ? { left: _spacing * 2 } : { right: _spacing * 2 },
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={t('gallery.viewAllMedia', 'View all photos')}
+      >
+        <View style={[styles.pagerFabInner, { backgroundColor: businessColors.primary }]}>
+          <Ionicons name="images-outline" size={_buttonSize / 2.4} color="#FFFFFF" />
+        </View>
+      </Pressable>
+    </View>
+  );
 }
 
 export default function GalleryScreen() {
   const { t } = useTranslation();
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const { width: winWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const { tab: tabParam, designId: designIdParam, productId: productIdParam } = useLocalSearchParams<{
+    tab?: string | string[];
+    designId?: string | string[];
+    productId?: string | string[];
+  }>();
+  const designId = normalizeIdParam(designIdParam);
+  const productId = normalizeIdParam(productIdParam);
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerImages, setViewerImages] = useState<string[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
-  const [uploaderById, setUploaderById] = useState<Record<string, AdminUser>>({});
+  const [refreshingDesigns, setRefreshingDesigns] = useState(false);
+  const [refreshingProducts, setRefreshingProducts] = useState(false);
   const [activeTab, setActiveTab] = useState<'designs' | 'products'>('designs');
-  const panY = useRef(new Animated.Value(0)).current;
+  const [layoutHeight, setLayoutHeight] = useState(0);
+  const chapterScrollRef = useRef<ScrollView>(null);
+  const panY = useRef(new RNAnimated.Value(0)).current;
   const { colors: businessColors } = useBusinessColors();
+
+  const normalized = normalizeTabParam(tabParam);
+
+  useFocusEffect(
+    useCallback(() => {
+      try {
+        setStatusBarStyle('light', true);
+        setStatusBarBackgroundColor('transparent', true);
+      } catch {
+        /* noop */
+      }
+      return () => {
+        try {
+          setStatusBarStyle('dark', true);
+        } catch {
+          /* noop */
+        }
+      };
+    }, [])
+  );
+
+  useEffect(() => {
+    if (layoutHeight <= 0 || winWidth <= 0) return;
+    const explicitChapter =
+      normalized !== null || designId !== null || productId !== null;
+    if (!explicitChapter) return;
+    const targetX = productId !== null || normalized === 'products' ? winWidth : 0;
+    requestAnimationFrame(() => {
+      chapterScrollRef.current?.scrollTo({ x: targetX, y: 0, animated: false });
+    });
+    setActiveTab(targetX > winWidth * 0.25 ? 'products' : 'designs');
+  }, [normalized, designId, productId, layoutHeight, winWidth]);
+
   const resetPan = () => {
     panY.setValue(0);
   };
@@ -158,397 +516,311 @@ export default function GalleryScreen() {
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gesture) => {
         const { dx, dy } = gesture;
-        return Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10; // vertical intent
+        return Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10;
       },
-      onPanResponderMove: Animated.event([null, { dy: panY }], { useNativeDriver: false }),
+      onPanResponderMove: RNAnimated.event([null, { dy: panY }], { useNativeDriver: false }),
       onPanResponderRelease: (_, gesture) => {
         const { dy, vy } = gesture;
         if (Math.abs(dy) > 120 || Math.abs(vy) > 1.2) {
           setViewerVisible(false);
-          Animated.timing(panY, { toValue: dy > 0 ? 600 : -600, duration: 150, useNativeDriver: true }).start(() => {
+          RNAnimated.timing(panY, { toValue: dy > 0 ? 600 : -600, duration: 150, useNativeDriver: false }).start(() => {
             resetPan();
           });
         } else {
-          Animated.spring(panY, { toValue: 0, useNativeDriver: true }).start();
+          RNAnimated.spring(panY, { toValue: 0, useNativeDriver: false }).start();
         }
       },
     })
   ).current;
-  
-  // Use Supabase stores
+
   const { designs, isLoading: designsLoading, fetchDesigns } = useDesignsStore();
   const { products, isLoading: productsLoading, fetchProducts } = useProductsStore();
-  
-  // Load data on component mount
+
   useEffect(() => {
     fetchDesigns();
     fetchProducts();
   }, []);
 
-  // Load uploader profiles per design
-  useEffect(() => {
-    const loadUploaders = async () => {
-      try {
-        const ids = Array.from(
-          new Set(
-            (designs as any[])
-              .map(d => (d && 'user_id' in d ? (d as any).user_id : null))
-              .filter(Boolean)
-          )
-        ) as string[];
-
-        if (ids.length === 0) {
-          setUploaderById({});
-          return;
-        }
-
-        const businessId = getBusinessId();
-        const { data, error } = await supabase
-          .from('users')
-          .select('id, name, image_url')
-          .in('id', ids)
-          .eq('business_id', businessId);
-
-        if (error) {
-          console.error('Error loading uploader profiles:', error);
-          return;
-        }
-
-        const map: Record<string, AdminUser> = {};
-        (data || []).forEach(u => { map[u.id] = u as AdminUser; });
-        setUploaderById(map);
-      } catch (e) {
-        console.error('Error loading uploader profiles:', e);
-      }
-    };
-
-    loadUploaders();
-  }, [designs]);
-  const onRefresh = async () => {
-    setRefreshing(true);
+  const onRefreshDesigns = useCallback(async () => {
+    setRefreshingDesigns(true);
     try {
-      if (activeTab === 'designs') {
-        await fetchDesigns();
-      } else {
-        await fetchProducts();
-      }
+      await fetchDesigns();
     } finally {
-      setRefreshing(false);
+      setRefreshingDesigns(false);
     }
-  };
-  
-  
-  
-  const currentData = activeTab === 'designs' ? designs : products;
-  const isLoading = activeTab === 'designs' ? designsLoading : productsLoading;
-  
+  }, [fetchDesigns]);
+
+  const onRefreshProducts = useCallback(async () => {
+    setRefreshingProducts(true);
+    try {
+      await fetchProducts();
+    } finally {
+      setRefreshingProducts(false);
+    }
+  }, [fetchProducts]);
+
+  const onChapterMomentumEnd = useCallback(
+    (e: { nativeEvent: { contentOffset: { x: number } } }) => {
+      const x = e.nativeEvent.contentOffset.x;
+      setActiveTab(x > winWidth * 0.5 ? 'products' : 'designs');
+    },
+    [winWidth]
+  );
+
+  const openViewer = useCallback((urls: string[]) => {
+    if (!urls.length) return;
+    setViewerImages(urls);
+    setViewerIndex(0);
+    setViewerVisible(true);
+  }, []);
+
+  /** Pager item height: fill tab area + extend under status bar for edge-to-edge media */
+  const pageHeight = layoutHeight + insets.top;
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar style="dark" backgroundColor={Colors.white} />
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View style={{ width: 22 }} />
-          <View style={{ alignItems: 'center' }}>
-            <Text style={styles.headerTitle}>
-              {t('gallery.title', 'Gallery')}
-            </Text>
-            <Text style={styles.headerSubtitle}>
-              {t('gallery.subtitle', 'Discover our designs and products')}
-            </Text>
-          </View>
-          <View style={{ width: 22 }} />
-        </View>
-      </View>
-      <View style={styles.contentWrapper}>
-        {/* Toggle Button */}
-        <View style={styles.toggleContainer}>
-          <View style={[styles.toggleWrapper, { backgroundColor: businessColors.primary + '15' }]}>
-            <TouchableOpacity
-              style={[
-                styles.toggleButton,
-                activeTab === 'designs' && [styles.toggleButtonActive, { backgroundColor: businessColors.primary }]
-              ]}
-              onPress={() => setActiveTab('designs')}
-              activeOpacity={0.7}
+    <View style={styles.container}>
+      <StatusBar style="light" translucent backgroundColor="transparent" />
+      <View
+        style={styles.fullBleedMeasure}
+        onLayout={(e) => {
+          const h = e.nativeEvent.layout.height;
+          if (h > 0 && Math.abs(h - layoutHeight) > 1) setLayoutHeight(h);
+        }}
+      >
+        {layoutHeight > 0 ? (
+          <View
+            style={[
+              styles.fullBleedBleed,
+              {
+                top: -insets.top,
+                height: pageHeight,
+              },
+            ]}
+          >
+            <ScrollView
+              ref={chapterScrollRef}
+              horizontal
+              pagingEnabled
+              nestedScrollEnabled
+              bounces={false}
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              style={{ height: pageHeight }}
+              contentContainerStyle={{ width: winWidth * 2, height: pageHeight }}
+              onMomentumScrollEnd={onChapterMomentumEnd}
+              directionalLockEnabled
             >
-              <Ionicons 
-                name="images-outline" 
-                size={16} 
-                color={activeTab === 'designs' ? Colors.white : businessColors.primary} 
-                style={styles.toggleIcon}
-              />
-              <Text style={[
-                styles.toggleButtonText,
-                activeTab === 'designs' && { color: Colors.white }
-              ]}>
-                {t('gallery.designs', 'Designs')}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.toggleButton,
-                activeTab === 'products' && [styles.toggleButtonActive, { backgroundColor: businessColors.primary }]
-              ]}
-              onPress={() => setActiveTab('products')}
-              activeOpacity={0.7}
-            >
-              <Ionicons 
-                name="cube-outline" 
-                size={16} 
-                color={activeTab === 'products' ? Colors.white : businessColors.primary} 
-                style={styles.toggleIcon}
-              />
-              <Text style={[
-                styles.toggleButtonText,
-                activeTab === 'products' && { color: Colors.white }
-              ]}>
-                {t('gallery.products', 'Products')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-        
-        {isLoading ? (
-          <View style={styles.skeletonContainer}>
-            <View style={styles.skeletonRow}>
-              {Array(2).fill(0).map((_, i) => (
-                <SkeletonTile key={`s1-${i}`} />
-              ))}
-            </View>
-            <View style={styles.skeletonRow}>
-              {Array(2).fill(0).map((_, i) => (
-                <SkeletonTile key={`s2-${i}`} />
-              ))}
-            </View>
-            <View style={styles.skeletonRow}>
-              {Array(2).fill(0).map((_, i) => (
-                <SkeletonTile key={`s3-${i}`} />
-              ))}
-            </View>
+              <View style={{ width: winWidth, height: pageHeight, backgroundColor: '#000' }}>
+                {designsLoading ? (
+                  <SkeletonTile fullBleed />
+                ) : (
+                  <GalleryVerticalPager
+                    data={designs as GalleryItem[]}
+                    isProduct={false}
+                    pageHeight={pageHeight}
+                    windowWidth={winWidth}
+                    businessColors={businessColors}
+                    refreshing={refreshingDesigns}
+                    onRefresh={onRefreshDesigns}
+                    onOpenUrls={openViewer}
+                    t={t}
+                    bottomInset={insets.bottom}
+                    topInset={insets.top}
+                    initialFocusItemId={designId}
+                  />
+                )}
+              </View>
+              <View style={{ width: winWidth, height: pageHeight, backgroundColor: '#000' }}>
+                {productsLoading ? (
+                  <SkeletonTile fullBleed />
+                ) : (
+                  <GalleryVerticalPager
+                    data={products as GalleryItem[]}
+                    isProduct
+                    pageHeight={pageHeight}
+                    windowWidth={winWidth}
+                    businessColors={businessColors}
+                    refreshing={refreshingProducts}
+                    onRefresh={onRefreshProducts}
+                    onOpenUrls={openViewer}
+                    t={t}
+                    bottomInset={insets.bottom}
+                    topInset={insets.top}
+                    initialFocusItemId={productId}
+                  />
+                )}
+              </View>
+            </ScrollView>
           </View>
         ) : (
-          <FlatList
-            data={currentData as GalleryItem[]}
-            keyExtractor={(item) => item.id}
-            numColumns={numColumns}
-            contentContainerStyle={[styles.listContent, { paddingHorizontal: effectiveContentPadding }]}
-            columnWrapperStyle={[styles.columnWrapper, { columnGap: interItemGap }]}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={businessColors.primary} />} 
-            ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <View style={styles.emptyIconWrap}>
-                  <Ionicons 
-                    name={activeTab === 'designs' ? "images-outline" : "cube-outline"} 
-                    size={26} 
-                    color={businessColors.primary} 
-                  />
-                </View>
-                <Text style={[styles.emptyTitle, { color: businessColors.primary }]}>
-                  {activeTab === 'designs' ? t('gallery.empty.designs', 'No designs yet') : t('gallery.empty.products', 'No products yet')}
-                </Text>
-                <Text style={styles.emptySubtitle}>
-                  {activeTab === 'designs' 
-                    ? t('gallery.emptySubtitle.designs', 'When you add designs, they will appear here') 
-                    : t('gallery.emptySubtitle.products', 'When you add products, they will appear here')
-                  }
-                </Text>
-              </View>
-            }
-            renderItem={({ item }) => (
-              <DesignTile
-                item={item}
-                uploaderUser={(() => {
-                  const userId = (item as any).user_id as string | undefined;
-                  return userId ? uploaderById[userId] || null : null;
-                })()}
-                businessColors={businessColors}
-                isProduct={activeTab === 'products'}
-                onOpen={(urls) => {
-                  setViewerImages(urls);
-                  setViewerIndex(0);
-                  setViewerVisible(true);
-                }}
-              />
-            )}
-          />
+          <SkeletonTile fullBleed />
         )}
       </View>
-      {/* Fullscreen image viewer */}
+
       <Modal visible={viewerVisible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setViewerVisible(false)}>
         <View style={styles.viewerBackdrop}>
-          <Animated.View style={{ flex: 1, transform: [{ translateY: panY }] }} {...panResponder.panHandlers}>
-          <SafeAreaProvider>
-          <SafeAreaView style={{ flex: 1 }} edges={['top','bottom']}>
-            <View style={styles.viewerHeader}>
-              <TouchableOpacity onPress={() => setViewerVisible(false)} style={styles.viewerCloseBtn}>
-                <Ionicons name="close" size={22} color={Colors.white} />
-              </TouchableOpacity>
-              <Text style={[styles.viewerTitle, { color: businessColors.primary }]}>
-                {activeTab === 'designs' ? t('gallery.viewer.designPhotos', 'Design Photos') : t('gallery.viewer.productPhotos', 'Product Photos')}
-              </Text>
-              <View style={{ width: 44 }} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Pressable style={styles.viewerHitAreaTop} onPress={() => setViewerVisible(false)} />
-              <Pressable style={styles.viewerHitAreaBottom} onPress={() => setViewerVisible(false)} />
-              <ScrollView
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                onScroll={(e) => {
-                  const x = e.nativeEvent.contentOffset.x;
-                  const w = e.nativeEvent.layoutMeasurement.width;
-                  const idx = Math.round(x / (w || 1));
-                  if (idx !== viewerIndex) setViewerIndex(idx);
-                }}
-                scrollEventThrottle={16}
-                contentContainerStyle={{ alignItems: 'center' }}
-              >
-                {viewerImages.map((url, idx) => (
-                  <View key={`viewer-${idx}`} style={{ width, height: '80%', justifyContent: 'center', alignItems: 'center' }}>
-                    {isVideoUrl(url) ? (
-                      <Video
-                        source={{ uri: url }}
-                        style={{ width: width, height: '100%' }}
-                        resizeMode={ResizeMode.CONTAIN}
-                        isLooping
-                        shouldPlay
-                        isMuted
-                        useNativeControls={false}
-                      />
-                    ) : (
-                      <Image source={{ uri: url }} style={{ width: width, height: '100%' }} resizeMode="contain" />
-                    )}
-                  </View>
-                ))}
-              </ScrollView>
-              {viewerImages.length > 1 && (
-                <View style={styles.viewerDots}>
-                  {viewerImages.map((_, i) => (
-                    <View key={`dot-${i}`} style={[styles.viewerDot, i === viewerIndex && { backgroundColor: businessColors.primary }]} />
-                  ))}
+          <RNAnimated.View style={{ flex: 1, transform: [{ translateY: panY }] }} {...panResponder.panHandlers}>
+            <SafeAreaProvider>
+              <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
+                <View style={styles.viewerHeader}>
+                  <TouchableOpacity onPress={() => setViewerVisible(false)} style={styles.viewerCloseBtn}>
+                    <Ionicons name="close" size={22} color={Colors.white} />
+                  </TouchableOpacity>
+                  <Text style={[styles.viewerTitle, { color: businessColors.primary }]}>
+                    {activeTab === 'designs'
+                      ? t('gallery.viewer.designPhotos', 'Design Photos')
+                      : t('gallery.viewer.productPhotos', 'Product Photos')}
+                  </Text>
+                  <View style={{ width: 44 }} />
                 </View>
-              )}
-            </View>
-          </SafeAreaView>
-          </SafeAreaProvider>
-          </Animated.View>
+                <View style={{ flex: 1 }}>
+                  <Pressable style={styles.viewerHitAreaTop} onPress={() => setViewerVisible(false)} />
+                  <Pressable style={styles.viewerHitAreaBottom} onPress={() => setViewerVisible(false)} />
+                  <ScrollView
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    onScroll={(e) => {
+                      const x = e.nativeEvent.contentOffset.x;
+                      const w = e.nativeEvent.layoutMeasurement.width;
+                      const idx = Math.round(x / (w || 1));
+                      if (idx !== viewerIndex) setViewerIndex(idx);
+                    }}
+                    scrollEventThrottle={16}
+                    contentContainerStyle={{ alignItems: 'center' }}
+                  >
+                    {viewerImages.map((url, idx) => (
+                      <View key={`viewer-${idx}`} style={{ width, height: '80%', justifyContent: 'center', alignItems: 'center' }}>
+                        {isVideoUrl(url) ? (
+                          <Video
+                            source={{ uri: url }}
+                            style={{ width: width, height: '100%' }}
+                            resizeMode={ResizeMode.CONTAIN}
+                            isLooping
+                            shouldPlay
+                            isMuted
+                            useNativeControls={false}
+                          />
+                        ) : (
+                          <Image source={{ uri: url }} style={{ width: width, height: '100%' }} resizeMode="contain" />
+                        )}
+                      </View>
+                    ))}
+                  </ScrollView>
+                  {viewerImages.length > 1 && (
+                    <View style={styles.viewerDots}>
+                      {viewerImages.map((_, i) => (
+                        <View
+                          key={`dot-${i}`}
+                          style={[styles.viewerDot, i === viewerIndex && { backgroundColor: businessColors.primary }]}
+                        />
+                      ))}
+                    </View>
+                  )}
+                </View>
+              </SafeAreaView>
+            </SafeAreaProvider>
+          </RNAnimated.View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.white,
+    backgroundColor: '#000',
   },
-  header: {
-    height: 104,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 16,
-    backgroundColor: Colors.white,
-  },
-  contentWrapper: {
+  fullBleedMeasure: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 8,
-  },
-  headerContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.text,
-    letterSpacing: -0.2,
-    textAlign: 'center',
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: Colors.subtext,
-    marginTop: 6,
-  },
-  placeholder: {
-    width: 40,
-  },
-  searchContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: Colors.white,
-    borderBottomWidth: 0,
-    borderBottomColor: 'transparent',
-  },
-  categoriesContainer: {
-    paddingVertical: 12,
-    backgroundColor: Colors.white,
-    borderBottomWidth: 0,
-    borderBottomColor: 'transparent',
-  },
-  categoryChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: Colors.card,
-    marginHorizontal: 4,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  selectedCategoryChip: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  categoryChipText: {
-    fontSize: 14,
-    color: Colors.text,
-  },
-  selectedCategoryChipText: {
-    color: Colors.white,
-  },
-  tile: {
-    width: tileSize,
-    height: tileSize,
-    padding: 4,
-  },
-  imageContainer: {
-    flex: 1,
-    borderRadius: 22,
     overflow: 'hidden',
-    position: 'relative',
-    backgroundColor: Colors.card,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 4,
   },
-  image: {
-    width: '100%',
-    height: '100%',
-  },
-  multiBadge: {
+  fullBleedBleed: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    left: 0,
+    right: 0,
   },
-  multiBadgeText: {
-    color: Colors.white,
-    fontSize: 11,
+  feedFlex: {
+    flex: 1,
+  },
+  pagerHost: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  pagerPage: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  paginationColumn: {
+    position: 'absolute',
+    top: '18%',
+    bottom: '32%',
+    justifyContent: 'center',
+  },
+  detailsWrapper: {
+    position: 'absolute',
+    bottom: 0,
+    top: '52%',
+    alignItems: 'flex-start',
+  },
+  detailsSlot: {
+    position: 'absolute',
+    width: '100%',
+    overflow: 'hidden',
+  },
+  pagerTitle: {
+    color: '#fff',
+    fontWeight: '900',
+    fontSize: 28,
+    marginBottom: _spacing / 2,
+    letterSpacing: -0.5,
+  },
+  pagerDescription: {
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 15,
     fontWeight: '600',
+    marginBottom: _spacing / 2,
+    lineHeight: 21,
+  },
+  pagerMeta: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  pagerFab: {
+    position: 'absolute',
+    zIndex: 20,
+  },
+  pagerFabInner: {
+    width: _buttonSize,
+    height: _buttonSize,
+    borderRadius: _buttonSize / 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  skeletonPage: {
+    flex: 1,
+    margin: 12,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: Colors.card,
+  },
+  skeletonPageFullBleed: {
+    margin: 0,
+    borderRadius: 0,
+  },
+  skeletonFill: {
+    flex: 1,
+    backgroundColor: '#1a1a1a',
   },
   viewerBackdrop: {
     flex: 1,
@@ -604,22 +876,12 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: 'rgba(255,255,255,0.35)',
   },
-  viewerDotActive: {
-    backgroundColor: Colors.white,
-  },
-  listContent: {
-    paddingHorizontal: 8,
-    paddingBottom: 120,
-    paddingTop: 12,
-  },
-  columnWrapper: {
-    gap: 0,
-  },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 80,
+    paddingVertical: 48,
     gap: 8,
+    backgroundColor: '#000',
   },
   emptyIconWrap: {
     width: 48,
@@ -627,97 +889,18 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.card,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     marginBottom: 4,
   },
   emptyTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.text,
+    color: '#FFFFFF',
   },
   emptySubtitle: {
     fontSize: 12,
-    color: '#6b7280',
-  },
-  skeletonContainer: {
-    paddingHorizontal: 4,
-    paddingTop: 12,
-  },
-  skeletonRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  skeletonBlock: {
-    flex: 1,
-    height: tileSize - 8,
-    borderRadius: 22,
-    backgroundColor: Colors.card,
-    margin: 4,
-  },
-  uploaderAvatarWrap: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    overflow: 'hidden',
-    backgroundColor: '#FFFFFF',
-    zIndex: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  uploaderAvatarImage: {
-    width: '100%',
-    height: '100%',
-  },
-  // Toggle Button Styles
-  toggleContainer: {
-    backgroundColor: 'transparent',
-    paddingHorizontal: 20,
-    paddingVertical: 6,
-    borderBottomWidth: 0,
-    borderBottomColor: 'transparent',
-    alignItems: 'center',
-  },
-  toggleWrapper: {
-    flexDirection: 'row',
-    borderRadius: 16,
-    padding: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  toggleButton: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  toggleButtonActive: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  toggleButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.subtext,
-  },
-  toggleIcon: {
-    marginRight: 4,
+    color: 'rgba(255,255,255,0.55)',
+    textAlign: 'center',
+    paddingHorizontal: 28,
   },
 });

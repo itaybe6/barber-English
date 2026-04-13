@@ -332,6 +332,10 @@ export default function DesignCarousel({
   }, []);
 
   const handleDesignPress = (design: Design) => {
+    if (onDesignPress) {
+      onDesignPress(design);
+      return;
+    }
     setSelectedDesign(design);
     setModalVisible(true);
   };

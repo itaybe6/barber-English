@@ -57,11 +57,12 @@ export default function ProductCarousel({
   };
 
   const handleProductPress = (product: Product) => {
-    setSelectedProduct(product);
-    setModalVisible(true);
     if (onProductPress) {
       onProductPress(product);
+      return;
     }
+    setSelectedProduct(product);
+    setModalVisible(true);
   };
 
   const formatPrice = (price: number) => {

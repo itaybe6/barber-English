@@ -4741,3 +4741,4 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingVertical: 8,
   },
 });
+});

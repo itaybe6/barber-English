@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   Modal,
   View,
@@ -58,6 +58,18 @@ function datesForDayIndices(dayIndices: number[], horizonDays = 28): string[] {
     if (dayIndices.includes(d.getDay())) result.push(formatDateToYMDLocal(d));
   }
   return result;
+}
+
+/** First upcoming calendar date (from tomorrow) matching `dayIndex` (same as Date.getDay()), or null */
+function nextOccurrenceForWeekday(dayIndex: number, horizonDays = 28): Date | null {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (let i = 1; i <= horizonDays; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    if (d.getDay() === dayIndex) return d;
+  }
+  return null;
 }
 
 function timeToMinutes(t: string): number {
@@ -136,9 +148,21 @@ export default function SwapRequestModal({
     }
   }, [appointment, canSubmit, selectedDays, selectedSlots, userPhone, userName, onSuccess, resetState, t]);
 
+  const locale = i18n?.language?.startsWith('he') ? 'he-IL' : 'en-US';
+
+  const nextDateLabelByDayIndex = useMemo(() => {
+    const out: Record<number, string> = {};
+    for (const { dayIndex } of DAYS) {
+      const d = nextOccurrenceForWeekday(dayIndex);
+      out[dayIndex] = d
+        ? d.toLocaleDateString(locale as any, { day: 'numeric', month: 'numeric' })
+        : '';
+    }
+    return out;
+  }, [locale]);
+
   if (!appointment) return null;
 
-  const locale = i18n?.language?.startsWith('he') ? 'he-IL' : 'en-US';
   const formattedDate = new Date(appointment.slot_date).toLocaleDateString(locale as any, {
     weekday: 'long', day: 'numeric', month: 'long',
   });
@@ -247,18 +271,23 @@ export default function SwapRequestModal({
             <View style={s.daysRow}>
               {DAYS.map(day => {
                 const active = selectedDays.includes(day.dayIndex);
+                const dateHint = nextDateLabelByDayIndex[day.dayIndex];
                 return (
-                  <TouchableOpacity
-                    key={day.dayIndex}
-                    style={[s.dayBtn, active && s.dayBtnActive]}
-                    onPress={() => toggleDay(day.dayIndex)}
-                    activeOpacity={0.72}
-                  >
-                    <Text style={[s.dayBtnText, active && s.dayBtnTextActive]}>
-                      {day.label}
+                  <View key={day.dayIndex} style={s.dayCell}>
+                    <Text style={s.dayDateAbove} numberOfLines={1}>
+                      {dateHint || '—'}
                     </Text>
-                    {active && <View style={s.dayDot} />}
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[s.dayBtn, active && s.dayBtnActive]}
+                      onPress={() => toggleDay(day.dayIndex)}
+                      activeOpacity={0.72}
+                    >
+                      <Text style={[s.dayBtnText, active && s.dayBtnTextActive]}>
+                        {day.label}
+                      </Text>
+                      {active && <View style={s.dayDot} />}
+                    </TouchableOpacity>
+                  </View>
                 );
               })}
             </View>
@@ -266,8 +295,12 @@ export default function SwapRequestModal({
             {/* ── Divider ── */}
             <View style={s.divider} />
 
-            {/* ── Time slots ──────────────────────────────────────────────── */}
-            <Text style={s.sectionLabel}>{t('swap.selectTime', 'באיזה שעות?')}</Text>
+            {/* ── Time slots — full-width row so label hugs the RTL start (visual right) ── */}
+            <View style={s.sectionLabelFullWidth}>
+              <Text style={[s.sectionLabel, s.sectionLabelNoMargin]}>
+                {t('swap.selectTime', 'באיזה שעות?')}
+              </Text>
+            </View>
 
             <View style={s.slotsRow}>
               {TIME_SLOTS.map(slot => {
@@ -539,6 +572,15 @@ const s = StyleSheet.create({
     textAlign: 'right',
     marginBottom: 12,
   },
+  /** Block wrapper so shrink-to-fit Text does not sit on the wrong screen edge */
+  sectionLabelFullWidth: {
+    width: '100%',
+    marginBottom: 12,
+  },
+  sectionLabelNoMargin: {
+    marginBottom: 0,
+    width: '100%',
+  },
   countBadge: {
     minWidth: 22,
     height: 22,
@@ -561,8 +603,20 @@ const s = StyleSheet.create({
     gap: 6,
     marginBottom: 22,
   },
-  dayBtn: {
+  dayCell: {
     flex: 1,
+    alignItems: 'center',
+  },
+  dayDateAbove: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#8E8E93',
+    marginBottom: 6,
+    textAlign: 'center',
+    width: '100%',
+  },
+  dayBtn: {
+    width: '100%',
     aspectRatio: 1,
     borderRadius: 12,
     borderWidth: 1.5,

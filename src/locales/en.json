@@ -509,6 +509,7 @@
   "common.searchByNamePhoneEmail": "Search by name, phone, or email",
   "common.close": "Close",
   "home.fixedMessage.gotIt": "OK",
+  "home.fixedMessage.title": "Message from the salon",
   "category": { "gel": "Gel polish", "feet": "Pedicure polish", "manicure": "Manicure" },
   "admin2": { "hoursAdmin": { "title": "Work constraints", "segment": { "hours": "Hours", "singleDay": "Single day", "multiDays": "Multiple days" }, "pickDateShort": "Pick a date", "closedHours": "Closed hours", "pickDateAllDay": "Pick a date (closed all day)", "pickDateRangeAllDay": "Pick a date range (closed all day)", "selectedRange": "Selected range:", "allDay": "All day", "chooseClosedHours": "Choose closed hours", "start": "Start", "end": "End", "upcomingConstraints": "Upcoming constraints", "noUpcomingConstraints": "No upcoming constraints", "noReason": "No reason", "saveCTA": "Save constraints" } },
   "login": {
@@ -1451,6 +1452,10 @@
       "willMove": "You will move to:",
       "question": "Confirm?",
       "yes": "Yes, confirm"
+    },
+    "notification": {
+      "title": "Appointment swapped",
+      "body": "Your appointment on {{fromDate}} at {{fromTime}} was swapped. Your new appointment is on {{toDate}} at {{toTime}}."
     }
   },
   "finance": {

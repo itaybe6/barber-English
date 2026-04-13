@@ -1695,7 +1695,7 @@ export default function SettingsScreen() {
     [canSeeAddEmployee, user, t],
   );
 
-  const [activeSettingsTab, setActiveSettingsTab] = useState<string>('appointments');
+  const [activeSettingsTab, setActiveSettingsTab] = useState<string>('general');
   const { tab: settingsDeepTabParam } = useLocalSearchParams<{ tab?: string | string[] }>();
 
   useEffect(() => {
@@ -2096,10 +2096,9 @@ export default function SettingsScreen() {
             style={[
               styles.settingsBelowTabs,
               {
+                /** Appointments: full scroll padding lives on the ScrollView. General: logout sits below the scroll — reserve space for the floating tab bar. */
                 paddingBottom:
-                  activeSettingsTab === 'appointments' || activeSettingsTab === 'general'
-                    ? 0
-                    : insets.bottom + 100,
+                  activeSettingsTab === 'appointments' ? 0 : insets.bottom + 100,
               },
             ]}
           >

@@ -2,6 +2,32 @@ import { supabase, getBusinessId } from '../supabase';
 import type { SwapRequest, Appointment } from '../supabase';
 import { notificationsApi } from './notifications';
 import { businessProfileApi, isClientSwapEnabled } from './businessProfile';
+import i18n from '@/src/config/i18n';
+import { formatTime12Hour } from '@/lib/utils/timeFormat';
+
+function swapNotifDateLocale(): string {
+  const lng = String(i18n.language || 'en').toLowerCase();
+  if (lng.startsWith('he')) return 'he-IL';
+  if (lng.startsWith('ar')) return 'ar';
+  if (lng.startsWith('ru')) return 'ru-RU';
+  return 'en-US';
+}
+
+function formatSwapNotifDate(isoDate: string): string {
+  const d = String(isoDate || '').split('T')[0];
+  const parts = d.split('-').map((x) => parseInt(x, 10));
+  if (parts.length < 3 || parts.some((n) => Number.isNaN(n))) return d;
+  const [y, m, day] = parts;
+  return new Date(y, m - 1, day).toLocaleDateString(swapNotifDateLocale(), {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+}
+
+function formatSwapNotifTime(time: string | undefined): string {
+  return formatTime12Hour(String(time ?? '').trim());
+}
 
 async function assertClientSwapAllowed(): Promise<boolean> {
   const profile = await businessProfileApi.getProfile();
@@ -288,11 +314,18 @@ export const swapRequestsApi = {
         .eq('id', swapRequest.id)
         .eq('business_id', businessId);
 
-      // Notify requester
-      const requesterNotifTitle = 'Appointment Swapped';
-      const requesterNotifContent = `Your appointment on ${swapRequest.original_date} at ${swapRequest.original_time} has been swapped to ${myAppointment.slot_date} at ${myAppointment.slot_time}.`;
+      const notifTitle = i18n.t('swap.notification.title', 'תור הוחלף');
+
+      // Requester: from their old slot → to the acceptor's slot
+      const requesterNotifContent = i18n.t('swap.notification.body', {
+        fromDate: formatSwapNotifDate(swapRequest.original_date),
+        fromTime: formatSwapNotifTime(swapRequest.original_time),
+        toDate: formatSwapNotifDate(myAppointment.slot_date),
+        toTime: formatSwapNotifTime(myAppointment.slot_time),
+      });
+
       await notificationsApi.createNotification({
-        title: requesterNotifTitle,
+        title: notifTitle,
         content: requesterNotifContent,
         type: 'system',
         recipient_name: swapRequest.requester_name || '',
@@ -300,11 +333,16 @@ export const swapRequestsApi = {
         business_id: businessId,
       }).catch(() => {});
 
-      // Notify acceptor
-      const acceptorNotifTitle = 'Appointment Swapped';
-      const acceptorNotifContent = `Your appointment on ${myAppointment.slot_date} at ${myAppointment.slot_time} has been swapped to ${swapRequest.original_date} at ${swapRequest.original_time}.`;
+      // Acceptor: from their old slot → to the requester's slot
+      const acceptorNotifContent = i18n.t('swap.notification.body', {
+        fromDate: formatSwapNotifDate(myAppointment.slot_date),
+        fromTime: formatSwapNotifTime(myAppointment.slot_time),
+        toDate: formatSwapNotifDate(swapRequest.original_date),
+        toTime: formatSwapNotifTime(swapRequest.original_time),
+      });
+
       await notificationsApi.createNotification({
-        title: acceptorNotifTitle,
+        title: notifTitle,
         content: acceptorNotifContent,
         type: 'system',
         recipient_name: myAppointment.client_name || '',

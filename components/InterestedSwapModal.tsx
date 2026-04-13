@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Modal,
   View,
@@ -9,6 +9,7 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  I18nManager,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -23,10 +24,27 @@ const PRIMARY_PALE = '#EEEDFE';
 const GRAY_TEXT    = '#8E8E93';
 const DARK         = '#1C1C1E';
 
-/** Row that lays out children from RIGHT to LEFT (first JSX child = right edge). */
-const RowRTL = ({ style, children, ...rest }: React.ComponentProps<typeof View>) => (
-  <View style={[s.rowRTL, style]} {...rest}>{children}</View>
-);
+interface RowProps extends React.ComponentProps<typeof View> {
+  rtl?: boolean;
+}
+
+function SheetRow({ rtl, style, children, ...rest }: RowProps) {
+  return (
+    <View
+      style={[
+        {
+          flexDirection: rtl ? ('row-reverse' as const) : ('row' as const),
+          alignItems: 'center' as const,
+          width: '100%' as const,
+        },
+        style,
+      ]}
+      {...rest}
+    >
+      {children}
+    </View>
+  );
+}
 
 interface SwapOpportunity {
   swapRequest: SwapRequest;
@@ -45,8 +63,23 @@ function fmtDate(d: string) {
 }
 
 export default function InterestedSwapModal({ visible, opportunities, onClose, onSwapSuccess }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [swappingId, setSwappingId] = useState<string | null>(null);
+
+  const activeLang = String(i18n.resolvedLanguage || i18n.language || '').toLowerCase();
+  /** Hebrew/Arabic UI or global RTL — i18n alone can be RTL before I18nManager reloads */
+  const layoutRtl = useMemo(
+    () =>
+      I18nManager.isRTL ||
+      activeLang.startsWith('he') ||
+      activeLang.startsWith('ar') ||
+      (typeof i18n.dir === 'function' && i18n.dir() === 'rtl'),
+    [activeLang, i18n],
+  );
+
+  const textAlign = layoutRtl ? ('right' as const) : ('left' as const);
+  /** Column cross-axis: flex-end = right side in LTR column when I18nManager is not globally RTL */
+  const colStart = layoutRtl ? ('flex-end' as const) : ('flex-start' as const);
 
   const handleSwap = (opp: SwapOpportunity) => {
     const name = opp.swapRequest.requester_name || t('swap.thisUser', 'לקוח זה');
@@ -92,11 +125,11 @@ export default function InterestedSwapModal({ visible, opportunities, onClose, o
 
           <View style={s.handle} />
 
-          {/* Header: [title block RIGHT] [X LEFT] — row-reverse, first child = right */}
-          <RowRTL style={s.header}>
-            <View style={s.headerText}>
-              <Text style={s.headerTitle}>{t('swap.interested.title', 'מעוניינים להחלפה')}</Text>
-              <Text style={s.headerSub}>
+          {/* Header: row-reverse in RTL → title (first child) goes right, close button goes left */}
+          <SheetRow rtl={layoutRtl} style={s.header}>
+            <View style={[s.headerText, { alignItems: colStart }]}>
+              <Text style={[s.headerTitle, { textAlign }]}>{t('swap.interested.title', 'מעוניינים להחלפה')}</Text>
+              <Text style={[s.headerSub, { textAlign }]}>
                 {count === 1
                   ? t('swap.interested.subOne', 'לקוח אחד מבקש לקחת את התור שלך')
                   : t('swap.interested.subMany', '{{n}} לקוחות מבקשים לקחת את התור שלך', { n: count })}
@@ -105,15 +138,15 @@ export default function InterestedSwapModal({ visible, opportunities, onClose, o
             <TouchableOpacity style={s.closeBtn} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Ionicons name="close" size={16} color="#636366" />
             </TouchableOpacity>
-          </RowRTL>
+          </SheetRow>
 
-          {/* Banner: text right, icon left */}
-          <RowRTL style={s.banner}>
-            <Text style={s.bannerText}>
+          {/* Banner: row-reverse in RTL → text (first child) goes right, icon goes left */}
+          <SheetRow rtl={layoutRtl} style={s.banner}>
+            <Text style={[s.bannerText, { textAlign }]}>
               {t('swap.interested.banner', 'בחר עם מי להחליף — שניכם תקבלו עדכון ותור חדש')}
             </Text>
             <Ionicons name="swap-horizontal" size={18} color={PRIMARY} style={s.bannerIcon} />
-          </RowRTL>
+          </SheetRow>
 
           <ScrollView
             showsVerticalScrollIndicator={false}
@@ -128,50 +161,50 @@ export default function InterestedSwapModal({ visible, opportunities, onClose, o
 
               return (
                 <View key={opp.swapRequest.id} style={s.card}>
-                  {/* Avatar RIGHT, text block, index LEFT */}
-                  <RowRTL style={s.cardTop}>
+                  {/* row-reverse in RTL: avatar → right, cardMeta → middle, indexBadge → left */}
+                  <SheetRow rtl={layoutRtl} style={s.cardTop}>
                     <View style={s.avatar}>
                       <LinearGradient colors={[PRIMARY_MID, PRIMARY]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.avatarGrad}>
                         <Text style={s.avatarLetter}>{initial}</Text>
                       </LinearGradient>
                     </View>
-                    <View style={s.cardMeta}>
-                      <Text style={s.cardName} numberOfLines={1}>{name}</Text>
+                    <View style={[s.cardMeta, { alignItems: colStart }]}>
+                      <Text style={[s.cardName, { textAlign }]} numberOfLines={1}>{name}</Text>
                       {!!opp.swapRequest.original_service_name && (
-                        <Text style={s.cardService} numberOfLines={1}>{opp.swapRequest.original_service_name}</Text>
+                        <Text style={[s.cardService, { textAlign }]} numberOfLines={1}>{opp.swapRequest.original_service_name}</Text>
                       )}
                     </View>
                     <View style={s.indexBadge}>
                       <Text style={s.indexText}>{idx + 1}</Text>
                     </View>
-                  </RowRTL>
+                  </SheetRow>
 
                   <View style={s.divider} />
 
-                  {/* My slot RIGHT, arrow, their slot LEFT */}
-                  <RowRTL style={s.slotRow}>
-                    <View style={[s.slotBox, s.slotMine]}>
-                      <Text style={[s.slotLabel, s.slotLabelMine]}>{t('swap.interested.yourSlot', 'התור שלך')}</Text>
-                      <Text style={[s.slotDate, s.slotDateMine]} numberOfLines={2}>
+                  {/* row-reverse in RTL: slotMine → right, arrowCircle → middle, slotBox (theirs) → left */}
+                  <SheetRow rtl={layoutRtl} style={s.slotRow}>
+                    <View style={[s.slotBox, s.slotMine, { alignItems: colStart }]}>
+                      <Text style={[s.slotLabel, s.slotLabelMine, { textAlign }]}>{t('swap.interested.yourSlot', 'התור שלך')}</Text>
+                      <Text style={[s.slotDate, s.slotDateMine, { textAlign }]} numberOfLines={2}>
                         {fmtDate(opp.myAppointment.slot_date)}
                       </Text>
-                      <Text style={[s.slotTime, s.slotTimeMine]}>
+                      <Text style={[s.slotTime, s.slotTimeMine, { textAlign }]}>
                         {formatTime12Hour(opp.myAppointment.slot_time || '')}
                       </Text>
                     </View>
                     <View style={s.arrowCircle}>
                       <Ionicons name="swap-horizontal" size={18} color={PRIMARY} />
                     </View>
-                    <View style={s.slotBox}>
-                      <Text style={s.slotLabel}>{t('swap.interested.theirSlot', 'התור שלהם')}</Text>
-                      <Text style={s.slotDate} numberOfLines={2}>
+                    <View style={[s.slotBox, { alignItems: colStart }]}>
+                      <Text style={[s.slotLabel, { textAlign }]}>{t('swap.interested.theirSlot', 'התור שלהם')}</Text>
+                      <Text style={[s.slotDate, { textAlign }]} numberOfLines={2}>
                         {fmtDate(opp.swapRequest.original_date)}
                       </Text>
-                      <Text style={s.slotTime}>
+                      <Text style={[s.slotTime, { textAlign }]}>
                         {formatTime12Hour(opp.swapRequest.original_time || '')}
                       </Text>
                     </View>
-                  </RowRTL>
+                  </SheetRow>
 
                   <TouchableOpacity
                     style={[s.swapBtn, isSwapping && s.swapBtnLoading]}
@@ -188,10 +221,10 @@ export default function InterestedSwapModal({ visible, opportunities, onClose, o
                       {isSwapping ? (
                         <ActivityIndicator size="small" color="#FFF" />
                       ) : (
-                        <RowRTL style={s.swapBtnRow}>
-                          <Text style={s.swapBtnText}>{t('swap.interested.confirmBtn', 'אשר החלפה')}</Text>
+                        <SheetRow rtl={layoutRtl} style={s.swapBtnRow}>
+                          <Text style={[s.swapBtnText, { textAlign }]}>{t('swap.interested.confirmBtn', 'אשר החלפה')}</Text>
                           <Ionicons name="checkmark-circle" size={18} color="rgba(255,255,255,0.85)" />
-                        </RowRTL>
+                        </SheetRow>
                       )}
                     </LinearGradient>
                   </TouchableOpacity>
@@ -206,11 +239,6 @@ export default function InterestedSwapModal({ visible, opportunities, onClose, o
 }
 
 const s = StyleSheet.create({
-  rowRTL: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    width: '100%',
-  },
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.52)',
@@ -249,15 +277,12 @@ const s = StyleSheet.create({
   headerText: {
     flex: 1,
     minWidth: 0,
-    alignItems: 'flex-end',
     gap: 4,
   },
   headerTitle: {
     fontSize: 22,
     fontWeight: '800',
     color: DARK,
-    textAlign: 'right',
-    writingDirection: 'rtl',
     alignSelf: 'stretch',
     letterSpacing: -0.5,
   },
@@ -265,8 +290,6 @@ const s = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: GRAY_TEXT,
-    textAlign: 'right',
-    writingDirection: 'rtl',
     alignSelf: 'stretch',
   },
   closeBtn: {
@@ -294,8 +317,6 @@ const s = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#3C3489',
-    textAlign: 'right',
-    writingDirection: 'rtl',
     lineHeight: 19,
   },
   bannerIcon: { flexShrink: 0 },
@@ -347,15 +368,12 @@ const s = StyleSheet.create({
   cardMeta: {
     flex: 1,
     minWidth: 0,
-    alignItems: 'flex-end',
     gap: 3,
   },
   cardName: {
     fontSize: 17,
     fontWeight: '700',
     color: DARK,
-    textAlign: 'right',
-    writingDirection: 'rtl',
     alignSelf: 'stretch',
     letterSpacing: -0.3,
   },
@@ -363,8 +381,6 @@ const s = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: '#6C6C70',
-    textAlign: 'right',
-    writingDirection: 'rtl',
     alignSelf: 'stretch',
   },
   indexBadge: {
@@ -398,7 +414,6 @@ const s = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 10,
     paddingHorizontal: 10,
-    alignItems: 'flex-end',
     gap: 3,
   },
   slotMine: {
@@ -410,8 +425,6 @@ const s = StyleSheet.create({
     color: GRAY_TEXT,
     textTransform: 'uppercase',
     letterSpacing: 0.4,
-    textAlign: 'right',
-    writingDirection: 'rtl',
     alignSelf: 'stretch',
   },
   slotLabelMine: {
@@ -421,8 +434,6 @@ const s = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#3C3C43',
-    textAlign: 'right',
-    writingDirection: 'rtl',
     alignSelf: 'stretch',
     lineHeight: 16,
   },
@@ -434,8 +445,6 @@ const s = StyleSheet.create({
     fontWeight: '800',
     color: DARK,
     letterSpacing: -0.5,
-    textAlign: 'right',
-    writingDirection: 'rtl',
     alignSelf: 'stretch',
   },
   slotTimeMine: {
@@ -477,7 +486,5 @@ const s = StyleSheet.create({
     fontWeight: '800',
     color: '#FFF',
     letterSpacing: -0.3,
-    textAlign: 'right',
-    writingDirection: 'rtl',
   },
 });

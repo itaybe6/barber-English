@@ -19,15 +19,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 
 import type { WaitlistEntry } from '@/lib/supabase';
-import { useColors } from '@/src/theme/ThemeProvider';
+import { useColors, usePrimaryContrast } from '@/src/theme/ThemeProvider';
 
 export interface WaitlistHomeFabPanelProps {
   entries: WaitlistEntry[];
   formatWaitlistDate: (dateString: string) => string;
   onRequestRemoveAll: () => void;
   isRemoving?: boolean;
-  /** `tag` — compact chip (e.g. under Book button). `banner` — full-width prominent row. */
-  triggerVariant?: 'tag' | 'banner';
+  /** `tag` — compact chip. `banner` — full-width prominent row. `card` — same style as next-appointment card. */
+  triggerVariant?: 'tag' | 'banner' | 'card';
 }
 
 const SHEET_RADIUS = 24;
@@ -64,11 +64,131 @@ export function WaitlistHomeFabPanel({
   const sheetMaxHeight = Math.round(winH * 0.9);
   const rtl = I18nManager.isRTL;
   const textAlign = rtl ? ('right' as const) : ('left' as const);
+  const { primaryOnSurface } = usePrimaryContrast();
 
   if (entries.length === 0) return null;
 
+  const firstEntry = entries[0];
+  const periodIcon =
+    firstEntry.time_period === 'morning'
+      ? 'sunny'
+      : firstEntry.time_period === 'afternoon'
+        ? 'partly-sunny'
+        : firstEntry.time_period === 'evening'
+          ? 'moon'
+          : 'time-outline';
+  const periodColor =
+    firstEntry.time_period === 'morning' ? '#F5A623' : colors.primary;
+
   const trigger =
-    triggerVariant === 'tag' ? (
+    triggerVariant === 'card' ? (
+      <TouchableOpacity
+        style={styles.cardTrigger}
+        onPress={open}
+        activeOpacity={0.88}
+        accessibilityRole="button"
+        accessibilityLabel={t('waitlist.compactA11y')}
+      >
+        {/* Header row — mirrors clientNextHeader */}
+        <View
+          style={[
+            styles.cardHeader,
+            { flexDirection: rtl ? 'row' : 'row-reverse' },
+          ]}
+        >
+          <Text style={styles.cardHeaderDate} numberOfLines={1}>
+            {formatWaitlistDate(firstEntry.requested_date)}
+          </Text>
+          <Text style={[styles.cardHeaderLabel, { color: colors.primary }]}>
+            {t('waitlist.title')}
+          </Text>
+        </View>
+
+        {/* Divider */}
+        <View style={styles.cardDivider} />
+
+        {/* Body row — mirrors clientNextBody */}
+        <View
+          style={[
+            styles.cardBody,
+            { flexDirection: rtl ? 'row-reverse' : 'row' },
+          ]}
+        >
+          {/* Left: icon + service + time period */}
+          <View
+            style={[
+              styles.cardInfo,
+              {
+                flexDirection: rtl ? 'row-reverse' : 'row',
+                alignItems: 'center',
+                gap: 12,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.cardIconCircle,
+                { backgroundColor: `${colors.primary}18` },
+              ]}
+            >
+              <Ionicons name="time" size={22} color={colors.primary} />
+            </View>
+            <View
+              style={{
+                flex: 1,
+                alignItems: rtl ? 'flex-end' : 'flex-start',
+                gap: 3,
+              }}
+            >
+              <Text
+                style={[
+                  styles.cardService,
+                  { textAlign: rtl ? 'right' : 'left' },
+                ]}
+                numberOfLines={1}
+              >
+                {firstEntry.service_name || t('waitlist.compactMessage')}
+              </Text>
+              <View
+                style={{
+                  flexDirection: rtl ? 'row-reverse' : 'row',
+                  alignItems: 'center',
+                  gap: 5,
+                }}
+              >
+                <Ionicons name={periodIcon as any} size={13} color={periodColor} />
+                <Text
+                  style={[
+                    styles.cardPeriodText,
+                    { color: periodColor, textAlign: rtl ? 'right' : 'left' },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {firstEntry.time_period === 'any'
+                    ? t('time_period.any')
+                    : t(`time_period.${firstEntry.time_period}`)}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Vertical separator */}
+          <View
+            style={[styles.cardTimeDivider, { backgroundColor: `${colors.primary}25` }]}
+          />
+
+          {/* Right: count + queue label */}
+          <View style={styles.cardCountBlock}>
+            <Text style={[styles.cardCountNum, { color: primaryOnSurface }]}>
+              {entries.length}
+            </Text>
+            <Text style={[styles.cardCountLabel, { color: `${primaryOnSurface}B3` }]}>
+              {t('waitlist.compactHint')}
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    ) : triggerVariant === 'tag' ? (
       <TouchableOpacity
         style={[
           styles.homeTag,
@@ -295,6 +415,94 @@ export function WaitlistHomeFabPanel({
 }
 
 const styles = StyleSheet.create({
+  // ── Card variant — mirrors clientNextCard in app/(client-tabs)/index.tsx ──
+  cardTrigger: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    marginHorizontal: 4,
+    ...Platform.select({
+      ios: { shadowColor: '#1e253b', shadowOpacity: 0.09, shadowRadius: 14, shadowOffset: { width: 0, height: 5 } },
+      android: { elevation: 5 },
+    }),
+  },
+  cardHeader: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 11,
+  },
+  cardHeaderDate: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#3C3C43',
+    flexShrink: 1,
+    maxWidth: 160,
+  },
+  cardHeaderLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+  },
+  cardBody: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    gap: 14,
+  },
+  cardInfo: {
+    flex: 1,
+    gap: 6,
+    minWidth: 0,
+  },
+  cardIconCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  cardService: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    letterSpacing: -0.3,
+  },
+  cardPeriodText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+  },
+  cardTimeDivider: {
+    width: 1.5,
+    height: 44,
+    borderRadius: 2,
+    marginHorizontal: 4,
+  },
+  cardCountBlock: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    flexShrink: 0,
+  },
+  cardCountNum: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -1,
+    includeFontPadding: false,
+  },
+  cardCountLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
   homeTag: {
     flexDirection: 'row',
     alignItems: 'center',

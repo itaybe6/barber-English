@@ -1092,12 +1092,12 @@ export default function ClientHomeScreen() {
             </TouchableOpacity>
           )}
           {waitlistEntries.length > 0 ? (
-            <View style={styles.waitlistTagHost}>
+            <View style={styles.waitlistCardHost}>
               <WaitlistHomeFabPanel
                 entries={waitlistEntries}
                 formatWaitlistDate={formatWaitlistDate}
                 isRemoving={isRemovingFromWaitlist}
-                triggerVariant="tag"
+                triggerVariant="card"
                 onRequestRemoveAll={() => {
                   Alert.alert(
                     t('waitlist.leave.title'),
@@ -1713,6 +1713,10 @@ const styles = StyleSheet.create<any>({
     width: '100%',
     alignItems: 'center',
     paddingHorizontal: 4,
+  },
+  waitlistCardHost: {
+    marginTop: 12,
+    width: '100%',
   },
   sectionTopSpacer: {
     marginTop: 4,

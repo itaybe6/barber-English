@@ -29,6 +29,7 @@ export interface TimeSelectionProps {
   primaryColor: string;
   t: any;
   onSelectTime: (time: string) => void;
+  onWaitlist?: () => void;
 }
 
 type TimePeriod = 'morning' | 'afternoon' | 'evening';
@@ -148,6 +149,7 @@ export default function TimeSelection({
   primaryColor,
   t,
   onSelectTime,
+  onWaitlist,
 }: TimeSelectionProps) {
   const insets = useSafeAreaInsets();
   const barBottom = getBookingStepBarTopFromBottom(insets.bottom);
@@ -224,6 +226,26 @@ export default function TimeSelection({
                 </Animated.View>
               );
             })}
+
+            {/* Waitlist nudge – shown when slots exist but none suit the user */}
+            {onWaitlist && (
+              <Animated.View entering={bookingStepRowEntering(runningDelay)} style={localStyles.waitlistRow}>
+                <View style={localStyles.waitlistDivider} />
+                <Text style={localStyles.waitlistHint}>
+                  {t('booking.noSuitableTime', 'לא מצאת שעה מתאימה?')}
+                </Text>
+                <Pressable
+                  onPress={onWaitlist}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [localStyles.waitlistBtn, pressed && localStyles.waitlistBtnPressed]}
+                >
+                  <Ionicons name="time-outline" size={16} color="rgba(255,255,255,0.9)" style={{ marginLeft: I18nManager.isRTL ? 0 : 4, marginRight: I18nManager.isRTL ? 4 : 0 }} />
+                  <Text style={localStyles.waitlistBtnText}>
+                    {t('booking.joinWaitlist', 'הצטרף/י לרשימת המתנה')}
+                  </Text>
+                </Pressable>
+              </Animated.View>
+            )}
           </ScrollView>
         ) : (
           <View style={localStyles.emptyBody}>
@@ -303,6 +325,46 @@ const localStyles = StyleSheet.create({
     flex: 1,
     height: StyleSheet.hairlineWidth,
     backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+
+  /* ── Waitlist nudge (bottom of slot list) ── */
+  waitlistRow: {
+    alignItems: 'center',
+    gap: 10,
+    paddingTop: 8,
+  },
+  waitlistDivider: {
+    width: 40,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    marginBottom: 2,
+  },
+  waitlistHint: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.6)',
+    textAlign: 'center',
+  },
+  waitlistBtn: {
+    flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 11,
+    paddingHorizontal: 22,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  waitlistBtnPressed: {
+    opacity: 0.7,
+    transform: [{ scale: 0.97 }],
+  },
+  waitlistBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.92)',
+    letterSpacing: 0.2,
   },
 
   /* ── Empty state ── */

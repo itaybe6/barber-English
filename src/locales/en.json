@@ -72,6 +72,7 @@
   "booking.bookAppointment": "Book Appointment",
   "booking.summary.staffLabel": "Staff member",
   "booking.summary.goBack": "Edit",
+  "booking.summary.goHome": "Home — leave booking",
   "booking.field.service": "Service",
   "booking.field.date": "Date",
   "booking.field.time": "Time",
@@ -1433,7 +1434,24 @@
     "confirmMessage": "Swap your appointment on {{myDate}} at {{myTime}} with the appointment on {{theirDate}} at {{theirTime}}?",
     "execute": "Swap",
     "swapSuccess": "Appointments have been swapped successfully!",
-    "swapFailed": "Failed to swap appointments"
+    "swapFailed": "Failed to swap appointments",
+    "interested": {
+      "title": "Swap interest",
+      "subOne": "One client wants your appointment slot",
+      "subMany": "{{n}} clients want your appointment slot",
+      "banner": "Pick who to swap with — both of you get a notification and your new time",
+      "yourSlot": "Your appointment",
+      "theirSlot": "Their appointment",
+      "confirmBtn": "Confirm swap"
+    },
+    "confirm": {
+      "title": "Confirm swap",
+      "lead": "wants to swap with you.",
+      "yourSlot": "Your appointment:",
+      "willMove": "You will move to:",
+      "question": "Confirm?",
+      "yes": "Yes, confirm"
+    }
   },
   "finance": {
     "title": "Finance",

@@ -212,9 +212,9 @@ const ServiceSelection = forwardRef<ServiceSelectionHandle, Props>(function Serv
                   {/* `direction: 'ltr'` prevents forceRTL from horizontally mirroring the SVG (otherwise `<` becomes `>`). */}
                   <View style={styles.continueChevronPhysical}>
                     {rtl ? (
-                      <ChevronLeft size={17} color={colors.primary} strokeWidth={2.2} />
-                    ) : (
                       <ChevronRight size={17} color={colors.primary} strokeWidth={2.2} />
+                    ) : (
+                      <ChevronLeft size={17} color={colors.primary} strokeWidth={2.2} />
                     )}
                   </View>
                 </Pressable>

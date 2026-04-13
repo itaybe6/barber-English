@@ -65,6 +65,7 @@
   "booking.bookAppointment": "احجز موعداً",
   "booking.summary.staffLabel": "عضو فريق",
   "booking.summary.goBack": "تعديل",
+  "booking.summary.goHome": "الرئيسية — مغادرة الحجز",
   "booking.field.service": "خدمة",
   "booking.field.date": "تاريخ",
   "booking.field.time": "وقت",

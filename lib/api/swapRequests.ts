@@ -151,11 +151,36 @@ export const swapRequestsApi = {
       if (!(await assertClientSwapAllowed())) {
         return [];
       }
+      const businessId = getBusinessId();
       const allRequests = await this.getActiveSwapRequests();
       const opportunities: Array<{ swapRequest: SwapRequest; myAppointment: Appointment }> = [];
 
+      /** Requester's booked slot (authoritative barber + duration vs row snapshot). */
+      const requesterAptIds = [...new Set(allRequests.map((r) => r.appointment_id).filter(Boolean))] as string[];
+      const requesterAptById = new Map<string, { duration_minutes: number | null; barber_id: string | null }>();
+      if (requesterAptIds.length > 0) {
+        const { data: reqApts, error: reqAptErr } = await supabase
+          .from('appointments')
+          .select('id, duration_minutes, barber_id')
+          .eq('business_id', businessId)
+          .in('id', requesterAptIds);
+        if (!reqAptErr) {
+          for (const row of reqApts || []) {
+            requesterAptById.set(String(row.id), {
+              duration_minutes: row.duration_minutes != null ? Number(row.duration_minutes) : null,
+              barber_id: row.barber_id != null ? String(row.barber_id) : null,
+            });
+          }
+        }
+      }
+
       for (const req of allRequests) {
         if (req.requester_phone === userPhone) continue;
+
+        const reqAptMeta = requesterAptById.get(req.appointment_id);
+        const requesterDuration =
+          reqAptMeta?.duration_minutes ?? req.original_duration_minutes ?? 60;
+        const requesterBarberId = reqAptMeta?.barber_id ?? req.original_barber_id ?? '';
 
         for (const apt of userAppointments) {
           if (!apt.slot_date || !apt.slot_time) continue;
@@ -169,13 +194,11 @@ export const swapRequestsApi = {
           const toMinutes = timeToMinutes(req.preferred_time_to);
           if (aptTimeMinutes < fromMinutes || aptTimeMinutes > toMinutes) continue;
 
-          const sameBarberId =
-            (req.original_barber_id || '') === (apt.barber_id || '');
+          const sameBarberId = (requesterBarberId || '') === (apt.barber_id || '');
           if (!sameBarberId) continue;
 
-          const sameDuration =
-            req.original_duration_minutes === (apt.duration_minutes || 60);
-          if (!sameDuration) continue;
+          const myDuration = apt.duration_minutes ?? 60;
+          if (requesterDuration !== myDuration) continue;
 
           opportunities.push({ swapRequest: req, myAppointment: apt });
         }

@@ -73,6 +73,7 @@
   "booking.bookAppointment": "קבע תור",
   "booking.summary.staffLabel": "איש צוות",
   "booking.summary.goBack": "חזור לשלב",
+  "booking.summary.goHome": "בית — יציאה מקביעת תור",
   "booking.field.service": "שירות",
   "booking.field.date": "תאריך",
   "booking.field.time": "שעה",
@@ -1434,7 +1435,24 @@
     "confirmMessage": "להחליף את התור שלך ב-{{myDate}} בשעה {{myTime}} עם התור ב-{{theirDate}} בשעה {{theirTime}}?",
     "execute": "החלף",
     "swapSuccess": "התורים הוחלפו בהצלחה!",
-    "swapFailed": "החלפת התורים נכשלה"
+    "swapFailed": "החלפת התורים נכשלה",
+    "interested": {
+      "title": "מעוניינים להחלפה",
+      "subOne": "לקוח אחד מבקש לקחת את התור שלך",
+      "subMany": "{{n}} לקוחות מבקשים לקחת את התור שלך",
+      "banner": "בחר עם מי להחליף — שניכם תקבלו עדכון ותור חדש",
+      "yourSlot": "התור שלך",
+      "theirSlot": "התור שלהם",
+      "confirmBtn": "אשר החלפה"
+    },
+    "confirm": {
+      "title": "אישור החלפה",
+      "lead": "רוצה שתחליף איתו/ה.",
+      "yourSlot": "התור שלך:",
+      "willMove": "יעבור ל:",
+      "question": "האם לאשר?",
+      "yes": "כן, אשר"
+    }
   },
   "finance": {
     "title": "פיננסים",

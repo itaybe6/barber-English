@@ -65,6 +65,7 @@
   "booking.bookAppointment": "Записаться",
   "booking.summary.staffLabel": "Сотрудник",
   "booking.summary.goBack": "Изменить",
+  "booking.summary.goHome": "Домой — выйти из записи",
   "booking.field.service": "Услуга",
   "booking.field.date": "Дата",
   "booking.field.time": "Время",

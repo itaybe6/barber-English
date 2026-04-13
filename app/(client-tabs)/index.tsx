@@ -50,8 +50,10 @@ import { Marquee } from '@animatereactnative/marquee';
 import { manicureImages } from '@/src/constants/manicureImages';
 import { ManicureMarqueeTile } from '@/components/ManicureMarqueeTile';
 import { distributeHeroMarqueeUrlsToRows, resolveAdminHeroMarqueeImages } from '@/components/home/AdminHomeHeroMarquee';
-import SwapOpportunities from '@/components/SwapOpportunities';
 import { WaitlistHomeFabPanel } from '@/components/WaitlistHomeFabPanel';
+import InterestedSwapModal from '@/components/InterestedSwapModal';
+import { swapRequestsApi } from '@/lib/api/swapRequests';
+import type { SwapRequest } from '@/lib/supabase';
 import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
 import { toBcp47Locale } from '@/lib/i18nLocale';
 
@@ -164,7 +166,7 @@ const clientHomeApi = {
       
       let query = supabase
         .from('appointments')
-        .select('id, slot_date, slot_time, client_name, client_phone, service_name, barber_id, status, business_id, user_id')
+        .select('id, slot_date, slot_time, client_name, client_phone, service_name, barber_id, status, business_id, user_id, duration_minutes')
         .eq('business_id', businessId)
         .in('slot_date', dates)
         .eq('is_available', false)
@@ -296,6 +298,8 @@ export default function ClientHomeScreen() {
   const [waitlistEntries, setWaitlistEntries] = useState<WaitlistEntry[]>([]);
   const [isLoadingWaitlist, setIsLoadingWaitlist] = useState(false);
   const [isRemovingFromWaitlist, setIsRemovingFromWaitlist] = useState(false);
+  const [interestedOpportunities, setInterestedOpportunities] = useState<Array<{ swapRequest: SwapRequest; myAppointment: AvailableTimeSlot }>>([]);
+  const [showInterestedModal, setShowInterestedModal] = useState(false);
   const [cardWidth, setCardWidth] = useState(0);
   const [lavaCardLayout, setLavaCardLayout] = useState<{ w: number; h: number } | null>(null);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
@@ -620,6 +624,19 @@ export default function ClientHomeScreen() {
       setIsRemovingFromWaitlist(false);
     }
   };
+
+  // Fetch active swap requests from OTHER users that want MY next appointment slot
+  useEffect(() => {
+    if (!nextAppointment || !user?.phone) {
+      setInterestedOpportunities([]);
+      return;
+    }
+    let cancelled = false;
+    swapRequestsApi.findSwapOpportunities(user.phone, [nextAppointment as any]).then((opps) => {
+      if (!cancelled) setInterestedOpportunities(opps as any);
+    });
+    return () => { cancelled = true; };
+  }, [nextAppointment?.id, user?.phone]);
 
   // Fetch appointments when component mounts
   useEffect(() => {
@@ -971,9 +988,6 @@ export default function ClientHomeScreen() {
             <SafeAreaView edges={['left', 'right']} style={styles.clientHomeSafeArea}>
               <View style={[styles.contentWrapperSheet, { zIndex: 10 }]}>
                 <View style={styles.contentWrapperInner}>
-        {/* Swap Opportunities Section */}
-        <SwapOpportunities />
-
         {/* Appointment / Book Card */}
         <View style={[styles.sectionContainer, { marginTop: 16 }]}>
           {isLoading ? (
@@ -1037,6 +1051,25 @@ export default function ClientHomeScreen() {
                   ) : null}
                 </View>
               </View>
+              {/* Interested swap footer — only when others want this slot */}
+              {interestedOpportunities.length > 0 && (
+                <>
+                  <View style={styles.clientNextDivider} />
+                  <View style={styles.clientNextInterestedRow}>
+                    <TouchableOpacity
+                      style={styles.interestedBadge}
+                      onPress={() => setShowInterestedModal(true)}
+                      activeOpacity={0.75}
+                    >
+                      <Ionicons name="people" size={13} color="#534AB7" />
+                      <Text style={styles.interestedBadgeText}>
+                        {t('swap.interested.badge', 'מעוניינים להחלפה')} · {interestedOpportunities.length}
+                      </Text>
+                      <Ionicons name="chevron-forward" size={12} color="#534AB7" />
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
             </TouchableOpacity>
           ) : (
             /* ── Lava Lamp Book Appointment Card ── */
@@ -1339,6 +1372,18 @@ export default function ClientHomeScreen() {
           </View>
         )}
       </View>
+
+      {/* Interested swap requests modal */}
+      <InterestedSwapModal
+        visible={showInterestedModal}
+        opportunities={interestedOpportunities}
+        onClose={() => setShowInterestedModal(false)}
+        onSwapSuccess={() => {
+          setShowInterestedModal(false);
+          fetchUserAppointments();
+          setInterestedOpportunities([]);
+        }}
+      />
 
       <Modal
         visible={showHomeFixedMessageSheet}
@@ -2546,6 +2591,30 @@ const styles = StyleSheet.create<any>({
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.2,
+  },
+
+  // ── Interested swap footer inside appointment card ──
+  clientNextInterestedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  interestedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#EEEDFE',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  interestedBadgeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#534AB7',
+    letterSpacing: -0.1,
   },
 });
 

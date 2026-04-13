@@ -900,6 +900,16 @@ export default function BookAppointment() {
     [selectedBarber, selectedService, selectedDay]
   );
 
+  const handleBookingGoHome = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setBookingSuccessData(null);
+    try {
+      (router as any).replace?.('/(client-tabs)/');
+    } catch {
+      router.back();
+    }
+  }, [router]);
+
   const bookingStripTopInset = 0;
 
   // Compute available start times dynamically for the selected service and date using business_hours
@@ -2041,6 +2051,26 @@ export default function BookAppointment() {
       ) : null}
 
       <SafeAreaView style={styles.container} edges={[]}>
+        {/* `direction: 'ltr'` on the row keeps the control on physical left under forceRTL */}
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.bookingHomeFabWrap,
+            { top: Math.max(safeAreaInsets.top, 8) + 4 },
+          ]}
+        >
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={t('booking.summary.goHome', 'Home — leave booking')}
+            hitSlop={{ top: 10, bottom: 10, left: 12, right: 12 }}
+            onPress={handleBookingGoHome}
+            activeOpacity={0.82}
+            style={styles.bookingHomeFab}
+          >
+            <Ionicons name="home-outline" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+
         <BookingStepTabs
           safeAreaBottom={safeAreaInsets.bottom}
           bottomInsetOverride={getBookingStepBarBottomInsetNoTabBar(safeAreaInsets.bottom)}
@@ -3363,7 +3393,40 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   container: {
     flex: 1,
+    position: 'relative',
     backgroundColor: 'transparent',
+  },
+  bookingHomeFabWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 200,
+    height: 48,
+    flexDirection: 'row',
+    direction: 'ltr',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+    paddingLeft: 12,
+  },
+  bookingHomeFab: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.42)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+      },
+      android: { elevation: 6 },
+      default: {},
+    }),
   },
   topSafeArea: {
     backgroundColor: '#FFFFFF',

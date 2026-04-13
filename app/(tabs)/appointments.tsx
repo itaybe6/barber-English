@@ -1622,11 +1622,9 @@ export default function AdminAppointmentsScreen() {
     const cols = 7;
     const timeCol = 48;
     const inner = sw - timeCol;
-    // For week view, enforce a minimum width per day so cards are readable; enables horizontal scroll
-    const minDaySize = 82;
-    const daySize = Math.max(inner / cols, minDaySize);
+    // All 7 days always fit the screen — no horizontal scroll, like Google Calendar
+    const daySize = inner / cols;
     const hourSize = 72;
-    /** ריפוד תחתון אחד לעמודת שעות + גלילה אנכית; לא כפול מול FlashList אופקי */
     return {
       cols,
       daySize,
@@ -2270,7 +2268,7 @@ export default function AdminAppointmentsScreen() {
                 </Animated.ScrollView>
 
                 <View style={[weekStyles.gridOuter, { direction: 'ltr' } as any]}>
-                  <Animated.View style={[weekStyles.headerRow, headerStylez]}>
+                  <View style={weekStyles.headerRow}>
                     {gridDays.map((d) => (
                       <HeaderDay
                         day={d}
@@ -2287,7 +2285,7 @@ export default function AdminAppointmentsScreen() {
                         onPress={() => setSelectedDate(d.date)}
                       />
                     ))}
-                  </Animated.View>
+                  </View>
 
                   <Animated.ScrollView
                     bounces={false}
@@ -2296,18 +2294,10 @@ export default function AdminAppointmentsScreen() {
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={{ paddingBottom: gridDims.padBottom }}
                   >
-                    <AnimatedFlashList
-                      ref={flashListRef}
-                      data={gridDays}
-                      horizontal
-                      keyExtractor={(item) => item.formatted}
-                      estimatedItemSize={gridDims.daySize}
-                      snapToInterval={gridDims.daySize}
-                      decelerationRate="fast"
-                      bounces={false}
-                      showsHorizontalScrollIndicator={false}
-                      renderItem={({ item, index }) => (
+                    <View style={{ flexDirection: 'row' }}>
+                      {gridDays.map((item, index) => (
                         <WeekDayColumn
+                          key={item.formatted}
                           day={item}
                           index={index}
                           columnWidth={gridDims.daySize}
@@ -2324,10 +2314,8 @@ export default function AdminAppointmentsScreen() {
                           onPressConstraint={openConstraintEditor}
                           minutesFromMidnight={minutesFromMidnight}
                         />
-                      )}
-                      onScroll={onScrollX}
-                      scrollEventThrottle={16}
-                    />
+                      ))}
+                    </View>
                   </Animated.ScrollView>
                 </View>
               </View>

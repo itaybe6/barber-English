@@ -53,7 +53,7 @@ import AddAdminModal from '@/components/AddAdminModal';
 import AddServiceModal from '@/components/AddServiceModal';
 import { SettingsServiceSwipeRow } from '@/components/SettingsServiceSwipeRow';
 import DeleteAccountModal from '@/components/DeleteAccountModal';
-import { formatTimeToAMPM } from '@/lib/hooks/useAdminAddAppointmentForm';
+import { formatBookingTimeLabel } from '@/lib/hooks/useAdminAddAppointmentForm';
 import { ADMIN_RECURRING_APPOINTMENTS_CHANGED } from '@/constants/adminCalendarEvents';
 import { useTranslation } from 'react-i18next';
 import { normalizeAppLanguage, isRtlLanguage, toBcp47Locale } from '@/lib/i18nLocale';
@@ -5067,7 +5067,7 @@ export default function SettingsScreen() {
                                     <View style={styles.recurringHubMetaRow}>
                                       <Text style={styles.recurringHubMetaText} numberOfLines={1}>
                                         {t(`day.${RECURRING_DOW_KEYS[Math.min(Math.max(0, item.day_of_week), 6)]}`)} ·{' '}
-                                        {formatTimeToAMPM(String(item.slot_time).slice(0, 5))}
+                                        {formatBookingTimeLabel(String(item.slot_time).slice(0, 5), i18n.language)}
                                       </Text>
                                       <Calendar size={15} color={Colors.subtext} strokeWidth={2.2} />
                                     </View>

@@ -1159,6 +1159,7 @@ export default function ClientHomeScreen() {
         {designs && designs.length > 0 && (
           <DesignCarousel
             designs={designs}
+            showDots={false}
             onDesignPress={(design) => {
               if (!isAuthenticated) {
                 router.push('/login');

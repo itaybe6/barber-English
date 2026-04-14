@@ -13,20 +13,30 @@ interface SettingsServiceSwipeRowProps {
   enabled: boolean;
   onDeletePress: () => void;
   children: React.ReactNode;
+  /** Clip radius — match inner card (services ~18, employees iosCard 16) */
+  outerBorderRadius?: number;
+  /** Optional copy for the red swipe delete chip */
+  deleteButtonText?: string;
+  deleteAccessibilityLabel?: string;
 }
 
 /**
- * Swipe-to-delete for service rows with a hard cap on horizontal travel.
- * Replaces RNGH `Swipeable` here because its right-panel width measurement breaks
- * under RTL + `row-reverse`, allowing the row to drag across the full screen while
- * the delete target stays a thin sliver.
+ * Swipe-to-delete for settings list rows (services, employees) with a hard cap on travel.
+ * Replaces RNGH `Swipeable`: under RTL its right-panel width measurement breaks, so the row
+ * could drag across the full screen while the delete chip stayed a thin sliver.
  */
 export function SettingsServiceSwipeRow({
   enabled,
   onDeletePress,
   children,
+  outerBorderRadius = 18,
+  deleteButtonText,
+  deleteAccessibilityLabel,
 }: SettingsServiceSwipeRowProps) {
   const { t } = useTranslation();
+  const delText = deleteButtonText ?? t('settings.services.delete', 'Delete');
+  const delA11y =
+    deleteAccessibilityLabel ?? t('settings.services.a11yDelete', 'Delete service');
   const translateX = useSharedValue(0);
   const startX = useSharedValue(0);
 
@@ -67,17 +77,17 @@ export function SettingsServiceSwipeRow({
   return (
     <View style={styles.root} accessibilityElementsHidden={false}>
       {/* LTR layer so “swipe left to reveal delete on the right” matches iOS muscle memory in Hebrew UI */}
-      <View style={styles.ltrLayer} pointerEvents="box-none">
+      <View style={[styles.ltrLayer, { borderRadius: outerBorderRadius }]} pointerEvents="box-none">
         <View style={styles.deleteStrip} pointerEvents="box-none">
           <TouchableOpacity
             style={styles.deleteBtn}
             onPress={() => handleDeleteTap()}
             activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityLabel={t('settings.services.a11yDelete', 'Delete service')}
+            accessibilityLabel={delA11y}
           >
             <Trash2 size={20} color="#fff" />
-            <Text style={styles.deleteLabel}>{t('settings.services.delete', 'Delete')}</Text>
+            <Text style={styles.deleteLabel}>{delText}</Text>
           </TouchableOpacity>
         </View>
         <GestureDetector gesture={pan}>
@@ -99,7 +109,6 @@ const styles = StyleSheet.create({
     direction: 'ltr',
     position: 'relative',
     overflow: 'hidden',
-    borderRadius: 18,
   },
   deleteStrip: {
     ...StyleSheet.absoluteFillObject,

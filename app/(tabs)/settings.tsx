@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Platform, 
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
-import { GestureHandlerRootView, Swipeable, ScrollView as GHScrollView } from 'react-native-gesture-handler';
+import { GestureHandlerRootView, ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -3443,21 +3443,12 @@ export default function SettingsScreen() {
                       adminUsers.map((adm: any) => {
                         return (
                           <View key={adm.id} style={{ marginBottom: 10 }}>
-                            <Swipeable
-                              friction={2}
-                              rightThreshold={28}
-                              renderRightActions={() => (
-                                <TouchableOpacity
-                                  style={styles.swipeDeleteAction}
-                                  activeOpacity={0.85}
-                                  onPress={() => openRemoveEmployeeDialog(adm)}
-                                  accessibilityRole="button"
-                                  accessibilityLabel={t('settings.services.a11yDelete', 'Delete service')}
-                                >
-                                  <Trash2 size={20} color={'#fff'} />
-                                  <Text style={styles.swipeDeleteText}>{t('settings.services.delete', 'Delete')}</Text>
-                                </TouchableOpacity>
-                              )}
+                            <SettingsServiceSwipeRow
+                              enabled
+                              outerBorderRadius={16}
+                              onDeletePress={() => openRemoveEmployeeDialog(adm)}
+                              deleteButtonText={t('settings.services.delete', 'Delete')}
+                              deleteAccessibilityLabel={t('settings.admin.removeEmployeeTitle', 'Remove employee')}
                             >
                               <View style={styles.iosCard}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -3484,7 +3475,7 @@ export default function SettingsScreen() {
                                   </View>
                                 </View>
                               </View>
-                            </Swipeable>
+                            </SettingsServiceSwipeRow>
                           </View>
                         );
                       })

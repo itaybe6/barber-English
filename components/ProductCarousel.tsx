@@ -17,13 +17,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { Product } from '@/lib/api/products';
 import { useColors, usePrimaryContrast } from '@/src/theme/ThemeProvider';
 import { useTranslation } from 'react-i18next';
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-/** Narrower cards so carousel doesn’t feel full-bleed wide */
-const CARD_WIDTH = SCREEN_WIDTH * 0.44;
-/** Image area height — card adds white info strip + price pill below */
-const PRODUCT_IMAGE_HEIGHT = CARD_WIDTH * 0.88;
-const CARD_SPACING = 14;
+/** Match admin home product row (`app/(tabs)/index.tsx`) */
+const PRODUCT_TILE_WIDTH = 160;
+const PRODUCT_TILE_GAP = 14;
+const PRODUCT_CAROUSEL_STRIDE = PRODUCT_TILE_WIDTH + PRODUCT_TILE_GAP;
 
 const LIGHTBOX_DESC_MAX_H = Math.round(SCREEN_HEIGHT * 0.22);
 
@@ -32,13 +31,16 @@ interface ProductCarouselProps {
   onProductPress?: (product: Product) => void;
   title?: string;
   subtitle?: string;
+  /** When false, only the carousel rows render (matches `DesignCarousel` without header). Default true. */
+  showHeader?: boolean;
 }
 
-export default function ProductCarousel({ 
-  products, 
-  onProductPress, 
+export default function ProductCarousel({
+  products,
+  onProductPress,
   title,
   subtitle,
+  showHeader = true,
 }: ProductCarouselProps) {
   const { t } = useTranslation();
   const displayTitle = title ?? t('products.carouselTitle');
@@ -70,77 +72,84 @@ export default function ProductCarousel({
     return `₪${whole ? price.toFixed(0) : price.toFixed(2)}`;
   };
 
-  const renderProductCard = (product: Product, index: number) => {
-    return (
-      <TouchableOpacity
-        key={product.id}
-        style={styles.productContainer}
-        onPress={() => handleProductPress(product)}
-        activeOpacity={0.88}
-      >
-        <View style={styles.productCard}>
-          <View style={styles.productImageSection}>
-            <Image
-              source={
-                product.image_url
-                  ? { uri: product.image_url }
-                  : require('@/assets/images/default/HomePage/barber/101-min.png')
-              }
-              style={styles.productImage}
-              resizeMode="cover"
-            />
-          </View>
-          <View style={styles.productInfoSection}>
-            <Text style={styles.productName} numberOfLines={2}>
-              {product.name}
-            </Text>
-          </View>
-        </View>
-
-        {/* Price pill — half outside the card (overlaps bottom of white strip) */}
-        <View
-          style={[
-            styles.pricePill,
-            { backgroundColor: colors.primary, shadowColor: colors.primary },
-          ]}
-        >
-          <Text style={[styles.pricePillText, { color: onPrimary }]}>
-            {formatPrice(product.price)}
-          </Text>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
   if (!products || products.length === 0) {
     return null;
   }
 
   return (
     <View style={styles.container}>
-      {/* Elegant Header */}
-      <View style={styles.elegantHeader}>
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.elegantTitle}>{displayTitle}</Text>
-          <Text style={styles.elegantSubtitle}>{displaySubtitle}</Text>
+      {showHeader ? (
+        <View style={styles.elegantHeader}>
+          <View style={styles.headerTitleContainer}>
+            <Text style={[styles.elegantTitle, { color: colors.text }]}>{displayTitle}</Text>
+            <Text style={[styles.elegantSubtitle, { color: colors.textSecondary }]}>
+              {displaySubtitle}
+            </Text>
+          </View>
         </View>
-      </View>
-
-      {/* Carousel */}
+      ) : null}
       <ScrollView
         ref={scrollViewRef}
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContainer}
+        style={styles.productCarousel}
+        contentContainerStyle={styles.productCarouselContent}
         decelerationRate="fast"
-        snapToInterval={CARD_WIDTH + CARD_SPACING}
-        snapToAlignment="center"
-        style={styles.scrollView}
+        snapToInterval={PRODUCT_CAROUSEL_STRIDE}
+        snapToAlignment="start"
       >
-        {products.map((product, index) => renderProductCard(product, index))}
+        {products.map((product) => {
+          const priceStr =
+            product.price % 1 === 0
+              ? `₪${product.price.toFixed(0)}`
+              : `₪${product.price.toFixed(2)}`;
+          return (
+            <TouchableOpacity
+              key={product.id}
+              onPress={() => handleProductPress(product)}
+              activeOpacity={0.88}
+              style={styles.productTile}
+            >
+              <View style={styles.productImageWrap}>
+                {product.image_url ? (
+                  <Image
+                    source={{ uri: product.image_url }}
+                    style={styles.productImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.productPlaceholder}>
+                    <Ionicons name="bag-outline" size={40} color="#8E8E93" />
+                  </View>
+                )}
+                <LinearGradient
+                  pointerEvents="none"
+                  colors={['rgba(0,0,0,0.5)', 'transparent']}
+                  locations={[0, 0.65]}
+                  style={styles.overlayGradientTop}
+                />
+                <LinearGradient
+                  pointerEvents="none"
+                  colors={['transparent', 'rgba(0,0,0,0.45)', 'rgba(0,0,0,0.88)']}
+                  locations={[0.15, 0.55, 1]}
+                  style={styles.overlayGradientBottom}
+                />
+                <View style={styles.pricePillWrap} pointerEvents="none">
+                  <View style={[styles.pricePill, { backgroundColor: colors.primary }]}>
+                    <Text style={[styles.pricePillText, { color: onPrimary }]}>{priceStr}</Text>
+                  </View>
+                </View>
+                <View style={styles.nameWrap} pointerEvents="none">
+                  <Text style={styles.nameOverlay} numberOfLines={2}>
+                    {product.name}
+                  </Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
 
-      {/* Product lightbox (gallery-style: image focus, details at bottom) */}
       <Modal
         visible={modalVisible}
         transparent
@@ -203,9 +212,7 @@ export default function ProductCarousel({
                       showsVerticalScrollIndicator={false}
                       nestedScrollEnabled
                     >
-                      <Text style={styles.lightboxDescription}>
-                        {selectedProduct.description}
-                      </Text>
+                      <Text style={styles.lightboxDescription}>{selectedProduct.description}</Text>
                     </ScrollView>
                   ) : null}
                   <Text style={[styles.lightboxPrice, { color: colors.primary }]}>
@@ -222,11 +229,13 @@ export default function ProductCarousel({
 }
 
 const styles = StyleSheet.create({
+  /** Same shell as `DesignCarousel` on client home — no white card, flush with sheet. */
   container: {
     paddingTop: 0,
     paddingBottom: 20,
     backgroundColor: 'transparent',
   },
+  /** Aligned with `DesignCarousel` section header — no white card. */
   elegantHeader: {
     alignItems: 'center',
     paddingHorizontal: 24,
@@ -239,7 +248,6 @@ const styles = StyleSheet.create({
   elegantTitle: {
     fontSize: 26,
     fontWeight: '700',
-    color: '#1C1C1E',
     textAlign: 'center',
     letterSpacing: -0.3,
     marginBottom: 4,
@@ -247,81 +255,94 @@ const styles = StyleSheet.create({
   elegantSubtitle: {
     fontSize: 14,
     fontWeight: '400',
-    color: '#8E8E93',
     textAlign: 'center',
     letterSpacing: 0.2,
   },
-  scrollView: {},
-  scrollContainer: {
+  productCarousel: {},
+  productCarouselContent: {
     paddingHorizontal: 16,
+    gap: PRODUCT_TILE_GAP,
+    paddingVertical: 6,
+    paddingBottom: 8,
   },
-  productContainer: {
-       width: CARD_WIDTH,
-       marginRight: CARD_SPACING,
-       alignItems: 'center',
-       paddingBottom: 10,
-     },
-  productCard: {
-    width: '100%',
-    backgroundColor: 'transparent',
-  },
-  productImageSection: {
-    width: '100%',
-    height: PRODUCT_IMAGE_HEIGHT,
-    backgroundColor: '#E8E8ED',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
+  productTile: {
+    width: PRODUCT_TILE_WIDTH,
+    height: PRODUCT_TILE_WIDTH,
+    borderRadius: 18,
     overflow: 'hidden',
-  },
-  productImage: {
-    width: '100%',
-    height: '100%',
-  },
-  productInfoSection: {
-    backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 18,
-    borderBottomRightRadius: 18,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.06)',
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 24,
-    alignItems: 'center',
-    minHeight: 56,
+    backgroundColor: '#ECECEF',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 5 },
-        shadowOpacity: 0.14,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.12,
         shadowRadius: 12,
       },
-      android: { elevation: 6 },
-      default: {},
+      android: { elevation: 4 },
     }),
   },
-  productName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1C1C1E',
-    lineHeight: 20,
-    textAlign: 'center',
-    letterSpacing: -0.2,
+  productImageWrap: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+  },
+  productImage: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  productPlaceholder: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ECECEF',
+  },
+  overlayGradientTop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '42%',
+  },
+  overlayGradientBottom: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '72%',
+  },
+  pricePillWrap: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    zIndex: 2,
+  },
+  nameWrap: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    right: 52,
+    zIndex: 2,
+    alignItems: 'flex-start',
+  },
+  nameOverlay: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: -0.15,
+    lineHeight: 17,
+    textAlign: 'left',
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   pricePill: {
-    marginTop: -18,
-    borderRadius: 24,
-    paddingVertical: 8,
-    paddingHorizontal: 22,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.22,
-    shadowRadius: 6,
-    elevation: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
   },
   pricePillText: {
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.3,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: -0.25,
   },
   lightboxOverlay: {
     flex: 1,

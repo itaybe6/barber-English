@@ -35,6 +35,28 @@ export function formatTimeToAMPM(time24: string): string {
   return `${hour12}:${minutes} ${ampm}`;
 }
 
+/** `HH:MM` 24-hour display (Israel / EU style). Accepts `HH:MM` or `HH:MM:SS`. */
+export function formatTime24Hour(time24: string): string {
+  const parts = String(time24 || '00:00').trim().split(':');
+  const hRaw = parseInt(parts[0] || '0', 10);
+  const mRaw = parseInt(parts[1] || '0', 10);
+  const h = Number.isFinite(hRaw) ? Math.min(23, Math.max(0, hRaw)) : 0;
+  const m = Number.isFinite(mRaw) ? Math.min(59, Math.max(0, mRaw)) : 0;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/**
+ * Time chips and summaries: 24h for Hebrew / Arabic / Russian (common in IL),
+ * 12h AM/PM for English.
+ */
+export function formatBookingTimeLabel(time24: string, lang: string | undefined | null): string {
+  const l = (lang ?? 'he').toLowerCase();
+  if (l.startsWith('he') || l.startsWith('iw') || l.startsWith('ar') || l.startsWith('ru')) {
+    return formatTime24Hour(time24);
+  }
+  return formatTimeToAMPM(time24);
+}
+
 function triggerMediumHaptic() {
   try {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);

@@ -29,7 +29,7 @@ import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-a
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useTranslation } from 'react-i18next';
 import { readableOnHex } from '@/lib/utils/readableOnHex';
-import { formatTimeToAMPM } from '@/lib/hooks/useAdminAddAppointmentForm';
+import { formatBookingTimeLabel } from '@/lib/hooks/useAdminAddAppointmentForm';
 import { useAddRecurringAppointmentForm } from '@/lib/hooks/useAddRecurringAppointmentForm';
 import type { Service } from '@/lib/supabase';
 import { ADMIN_RECURRING_APPOINTMENTS_CHANGED } from '@/constants/adminCalendarEvents';
@@ -597,12 +597,12 @@ export default function AddRecurringAppointmentScreen() {
                             end={{ x: 1, y: 1 }}
                             style={styles.chipActive}
                           >
-                            <Text style={styles.chipActiveTxt}>{formatTimeToAMPM(time)}</Text>
+                            <Text style={styles.chipActiveTxt}>{formatBookingTimeLabel(time, i18n.language)}</Text>
                           </LinearGradient>
                         ) : (
                           <View style={[styles.chipIdle, { borderColor: fieldBorder, backgroundColor: fieldBg }]}>
                             <Text style={[styles.chipIdleTxt, { color: innerText }]}>
-                              {formatTimeToAMPM(time)}
+                              {formatBookingTimeLabel(time, i18n.language)}
                             </Text>
                           </View>
                         )}
@@ -765,7 +765,7 @@ export default function AddRecurringAppointmentScreen() {
                   { color: heroText, textAlign: textAlignPrimary, writingDirection: writingDir },
                 ]}
               >
-                {form.selectedTime ? formatTimeToAMPM(form.selectedTime) : ''}
+                {form.selectedTime ? formatBookingTimeLabel(form.selectedTime, i18n.language) : ''}
               </Text>
               <Text
                 style={[

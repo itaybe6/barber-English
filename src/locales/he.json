@@ -545,6 +545,7 @@
   "common.close": "סגור",
   "home.fixedMessage.gotIt": "הבנתי",
   "home.fixedMessage.title": "הודעה חשובה",
+  "home.fixedMessage.dragToClose": "גררו למעלה על הפס כדי לסגור",
   "category": { "gel": "לק ג'ל", "feet": "לק ברגליים", "manicure": "מניקור" },
   "admin2": { "hoursAdmin": { "title": "אילוצי עבודה", "segment": { "hours": "שעות", "singleDay": "יום אחד", "multiDays": "מספר ימים" }, "pickDateShort": "בחר/י תאריך", "closedHours": "שעות סגורות", "pickDateAllDay": "בחירת תאריך (סגור כל היום)", "pickDateRangeAllDay": "בחירת טווח תאריכים (סגור כל היום)", "selectedRange": "טווח נבחר:", "allDay": "כל היום", "chooseClosedHours": "בחר/י שעות סגורות", "start": "התחלה", "end": "סיום", "upcomingConstraints": "אילוצים קרובים", "noUpcomingConstraints": "אין אילוצים קרובים", "noReason": "ללא סיבה", "saveCTA": "שמור אילוצים" } },
   "login": {

@@ -405,7 +405,9 @@ export default function DesignCarousel({
       {showHeader && (
         <View style={styles.elegantHeader}>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.elegantTitle}>{title || t('admin.gallery.title', 'Gallery')}</Text>
+            <Text style={[styles.elegantTitle, { color: colors.text }]}>
+              {title || t('admin.gallery.title', 'Gallery')}
+            </Text>
             {showSubtitle ? (
               <Text style={styles.elegantSubtitle}>{subtitle || t('admin.gallery.subtitle', 'Manage your designs')}</Text>
             ) : null}
@@ -511,19 +513,18 @@ const styles = StyleSheet.create({
   elegantHeader: {
     alignItems: 'center',
     paddingHorizontal: 24,
-    marginBottom: 20,
-    marginTop: 20, // Add top margin to create space from the booking section above
+    marginBottom: 14,
+    marginTop: 16,
   },
   headerTitleContainer: {
     alignItems: 'center',
   },
   elegantTitle: {
-    fontSize: 26, // Increased from 24 to 26
+    fontSize: 20,
     fontWeight: '700',
-    color: '#1C1C1E',
     textAlign: 'center',
-    letterSpacing: -0.3,
-    marginBottom: 4,
+    letterSpacing: -0.25,
+    marginBottom: 3,
   },
   elegantSubtitle: {
     fontSize: 14,

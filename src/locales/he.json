@@ -2,6 +2,9 @@
   "welcome": "ברוך הבא",
   "valuedClient": "לקוח יקר",
   "home.subtitle": "קבע תור במהירות ובקלות\nהזמן שלך חשוב",
+  "home.emptyNextCard.greeting": "שלום",
+  "home.emptyNextCard.greetingWithName": "שלום {{name}}",
+  "home.emptyNextCard.subtitle": "לחץ כאן כדי לקבוע תור חדש",
   "profile.title": "הגדרות ופרופיל",
   "notifications.title": "התראות",
   

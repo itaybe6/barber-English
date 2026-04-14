@@ -33,6 +33,8 @@ interface ProductCarouselProps {
   subtitle?: string;
   /** When false, only the carousel rows render (matches `DesignCarousel` without header). Default true. */
   showHeader?: boolean;
+  /** When false, the line under the section title is hidden. Default true. */
+  showSubtitle?: boolean;
 }
 
 export default function ProductCarousel({
@@ -41,6 +43,7 @@ export default function ProductCarousel({
   title,
   subtitle,
   showHeader = true,
+  showSubtitle = true,
 }: ProductCarouselProps) {
   const { t } = useTranslation();
   const displayTitle = title ?? t('products.carouselTitle');
@@ -82,9 +85,11 @@ export default function ProductCarousel({
         <View style={styles.elegantHeader}>
           <View style={styles.headerTitleContainer}>
             <Text style={[styles.elegantTitle, { color: colors.text }]}>{displayTitle}</Text>
-            <Text style={[styles.elegantSubtitle, { color: colors.textSecondary }]}>
-              {displaySubtitle}
-            </Text>
+            {showSubtitle ? (
+              <Text style={[styles.elegantSubtitle, { color: colors.textSecondary }]}>
+                {displaySubtitle}
+              </Text>
+            ) : null}
           </View>
         </View>
       ) : null}

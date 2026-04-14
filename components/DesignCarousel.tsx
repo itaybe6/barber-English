@@ -115,6 +115,8 @@ interface DesignCarouselProps {
   title?: string;
   subtitle?: string;
   showHeader?: boolean;
+  /** When false, the line under the section title is hidden. Default true. */
+  showSubtitle?: boolean;
   /** Pagination dots under the carousel (admin home keeps true). Default true. */
   showDots?: boolean;
 }
@@ -131,6 +133,7 @@ export default function DesignCarousel({
   title = undefined,
   subtitle = undefined,
   showHeader = true,
+  showSubtitle = true,
   showDots = true,
 }: DesignCarouselProps) {
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
@@ -403,7 +406,9 @@ export default function DesignCarousel({
         <View style={styles.elegantHeader}>
           <View style={styles.headerTitleContainer}>
             <Text style={styles.elegantTitle}>{title || t('admin.gallery.title', 'Gallery')}</Text>
-            <Text style={styles.elegantSubtitle}>{subtitle || t('admin.gallery.subtitle', 'Manage your designs')}</Text>
+            {showSubtitle ? (
+              <Text style={styles.elegantSubtitle}>{subtitle || t('admin.gallery.subtitle', 'Manage your designs')}</Text>
+            ) : null}
           </View>
         </View>
       )}

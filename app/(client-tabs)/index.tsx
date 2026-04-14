@@ -309,6 +309,14 @@ export default function ClientHomeScreen() {
     [businessProfile],
   );
 
+  /** First word of profile name for the empty-state book card greeting. */
+  const bookCardGreetingFirstName = useMemo(() => {
+    const raw = user?.name?.trim();
+    if (!raw) return null;
+    const first = raw.split(/\s+/)[0]?.trim();
+    return first || null;
+  }, [user?.name]);
+
   /** http(s) logo URL for hero — matches admin `homeLogoUrl` (`app/(tabs)/index.tsx`). */
   const homeLogoUrlForHeader = useMemo(() => {
     const raw = String(businessProfile?.home_logo_url ?? '').trim();
@@ -1078,6 +1086,12 @@ export default function ClientHomeScreen() {
               activeOpacity={0.85}
               style={[styles.lavaBookCard, (isBlocked || awaitingApproval) && { opacity: 0.55 }]}
               disabled={isBlocked || awaitingApproval}
+              accessibilityRole="button"
+              accessibilityLabel={
+                bookCardGreetingFirstName
+                  ? `${t('home.emptyNextCard.greetingWithName', { name: bookCardGreetingFirstName })}. ${t('home.emptyNextCard.subtitle')}`
+                  : `${t('home.emptyNextCard.greeting')}. ${t('home.emptyNextCard.subtitle')}`
+              }
               onPress={() => {
                 if (!isAuthenticated) {
                   router.push('/login');
@@ -1113,10 +1127,12 @@ export default function ClientHomeScreen() {
               <View style={styles.lavaBookContent}>
                 <View style={styles.lavaBookTextBlock}>
                   <Text style={[styles.lavaBookTitle, { color: onPrimary }]}>
-                    {t('book.now', 'Book Now')}
+                    {bookCardGreetingFirstName
+                      ? t('home.emptyNextCard.greetingWithName', { name: bookCardGreetingFirstName })
+                      : t('home.emptyNextCard.greeting')}
                   </Text>
                   <Text style={[styles.lavaBookLabel, { color: `${onPrimary}99` }]}>
-                    {t('appointments.noUpcoming', 'No upcoming appointments')}
+                    {t('home.emptyNextCard.subtitle')}
                   </Text>
                 </View>
                 <View style={[styles.lavaBookArrow, { backgroundColor: `${onPrimary}22` }]}>
@@ -1160,6 +1176,7 @@ export default function ClientHomeScreen() {
           <DesignCarousel
             designs={designs}
             showDots={false}
+            showSubtitle={false}
             onDesignPress={(design) => {
               if (!isAuthenticated) {
                 router.push('/login');
@@ -1176,6 +1193,7 @@ export default function ClientHomeScreen() {
         {products && products.length > 0 && (
           <ProductCarousel
             products={products}
+            showSubtitle={false}
             onProductPress={(product) => {
               if (!isAuthenticated) {
                 router.push('/login');
@@ -1192,8 +1210,7 @@ export default function ClientHomeScreen() {
         {displayAddress ? (
           <View style={[styles.sectionContainer, { marginBottom: 24 }]}> 
             <View style={styles.sectionHeaderModernSimple}>
-              <Text style={{ fontSize: 26, fontWeight: '700', color: '#1C1C1E', textAlign: 'center', letterSpacing: -0.3, marginBottom: 4 }}>{t('how.to.get.here')}</Text>
-              <Text style={{ fontSize: 14, fontWeight: '400', color: '#8E8E93', textAlign: 'center', letterSpacing: 0.2 }}>{t('tap.map.for.directions')}</Text>
+              <Text style={{ fontSize: 26, fontWeight: '700', color: '#1C1C1E', textAlign: 'center', letterSpacing: -0.3 }}>{t('how.to.get.here')}</Text>
             </View>
              
              <TouchableOpacity

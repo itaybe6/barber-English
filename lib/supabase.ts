@@ -313,6 +313,8 @@ export interface BusinessProfile {
   // New per-barber booking open days map: { [userId: string]: number }
   booking_open_days_by_user?: Record<string, number>;
   business_number?: string;
+  /** When true, business is VAT-exempt (עוסק פטור) — receipts omit VAT split. */
+  vat_exempt?: boolean;
   accountant_email?: string;
   /** 1–28: day of month (Asia/Jerusalem) to email the previous month’s report */
   accountant_report_day_of_month?: number;
@@ -335,6 +337,8 @@ export interface BusinessProfile {
   /** Encrypted API secret (enc:v1:...) — same encryption as Pulseem fields */
   greeninvoice_api_secret?: string | null;
   greeninvoice_has_credentials?: boolean;
+  /** Last issued local PDF receipt serial (see RPC `next_local_kabala_receipt_serial`). */
+  local_kabala_last_serial?: number;
   created_at: string;
   updated_at: string;
 }

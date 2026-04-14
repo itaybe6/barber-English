@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallba
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking, Dimensions, Switch, I18nManager, DeviceEventEmitter, Keyboard, InteractionManager, type LayoutChangeEvent } from 'react-native';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
 import * as Haptics from 'expo-haptics';
 import { GestureHandlerRootView, Swipeable, ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -39,6 +38,7 @@ import {
   Camera,
   Megaphone,
   Layers,
+  FileText,
 } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -216,6 +216,11 @@ export default function SettingsScreen() {
   const [tiktokDraft, setTiktokDraft] = useState('');
   const [showEditDisplayNameModal, setShowEditDisplayNameModal] = useState(false);
   const [displayNameDraft, setDisplayNameDraft] = useState('');
+  const [showReceiptLegalModal, setShowReceiptLegalModal] = useState(false);
+  const [receiptLegalDisplayName, setReceiptLegalDisplayName] = useState('');
+  const [receiptLegalBusinessNumber, setReceiptLegalBusinessNumber] = useState('');
+  const [receiptLegalBusinessPhone, setReceiptLegalBusinessPhone] = useState('');
+  const [receiptLegalVatExempt, setReceiptLegalVatExempt] = useState(false);
   const [cancellationHoursDraft, setCancellationHoursDraft] = useState('24');
   // Admin name/phone edit
   const [showEditAdminModal, setShowEditAdminModal] = useState(false);
@@ -450,6 +455,40 @@ export default function SettingsScreen() {
       }
       setProfile(updated);
       Alert.alert(t('success.generic','Success'), t('settings.profile.saveSuccess','Business details saved successfully'));
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const openReceiptLegalModal = useCallback(() => {
+    setReceiptLegalDisplayName((profileDisplayName || '').trim());
+    setReceiptLegalBusinessNumber(String(profile?.business_number ?? '').trim());
+    setReceiptLegalBusinessPhone(String(profile?.phone ?? '').trim());
+    setReceiptLegalVatExempt(profile?.vat_exempt === true);
+    setShowReceiptLegalModal(true);
+  }, [profileDisplayName, profile?.business_number, profile?.phone, profile?.vat_exempt]);
+
+  const handleSaveReceiptLegalDetails = async () => {
+    setIsSavingProfile(true);
+    try {
+      const updated = await businessProfileApi.upsertProfile({
+        display_name: receiptLegalDisplayName.trim() || null as any,
+        business_number: receiptLegalBusinessNumber.trim() || null as any,
+        phone: receiptLegalBusinessPhone.trim() || null as any,
+        vat_exempt: receiptLegalVatExempt as any,
+        address: (profileAddress || '').trim() || null as any,
+        instagram_url: (profileInstagram || '').trim() || null as any,
+        facebook_url: (profileFacebook || '').trim() || null as any,
+        tiktok_url: (profileTiktok || '').trim() || null as any,
+      });
+      if (!updated) {
+        Alert.alert(t('error.generic', 'Error'), t('settings.profile.receiptLegalSaveFailed', 'Could not save receipt details'));
+        return;
+      }
+      setProfile(updated);
+      setProfileDisplayName(updated.display_name || '');
+      setShowReceiptLegalModal(false);
+      Alert.alert(t('success.generic', 'Success'), t('settings.profile.saveSuccess', 'Business details saved successfully'));
     } finally {
       setIsSavingProfile(false);
     }
@@ -1540,6 +1579,20 @@ export default function SettingsScreen() {
           setTimeout(resolve, Platform.OS === 'ios' ? 80 : 0);
         });
       });
+      /** Dynamic import so the route can load without the native module (dev clients must be rebuilt after adding the dependency). */
+      let DocumentPicker: typeof import('expo-document-picker');
+      try {
+        DocumentPicker = await import('expo-document-picker');
+      } catch {
+        Alert.alert(
+          t('error.generic', 'Error'),
+          t(
+            'settings.profile.documentPickerNativeMissing',
+            'בחירת קובץ דורשת build מחדש של האפליקציה עם expo-document-picker (למשל: npx expo run:ios או EAS build).',
+          ),
+        );
+        return;
+      }
       const result = await DocumentPicker.getDocumentAsync({
         type: 'image/*',
         copyToCacheDirectory: true,
@@ -1565,6 +1618,16 @@ export default function SettingsScreen() {
       console.error('pick home logo from files failed', e);
       const msg = e instanceof Error ? e.message : '';
       if (msg.includes('document picking in progress')) {
+        return;
+      }
+      if (msg.includes('ExpoDocumentPicker') || msg.includes('native module')) {
+        Alert.alert(
+          t('error.generic', 'Error'),
+          t(
+            'settings.profile.documentPickerNativeMissing',
+            'בחירת קובץ דורשת build מחדש של האפליקציה עם expo-document-picker (למשל: npx expo run:ios או EAS build).',
+          ),
+        );
         return;
       }
       Alert.alert(t('error.generic', 'Error'), t('settings.profile.homeLogoUploadFailed', 'Logo upload failed'));
@@ -2946,6 +3009,16 @@ export default function SettingsScreen() {
         <View style={styles.settingsTabPanel}>
           <View style={styles.settingsAccordionBody}>
               {renderSettingItemLTR(
+                <FileText size={20} color={businessColors.primary} />,
+                t('settings.profile.receiptLegalRowTitle', 'Receipt & tax details'),
+                t(
+                  'settings.profile.receiptLegalRowSubtitle',
+                  'Name, VAT ID, phone, VAT-exempt — used on receipts (320)',
+                ),
+                undefined,
+                openReceiptLegalModal,
+              )}
+              {renderSettingItemLTR(
                 <MapPin size={20} color="#FF3B30" />,
                 t('settings.profile.businessAddressTitle', 'Business address'),
                 businessAddressDisplay || t('settings.profile.addAddress', 'Add address'),
@@ -3523,6 +3596,117 @@ export default function SettingsScreen() {
                   textAlign="left"
                 />
               </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Receipt / VAT legal fields (local kabala 320 + compliance) */}
+      <Modal
+        visible={showReceiptLegalModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => !isSavingProfile && setShowReceiptLegalModal(false)}
+      >
+        <View style={styles.smallModalOverlay}>
+          <View style={styles.smallModalCard}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => !isSavingProfile && setShowReceiptLegalModal(false)}
+                disabled={isSavingProfile}
+              >
+                <Text style={styles.modalCloseText}>{t('cancel', 'Cancel')}</Text>
+              </TouchableOpacity>
+              <Text style={styles.modalTitleLTR} numberOfLines={2}>
+                {t('settings.profile.receiptLegalModalTitle', 'Receipt & tax details')}
+              </Text>
+              <TouchableOpacity
+                style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]}
+                onPress={() => void handleSaveReceiptLegalDetails()}
+                disabled={isSavingProfile}
+              >
+                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>
+                  {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabelLTR}>{t('settings.profile.businessName', 'Business name')}</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={receiptLegalDisplayName}
+                  onChangeText={setReceiptLegalDisplayName}
+                  placeholder={t('settings.profile.businessNamePlaceholder', 'For example: The Studio of Hadas')}
+                  placeholderTextColor={Colors.subtext}
+                  textAlign="left"
+                  editable={!isSavingProfile}
+                />
+              </View>
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabelLTR}>
+                  {t('settings.profile.receiptLegalOsekLabel', 'Authorized dealer / company ID (ח.פ.)')}
+                </Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={receiptLegalBusinessNumber}
+                  onChangeText={setReceiptLegalBusinessNumber}
+                  placeholder={t('settings.profile.receiptLegalOsekPlaceholder', 'e.g. 515000000')}
+                  placeholderTextColor={Colors.subtext}
+                  keyboardType="number-pad"
+                  textAlign="left"
+                  editable={!isSavingProfile}
+                />
+              </View>
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabelLTR}>
+                  {t('settings.profile.receiptLegalPhoneLabel', 'Business phone (on receipts)')}
+                </Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={receiptLegalBusinessPhone}
+                  onChangeText={setReceiptLegalBusinessPhone}
+                  placeholder={t('settings.profile.receiptLegalPhonePlaceholder', 'e.g. 050-1234567')}
+                  placeholderTextColor={Colors.subtext}
+                  keyboardType="phone-pad"
+                  textAlign="left"
+                  editable={!isSavingProfile}
+                />
+              </View>
+              <View style={[styles.settingItemLTR, { borderBottomWidth: 0, paddingVertical: 12 }]}>
+                <View style={styles.settingContentLTR}>
+                  <Text style={styles.settingTitleLTR}>
+                    {t('settings.profile.receiptLegalVatExemptLabel', 'VAT-exempt business (עוסק פטור)')}
+                  </Text>
+                  <Text style={styles.settingSubtitleLTR}>
+                    {t(
+                      'settings.profile.receiptLegalVatExemptSubtitle',
+                      'On if you do not charge VAT; receipts omit the VAT breakdown.',
+                    )}
+                  </Text>
+                </View>
+                <Switch
+                  value={receiptLegalVatExempt}
+                  onValueChange={setReceiptLegalVatExempt}
+                  disabled={isSavingProfile}
+                  trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                  thumbColor={
+                    receiptLegalVatExempt
+                      ? businessColors.primary
+                      : Platform.OS === 'android'
+                        ? '#f4f3f4'
+                        : undefined
+                  }
+                  ios_backgroundColor="#E5E5EA"
+                />
+              </View>
+              <Text style={[styles.settingSubtitleLTR, { paddingHorizontal: 4, paddingBottom: 16, opacity: 0.85 }]}>
+                {t(
+                  'settings.profile.receiptLegalHint',
+                  'Edit the address below under «Business address». Receipt accent color is under Design.',
+                )}
+              </Text>
             </ScrollView>
           </View>
         </View>

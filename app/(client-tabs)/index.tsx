@@ -311,12 +311,10 @@ export default function ClientHomeScreen() {
     [businessProfile],
   );
 
-  /** First word of profile name for the empty-state book card greeting. */
-  const bookCardGreetingFirstName = useMemo(() => {
+  /** Full display name (including family name) for the empty-state book card greeting. */
+  const bookCardGreetingDisplayName = useMemo(() => {
     const raw = user?.name?.trim();
-    if (!raw) return null;
-    const first = raw.split(/\s+/)[0]?.trim();
-    return first || null;
+    return raw && raw.length > 0 ? raw : null;
   }, [user?.name]);
 
   /** http(s) logo URL for hero — matches admin `homeLogoUrl` (`app/(tabs)/index.tsx`). */
@@ -1108,8 +1106,8 @@ export default function ClientHomeScreen() {
               disabled={isBlocked || awaitingApproval}
               accessibilityRole="button"
               accessibilityLabel={
-                bookCardGreetingFirstName
-                  ? `${t('home.emptyNextCard.greetingWithName', { name: bookCardGreetingFirstName })}. ${t('home.emptyNextCard.subtitle')}`
+                bookCardGreetingDisplayName
+                  ? `${t('home.emptyNextCard.greetingWithName', { name: bookCardGreetingDisplayName })}. ${t('home.emptyNextCard.subtitle')}`
                   : `${t('home.emptyNextCard.greeting')}. ${t('home.emptyNextCard.subtitle')}`
               }
               onPress={() => {
@@ -1147,8 +1145,8 @@ export default function ClientHomeScreen() {
               <View style={styles.lavaBookContent}>
                 <View style={styles.lavaBookTextBlock}>
                   <Text style={[styles.lavaBookTitle, { color: onPrimary }]}>
-                    {bookCardGreetingFirstName
-                      ? t('home.emptyNextCard.greetingWithName', { name: bookCardGreetingFirstName })
+                    {bookCardGreetingDisplayName
+                      ? t('home.emptyNextCard.greetingWithName', { name: bookCardGreetingDisplayName })
                       : t('home.emptyNextCard.greeting')}
                   </Text>
                   <Text style={[styles.lavaBookLabel, { color: `${onPrimary}99` }]}>

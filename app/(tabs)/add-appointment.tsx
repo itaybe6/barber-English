@@ -42,7 +42,7 @@ import { readableOnHex } from '@/lib/utils/readableOnHex';
 import {
   useAdminAddAppointmentForm,
   formatDateToLocalString,
-  formatTimeToAMPM,
+  formatBookingTimeLabel,
   parseDateKeyToLocalDate,
   type AdminBookingSaveSuccessPayload,
 } from '@/lib/hooks/useAdminAddAppointmentForm';
@@ -223,7 +223,7 @@ export default function AddAppointmentScreen() {
       },
       {
         variant: 'body',
-        text: `${t('booking.field.time', 'שעה')}: ${formatTimeToAMPM(time)}`,
+        text: `${t('booking.field.time', 'שעה')}: ${formatBookingTimeLabel(time, i18n?.language)}`,
       },
     ];
     lines.push({
@@ -774,11 +774,13 @@ export default function AddAppointmentScreen() {
                             end={{ x: 1, y: 1 }}
                             style={styles.chipActive}
                           >
-                            <Text style={styles.chipActiveTxt}>{formatTimeToAMPM(time)}</Text>
+                            <Text style={styles.chipActiveTxt}>{formatBookingTimeLabel(time, i18n.language)}</Text>
                           </LinearGradient>
                         ) : (
                           <View style={[styles.chipIdle, { borderColor: fieldBorder, backgroundColor: fieldBg }]}>
-                            <Text style={[styles.chipIdleTxt, { color: innerText }]}>{formatTimeToAMPM(time)}</Text>
+                            <Text style={[styles.chipIdleTxt, { color: innerText }]}>
+                              {formatBookingTimeLabel(time, i18n.language)}
+                            </Text>
                           </View>
                         )}
                       </Pressable>
@@ -882,7 +884,7 @@ export default function AddAppointmentScreen() {
                   { color: heroText, textAlign: textAlignPrimary, writingDirection: writingDir },
                 ]}
               >
-                {form.selectedTime ? formatTimeToAMPM(form.selectedTime) : ''}
+                {form.selectedTime ? formatBookingTimeLabel(form.selectedTime, i18n.language) : ''}
               </Text>
             </View>
           </View>

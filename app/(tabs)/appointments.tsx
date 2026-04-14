@@ -83,9 +83,19 @@ type PressableScaleProps = {
   hitSlop?: any;
   pressRetentionOffset?: any;
   accessibilityLabel?: string;
+  accessibilityHint?: string;
   children?: React.ReactNode;
 };
-const PressableScale = ({ onPress, style, children, disabled, hitSlop, pressRetentionOffset, accessibilityLabel }: PressableScaleProps) => {
+const PressableScale = ({
+  onPress,
+  style,
+  children,
+  disabled,
+  hitSlop,
+  pressRetentionOffset,
+  accessibilityLabel,
+  accessibilityHint,
+}: PressableScaleProps) => {
   const scale = React.useRef(new RNAnimated.Value(1)).current;
 
   const handlePressIn = React.useCallback(() => {
@@ -120,6 +130,7 @@ const PressableScale = ({ onPress, style, children, disabled, hitSlop, pressRete
       hitSlop={hitSlop || { top: 24, bottom: 24, left: 24, right: 24 }}
       disabled={disabled}
       accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
       style={[style, { transform: [{ scale }] }]}
     >
       {children}
@@ -366,18 +377,22 @@ function _gregorianDayHeaderParts(date: Date) {
   return { dayNum, weekday };
 }
 
-/** תצוגת תאריך תור (YYYY-MM-DD) — כמו במודל החודש */
+/** תצוגת תאריך תור — יום בשבוע + יום/חודש/שנה (לא ISO yyyy-mm-dd) */
 function _formatSlotDateLine(slotDate: string) {
-  const parts = String(slotDate || '')
+  const isoDay = String(slotDate || '').slice(0, 10);
+  const parts = isoDay
     .split('-')
     .map((x) => parseInt(x, 10));
   const yy = parts[0];
   const mm = parts[1];
   const dd = parts[2];
-  if (!yy || !mm || !dd) return slotDate || '—';
+  if (!yy || !mm || !dd) return isoDay || slotDate || '—';
   const d = new Date(yy, mm - 1, dd);
   const p = _gregorianDayHeaderParts(d);
-  return p.weekday ? `${p.weekday} · ${p.dayNum}` : slotDate;
+  const ddP = String(dd).padStart(2, '0');
+  const mmP = String(mm).padStart(2, '0');
+  const dmy = `${ddP}/${mmP}/${yy}`;
+  return p.weekday ? `${p.weekday} · ${dmy}` : dmy;
 }
 
 /** End of appointment window in local time (ms). Past = fully finished. */
@@ -2849,82 +2864,20 @@ export default function AdminAppointmentsScreen() {
                     </View>
 
                     <View style={styles.actionsSheetBody}>
-                    {phoneLine ? (
-                      <View
-                        style={[
-                          styles.actionsSecondaryActionsRow,
-                          { flexDirection: isRtl ? 'row-reverse' : 'row' },
-                        ]}
-                      >
+                    {(() => {
+                      const showReceipt =
+                        (apt.status === 'confirmed' || apt.status === 'completed') && !apt.is_available;
+                      const fullW = styles.actionsSecondaryCard;
+                      const receiptCard = (
                         <PressableScale
-                          style={[styles.actionsSecondaryCard, styles.actionsSecondaryCardInRow]}
-                          accessibilityLabel={tHe('admin.appointments.callClient', 'חייג ללקוח')}
-                          onPress={async () => {
-                            const phone = actionsModal.appointment?.client_phone;
-                            requestCloseActionsModal();
-                            if (phone) await startPhoneCall(phone);
-                          }}
-                        >
-                          <View
-                            style={[
-                              styles.actionsSecondaryIconPrimary,
-                              { backgroundColor: _primaryOnWhite(calendarPrimary, 0.14) },
-                            ]}
-                          >
-                            <Ionicons name="call-outline" size={16} color={calendarPrimary} />
-                          </View>
-                          <View style={styles.actionsSecondaryTitleWrap}>
-                            <Text
-                              style={[styles.actionsSecondaryTitlePrimary, { color: calendarPrimary }]}
-                              numberOfLines={1}
-                            >
-                              {tHe('admin.appointments.callClient', 'חייג ללקוח')}
-                            </Text>
-                          </View>
-                        </PressableScale>
-                        <PressableScale
-                          style={[styles.actionsSecondaryCard, styles.actionsSecondaryCardInRow]}
-                          accessibilityLabel={tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
-                          onPress={() => {
-                            const a = actionsModal.appointment;
-                            if (a) beginDeleteAppointmentFromSheet(a);
-                          }}
-                        >
-                          <View style={styles.actionsSecondaryIconDanger}>
-                            <Ionicons name="trash-outline" size={16} color={Colors.error} />
-                          </View>
-                          <View style={styles.actionsSecondaryTitleWrap}>
-                            <Text style={styles.actionsSecondaryTitleDanger} numberOfLines={1}>
-                              {tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
-                            </Text>
-                          </View>
-                        </PressableScale>
-                      </View>
-                    ) : (
-                      <PressableScale
-                        style={styles.actionsSecondaryCard}
-                        accessibilityLabel={tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
-                        onPress={() => {
-                          const a = actionsModal.appointment;
-                          if (a) beginDeleteAppointmentFromSheet(a);
-                        }}
-                      >
-                        <View style={styles.actionsSecondaryIconDanger}>
-                          <Ionicons name="trash-outline" size={16} color={Colors.error} />
-                        </View>
-                        <View style={styles.actionsSecondaryTitleWrap}>
-                          <Text style={styles.actionsSecondaryTitleDanger} numberOfLines={1}>
-                            {tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
-                          </Text>
-                        </View>
-                      </PressableScale>
-                    )}
-                    {(apt.status === 'confirmed' || apt.status === 'completed') && !apt.is_available ? (
-                      <View style={styles.actionsReceiptBlock}>
-                        <PressableScale
-                          style={styles.actionsSecondaryCard}
+                          key="receipt"
+                          style={fullW}
                           disabled={issuingLocalKabalaAppointmentId === apt.id}
                           accessibilityLabel={tHe('admin.appointments.issueLocalKabala', 'הפק קבלה')}
+                          accessibilityHint={tHe(
+                            'admin.appointments.issueLocalKabalaHint',
+                            'PDF מעוצב עם מספר קבלה סידורי (ללא חשבונית ירוקה)',
+                          )}
                           onPress={() => {
                             void issueLocalIsraeliKabalaReceiptForAppointment(apt);
                           }}
@@ -2942,10 +2895,7 @@ export default function AdminAppointmentsScreen() {
                             )}
                           </View>
                           <View style={styles.actionsSecondaryTitleWrap}>
-                            <Text
-                              style={[styles.actionsSecondaryTitlePrimary, { color: calendarPrimary }]}
-                              numberOfLines={1}
-                            >
+                            <Text style={[styles.actionsSecondaryTitlePrimary, { color: calendarPrimary }]} numberOfLines={2}>
                               {tHe('admin.appointments.issueLocalKabala', 'הפק קבלה')}
                             </Text>
                             <Text style={styles.actionsReceiptHint} numberOfLines={2}>
@@ -2956,8 +2906,101 @@ export default function AdminAppointmentsScreen() {
                             </Text>
                           </View>
                         </PressableScale>
-                      </View>
-                    ) : null}
+                      );
+                      if (phoneLine) {
+                        return (
+                          <View style={styles.actionsStackedButtonsWrap}>
+                            <PressableScale
+                              style={fullW}
+                              accessibilityLabel={tHe('admin.appointments.callClient', 'חייג ללקוח')}
+                              onPress={async () => {
+                                const phone = actionsModal.appointment?.client_phone;
+                                requestCloseActionsModal();
+                                if (phone) await startPhoneCall(phone);
+                              }}
+                            >
+                              <View
+                                style={[
+                                  styles.actionsSecondaryIconPrimary,
+                                  { backgroundColor: _primaryOnWhite(calendarPrimary, 0.14) },
+                                ]}
+                              >
+                                <Ionicons name="call-outline" size={16} color={calendarPrimary} />
+                              </View>
+                              <View style={styles.actionsSecondaryTitleWrap}>
+                                <Text
+                                  style={[styles.actionsSecondaryTitlePrimary, { color: calendarPrimary }]}
+                                  numberOfLines={2}
+                                >
+                                  {tHe('admin.appointments.callClient', 'חייג ללקוח')}
+                                </Text>
+                              </View>
+                            </PressableScale>
+                            <PressableScale
+                              style={fullW}
+                              accessibilityLabel={tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
+                              onPress={() => {
+                                const a = actionsModal.appointment;
+                                if (a) beginDeleteAppointmentFromSheet(a);
+                              }}
+                            >
+                              <View style={styles.actionsSecondaryIconDanger}>
+                                <Ionicons name="trash-outline" size={16} color={Colors.error} />
+                              </View>
+                              <View style={styles.actionsSecondaryTitleWrap}>
+                                <Text style={styles.actionsSecondaryTitleDanger} numberOfLines={2}>
+                                  {tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
+                                </Text>
+                              </View>
+                            </PressableScale>
+                            {showReceipt ? receiptCard : null}
+                          </View>
+                        );
+                      }
+                      if (showReceipt) {
+                        return (
+                          <View style={styles.actionsStackedButtonsWrap}>
+                            <PressableScale
+                              style={fullW}
+                              accessibilityLabel={tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
+                              onPress={() => {
+                                const a = actionsModal.appointment;
+                                if (a) beginDeleteAppointmentFromSheet(a);
+                              }}
+                            >
+                              <View style={styles.actionsSecondaryIconDanger}>
+                                <Ionicons name="trash-outline" size={16} color={Colors.error} />
+                              </View>
+                              <View style={styles.actionsSecondaryTitleWrap}>
+                                <Text style={styles.actionsSecondaryTitleDanger} numberOfLines={2}>
+                                  {tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
+                                </Text>
+                              </View>
+                            </PressableScale>
+                            {receiptCard}
+                          </View>
+                        );
+                      }
+                      return (
+                        <PressableScale
+                          style={fullW}
+                          accessibilityLabel={tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
+                          onPress={() => {
+                            const a = actionsModal.appointment;
+                            if (a) beginDeleteAppointmentFromSheet(a);
+                          }}
+                        >
+                          <View style={styles.actionsSecondaryIconDanger}>
+                            <Ionicons name="trash-outline" size={16} color={Colors.error} />
+                          </View>
+                          <View style={styles.actionsSecondaryTitleWrap}>
+                            <Text style={styles.actionsSecondaryTitleDanger} numberOfLines={2}>
+                              {tHe('admin.appointments.deleteAppointment', 'מחיקת תור')}
+                            </Text>
+                          </View>
+                        </PressableScale>
+                      );
+                    })()}
                     </View>
                   </>
                 );
@@ -3998,31 +4041,17 @@ const styles = StyleSheet.create({
     paddingTop: 26,
     paddingBottom: 8,
   },
-  actionsReceiptBlock: {
-    marginHorizontal: 14,
-    marginTop: 10,
-  },
-  actionsReceiptCard: {
-    opacity: 0.88,
+  actionsStackedButtonsWrap: {
+    gap: 10,
+    marginTop: 0,
   },
   actionsReceiptHint: {
-    marginTop: 2,
+    marginTop: 4,
     fontSize: 12,
     fontWeight: '600',
     color: 'rgba(15,23,42,0.5)',
     textAlign: 'right',
-  },
-  actionsSecondaryActionsRow: {
-    marginHorizontal: 14,
-    marginTop: 0,
-    gap: 8,
-    alignItems: 'stretch',
-  },
-  actionsSecondaryCardInRow: {
-    flex: 1,
-    minWidth: 0,
-    marginHorizontal: 0,
-    marginTop: 0,
+    lineHeight: 16,
   },
   actionsSecondaryCard: {
     marginHorizontal: 14,

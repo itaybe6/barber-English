@@ -3,13 +3,13 @@ import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Platform, 
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
-import { GestureHandlerRootView, Swipeable, ScrollView as GHScrollView } from 'react-native-gesture-handler';
+import { GestureHandlerRootView, ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
-import { servicesApi, updateService, createService, deleteService, updateServicesOrderIndexes } from '@/lib/api/services';
+import { servicesApi, updateService, deleteService, updateServicesOrderIndexes } from '@/lib/api/services';
 import type { Service } from '@/lib/supabase';
 import { recurringAppointmentsApi } from '@/lib/api/recurringAppointments';
 import { supabase, getBusinessId } from '@/lib/supabase';
@@ -50,8 +50,10 @@ import { ColorPicker } from '@/components/ColorPicker';
 import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import AddAdminModal from '@/components/AddAdminModal';
+import AddServiceModal from '@/components/AddServiceModal';
+import { SettingsServiceSwipeRow } from '@/components/SettingsServiceSwipeRow';
 import DeleteAccountModal from '@/components/DeleteAccountModal';
-import { formatTimeToAMPM } from '@/lib/hooks/useAdminAddAppointmentForm';
+import { formatBookingTimeLabel } from '@/lib/hooks/useAdminAddAppointmentForm';
 import { ADMIN_RECURRING_APPOINTMENTS_CHANGED } from '@/constants/adminCalendarEvents';
 import { useTranslation } from 'react-i18next';
 import { normalizeAppLanguage, isRtlLanguage, toBcp47Locale } from '@/lib/i18nLocale';
@@ -166,7 +168,6 @@ export default function SettingsScreen() {
   const [savedServiceId, setSavedServiceId] = useState<string | null>(null);
   const [servicesError, setServicesError] = useState<string | null>(null);
   const [expandedServiceId, setExpandedServiceId] = useState<string | null>(null);
-  const [isAddingService, setIsAddingService] = useState(false);
 
   // Business profile state
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
@@ -203,6 +204,8 @@ export default function SettingsScreen() {
   const clientReminderHoursRulerRef = useRef<BookingDaysRulerHandle>(null);
   const adminReminderMinutesRulerRef = useRef<BookingDaysRulerHandle>(null);
   const homeFixedMessageInputRef = useRef<TextInput>(null);
+  /** Text when the home fixed-message editor was opened — restored on Cancel. */
+  const homeFixedMessageEditorSnapshotRef = useRef('');
   const [showCancellationDropdown, setShowCancellationDropdown] = useState(false);
   // Address bottom sheet animation
   const addressSheetAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
@@ -227,6 +230,21 @@ export default function SettingsScreen() {
   const [adminNameDraft, setAdminNameDraft] = useState('');
   const [adminPhoneDraft, setAdminPhoneDraft] = useState('');
   const [isSavingAdmin, setIsSavingAdmin] = useState(false);
+  /** Bottom sheet: backdrop fades in place; sheet slides separately (avoids RN Modal `slide` moving dimmer with sheet). */
+  const editAdminSheetAnim = useRef(new Animated.Value(0)).current;
+  const editAdminDragY = useRef(new Animated.Value(0)).current;
+  const editAdminSheetTranslateY = useMemo(
+    () => editAdminSheetAnim.interpolate({ inputRange: [0, 1], outputRange: [WINDOW_HEIGHT, 0] }),
+    [editAdminSheetAnim],
+  );
+  const editAdminCombinedTranslateY = useMemo(
+    () => Animated.add(editAdminSheetTranslateY as any, editAdminDragY as any),
+    [editAdminSheetTranslateY, editAdminDragY],
+  );
+  const editAdminBackdropOpacity = useMemo(
+    () => editAdminSheetAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }),
+    [editAdminSheetAnim],
+  );
   const [isUploadingAdminAvatar, setIsUploadingAdminAvatar] = useState(false);
   const [isUploadingHomeLogo, setIsUploadingHomeLogo] = useState(false);
   /** expo-document-picker throws if a second pick starts before the first finishes (e.g. double tap). */
@@ -746,6 +764,18 @@ export default function SettingsScreen() {
       setIsSavingProfile(false);
     }
   };
+
+  useEffect(() => {
+    if (homeFixedMessageEditorOpen) {
+      homeFixedMessageEditorSnapshotRef.current = homeFixedMessageText;
+    }
+  }, [homeFixedMessageEditorOpen]);
+
+  const handleHomeFixedMessageEditorCancel = useCallback(() => {
+    setHomeFixedMessageText(homeFixedMessageEditorSnapshotRef.current);
+    setHomeFixedMessageEditorOpen(false);
+    Keyboard.dismiss();
+  }, []);
 
   const handleHomeFixedMessageSavePress = async () => {
     if (!canSeeAddEmployee || !homeFixedMessageEnabled) return;
@@ -1315,20 +1345,12 @@ export default function SettingsScreen() {
     setEditableServices(prev => prev.map(s => (s.id === id ? { ...s, [key]: value } : s)));
   };
 
-  // Add Service modal state
+  // Add Service modal (same native sheet pattern as AddAdminModal)
   const [showAddServiceModal, setShowAddServiceModal] = useState(false);
   const [showCountsDropdown, setShowCountsDropdown] = useState(false);
-  
-  
-  
-  const [addSvcName, setAddSvcName] = useState('');
-  const [addSvcPrice, setAddSvcPrice] = useState<string>('0');
-  // removed per-service duration field
-  const [addSvcDuration, setAddSvcDuration] = useState<string>('60');
-  // category removed
-  const [addSvcIsSaving, setAddSvcIsSaving] = useState(false);
+
   const [showDurationPicker, setShowDurationPicker] = useState(false);
-  // null = picker is for add-new-service; string = picker is for editing that service id
+  /** When set, duration picker updates this service row */
   const [editingServiceDurationId, setEditingServiceDurationId] = useState<string | null>(null);
   // category removed
   const [showDurationDropdown, setShowDurationDropdown] = useState(false);
@@ -1459,6 +1481,123 @@ export default function SettingsScreen() {
       setIsUploadingAdminAvatar(false);
     }
   };
+
+  const animateEditAdminSheetClosed = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(editAdminSheetAnim, {
+        toValue: 0,
+        duration: 240,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(editAdminDragY, {
+        toValue: 0,
+        duration: 240,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      editAdminDragY.setValue(0);
+      setShowEditAdminModal(false);
+    });
+  }, [editAdminSheetAnim, editAdminDragY]);
+
+  const requestCloseEditAdminSheet = useCallback(() => {
+    if (isSavingAdmin) return;
+    animateEditAdminSheetClosed();
+  }, [isSavingAdmin, animateEditAdminSheetClosed]);
+
+  useEffect(() => {
+    if (!showEditAdminModal) return;
+    editAdminDragY.setValue(0);
+    editAdminSheetAnim.setValue(0);
+    const id = requestAnimationFrame(() => {
+      Animated.timing(editAdminSheetAnim, {
+        toValue: 1,
+        duration: 300,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [showEditAdminModal, editAdminSheetAnim, editAdminDragY]);
+
+  const editAdminGrabberPanHandlers = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (_: GestureResponderEvent, g: PanResponderGestureState) =>
+          g.dy > 4 && Math.abs(g.dy) > Math.abs(g.dx),
+        onPanResponderMove: (_: GestureResponderEvent, g: PanResponderGestureState) => {
+          editAdminDragY.setValue(Math.max(0, g.dy));
+        },
+        onPanResponderRelease: (_: GestureResponderEvent, g: PanResponderGestureState) => {
+          const shouldClose = g.dy > 90 || g.vy > 0.82;
+          if (shouldClose && !isSavingAdmin) {
+            Animated.timing(editAdminSheetAnim, {
+              toValue: 0,
+              duration: 220,
+              easing: Easing.in(Easing.cubic),
+              useNativeDriver: true,
+            }).start(() => {
+              editAdminDragY.setValue(0);
+              setShowEditAdminModal(false);
+            });
+          } else {
+            Animated.timing(editAdminDragY, {
+              toValue: 0,
+              duration: 180,
+              easing: Easing.out(Easing.cubic),
+              useNativeDriver: true,
+            }).start();
+          }
+        },
+        onPanResponderTerminate: () => {
+          Animated.timing(editAdminDragY, {
+            toValue: 0,
+            duration: 180,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }).start();
+        },
+      }).panHandlers,
+    [editAdminDragY, editAdminSheetAnim, isSavingAdmin],
+  );
+
+  const saveEditAdminModal = useCallback(async () => {
+    if (!user?.id) {
+      animateEditAdminSheetClosed();
+      return;
+    }
+    if (!adminNameDraft.trim() || !adminPhoneDraft.trim()) {
+      Alert.alert(
+        t('error.generic', 'Error'),
+        t('settings.admin.fillNamePhone', 'Please fill in name and phone number'),
+      );
+      return;
+    }
+    try {
+      setIsSavingAdmin(true);
+      const updated = await usersApi.updateUser(
+        user.id as any,
+        {
+          name: adminNameDraft.trim() as any,
+          phone: adminPhoneDraft.trim() as any,
+        } as any,
+      );
+      if (updated) {
+        updateUserProfile({ name: updated.name as any, phone: (updated as any).phone } as any);
+        animateEditAdminSheetClosed();
+      } else {
+        Alert.alert(
+          t('error.generic', 'Error'),
+          t('settings.admin.saveDetailsFailed', 'Failed to save admin details'),
+        );
+      }
+    } finally {
+      setIsSavingAdmin(false);
+    }
+  }, [user?.id, adminNameDraft, adminPhoneDraft, t, updateUserProfile, animateEditAdminSheetClosed]);
 
   const uploadHomeScreenLogo = async (asset: {
     uri: string;
@@ -1697,43 +1836,7 @@ export default function SettingsScreen() {
   };
 
   const handleOpenAddService = () => {
-    setAddSvcName('');
-    setAddSvcPrice('0');
-    setAddSvcDuration('60');
-    setIsAddingService(true);
-  };
-
-  const handleCreateService = async () => {
-    if (!addSvcName.trim()) {
-      Alert.alert(t('error.generic','Error'), t('settings.services.nameRequired','Please enter a service name'));
-      return;
-    }
-    setAddSvcIsSaving(true);
-    try {
-      const created = await createService({
-        name: addSvcName.trim(),
-        price: parseFloat(addSvcPrice) || 0,
-        duration_minutes: parseInt(addSvcDuration, 10) || 60,
-        is_active: true,
-        worker_id: (user?.id as any) as any,
-      } as any);
-      if (created) {
-        const nextOrder = editableServices.length;
-        const withOrder = await updateService(created.id, { order_index: nextOrder } as any);
-        const row: Service = (withOrder as Service) || { ...created, order_index: nextOrder };
-        setEditableServices((prev) => sortServicesLikeClientBooking([...prev, row]));
-        setIsAddingService(false);
-        setAddSvcName('');
-        setAddSvcPrice('0');
-        setAddSvcDuration('60');
-      } else {
-        Alert.alert(t('error.generic','Error'), t('settings.services.createFailed','Failed to create service'));
-      }
-    } catch (e) {
-      Alert.alert(t('error.generic','Error'), t('settings.services.createFailed','Failed to create service'));
-    } finally {
-      setAddSvcIsSaving(false);
-    }
+    setShowAddServiceModal(true);
   };
 
   const handleDeleteService = (id: string) => {
@@ -1912,7 +2015,7 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (activeSettingsTab !== 'services') {
       setExpandedServiceId(null);
-      setIsAddingService(false);
+      setShowAddServiceModal(false);
       setShowDurationPicker(false);
       setEditingServiceDurationId(null);
       return;
@@ -1920,7 +2023,7 @@ export default function SettingsScreen() {
     let cancelled = false;
     setIsLoadingServices(true);
     setServicesError(null);
-    setIsAddingService(false);
+    setShowAddServiceModal(false);
     setExpandedServiceId(null);
     void (async () => {
       try {
@@ -2246,7 +2349,7 @@ export default function SettingsScreen() {
             style={[
               styles.settingsBelowTabs,
               {
-                /** Appointments: full scroll padding lives on the ScrollView. General: logout sits below the scroll — reserve space for the floating tab bar. */
+                /** Reserve space for floating tab bar (general: logout is inside ScrollView). */
                 paddingBottom:
                   activeSettingsTab === 'appointments' ? 0 : insets.bottom + 100,
               },
@@ -2257,6 +2360,8 @@ export default function SettingsScreen() {
             style={styles.settingsAppointmentsScroll}
             contentContainerStyle={[
               styles.settingsAppointmentsScrollContent,
+              /** Without this override, `flexGrow: 1` can leave the logout row off-layout on some devices. */
+              { flexGrow: 0 },
               {
                 paddingBottom:
                   insets.bottom +
@@ -2386,26 +2491,41 @@ export default function SettingsScreen() {
                           {homeFixedMessageText.length}/{HOME_FIXED_MESSAGE_MAX_LEN}
                         </Text>
                       </View>
-                      <TouchableOpacity
-                        style={[
-                          styles.homeFixedMessageSaveButton,
-                          {
-                            backgroundColor: businessColors.primary,
-                            opacity: isSavingProfile ? 0.55 : 1,
-                          },
-                        ]}
-                        onPress={() => {
-                          void handleHomeFixedMessageSavePress();
-                        }}
-                        disabled={isSavingProfile}
-                        activeOpacity={0.88}
-                      >
-                        <Text style={styles.homeFixedMessageSaveButtonText}>
-                          {isSavingProfile
-                            ? t('settings.common.saving', 'Saving...')
-                            : t('settings.policies.homeFixedMessageSave', 'Save message')}
-                        </Text>
-                      </TouchableOpacity>
+                      <View style={styles.homeFixedMessageComposerActions}>
+                        <TouchableOpacity
+                          style={[
+                            styles.homeFixedMessageSaveButton,
+                            styles.homeFixedMessageSaveButtonInComposerRow,
+                            {
+                              backgroundColor: businessColors.primary,
+                              opacity: isSavingProfile ? 0.55 : 1,
+                            },
+                          ]}
+                          onPress={() => {
+                            void handleHomeFixedMessageSavePress();
+                          }}
+                          disabled={isSavingProfile}
+                          activeOpacity={0.88}
+                          accessibilityRole="button"
+                          accessibilityLabel={t('settings.policies.homeFixedMessageSave', 'Save message')}
+                        >
+                          <Text style={styles.homeFixedMessageSaveButtonText}>
+                            {isSavingProfile
+                              ? t('settings.common.saving', 'Saving...')
+                              : t('settings.policies.homeFixedMessageSave', 'Save message')}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.homeFixedMessageCancelButton}
+                          onPress={handleHomeFixedMessageEditorCancel}
+                          disabled={isSavingProfile}
+                          activeOpacity={0.88}
+                          accessibilityRole="button"
+                          accessibilityLabel={t('cancel', 'Cancel')}
+                        >
+                          <Text style={styles.homeFixedMessageCancelButtonText}>{t('cancel', 'Cancel')}</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   ) : (
                     <Pressable
@@ -2485,6 +2605,18 @@ export default function SettingsScreen() {
                 ) : null}
               </View>
             </View>
+            {user ? (
+              <TouchableOpacity
+                style={[styles.logoutButton, { backgroundColor: businessColors.primary }]}
+                onPress={handleLogout}
+                activeOpacity={0.88}
+                accessibilityRole="button"
+                accessibilityLabel={t('settings.sections.logoutLabel', 'Logout')}
+              >
+                <LogOut size={20} color={Colors.white} />
+                <Text style={styles.logoutText}>{t('settings.sections.logoutLabel', 'Logout')}</Text>
+              </TouchableOpacity>
+            ) : null}
           </ScrollView>
         )}
 
@@ -2755,14 +2887,37 @@ export default function SettingsScreen() {
         {activeSettingsTab === 'services' && (
         <View style={[styles.settingsTabPanel, styles.settingsTabPanelServices]}>
             <View style={[styles.servicesModalBodyColumn, styles.servicesModalBodyGrouped]}>
-              <GestureHandlerRootView style={{ flex: 1 }}>
+              <View style={styles.settingsListScreenHeader}>
+                <TouchableOpacity
+                  style={[styles.settingsListScreenHeaderAdd, { backgroundColor: businessColors.primary }]}
+                  onPress={handleOpenAddService}
+                  activeOpacity={0.88}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('settings.services.add', 'Add service')}
+                >
+                  <Plus size={22} color={Colors.white} strokeWidth={2.4} />
+                </TouchableOpacity>
+                <View style={styles.settingsListScreenHeaderTextCol}>
+                  <Text style={styles.settingsListScreenHeaderTitle} numberOfLines={1}>
+                    {t('settings.services.edit', 'Edit services')}
+                  </Text>
+                  <Text style={styles.settingsListScreenHeaderSubtitle} numberOfLines={2}>
+                    {t('settings.services.editSubtitle', 'Update prices and durations')}
+                  </Text>
+                </View>
+              </View>
+              <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'transparent' }}>
               <DraggableFlatList<Service>
-                style={{ flex: 1 }}
-                containerStyle={{ flex: 1 }}
+                style={{ flex: 1, backgroundColor: 'transparent' }}
+                containerStyle={{ flex: 1, backgroundColor: 'transparent' }}
                 contentContainerStyle={[
                   styles.modalContentContainer,
                   styles.servicesModalScrollContent,
-                  { paddingTop: 10, paddingBottom: insets.bottom + 80 },
+                  {
+                    paddingTop: 10,
+                    paddingBottom: insets.bottom + 80,
+                    backgroundColor: 'transparent',
+                  },
                 ]}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
@@ -2796,7 +2951,7 @@ export default function SettingsScreen() {
                   </View>
                 )}
 
-                {!isLoadingServices && !servicesError && editableServices.length === 0 && !isAddingService && (
+                {!isLoadingServices && !servicesError && editableServices.length === 0 && !showAddServiceModal && (
                   <View style={[styles.svcEmptyState, styles.servicesModalFullWidthBlock]}>
                     <View style={[styles.svcEmptyIcon, { backgroundColor: `${businessColors.primary}15` }]}>
                       <Ionicons name="cut-outline" size={32} color={businessColors.primary} />
@@ -2823,20 +2978,9 @@ export default function SettingsScreen() {
                       disabled={isActive}
                       style={({ pressed }) => (pressed && isActive ? { opacity: 0.95 } : undefined)}
                     >
-                    <Swipeable
-                      enabled
-                      friction={2}
-                      rightThreshold={40}
-                      renderRightActions={() => (
-                        <TouchableOpacity
-                          style={styles.swipeDeleteAction}
-                          activeOpacity={0.85}
-                          onPress={() => handleDeleteService(svc.id)}
-                        >
-                          <Trash2 size={20} color={'#fff'} />
-                          <Text style={styles.swipeDeleteText}>{t('settings.services.delete','Delete')}</Text>
-                        </TouchableOpacity>
-                      )}
+                    <SettingsServiceSwipeRow
+                      enabled={!isExpanded && !isActive}
+                      onDeletePress={() => handleDeleteService(svc.id)}
                     >
                       <View style={[styles.svcCard, styles.svcListCard, justSaved && styles.svcCardSaved, isActive && styles.svcListCardDragging]}>
                         <View style={[styles.svcCardAccent, { backgroundColor: businessColors.primary }]} />
@@ -2975,7 +3119,7 @@ export default function SettingsScreen() {
                           </>
                         )}
                       </View>
-                    </Swipeable>
+                    </SettingsServiceSwipeRow>
                     </Pressable>
                     </View>
                     </ScaleDecorator>
@@ -2984,23 +3128,6 @@ export default function SettingsScreen() {
               />
 
               </GestureHandlerRootView>
-
-              <TouchableOpacity
-                style={[
-                  styles.servicesAddFab,
-                  {
-                    backgroundColor: businessColors.primary,
-                    bottom: insets.bottom + 8,
-                    right: Math.max(16, insets.right + 8),
-                  },
-                ]}
-                onPress={handleOpenAddService}
-                activeOpacity={0.88}
-                accessibilityRole="button"
-                accessibilityLabel={t('settings.services.add', 'הוספת שירות')}
-              >
-                <Plus size={28} color="#FFFFFF" strokeWidth={2.5} />
-              </TouchableOpacity>
             </View>
         </View>
         )}
@@ -3267,9 +3394,34 @@ export default function SettingsScreen() {
         {canSeeAddEmployee && activeSettingsTab === 'employees' && (
         <View style={[styles.settingsTabPanel, styles.settingsTabPanelServices]}>
             <View style={[styles.servicesModalBodyColumn, styles.servicesModalBodyGrouped]}>
+              <View style={styles.settingsListScreenHeader}>
+                <TouchableOpacity
+                  style={[styles.settingsListScreenHeaderAdd, { backgroundColor: businessColors.primary }]}
+                  onPress={() => setShowAddAdminModal(true)}
+                  activeOpacity={0.88}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('settings.admin.addEmployee', 'Add employee user')}
+                >
+                  <Plus size={22} color={Colors.white} strokeWidth={2.4} />
+                </TouchableOpacity>
+                <View style={styles.settingsListScreenHeaderTextCol}>
+                  <Text style={styles.settingsListScreenHeaderTitle} numberOfLines={1}>
+                    {t('settings.admin.editEmployees', 'Edit employees')}
+                  </Text>
+                  <Text style={styles.settingsListScreenHeaderSubtitle} numberOfLines={2}>
+                    {t(
+                      'settings.admin.editEmployeesSubtitle',
+                      'Add, update details, or remove team members',
+                    )}
+                  </Text>
+                </View>
+              </View>
               <ScrollView
-                style={{ flex: 1 }}
-                contentContainerStyle={[styles.modalContentContainer, { paddingTop: 8, paddingBottom: insets.bottom + 80 }]}
+                style={{ flex: 1, backgroundColor: 'transparent' }}
+                contentContainerStyle={[
+                  styles.modalContentContainer,
+                  { paddingTop: 4, paddingBottom: insets.bottom + 80, backgroundColor: 'transparent' },
+                ]}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
               >
@@ -3291,21 +3443,12 @@ export default function SettingsScreen() {
                       adminUsers.map((adm: any) => {
                         return (
                           <View key={adm.id} style={{ marginBottom: 10 }}>
-                            <Swipeable
-                              friction={2}
-                              rightThreshold={28}
-                              renderRightActions={() => (
-                                <TouchableOpacity
-                                  style={styles.swipeDeleteAction}
-                                  activeOpacity={0.85}
-                                  onPress={() => openRemoveEmployeeDialog(adm)}
-                                  accessibilityRole="button"
-                                  accessibilityLabel={t('settings.services.a11yDelete', 'Delete service')}
-                                >
-                                  <Trash2 size={20} color={'#fff'} />
-                                  <Text style={styles.swipeDeleteText}>{t('settings.services.delete', 'Delete')}</Text>
-                                </TouchableOpacity>
-                              )}
+                            <SettingsServiceSwipeRow
+                              enabled
+                              outerBorderRadius={16}
+                              onDeletePress={() => openRemoveEmployeeDialog(adm)}
+                              deleteButtonText={t('settings.services.delete', 'Delete')}
+                              deleteAccessibilityLabel={t('settings.admin.removeEmployeeTitle', 'Remove employee')}
                             >
                               <View style={styles.iosCard}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -3332,7 +3475,7 @@ export default function SettingsScreen() {
                                   </View>
                                 </View>
                               </View>
-                            </Swipeable>
+                            </SettingsServiceSwipeRow>
                           </View>
                         );
                       })
@@ -3340,22 +3483,6 @@ export default function SettingsScreen() {
                   </View>
                 )}
               </ScrollView>
-              <TouchableOpacity
-                style={[
-                  styles.servicesAddFab,
-                  {
-                    backgroundColor: businessColors.primary,
-                    bottom: insets.bottom + 8,
-                    right: Math.max(16, insets.right + 8),
-                  },
-                ]}
-                onPress={() => setShowAddAdminModal(true)}
-                activeOpacity={0.88}
-                accessibilityRole="button"
-                accessibilityLabel={t('settings.admin.addEmployee', 'Add employee user')}
-              >
-                <Plus size={28} color="#FFFFFF" strokeWidth={2.5} />
-              </TouchableOpacity>
             </View>
         </View>
         )}
@@ -3391,13 +3518,6 @@ export default function SettingsScreen() {
           </ScrollView>
         </View>
         )}
-
-        {user && activeSettingsTab === 'general' ? (
-          <TouchableOpacity style={[styles.logoutButton, { backgroundColor: businessColors.primary }]} onPress={handleLogout}>
-            <LogOut size={20} color={Colors.white} />
-            <Text style={styles.logoutText}>{t('settings.sections.logoutLabel', 'Logout')}</Text>
-          </TouchableOpacity>
-        ) : null}
 
           </View>
         </View>
@@ -3930,101 +4050,54 @@ export default function SettingsScreen() {
         </SafeAreaView>
       </Modal>
 
-      {/* Edit Admin (name & phone) Modal */}
+      {/* Edit Admin (name & phone) — compact bottom sheet; backdrop fades in place, sheet slides + drag-to-dismiss */}
       <Modal
         visible={showEditAdminModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowEditAdminModal(false)}
+        transparent
+        animationType="none"
+        onRequestClose={requestCloseEditAdminSheet}
       >
         <KeyboardAvoidingView
-          style={{ flex: 1 }}
+          style={styles.editAdminKavRoot}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 50}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
         >
-          <SafeAreaView style={styles.editAdminModalRoot}>
-            <LinearGradient
-              colors={['#EEF2F9', '#F4F6FB', '#FAFBFD']}
-              locations={[0, 0.45, 1]}
-              style={StyleSheet.absoluteFillObject}
-              pointerEvents="none"
-            />
-            <View style={styles.editAdminHeader}>
-              <TouchableOpacity
-                style={[styles.editAdminHeaderSide, styles.editAdminHeaderSideLeading]}
-                onPress={() => setShowEditAdminModal(false)}
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                accessibilityRole="button"
-                accessibilityLabel={t('cancel', 'Cancel')}
-              >
-                <Text style={styles.editAdminCancelText}>{t('cancel', 'Cancel')}</Text>
-              </TouchableOpacity>
-              <Text style={styles.editAdminHeaderTitle} numberOfLines={1}>
-                {t('settings.admin.edit', 'Edit admin')}
-              </Text>
-              <View style={[styles.editAdminHeaderSide, styles.editAdminHeaderSideTrailing]}>
-                <TouchableOpacity
-                  style={[
-                    styles.editAdminSavePill,
-                    { backgroundColor: businessColors.primary },
-                    isSavingAdmin && styles.editAdminSavePillDisabled,
-                  ]}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  onPress={async () => {
-                    if (!user?.id) {
-                      setShowEditAdminModal(false);
-                      return;
-                    }
-                    if (!adminNameDraft.trim() || !adminPhoneDraft.trim()) {
-                      Alert.alert(
-                        t('error.generic', 'Error'),
-                        t('settings.admin.fillNamePhone', 'Please fill in name and phone number'),
-                      );
-                      return;
-                    }
-                    try {
-                      setIsSavingAdmin(true);
-                      const updated = await usersApi.updateUser(
-                        user.id as any,
-                        {
-                          name: adminNameDraft.trim() as any,
-                          phone: adminPhoneDraft.trim() as any,
-                        } as any,
-                      );
-                      if (updated) {
-                        updateUserProfile({ name: updated.name as any, phone: (updated as any).phone } as any);
-                        setShowEditAdminModal(false);
-                      } else {
-                        Alert.alert(
-                          t('error.generic', 'Error'),
-                          t('settings.admin.saveDetailsFailed', 'Failed to save admin details'),
-                        );
-                      }
-                    } finally {
-                      setIsSavingAdmin(false);
-                    }
-                  }}
-                  disabled={isSavingAdmin}
-                  activeOpacity={0.88}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('save', 'Save')}
-                >
-                  <Text style={styles.editAdminSavePillText}>
-                    {isSavingAdmin ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <ScrollView
-              style={styles.editAdminScroll}
-              contentContainerStyle={styles.editAdminScrollContent}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="interactive"
-              contentInsetAdjustmentBehavior="automatic"
-              automaticallyAdjustKeyboardInsets
+          <View style={styles.editAdminOverlayFill}>
+            <TouchableWithoutFeedback onPress={requestCloseEditAdminSheet}>
+              <Animated.View style={[styles.editAdminBackdrop, { opacity: editAdminBackdropOpacity }]} />
+            </TouchableWithoutFeedback>
+            <Animated.View
+              style={[
+                styles.editAdminSheetWrap,
+                { maxHeight: WINDOW_HEIGHT * 0.92, transform: [{ translateY: editAdminCombinedTranslateY }] },
+              ]}
+              pointerEvents="box-none"
             >
+              <View style={styles.editAdminSheetSurface}>
+                <SafeAreaView edges={['bottom']} style={styles.editAdminSheetSafe}>
+                  <View style={styles.editAdminModalColumn}>
+              <View style={styles.editAdminTopChrome}>
+                <View
+                  style={styles.editAdminGrabberTrack}
+                  accessibilityLabel={t('settings.admin.dragSheetToClose', 'Drag down to close')}
+                  {...editAdminGrabberPanHandlers}
+                >
+                  <View style={styles.editAdminGrabberBar} />
+                </View>
+                <Text style={styles.editAdminHeaderTitle} numberOfLines={1}>
+                  {t('settings.admin.edit', 'Edit admin')}
+                </Text>
+              </View>
+
+              <ScrollView
+                style={styles.editAdminScroll}
+                contentContainerStyle={styles.editAdminScrollContent}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="interactive"
+                contentInsetAdjustmentBehavior="automatic"
+                automaticallyAdjustKeyboardInsets
+              >
               <View style={styles.editAdminHero}>
                 <LinearGradient
                   colors={[businessColors.primary, `${businessColors.primary}BB`]}
@@ -4046,7 +4119,7 @@ export default function SettingsScreen() {
                         resizeMode="cover"
                       />
                     ) : (
-                      <User size={40} color={Colors.subtext} strokeWidth={1.75} />
+                      <User size={36} color={Colors.subtext} strokeWidth={1.75} />
                     )}
                     {isUploadingAdminAvatar && (
                       <View style={styles.editAdminAvatarLoading}>
@@ -4070,7 +4143,7 @@ export default function SettingsScreen() {
                   activeOpacity={0.88}
                   disabled={isUploadingAdminAvatar}
                 >
-                  <Camera size={18} color={businessColors.primary} strokeWidth={2.2} />
+                  <Camera size={17} color={businessColors.primary} strokeWidth={2} />
                   <Text style={[styles.editAdminPhotoBtnText, { color: businessColors.primary }]}>
                     {isUploadingAdminAvatar
                       ? t('settings.common.uploading', 'Uploading...')
@@ -4125,9 +4198,33 @@ export default function SettingsScreen() {
                   />
                 </View>
               </View>
-              <View style={{ height: 100 }} />
             </ScrollView>
-          </SafeAreaView>
+
+                    <View style={styles.editAdminFooter}>
+                      <TouchableOpacity
+                        style={[
+                          styles.editAdminFooterSave,
+                          { backgroundColor: businessColors.primary },
+                          isSavingAdmin && styles.editAdminFooterSaveDisabled,
+                        ]}
+                        onPress={() => {
+                          void saveEditAdminModal();
+                        }}
+                        disabled={isSavingAdmin}
+                        activeOpacity={0.88}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('save', 'Save')}
+                      >
+                        <Text style={styles.editAdminFooterSaveText}>
+                          {isSavingAdmin ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </SafeAreaView>
+              </View>
+            </Animated.View>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -4970,7 +5067,7 @@ export default function SettingsScreen() {
                                     <View style={styles.recurringHubMetaRow}>
                                       <Text style={styles.recurringHubMetaText} numberOfLines={1}>
                                         {t(`day.${RECURRING_DOW_KEYS[Math.min(Math.max(0, item.day_of_week), 6)]}`)} ·{' '}
-                                        {formatTimeToAMPM(String(item.slot_time).slice(0, 5))}
+                                        {formatBookingTimeLabel(String(item.slot_time).slice(0, 5), i18n.language)}
                                       </Text>
                                       <Calendar size={15} color={Colors.subtext} strokeWidth={2.2} />
                                     </View>
@@ -5041,9 +5138,10 @@ export default function SettingsScreen() {
                 showsVerticalScrollIndicator
               >
                 {durationOptions.map((mins, idx) => {
-                  const currentVal = editingServiceDurationId
-                    ? editableServices.find(s => s.id === editingServiceDurationId)?.duration_minutes
-                    : parseInt(addSvcDuration, 10);
+                  const editSvc = editingServiceDurationId
+                    ? editableServices.find((s) => s.id === editingServiceDurationId)
+                    : undefined;
+                  const currentVal = editSvc?.duration_minutes ?? 60;
                   const isSelected = currentVal === mins;
                   return (
                     <TouchableOpacity
@@ -5056,8 +5154,6 @@ export default function SettingsScreen() {
                       onPress={() => {
                         if (editingServiceDurationId) {
                           updateLocalServiceField(editingServiceDurationId, 'duration_minutes', mins as any);
-                        } else {
-                          setAddSvcDuration(String(mins));
                         }
                         setShowDurationPicker(false);
                         setEditingServiceDurationId(null);
@@ -5076,88 +5172,17 @@ export default function SettingsScreen() {
           </Pressable>
         )}
 
-        {/* Add service form — rendered as overlay OUTSIDE GestureHandlerRootView so all taps work */}
-        {isAddingService && (
-          <View style={styles.svcAddFormOverlay}>
-            <View style={styles.svcAddCard}>
-              {/* Colored header band */}
-              <View style={[styles.svcAddCardHeaderBand, { backgroundColor: `${businessColors.primary}12` }]}>
-                <Text style={styles.svcAddCardTitle}>{t('settings.services.newService','שירות חדש')}</Text>
-                <TouchableOpacity onPress={() => setIsAddingService(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                  <X size={17} color={Colors.subtext} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Fields area */}
-              <View style={styles.svcAddFieldsArea}>
-              {/* Service name */}
-              <View style={[styles.formGroup, { marginBottom: 10 }]}>
-                <Text style={styles.formLabel}>{t('settings.services.name','שם השירות')} *</Text>
-                <TextInput
-                  style={[styles.formInput, styles.svcAddNameInput]}
-                  value={addSvcName}
-                  onChangeText={setAddSvcName}
-                  placeholder={t('settings.services.enterName','הזן שם שירות')}
-                  placeholderTextColor={Colors.subtext}
-                  textAlign="right"
-                />
-              </View>
-
-              {/* Price + Duration row */}
-              <View style={[styles.twoColumnRow, { flexDirection: 'row', marginBottom: 4 }]}>
-                <View style={[styles.formGroup, styles.twoColumnItem, { marginBottom: 0 }]}>
-                  <Text style={styles.formLabel}>{t('settings.services.price','מחיר (₪)')} *</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    value={addSvcPrice}
-                    onChangeText={(v) => setAddSvcPrice(v.replace(/[^0-9.]/g, ''))}
-                    placeholder="0"
-                    placeholderTextColor={Colors.subtext}
-                    keyboardType="numeric"
-                    textAlign="right"
-                  />
-                </View>
-                <View style={[styles.formGroup, styles.twoColumnItem, { marginBottom: 0 }]}>
-                  <Text style={styles.formLabel}>{t('settings.services.duration','משך')} *</Text>
-                  <TouchableOpacity
-                    style={styles.svcDurationPickerBtn}
-                    onPress={() => setShowDurationPicker(true)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.svcDurationPickerBtnText, !addSvcDuration && { color: Colors.subtext }]}>
-                      {addSvcDuration ? `${addSvcDuration} ${t('settings.services.minShort','דק׳')}` : t('settings.services.selectDuration','בחר...')}
-                    </Text>
-                    <ChevronDown size={16} color={Colors.subtext} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Actions */}
-              <View style={[styles.svcAddActions, { marginTop: 14 }]}>
-                <TouchableOpacity
-                  style={styles.svcCancelButton}
-                  onPress={() => setIsAddingService(false)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.svcCancelButtonText}>{t('cancel','ביטול')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.svcSaveButton, { backgroundColor: businessColors.primary, opacity: addSvcIsSaving ? 0.7 : 1 }]}
-                  onPress={handleCreateService}
-                  disabled={addSvcIsSaving}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.svcSaveButtonText}>
-                    {addSvcIsSaving ? t('settings.common.saving','שומר...') : t('settings.services.add','הוספת שירות')}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              </View>{/* end svcAddFieldsArea */}
-            </View>
-          </View>
-        )}
       </>
       )}
+
+      <AddServiceModal
+        visible={showAddServiceModal}
+        onClose={() => setShowAddServiceModal(false)}
+        onSuccess={(row) => {
+          setEditableServices((prev) => sortServicesLikeClientBooking([...prev, row]));
+        }}
+        nextOrderIndex={editableServices.length}
+      />
 
       {/* Add Admin Modal */}
       <AddAdminModal
@@ -5414,11 +5439,37 @@ const styles = StyleSheet.create({
     color: Colors.subtext,
     letterSpacing: 0.2,
   },
-  homeFixedMessageSaveButton: {
+  /** `direction: 'ltr'` keeps [Save | Cancel] order consistent in RTL locales (primary action on the left of the pair). */
+  homeFixedMessageComposerActions: {
     marginTop: 14,
+    flexDirection: 'row',
+    direction: 'ltr',
+    width: '100%',
+    alignItems: 'stretch',
+    gap: 10,
+  },
+  homeFixedMessageCancelButton: {
+    flex: 1,
     borderRadius: 14,
     paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F2F2F7',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.14)',
+  },
+  homeFixedMessageCancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  homeFixedMessageSaveButton: {
+    marginTop: 14,
+    alignSelf: 'stretch',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
     ...Platform.select({
@@ -5432,6 +5483,11 @@ const styles = StyleSheet.create({
         elevation: 3,
       },
     }),
+  },
+  homeFixedMessageSaveButtonInComposerRow: {
+    marginTop: 0,
+    flex: 1,
+    minWidth: 0,
   },
   homeFixedMessageSaveButtonText: {
     fontSize: 16,
@@ -5687,12 +5743,15 @@ const styles = StyleSheet.create({
       android: { elevation: 4 },
     }),
   },
-  /** Services / Employees inline lists: same background as settings page (no white card) */
+  /** Services / Employees: full-bleed on page background — no inset gray card */
   settingsTabPanelServices: {
     flex: 1,
     minHeight: 320,
-    marginBottom: 8,
-    backgroundColor: SETTINGS_GROUPED_BG,
+    marginHorizontal: 0,
+    marginBottom: 0,
+    borderRadius: 0,
+    overflow: 'visible',
+    backgroundColor: 'transparent',
     borderWidth: 0,
     borderColor: 'transparent',
     shadowOpacity: 0,
@@ -5701,25 +5760,47 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
   servicesModalBodyGrouped: {
-    backgroundColor: SETTINGS_GROUPED_BG,
+    backgroundColor: 'transparent',
   },
-  servicesAddFab: {
-    position: 'absolute',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  settingsListScreenHeader: {
+    flexDirection: 'row',
+    direction: 'ltr',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    alignSelf: 'stretch',
+    width: '100%',
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 12,
+    gap: 12,
+    backgroundColor: 'transparent',
+  },
+  settingsListScreenHeaderTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  settingsListScreenHeaderTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: Colors.text,
+    letterSpacing: -0.35,
+    textAlign: 'right',
+  },
+  settingsListScreenHeaderSubtitle: {
+    marginTop: 3,
+    fontSize: 13,
+    fontWeight: '500',
+    color: Colors.subtext,
+    textAlign: 'right',
+    lineHeight: 18,
+  },
+  settingsListScreenHeaderAdd: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 20,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.22,
-        shadowRadius: 8,
-      },
-      android: { elevation: 8 },
-    }),
+    flexShrink: 0,
   },
   settingsAppointmentsSubsectionTitle: {
     fontSize: 12,
@@ -6906,49 +6987,81 @@ const styles = StyleSheet.create({
     color: Colors.subtext,
     textAlign: 'center',
   },
-  editAdminModalRoot: {
+  editAdminKavRoot: {
     flex: 1,
-    backgroundColor: 'transparent',
   },
-  editAdminHeader: {
-    flexDirection: 'row',
+  editAdminOverlayFill: {
+    flex: 1,
+  },
+  editAdminBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    zIndex: 1,
+  },
+  editAdminSheetWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 2,
+  },
+  editAdminSheetSurface: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -3 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+      },
+      android: { elevation: 12 },
+    }),
+  },
+  editAdminSheetSafe: {
+    backgroundColor: Colors.white,
+  },
+  editAdminModalColumn: {
+    backgroundColor: Colors.white,
+  },
+  editAdminTopChrome: {
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    backgroundColor: 'rgba(255,255,255,0.72)',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(60,60,67,0.12)',
+    paddingHorizontal: 20,
+    paddingTop: 2,
+    paddingBottom: 10,
   },
-  editAdminHeaderSide: {
-    width: 88,
+  editAdminGrabberTrack: {
+    alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 4,
   },
-  editAdminHeaderSideLeading: {
-    alignItems: 'flex-start',
-  },
-  editAdminHeaderSideTrailing: {
-    alignItems: 'flex-end',
-  },
-  editAdminCancelText: {
-    fontSize: 17,
-    fontWeight: '500',
-    color: Colors.text,
-    includeFontPadding: false,
+  editAdminGrabberBar: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(60,60,67,0.22)',
   },
   editAdminHeaderTitle: {
-    flex: 1,
+    marginTop: 2,
     fontSize: 17,
     fontWeight: '700',
     color: Colors.text,
     textAlign: 'center',
-    letterSpacing: -0.3,
+    letterSpacing: -0.28,
   },
-  editAdminSavePill: {
-    paddingVertical: 8,
-    paddingHorizontal: 18,
-    borderRadius: 999,
-    minWidth: 72,
+  editAdminFooter: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+    backgroundColor: Colors.white,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(60,60,67,0.06)',
+  },
+  editAdminFooterSave: {
+    borderRadius: 14,
+    paddingVertical: 15,
     alignItems: 'center',
     justifyContent: 'center',
     ...Platform.select({
@@ -6956,119 +7069,121 @@ const styles = StyleSheet.create({
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 3 },
         shadowOpacity: 0.12,
-        shadowRadius: 5,
+        shadowRadius: 8,
       },
-      android: { elevation: 3 },
+      android: { elevation: 4 },
     }),
   },
-  editAdminSavePillDisabled: {
-    opacity: 0.5,
+  editAdminFooterSaveDisabled: {
+    opacity: 0.55,
   },
-  editAdminSavePillText: {
-    fontSize: 16,
+  editAdminFooterSaveText: {
+    color: Colors.white,
+    fontSize: 17,
     fontWeight: '700',
-    color: '#FFFFFF',
   },
   editAdminScroll: {
-    flex: 1,
-    backgroundColor: 'transparent',
+    flexGrow: 0,
+    flexShrink: 1,
+    backgroundColor: Colors.white,
   },
   editAdminScrollContent: {
+    flexGrow: 0,
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 8,
+    paddingTop: 4,
+    paddingBottom: 12,
   },
   editAdminHero: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 18,
   },
   editAdminAvatarRing: {
-    padding: 4,
-    borderRadius: 52,
+    padding: 3,
+    borderRadius: 48,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.18,
-        shadowRadius: 20,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.12,
+        shadowRadius: 14,
       },
-      android: { elevation: 8 },
+      android: { elevation: 5 },
     }),
   },
   editAdminAvatarInner: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
   editAdminAvatarImage: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
   },
   editAdminAvatarLoading: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.12)',
-    borderRadius: 44,
+    borderRadius: 40,
   },
   editAdminHeroName: {
-    marginTop: 16,
-    fontSize: 22,
-    fontWeight: '800',
+    marginTop: 12,
+    fontSize: 19,
+    fontWeight: '700',
     color: Colors.text,
     textAlign: 'center',
-    letterSpacing: -0.4,
+    letterSpacing: -0.35,
   },
   editAdminHeroPhone: {
-    marginTop: 4,
-    fontSize: 15,
+    marginTop: 3,
+    fontSize: 14,
     fontWeight: '500',
     color: Colors.subtext,
     textAlign: 'center',
     writingDirection: 'ltr',
   },
   editAdminPhotoBtn: {
-    marginTop: 14,
+    marginTop: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 11,
-    paddingHorizontal: 18,
+    gap: 7,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth * 2,
   },
   editAdminPhotoBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '600',
   },
   editAdminFormCard: {
     alignSelf: 'stretch',
     alignItems: 'stretch',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    paddingHorizontal: 18,
-    paddingTop: 20,
-    paddingBottom: 22,
+    backgroundColor: '#EFEFF4',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(60,60,67,0.08)',
+    borderColor: 'rgba(60,60,67,0.06)',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.07,
-        shadowRadius: 24,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 8,
       },
-      android: { elevation: 4 },
+      android: { elevation: 1 },
     }),
   },
   editAdminField: {
     alignSelf: 'stretch',
-    marginBottom: 20,
+    marginBottom: 14,
   },
   editAdminFieldLast: {
     alignSelf: 'stretch',
@@ -7076,26 +7191,27 @@ const styles = StyleSheet.create({
   },
   editAdminLabelWrap: {
     width: '100%',
-    marginBottom: 8,
+    marginBottom: 6,
     flexDirection: 'row',
     direction: 'ltr',
   },
   editAdminFieldLabel: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
     color: '#636366',
-    letterSpacing: -0.1,
+    letterSpacing: -0.08,
   },
   editAdminFieldInput: {
-    minHeight: 52,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: Platform.OS === 'ios' ? 14 : 10,
-    fontSize: 17,
+    minHeight: 48,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+    fontSize: 16,
     fontWeight: '600',
     color: Colors.text,
-    backgroundColor: '#F2F4F7',
-    borderWidth: 0,
+    backgroundColor: Colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60,60,67,0.07)',
   },
   editAdminFieldInputRtl: {
     textAlign: 'right',
@@ -7140,7 +7256,7 @@ const styles = StyleSheet.create({
   },
   servicesModalBodyColumn: {
     flex: 1,
-    backgroundColor: Colors.white,
+    backgroundColor: 'transparent',
     position: 'relative',
   },
   servicesModalTabBarRoot: {

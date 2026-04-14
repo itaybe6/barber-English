@@ -6,6 +6,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -576,15 +577,17 @@ function CalendarReminderEditorModalInner({
     );
   };
 
+  const modalTopInset = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0,
+    16
+  );
+
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'left', 'right', 'bottom']}>
+    <View style={styles.screenRoot}>
+      <View style={[styles.safeAreaTopStripe, { height: modalTopInset }]} />
+      <SafeAreaView style={styles.bodySafe} edges={['left', 'right', 'bottom']}>
       <View style={styles.headerSafeWrap}>
-        <LinearGradient
-          colors={[`${primary}18`, `${primary}06`, 'transparent']}
-          locations={[0, 0.45, 1]}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
         <View style={[styles.headerRow, layoutRtl && styles.headerRowRtl, styles.headerRowPad]}>
           <TouchableOpacity
             onPress={onClose}
@@ -832,7 +835,8 @@ function CalendarReminderEditorModalInner({
           onClose={() => setTimePickerWhich(null)}
           insetBottom={insets.bottom}
         />
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -847,8 +851,10 @@ export default function CalendarReminderEditorModal(props: CalendarReminderEdito
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: UI.bg, direction: 'ltr' },
-  headerSafeWrap: { zIndex: 2 },
+  screenRoot: { flex: 1, backgroundColor: UI.bg, direction: 'ltr' },
+  safeAreaTopStripe: { backgroundColor: UI.surface, alignSelf: 'stretch' },
+  bodySafe: { flex: 1, minHeight: 0, backgroundColor: UI.bg },
+  headerSafeWrap: { zIndex: 2, backgroundColor: UI.surface },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',

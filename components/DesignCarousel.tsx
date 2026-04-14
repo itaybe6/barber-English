@@ -115,6 +115,10 @@ interface DesignCarouselProps {
   title?: string;
   subtitle?: string;
   showHeader?: boolean;
+  /** When false, the line under the section title is hidden. Default true. */
+  showSubtitle?: boolean;
+  /** Pagination dots under the carousel (admin home keeps true). Default true. */
+  showDots?: boolean;
 }
 
 interface AdminUser {
@@ -129,6 +133,8 @@ export default function DesignCarousel({
   title = undefined,
   subtitle = undefined,
   showHeader = true,
+  showSubtitle = true,
+  showDots = true,
 }: DesignCarouselProps) {
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
   const [userProfiles, setUserProfiles] = useState<{[key: string]: AdminUser}>({});
@@ -243,13 +249,18 @@ export default function DesignCarousel({
   }, [sessionUserId, sessionImageUrl]);
 
   useEffect(() => {
+    if (!showDots) return;
     setCarouselIndex(0);
-  }, [designs.length]);
+  }, [designs.length, showDots]);
 
-  const syncCarouselIndex = useCallback((offsetX: number) => {
-    const next = carouselIndexFromOffset(offsetX, CARD_STRIDE, designs.length);
-    setCarouselIndex((prev) => (prev === next ? prev : next));
-  }, [designs.length]);
+  const syncCarouselIndex = useCallback(
+    (offsetX: number) => {
+      if (!showDots) return;
+      const next = carouselIndexFromOffset(offsetX, CARD_STRIDE, designs.length);
+      setCarouselIndex((prev) => (prev === next ? prev : next));
+    },
+    [designs.length, showDots]
+  );
 
   useEffect(() => {
     const startAnimations = () => {
@@ -395,7 +406,9 @@ export default function DesignCarousel({
         <View style={styles.elegantHeader}>
           <View style={styles.headerTitleContainer}>
             <Text style={styles.elegantTitle}>{title || t('admin.gallery.title', 'Gallery')}</Text>
-            <Text style={styles.elegantSubtitle}>{subtitle || t('admin.gallery.subtitle', 'Manage your designs')}</Text>
+            {showSubtitle ? (
+              <Text style={styles.elegantSubtitle}>{subtitle || t('admin.gallery.subtitle', 'Manage your designs')}</Text>
+            ) : null}
           </View>
         </View>
       )}
@@ -410,19 +423,25 @@ export default function DesignCarousel({
         snapToInterval={CARD_STRIDE}
         snapToAlignment="start"
         style={styles.scrollView}
-        scrollEventThrottle={16}
-        onScroll={(e) => syncCarouselIndex(e.nativeEvent.contentOffset.x)}
-        onMomentumScrollEnd={(e) => syncCarouselIndex(e.nativeEvent.contentOffset.x)}
+        scrollEventThrottle={showDots ? 16 : undefined}
+        onScroll={
+          showDots ? (e) => syncCarouselIndex(e.nativeEvent.contentOffset.x) : undefined
+        }
+        onMomentumScrollEnd={
+          showDots ? (e) => syncCarouselIndex(e.nativeEvent.contentOffset.x) : undefined
+        }
       >
         {designs.map((design, index) => renderDesignCard(design, index))}
       </ScrollView>
 
-      <HorizontalCarouselDots
-        count={designs.length}
-        minCount={2}
-        activeIndex={carouselIndex}
-        activeColor={colors.primary}
-      />
+      {showDots ? (
+        <HorizontalCarouselDots
+          count={designs.length}
+          minCount={2}
+          activeIndex={carouselIndex}
+          activeColor={colors.primary}
+        />
+      ) : null}
 
       {/* Design Modal */}
       <Modal

@@ -1,6 +1,11 @@
 {
   "version": 1,
   "skills": {
+    "israeli-e-invoice": {
+      "source": "skills-il/accounting",
+      "sourceType": "github",
+      "computedHash": "da4522fe7b9d56f4c7d5d8b22e137a52ee322fa97040f63951ce56d0499fac7c"
+    },
     "react-native-skills": {
       "source": "secondsky/claude-skills",
       "sourceType": "github",

@@ -213,7 +213,9 @@ export async function handleGreenInvoiceIssueReceiptBody(
 
   const { data: profile, error: profErr } = await admin
     .from("business_profile")
-    .select("greeninvoice_api_key_id, greeninvoice_api_secret, greeninvoice_has_credentials")
+    .select(
+      "greeninvoice_api_key_id, greeninvoice_api_secret, greeninvoice_has_credentials, business_number",
+    )
     .eq("id", businessId)
     .maybeSingle();
 
@@ -253,8 +255,12 @@ export async function handleGreenInvoiceIssueReceiptBody(
 
   const docDate = String(appt.slot_date ?? "").trim() ||
     new Date().toISOString().slice(0, 10);
+  const osek = profile.business_number != null
+    ? String(profile.business_number).trim()
+    : "";
   const remarks =
-    `תור ${appointmentId.slice(0, 8)}… | ${docDate} ${String(appt.slot_time ?? "").trim()} | ${serviceName}`;
+    `תור ${appointmentId.slice(0, 8)}… | ${docDate} ${String(appt.slot_time ?? "").trim()} | ${serviceName}` +
+    (osek ? ` | עוסק מורשה: ${osek}` : "");
 
   const payload = {
     type: DOC_TYPE_RECEIPT,

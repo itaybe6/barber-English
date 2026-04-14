@@ -29,6 +29,8 @@ export const unstable_settings = {
 // In dev with fast refresh this can be called multiple times; ignore errors.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
+type SplashHideState = "idle" | "hiding" | "done";
+
 export default function RootLayout() {
   const [loaded, error] = useFonts({
     ...FontAwesome.font,
@@ -45,6 +47,8 @@ export default function RootLayout() {
   const segments = useSegments();
   const router = useRouter();
   const [bootDebug, setBootDebug] = React.useState<{ start: number; notes: string[] }>({ start: Date.now(), notes: [] });
+  /** hideAsync must run at most once — onLayout fires repeatedly and extra calls throw on iOS. */
+  const splashHideRef = React.useRef<SplashHideState>("idle");
   const addNote = React.useCallback((m: string) => {
     if (__DEV__) {
       setBootDebug((s) => ({ ...s, notes: [...s.notes, `${Math.round((Date.now()-s.start)/1000)}s ${m}`] }));
@@ -157,15 +161,26 @@ export default function RootLayout() {
     }
   }, [error]);
 
-  const onLayoutRootView = React.useCallback(async (_e?: any) => {
-    // Hide splash screen after root is mounted
+  const hideSplashOnce = React.useCallback(async (reason: string) => {
+    if (splashHideRef.current === "done") return;
+    if (splashHideRef.current === "hiding") return;
+    splashHideRef.current = "hiding";
     try {
-      addNote('onLayout -> hide splash');
+      addNote(`${reason} -> hide splash`);
       await SplashScreen.hideAsync();
+      splashHideRef.current = "done";
     } catch (err) {
-      console.warn('Failed to hide splash screen:', err);
+      splashHideRef.current = "idle";
+      console.warn("Failed to hide splash screen:", err);
     }
-  }, []);
+  }, [addNote]);
+
+  const onLayoutRootView = React.useCallback(
+    async (_e?: any) => {
+      await hideSplashOnce("onLayout");
+    },
+    [hideSplashOnce],
+  );
 
   // Set default text styling
   useEffect(() => {
@@ -188,25 +203,22 @@ export default function RootLayout() {
     registerToken();
   }, [user?.phone, notificationsEnabled]);
 
-  // Fuse: ensure splash hides even if fonts/hydration lag in production
+  // Fuse: ensure splash hides even if onLayout is delayed (single guarded call)
   useEffect(() => {
     const t = setTimeout(() => {
-      addNote('3000ms fallback hide');
-      SplashScreen.hideAsync().catch(() => {});
-    }, 3000); // Reduced from 5000 to 3000
+      void hideSplashOnce("3000ms fallback");
+    }, 3000);
     return () => clearTimeout(t);
-  }, []);
+  }, [hideSplashOnce]);
 
-  // Hide splash screen when fonts are loaded or after timeout
+  // When fonts finish (or error), prompt hide — still only runs once via ref
   useEffect(() => {
-    if (loaded || error) {
-      const t = setTimeout(() => {
-        addNote('fonts loaded -> hide');
-        SplashScreen.hideAsync().catch(() => {});
-      }, 100);
-      return () => clearTimeout(t);
-    }
-  }, [loaded, error]);
+    if (!loaded && !error) return;
+    const t = setTimeout(() => {
+      void hideSplashOnce("fonts loaded");
+    }, 100);
+    return () => clearTimeout(t);
+  }, [loaded, error, hideSplashOnce]);
 
   let content: React.ReactNode = null;
 

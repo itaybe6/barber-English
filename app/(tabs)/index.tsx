@@ -83,10 +83,11 @@ const HERO_MARQUEE_HOST_HEIGHT = HERO_HEIGHT + HERO_MARQUEE_BOTTOM_BLEED;
 const HERO_OVERLAP = 214;
 /** Extra pull: negative margin so the sheet covers the tilted marquee’s lower wedge */
 const HERO_SHEET_PULL_UP = 64;
-/** Logo overlay (align with `overlayLogoWrapper` top + `overlayLogoInner` height) */
-const ADMIN_HOME_LOGO_TOP_OFFSET = -15;
-const ADMIN_HOME_LOGO_HEIGHT = 78;
-const ADMIN_HOME_LOGO_WIDTH = 200;
+/** Logo overlay — positive nudges logo down for space under status bar / Dynamic Island. */
+const ADMIN_HOME_LOGO_TOP_OFFSET = 8;
+/** Hero header logo frame — compact so mark doesn’t dominate the hero. */
+const ADMIN_HOME_LOGO_HEIGHT = 52;
+const ADMIN_HOME_LOGO_WIDTH = 138;
 const OUTER_INNER_HANDOFF_ON_PX = 4;
 /** Wider band reduces handoff flutter when flinging the sheet down */
 const OUTER_INNER_HANDOFF_OFF_PX = 36;
@@ -1619,7 +1620,7 @@ export default function HomeScreen() {
           <View style={styles.overlayLogoInner}>
             <Image
               source={getHomeLogoSourceFromUrl(homeLogoUrl)}
-              style={[styles.overlayLogo, !homeLogoUrl && styles.overlayLogoBundledWhite]}
+              style={[styles.overlayLogo, styles.overlayLogoHeroWhite]}
               resizeMode="contain"
             />
           </View>
@@ -2590,8 +2591,8 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     width: '100%',
     height: '100%',
   },
-  /** Bundled asset is template-style; remote uploads are full-color — do not tint those. */
-  overlayLogoBundledWhite: {
+  /** White on hero scrim — bundled template and uploaded marks (PNG/JPEG read as template for tint). */
+  overlayLogoHeroWhite: {
     tintColor: '#FFFFFF',
   },
   overlayLogoWrapper: {

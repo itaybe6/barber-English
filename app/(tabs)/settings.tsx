@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking, Dimensions, Switch, I18nManager, DeviceEventEmitter, Keyboard, type LayoutChangeEvent } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Platform, Alert, TextInput, Modal, Pressable, ActivityIndicator, Animated, Easing, TouchableWithoutFeedback, PanResponder, GestureResponderEvent, PanResponderGestureState, KeyboardAvoidingView, Linking, Dimensions, Switch, I18nManager, DeviceEventEmitter, Keyboard, InteractionManager, type LayoutChangeEvent } from 'react-native';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
-import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
+import { GestureHandlerRootView, Swipeable, ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -38,6 +38,7 @@ import {
   Camera,
   Megaphone,
   Layers,
+  FileText,
 } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -61,6 +62,7 @@ import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-a
 import { BookingDaysRuler, type BookingDaysRulerHandle } from '@/components/BookingDaysRuler';
 import { getExpoExtra } from '@/lib/getExtra';
 import { getHomeLogoSource } from '@/src/theme/assets';
+import { readAsStringAsync } from 'expo-file-system/legacy';
 
 // Helper for shadow style
 const shadowStyle = Platform.select({
@@ -214,6 +216,11 @@ export default function SettingsScreen() {
   const [tiktokDraft, setTiktokDraft] = useState('');
   const [showEditDisplayNameModal, setShowEditDisplayNameModal] = useState(false);
   const [displayNameDraft, setDisplayNameDraft] = useState('');
+  const [showReceiptLegalModal, setShowReceiptLegalModal] = useState(false);
+  const [receiptLegalDisplayName, setReceiptLegalDisplayName] = useState('');
+  const [receiptLegalBusinessNumber, setReceiptLegalBusinessNumber] = useState('');
+  const [receiptLegalBusinessPhone, setReceiptLegalBusinessPhone] = useState('');
+  const [receiptLegalVatExempt, setReceiptLegalVatExempt] = useState(false);
   const [cancellationHoursDraft, setCancellationHoursDraft] = useState('24');
   // Admin name/phone edit
   const [showEditAdminModal, setShowEditAdminModal] = useState(false);
@@ -222,6 +229,8 @@ export default function SettingsScreen() {
   const [isSavingAdmin, setIsSavingAdmin] = useState(false);
   const [isUploadingAdminAvatar, setIsUploadingAdminAvatar] = useState(false);
   const [isUploadingHomeLogo, setIsUploadingHomeLogo] = useState(false);
+  /** expo-document-picker throws if a second pick starts before the first finishes (e.g. double tap). */
+  const homeLogoDocumentPickerBusyRef = useRef(false);
   const [adminProfileLavaLayout, setAdminProfileLavaLayout] = useState({ w: 0, h: 0 });
   const onAdminProfileLavaLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -446,6 +455,40 @@ export default function SettingsScreen() {
       }
       setProfile(updated);
       Alert.alert(t('success.generic','Success'), t('settings.profile.saveSuccess','Business details saved successfully'));
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const openReceiptLegalModal = useCallback(() => {
+    setReceiptLegalDisplayName((profileDisplayName || '').trim());
+    setReceiptLegalBusinessNumber(String(profile?.business_number ?? '').trim());
+    setReceiptLegalBusinessPhone(String(profile?.phone ?? '').trim());
+    setReceiptLegalVatExempt(profile?.vat_exempt === true);
+    setShowReceiptLegalModal(true);
+  }, [profileDisplayName, profile?.business_number, profile?.phone, profile?.vat_exempt]);
+
+  const handleSaveReceiptLegalDetails = async () => {
+    setIsSavingProfile(true);
+    try {
+      const updated = await businessProfileApi.upsertProfile({
+        display_name: receiptLegalDisplayName.trim() || null as any,
+        business_number: receiptLegalBusinessNumber.trim() || null as any,
+        phone: receiptLegalBusinessPhone.trim() || null as any,
+        vat_exempt: receiptLegalVatExempt as any,
+        address: (profileAddress || '').trim() || null as any,
+        instagram_url: (profileInstagram || '').trim() || null as any,
+        facebook_url: (profileFacebook || '').trim() || null as any,
+        tiktok_url: (profileTiktok || '').trim() || null as any,
+      });
+      if (!updated) {
+        Alert.alert(t('error.generic', 'Error'), t('settings.profile.receiptLegalSaveFailed', 'Could not save receipt details'));
+        return;
+      }
+      setProfile(updated);
+      setProfileDisplayName(updated.display_name || '');
+      setShowReceiptLegalModal(false);
+      Alert.alert(t('success.generic', 'Success'), t('settings.profile.saveSuccess', 'Business details saved successfully'));
     } finally {
       setIsSavingProfile(false);
     }
@@ -1304,6 +1347,17 @@ export default function SettingsScreen() {
     return 'image/jpeg';
   };
 
+  /** Storage path extension — avoid `image/svg+xml` → invalid `svg+xml` segment from naive split('/')[1]. */
+  const fileExtensionForHomeLogoMime = (mime: string): string => {
+    const m = mime.toLowerCase().split(';')[0].trim();
+    if (m === 'image/jpeg' || m === 'image/jpg') return 'jpeg';
+    if (m === 'image/png') return 'png';
+    if (m === 'image/webp') return 'webp';
+    if (m === 'image/heic' || m === 'image/heif') return 'heic';
+    if (m === 'image/gif') return 'gif';
+    return 'png';
+  };
+
   // Guess mime for images and videos
   const guessMimeFromUriForAny = (uriOrName: string): string => {
     const ext = (uriOrName.split('.').pop() || '').toLowerCase().split('?')[0];
@@ -1419,12 +1473,28 @@ export default function SettingsScreen() {
         const bytes = base64ToUint8Array(asset.base64);
         fileBody = bytes;
       } else {
-        const response = await fetch(asset.uri, { cache: 'no-store' });
-        const fetched = await response.blob();
-        fileBody = fetched;
-        contentType = fetched.type || contentType;
+        const uri = String(asset.uri || '').trim();
+        /** iOS Files + Hermes: `fetch(file://…)` often yields an empty Blob; read bytes via Expo FS. */
+        const readLocalViaFs =
+          Platform.OS !== 'web' &&
+          uri.length > 0 &&
+          (uri.startsWith('file:') || (Platform.OS === 'android' && uri.startsWith('content:')));
+        if (readLocalViaFs) {
+          const b64 = await readAsStringAsync(uri, { encoding: 'base64' });
+          const bytes = base64ToUint8Array(b64);
+          if (bytes.length < 32) {
+            console.error('home logo file read too small', bytes.length);
+            return null;
+          }
+          fileBody = bytes;
+        } else {
+          const response = await fetch(uri, { cache: 'no-store' });
+          const fetched = await response.blob();
+          fileBody = fetched;
+          contentType = fetched.type || contentType;
+        }
       }
-      const extGuess = (contentType.split('/')[1] || 'png').toLowerCase();
+      const extGuess = fileExtensionForHomeLogoMime(contentType);
       const randomId = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
       const bid = getBusinessId();
       const filePath = `home-logos/${bid}/${Date.now()}_${randomId()}.${extGuess}`;
@@ -1443,7 +1513,34 @@ export default function SettingsScreen() {
     }
   };
 
-  const handlePickHomeScreenLogo = async () => {
+  const uploadAndSaveHomeLogo = async (asset: {
+    uri: string;
+    base64?: string | null;
+    mimeType?: string | null;
+    fileName?: string | null;
+  }) => {
+    setIsUploadingHomeLogo(true);
+    try {
+      const uploadedUrl = await uploadHomeScreenLogo(asset);
+      if (!uploadedUrl) {
+        Alert.alert(t('error.generic', 'Error'), t('settings.profile.homeLogoUploadFailed', 'Logo upload failed'));
+        return;
+      }
+      const updated = await businessProfileApi.updateHomeLogoUrl(uploadedUrl);
+      if (!updated) {
+        Alert.alert(t('error.generic', 'Error'), t('settings.profile.homeLogoSaveFailed', 'Failed to save logo'));
+        return;
+      }
+      setProfile(updated);
+    } catch (e) {
+      console.error('pick/upload home logo failed', e);
+      Alert.alert(t('error.generic', 'Error'), t('settings.profile.homeLogoUploadFailed', 'Logo upload failed'));
+    } finally {
+      setIsUploadingHomeLogo(false);
+    }
+  };
+
+  const pickHomeScreenLogoFromPhotoLibrary = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
@@ -1461,28 +1558,81 @@ export default function SettingsScreen() {
       });
       if (result.canceled || !result.assets?.length) return;
       const a: any = result.assets[0];
-      setIsUploadingHomeLogo(true);
-      const uploadedUrl = await uploadHomeScreenLogo({
+      await uploadAndSaveHomeLogo({
         uri: a.uri,
         base64: a.base64 ?? null,
         mimeType: a.mimeType ?? null,
         fileName: a.fileName ?? null,
       });
-      if (!uploadedUrl) {
-        Alert.alert(t('error.generic', 'Error'), t('settings.profile.homeLogoUploadFailed', 'Logo upload failed'));
-        return;
-      }
-      const updated = await businessProfileApi.updateHomeLogoUrl(uploadedUrl);
-      if (!updated) {
-        Alert.alert(t('error.generic', 'Error'), t('settings.profile.homeLogoSaveFailed', 'Failed to save logo'));
-        return;
-      }
-      setProfile(updated);
     } catch (e) {
-      console.error('pick/upload home logo failed', e);
+      console.error('pick home logo from gallery failed', e);
+      Alert.alert(t('error.generic', 'Error'), t('settings.profile.homeLogoUploadFailed', 'Logo upload failed'));
+    }
+  };
+
+  const pickHomeScreenLogoFromFiles = async () => {
+    if (homeLogoDocumentPickerBusyRef.current || isUploadingHomeLogo) return;
+    homeLogoDocumentPickerBusyRef.current = true;
+    try {
+      await new Promise<void>((resolve) => {
+        InteractionManager.runAfterInteractions(() => {
+          setTimeout(resolve, Platform.OS === 'ios' ? 80 : 0);
+        });
+      });
+      /** Dynamic import so the route can load without the native module (dev clients must be rebuilt after adding the dependency). */
+      let DocumentPicker: typeof import('expo-document-picker');
+      try {
+        DocumentPicker = await import('expo-document-picker');
+      } catch {
+        Alert.alert(
+          t('error.generic', 'Error'),
+          t(
+            'settings.profile.documentPickerNativeMissing',
+            'בחירת קובץ דורשת build מחדש של האפליקציה עם expo-document-picker (למשל: npx expo run:ios או EAS build).',
+          ),
+        );
+        return;
+      }
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'image/*',
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const file = result.assets[0];
+      const mime = String(file.mimeType || guessMimeFromUri(file.name || file.uri));
+      if (!mime.startsWith('image/')) {
+        Alert.alert(
+          t('error.generic', 'Error'),
+          t('settings.profile.homeLogoFileNotImage', 'Please choose an image file (PNG, JPEG, etc.).'),
+        );
+        return;
+      }
+      await uploadAndSaveHomeLogo({
+        uri: file.uri,
+        base64: null,
+        mimeType: file.mimeType ?? null,
+        fileName: file.name ?? null,
+      });
+    } catch (e) {
+      console.error('pick home logo from files failed', e);
+      const msg = e instanceof Error ? e.message : '';
+      if (msg.includes('document picking in progress')) {
+        return;
+      }
+      if (msg.includes('ExpoDocumentPicker') || msg.includes('native module')) {
+        Alert.alert(
+          t('error.generic', 'Error'),
+          t(
+            'settings.profile.documentPickerNativeMissing',
+            'בחירת קובץ דורשת build מחדש של האפליקציה עם expo-document-picker (למשל: npx expo run:ios או EAS build).',
+          ),
+        );
+        return;
+      }
       Alert.alert(t('error.generic', 'Error'), t('settings.profile.homeLogoUploadFailed', 'Logo upload failed'));
     } finally {
-      setIsUploadingHomeLogo(false);
+      homeLogoDocumentPickerBusyRef.current = false;
     }
   };
 
@@ -2859,6 +3009,16 @@ export default function SettingsScreen() {
         <View style={styles.settingsTabPanel}>
           <View style={styles.settingsAccordionBody}>
               {renderSettingItemLTR(
+                <FileText size={20} color={businessColors.primary} />,
+                t('settings.profile.receiptLegalRowTitle', 'Receipt & tax details'),
+                t(
+                  'settings.profile.receiptLegalRowSubtitle',
+                  'Name, VAT ID, phone, VAT-exempt — used on receipts (320)',
+                ),
+                undefined,
+                openReceiptLegalModal,
+              )}
+              {renderSettingItemLTR(
                 <MapPin size={20} color="#FF3B30" />,
                 t('settings.profile.businessAddressTitle', 'Business address'),
                 businessAddressDisplay || t('settings.profile.addAddress', 'Add address'),
@@ -2912,7 +3072,7 @@ export default function SettingsScreen() {
         )}
 
         {canSeeAddEmployee && activeSettingsTab === 'design' && (
-          <ScrollView
+          <GHScrollView
             style={styles.settingsAppointmentsScroll}
             contentContainerStyle={[
               styles.settingsAppointmentsScrollContent,
@@ -2923,7 +3083,7 @@ export default function SettingsScreen() {
                   (Platform.OS === 'android' ? settingsKeyboardInset : 0),
               },
             ]}
-            keyboardShouldPersistTaps="handled"
+            keyboardShouldPersistTaps="always"
             keyboardDismissMode="interactive"
             showsVerticalScrollIndicator={false}
             automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
@@ -3035,48 +3195,73 @@ export default function SettingsScreen() {
                         </Text>
                       </TouchableOpacity>
                     </View>
+                    <View style={styles.settingDivider} />
                   </>
                 ) : null}
-                {profile?.home_header_show_logo !== false ? (
-                  <View style={styles.homeLogoDesignRow}>
-                    <View style={styles.homeLogoPreviewWrap}>
-                      <Image
-                        source={getHomeLogoSource(profile)}
-                        style={styles.homeLogoPreviewImage}
-                        resizeMode="contain"
-                      />
-                      {isUploadingHomeLogo ? (
-                        <View style={styles.homeLogoPreviewLoading}>
-                          <ActivityIndicator size="small" color={businessColors.primary} />
-                        </View>
-                      ) : null}
-                    </View>
-                    <View style={styles.homeLogoDesignActions}>
-                      <TouchableOpacity
-                        style={[
-                          styles.homeLogoActionBtn,
-                          { borderColor: `${businessColors.primary}40`, backgroundColor: `${businessColors.primary}12` },
-                        ]}
-                        onPress={handlePickHomeScreenLogo}
-                        activeOpacity={0.88}
-                        disabled={isUploadingHomeLogo}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('settings.profile.homeLogoUploadButton', 'Upload logo')}
-                      >
-                        <Camera size={18} color={businessColors.primary} strokeWidth={2.2} />
-                        <Text style={[styles.homeLogoActionBtnText, { color: businessColors.primary }]}>
-                          {isUploadingHomeLogo
-                            ? t('settings.common.uploading', 'Uploading...')
-                            : t('settings.profile.homeLogoUploadButton', 'Upload logo')}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
+                <View style={styles.homeLogoDesignRow}>
+                  <View style={styles.homeLogoPreviewWrap}>
+                    <Image
+                      source={getHomeLogoSource(profile)}
+                      style={styles.homeLogoPreviewImage}
+                      resizeMode="contain"
+                    />
+                    {isUploadingHomeLogo ? (
+                      <View style={styles.homeLogoPreviewLoading}>
+                        <ActivityIndicator size="small" color={businessColors.primary} />
+                      </View>
+                    ) : null}
                   </View>
-                ) : null}
+                  <View style={styles.homeLogoDesignActions}>
+                    <TouchableOpacity
+                      style={[
+                        styles.homeLogoActionBtn,
+                        {
+                          borderColor: `${businessColors.primary}40`,
+                          backgroundColor: `${businessColors.primary}12`,
+                          opacity: isUploadingHomeLogo ? 0.55 : 1,
+                        },
+                      ]}
+                      onPress={() => void pickHomeScreenLogoFromPhotoLibrary()}
+                      disabled={isUploadingHomeLogo}
+                      activeOpacity={0.75}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('settings.profile.homeLogoFromPhotos', 'Photo library')}
+                      hitSlop={{ top: 10, bottom: 6, left: 10, right: 10 }}
+                    >
+                      <Camera size={18} color={businessColors.primary} strokeWidth={2.2} />
+                      <Text style={[styles.homeLogoActionBtnText, { color: businessColors.primary }]}>
+                        {isUploadingHomeLogo
+                          ? t('settings.common.uploading', 'Uploading...')
+                          : t('settings.profile.homeLogoFromPhotos', 'Photo library')}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.homeLogoActionBtn,
+                        styles.homeLogoActionBtnSecondary,
+                        {
+                          borderColor: 'rgba(60, 60, 67, 0.22)',
+                          opacity: isUploadingHomeLogo ? 0.55 : 1,
+                        },
+                      ]}
+                      onPress={() => void pickHomeScreenLogoFromFiles()}
+                      disabled={isUploadingHomeLogo}
+                      activeOpacity={0.75}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('settings.profile.homeLogoFromFiles', 'Files')}
+                      hitSlop={{ top: 6, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Ionicons name="folder-outline" size={20} color={businessColors.primary} />
+                      <Text style={[styles.homeLogoActionBtnText, { color: businessColors.primary }]}>
+                        {t('settings.profile.homeLogoFromFiles', 'Files')}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               </View>
           </View>
         </View>
-          </ScrollView>
+          </GHScrollView>
         )}
 
         {canSeeAddEmployee && activeSettingsTab === 'employees' && (
@@ -3411,6 +3596,117 @@ export default function SettingsScreen() {
                   textAlign="left"
                 />
               </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Receipt / VAT legal fields (local kabala 320 + compliance) */}
+      <Modal
+        visible={showReceiptLegalModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => !isSavingProfile && setShowReceiptLegalModal(false)}
+      >
+        <View style={styles.smallModalOverlay}>
+          <View style={styles.smallModalCard}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => !isSavingProfile && setShowReceiptLegalModal(false)}
+                disabled={isSavingProfile}
+              >
+                <Text style={styles.modalCloseText}>{t('cancel', 'Cancel')}</Text>
+              </TouchableOpacity>
+              <Text style={styles.modalTitleLTR} numberOfLines={2}>
+                {t('settings.profile.receiptLegalModalTitle', 'Receipt & tax details')}
+              </Text>
+              <TouchableOpacity
+                style={[styles.modalSendButton, isSavingProfile && styles.modalSendButtonDisabled]}
+                onPress={() => void handleSaveReceiptLegalDetails()}
+                disabled={isSavingProfile}
+              >
+                <Text style={[styles.modalSendText, isSavingProfile && styles.modalSendTextDisabled]}>
+                  {isSavingProfile ? t('settings.common.saving', 'Saving...') : t('save', 'Save')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.smallModalContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabelLTR}>{t('settings.profile.businessName', 'Business name')}</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={receiptLegalDisplayName}
+                  onChangeText={setReceiptLegalDisplayName}
+                  placeholder={t('settings.profile.businessNamePlaceholder', 'For example: The Studio of Hadas')}
+                  placeholderTextColor={Colors.subtext}
+                  textAlign="left"
+                  editable={!isSavingProfile}
+                />
+              </View>
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabelLTR}>
+                  {t('settings.profile.receiptLegalOsekLabel', 'Authorized dealer / company ID (ח.פ.)')}
+                </Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={receiptLegalBusinessNumber}
+                  onChangeText={setReceiptLegalBusinessNumber}
+                  placeholder={t('settings.profile.receiptLegalOsekPlaceholder', 'e.g. 515000000')}
+                  placeholderTextColor={Colors.subtext}
+                  keyboardType="number-pad"
+                  textAlign="left"
+                  editable={!isSavingProfile}
+                />
+              </View>
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabelLTR}>
+                  {t('settings.profile.receiptLegalPhoneLabel', 'Business phone (on receipts)')}
+                </Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={receiptLegalBusinessPhone}
+                  onChangeText={setReceiptLegalBusinessPhone}
+                  placeholder={t('settings.profile.receiptLegalPhonePlaceholder', 'e.g. 050-1234567')}
+                  placeholderTextColor={Colors.subtext}
+                  keyboardType="phone-pad"
+                  textAlign="left"
+                  editable={!isSavingProfile}
+                />
+              </View>
+              <View style={[styles.settingItemLTR, { borderBottomWidth: 0, paddingVertical: 12 }]}>
+                <View style={styles.settingContentLTR}>
+                  <Text style={styles.settingTitleLTR}>
+                    {t('settings.profile.receiptLegalVatExemptLabel', 'VAT-exempt business (עוסק פטור)')}
+                  </Text>
+                  <Text style={styles.settingSubtitleLTR}>
+                    {t(
+                      'settings.profile.receiptLegalVatExemptSubtitle',
+                      'On if you do not charge VAT; receipts omit the VAT breakdown.',
+                    )}
+                  </Text>
+                </View>
+                <Switch
+                  value={receiptLegalVatExempt}
+                  onValueChange={setReceiptLegalVatExempt}
+                  disabled={isSavingProfile}
+                  trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
+                  thumbColor={
+                    receiptLegalVatExempt
+                      ? businessColors.primary
+                      : Platform.OS === 'android'
+                        ? '#f4f3f4'
+                        : undefined
+                  }
+                  ios_backgroundColor="#E5E5EA"
+                />
+              </View>
+              <Text style={[styles.settingSubtitleLTR, { paddingHorizontal: 4, paddingBottom: 16, opacity: 0.85 }]}>
+                {t(
+                  'settings.profile.receiptLegalHint',
+                  'Edit the address below under «Business address». Receipt accent color is under Design.',
+                )}
+              </Text>
             </ScrollView>
           </View>
         </View>
@@ -5534,6 +5830,9 @@ const styles = StyleSheet.create({
   homeLogoActionBtnText: {
     fontSize: 15,
     fontWeight: '600',
+  },
+  homeLogoActionBtnSecondary: {
+    backgroundColor: 'rgba(142, 142, 147, 0.08)',
   },
   addressSheetContainer: {
     position: 'absolute',

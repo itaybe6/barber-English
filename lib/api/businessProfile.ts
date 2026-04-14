@@ -264,6 +264,27 @@ export const businessProfileApi = {
     }
   },
 
+  async updateHomeHeaderTitleFont(home_header_title_font: string | null): Promise<BusinessProfile | null> {
+    try {
+      const businessId = getBusinessId();
+      const { data, error } = await supabase
+        .from('business_profile')
+        .update({ home_header_title_font })
+        .eq('id', businessId)
+        .select('*')
+        .single();
+
+      if (error) {
+        console.error('Error updating home_header_title_font:', error);
+        return null;
+      }
+      return (data as BusinessProfile) || null;
+    } catch (e) {
+      console.error('Error in updateHomeHeaderTitleFont:', e);
+      return null;
+    }
+  },
+
   async updateHomeFixedMessage(opts: {
     enabled: boolean;
     message?: string | null;

@@ -29,6 +29,11 @@ import { clients } from '@/constants/clients';
 // import { AvailableTimeSlot } from '@/lib/supabase'; // Not used in this file
 import { supabase } from '@/lib/supabase';
 import { businessProfileApi, getHomeHeaderTitleWhenLogoHidden } from '@/lib/api/businessProfile';
+import {
+  homeHeaderTitleFontStyle,
+  normalizeHomeHeaderTitleFontId,
+  type HomeHeaderTitleFontId,
+} from '@/lib/homeHeaderTitleFont';
 import Card from '@/components/Card';
 import { Calendar, Clock, ChevronLeft, ChevronRight, Star, Pencil } from 'lucide-react-native';
 import DaySelector from '@/components/DaySelector';
@@ -154,23 +159,33 @@ export default function HomeScreen() {
   const [homeLogoUrl, setHomeLogoUrl] = useState<string | null>(null);
   const [homeHeaderShowLogo, setHomeHeaderShowLogo] = useState(true);
   const [homeHeaderDisplayName, setHomeHeaderDisplayName] = useState('');
+  const [homeHeaderTitleFontId, setHomeHeaderTitleFontId] = useState<HomeHeaderTitleFontId>('system');
 
   const loadHeroImages = useCallback(async () => {
     try {
       const p = await businessProfileApi.getProfile();
+      // getProfile() can return null on transient errors — do not clear hero/logo state.
+      if (!p) return;
       const list = sanitizeUrlArray((p as any)?.home_hero_images);
       setHeroImages(list.length > 0 ? list : null);
       const rawLogo = String(p?.home_logo_url ?? '').trim();
       setHomeLogoUrl(/^https?:\/\//i.test(rawLogo) ? rawLogo : null);
       setHomeHeaderShowLogo(p?.home_header_show_logo !== false);
       setHomeHeaderDisplayName(getHomeHeaderTitleWhenLogoHidden(p));
+      setHomeHeaderTitleFontId(normalizeHomeHeaderTitleFontId((p as any)?.home_header_title_font));
     } catch {
       setHeroImages(null);
       setHomeLogoUrl(null);
       setHomeHeaderShowLogo(true);
       setHomeHeaderDisplayName('');
+      setHomeHeaderTitleFontId('system');
     }
   }, []);
+
+  const adminHomeHeaderTitleFontStyle = useMemo(
+    () => homeHeaderTitleFontStyle(homeHeaderTitleFontId),
+    [homeHeaderTitleFontId],
+  );
 
   useEffect(() => {
     loadHeroImages();
@@ -1626,7 +1641,7 @@ export default function HomeScreen() {
           </View>
         ) : (
           <View style={styles.overlayNameInner}>
-            <Text style={styles.overlayBusinessName} numberOfLines={2}>
+            <Text style={[styles.overlayBusinessName, adminHomeHeaderTitleFontStyle]} numberOfLines={2}>
               {homeHeaderDisplayName ||
                 t('settings.profile.displayNameFallbackShort', 'Business')}
             </Text>

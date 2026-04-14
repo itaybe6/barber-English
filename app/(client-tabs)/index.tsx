@@ -33,6 +33,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Appointment as AvailableTimeSlot } from '@/lib/supabase';
 import { businessProfileApi, getHomeHeaderTitleWhenLogoHidden } from '@/lib/api/businessProfile';
+import { homeHeaderTitleFontStyle, normalizeHomeHeaderTitleFontId } from '@/lib/homeHeaderTitleFont';
 import { usersApi } from '@/lib/api/users';
 import type { BusinessProfile, WaitlistEntry } from '@/lib/supabase';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
@@ -48,6 +49,7 @@ import { Marquee } from '@animatereactnative/marquee';
 import { manicureImages } from '@/src/constants/manicureImages';
 import { ManicureMarqueeTile } from '@/components/ManicureMarqueeTile';
 import { distributeHeroMarqueeUrlsToRows, resolveAdminHeroMarqueeImages } from '@/components/home/AdminHomeHeroMarquee';
+import { ClientWeekAvailabilityStrip } from '@/components/home/ClientWeekAvailabilityStrip';
 import { WaitlistHomeFabPanel } from '@/components/WaitlistHomeFabPanel';
 import HomeFixedMessageSheet from '@/components/HomeFixedMessageSheet';
 import InterestedSwapModal from '@/components/InterestedSwapModal';
@@ -336,12 +338,10 @@ export default function ClientHomeScreen() {
     [businessProfile],
   );
 
-  /** First word of profile name for the empty-state book card greeting. */
-  const bookCardGreetingFirstName = useMemo(() => {
+  /** Full display name (including family name) for the empty-state book card greeting. */
+  const bookCardGreetingDisplayName = useMemo(() => {
     const raw = user?.name?.trim();
-    if (!raw) return null;
-    const first = raw.split(/\s+/)[0]?.trim();
-    return first || null;
+    return raw && raw.length > 0 ? raw : null;
   }, [user?.name]);
 
   /** http(s) logo URL for hero — matches admin `homeLogoUrl` (`app/(tabs)/index.tsx`). */
@@ -350,10 +350,19 @@ export default function ClientHomeScreen() {
     return /^https?:\/\//i.test(raw) ? raw : null;
   }, [businessProfile?.home_logo_url]);
   const clientHomeHeaderShowLogo = businessProfile?.home_header_show_logo !== false;
+  const clientHomeHeaderTitleFontStyle = useMemo(
+    () =>
+      homeHeaderTitleFontStyle(
+        normalizeHomeHeaderTitleFontId(businessProfile?.home_header_title_font),
+      ),
+    [businessProfile?.home_header_title_font],
+  );
 
   const [managerPhone, setManagerPhone] = useState<string | null>(null);
   const [businessPhone, setBusinessPhone] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  /** Bumps after pull-to-refresh so the week strip refetches without leaving the screen */
+  const [weekStripReloadToken, setWeekStripReloadToken] = useState(0);
   const [innerScrollEnabled, setInnerScrollEnabled] = useState(false);
   const innerScrollRef = useRef<ScrollView>(null);
   const outerScrollCapSV = useSharedValue(0);
@@ -699,20 +708,26 @@ export default function ClientHomeScreen() {
     const loadProfile = async () => {
       try {
         const p = await businessProfileApi.getProfile();
-        setBusinessProfile(p);
-        // After profile is loaded, refresh appointments horizon
-        try { await fetchUserAppointments(); } catch {}
-        
-        // Extract phone number from business profile
-        if (p?.phone) {
-          const numeric = p.phone.replace(/\D/g, '');
-          let normalized = numeric;
-          if (numeric.startsWith('0') && numeric.length >= 9) {
-            normalized = `972${numeric.slice(1)}`;
-          } else if (!numeric.startsWith('972')) {
-            normalized = numeric; // leave as is; wa.me accepts many formats if country code included
+        // getProfile() returns null on Supabase errors without throwing — never replace a good
+        // profile with null or we lose home_logo_url / hero images until the next full reload.
+        if (p) {
+          setBusinessProfile(p);
+          // After profile is loaded, refresh appointments horizon
+          try {
+            await fetchUserAppointments();
+          } catch {}
+
+          // Extract phone number from business profile
+          if (p.phone) {
+            const numeric = p.phone.replace(/\D/g, '');
+            let normalized = numeric;
+            if (numeric.startsWith('0') && numeric.length >= 9) {
+              normalized = `972${numeric.slice(1)}`;
+            } else if (!numeric.startsWith('972')) {
+              normalized = numeric; // leave as is; wa.me accepts many formats if country code included
+            }
+            setBusinessPhone(normalized);
           }
-          setBusinessPhone(normalized);
         }
       } catch (error) {
         console.error('Error loading business profile:', error);
@@ -835,7 +850,7 @@ export default function ClientHomeScreen() {
       const loadProfile = async () => {
         try {
           const p = await businessProfileApi.getProfile();
-          setBusinessProfile(p);
+          if (p) setBusinessProfile(p);
         } catch (error) {
           console.error('Error loading business profile on focus:', error);
         }
@@ -856,12 +871,15 @@ export default function ClientHomeScreen() {
         (async () => {
           try {
             const p = await businessProfileApi.getProfile();
-            setBusinessProfile(p);
-          } catch { setBusinessProfile(null); }
+            if (p) setBusinessProfile(p);
+          } catch {
+            /* keep existing profile — avoid flashing bundled logo on transient errors */
+          }
         })(),
       ]);
     } finally {
       setRefreshing(false);
+      setWeekStripReloadToken((n) => n + 1);
     }
   }, [fetchUserAppointments, fetchWaitlistEntries, fetchDesigns, fetchProducts]);
 
@@ -1117,8 +1135,8 @@ export default function ClientHomeScreen() {
               disabled={isBlocked || awaitingApproval}
               accessibilityRole="button"
               accessibilityLabel={
-                bookCardGreetingFirstName
-                  ? `${t('home.emptyNextCard.greetingWithName', { name: bookCardGreetingFirstName })}. ${t('home.emptyNextCard.subtitle')}`
+                bookCardGreetingDisplayName
+                  ? `${t('home.emptyNextCard.greetingWithName', { name: bookCardGreetingDisplayName })}. ${t('home.emptyNextCard.subtitle')}`
                   : `${t('home.emptyNextCard.greeting')}. ${t('home.emptyNextCard.subtitle')}`
               }
               onPress={() => {
@@ -1156,8 +1174,8 @@ export default function ClientHomeScreen() {
               <View style={styles.lavaBookContent}>
                 <View style={styles.lavaBookTextBlock}>
                   <Text style={[styles.lavaBookTitle, { color: onPrimary }]}>
-                    {bookCardGreetingFirstName
-                      ? t('home.emptyNextCard.greetingWithName', { name: bookCardGreetingFirstName })
+                    {bookCardGreetingDisplayName
+                      ? t('home.emptyNextCard.greetingWithName', { name: bookCardGreetingDisplayName })
                       : t('home.emptyNextCard.greeting')}
                   </Text>
                   <Text style={[styles.lavaBookLabel, { color: `${onPrimary}99` }]}>
@@ -1181,6 +1199,15 @@ export default function ClientHomeScreen() {
               />
             </View>
           ) : null}
+        </View>
+
+        <View style={styles.sectionContainer}>
+          <ClientWeekAvailabilityStrip
+            primaryColor={colors.primary}
+            isBlocked={isBlocked}
+            awaitingApproval={awaitingApproval}
+            reloadToken={weekStripReloadToken}
+          />
         </View>
 
         {/* Design Carousel */}
@@ -1410,7 +1437,10 @@ export default function ClientHomeScreen() {
           </View>
         ) : (
           <View style={styles.clientHomeHeaderTitleNoLogoWrap}>
-            <Text style={styles.clientHomeHeaderTitleNoLogo} numberOfLines={2}>
+            <Text
+              style={[styles.clientHomeHeaderTitleNoLogo, clientHomeHeaderTitleFontStyle]}
+              numberOfLines={2}
+            >
               {getHomeHeaderTitleWhenLogoHidden(businessProfile) ||
                 t('settings.profile.displayNameFallbackShort', 'Business')}
             </Text>

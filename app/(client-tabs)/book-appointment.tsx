@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { BlurView } from 'expo-blur';
 import * as Calendar from 'expo-calendar';
 import { Ionicons } from '@expo/vector-icons';
+import { Home } from 'lucide-react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -39,6 +40,7 @@ import { Service } from '@/lib/supabase';
 import { servicesApi, filterServicesForBookingBarber } from '@/lib/api/services';
 import { supabase, getBusinessId, Appointment } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
+import { useWaitlistStore } from '@/stores/waitlistStore';
 import { isClientAwaitingApproval } from '@/lib/utils/clientApproval';
 import { isRtlLanguage, toBcp47Locale } from '@/lib/i18nLocale';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
@@ -385,6 +387,28 @@ const toLocalDateStr = (d: Date): string => {
   return `${y}-${m}-${day}`;
 };
 
+/**
+ * TEST HARNESS — remove before production.
+ * Forces April 21 (any year, local `YYYY-MM-DD`) to behave as fully booked (red dot) and tappable for waitlist.
+ */
+function isBookingWaitlistTestFullDay(dateStr: string): boolean {
+  return /^\d{4}-04-21$/.test(String(dateStr).trim());
+}
+
+function mergeBookingWaitlistTestDayAvailability(
+  base: Record<string, number>,
+  dayRows: Array<{ fullDate: Date }>
+): Record<string, number> {
+  const out = { ...base };
+  for (const row of dayRows) {
+    const ds = toLocalDateStr(row.fullDate);
+    if (isBookingWaitlistTestFullDay(ds)) {
+      out[ds] = 0;
+    }
+  }
+  return out;
+}
+
 // Generate next N days with Hebrew day names
 const getNextNDays = (n: number) => {
   const today = new Date();
@@ -561,6 +585,37 @@ export default function BookAppointment() {
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [showWaitlistSheet, setShowWaitlistSheet] = useState(false);
+  const getClientWaitlistEntries = useWaitlistStore((s) => s.getClientWaitlistEntries);
+
+  /** Block joining while the user already has active (`waiting`) waitlist rows for this business. */
+  const openWaitlistSheetIfAllowed = useCallback(async () => {
+    if (!user?.phone) {
+      Alert.alert(t('error.generic', 'Error'), t('waitlist.userInfoMissing', 'User info is missing'));
+      return;
+    }
+    await getClientWaitlistEntries(user.phone);
+    const entries = useWaitlistStore.getState().clientWaitlistEntries;
+    if (entries.length > 0) {
+      Alert.alert(
+        t('waitlist.cannotJoinTitle', 'Active waitlist'),
+        t(
+          'waitlist.mustLeaveWaitlistFirst',
+          'You are already on the waitlist. Leave it from the home screen before joining again.'
+        )
+      );
+      return;
+    }
+    setShowWaitlistSheet(true);
+  }, [user?.phone, getClientWaitlistEntries, t]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.phone) {
+        getClientWaitlistEntries(user.phone);
+      }
+    }, [user?.phone, getClientWaitlistEntries])
+  );
+
   const [isBooking, setIsBooking] = useState(false);
   const [isCheckingAppointments, setIsCheckingAppointments] = useState(false);
   const [timeConfirmPanelVisible, setTimeConfirmPanelVisible] = useState(false);
@@ -1037,19 +1092,6 @@ export default function BookAppointment() {
   };
   
   const availableTimeSlots = getAvailableTimeSlotsForDate();
-
-  /** Periods that have at least one available slot — excluded from waitlist options. */
-  const availableSlotPeriods = useMemo(() => {
-    const slots = availableTimeSlots || [];
-    const periods = new Set<string>();
-    slots.forEach((slot: string) => {
-      const hour = parseInt(slot.split(':')[0], 10);
-      if (hour <= 11) periods.add('morning');
-      else if (hour <= 16) periods.add('afternoon');
-      else periods.add('evening');
-    });
-    return Array.from(periods) as ('morning' | 'afternoon' | 'evening')[];
-  }, [availableTimeSlots]);
 
   // Check if user has any booked appointment on a specific date (match by phone variants; fallback to name)
   const checkUserAppointmentsOnDate = async (dateString: string) => {
@@ -1890,14 +1932,24 @@ export default function BookAppointment() {
     }
   }, [safeAreaInsets.top]);
 
+  const dayAvailabilityForBooking = useMemo(
+    () => mergeBookingWaitlistTestDayAvailability(dayAvailability, days),
+    [dayAvailability, days]
+  );
+
   /** Called when a day cell is tapped — advances to time selection if the day has availability. */
   const advanceFromDaySelect = React.useCallback((dayIndex: number) => {
     setSelectedDay(dayIndex);
     const day = days[dayIndex];
     if (!day) return;
     const dateStr = toLocalDateStr(day.fullDate);
-    const avail = dayAvailability[dateStr] ?? -1;
-    if (avail <= 0) return; // no slots available — waitlist button will appear via advanceNext prop
+    const avail = dayAvailabilityForBooking[dateStr] ?? -1;
+    if (avail === 0) {
+      setSelectedTime(null);
+      void openWaitlistSheetIfAllowed();
+      return;
+    }
+    if (avail < 0) return;
     const winW = Dimensions.get('window').width;
     const dstCX = slotCenterX(3, 2, winW, H_PAD, GAP, I18nManager.isRTL);
     const dstCY = safeAreaInsets.top + BOOKING_PROGRESS_STRIP_TOP_GAP + BOOKING_PROGRESS_STRIP_HEIGHT / 2;
@@ -1911,7 +1963,7 @@ export default function BookAppointment() {
       setDayFlightAnimKey((k) => k + 1);
       setCurrentStep(4);
     }
-  }, [days, dayAvailability, safeAreaInsets.top]);
+  }, [days, dayAvailabilityForBooking, safeAreaInsets.top, openWaitlistSheetIfAllowed]);
 
   useEffect(() => {
     if (currentStep !== 2 && barberChipEntrance !== null) {
@@ -1921,7 +1973,7 @@ export default function BookAppointment() {
 
   const selectedDayDateStr = selectedDate ? toLocalDateStr(selectedDate) : '';
   const selectedDayHasAvail =
-    selectedDayDateStr ? (dayAvailability[selectedDayDateStr] ?? -1) > 0 : false;
+    selectedDayDateStr ? (dayAvailabilityForBooking[selectedDayDateStr] ?? -1) > 0 : false;
 
   const bookingTimePanelDateLine = useMemo(() => {
     if (selectedDay === null || !days[selectedDay]) return '';
@@ -1959,7 +2011,7 @@ export default function BookAppointment() {
       // Expand the summary sheet after the chip renders (slight delay)
       setTimeout(() => summarySheetRef.current?.expand(), 160);
     },
-    onWaitlist: () => setShowWaitlistSheet(true),
+    onWaitlist: () => void openWaitlistSheetIfAllowed(),
   };
 
   const bookingSuccessLines = useMemo((): SuccessLine[] => {
@@ -2051,7 +2103,7 @@ export default function BookAppointment() {
       ) : null}
 
       <SafeAreaView style={styles.container} edges={[]}>
-        {/* `direction: 'ltr'` on the row keeps the control on physical left under forceRTL */}
+        {/* `direction: 'ltr'` + flex-end keeps the control on physical right under forceRTL */}
         <View
           pointerEvents="box-none"
           style={[
@@ -2067,7 +2119,7 @@ export default function BookAppointment() {
             activeOpacity={0.82}
             style={styles.bookingHomeFab}
           >
-            <Ionicons name="home-outline" size={22} color="#FFFFFF" />
+            <Home size={22} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
 
@@ -2081,11 +2133,6 @@ export default function BookAppointment() {
             time: t('booking.step.time', 'Time'),
             continue: t('booking.continue', 'המשך'),
           }}
-          advanceNext={
-            currentStep === 3 && selectedDay !== null && !selectedDayHasAvail && selectedDayDateStr && (dayAvailability[selectedDayDateStr] ?? -1) === 0
-              ? { enabled: true, onPress: () => setShowWaitlistSheet(true), variant: 'waitlist' as const }
-              : undefined
-          }
         />
       {/* Header removed on steps 3-4 per request */}
       <View
@@ -2225,7 +2272,7 @@ export default function BookAppointment() {
               bookingOpenDays={bookingOpenDays}
               selectedDate={selectedDate}
               selectedDayIndex={selectedDay}
-              dayAvailability={dayAvailability}
+              dayAvailability={dayAvailabilityForBooking}
               language={i18n?.language || 'he'}
               primaryColor={colors.primary}
               t={t}
@@ -2344,7 +2391,6 @@ export default function BookAppointment() {
         selectedDate={selectedDate ? toLocalDateStr(selectedDate) : ''}
         serviceName={waitlistServiceSummary}
         barberId={selectedBarber?.id || ''}
-        unavailablePeriods={currentStep === 4 ? availableSlotPeriods : undefined}
       />
 
       {/* Replace Confirmation Modal */}
@@ -3404,9 +3450,9 @@ const createStyles = (colors: any) => StyleSheet.create({
     height: 48,
     flexDirection: 'row',
     direction: 'ltr',
-    justifyContent: 'flex-start',
+    justifyContent: 'flex-end',
     alignItems: 'flex-start',
-    paddingLeft: 12,
+    paddingRight: 12,
   },
   bookingHomeFab: {
     width: 44,

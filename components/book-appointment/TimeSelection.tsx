@@ -12,12 +12,13 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeIn, Easing } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const stepSlideUp = FadeIn.duration(380)
+const stepSlideUp = FadeIn.duration(290)
   .easing(Easing.out(Easing.cubic))
-  .withInitialValues({ opacity: 0, transform: [{ translateY: 55 }] });
+  .withInitialValues({ opacity: 0, transform: [{ translateY: 42 }] });
 
+import { BOOKING_TIME_PERIOD_EMOJI } from '@/constants/bookingTimePeriodEmoji';
 import { getBookingStepBarTopFromBottom } from '@/components/book-appointment/BookingStepTabs';
-import { bookingStepRowEntering } from '@/components/book-appointment/bookingStepListEnterAnimation';
+import { bookingTimeRowEntering } from '@/components/book-appointment/bookingStepListEnterAnimation';
 
 export interface TimeSelectionProps {
   visible: boolean;
@@ -48,7 +49,7 @@ const PERIODS: PeriodConfig[] = [
     key: 'morning',
     labelKey: 'booking.timePeriod.morning',
     labelFallback: 'בוקר',
-    emoji: '☀️',
+    emoji: BOOKING_TIME_PERIOD_EMOJI.morning,
     fromHour: 0,
     toHour: 11,
   },
@@ -56,7 +57,7 @@ const PERIODS: PeriodConfig[] = [
     key: 'afternoon',
     labelKey: 'booking.timePeriod.afternoon',
     labelFallback: 'צהריים',
-    emoji: '🌤',
+    emoji: BOOKING_TIME_PERIOD_EMOJI.afternoon,
     fromHour: 12,
     toHour: 16,
   },
@@ -64,7 +65,7 @@ const PERIODS: PeriodConfig[] = [
     key: 'evening',
     labelKey: 'booking.timePeriod.evening',
     labelFallback: 'ערב',
-    emoji: '🌙',
+    emoji: BOOKING_TIME_PERIOD_EMOJI.evening,
     fromHour: 17,
     toHour: 23,
   },
@@ -101,7 +102,7 @@ function SlotGrid({ slots, selectedTime, primaryColor, onSelectTime, baseDelay }
             return (
               <Animated.View
                 key={slot}
-                entering={bookingStepRowEntering(delay)}
+                entering={bookingTimeRowEntering(delay)}
                 style={gridStyles.cellWrap}
               >
                 <Pressable
@@ -185,7 +186,7 @@ export default function TimeSelection({
             ]}
           >
             {/* Title + subtitle – same pattern as other steps */}
-            <Animated.View entering={bookingStepRowEntering(0)} style={localStyles.header}>
+            <Animated.View entering={bookingTimeRowEntering(0)} style={localStyles.header}>
               <Text style={localStyles.title} maxFontSizeMultiplier={1.35}>
                 {t('booking.selectTimeTitle', 'Choose a time')}
               </Text>
@@ -203,7 +204,7 @@ export default function TimeSelection({
               return (
                 <Animated.View
                   key={period.key}
-                  entering={bookingStepRowEntering(sectionDelay)}
+                  entering={bookingTimeRowEntering(sectionDelay)}
                   style={localStyles.section}
                 >
                   {/* Compact period label */}
@@ -229,7 +230,7 @@ export default function TimeSelection({
 
             {/* Waitlist nudge – shown when slots exist but none suit the user */}
             {onWaitlist && (
-              <Animated.View entering={bookingStepRowEntering(runningDelay)} style={localStyles.waitlistRow}>
+              <Animated.View entering={bookingTimeRowEntering(runningDelay)} style={localStyles.waitlistRow}>
                 <View style={localStyles.waitlistDivider} />
                 <Text style={localStyles.waitlistHint}>
                   {t('booking.noSuitableTime', 'לא מצאת שעה מתאימה?')}

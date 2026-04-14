@@ -6,12 +6,12 @@ import {
   TouchableOpacity,
   Platform,
   Alert,
-  I18nManager,
-  Modal,
+  ActivityIndicator,
 } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from 'react-native-reanimated';
 import {
   BottomSheetModal,
-  BottomSheetScrollView,
+  BottomSheetView,
   BottomSheetBackdrop,
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
@@ -23,18 +23,180 @@ import { useAuthStore } from '@/stores/authStore';
 import { useWaitlistStore } from '@/stores/waitlistStore';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import TimePeriodSelector, { TimePeriod } from '@/components/TimePeriodSelector';
-import BookingSuccessAnimatedOverlay, {
-  type SuccessLine,
-} from '@/components/book-appointment/BookingSuccessAnimatedOverlay';
 import { isRtlLanguage, toBcp47Locale } from '@/lib/i18nLocale';
 import { bidiIsolateLtrValue, bidiRtlLabelWithColon } from '@/lib/utils/rtlPunctuation';
-import { getSelectableTimePeriodsForDate } from '@/lib/utils/waitlistTimePeriods';
+import {
+  getSelectableTimePeriodsForDate,
+  type WaitlistDayWindow,
+} from '@/lib/utils/waitlistTimePeriods';
 import { formatWaitlistSuccessSubheadDate } from '@/lib/utils/formatWaitlistSuccessSubheadDate';
+
+/** In-sheet success (same rhythm as `BookingSummarySheet` after booking). */
+function WaitlistInlineSuccessView({
+  primaryColor,
+  textPrimary,
+  textSecondary,
+  headline,
+  dateLine,
+  serviceLabel,
+  serviceValue,
+  windowLabel,
+  windowValue,
+  notify,
+  gotItLabel,
+  onGotIt,
+}: {
+  primaryColor: string;
+  textPrimary: string;
+  textSecondary: string;
+  headline: string;
+  dateLine: string;
+  serviceLabel: string;
+  serviceValue: string;
+  windowLabel: string;
+  windowValue: string;
+  notify: string;
+  gotItLabel: string;
+  onGotIt: () => void;
+}) {
+  const fade = useSharedValue(0);
+  const checkScale = useSharedValue(0);
+
+  useEffect(() => {
+    fade.value = withTiming(1, { duration: 300 });
+    checkScale.value = withDelay(140, withSpring(1, { damping: 11, stiffness: 155 }));
+  }, [fade, checkScale]);
+
+  const rootStyle = useAnimatedStyle(() => ({
+    opacity: fade.value,
+  }));
+  const checkStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: checkScale.value }],
+  }));
+
+  return (
+    <Animated.View style={[inlineSuccessStyles.root, rootStyle]}>
+      <Animated.View style={[inlineSuccessStyles.checkWrap, checkStyle]}>
+        <Ionicons name="checkmark-circle" size={72} color={primaryColor} />
+      </Animated.View>
+      <Text style={[inlineSuccessStyles.title, { color: primaryColor }]} maxFontSizeMultiplier={1.25}>
+        {headline}
+      </Text>
+      <Text
+        style={[inlineSuccessStyles.dateLine, { color: textSecondary }]}
+        maxFontSizeMultiplier={1.2}
+      >
+        {dateLine}
+      </Text>
+      <View style={inlineSuccessStyles.meta}>
+        <Text style={[inlineSuccessStyles.metaLabel, { color: textSecondary }]}>{serviceLabel}</Text>
+        <Text style={[inlineSuccessStyles.metaValue, { color: textPrimary }]} numberOfLines={2}>
+          {serviceValue}
+        </Text>
+        <View style={inlineSuccessStyles.divider} />
+        <Text style={[inlineSuccessStyles.metaLabel, { color: textSecondary }]}>{windowLabel}</Text>
+        <Text style={[inlineSuccessStyles.metaValue, { color: textPrimary }]} numberOfLines={2}>
+          {windowValue}
+        </Text>
+      </View>
+      <Text
+        style={[inlineSuccessStyles.notify, { color: textSecondary }]}
+        maxFontSizeMultiplier={1.15}
+      >
+        {notify}
+      </Text>
+      <TouchableOpacity
+        activeOpacity={0.88}
+        onPress={onGotIt}
+        style={[inlineSuccessStyles.gotItBtn, { backgroundColor: primaryColor }]}
+        accessibilityRole="button"
+        accessibilityLabel={gotItLabel}
+      >
+        <Text style={inlineSuccessStyles.gotItText}>{gotItLabel}</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+const inlineSuccessStyles = StyleSheet.create({
+  root: {
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingHorizontal: 8,
+    minHeight: 360,
+    gap: 8,
+  },
+  checkWrap: {
+    marginBottom: 4,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '800',
+    textAlign: 'center',
+    letterSpacing: -0.3,
+    lineHeight: 26,
+  },
+  dateLine: {
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: -0.1,
+    marginBottom: 4,
+  },
+  meta: {
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+    width: '100%',
+  },
+  metaLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  metaValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+    letterSpacing: -0.2,
+  },
+  divider: {
+    width: 32,
+    height: 1,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+    marginVertical: 6,
+  },
+  notify: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginTop: 6,
+    paddingHorizontal: 8,
+  },
+  gotItBtn: {
+    marginTop: 14,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 200,
+  },
+  gotItText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+});
 
 interface Props {
   visible: boolean;
   onClose: () => void;
-  /** After fullscreen waitlist success — e.g. go to client home */
+  /** After in-sheet waitlist success — "Got it" — e.g. go to client home */
   onWaitlistSuccessGotIt?: () => void;
   selectedDate: string;
   serviceName: string;
@@ -42,8 +204,6 @@ interface Props {
   /** Periods that already have available slots — excluded from the waitlist options. */
   unavailablePeriods?: TimePeriod[];
 }
-
-const SNAP_POINTS = ['68%', '92%'];
 
 export default function WaitlistBottomSheet({
   visible,
@@ -62,34 +222,26 @@ export default function WaitlistBottomSheet({
 
   const sheetRef = useRef<BottomSheetModal>(null);
 
-  const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod | null>(null);
+  const [selectedWindows, setSelectedWindows] = useState<WaitlistDayWindow[]>([]);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successAnimKey, setSuccessAnimKey] = useState(0);
   /** Snapshot so success copy stays valid if local state resets before the modal paints. */
   const [successSnapshot, setSuccessSnapshot] = useState<{
-    period: TimePeriod;
+    periods: WaitlistDayWindow[];
     dateStr: string;
     service: string;
   } | null>(null);
 
-  const allowedPeriods = useMemo(() => {
+  const allowedPeriods = useMemo((): WaitlistDayWindow[] => {
     const base = getSelectableTimePeriodsForDate(selectedDate);
-    if (!unavailablePeriods || unavailablePeriods.length === 0) return base;
-    // Remove periods that already have available slots — no point joining waitlist for those.
-    // Keep 'any' only if at least one period is actually unavailable (i.e., not all are covered).
-    const filtered = base.filter((p) => !unavailablePeriods.includes(p));
-    // If every specific period is covered, also remove 'any' since all windows are available.
-    const specificCovered = (['morning', 'afternoon', 'evening'] as TimePeriod[]).every(
-      (p) => unavailablePeriods.includes(p) || !base.includes(p)
-    );
-    if (specificCovered) return filtered.filter((p) => p !== 'any');
-    return filtered;
+    if (!unavailablePeriods?.length) return base;
+    return base.filter((p) => !unavailablePeriods.includes(p as TimePeriod));
   }, [selectedDate, unavailablePeriods]);
 
   // Open / close in response to `visible` prop
   useEffect(() => {
     if (visible) {
-      setSelectedPeriod(null);
+      setSelectedWindows([]);
       setShowSuccess(false);
       setSuccessSnapshot(null);
       sheetRef.current?.present();
@@ -100,10 +252,8 @@ export default function WaitlistBottomSheet({
 
   useEffect(() => {
     if (!visible) return;
-    if (selectedPeriod && !allowedPeriods.includes(selectedPeriod)) {
-      setSelectedPeriod(null);
-    }
-  }, [visible, allowedPeriods, selectedPeriod]);
+    setSelectedWindows((prev) => prev.filter((p) => allowedPeriods.includes(p)));
+  }, [visible, allowedPeriods]);
 
   const handleDismiss = useCallback(() => {
     onClose();
@@ -138,16 +288,7 @@ export default function WaitlistBottomSheet({
       ? t('waitlist.anyService', 'Any available service')
       : serviceName;
 
-  const successPeriodKey = useMemo(() => {
-    const p = successSnapshot?.period ?? selectedPeriod;
-    if (p === 'morning') return 'time_period.morning';
-    if (p === 'afternoon') return 'time_period.afternoon';
-    if (p === 'evening') return 'time_period.evening';
-    if (p === 'any') return 'time_period.any';
-    return '';
-  }, [successSnapshot?.period, selectedPeriod]);
-
-  const successLines = useMemo((): SuccessLine[] => {
+  const waitlistSuccessCopy = useMemo(() => {
     const dateStr = successSnapshot?.dateStr ?? selectedDate;
     const svc =
       successSnapshot?.service != null
@@ -155,60 +296,43 @@ export default function WaitlistBottomSheet({
           ? t('waitlist.anyService', 'Any available service')
           : successSnapshot.service
         : serviceDisplay;
-    if (!showSuccess || !dateStr || !successPeriodKey) return [];
+    const periodsForCopy =
+      successSnapshot?.periods?.length ? successSnapshot.periods : selectedWindows;
+    if (!showSuccess || !successSnapshot || !dateStr || periodsForCopy.length === 0) return null;
     const langRtl = isRtlLanguage(i18n?.language);
     const serviceLabel = t('booking.field.service', 'Service');
     const windowLabel = t('waitlist.preferredWindow', 'Preferred time');
-    const periodName = t(successPeriodKey as never);
+    const periodName = periodsForCopy.map((p) => t(`time_period.${p}` as never)).join(' · ');
     const notifyRaw = t(
       'waitlist.successAnimatedNotify',
       "We'll let you know as soon as\na slot opens in the time you chose"
     );
-
-    return [
-      { variant: 'headline', text: t('waitlist.successAnimatedHeadline', "You're on the waitlist") },
-      {
-        variant: 'subheadline',
-        text: t('waitlist.successForDateLine', 'לתאריך {{date}}', {
-          date: formatWaitlistSuccessSubheadDate(dateStr, toBcp47Locale(i18n?.language)),
-        }),
-      },
-      {
-        variant: 'detailLabel',
-        text: langRtl ? bidiRtlLabelWithColon(serviceLabel) : `${serviceLabel}:`,
-      },
-      {
-        variant: 'detailValue',
-        text: langRtl ? bidiIsolateLtrValue(svc) : svc,
-      },
-      {
-        variant: 'detailLabel',
-        text: langRtl ? bidiRtlLabelWithColon(windowLabel) : `${windowLabel}:`,
-      },
-      {
-        variant: 'detailValue',
-        text: langRtl ? bidiIsolateLtrValue(periodName) : periodName,
-      },
-      {
-        variant: 'emphasis',
-        text: notifyRaw,
-      },
-    ];
+    return {
+      headline: t('waitlist.successAnimatedHeadline', "You're on the waitlist"),
+      dateLine: t('waitlist.successForDateLine', 'לתאריך {{date}}', {
+        date: formatWaitlistSuccessSubheadDate(dateStr, toBcp47Locale(i18n?.language)),
+      }),
+      serviceLabel: langRtl ? bidiRtlLabelWithColon(serviceLabel) : `${serviceLabel}:`,
+      serviceValue: langRtl ? bidiIsolateLtrValue(svc) : svc,
+      windowLabel: langRtl ? bidiRtlLabelWithColon(windowLabel) : `${windowLabel}:`,
+      windowValue: langRtl ? bidiIsolateLtrValue(periodName) : periodName,
+      notify: notifyRaw,
+    };
   }, [
     showSuccess,
     successSnapshot,
     selectedDate,
-    successPeriodKey,
+    selectedWindows,
     serviceDisplay,
     t,
     i18n?.language,
   ]);
 
   const handleSubmit = async () => {
-    if (!selectedPeriod) {
+    if (selectedWindows.length === 0) {
       Alert.alert(
         t('error.generic', 'Error'),
-        t('waitlist.selectPeriod', 'Please select a preferred time period')
+        t('waitlist.selectAtLeastOneWindow', 'Select at least one time window')
       );
       return;
     }
@@ -226,20 +350,17 @@ export default function WaitlistBottomSheet({
         user.phone,
         serviceName || 'General service',
         selectedDate,
-        selectedPeriod,
+        selectedWindows,
         barberId || undefined
       );
       if (success) {
         setSuccessSnapshot({
-          period: selectedPeriod,
+          periods: [...selectedWindows],
           dateStr: selectedDate,
           service: serviceName || 'General service',
         });
         setSuccessAnimKey((k) => k + 1);
         setShowSuccess(true);
-        try {
-          sheetRef.current?.dismiss();
-        } catch {}
       } else {
         Alert.alert(
           t('error.generic', 'Error'),
@@ -253,8 +374,6 @@ export default function WaitlistBottomSheet({
       );
     }
   };
-
-  const isRTL = I18nManager.isRTL;
 
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
@@ -289,145 +408,127 @@ export default function WaitlistBottomSheet({
     <>
       <BottomSheetModal
         ref={sheetRef}
-        snapPoints={SNAP_POINTS}
-        index={0}
+        enableDynamicSizing
         onDismiss={handleDismiss}
         backdropComponent={renderBackdrop}
         backgroundComponent={sheetBg}
         handleIndicatorStyle={{ backgroundColor: `${colors.text}30`, width: 40 }}
-        enablePanDownToClose
-        enableDynamicSizing={false}
+        enablePanDownToClose={!showSuccess}
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
       >
-        <BottomSheetScrollView
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 16 }]}
-          showsVerticalScrollIndicator={false}
+        <BottomSheetView
+          style={[styles.sheetBody, { paddingBottom: Math.max(insets.bottom, 12) + 10 }]}
         >
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={[styles.headerTitle, { color: colors.text }]}>
-              {t('waitlist.joinSheetTitle', 'הצטרפות לרשימת המתנה')}
-            </Text>
-            <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-              {t('waitlist.joinSheetSubtitle', 'בחר חלון זמן מועדף')}
-            </Text>
-          </View>
-
-          {/* Date + service info card */}
-          <View
-            style={[
-              styles.infoCard,
-              { backgroundColor: colors.surface, borderColor: `${colors.primary}18` },
-            ]}
-          >
-            {/* Date row */}
-            <View style={styles.infoRow}>
-              <View style={[styles.infoIconBubble, { backgroundColor: `${colors.primary}12` }]}>
-                <Ionicons name="calendar-outline" size={18} color={colors.primary} />
-              </View>
-              <View style={styles.infoTextBlock}>
-                <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
-                  {t('booking.field.date', 'תאריך')}
-                </Text>
-                <Text style={[styles.infoValue, { color: colors.text }]}>
-                  {formatDate(selectedDate)}
-                </Text>
-              </View>
-            </View>
-
-            <View style={[styles.infoDivider, { backgroundColor: `${colors.primary}12` }]} />
-
-            {/* Service row */}
-            <View style={styles.infoRow}>
-              <View style={[styles.infoIconBubble, { backgroundColor: `${colors.primary}12` }]}>
-                <Ionicons name="briefcase-outline" size={18} color={colors.primary} />
-              </View>
-              <View style={styles.infoTextBlock}>
-                <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>
-                  {t('booking.field.service', 'שירות')}
-                </Text>
-                <Text style={[styles.infoValue, { color: colors.text }]}>
-                  {serviceDisplay}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Time period selector — header hidden, shown inline */}
-          <View style={styles.selectorWrap}>
-            <TimePeriodSelector
-              selectedPeriod={selectedPeriod}
-              onSelectPeriod={setSelectedPeriod}
-              disabled={isLoading}
-              hideHeader
-              allowedPeriods={allowedPeriods}
+          {showSuccess && waitlistSuccessCopy ? (
+            <WaitlistInlineSuccessView
+              key={successAnimKey}
+              primaryColor={colors.primary}
+              textPrimary={colors.text}
+              textSecondary={colors.textSecondary}
+              headline={waitlistSuccessCopy.headline}
+              dateLine={waitlistSuccessCopy.dateLine}
+              serviceLabel={waitlistSuccessCopy.serviceLabel}
+              serviceValue={waitlistSuccessCopy.serviceValue}
+              windowLabel={waitlistSuccessCopy.windowLabel}
+              windowValue={waitlistSuccessCopy.windowValue}
+              notify={waitlistSuccessCopy.notify}
+              gotItLabel={t('booking.gotIt', 'הבנתי')}
+              onGotIt={handleWaitlistSuccessDismiss}
             />
-          </View>
+          ) : (
+            <>
+              {/* Header */}
+              <View style={styles.header}>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>
+                  {t('waitlist.joinSheetTitle', 'הצטרפות לרשימת המתנה')}
+                </Text>
+                <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
+                  {t('waitlist.joinSheetSubtitleMulti', 'Choose one or more windows')}
+                </Text>
+              </View>
 
-          {/* Submit button */}
-          <TouchableOpacity
-            activeOpacity={0.88}
-            onPress={handleSubmit}
-            disabled={isLoading || !selectedPeriod}
-            style={styles.submitTouch}
-          >
-            <LinearGradient
-              colors={
-                selectedPeriod
-                  ? [colors.primary, colors.secondary || colors.primary]
-                  : ['#C7C7CC', '#AEAEB2']
-              }
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.submitGradient}
-            >
-              {isLoading ? (
-                <Ionicons name="hourglass-outline" size={20} color="#FFFFFF" />
-              ) : (
-                <>
-                  <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
-                  <Text style={styles.submitText}>{t('waitlist.joinButton', 'הצטרף לרשימה')}</Text>
-                </>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
-        </BottomSheetScrollView>
+              {/* Date + service — compact primary chips */}
+              <View style={styles.infoTagStack}>
+                <View style={[styles.infoTag, { backgroundColor: colors.primary }]}>
+                  <Text style={styles.infoTagText} maxFontSizeMultiplier={1.15}>
+                    {formatDate(selectedDate)}
+                  </Text>
+                </View>
+                <View style={[styles.infoTag, styles.infoTagService, { backgroundColor: colors.primary }]}>
+                  <Text
+                    style={styles.infoTagText}
+                    numberOfLines={2}
+                    maxFontSizeMultiplier={1.12}
+                  >
+                    {serviceDisplay}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Time period selector — header hidden, shown inline */}
+              <View style={styles.selectorWrap}>
+                <TimePeriodSelector
+                  multiSelect
+                  selectedWindows={selectedWindows}
+                  onChangeWindows={setSelectedWindows}
+                  disabled={isLoading}
+                  hideHeader
+                  allowedPeriods={allowedPeriods}
+                />
+              </View>
+
+              {/* Submit button */}
+              <TouchableOpacity
+                activeOpacity={0.88}
+                onPress={handleSubmit}
+                disabled={isLoading || selectedWindows.length === 0}
+                style={styles.submitTouch}
+              >
+                <LinearGradient
+                  colors={
+                    selectedWindows.length > 0
+                      ? [colors.primary, colors.secondary || colors.primary]
+                      : ['#C7C7CC', '#AEAEB2']
+                  }
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.submitGradient}
+                >
+                  {isLoading ? (
+                    <>
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                      <Text style={styles.submitText}>
+                        {t('waitlist.joinButton', 'הצטרפות לרשימה')}
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                      <Text style={styles.submitText}>
+                        {t('waitlist.joinButton', 'הצטרפות לרשימה')}
+                      </Text>
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+            </>
+          )}
+        </BottomSheetView>
       </BottomSheetModal>
-
-      {/* Full-screen success — must use Modal so it appears above @gorhom/bottom-sheet portal */}
-      <Modal
-        visible={showSuccess}
-        animationType="fade"
-        transparent
-        statusBarTranslucent
-        onRequestClose={handleWaitlistSuccessDismiss}
-      >
-        {showSuccess ? (
-          <BookingSuccessAnimatedOverlay
-            key={successAnimKey}
-            lines={successLines}
-            rtl={isRTL}
-            accentColor={colors.primary}
-            centerMeta
-            gotItLabel={t('booking.gotIt', 'הבנתי')}
-            onDismiss={handleWaitlistSuccessDismiss}
-          />
-        ) : null}
-      </Modal>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollContent: {
+  sheetBody: {
     paddingHorizontal: 20,
     paddingTop: 4,
   },
   header: {
     alignItems: 'center',
-    paddingTop: 12,
-    paddingBottom: 20,
+    paddingTop: 8,
+    paddingBottom: 14,
     gap: 6,
   },
   headerTitle: {
@@ -442,61 +543,53 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     opacity: 0.8,
   },
-  infoCard: {
-    borderRadius: 18,
-    borderWidth: 1,
+  infoTagStack: {
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignContent: 'center',
+    gap: 8,
+    marginBottom: 6,
     paddingVertical: 4,
-    paddingHorizontal: 16,
-    marginBottom: 4,
+  },
+  infoTag: {
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
+        shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.06,
-        shadowRadius: 8,
+        shadowRadius: 4,
       },
-      android: { elevation: 2 },
+      android: { elevation: 1 },
     }),
   },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    gap: 12,
+  /** Long service names: cap width so chips stay “tag-sized”, wrap to 2 lines max */
+  infoTagService: {
+    maxWidth: '88%',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
   },
-  infoTextBlock: {
-    flex: 1,
-    alignItems: 'flex-start',
-    gap: 2,
-  },
-  infoLabel: {
-    fontSize: 11,
-    fontWeight: '500',
-    textAlign: 'left',
-    letterSpacing: 0.1,
-  },
-  infoValue: {
-    fontSize: 15,
-    fontWeight: '700',
-    textAlign: 'left',
-    letterSpacing: -0.2,
-  },
-  infoIconBubble: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  infoDivider: {
-    height: 1,
-    marginHorizontal: -4,
+  infoTagText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: -0.1,
+    lineHeight: 16,
   },
   selectorWrap: {
-    marginTop: 8,
+    marginTop: 4,
   },
   submitTouch: {
-    marginTop: 16,
+    marginTop: 12,
     borderRadius: 18,
     overflow: 'hidden',
     ...Platform.select({

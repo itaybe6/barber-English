@@ -1,9 +1,11 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, Pressable, StyleSheet, Platform } from 'react-native';
+import { BOOKING_TIME_PERIOD_EMOJI } from '@/constants/bookingTimePeriodEmoji';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
+import type { WaitlistDayWindow } from '@/lib/utils/waitlistTimePeriods';
 
 export type TimePeriod = 'morning' | 'afternoon' | 'evening' | 'any';
 
@@ -51,29 +53,60 @@ const timePeriodOptions: TimePeriodOption[] = [
   },
 ];
 
+const WINDOW_ORDER: Record<WaitlistDayWindow, number> = {
+  morning: 0,
+  afternoon: 1,
+  evening: 2,
+};
+
+function sortWindows(w: WaitlistDayWindow[]): WaitlistDayWindow[] {
+  return [...w].sort((a, b) => WINDOW_ORDER[a] - WINDOW_ORDER[b]);
+}
+
 interface TimePeriodSelectorProps {
-  selectedPeriod: TimePeriod | null;
-  onSelectPeriod: (period: TimePeriod) => void;
   disabled?: boolean;
   hideHeader?: boolean;
   /** When set, only these periods are listed (e.g. same-day: drop windows that already ended). */
   allowedPeriods?: TimePeriod[] | null;
+  /** Waitlist: toggle multiple day windows (morning / afternoon / evening only). */
+  multiSelect?: boolean;
+  selectedWindows?: WaitlistDayWindow[];
+  onChangeWindows?: (next: WaitlistDayWindow[]) => void;
+  /** Single-choice mode (ignored when `multiSelect` is true). */
+  selectedPeriod?: TimePeriod | null;
+  onSelectPeriod?: (period: TimePeriod) => void;
 }
 
 export default function TimePeriodSelector({
-  selectedPeriod,
-  onSelectPeriod,
   disabled = false,
   hideHeader = false,
   allowedPeriods = null,
+  multiSelect = false,
+  selectedWindows = [],
+  onChangeWindows,
+  selectedPeriod = null,
+  onSelectPeriod,
 }: TimePeriodSelectorProps) {
   const { t } = useTranslation();
   const { colors } = useBusinessColors();
 
-  const allowed =
-    allowedPeriods == null ? null : new Set<TimePeriod>(allowedPeriods);
-  const optionsToShow =
-    allowed == null ? timePeriodOptions : timePeriodOptions.filter((o) => allowed.has(o.value));
+  const allowed = allowedPeriods == null ? null : new Set<TimePeriod>(allowedPeriods);
+
+  const optionsToShow = (() => {
+    const pool = multiSelect
+      ? timePeriodOptions.filter((o) => o.value !== 'any')
+      : timePeriodOptions;
+    if (allowed == null) return pool;
+    return pool.filter((o) => allowed.has(o.value));
+  })();
+
+  const toggleWindow = (w: WaitlistDayWindow) => {
+    if (!onChangeWindows || disabled) return;
+    const next = selectedWindows.includes(w)
+      ? selectedWindows.filter((x) => x !== w)
+      : sortWindows([...selectedWindows, w]);
+    onChangeWindows(next);
+  };
 
   return (
     <View style={styles.outer}>
@@ -87,18 +120,25 @@ export default function TimePeriodSelector({
           </View>
 
           <Text style={[styles.title, { color: colors.text }]}>
-            {t('waitlist.selectPeriod', 'Please select a preferred time period')}
+            {multiSelect
+              ? t('waitlist.selectPeriodMulti', 'Choose one or more time windows')
+              : t('waitlist.selectPeriod', 'Please select a preferred time period')}
           </Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            {t(
-              'waitlist.selectPeriodSubtitle',
-              "We'll notify you when a slot opens in your preferred time period"
-            )}
+            {multiSelect
+              ? t(
+                  'waitlist.selectPeriodsSubtitle',
+                  "We'll notify you when a slot opens in any of the windows you select"
+                )
+              : t(
+                  'waitlist.selectPeriodSubtitle',
+                  "We'll notify you when a slot opens in your preferred time period"
+                )}
           </Text>
         </>
       )}
 
-      <View style={styles.optionsStack}>
+      <View style={[styles.optionsStack, multiSelect && styles.optionsStackRow]}>
         {optionsToShow.length === 0 ? (
           <Text style={[styles.emptyHint, { color: colors.textSecondary }]}>
             {t(
@@ -108,16 +148,152 @@ export default function TimePeriodSelector({
           </Text>
         ) : null}
         {optionsToShow.map((option) => {
-          const selected = selectedPeriod === option.value;
+          const isWindow = option.value === 'morning' || option.value === 'afternoon' || option.value === 'evening';
+          const selected = multiSelect
+            ? isWindow && selectedWindows.includes(option.value as WaitlistDayWindow)
+            : selectedPeriod === option.value;
+
+          const isMultiWindowCard = multiSelect && isWindow;
+
+          const cardShell = (
+            <>
+              {selected && !isMultiWindowCard && (
+                <LinearGradient
+                  colors={[`${colors.primary}22`, 'transparent']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                />
+              )}
+              {multiSelect && isWindow ? (
+                <>
+                  <View style={[styles.iconRingMulti, { backgroundColor: option.accentSoft }]}>
+                    <Text style={styles.periodEmojiMulti} maxFontSizeMultiplier={1.25}>
+                      {BOOKING_TIME_PERIOD_EMOJI[option.value as WaitlistDayWindow]}
+                    </Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.optionLabelMulti,
+                      { color: colors.text },
+                      selected && { color: colors.primary, fontWeight: '700' },
+                      disabled && styles.disabledText,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {t(option.label as never)}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.optionDescriptionMulti,
+                      { color: colors.textSecondary },
+                      selected && { color: colors.primary, opacity: 0.85 },
+                      disabled && styles.disabledText,
+                    ]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.85}
+                  >
+                    {t(option.rangeKey as never)}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <View style={[styles.iconRing, { backgroundColor: option.accentSoft }]}>
+                    <Ionicons name={option.icon} size={22} color={option.accent} />
+                  </View>
+
+                  <View style={styles.optionTextBlock}>
+                    <Text
+                      style={[
+                        styles.optionLabel,
+                        { color: colors.text },
+                        selected && { color: colors.primary, fontWeight: '700' },
+                        disabled && styles.disabledText,
+                      ]}
+                    >
+                      {t(option.label as never)}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.optionDescription,
+                        { color: colors.textSecondary },
+                        selected && { color: colors.primary, opacity: 0.85 },
+                        disabled && styles.disabledText,
+                      ]}
+                    >
+                      {t(option.rangeKey as never)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.trailingSlot}>
+                    {selected ? (
+                      <LinearGradient
+                        colors={[colors.primary, colors.secondary || colors.primary]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.checkBubble}
+                      >
+                        <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+                      </LinearGradient>
+                    ) : (
+                      <View style={[styles.emptyRing, { borderColor: `${colors.text}18` }]} />
+                    )}
+                  </View>
+                </>
+              )}
+            </>
+          );
+
+          /**
+           * Waitlist windows: plain `View` holds white + rounded rect — RN `TouchableOpacity` often
+           * fails to paint backgrounds inside @gorhom/bottom-sheet (gesture-handler stack).
+           */
+          if (isMultiWindowCard) {
+            return (
+              <View
+                key={option.value}
+                collapsable={false}
+                style={[styles.cardTouchable, styles.cardTouchableMulti, styles.multiWindowCube]}
+              >
+                <Pressable
+                  disabled={disabled}
+                  onPress={() => {
+                    if (disabled) return;
+                    toggleWindow(option.value as WaitlistDayWindow);
+                  }}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: !!selected }}
+                  android_ripple={{ color: 'rgba(0,0,0,0.1)' }}
+                  style={({ pressed }) => [
+                    styles.multiWindowCubeInner,
+                    disabled && styles.disabledOption,
+                    pressed && !disabled && styles.multiWindowCubePressed,
+                  ]}
+                >
+                  {cardShell}
+                </Pressable>
+              </View>
+            );
+          }
+
           return (
             <TouchableOpacity
               key={option.value}
               activeOpacity={disabled ? 1 : 0.88}
               disabled={disabled}
-              onPress={() => !disabled && onSelectPeriod(option.value)}
-              style={styles.cardTouchable}
+              onPress={() => {
+                if (disabled) return;
+                if (!multiSelect && onSelectPeriod) {
+                  onSelectPeriod(option.value);
+                }
+              }}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: !!selected }}
+              style={[styles.cardTouchable]}
             >
               <View
+                collapsable={false}
                 style={[
                   styles.optionCard,
                   {
@@ -128,55 +304,7 @@ export default function TimePeriodSelector({
                   selected && styles.optionCardSelected,
                 ]}
               >
-                {selected && (
-                  <LinearGradient
-                    colors={[`${colors.primary}22`, 'transparent']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                  />
-                )}
-                <View style={[styles.iconRing, { backgroundColor: option.accentSoft }]}>
-                  <Ionicons name={option.icon} size={22} color={option.accent} />
-                </View>
-
-                <View style={styles.optionTextBlock}>
-                  <Text
-                    style={[
-                      styles.optionLabel,
-                      { color: colors.text },
-                      selected && { color: colors.primary, fontWeight: '700' },
-                      disabled && styles.disabledText,
-                    ]}
-                  >
-                    {t(option.label as never)}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.optionDescription,
-                      { color: colors.textSecondary },
-                      selected && { color: colors.primary, opacity: 0.85 },
-                      disabled && styles.disabledText,
-                    ]}
-                  >
-                    {t(option.rangeKey as never)}
-                  </Text>
-                </View>
-
-                <View style={styles.trailingSlot}>
-                  {selected ? (
-                    <LinearGradient
-                      colors={[colors.primary, colors.secondary]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.checkBubble}
-                    >
-                      <Ionicons name="checkmark" size={18} color="#FFFFFF" />
-                    </LinearGradient>
-                  ) : (
-                    <View style={[styles.emptyRing, { borderColor: `${colors.text}18` }]} />
-                  )}
-                </View>
+                {cardShell}
               </View>
             </TouchableOpacity>
           );
@@ -226,8 +354,52 @@ const styles = StyleSheet.create({
   optionsStack: {
     gap: 11,
   },
+  optionsStackRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'stretch',
+  },
   cardTouchable: {
     borderRadius: 18,
+  },
+  cardTouchableMulti: {
+    flex: 1,
+    minWidth: 0,
+    alignSelf: 'stretch',
+  },
+  /**
+   * Each waitlist window: white rounded tile.
+   * Do not use `overflow: 'hidden'` here — it clips the drop shadow on iOS.
+   */
+  multiWindowCube: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.18,
+        shadowRadius: 14,
+      },
+      android: {
+        elevation: 7,
+      },
+    }),
+  },
+  multiWindowCubeInner: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    gap: 6,
+    minHeight: 108,
+    width: '100%',
+  },
+  multiWindowCubePressed: {
+    opacity: 0.94,
   },
   optionCard: {
     flexDirection: 'row',
@@ -268,6 +440,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginEnd: 14,
+  },
+  iconRingMulti: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  periodEmojiMulti: {
+    fontSize: 22,
+    lineHeight: 26,
+    textAlign: 'center',
+  },
+  optionLabelMulti: {
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+    width: '100%',
+  },
+  optionDescriptionMulti: {
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    width: '100%',
+    opacity: 0.9,
   },
   optionTextBlock: {
     flex: 1,

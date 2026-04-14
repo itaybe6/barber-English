@@ -15,7 +15,9 @@ function formatWaitlistAdminNotifyDate(isoDate: string): string {
   });
 }
 
-function waitlistTimePeriodLabel(period: 'morning' | 'afternoon' | 'evening' | 'any'): string {
+export type WaitlistInsertWindow = 'morning' | 'afternoon' | 'evening';
+
+function waitlistTimePeriodLabel(period: WaitlistInsertWindow | 'any'): string {
   const key =
     period === 'morning'
       ? 'time_period.morning'
@@ -25,6 +27,10 @@ function waitlistTimePeriodLabel(period: 'morning' | 'afternoon' | 'evening' | '
           ? 'time_period.evening'
           : 'time_period.any';
   return i18n.t(key);
+}
+
+function formatJoinedPeriodLabels(periods: WaitlistInsertWindow[]): string {
+  return periods.map((p) => waitlistTimePeriodLabel(p)).join(', ');
 }
 
 interface WaitlistStore {
@@ -39,75 +45,126 @@ interface WaitlistStore {
     clientPhone: string,
     serviceName: string,
     requestedDate: string,
-    timePeriod: 'morning' | 'afternoon' | 'evening' | 'any',
+    timePeriods: WaitlistInsertWindow[],
     userId?: string
   ) => Promise<boolean>;
-  
+
   getClientWaitlistEntries: (clientPhone: string) => Promise<void>;
   removeFromWaitlist: (entryId: string) => Promise<boolean>;
   clearError: () => void;
   reset: () => void;
 }
 
-export const useWaitlistStore = create<WaitlistStore>((set, get) => ({
+export const useWaitlistStore = create<WaitlistStore>((set) => ({
   // Initial state
   clientWaitlistEntries: [],
   isLoading: false,
   error: null,
 
-  // Add client to waitlist
+  // Add client to waitlist (one DB row per window; skips windows already registered)
   addToWaitlist: async (
     clientName: string,
     clientPhone: string,
     serviceName: string,
     requestedDate: string,
-    timePeriod: 'morning' | 'afternoon' | 'evening' | 'any',
+    timePeriods: WaitlistInsertWindow[],
     userId?: string
   ) => {
     set({ isLoading: true, error: null });
-    
+
     try {
       const businessId = getBusinessId();
-      
-      // Check if client is already on waitlist for this date
-      const { data: existingEntry } = await supabase
+
+      const normalized = [...new Set(timePeriods)].filter(
+        (p): p is WaitlistInsertWindow => p === 'morning' || p === 'afternoon' || p === 'evening'
+      );
+      if (normalized.length === 0) {
+        set({
+          error: i18n.t('waitlist.selectAtLeastOneWindow', 'Select at least one time window'),
+          isLoading: false,
+        });
+        return false;
+      }
+
+      const { data: anyActive, error: anyActiveErr } = await supabase
         .from('waitlist_entries')
-        .select('*')
+        .select('id')
+        .eq('client_phone', clientPhone)
+        .eq('business_id', businessId)
+        .eq('status', 'waiting')
+        .limit(1);
+
+      if (anyActiveErr) {
+        console.error('Error checking existing waitlist:', anyActiveErr);
+        set({
+          error: i18n.t('waitlist.addError', 'An error occurred while adding to the waitlist'),
+          isLoading: false,
+        });
+        return false;
+      }
+
+      if (anyActive && anyActive.length > 0) {
+        set({
+          error: i18n.t(
+            'waitlist.mustLeaveWaitlistFirst',
+            'You are already on the waitlist. Leave it from the home screen before joining again.'
+          ),
+          isLoading: false,
+        });
+        return false;
+      }
+
+      const { data: existingRows, error: existingErr } = await supabase
+        .from('waitlist_entries')
+        .select('time_period')
         .eq('client_phone', clientPhone)
         .eq('requested_date', requestedDate)
         .eq('status', 'waiting')
-        .eq('business_id', businessId)
-        .single();
+        .eq('business_id', businessId);
 
-      if (existingEntry) {
-        set({ error: 'You are already on the waitlist for this date', isLoading: false });
+      if (existingErr) {
+        console.error('Error checking waitlist:', existingErr);
+        set({ error: i18n.t('waitlist.addError', 'An error occurred while adding to the waitlist'), isLoading: false });
         return false;
       }
 
-      const { data, error } = await supabase
-        .from('waitlist_entries')
-        .insert({
-          client_name: clientName,
-          client_phone: clientPhone,
-          service_name: serviceName,
-          requested_date: requestedDate,
-          time_period: timePeriod,
-          user_id: userId,
-          business_id: businessId,
-        })
-        .select()
-        .single();
+      const existing = new Set(
+        (existingRows || []).map((r: { time_period: string }) => r.time_period as WaitlistInsertWindow)
+      );
+      const toInsert = normalized.filter((p) => !existing.has(p));
+
+      if (toInsert.length === 0) {
+        set({
+          error: i18n.t(
+            'waitlist.alreadyRegisteredWindows',
+            'You are already on the waitlist for the selected time windows on this date'
+          ),
+          isLoading: false,
+        });
+        return false;
+      }
+
+      const rows = toInsert.map((time_period) => ({
+        client_name: clientName,
+        client_phone: clientPhone,
+        service_name: serviceName,
+        requested_date: requestedDate,
+        time_period,
+        user_id: userId,
+        business_id: businessId,
+      }));
+
+      const { data, error } = await supabase.from('waitlist_entries').insert(rows).select();
 
       if (error) {
         console.error('Error adding to waitlist:', error);
-        set({ error: 'An error occurred while adding to the waitlist', isLoading: false });
+        set({ error: i18n.t('waitlist.addError', 'An error occurred while adding to the waitlist'), isLoading: false });
         return false;
       }
 
-      if (data) {
-        // Add to local state
-        set(state => ({
-          clientWaitlistEntries: [...state.clientWaitlistEntries, data],
+      if (data?.length) {
+        set((state) => ({
+          clientWaitlistEntries: [...state.clientWaitlistEntries, ...data],
           isLoading: false,
         }));
         try {
@@ -116,12 +173,13 @@ export const useWaitlistStore = create<WaitlistStore>((set, get) => ({
               ? i18n.t('waitlist.anyService', 'Any available service')
               : serviceName;
           const title = i18n.t('admin.notify.waitlistJoinTitle', 'New client joined the waitlist');
+          const periodLabel = formatJoinedPeriodLabels(toInsert);
           const content = i18n.t('admin.notify.waitlistJoinBody', {
             clientName,
             clientPhone,
             serviceName: displayService,
             dateFormatted: formatWaitlistAdminNotifyDate(requestedDate),
-            periodLabel: waitlistTimePeriodLabel(timePeriod),
+            periodLabel,
           });
           if (userId) {
             notificationsApi
@@ -133,7 +191,7 @@ export const useWaitlistStore = create<WaitlistStore>((set, get) => ({
         } catch {}
         return true;
       }
-      
+
       set({ isLoading: false });
       return false;
     } catch (error) {
@@ -146,15 +204,18 @@ export const useWaitlistStore = create<WaitlistStore>((set, get) => ({
   // Get client's waitlist entries
   getClientWaitlistEntries: async (clientPhone: string) => {
     set({ isLoading: true, error: null });
-    
+
     try {
       const businessId = getBusinessId();
-      
+
       const { data, error } = await supabase
         .from('waitlist_entries')
-        .select('id, client_name, client_phone, requested_date, requested_time, service_name, status, notes, created_at, business_id')
+        .select(
+          'id, client_name, client_phone, requested_date, service_name, time_period, status, user_id, business_id, created_at, updated_at'
+        )
         .eq('client_phone', clientPhone)
         .eq('business_id', businessId)
+        .eq('status', 'waiting')
         .order('requested_date', { ascending: true })
         .order('created_at', { ascending: true })
         .limit(50);
@@ -175,10 +236,10 @@ export const useWaitlistStore = create<WaitlistStore>((set, get) => ({
   // Remove from waitlist
   removeFromWaitlist: async (entryId: string) => {
     set({ isLoading: true, error: null });
-    
+
     try {
       const businessId = getBusinessId();
-      
+
       const { error } = await supabase
         .from('waitlist_entries')
         .delete()
@@ -192,8 +253,8 @@ export const useWaitlistStore = create<WaitlistStore>((set, get) => ({
       }
 
       // Remove from local state
-      set(state => ({
-        clientWaitlistEntries: state.clientWaitlistEntries.filter(entry => entry.id !== entryId),
+      set((state) => ({
+        clientWaitlistEntries: state.clientWaitlistEntries.filter((entry) => entry.id !== entryId),
         isLoading: false,
       }));
       return true;
@@ -217,4 +278,4 @@ export const useWaitlistStore = create<WaitlistStore>((set, get) => ({
       error: null,
     });
   },
-})); 
+}));

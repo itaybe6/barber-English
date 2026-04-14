@@ -20,14 +20,17 @@ import { LinearGradient } from 'expo-linear-gradient';
 import BookingSuccessAnimatedOverlay, {
   type SuccessLine,
 } from '@/components/book-appointment/BookingSuccessAnimatedOverlay';
-import TimePeriodSelector, { TimePeriod } from '@/components/TimePeriodSelector';
+import TimePeriodSelector from '@/components/TimePeriodSelector';
 import { useWaitlistStore } from '@/stores/waitlistStore';
 import { isRtlLanguage, toBcp47Locale } from '@/lib/i18nLocale';
 import { bidiIsolateLtrValue, bidiRtlLabelWithColon } from '@/lib/utils/rtlPunctuation';
 import { useAuthStore } from '@/stores/authStore';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { getScrollContentPaddingBottomForFloatingClientTabBar } from '@/constants/clientTabBarInsets';
-import { getSelectableTimePeriodsForDate } from '@/lib/utils/waitlistTimePeriods';
+import {
+  getSelectableTimePeriodsForDate,
+  type WaitlistDayWindow,
+} from '@/lib/utils/waitlistTimePeriods';
 import { formatWaitlistSuccessSubheadDate } from '@/lib/utils/formatWaitlistSuccessSubheadDate';
 
 export default function WaitlistScreen() {
@@ -40,7 +43,7 @@ export default function WaitlistScreen() {
     barberId: string;
   };
 
-  const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod | null>(null);
+  const [selectedWindows, setSelectedWindows] = useState<WaitlistDayWindow[]>([]);
   const [showWaitlistSuccessModal, setShowWaitlistSuccessModal] = useState(false);
   const [waitlistSuccessAnimKey, setWaitlistSuccessAnimKey] = useState(0);
   const { user } = useAuthStore();
@@ -58,10 +61,8 @@ export default function WaitlistScreen() {
   );
 
   useEffect(() => {
-    if (selectedPeriod && !allowedPeriods.includes(selectedPeriod)) {
-      setSelectedPeriod(null);
-    }
-  }, [allowedPeriods, selectedPeriod]);
+    setSelectedWindows((prev) => prev.filter((p) => allowedPeriods.includes(p)));
+  }, [allowedPeriods]);
 
   const formatDate = useCallback(
     (dateString: string) => {
@@ -93,8 +94,11 @@ export default function WaitlistScreen() {
   const backIcon = I18nManager.isRTL ? 'chevron-forward' : 'chevron-back';
 
   const handleAddToWaitlist = async () => {
-    if (!selectedPeriod) {
-      Alert.alert(t('error.generic', 'Error'), t('waitlist.selectPeriod', 'Please select a preferred time period'));
+    if (selectedWindows.length === 0) {
+      Alert.alert(
+        t('error.generic', 'Error'),
+        t('waitlist.selectAtLeastOneWindow', 'Select at least one time window')
+      );
       return;
     }
 
@@ -114,7 +118,7 @@ export default function WaitlistScreen() {
         user.phone,
         serviceName,
         selectedDate,
-        selectedPeriod,
+        selectedWindows,
         barberId || undefined
       );
 
@@ -139,19 +143,8 @@ export default function WaitlistScreen() {
   const serviceDisplay =
     serviceName === 'General service' ? t('waitlist.anyService', 'Any available service') : serviceName;
 
-  const periodLabelKey =
-    selectedPeriod === 'morning'
-      ? 'time_period.morning'
-      : selectedPeriod === 'afternoon'
-        ? 'time_period.afternoon'
-        : selectedPeriod === 'evening'
-          ? 'time_period.evening'
-          : selectedPeriod === 'any'
-            ? 'time_period.any'
-            : '';
-
   const waitlistSuccessLines = useMemo((): SuccessLine[] => {
-    if (!showWaitlistSuccessModal || !selectedDate || !selectedPeriod || !periodLabelKey) {
+    if (!showWaitlistSuccessModal || !selectedDate || selectedWindows.length === 0) {
       return [];
     }
     const svc =
@@ -159,7 +152,7 @@ export default function WaitlistScreen() {
     const langRtl = isRtlLanguage(i18n?.language);
     const serviceLabel = t('booking.field.service', 'Service');
     const windowLabel = t('waitlist.preferredWindow', 'Preferred time');
-    const periodName = t(periodLabelKey as never);
+    const periodName = selectedWindows.map((p) => t(`time_period.${p}` as never)).join(' · ');
     const notifyRaw = t(
       'waitlist.successAnimatedNotify',
       "We'll let you know as soon as\na slot opens in the time you chose"
@@ -199,8 +192,7 @@ export default function WaitlistScreen() {
   }, [
     showWaitlistSuccessModal,
     selectedDate,
-    selectedPeriod,
-    periodLabelKey,
+    selectedWindows,
     serviceName,
     t,
     i18n?.language,
@@ -311,8 +303,9 @@ export default function WaitlistScreen() {
             </View>
 
             <TimePeriodSelector
-              selectedPeriod={selectedPeriod}
-              onSelectPeriod={setSelectedPeriod}
+              multiSelect
+              selectedWindows={selectedWindows}
+              onChangeWindows={setSelectedWindows}
               disabled={isLoading}
               allowedPeriods={allowedPeriods}
             />
@@ -321,10 +314,10 @@ export default function WaitlistScreen() {
               <TouchableOpacity
                 activeOpacity={0.92}
                 onPress={handleAddToWaitlist}
-                disabled={!selectedPeriod || isLoading}
+                disabled={selectedWindows.length === 0 || isLoading}
                 style={styles.ctaTouchable}
               >
-                {isLoading && selectedPeriod ? (
+                {isLoading && selectedWindows.length > 0 ? (
                   <LinearGradient
                     colors={[colors.primary, colors.secondary]}
                     start={{ x: 0, y: 0 }}
@@ -336,7 +329,7 @@ export default function WaitlistScreen() {
                       <Text style={styles.confirmButtonText}>{t('waitlist.adding', 'Adding to waitlist...')}</Text>
                     </View>
                   </LinearGradient>
-                ) : selectedPeriod ? (
+                ) : selectedWindows.length > 0 ? (
                   <LinearGradient
                     colors={[colors.primary, colors.secondary]}
                     start={{ x: 0, y: 0 }}
@@ -359,7 +352,7 @@ export default function WaitlistScreen() {
                     <View style={styles.buttonContent}>
                       <Ionicons name="time-outline" size={22} color={colors.textSecondary} />
                       <Text style={[styles.confirmButtonTextMuted, { color: colors.textSecondary }]}>
-                        {t('waitlist.selectPeriodFirst', 'Select a time period first')}
+                        {t('waitlist.selectWindowsFirst', 'Select one or more time windows')}
                       </Text>
                     </View>
                   </View>

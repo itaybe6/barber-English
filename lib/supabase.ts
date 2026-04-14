@@ -222,6 +222,10 @@ export interface WaitlistEntry {
   business_id: string;
   created_at: string;
   updated_at: string;
+  /** Filled client-side when resolving `user_id` → staff display name (not a DB column). */
+  staff_name?: string | null;
+  /** Filled client-side from `users.image_url` when resolving staff (not a DB column). */
+  staff_image_url?: string | null;
 }
 
 // Notification interface

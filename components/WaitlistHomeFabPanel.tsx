@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   I18nManager,
   Modal,
   Platform,
@@ -12,8 +13,15 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  LinearTransition,
+  SlideInDown,
+  ZoomIn,
+} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -24,27 +32,44 @@ import { useColors, usePrimaryContrast } from '@/src/theme/ThemeProvider';
 export interface WaitlistHomeFabPanelProps {
   entries: WaitlistEntry[];
   formatWaitlistDate: (dateString: string) => string;
-  onRequestRemoveAll: () => void;
-  isRemoving?: boolean;
+  /** Delete waitlist rows on server; return true if all succeeded (entries cleared in parent only after `onLeaveSuccessDismiss`). */
+  onConfirmRemoveAll: () => Promise<boolean>;
+  /** After in-sheet success + user tapped Got it — clear local waitlist state / refresh. */
+  onLeaveSuccessDismiss: () => void;
   /** `tag` — compact chip. `banner` — full-width prominent row. `card` — same style as next-appointment card. */
   triggerVariant?: 'tag' | 'banner' | 'card';
 }
 
 const SHEET_RADIUS = 24;
 const MODAL_ANIM_MS = 320;
+const SHEET_LAYOUT_DURATION_MS = 380;
+/** Smooth height change when sheet content changes — duration-based (no spring bounce). */
+const WAITLIST_SHEET_LAYOUT = LinearTransition.duration(SHEET_LAYOUT_DURATION_MS);
+/**
+ * After working → success, the sheet layout animates ~SHEET_LAYOUT_DURATION_MS.
+ * Success check + copy wait so the zoom isn’t lost while the sheet is still resizing.
+ */
+const SUCCESS_REVEAL_DELAY_MS = SHEET_LAYOUT_DURATION_MS + 40;
+
+type RemoveSheetPhase = 'main' | 'confirm' | 'working' | 'success';
 
 export function WaitlistHomeFabPanel({
   entries,
   formatWaitlistDate,
-  onRequestRemoveAll,
-  isRemoving = false,
+  onConfirmRemoveAll,
+  onLeaveSuccessDismiss,
   triggerVariant = 'tag',
 }: WaitlistHomeFabPanelProps) {
   const { t } = useTranslation();
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { height: winH } = useWindowDimensions();
+  const { height: winH, width: winW } = useWindowDimensions();
+  /** Max pill width: sheet padding (~40) + small margin; keeps content-sized pills centered without overflow. */
+  const tagPillMaxWidth = Math.max(220, winW - 48);
+  /** Date + time share one row; each pill caps at half the row (sheet padding 20×2, gap 8). */
+  const topRowPillMaxWidth = Math.max(100, Math.floor((winW - 40 - 8) / 2));
   const [isOpen, setIsOpen] = useState(false);
+  const [removePhase, setRemovePhase] = useState<RemoveSheetPhase>('main');
 
   useEffect(() => {
     if (entries.length === 0) setIsOpen(false);
@@ -52,13 +77,48 @@ export function WaitlistHomeFabPanel({
 
   const close = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setRemovePhase('main');
     setIsOpen(false);
+  }, []);
+
+  /** From the leave-confirm step — return to the waitlist details without closing the sheet. */
+  const backFromConfirmStep = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setRemovePhase('main');
   }, []);
 
   const open = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setRemovePhase('main');
     setIsOpen(true);
   }, []);
+
+  const runConfirmRemove = useCallback(async () => {
+    setRemovePhase('working');
+    try {
+      const ok = await onConfirmRemoveAll();
+      if (ok) {
+        try {
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch {
+          /* noop */
+        }
+        setRemovePhase('success');
+      } else {
+        setRemovePhase('confirm');
+        Alert.alert(
+          t('error.generic', 'Error'),
+          t('error.removing.waitlist', 'An error occurred while removing from the waitlist')
+        );
+      }
+    } catch {
+      setRemovePhase('confirm');
+      Alert.alert(
+        t('error.generic', 'Error'),
+        t('error.removing.waitlist', 'An error occurred while removing from the waitlist')
+      );
+    }
+  }, [onConfirmRemoveAll, t]);
 
   const listMaxHeight = Math.round(winH * 0.5);
   const sheetMaxHeight = Math.round(winH * 0.9);
@@ -66,7 +126,23 @@ export function WaitlistHomeFabPanel({
   const textAlign = rtl ? ('right' as const) : ('left' as const);
   const { primaryOnSurface } = usePrimaryContrast();
 
+  /** main ↔ confirm: subtle cross-fade only (no slide). */
+  const waitlistStepTransition = useMemo(
+    () => ({
+      exitMain: FadeOut.duration(180),
+      enterConfirm: FadeIn.duration(260),
+      exitConfirm: FadeOut.duration(180),
+      enterMain: FadeIn.duration(260),
+    }),
+    []
+  );
+
   if (entries.length === 0) return null;
+
+  const getServiceLabel = (entry: WaitlistEntry) =>
+    entry.service_name === 'General service' || !entry.service_name?.trim()
+      ? t('waitlist.anyService', 'Any available service')
+      : entry.service_name;
 
   const firstEntry = entries[0];
   const periodIcon =
@@ -76,7 +152,7 @@ export function WaitlistHomeFabPanel({
         ? 'partly-sunny'
         : firstEntry.time_period === 'evening'
           ? 'moon'
-          : 'time-outline';
+          : 'time';
   const periodColor =
     firstEntry.time_period === 'morning' ? '#F5A623' : colors.primary;
 
@@ -269,13 +345,30 @@ export function WaitlistHomeFabPanel({
         transparent
         animationType="none"
         statusBarTranslucent
-        onRequestClose={close}
+        onRequestClose={() => {
+          if (removePhase === 'working') return;
+          if (removePhase === 'success') {
+            onLeaveSuccessDismiss();
+            return;
+          }
+          if (removePhase === 'confirm') {
+            backFromConfirmStep();
+            return;
+          }
+          close();
+        }}
       >
         <View style={styles.modalRoot} pointerEvents="box-none">
           <Animated.View entering={FadeIn.duration(200)} style={styles.backdrop}>
             <Pressable
               style={StyleSheet.absoluteFillObject}
-              onPress={close}
+              onPress={
+                removePhase === 'main'
+                  ? close
+                  : removePhase === 'confirm'
+                    ? backFromConfirmStep
+                    : undefined
+              }
               accessibilityRole="button"
               accessibilityLabel={t('close')}
             />
@@ -283,51 +376,140 @@ export function WaitlistHomeFabPanel({
 
           <Animated.View
             entering={SlideInDown.duration(MODAL_ANIM_MS)}
+            layout={WAITLIST_SHEET_LAYOUT}
             style={[
               styles.sheet,
               {
                 backgroundColor: colors.background,
                 maxHeight: sheetMaxHeight,
-                paddingBottom: Math.max(insets.bottom, 16) + 12,
+                paddingTop: removePhase === 'confirm' ? 6 : 18,
+                paddingBottom:
+                  removePhase === 'confirm'
+                    ? Math.max(insets.bottom, 10) + 8
+                    : Math.max(insets.bottom, 16) + 12,
               },
             ]}
           >
-            <View
-              style={[
-                styles.sheetHeaderRow,
-                { flexDirection: rtl ? 'row-reverse' : 'row' },
-              ]}
-            >
-              <View style={styles.sheetHeaderText}>
-                <Text style={[styles.sheetTitle, { color: colors.text, textAlign }]}>
-                  {t('waitlist.title')}
-                </Text>
-                <Text
-                  style={[styles.sheetSubtitle, { color: colors.primary, textAlign }]}
-                >
-                  {entries.length === 1
-                    ? t('waitlist.waitingFor', { service: entries[0].service_name })
-                    : t('waitlist.waitingForMany', { count: entries.length })}
-                </Text>
-              </View>
-
-              <Pressable
-                onPress={close}
-                hitSlop={12}
-                style={({ pressed }) => [
-                  styles.sheetCloseBtn,
-                  {
-                    backgroundColor: pressed ? `${colors.text}18` : `${colors.text}0D`,
-                    borderColor: `${colors.text}22`,
-                  },
+            {removePhase === 'main' && (
+              <View
+                style={[
+                  styles.sheetHeaderRow,
+                  { flexDirection: rtl ? 'row-reverse' : 'row' },
                 ]}
-                accessibilityRole="button"
-                accessibilityLabel={t('close')}
               >
-                <Ionicons name="close" size={22} color={colors.text} />
-              </Pressable>
-            </View>
+                <View style={styles.sheetHeaderText}>
+                  <Text style={[styles.sheetTitle, { color: colors.text, textAlign }]}>
+                    {t('waitlist.title')}
+                  </Text>
+                  {entries.length === 1 ? (
+                    <Text
+                      style={[
+                        styles.sheetSubtitle,
+                        { color: colors.textSecondary, textAlign },
+                      ]}
+                    >
+                      {t('waitlist.waitingForIntro')}
+                      {getServiceLabel(entries[0])}
+                    </Text>
+                  ) : (
+                    <Text
+                      style={[styles.sheetSubtitle, { color: colors.textSecondary, textAlign }]}
+                    >
+                      {t('waitlist.modalSubtitleMany', 'You have {{count}} active waitlist requests', {
+                        count: entries.length,
+                      })}
+                    </Text>
+                  )}
+                </View>
 
+                <Pressable
+                  onPress={close}
+                  hitSlop={12}
+                  style={({ pressed }) => [
+                    styles.sheetCloseBtn,
+                    {
+                      backgroundColor: pressed ? `${colors.text}18` : `${colors.text}0D`,
+                    },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('close')}
+                >
+                  <Ionicons name="close" size={22} color={colors.text} />
+                </Pressable>
+              </View>
+            )}
+
+            {removePhase === 'working' || removePhase === 'success' ? (
+              <View style={styles.inSheetPhaseBlock}>
+                {removePhase === 'working' ? (
+                  <View style={styles.inSheetWorking}>
+                    <ActivityIndicator size="large" color={colors.primary} />
+                    <Text
+                      style={[
+                        styles.inSheetWorkingText,
+                        { color: colors.textSecondary, textAlign },
+                      ]}
+                    >
+                      {t('waitlist.leaveWorking', 'Removing you from the waitlist…')}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.inSheetSuccess}>
+                    <Animated.View
+                      entering={ZoomIn.delay(SUCCESS_REVEAL_DELAY_MS).duration(380)}
+                    >
+                      <Ionicons name="checkmark-circle" size={76} color={colors.primary} />
+                    </Animated.View>
+                    <Animated.Text
+                      entering={FadeIn.delay(SUCCESS_REVEAL_DELAY_MS).duration(280)}
+                      style={[styles.inSheetSuccessTitle, { color: colors.text, textAlign }]}
+                    >
+                      {t('waitlist.leaveSuccessHeadline', 'You left the waitlist')}
+                    </Animated.Text>
+                    <Animated.Text
+                      entering={FadeIn.delay(SUCCESS_REVEAL_DELAY_MS + 40).duration(280)}
+                      style={[
+                        styles.inSheetSuccessSub,
+                        {
+                          color: colors.textSecondary,
+                          textAlign: 'center',
+                          alignSelf: 'stretch',
+                        },
+                      ]}
+                    >
+                      {t(
+                        'waitlist.leaveSuccessSub',
+                        'You can join the waitlist again anytime when booking an appointment.'
+                      )}
+                    </Animated.Text>
+                    <Animated.View
+                      entering={FadeIn.delay(SUCCESS_REVEAL_DELAY_MS + 100).duration(260)}
+                    >
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.inSheetGotItBtn,
+                          {
+                            backgroundColor: colors.primary,
+                            opacity: pressed ? 0.9 : 1,
+                          },
+                        ]}
+                        onPress={onLeaveSuccessDismiss}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('booking.gotIt', 'Got it')}
+                      >
+                        <Text style={styles.removeBtnText}>{t('booking.gotIt', 'Got it')}</Text>
+                      </Pressable>
+                    </Animated.View>
+                  </View>
+                )}
+              </View>
+            ) : removePhase === 'main' ? (
+              <Animated.View
+                key="waitlist-remove-main"
+                style={styles.sheetStepWrap}
+                entering={waitlistStepTransition.enterMain}
+                exiting={waitlistStepTransition.exitMain}
+              >
             <ScrollView
               style={{ maxHeight: listMaxHeight }}
               showsVerticalScrollIndicator={false}
@@ -349,64 +531,232 @@ export function WaitlistHomeFabPanel({
                     : `${t(`time_period.${entry.time_period}`)} · ${t(`time_period.range.${entry.time_period}` as never)}`;
                 const periodColor =
                   entry.time_period === 'morning' ? '#F5A623' : colors.primary;
-                return (
+                const staffLabel =
+                  entry.staff_name && entry.staff_name.length > 0
+                    ? entry.staff_name
+                    : t('waitlist.staffAny', 'Any staff');
+                const serviceLabel = getServiceLabel(entry);
+
+                const tagPill = (
+                  bg: string,
+                  icon: keyof typeof Ionicons.glyphMap,
+                  iconColor: string,
+                  label: string,
+                  maxW: number
+                ) => (
                   <View
-                    key={entry.id}
                     style={[
-                      styles.entryTagsWrap,
+                      styles.entryTag,
                       { flexDirection: rtl ? 'row-reverse' : 'row' },
+                      { backgroundColor: bg },
+                      { maxWidth: maxW },
                     ]}
                   >
-                    <View
-                      style={[
-                        styles.entryTag,
-                        { flexDirection: rtl ? 'row-reverse' : 'row' },
-                        { backgroundColor: `${colors.primary}20` },
-                      ]}
+                    <Ionicons name={icon} size={16} color={iconColor} />
+                    <Text
+                      style={[styles.entryTagText, { color: colors.text, textAlign }]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
                     >
-                      <Ionicons name="calendar-outline" size={17} color={colors.primary} />
-                      <Text
-                        style={[styles.entryTagText, { color: colors.text, textAlign }]}
-                        numberOfLines={2}
-                      >
-                        {formatWaitlistDate(entry.requested_date)}
-                      </Text>
+                      {label}
+                    </Text>
+                  </View>
+                );
+
+                const staffTagPill = (
+                  <View
+                    style={[
+                      styles.entryTag,
+                      { flexDirection: rtl ? 'row-reverse' : 'row' },
+                      { backgroundColor: `${colors.primary}14` },
+                      { maxWidth: tagPillMaxWidth },
+                    ]}
+                  >
+                    <View style={styles.staffAvatarRing}>
+                      {entry.staff_image_url ? (
+                        <Image
+                          source={{ uri: entry.staff_image_url }}
+                          style={styles.staffAvatarImg}
+                          contentFit="cover"
+                        />
+                      ) : (
+                        <View
+                          style={[
+                            styles.staffAvatarFallback,
+                            { backgroundColor: `${colors.primary}22` },
+                          ]}
+                        >
+                          <Ionicons name="person" size={16} color={colors.primary} />
+                        </View>
+                      )}
                     </View>
-                    <View
+                    <Text
                       style={[
-                        styles.entryTag,
-                        { flexDirection: rtl ? 'row-reverse' : 'row' },
-                        { backgroundColor: `${periodColor}2B` },
+                        styles.entryTagText,
+                        styles.entryTagTextStaffOnlyLayout,
+                        { color: colors.text, textAlign },
                       ]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
                     >
-                      <Ionicons name={periodIcon} size={17} color={periodColor} />
+                      {staffLabel}
+                    </Text>
+                  </View>
+                );
+
+                return (
+                  <View key={entry.id} style={styles.entryGridBlock}>
+                    {entries.length > 1 ? (
                       <Text
-                        style={[styles.entryTagText, { color: colors.text, textAlign }]}
-                        numberOfLines={2}
+                        style={[
+                          styles.entryWaitingLead,
+                          { color: colors.textSecondary, textAlign },
+                        ]}
                       >
-                        {timeLine}
+                        {t('waitlist.waitingForIntro')}
+                        {serviceLabel}
                       </Text>
+                    ) : null}
+                    <View style={styles.entryTagRows}>
+                      <View
+                        style={[
+                          styles.entryTagTopRow,
+                          { flexDirection: rtl ? 'row-reverse' : 'row' },
+                        ]}
+                      >
+                        <View style={styles.entryTagTopCell}>
+                          {tagPill(
+                            `${colors.primary}20`,
+                            'calendar',
+                            colors.primary,
+                            formatWaitlistDate(entry.requested_date),
+                            topRowPillMaxWidth
+                          )}
+                        </View>
+                        <View style={styles.entryTagTopCell}>
+                          {tagPill(
+                            `${periodColor}2B`,
+                            periodIcon,
+                            periodColor,
+                            timeLine,
+                            topRowPillMaxWidth
+                          )}
+                        </View>
+                      </View>
+                      <View style={styles.tagRowCenter}>{staffTagPill}</View>
                     </View>
                   </View>
                 );
               })}
             </ScrollView>
 
-            <TouchableOpacity
-              style={[
-                styles.removeBtn,
-                { backgroundColor: colors.primary, opacity: isRemoving ? 0.65 : 1 },
-              ]}
-              onPress={onRequestRemoveAll}
-              disabled={isRemoving}
-              activeOpacity={0.88}
-            >
-              {isRemoving ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.removeBtn,
+                  {
+                    backgroundColor: colors.primary,
+                    opacity: pressed ? 0.92 : 1,
+                  },
+                ]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setRemovePhase('confirm');
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={t('waitlist.remove')}
+              >
                 <Text style={styles.removeBtnText}>{t('waitlist.remove')}</Text>
-              )}
-            </TouchableOpacity>
+              </Pressable>
+              </Animated.View>
+            ) : (
+              <Animated.View
+                key="waitlist-remove-confirm"
+                style={styles.sheetStepWrap}
+                entering={waitlistStepTransition.enterConfirm}
+                exiting={waitlistStepTransition.exitConfirm}
+              >
+              <View style={styles.removeConfirmSoloOuter}>
+                <View style={styles.removeConfirmMessageContent}>
+                  <View
+                    style={[
+                      styles.removeConfirmTitleRow,
+                      { flexDirection: rtl ? 'row-reverse' : 'row' },
+                    ]}
+                  >
+                    <View style={styles.sheetHeaderText}>
+                      <Text
+                        style={[styles.removeConfirmSoloTitle, { color: colors.text, textAlign }]}
+                      >
+                        {t('waitlist.leaveConfirmTitle', 'Are you sure?')}
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={backFromConfirmStep}
+                      hitSlop={12}
+                      style={({ pressed }) => [
+                        styles.sheetCloseBtn,
+                        {
+                          backgroundColor: pressed ? `${colors.text}18` : `${colors.text}0D`,
+                        },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('close')}
+                    >
+                      <Ionicons name="close" size={22} color={colors.text} />
+                    </Pressable>
+                  </View>
+                  <Text
+                    style={[
+                      styles.removeConfirmSoloSub,
+                      { color: colors.textSecondary, textAlign },
+                    ]}
+                  >
+                    {t(
+                      'waitlist.leaveConfirmHint',
+                      'Leaving the list will cancel your request for an appointment.\nTo go back, tap Cancel.'
+                    )}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.removeConfirmActionsRow,
+                    { flexDirection: rtl ? 'row-reverse' : 'row' },
+                  ]}
+                >
+                  <Pressable
+                    onPress={backFromConfirmStep}
+                    style={({ pressed }) => [
+                      styles.removeConfirmBtnSecondary,
+                      {
+                        borderColor: `${colors.text}28`,
+                        opacity: pressed ? 0.88 : 1,
+                      },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('cancel')}
+                  >
+                    <Text style={[styles.removeConfirmBtnSecondaryText, { color: colors.text }]}>
+                      {t('cancel')}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => void runConfirmRemove()}
+                    style={({ pressed }) => [
+                      styles.removeConfirmBtnPrimary,
+                      {
+                        backgroundColor: colors.primary,
+                        opacity: pressed ? 0.92 : 1,
+                      },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('confirm')}
+                  >
+                    <Text style={styles.removeBtnText}>{t('confirm')}</Text>
+                  </Pressable>
+                </View>
+              </View>
+              </Animated.View>
+            )}
           </Animated.View>
         </View>
       </Modal>
@@ -469,10 +819,11 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   cardService: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '700',
     color: '#1C1C1E',
-    letterSpacing: -0.3,
+    letterSpacing: -0.25,
+    lineHeight: 20,
   },
   cardPeriodText: {
     fontSize: 12.5,
@@ -594,11 +945,17 @@ const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.45)',
+    zIndex: 0,
+  },
+  /** Wraps main vs confirm body so layout transitions can run. */
+  sheetStepWrap: {
+    width: '100%',
+    overflow: 'hidden',
   },
   sheet: {
+    zIndex: 2,
     borderTopLeftRadius: SHEET_RADIUS,
     borderTopRightRadius: SHEET_RADIUS,
-    paddingTop: 18,
     paddingHorizontal: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
@@ -613,7 +970,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
   },
   sheetHeaderRow: {
     alignItems: 'flex-start',
@@ -633,42 +989,106 @@ const styles = StyleSheet.create({
     lineHeight: 28,
   },
   sheetSubtitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    marginTop: 10,
-    letterSpacing: -0.25,
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 6,
+    letterSpacing: -0.1,
     lineHeight: 22,
   },
-  entryTagsWrap: {
-    flexWrap: 'wrap',
+  entryWaitingLead: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 10,
+    letterSpacing: -0.1,
+    lineHeight: 20,
+  },
+  entryGridBlock: {
+    marginBottom: 16,
     gap: 10,
-    marginBottom: 14,
+    width: '100%',
+  },
+  entryTagRows: {
+    width: '100%',
+    gap: 10,
+    alignItems: 'stretch',
+  },
+  /** Date + time: two columns; staff pill sits centered on the row below. */
+  entryTagTopRow: {
+    width: '100%',
+    gap: 8,
+    alignItems: 'stretch',
+  },
+  entryTagTopCell: {
+    flex: 1,
+    minWidth: 0,
     alignItems: 'center',
   },
-  entryTag: {
+  /** Centers a content-sized pill; row is only as wide as the pill (up to maxWidth). */
+  tagRowCenter: {
+    width: '100%',
     alignItems: 'center',
+    minWidth: 0,
+  },
+  entryTag: {
+    flexGrow: 0,
+    alignItems: 'center',
+    alignSelf: 'center',
     gap: 8,
-    paddingVertical: 11,
-    paddingHorizontal: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 9999,
-    maxWidth: '100%',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 3,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 6,
       },
-      android: { elevation: 1 },
+      android: { elevation: 3 },
       default: {},
     }),
   },
   entryTagText: {
     flexShrink: 1,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     letterSpacing: -0.2,
-    lineHeight: 19,
+    lineHeight: 18,
+  },
+  /** Same font as `entryTagText`; only layout differs so the chip stays content-sized. */
+  entryTagTextStaffOnlyLayout: {
+    flex: 0,
+    flexShrink: 1,
+    flexBasis: 'auto',
+  },
+  /** Slightly larger than row icons so the face is visible; pill still uses same padding as other tags. */
+  staffAvatarRing: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.12,
+        shadowRadius: 3,
+      },
+      android: { elevation: 2 },
+      default: {},
+    }),
+  },
+  staffAvatarImg: {
+    width: '100%',
+    height: '100%',
+  },
+  staffAvatarFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   removeBtn: {
     marginTop: 8,
@@ -683,5 +1103,114 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     letterSpacing: -0.2,
+  },
+  removeConfirmSoloOuter: {
+    width: '100%',
+    paddingTop: 0,
+    paddingBottom: 0,
+    gap: 22,
+  },
+  /** Title + X on one row; subtitle below. */
+  removeConfirmMessageContent: {
+    width: '100%',
+    alignItems: 'stretch',
+    gap: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  removeConfirmTitleRow: {
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8,
+    width: '100%',
+  },
+  removeConfirmSoloTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.35,
+    lineHeight: 26,
+  },
+  removeConfirmSoloSub: {
+    marginTop: 2,
+    marginBottom: 4,
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 22,
+    letterSpacing: -0.12,
+    alignSelf: 'stretch',
+    width: '100%',
+  },
+  removeConfirmActionsRow: {
+    width: '100%',
+    gap: 10,
+    alignItems: 'stretch',
+  },
+  removeConfirmBtnSecondary: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  removeConfirmBtnSecondaryText: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  removeConfirmBtnPrimary: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  inSheetPhaseBlock: {
+    minHeight: 280,
+    paddingVertical: 20,
+    justifyContent: 'center',
+  },
+  inSheetWorking: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+    paddingHorizontal: 8,
+  },
+  inSheetWorkingText: {
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 22,
+    letterSpacing: -0.1,
+  },
+  inSheetSuccess: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 14,
+    paddingHorizontal: 12,
+  },
+  inSheetSuccessTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.35,
+    lineHeight: 30,
+    marginTop: 8,
+  },
+  inSheetSuccessSub: {
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 22,
+    letterSpacing: -0.1,
+    marginBottom: 8,
+  },
+  inSheetGotItBtn: {
+    marginTop: 12,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 200,
   },
 });

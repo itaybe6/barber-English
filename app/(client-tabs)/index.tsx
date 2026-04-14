@@ -225,30 +225,58 @@ const clientHomeApi = {
         throw error;
       }
 
-      return data || [];
+      const entries = data || [];
+      const staffIds = [...new Set(entries.map((e) => e.user_id).filter(Boolean))] as string[];
+      let nameById: Record<string, string> = {};
+      let imageById: Record<string, string | null> = {};
+      if (staffIds.length > 0) {
+        const { data: staffRows, error: staffErr } = await supabase
+          .from('users')
+          .select('id, name, image_url')
+          .eq('business_id', businessId)
+          .in('id', staffIds);
+        if (!staffErr && staffRows) {
+          nameById = Object.fromEntries(
+            staffRows.map((r: { id: string; name: string | null }) => [r.id, String(r.name || '').trim()])
+          );
+          imageById = Object.fromEntries(
+            staffRows.map((r: { id: string; image_url: string | null }) => [
+              r.id,
+              r.image_url && String(r.image_url).trim() ? String(r.image_url).trim() : null,
+            ])
+          );
+        }
+      }
+
+      return entries.map((e) => ({
+        ...e,
+        staff_name: e.user_id ? nameById[e.user_id] || null : null,
+        staff_image_url: e.user_id ? imageById[e.user_id] ?? null : null,
+      }));
     } catch (error) {
       console.error('Error in getUserWaitlistEntries:', error);
       throw error;
     }
   },
 
-  // Remove user from waitlist
+  // Remove user from waitlist — returns true only if a row was actually deleted
   async removeFromWaitlist(entryId: string): Promise<boolean> {
     try {
       const businessId = getBusinessId();
-      
-      const { error } = await supabase
+
+      const { data, error } = await supabase
         .from('waitlist_entries')
         .delete()
         .eq('id', entryId)
-        .eq('business_id', businessId); // Ensure we only delete from current business
+        .eq('business_id', businessId)
+        .select('id');
 
       if (error) {
         console.error('Error removing from waitlist:', error);
         throw error;
       }
 
-      return true;
+      return Array.isArray(data) && data.length > 0;
     } catch (error) {
       console.error('Error in removeFromWaitlist:', error);
       throw error;
@@ -298,7 +326,6 @@ export default function ClientHomeScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [waitlistEntries, setWaitlistEntries] = useState<WaitlistEntry[]>([]);
   const [isLoadingWaitlist, setIsLoadingWaitlist] = useState(false);
-  const [isRemovingFromWaitlist, setIsRemovingFromWaitlist] = useState(false);
   const [interestedOpportunities, setInterestedOpportunities] = useState<Array<{ swapRequest: SwapRequest; myAppointment: AvailableTimeSlot }>>([]);
   const [showInterestedModal, setShowInterestedModal] = useState(false);
   const [cardWidth, setCardWidth] = useState(0);
@@ -616,23 +643,25 @@ export default function ClientHomeScreen() {
     }
   }, [user?.phone]);
 
-  // Handle removing from waitlist
-  const handleRemoveFromWaitlist = async (entryId: string) => {
-    setIsRemovingFromWaitlist(true);
+  /** Server-side delete only; UI (loader → ✓) lives inside `WaitlistHomeFabPanel`. Clear list on Got it. */
+  const handleConfirmRemoveWaitlistAll = useCallback(async (): Promise<boolean> => {
+    const ids = waitlistEntries.map((e) => e.id);
+    if (ids.length === 0) return false;
     try {
-      const success = await clientHomeApi.removeFromWaitlist(entryId);
-      if (success) {
-        // Remove from local state
-        setWaitlistEntries(prev => prev.filter(entry => entry.id !== entryId));
-        Alert.alert(t('removed.from.waitlist', 'Removed from waitlist'), t('removed.from.waitlist.message', 'You have been successfully removed from the waitlist'));
+      for (const id of ids) {
+        const ok = await clientHomeApi.removeFromWaitlist(id);
+        if (!ok) return false;
       }
+      return true;
     } catch (error) {
       console.error('Error removing from waitlist:', error);
-      Alert.alert(t('error.generic', 'Error'), t('error.removing.waitlist', 'An error occurred while removing from the waitlist'));
-    } finally {
-      setIsRemovingFromWaitlist(false);
+      return false;
     }
-  };
+  }, [waitlistEntries]);
+
+  const handleWaitlistLeaveSuccessDismiss = useCallback(() => {
+    setWaitlistEntries([]);
+  }, []);
 
   // Fetch active swap requests from OTHER users that want MY next appointment slot
   useEffect(() => {
@@ -1146,26 +1175,9 @@ export default function ClientHomeScreen() {
               <WaitlistHomeFabPanel
                 entries={waitlistEntries}
                 formatWaitlistDate={formatWaitlistDate}
-                isRemoving={isRemovingFromWaitlist}
                 triggerVariant="card"
-                onRequestRemoveAll={() => {
-                  Alert.alert(
-                    t('waitlist.leave.title'),
-                    t('waitlist.leave.message'),
-                    [
-                      { text: t('cancel'), style: 'cancel' },
-                      {
-                        text: t('confirm'),
-                        style: 'destructive',
-                        onPress: () => {
-                          waitlistEntries.forEach((entry) => {
-                            handleRemoveFromWaitlist(entry.id);
-                          });
-                        },
-                      },
-                    ]
-                  );
-                }}
+                onConfirmRemoveAll={handleConfirmRemoveWaitlistAll}
+                onLeaveSuccessDismiss={handleWaitlistLeaveSuccessDismiss}
               />
             </View>
           ) : null}
@@ -1423,6 +1435,7 @@ export default function ClientHomeScreen() {
         message={homeFixedMessageText}
         onDismiss={() => setHomeFixedMessageDismissed(true)}
       />
+
     </View>
   );
 }

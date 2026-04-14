@@ -12,7 +12,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { servicesApi, updateService, deleteService, updateServicesOrderIndexes } from '@/lib/api/services';
 import type { Service } from '@/lib/supabase';
 import { recurringAppointmentsApi } from '@/lib/api/recurringAppointments';
-import { supabase, getBusinessId } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { businessProfileApi, isClientApprovalRequired, isClientSwapEnabled, isMultiServiceBookingAllowed } from '@/lib/api/businessProfile';
 import type { BusinessProfile } from '@/lib/supabase';
 import { 
@@ -64,7 +64,13 @@ import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-a
 import { BookingDaysRuler, type BookingDaysRulerHandle } from '@/components/BookingDaysRuler';
 import { getExpoExtra } from '@/lib/getExtra';
 import { getHomeLogoSource } from '@/src/theme/assets';
-import { readAsStringAsync } from 'expo-file-system/legacy';
+import {
+  HOME_HEADER_TITLE_FONT_IDS,
+  filterEnglishHomeHeaderTitle,
+  homeHeaderTitleFontIdToDb,
+  normalizeHomeHeaderTitleFontId,
+  type HomeHeaderTitleFontId,
+} from '@/lib/homeHeaderTitleFont';
 
 // Helper for shadow style
 const shadowStyle = Platform.select({
@@ -246,9 +252,6 @@ export default function SettingsScreen() {
     [editAdminSheetAnim],
   );
   const [isUploadingAdminAvatar, setIsUploadingAdminAvatar] = useState(false);
-  const [isUploadingHomeLogo, setIsUploadingHomeLogo] = useState(false);
-  /** expo-document-picker throws if a second pick starts before the first finishes (e.g. double tap). */
-  const homeLogoDocumentPickerBusyRef = useRef(false);
   const [adminProfileLavaLayout, setAdminProfileLavaLayout] = useState({ w: 0, h: 0 });
   const onAdminProfileLavaLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -356,7 +359,7 @@ export default function SettingsScreen() {
   );
 
   useEffect(() => {
-    setHomeHeaderNoLogoTitleDraft(String(profile?.home_header_text_without_logo ?? ''));
+    setHomeHeaderNoLogoTitleDraft(filterEnglishHomeHeaderTitle(String(profile?.home_header_text_without_logo ?? '')));
   }, [profile?.home_header_text_without_logo]);
 
   useEffect(() => {
@@ -1369,17 +1372,6 @@ export default function SettingsScreen() {
     return 'image/jpeg';
   };
 
-  /** Storage path extension — avoid `image/svg+xml` → invalid `svg+xml` segment from naive split('/')[1]. */
-  const fileExtensionForHomeLogoMime = (mime: string): string => {
-    const m = mime.toLowerCase().split(';')[0].trim();
-    if (m === 'image/jpeg' || m === 'image/jpg') return 'jpeg';
-    if (m === 'image/png') return 'png';
-    if (m === 'image/webp') return 'webp';
-    if (m === 'image/heic' || m === 'image/heif') return 'heic';
-    if (m === 'image/gif') return 'gif';
-    return 'png';
-  };
-
   // Guess mime for images and videos
   const guessMimeFromUriForAny = (uriOrName: string): string => {
     const ext = (uriOrName.split('.').pop() || '').toLowerCase().split('?')[0];
@@ -1599,182 +1591,6 @@ export default function SettingsScreen() {
     }
   }, [user?.id, adminNameDraft, adminPhoneDraft, t, updateUserProfile, animateEditAdminSheetClosed]);
 
-  const uploadHomeScreenLogo = async (asset: {
-    uri: string;
-    base64?: string | null;
-    mimeType?: string | null;
-    fileName?: string | null;
-  }): Promise<string | null> => {
-    try {
-      let contentType = asset.mimeType || guessMimeFromUri(asset.fileName || asset.uri);
-      let fileBody: Blob | Uint8Array;
-      if (asset.base64) {
-        const bytes = base64ToUint8Array(asset.base64);
-        fileBody = bytes;
-      } else {
-        const uri = String(asset.uri || '').trim();
-        /** iOS Files + Hermes: `fetch(file://…)` often yields an empty Blob; read bytes via Expo FS. */
-        const readLocalViaFs =
-          Platform.OS !== 'web' &&
-          uri.length > 0 &&
-          (uri.startsWith('file:') || (Platform.OS === 'android' && uri.startsWith('content:')));
-        if (readLocalViaFs) {
-          const b64 = await readAsStringAsync(uri, { encoding: 'base64' });
-          const bytes = base64ToUint8Array(b64);
-          if (bytes.length < 32) {
-            console.error('home logo file read too small', bytes.length);
-            return null;
-          }
-          fileBody = bytes;
-        } else {
-          const response = await fetch(uri, { cache: 'no-store' });
-          const fetched = await response.blob();
-          fileBody = fetched;
-          contentType = fetched.type || contentType;
-        }
-      }
-      const extGuess = fileExtensionForHomeLogoMime(contentType);
-      const randomId = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-      const bid = getBusinessId();
-      const filePath = `home-logos/${bid}/${Date.now()}_${randomId()}.${extGuess}`;
-      const { error: uploadError } = await supabase.storage
-        .from('app_design')
-        .upload(filePath, fileBody as any, { contentType, upsert: false });
-      if (uploadError) {
-        console.error('home logo upload error', uploadError);
-        return null;
-      }
-      const { data } = supabase.storage.from('app_design').getPublicUrl(filePath);
-      return data.publicUrl;
-    } catch (e) {
-      console.error('home logo upload exception', e);
-      return null;
-    }
-  };
-
-  const uploadAndSaveHomeLogo = async (asset: {
-    uri: string;
-    base64?: string | null;
-    mimeType?: string | null;
-    fileName?: string | null;
-  }) => {
-    setIsUploadingHomeLogo(true);
-    try {
-      const uploadedUrl = await uploadHomeScreenLogo(asset);
-      if (!uploadedUrl) {
-        Alert.alert(t('error.generic', 'Error'), t('settings.profile.homeLogoUploadFailed', 'Logo upload failed'));
-        return;
-      }
-      const updated = await businessProfileApi.updateHomeLogoUrl(uploadedUrl);
-      if (!updated) {
-        Alert.alert(t('error.generic', 'Error'), t('settings.profile.homeLogoSaveFailed', 'Failed to save logo'));
-        return;
-      }
-      setProfile(updated);
-    } catch (e) {
-      console.error('pick/upload home logo failed', e);
-      Alert.alert(t('error.generic', 'Error'), t('settings.profile.homeLogoUploadFailed', 'Logo upload failed'));
-    } finally {
-      setIsUploadingHomeLogo(false);
-    }
-  };
-
-  const pickHomeScreenLogoFromPhotoLibrary = async () => {
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          t('profile.permissionRequired', 'Permission Required'),
-          t('profile.permissionGallery', 'Please allow gallery access to pick a profile picture'),
-        );
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'images',
-        allowsMultipleSelection: false,
-        quality: 0.92,
-        base64: true,
-      });
-      if (result.canceled || !result.assets?.length) return;
-      const a: any = result.assets[0];
-      await uploadAndSaveHomeLogo({
-        uri: a.uri,
-        base64: a.base64 ?? null,
-        mimeType: a.mimeType ?? null,
-        fileName: a.fileName ?? null,
-      });
-    } catch (e) {
-      console.error('pick home logo from gallery failed', e);
-      Alert.alert(t('error.generic', 'Error'), t('settings.profile.homeLogoUploadFailed', 'Logo upload failed'));
-    }
-  };
-
-  const pickHomeScreenLogoFromFiles = async () => {
-    if (homeLogoDocumentPickerBusyRef.current || isUploadingHomeLogo) return;
-    homeLogoDocumentPickerBusyRef.current = true;
-    try {
-      await new Promise<void>((resolve) => {
-        InteractionManager.runAfterInteractions(() => {
-          setTimeout(resolve, Platform.OS === 'ios' ? 80 : 0);
-        });
-      });
-      /** Dynamic import so the route can load without the native module (dev clients must be rebuilt after adding the dependency). */
-      let DocumentPicker: typeof import('expo-document-picker');
-      try {
-        DocumentPicker = await import('expo-document-picker');
-      } catch {
-        Alert.alert(
-          t('error.generic', 'Error'),
-          t(
-            'settings.profile.documentPickerNativeMissing',
-            'בחירת קובץ דורשת build מחדש של האפליקציה עם expo-document-picker (למשל: npx expo run:ios או EAS build).',
-          ),
-        );
-        return;
-      }
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'image/*',
-        copyToCacheDirectory: true,
-        multiple: false,
-      });
-      if (result.canceled || !result.assets?.length) return;
-      const file = result.assets[0];
-      const mime = String(file.mimeType || guessMimeFromUri(file.name || file.uri));
-      if (!mime.startsWith('image/')) {
-        Alert.alert(
-          t('error.generic', 'Error'),
-          t('settings.profile.homeLogoFileNotImage', 'Please choose an image file (PNG, JPEG, etc.).'),
-        );
-        return;
-      }
-      await uploadAndSaveHomeLogo({
-        uri: file.uri,
-        base64: null,
-        mimeType: file.mimeType ?? null,
-        fileName: file.name ?? null,
-      });
-    } catch (e) {
-      console.error('pick home logo from files failed', e);
-      const msg = e instanceof Error ? e.message : '';
-      if (msg.includes('document picking in progress')) {
-        return;
-      }
-      if (msg.includes('ExpoDocumentPicker') || msg.includes('native module')) {
-        Alert.alert(
-          t('error.generic', 'Error'),
-          t(
-            'settings.profile.documentPickerNativeMissing',
-            'בחירת קובץ דורשת build מחדש של האפליקציה עם expo-document-picker (למשל: npx expo run:ios או EAS build).',
-          ),
-        );
-        return;
-      }
-      Alert.alert(t('error.generic', 'Error'), t('settings.profile.homeLogoUploadFailed', 'Logo upload failed'));
-    } finally {
-      homeLogoDocumentPickerBusyRef.current = false;
-    }
-  };
-
   const handleHomeHeaderShowLogoToggle = async (next: boolean) => {
     setIsSavingProfile(true);
     try {
@@ -1793,8 +1609,8 @@ export default function SettingsScreen() {
   };
 
   const saveHomeHeaderTextWithoutLogoIfChanged = async () => {
-    const raw = homeHeaderNoLogoTitleDraft.trim();
-    const stored = String(profile?.home_header_text_without_logo ?? '').trim();
+    const raw = filterEnglishHomeHeaderTitle(homeHeaderNoLogoTitleDraft).trim();
+    const stored = filterEnglishHomeHeaderTitle(String(profile?.home_header_text_without_logo ?? '')).trim();
     if (raw === stored) return;
     setIsSavingProfile(true);
     try {
@@ -1803,6 +1619,25 @@ export default function SettingsScreen() {
         Alert.alert(
           t('error.generic', 'Error'),
           t('settings.profile.homeHeaderNoLogoTitleSaveFailed', 'Could not save header text'),
+        );
+        return;
+      }
+      setProfile(updated);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleHomeHeaderTitleFontSelect = async (nextId: HomeHeaderTitleFontId) => {
+    const current = normalizeHomeHeaderTitleFontId(profile?.home_header_title_font);
+    if (nextId === current) return;
+    setIsSavingProfile(true);
+    try {
+      const updated = await businessProfileApi.updateHomeHeaderTitleFont(homeHeaderTitleFontIdToDb(nextId));
+      if (!updated) {
+        Alert.alert(
+          t('error.generic', 'Error'),
+          t('settings.profile.homeHeaderTitleFontSaveFailed', 'Could not save font'),
         );
         return;
       }
@@ -3242,7 +3077,7 @@ export default function SettingsScreen() {
                     <Text style={styles.settingSubtitleLTR}>
                       {t(
                         'settings.profile.homeHeaderShowLogoSubtitle',
-                        'When off, set a custom name for the top of the home screen (manager and client). Leave blank to use the business display name.',
+                        'When off, show an English name at the top (manager and client). Leave blank to use the business display name from business details.',
                       )}
                     </Text>
                   </View>
@@ -3253,7 +3088,7 @@ export default function SettingsScreen() {
                       onValueChange={(v) => {
                         void handleHomeHeaderShowLogoToggle(v);
                       }}
-                      disabled={isUploadingHomeLogo || isSavingProfile}
+                      disabled={isSavingProfile}
                       trackColor={{ false: '#E5E5EA', true: '#E5E5EA' }}
                       thumbColor={
                         profile?.home_header_show_logo !== false
@@ -3276,19 +3111,13 @@ export default function SettingsScreen() {
                       <Text style={styles.homeHeaderNoLogoTitleHint}>
                         {t(
                           'settings.profile.homeHeaderNoLogoTitleHint',
-                          'Leave empty to use the business display name from business details.',
+                          'English letters, numbers, and basic punctuation only. Leave empty to use the business display name from business details.',
                         )}
                       </Text>
                       <TextInput
-                        style={[
-                          styles.homeHeaderNoLogoTitleInput,
-                          {
-                            textAlign: editAdminInputsRtl ? 'right' : 'left',
-                            writingDirection: editAdminInputsRtl ? 'rtl' : 'ltr',
-                          },
-                        ]}
+                        style={[styles.homeHeaderNoLogoTitleInput, { textAlign: 'left', writingDirection: 'ltr' }]}
                         value={homeHeaderNoLogoTitleDraft}
-                        onChangeText={setHomeHeaderNoLogoTitleDraft}
+                        onChangeText={(v) => setHomeHeaderNoLogoTitleDraft(filterEnglishHomeHeaderTitle(v))}
                         onBlur={() => void saveHomeHeaderTextWithoutLogoIfChanged()}
                         placeholder={
                           (profileDisplayName || '').trim() ||
@@ -3296,21 +3125,60 @@ export default function SettingsScreen() {
                         }
                         placeholderTextColor="#8E8E93"
                         maxLength={120}
-                        editable={!isSavingProfile && !isUploadingHomeLogo}
+                        editable={!isSavingProfile}
+                        autoCorrect={false}
+                        autoCapitalize="words"
+                        keyboardType={Platform.OS === 'ios' ? 'ascii-capable' : 'default'}
                       />
+                      <Text style={styles.homeHeaderFontLabel}>
+                        {t('settings.profile.homeHeaderTitleFontLabel', 'Font')}
+                      </Text>
+                      <View style={styles.homeHeaderFontChipsWrap}>
+                        {HOME_HEADER_TITLE_FONT_IDS.map((fid) => {
+                          const selected =
+                            normalizeHomeHeaderTitleFontId(profile?.home_header_title_font) === fid;
+                          return (
+                            <TouchableOpacity
+                              key={fid}
+                              style={[
+                                styles.homeHeaderFontChip,
+                                selected && {
+                                  backgroundColor: `${businessColors.primary}18`,
+                                  borderColor: businessColors.primary,
+                                },
+                              ]}
+                              onPress={() => void handleHomeHeaderTitleFontSelect(fid)}
+                              disabled={isSavingProfile}
+                              activeOpacity={0.85}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected }}
+                              accessibilityLabel={t(`settings.profile.homeHeaderTitleFont.${fid}`, fid)}
+                            >
+                              <Text
+                                style={[
+                                  styles.homeHeaderFontChipText,
+                                  selected && { color: businessColors.primary },
+                                ]}
+                              >
+                                {t(`settings.profile.homeHeaderTitleFont.${fid}`, fid)}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
                       <TouchableOpacity
                         style={[
                           styles.homeFixedMessageSaveButton,
                           {
                             backgroundColor: businessColors.primary,
-                            opacity: isSavingProfile || isUploadingHomeLogo ? 0.55 : 1,
+                            opacity: isSavingProfile ? 0.55 : 1,
                           },
                         ]}
                         onPress={async () => {
                           await saveHomeHeaderTextWithoutLogoIfChanged();
                           Keyboard.dismiss();
                         }}
-                        disabled={isSavingProfile || isUploadingHomeLogo}
+                        disabled={isSavingProfile}
                         activeOpacity={0.88}
                         accessibilityRole="button"
                         accessibilityLabel={t('save', 'Save')}
@@ -3325,66 +3193,28 @@ export default function SettingsScreen() {
                     <View style={styles.settingDivider} />
                   </>
                 ) : null}
-                <View style={styles.homeLogoDesignRow}>
-                  <View style={styles.homeLogoPreviewWrap}>
-                    <Image
-                      source={getHomeLogoSource(profile)}
-                      style={styles.homeLogoPreviewImage}
-                      resizeMode="contain"
-                    />
-                    {isUploadingHomeLogo ? (
-                      <View style={styles.homeLogoPreviewLoading}>
-                        <ActivityIndicator size="small" color={businessColors.primary} />
+                {profile?.home_header_show_logo !== false ? (
+                  <>
+                    <View style={styles.settingDivider} />
+                    <View style={styles.homeLogoBrandingPreviewSection}>
+                      <Text style={styles.homeHeaderBrandingPreviewHint}>
+                        {t(
+                          'settings.profile.homeLogoBrandingOnlySubtitle',
+                          'The logo is taken from your app build (white-label). Managers cannot upload a different logo here.',
+                        )}
+                      </Text>
+                      <View style={styles.homeLogoPreviewWrapCentered}>
+                        <View style={styles.homeLogoPreviewWrap}>
+                          <Image
+                            source={getHomeLogoSource(profile)}
+                            style={styles.homeLogoPreviewImage}
+                            resizeMode="contain"
+                          />
+                        </View>
                       </View>
-                    ) : null}
-                  </View>
-                  <View style={styles.homeLogoDesignActions}>
-                    <TouchableOpacity
-                      style={[
-                        styles.homeLogoActionBtn,
-                        {
-                          borderColor: `${businessColors.primary}40`,
-                          backgroundColor: `${businessColors.primary}12`,
-                          opacity: isUploadingHomeLogo ? 0.55 : 1,
-                        },
-                      ]}
-                      onPress={() => void pickHomeScreenLogoFromPhotoLibrary()}
-                      disabled={isUploadingHomeLogo}
-                      activeOpacity={0.75}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('settings.profile.homeLogoFromPhotos', 'Photo library')}
-                      hitSlop={{ top: 10, bottom: 6, left: 10, right: 10 }}
-                    >
-                      <Camera size={18} color={businessColors.primary} strokeWidth={2.2} />
-                      <Text style={[styles.homeLogoActionBtnText, { color: businessColors.primary }]}>
-                        {isUploadingHomeLogo
-                          ? t('settings.common.uploading', 'Uploading...')
-                          : t('settings.profile.homeLogoFromPhotos', 'Photo library')}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.homeLogoActionBtn,
-                        styles.homeLogoActionBtnSecondary,
-                        {
-                          borderColor: 'rgba(60, 60, 67, 0.22)',
-                          opacity: isUploadingHomeLogo ? 0.55 : 1,
-                        },
-                      ]}
-                      onPress={() => void pickHomeScreenLogoFromFiles()}
-                      disabled={isUploadingHomeLogo}
-                      activeOpacity={0.75}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('settings.profile.homeLogoFromFiles', 'Files')}
-                      hitSlop={{ top: 6, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <Ionicons name="folder-outline" size={20} color={businessColors.primary} />
-                      <Text style={[styles.homeLogoActionBtnText, { color: businessColors.primary }]}>
-                        {t('settings.profile.homeLogoFromFiles', 'Files')}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                    </View>
+                  </>
+                ) : null}
               </View>
           </View>
         </View>
@@ -5865,13 +5695,49 @@ const styles = StyleSheet.create({
     color: Colors.text,
     backgroundColor: '#FFFFFF',
   },
-  homeLogoDesignRow: {
+  homeHeaderFontLabel: {
+    marginTop: 14,
+    marginBottom: 2,
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'left',
+  },
+  homeHeaderFontChipsWrap: {
     flexDirection: 'row',
-    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  homeHeaderFontChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(60, 60, 67, 0.22)',
+    backgroundColor: '#FFFFFF',
+  },
+  homeHeaderFontChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  homeLogoBrandingPreviewSection: {
     paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 4,
-    gap: 14,
+    paddingTop: 6,
+    paddingBottom: 12,
+  },
+  homeHeaderBrandingPreviewHint: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: Colors.subtext,
+    marginBottom: 10,
+    textAlign: 'left',
+  },
+  homeLogoPreviewWrapCentered: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   homeLogoPreviewWrap: {
     width: 88,
@@ -5887,33 +5753,6 @@ const styles = StyleSheet.create({
   homeLogoPreviewImage: {
     width: '82%',
     height: '82%',
-  },
-  homeLogoPreviewLoading: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.65)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  homeLogoDesignActions: {
-    flex: 1,
-    gap: 10,
-  },
-  homeLogoActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  homeLogoActionBtnText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  homeLogoActionBtnSecondary: {
-    backgroundColor: 'rgba(142, 142, 147, 0.08)',
   },
   addressSheetContainer: {
     position: 'absolute',

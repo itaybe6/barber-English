@@ -1210,7 +1210,17 @@ export default function ClientHomeScreen() {
         {displayAddress ? (
           <View style={[styles.sectionContainer, { marginBottom: 24 }]}> 
             <View style={styles.sectionHeaderModernSimple}>
-              <Text style={{ fontSize: 26, fontWeight: '700', color: '#1C1C1E', textAlign: 'center', letterSpacing: -0.3 }}>{t('how.to.get.here')}</Text>
+              <Text
+                style={{
+                  fontSize: 20,
+                  fontWeight: '700',
+                  color: colors.text,
+                  textAlign: 'center',
+                  letterSpacing: -0.25,
+                }}
+              >
+                {t('how.to.get.here')}
+              </Text>
             </View>
              
              <TouchableOpacity

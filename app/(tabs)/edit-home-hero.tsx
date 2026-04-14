@@ -467,20 +467,11 @@ export default function EditHomeHeroScreen() {
   }, [busy, images, router, save, t]);
 
   const removeAt = useCallback(
-    (index: number) => {
-      Alert.alert(t('settings.profile.heroDeleteTitle', 'Remove image'), t('settings.profile.heroDeleteConfirm'), [
-        { text: t('cancel', 'Cancel'), style: 'cancel' },
-        {
-          text: t('delete', 'Delete'),
-          style: 'destructive',
-          onPress: async () => {
-            const next = images.filter((_, i) => i !== index);
-            await save(next);
-          },
-        },
-      ]);
+    async (index: number) => {
+      const next = images.filter((_, i) => i !== index);
+      await save(next);
     },
-    [images, save, t]
+    [images, save]
   );
 
   const moveToFront = useCallback(

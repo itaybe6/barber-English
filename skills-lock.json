@@ -6,6 +6,11 @@
       "sourceType": "github",
       "computedHash": "da4522fe7b9d56f4c7d5d8b22e137a52ee322fa97040f63951ce56d0499fac7c"
     },
+    "israeli-social-content": {
+      "source": "skills-il/marketing-growth",
+      "sourceType": "github",
+      "computedHash": "0301c74bd89d0965d5b4344818fa7faeaa0bd7d1ab6f6fe723e231500886f181"
+    },
     "react-native-skills": {
       "source": "secondsky/claude-skills",
       "sourceType": "github",

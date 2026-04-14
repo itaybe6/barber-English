@@ -7,10 +7,12 @@ import { useAuthStore } from '@/stores/authStore';
 export type LocalKabalaIssueErrorCode =
   | 'missing_business_id'
   | 'missing_osek'
+  | 'invalid_osek'
   | 'missing_seller_name'
   | 'missing_address'
   | 'price_unknown'
   | 'invalid_status'
+  | 'vat_math_failed'
   | 'serial_failed'
   | 'pdf_failed';
 
@@ -34,6 +36,8 @@ export type LocalKabalaReceiptOptions = {
    * `net_before_vat` — price is net; total adds VAT.
    */
   priceBasis?: 'gross_incl_vat' | 'net_before_vat';
+  /** תנאי תשלום קצר (שלב 2). */
+  paymentTermsHe?: string;
 };
 
 export type LocalKabalaReceiptMime = 'application/pdf' | 'text/html';
@@ -79,6 +83,52 @@ function parseYyyyMmDd(s: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/** תאריך מסמך (YYYY-MM-DD) לא אחרי היום (לוח שנה מקומי של המכשיר). */
+export function isDocumentDateAfterToday(yyyyMmDd: string): boolean {
+  const doc = parseYyyyMmDd(yyyyMmDd);
+  if (!doc) return true;
+  const now = new Date();
+  const endToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  return doc.getTime() > endToday.getTime();
+}
+
+/**
+ * מספר עוסק מורשה ישראלי — 9 ספרות עם אלגוריתם ספרת ביקורת (כמו ב־SHAAM / הסקיל).
+ * @see `.agents/skills/israeli-e-invoice/scripts/validate_invoice.py` — `validate_tin`
+ */
+export function validateIsraeliOsekCheckDigit9(digits9: string): boolean {
+  if (!/^\d{9}$/.test(digits9)) return false;
+  const d = digits9.split('').map((c) => Number(c));
+  const weights = [1, 2, 1, 2, 1, 2, 1, 2, 1];
+  let total = 0;
+  for (let i = 0; i < 9; i++) {
+    const p = d[i]! * weights[i]!;
+    total += Math.floor(p / 10) + (p % 10);
+  }
+  return total % 10 === 0;
+}
+
+/** תאריך עברי לתצוגה (לצד גרגוריאני), כשהמנוע תומך. */
+export function formatHebrewCalendarDateLine(yyyyMmDd: string): string {
+  const d = parseYyyyMmDd(yyyyMmDd);
+  if (!d) return '';
+  try {
+    return new Intl.DateTimeFormat('he-IL-u-ca-hebrew', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    }).format(d);
+  } catch {
+    try {
+      return new Intl.DateTimeFormat('he-IL', { calendar: 'hebrew', day: 'numeric', month: 'long', year: 'numeric' }).format(
+        d,
+      );
+    } catch {
+      return '';
+    }
+  }
+}
+
 /** Total for threshold / display; VAT lines when not exempt. */
 export function computeLocalKabala320Amounts(params: {
   catalogPrice: number;
@@ -110,8 +160,8 @@ export function computeLocalKabala320Amounts(params: {
 }
 
 /**
- * סף מספר הקצאה — על **סכום לפני מע״מ** (כמו בשע״מ): 25,000 ₪ עד סוף 2025, 10,000 ₪ מינואר 2026, 5,000 ₪ מיוני 2026.
- * קבלה 320: תזכורת בלבד ללקוחות שמדווחים גבוה; חובת הקצאה החלה בדרך כלל על חשבוניות מס (300/305/310).
+ * סף מספר הקצאה לפני מע״מ — חל על חשבוניות מס 300/305/310 בלבד (לא על קבלה 320).
+ * נשאר לשימוש עתידי / אינטגרציות.
  */
 export function allocationNetThresholdNisForDocumentDate(documentDateYyyyMmDd: string): number {
   const doc = parseYyyyMmDd(documentDateYyyyMmDd);
@@ -123,17 +173,28 @@ export function allocationNetThresholdNisForDocumentDate(documentDateYyyyMmDd: s
   return 5_000;
 }
 
-function allocationNoticeForKabala320(params: {
-  netBeforeVat: number;
-  vatExempt: boolean;
-  documentDateYyyyMmDd: string;
-}): { show: boolean; thresholdNetNis: number } {
-  if (params.vatExempt) {
-    return { show: false, thresholdNetNis: allocationNetThresholdNisForDocumentDate(params.documentDateYyyyMmDd) };
+/** שלב 6: וידוא שחישוב המע״מ עקבי (סטייה ≤ 2 אגורות). */
+function verifyVatMathConsistency(params: {
+  amounts: { vatExempt: boolean; netBeforeVat: number; vatAmount: number; totalInclVat: number };
+  priceBasis: 'gross_incl_vat' | 'net_before_vat';
+  catalogPrice: number;
+  rate: number;
+}): boolean {
+  const { amounts, priceBasis, catalogPrice, rate } = params;
+  if (amounts.vatExempt) return true;
+  const tol = 0.02;
+  if (priceBasis === 'net_before_vat') {
+    const expVat = roundMoney2(amounts.netBeforeVat * rate);
+    const expTot = roundMoney2(amounts.netBeforeVat + expVat);
+    return (
+      Math.abs(amounts.vatAmount - expVat) <= tol && Math.abs(amounts.totalInclVat - expTot) <= tol
+    );
   }
-  const thresholdNetNis = allocationNetThresholdNisForDocumentDate(params.documentDateYyyyMmDd);
-  const show = params.netBeforeVat > thresholdNetNis;
-  return { show, thresholdNetNis };
+  const expTot = roundMoney2(catalogPrice);
+  return (
+    Math.abs(amounts.totalInclVat - expTot) <= tol &&
+    Math.abs(amounts.netBeforeVat + amounts.vatAmount - amounts.totalInclVat) <= tol
+  );
 }
 
 function escapeHtml(s: string): string {
@@ -224,9 +285,8 @@ export function buildLocalKabala320ReceiptHtml(params: {
   receiptSerial: number;
   accentColor: string;
   allocationNumber?: string;
-  allocationThresholdNote: boolean;
-  /** סף לפני מע״מ למועד המסמך — מוצג כש־`allocationThresholdNote` */
-  allocationThresholdNetNis?: number;
+  /** תנאי תשלום קצר (שלב 2 בהנחיות). */
+  paymentTermsHe?: string;
 }): string {
   const {
     sellerName,
@@ -245,8 +305,7 @@ export function buildLocalKabala320ReceiptHtml(params: {
     receiptSerial,
     accentColor,
     allocationNumber,
-    allocationThresholdNote,
-    allocationThresholdNetNis,
+    paymentTermsHe = 'תשלום במועד ביקור הלקוח',
   } = params;
 
   const safeSeller = escapeHtml(sellerName);
@@ -257,6 +316,10 @@ export function buildLocalKabala320ReceiptHtml(params: {
   const safeService = escapeHtml(serviceDescription);
   const safePayment = escapeHtml(paymentMethodHe);
   const dateLine = escapeHtml(formatDateIl(documentDate));
+  const hebrewCalRaw = formatHebrewCalendarDateLine(documentDate).trim();
+  const hebrewDateHtml = hebrewCalRaw
+    ? `<div class="row"><span class="k">תאריך (לוח עברי)</span><span class="v">${escapeHtml(hebrewCalRaw)}</span></div>`
+    : '';
   const safeApt = escapeHtml(appointmentId);
   const serialStr = escapeHtml(String(receiptSerial));
   const vatPct = Math.round(LOCAL_KABALA_VAT_RATE * 100);
@@ -264,6 +327,11 @@ export function buildLocalKabala320ReceiptHtml(params: {
   const vatStr = escapeHtml(formatCurrencyNis(vatAmount, 2));
   const totalStr = escapeHtml(formatCurrencyNis(totalInclVat, 2));
   const safeAlloc = allocationNumber ? escapeHtml(String(allocationNumber).trim()) : '';
+  const safePaymentTerms = escapeHtml(paymentTermsHe);
+  const lineQty = 1;
+  const unitNet = netBeforeVat / lineQty;
+  const unitNetStr = escapeHtml(formatCurrencyNis(unitNet, 2));
+  const lineNetStr = escapeHtml(formatCurrencyNis(netBeforeVat, 2));
 
   const phoneRow =
     businessPhone.trim().length > 0
@@ -287,28 +355,14 @@ export function buildLocalKabala320ReceiptHtml(params: {
         </div>
       </section>`;
 
-  const thNis =
-    allocationThresholdNetNis != null
-      ? allocationThresholdNetNis
-      : allocationNetThresholdNisForDocumentDate(documentDate);
-  const thStr = escapeHtml(thNis.toLocaleString('he-IL'));
-
-  const allocBlock =
-    allocationThresholdNote || safeAlloc
-      ? `<div class="foot-block allocation">
-          <strong>מספר הקצאה (שע״מ / SHAAM)</strong>
-          ${
-            safeAlloc
-              ? `<p>מספר הקצאה: <span class="mono">${safeAlloc}</span></p>`
-              : ''
-          }
-          ${
-            allocationThresholdNote
-              ? `<p class="warn">סכום העסקה <strong>לפני מע״מ</strong> (${netStr}) עובר את הסף הרלוונטי למועד המסמך (<strong>${thStr} ₪</strong> לפני מע״מ). בחשבונית מס ובמסמכים שנדרשים בחוק, יש לקבל מספר הקצאה <strong>בזמן אמת</strong> ממערכות רשות המסים ולשלבו במסמך הרשמי.</p>`
-              : ''
-          }
+  /** קבלה 320: מספר הקצאה לא נדרש לפי דין על סף (שלב 4); מוצג רק אם הוזן ידנית / מממשק עתידי. */
+  const allocBlock = safeAlloc
+    ? `<div class="foot-block allocation">
+          <strong>מספר הקצאה (שע״מ)</strong>
+          <p>מספר הקצאה: <span class="mono">${safeAlloc}</span></p>
+          <p class="alloc-note">מספר הקצאה מוצג כאן רק כשסופק; לקבלה 320 אין חובת הקצאה על סכום לפי ההנחיות הרווחות (בניגוד לחשבונית מס 300/305/310).</p>
         </div>`
-      : '';
+    : '';
 
   return `<!DOCTYPE html>
 <html dir="rtl" lang="he">
@@ -462,7 +516,18 @@ export function buildLocalKabala320ReceiptHtml(params: {
     }
     .foot-block { margin-bottom: 12px; }
     .foot-block:last-child { margin-bottom: 0; }
-    .foot-block.allocation .warn { color: #7a4a00; margin-top: 6px; }
+    .foot-block.allocation .alloc-note { font-size: 10px; color: #666; margin-top: 8px; line-height: 1.45; }
+    .lines-wrap { margin: 0 16px 12px; border: 1px solid #ececf0; border-radius: 10px; overflow: hidden; }
+    .lines-head, .lines-row { display: flex; flex-direction: row; direction: rtl; font-size: 12px; }
+    .lines-head { background: #f5f5f7; font-weight: 700; color: #444; border-bottom: 1px solid #e5e5ea; }
+    .lines-head span, .lines-row span { flex: 1; padding: 8px 10px; text-align: right; border-left: 1px solid #eee; }
+    .lines-head span:last-child, .lines-row span:last-child { border-left: none; }
+    .lines-row { border-bottom: 1px solid #f0f0f2; }
+    .lines-row:last-child { border-bottom: none; }
+    .col-qty { flex: 0 0 52px !important; }
+    .col-desc { flex: 2 !important; }
+    .col-unit { flex: 1.1 !important; }
+    .col-line { flex: 1.1 !important; font-weight: 600; }
     .mono {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       direction: ltr;
@@ -487,8 +552,8 @@ export function buildLocalKabala320ReceiptHtml(params: {
     <div class="accent-bar"></div>
     <header class="head">
       <div class="biz">${safeSeller}</div>
-      <div class="doc-type">קבלה — סוג מסמך 320</div>
-      <div class="doc-sub">קבלה (320) — פירוט שדות לתיעוד ושקיפות מול הלקוח; יש לוודא עמידה בדינים ובהוראות רשות המסים לפי סוג העסק והמסמך.</div>
+      <div class="doc-type">קבלה — סוג מסמך 320 (Receipt · אישור תשלום בלבד)</div>
+      <div class="doc-sub">לעומת: 300 חשבונית מס · 305 חשבונית מס/קבלה · 310 חשבונית זיכוי · 330 פרופורמה — יש לבחור סוג נכון לפי העסקה. מסמך זה הוא 320 בלבד.</div>
       <div class="biz-meta">
         <div><strong>כתובת:</strong> ${safeAddr}</div>
         ${phoneRow}
@@ -497,26 +562,42 @@ export function buildLocalKabala320ReceiptHtml(params: {
     </header>
     <div class="section-title">פרטי מסמך</div>
     <div class="serial-wrap">
-      <div class="serial-label">מספר סידורי עוקב (קבלה)</div>
+      <div class="serial-label">מספר מסמך סידורי (סדרת מוכר — קבלה)</div>
       <div class="serial-num">מס׳ ${serialStr}</div>
     </div>
     <div class="body">
-      <div class="row"><span class="k">תאריך הפקה</span><span class="v">${dateLine}</span></div>
-      <div class="row"><span class="k">שם לקוח</span><span class="v">${safeBuyer}</span></div>
-      <div class="row"><span class="k">תיאור שירות / מוצר</span><span class="v">${safeService}</span></div>
+      <div class="row"><span class="k">תאריך (לוח גרגוריאני, DD/MM/YYYY)</span><span class="v">${dateLine}</span></div>
+      ${hebrewDateHtml}
+      <div class="row"><span class="k">שם לקוח / קונה</span><span class="v">${safeBuyer}</span></div>
       <div class="row"><span class="k">אמצעי תשלום</span><span class="v">${safePayment}</span></div>
+      <div class="row"><span class="k">תנאי תשלום</span><span class="v">${safePaymentTerms}</span></div>
       <div class="row"><span class="k">אסמכתא</span><span class="v"><span class="mono">${safeApt}</span></span></div>
     </div>
-    <div class="section-title">סכומים</div>
+    <div class="section-title">פירוט עסקה (פריטים)</div>
+    <div class="lines-wrap" role="table" aria-label="שורות עסקה">
+      <div class="lines-head" role="row">
+        <span class="col-qty">כמות</span>
+        <span class="col-desc">תיאור</span>
+        <span class="col-unit">מחיר ליחידה<br/><small>(לפני מע״מ)</small></span>
+        <span class="col-line">סכום שורה<br/><small>(לפני מע״מ)</small></span>
+      </div>
+      <div class="lines-row" role="row">
+        <span class="col-qty">${lineQty}</span>
+        <span class="col-desc">${safeService}</span>
+        <span class="col-unit">${vatExempt ? '—' : unitNetStr}</span>
+        <span class="col-line">${vatExempt ? totalStr : lineNetStr}</span>
+      </div>
+    </div>
+    <div class="section-title">סכומים (שקל חדש)</div>
     ${vatBlock}
     <footer class="foot">
       ${allocBlock}
       <div class="foot-block">
-        מסמך זה הופק במערכת הניהול של בית העסק לצורכי תיעוד ולקוח. דיווחים, מסמכים חשמליים רשמיים ומספרי הקצאה מ־SHAAM — לפי סוג המסמך והוראות רשות המסים העדכניות.
+        מסמך זה הופק במערכת הניהול של בית העסק. חשבונית מס (300), חשבונית מס/קבלה (305), זיכוי (310) ופרופורמה (330) — כל אחד דרישות שונות; קבלה 320 היא אישור תשלום בלבד. יש לוודא שיעור מע״מ עדכני (כיום ${vatPct}% לפי הנחיות) ושדות נוספים מול רשות המסים.
         ${
           vatExempt
-            ? ' עוסק פטור אינו גובה מע״מ; יש לוודא את הסטטוס מול הרשות.'
-            : ` שיעור המע״מ (${vatPct}%) וספי ההקצאה (לפני מע״מ) יש לעדכן מול פרסומי הרשות בעת שינוי.`
+            ? ' עוסק פטור אינו גובה מע״מ; אין שורת פירוט מע״מ (לפי שלב 3).'
+            : ` פירוט מע״מ: מע״מ = בסיס × ${vatPct}% (עיגול אגורות); סה״כ = בסיס + מע״מ.`
         }
       </div>
     </footer>
@@ -547,11 +628,27 @@ export async function prepareLocalKabala320ReceiptPdf(
 
   const osekRaw = String(profile.business_number ?? '').trim();
   const osekDigits = digitsOnly(osekRaw);
+  const vatExempt = options?.vatExempt === true || profile.vat_exempt === true;
+
   if (osekDigits.length < 8) {
     return {
       ok: false,
       error: 'missing_osek',
-      messageHe: 'יש למלא מספר עוסק מורשה תקין בפרופיל העסק (הגדרות).',
+      messageHe: 'יש למלא מספר עוסק / ח.פ. בפרופיל העסק (הגדרות).',
+    };
+  }
+  if (osekDigits.length === 9 && !validateIsraeliOsekCheckDigit9(osekDigits)) {
+    return {
+      ok: false,
+      error: 'invalid_osek',
+      messageHe: 'מספר העוסק אינו עומד בבדיקת ספרת ביקורת (9 ספרות). ודאו את המספר בהגדרות.',
+    };
+  }
+  if (!vatExempt && osekDigits.length !== 9) {
+    return {
+      ok: false,
+      error: 'missing_osek',
+      messageHe: 'לעוסק מורשה נדרשות 9 ספרות למספר עוסק (לפי פורמט רשות המסים). עדכנו בפרופיל.',
     };
   }
 
@@ -579,6 +676,28 @@ export async function prepareLocalKabala320ReceiptPdf(
     };
   }
 
+  const documentDate = String(apt.slot_date ?? '').trim() || new Date().toISOString().slice(0, 10);
+  const priceBasis = options?.priceBasis === 'net_before_vat' ? 'net_before_vat' : 'gross_incl_vat';
+  const amounts = computeLocalKabala320Amounts({
+    catalogPrice: price,
+    vatExempt,
+    priceBasis,
+  });
+  if (
+    !verifyVatMathConsistency({
+      amounts,
+      priceBasis,
+      catalogPrice: price,
+      rate: LOCAL_KABALA_VAT_RATE,
+    })
+  ) {
+    return {
+      ok: false,
+      error: 'vat_math_failed',
+      messageHe: 'חישוב המע״מ אינו עקבי. בדקו את מחיר השירות ובסיס המחיר (כולל / לפני מע״מ) בהגדרות.',
+    };
+  }
+
   const callerUserId = String(useAuthStore.getState().user?.id ?? '').trim();
   if (!callerUserId) {
     return {
@@ -587,6 +706,7 @@ export async function prepareLocalKabala320ReceiptPdf(
       messageHe: 'לא זוהה משתמש מחובר. התחברו מחדש לאפליקציה.',
     };
   }
+
   const serialRes = await allocateNextLocalKabalaReceiptSerial({
     businessId: getBusinessId()!,
     callerUserId,
@@ -598,27 +718,15 @@ export async function prepareLocalKabala320ReceiptPdf(
 
   const buyerName = await resolveClientNameForAppointment(apt);
   const serviceDescription = String(apt.service_name ?? 'שירות').trim() || 'שירות';
-  const documentDate = String(apt.slot_date ?? '').trim() || new Date().toISOString().slice(0, 10);
   const accent = normalizeHexColor(profile.primary_color, '#2d6a4f');
 
-  const vatExempt = options?.vatExempt === true || profile.vat_exempt === true;
-  const priceBasis = options?.priceBasis === 'net_before_vat' ? 'net_before_vat' : 'gross_incl_vat';
-  const amounts = computeLocalKabala320Amounts({
-    catalogPrice: price,
-    vatExempt,
-    priceBasis,
-  });
   const payMethod: LocalKabalaPaymentMethod = options?.paymentMethod ?? 'cash';
   const paymentHe = paymentMethodHebrew(
     payMethod,
     payMethod === 'credit' ? options?.cardLast4 : undefined,
   );
   const allocNum = String(options?.allocationNumber ?? '').trim();
-  const allocNotice = allocationNoticeForKabala320({
-    netBeforeVat: amounts.netBeforeVat,
-    vatExempt: amounts.vatExempt,
-    documentDateYyyyMmDd: documentDate,
-  });
+  const paymentTermsHe = String(options?.paymentTermsHe ?? '').trim() || 'תשלום במועד ביקור הלקוח';
 
   const html = buildLocalKabala320ReceiptHtml({
     sellerName,
@@ -637,8 +745,7 @@ export async function prepareLocalKabala320ReceiptPdf(
     receiptSerial,
     accentColor: accent,
     allocationNumber: allocNum || undefined,
-    allocationThresholdNote: allocNotice.show,
-    allocationThresholdNetNis: allocNotice.show ? allocNotice.thresholdNetNis : undefined,
+    paymentTermsHe,
   });
 
   /** HTML בלבד — לא טוענים `expo-print` (מודול נטיבי שלא קיים ב־dev client רבים; גרם ל־ERROR בלוג). PDF: אחרי `npx expo run:ios` אפשר להחזיר שימוש ב־expo-print. */

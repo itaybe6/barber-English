@@ -11,13 +11,13 @@ import {
   TextInput,
   ActivityIndicator,
   Platform,
-  I18nManager,
   StatusBar,
+  Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { useTranslation } from 'react-i18next';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { businessConstraintsApi } from '@/lib/api/businessConstraints';
 import { findBookedAppointmentsOverlappingConstraintWindows } from '@/lib/api/constraintAppointmentConflicts';
@@ -220,12 +220,13 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
   const primary = businessColors.primary;
   const calendarTheme = useMemo(() => buildCalendarTheme(primary), [primary]);
 
-  /** Nested Modal often gets 0 from SafeAreaView; combine insets + Android status bar + minimum gap. */
-  const listModalTopInset = Math.max(
+  /** Modal windows often report 0 safe-area from SafeAreaView — use explicit insets + status bar + minimum gap. */
+  const modalTopInset = Math.max(
     insets.top,
     Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0,
     16
   );
+  const sheetMaxHeight = Dimensions.get('window').height - modalTopInset - 12;
 
   const today = useMemo(() => {
     const d = new Date();
@@ -244,7 +245,7 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
   const [isHoursModalOpen, setIsHoursModalOpen] = useState<boolean>(false);
   const [tempStartHour, setTempStartHour] = useState<string>(startTime);
   const [tempEndHour, setTempEndHour] = useState<string>(endTime);
-  const [isExistingModalOpen, setIsExistingModalOpen] = useState<boolean>(false);
+  const [isExistingModalOpen, setIsExistingModalOpen] = useState(false);
   const [showConstraintSuccess, setShowConstraintSuccess] = useState(false);
   const [constraintSuccessLines, setConstraintSuccessLines] = useState<SuccessLine[]>([]);
   const [constraintSuccessAnimKey, setConstraintSuccessAnimKey] = useState(0);
@@ -589,14 +590,18 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={[styles.root, rtl && styles.rtlRoot]}>
-        <SafeAreaView style={[styles.safeTop, rtl && styles.rtlRoot]} edges={['top', 'left', 'right']}>
-          <LinearGradient
-            colors={[`${primary}18`, `${primary}06`, 'transparent']}
-            locations={[0, 0.45, 1]}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-          <View style={[styles.headerRow, styles.headerRowRtl]}>
+        <View style={[styles.safeAreaTopStripe, { height: modalTopInset }]} />
+        <View
+          style={[
+            styles.mainModalBody,
+            {
+              paddingLeft: Math.max(insets.left, 0),
+              paddingRight: Math.max(insets.right, 0),
+            },
+          ]}
+        >
+          <View style={[styles.safeTop, styles.headerSurface, rtl && styles.rtlRoot]}>
+          <View style={styles.headerRow}>
             <TouchableOpacity
               onPress={onClose}
               style={styles.headerIconBtn}
@@ -612,29 +617,36 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
               <Text style={[styles.headerTitle, rtl && styles.hebrewText]} numberOfLines={1}>
                 {t('admin.hoursAdmin.title', 'Work constraints')}
               </Text>
-              <Text style={[styles.headerSubtitle, rtl && styles.hebrewText]} numberOfLines={2}>
-                {t('admin.hoursAdmin.constraintsModalSubtitle')}
-              </Text>
             </View>
-            <TouchableOpacity
-              onPress={() => setIsExistingModalOpen(true)}
-              style={[styles.headerIconBtn, styles.constraintsFab]}
-              activeOpacity={0.88}
-              accessibilityRole="button"
-              accessibilityLabel={t('admin.hoursAdmin.upcomingConstraints', 'Upcoming constraints')}
-            >
-              <LinearGradient colors={[primary, `${primary}CC`]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.fabGradient}>
-                <Ionicons name="list-outline" size={22} color="#FFFFFF" />
-              </LinearGradient>
-            </TouchableOpacity>
+            <View style={styles.headerEndSpacer} />
           </View>
-        </SafeAreaView>
+        </View>
 
-        <KeyboardAwareScreenScroll
+          <KeyboardAwareScreenScroll
           style={[styles.scrollFlex, rtl && styles.rtlRoot]}
           contentContainerStyle={{ paddingBottom: 120 }}
           keyboardShouldPersistTaps="handled"
         >
+          <View style={styles.manageBtnOnlyWrap}>
+            <TouchableOpacity
+              onPress={() => setIsExistingModalOpen(true)}
+              activeOpacity={0.85}
+              style={[styles.modeCard, styles.modeCardRtl, { borderColor: UI.border }]}
+              accessibilityRole="button"
+              accessibilityLabel={t('admin.hoursAdmin.openConstraintsManager', 'Manage constraints')}
+            >
+              <View style={styles.modeIconWrap}>
+                <Ionicons name="list-outline" size={22} color={UI.textSecondary} />
+              </View>
+              <View style={[styles.modeTextCol, rtl && styles.modeTextColHebrew]}>
+                <Text style={[styles.modeTitle, rtl && styles.hebrewText]} numberOfLines={2}>
+                  {t('admin.hoursAdmin.openConstraintsManager', 'Manage constraints')}
+                </Text>
+              </View>
+              <Ionicons name="chevron-back" size={24} color={UI.textTertiary} />
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.sectionPad}>
             <Text style={[styles.sectionLabel, rtl && styles.hebrewText]}>{t('admin.hoursAdmin.whatToBlock')}</Text>
             <View style={styles.modeList}>
@@ -771,7 +783,7 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
           </View>
         </KeyboardAwareScreenScroll>
 
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+          <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           <LinearGradient colors={[UI.bg, UI.bg]} style={StyleSheet.absoluteFill} />
           <TouchableOpacity
             style={[styles.saveBtn, styles.saveBtnRtl, { backgroundColor: primary, shadowColor: primary }, isSaving && styles.saveBtnDisabled]}
@@ -788,16 +800,17 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
               </>
             )}
           </TouchableOpacity>
+          </View>
         </View>
       </View>
 
       <Modal visible={isExistingModalOpen} animationType="slide" onRequestClose={() => setIsExistingModalOpen(false)}>
         <View
           style={[
-            styles.root,
+            styles.listModalRoot,
             rtl && styles.rtlRoot,
             {
-              paddingTop: listModalTopInset,
+              paddingTop: modalTopInset,
               paddingBottom: Math.max(insets.bottom, 12),
               paddingLeft: Math.max(insets.left, 0),
               paddingRight: Math.max(insets.right, 0),
@@ -820,8 +833,8 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
             <View style={{ width: 44 }} />
           </View>
           <ScrollView
-            style={styles.listModalScroll}
-            contentContainerStyle={{ paddingBottom: 32 }}
+            style={[styles.listModalScroll, styles.listModalScrollBg]}
+            contentContainerStyle={{ paddingBottom: 32, flexGrow: 1 }}
             showsVerticalScrollIndicator={false}
           >
             {existing.length === 0 ? (
@@ -922,17 +935,25 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
       <Modal visible={isHoursModalOpen} transparent animationType="fade" onRequestClose={() => setIsHoursModalOpen(false)}>
         <View style={styles.sheetBackdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setIsHoursModalOpen(false)} accessibilityRole="button" accessibilityLabel={t('close')} />
-          <View style={[styles.bottomSheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          <View
+            style={[
+              styles.bottomSheet,
+              {
+                paddingBottom: Math.max(insets.bottom, 16),
+                maxHeight: sheetMaxHeight,
+              },
+            ]}
+          >
             <View style={styles.sheetGrabber} />
             <Text style={[styles.sheetTitle, rtl && { writingDirection: 'rtl' }]}>{t('admin.hoursAdmin.chooseClosedHours', 'Choose closed hours')}</Text>
             <View style={styles.wheelRow}>
               <View style={styles.wheelCol}>
-                <Text style={[styles.wheelLabel, rtl && styles.hebrewText]}>{t('admin.hoursAdmin.start', 'Start')}</Text>
+                <Text style={[styles.wheelLabel, rtl && styles.wheelLabelRtl]}>{t('admin.hoursAdmin.start', 'Start')}</Text>
                 <WheelPicker options={timeOptions} value={tempStartHour} onChange={setTempStartHour} primaryColor={primary} />
               </View>
               <View style={{ width: 12 }} />
               <View style={styles.wheelCol}>
-                <Text style={[styles.wheelLabel, rtl && styles.hebrewText]}>{t('admin.hoursAdmin.end', 'End')}</Text>
+                <Text style={[styles.wheelLabel, rtl && styles.wheelLabelRtl]}>{t('admin.hoursAdmin.end', 'End')}</Text>
                 <WheelPicker options={timeOptions} value={tempEndHour} onChange={setTempEndHour} primaryColor={primary} />
               </View>
             </View>
@@ -973,8 +994,14 @@ export default function BusinessConstraintsModal({ visible, onClose, onConstrain
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: UI.bg },
+  /** Full screen white so status-bar inset matches the list modal header */
+  listModalRoot: { flex: 1, backgroundColor: UI.surface },
+  listModalScrollBg: { backgroundColor: UI.bg },
   rtlRoot: { direction: 'ltr' },
+  safeAreaTopStripe: { backgroundColor: UI.surface, alignSelf: 'stretch' },
+  mainModalBody: { flex: 1, minHeight: 0 },
   safeTop: { zIndex: 2 },
+  headerSurface: { backgroundColor: UI.surface },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -982,7 +1009,8 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     gap: 12,
   },
-  headerRowRtl: { flexDirection: 'row-reverse' },
+  /** Same width as the old trailing FAB so the title block stays visually centered */
+  headerEndSpacer: { width: 44, minHeight: 44 },
   headerIconBtn: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   iconCircle: {
     width: 44,
@@ -997,24 +1025,12 @@ const styles = StyleSheet.create({
       android: { elevation: 2 },
     }),
   },
-  constraintsFab: {},
-  fabGradient: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 8 },
-      android: { elevation: 5 },
-    }),
-  },
   scrollFlex: { flex: 1 },
   headerTitles: { flex: 1, justifyContent: 'center', alignItems: 'flex-start' },
   headerTitlesHebrew: { alignSelf: 'stretch', alignItems: 'stretch' },
   headerTitle: { fontSize: 20, fontWeight: '800', color: UI.text, letterSpacing: -0.3 },
-  headerSubtitle: { fontSize: 13, fontWeight: '600', color: UI.textSecondary, marginTop: 4, lineHeight: 18 },
   hebrewText: { textAlign: 'right', writingDirection: 'rtl', alignSelf: 'stretch' },
+  manageBtnOnlyWrap: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 2 },
   sectionPad: { paddingHorizontal: 16, paddingTop: 4 },
   sectionLabel: {
     fontSize: 13,
@@ -1219,7 +1235,9 @@ const styles = StyleSheet.create({
   },
   sheetTitle: { fontSize: 18, fontWeight: '800', color: UI.text, marginBottom: 8, textAlign: 'center' },
   wheelRow: { flexDirection: 'row', marginTop: 4 },
-  wheelCol: { flex: 1, minWidth: 0 },
+  wheelCol: { flex: 1, minWidth: 0, alignItems: 'stretch' },
+  /** Do not use `hebrewText` here — it sets textAlign:right and breaks centering above each column. */
+  wheelLabelRtl: { writingDirection: 'rtl', textAlign: 'center', alignSelf: 'stretch' },
   wheelLabel: { fontSize: 12, fontWeight: '800', color: UI.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5, textAlign: 'center' },
   sheetPrimaryBtn: {
     marginTop: 8,

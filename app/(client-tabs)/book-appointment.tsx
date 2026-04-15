@@ -588,26 +588,14 @@ export default function BookAppointment() {
   const [showWaitlistSheet, setShowWaitlistSheet] = useState(false);
   const getClientWaitlistEntries = useWaitlistStore((s) => s.getClientWaitlistEntries);
 
-  /** Block joining while the user already has active (`waiting`) waitlist rows for this business. */
+  /** Allow opening the waitlist sheet even when the client already has active waitlist rows. */
   const openWaitlistSheetIfAllowed = useCallback(async () => {
     if (!user?.phone) {
       Alert.alert(t('error.generic', 'Error'), t('waitlist.userInfoMissing', 'User info is missing'));
       return;
     }
-    await getClientWaitlistEntries(user.phone);
-    const entries = useWaitlistStore.getState().clientWaitlistEntries;
-    if (entries.length > 0) {
-      Alert.alert(
-        t('waitlist.cannotJoinTitle', 'Active waitlist'),
-        t(
-          'waitlist.mustLeaveWaitlistFirst',
-          'You are already on the waitlist. Leave it from the home screen before joining again.'
-        )
-      );
-      return;
-    }
     setShowWaitlistSheet(true);
-  }, [user?.phone, getClientWaitlistEntries, t]);
+  }, [user?.phone, t]);
 
   useFocusEffect(
     useCallback(() => {

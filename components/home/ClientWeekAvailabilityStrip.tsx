@@ -9,6 +9,8 @@ import {
   Platform,
   I18nManager,
   Image,
+  Animated,
+  Easing,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -23,6 +25,7 @@ import { parseHexRgb } from '@/lib/colorContrast';
 import type { User } from '@/lib/supabase';
 
 const CARD_RADIUS = 20;
+const GAUGE_TRACK_H = 76;
 
 function primaryRgba(hex: string, alpha: number): string {
   const rgb = parseHexRgb(hex);
@@ -74,10 +77,10 @@ function buildWeekDays(
     const weekdayShort = date.toLocaleDateString(locale, { weekday: 'short' });
     const dayNum = String(date.getDate());
     const dayOfWeek = date.getDay();
-    // A day is closed if the business_hours row for that day_of_week is is_active=false.
-    // If activeDayMap has no entry for this day (no hours row at all), treat it as closed.
+    // A day is closed when activeDayMap has data AND the day is not explicitly is_active=true.
+    // Using !== true (not === false) so days with no row at all are treated as closed.
     const isClosed = Object.keys(activeDayMap).length > 0
-      ? activeDayMap[dayOfWeek] === false
+      ? activeDayMap[dayOfWeek] !== true
       : false;
     out.push({
       dateKey,
@@ -94,7 +97,7 @@ function buildWeekDays(
   return out;
 }
 
-const BARBER_AVATAR = 54;
+const BARBER_AVATAR = 52;
 
 /**
  * Returns the id of the rightmost barber chip.
@@ -129,6 +132,11 @@ export function ClientWeekAvailabilityStrip({
   // Stale-request guard: only the latest request's results are applied
   const loadRequestIdRef = useRef(0);
 
+  // One Animated.Value per day slot — animated from 0 → target fill height
+  const fillAnimValues = useRef(
+    Array.from({ length: STRIP_DAYS }, () => new Animated.Value(0)),
+  ).current;
+
   const load = useCallback(async () => {
     const requestId = ++loadRequestIdRef.current;
     setLoading(true);
@@ -140,7 +148,16 @@ export function ClientWeekAvailabilityStrip({
 
       if (requestId !== loadRequestIdRef.current) return;
 
-      setBarbers(admins);
+      // ─── TEMP TEST: inject dummy barbers to preview multi-staff layout ───
+      const dummyBarbers: User[] = [
+        { id: 'dummy-1', name: 'יוסי כהן', image_url: null } as any,
+        { id: 'dummy-2', name: 'מושה לוי', image_url: null } as any,
+        { id: 'dummy-3', name: 'דוד מזרחי', image_url: null } as any,
+        { id: 'dummy-4', name: 'רוני אברהם', image_url: null } as any,
+        { id: 'dummy-5', name: 'אבי פרץ', image_url: null } as any,
+      ];
+      setBarbers([...admins, ...dummyBarbers]);
+      // ─────────────────────────────────────────────────────────────────────
       setHorizonDays(Math.max(0, horizon));
 
       const resolvedBarberId =
@@ -165,16 +182,17 @@ export function ClientWeekAvailabilityStrip({
 
       if (requestId !== loadRequestIdRef.current) return;
 
-      // Build active-day map: global hours first, then override with barber-specific rows
+      // Build active-day map.
+      // When a barber is selected and has their own hours rows, use ONLY those rows —
+      // global hours must not bleed in for days the barber doesn't work.
+      // When no barber-specific rows exist, fall back to global hours.
       const globalHours = allHours.filter((h) => !h.user_id);
       const barberHours = resolvedBarberId
         ? allHours.filter((h) => h.user_id === resolvedBarberId)
         : [];
+      const sourceHours = barberHours.length > 0 ? barberHours : globalHours;
       const newActiveDayMap: Record<number, boolean> = {};
-      for (const h of globalHours) {
-        newActiveDayMap[h.day_of_week] = h.is_active;
-      }
-      for (const h of barberHours) {
+      for (const h of sourceHours) {
         newActiveDayMap[h.day_of_week] = h.is_active;
       }
       setActiveDayMap(newActiveDayMap);
@@ -215,23 +233,60 @@ export function ClientWeekAvailabilityStrip({
     return buildWeekDays(counts, today, horizonDays, locale, activeDayMap);
   }, [counts, horizonDays, locale, activeDayMap]);
 
+  const maxDayCount = useMemo(
+    () => Math.max(1, ...weekDays.map((d) => d.count)),
+    [weekDays],
+  );
+
+  // Animate gauge bars whenever data finishes loading or weekDays change
+  useEffect(() => {
+    if (loading) {
+      // Reset to zero while loading so bars re-enter on next data arrival
+      fillAnimValues.forEach((v) => v.setValue(0));
+      return;
+    }
+    const max = Math.max(1, ...weekDays.map((d) => d.count));
+    const animations = fillAnimValues.map((val, i) => {
+      const d = weekDays[i];
+      if (!d) return Animated.timing(val, { toValue: 0, duration: 0, useNativeDriver: false });
+      const dimmed = d.isPastCalendarDay || d.isBeyondBookingHorizon || d.isClosed;
+      const isEmpty = dimmed || d.count === 0;
+      const ratio = isEmpty ? 0 : Math.sqrt(d.count / max);
+      const targetH = Math.max(0, Math.round(ratio * GAUGE_TRACK_H));
+      // Stagger: RTL reads right→left so reverse index for natural feel
+      const staggerIndex = rtl ? STRIP_DAYS - 1 - i : i;
+      return Animated.timing(val, {
+        toValue: targetH,
+        duration: 650,
+        delay: staggerIndex * 60,
+        easing: Easing.out(Easing.exp),
+        useNativeDriver: false,
+      });
+    });
+    Animated.parallel(animations).start();
+  }, [loading, weekDays, rtl]);
+
   const titleColor = '#1C1C1E';
   const secondaryLabel = 'rgba(60, 60, 67, 0.64)';
   const tertiaryLabel = 'rgba(60, 60, 67, 0.45)';
 
-  const showBarberRow = barbers.length > 0;
+  const showBarberRow = barbers.length > 1;
 
   return (
     <View
       style={[styles.touchWrap, (isBlocked || awaitingApproval) && { opacity: 0.5 }]}
       accessibilityElementsHidden={isBlocked || awaitingApproval}
     >
-      <Text style={[styles.title, { color: titleColor }]}>
-        {t('home.weekAvailability.title', 'תורים פנויים בימים הקרובים')}
-      </Text>
-      {/** White card — title sits above (outside), like waitlist section title vs card */}
       <View style={styles.sectionCard}>
         <View style={styles.cardInner}>
+          <Text style={[styles.title, { color: titleColor }]}>
+            {t('home.weekAvailability.title', 'מד זמינות תורים')}
+          </Text>
+          {showBarberRow ? (
+            <Text style={[styles.subtitle, { color: secondaryLabel }]}>
+              {t('home.weekAvailability.subtitle', 'בחרו איש צוות לצפייה בזמינות')}
+            </Text>
+          ) : null}
           {showBarberRow ? (
             <ScrollView
               horizontal
@@ -239,7 +294,9 @@ export function ClientWeekAvailabilityStrip({
               style={styles.barberScroll}
               contentContainerStyle={[
                 styles.barberScrollContent,
-                { flexDirection: rtl ? 'row-reverse' : 'row' },
+                barbers.length <= 4
+                  ? { justifyContent: 'center', flexGrow: 1 }
+                  : { justifyContent: 'flex-start' },
               ]}
               keyboardShouldPersistTaps="handled"
             >
@@ -290,74 +347,53 @@ export function ClientWeekAvailabilityStrip({
             </View>
           ) : (
             <View style={[styles.daysRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
-              {weekDays.map((d) => {
-                  const dimmed = d.isPastCalendarDay || d.isBeyondBookingHorizon || d.isClosed;
-                  const has = !dimmed && d.count > 0;
-                  /** Same chrome as "today" — primary wash + border when this calendar day has open slots */
-                  const primaryHighlight = !dimmed && (d.isToday || has);
+              {weekDays.map((d, index) => {
+                const dimmed = d.isPastCalendarDay || d.isBeyondBookingHorizon || d.isClosed;
+                // sqrt scale: compresses large differences so days with "many" slots
+                // don't dwarf days with a moderate number of slots
+                const ratio = dimmed || d.count === 0 ? 0 : Math.sqrt(d.count / maxDayCount);
+                // Opacity scales from 0.28 (sparse) to 1.0 (full) so color deepens with count
+                const fillAlpha = ratio < 0.001 ? 0 : 0.28 + ratio * 0.72;
+                const fillBg = primaryRgba(primaryColor, fillAlpha);
 
-                  const bgColor = dimmed
-                    ? 'rgba(0,0,0,0.03)'
-                    : primaryHighlight
-                    ? primaryRgba(primaryColor, 0.09)
-                    : 'rgba(0,0,0,0.04)';
+                // A day with 0 slots (closed, past, or fully booked) looks gray — same as dimmed
+                const isEmpty = dimmed || d.count === 0;
+                const labelColor = isEmpty
+                  ? 'rgba(60,60,67,0.25)'
+                  : d.isToday
+                  ? primaryColor
+                  : 'rgba(60,60,67,0.55)';
 
-                  const borderColor = dimmed
-                    ? 'rgba(60,60,67,0.07)'
-                    : primaryHighlight
-                    ? primaryColor
-                    : 'rgba(60,60,67,0.14)';
-
-                  const borderWidth = primaryHighlight ? 1.5 : 1;
-
-                  const countColor = dimmed
-                    ? 'rgba(60,60,67,0.22)'
-                    : 'rgba(60,60,67,0.28)';
-
-                  const weekdayColor = dimmed
-                    ? 'rgba(60,60,67,0.25)'
-                    : primaryHighlight
-                    ? primaryColor
-                    : tertiaryLabel;
-
-                  return (
-                    <TouchableOpacity
-                      key={d.dateKey}
-                      activeOpacity={dimmed ? 1 : 0.68}
-                      disabled={dimmed || isBlocked || awaitingApproval}
-                      onPress={() => {
-                        if (!dimmed && !isBlocked && !awaitingApproval) {
-                          router.push('/(client-tabs)/book-appointment');
-                        }
-                      }}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${d.isToday ? t('home.weekAvailability.today', 'Today') : d.weekdayShort}, ${d.dayNum}`}
-                      style={[
-                        styles.dayBtn,
-                        {
-                          backgroundColor: bgColor,
-                          borderColor,
-                          borderWidth,
-                        },
-                        dimmed && styles.dayBtnDimmed,
-                      ]}
+                return (
+                  <TouchableOpacity
+                    key={d.dateKey}
+                    activeOpacity={isEmpty ? 1 : 0.68}
+                    disabled={isEmpty || isBlocked || awaitingApproval}
+                    onPress={() => {
+                      if (!isEmpty && !isBlocked && !awaitingApproval) {
+                        router.push('/(client-tabs)/book-appointment');
+                      }
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${d.isToday ? t('home.weekAvailability.today', 'Today') : d.weekdayShort}, ${d.count}`}
+                    style={[styles.gaugeCol, isEmpty && { opacity: 0.35 }]}
+                  >
+                    <View style={styles.gaugeTrack}>
+                      <Animated.View
+                        style={[styles.gaugeFill, { height: fillAnimValues[index], backgroundColor: fillBg }]}
+                      />
+                    </View>
+                    <Text
+                      style={[styles.gaugeLabel, { color: labelColor }]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.7}
                     >
-                      <Text
-                        style={[styles.dayBtnWeekday, { color: weekdayColor }]}
-                        numberOfLines={1}
-                        adjustsFontSizeToFit
-                        minimumFontScale={0.7}
-                      >
-                        {d.isToday
-                          ? t('home.weekAvailability.today', 'Today')
-                          : d.weekdayShort}
-                      </Text>
-                      <Text style={[styles.dayBtnCount, { color: countColor }]}>
-                        {dimmed ? '—' : String(d.count)}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                      {d.isToday ? t('home.weekAvailability.today', 'היום') : d.weekdayShort}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           )}
         </View>
@@ -395,26 +431,34 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
   },
   title: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
-    letterSpacing: -0.4,
+    letterSpacing: -0.3,
+    textAlign: 'center',
+    marginBottom: 3,
+    paddingHorizontal: 8,
+  },
+  subtitle: {
+    fontSize: 12,
+    fontWeight: '500',
     textAlign: 'center',
     marginBottom: 10,
     paddingHorizontal: 8,
   },
   barberScroll: {
     marginBottom: 8,
-    maxHeight: BARBER_AVATAR + 26,
+    maxHeight: BARBER_AVATAR + 28,
+    marginHorizontal: -16,
   },
   barberScrollContent: {
-    alignItems: 'flex-start',
-    gap: 12,
+    alignItems: 'center',
+    gap: 6,
     paddingVertical: 2,
-    paddingRight: 4,
+    paddingHorizontal: 16,
   },
   barberChipWrap: {
     alignItems: 'center',
-    width: 70,
+    width: 68,
   },
   avatarRing: {
     width: BARBER_AVATAR,
@@ -439,7 +483,7 @@ const styles = StyleSheet.create({
   },
   barberLabel: {
     marginTop: 4,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '600',
     textAlign: 'center',
     maxWidth: 64,
@@ -456,31 +500,31 @@ const styles = StyleSheet.create({
   },
   daysRow: {
     gap: 5,
-    marginTop: 2,
+    marginTop: 4,
+    alignItems: 'flex-end',
   },
-  dayBtn: {
+  gaugeCol: {
     flex: 1,
-    borderRadius: 14,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 3,
-    gap: 4,
+    gap: 7,
+  },
+  gaugeTrack: {
+    width: '100%',
+    height: GAUGE_TRACK_H,
+    backgroundColor: 'rgba(0,0,0,0.055)',
+    borderRadius: 10,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
     ...Platform.select({ ios: { borderCurve: 'continuous' as any } }),
   },
-  dayBtnDimmed: {
-    opacity: 0.35,
+  gaugeFill: {
+    width: '100%',
+    borderRadius: 10,
   },
-  dayBtnWeekday: {
+  gaugeLabel: {
     fontSize: 10,
     fontWeight: '600',
     textAlign: 'center',
     letterSpacing: 0,
-  },
-  dayBtnCount: {
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-    textAlign: 'center',
   },
 });

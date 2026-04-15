@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Dimensions, Image, StyleSheet, View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -261,6 +261,11 @@ export default function SelectBarberScreen() {
   const [homeLogoUrl, setHomeLogoUrl] = useState<string | null>(null);
 
   const scrollX = useSharedValue(0);
+  const flatListRef = useRef<any>(null);
+
+  // Reversed display order: barbers[0] lands at the physical-right end.
+  // Swiping RIGHT decreases contentOffset.x → shows the next original barber.
+  const displayBarbers = useMemo(() => [...barbers].reverse(), [barbers]);
 
   useEffect(() => {
     let cancelled = false;
@@ -289,6 +294,20 @@ export default function SelectBarberScreen() {
     };
     loadBarbers();
   }, []);
+
+  // After data loads, scroll to the last display item (= barbers[0]) so the
+  // first barber is shown on screen and swiping RIGHT reveals the next one.
+  useEffect(() => {
+    if (barbers.length < 2) return;
+    const lastDisplayIndex = barbers.length - 1;
+    const targetOffset = lastDisplayIndex * (_slideWidth + _spacing);
+    // Defer until after the FlatList has laid out
+    const t = setTimeout(() => {
+      flatListRef.current?.scrollToOffset({ offset: targetOffset, animated: false });
+      scrollX.value = lastDisplayIndex;
+    }, 50);
+    return () => clearTimeout(t);
+  }, [barbers]);
 
   const onScroll = useAnimatedScrollHandler((e) => {
     scrollX.value = e.contentOffset.x / (_slideWidth + _spacing);
@@ -323,7 +342,7 @@ export default function SelectBarberScreen() {
     <View style={styles.container}>
       {/* Backdrop Images */}
       <View style={StyleSheet.absoluteFillObject}>
-        {barbers.map((barber, index) => (
+        {displayBarbers.map((barber, index) => (
           <BackdropImage
             key={`bg-barber-${barber.id}`}
             index={index}
@@ -360,7 +379,7 @@ export default function SelectBarberScreen() {
 
       {/* Barber Details in Top Area */}
       <View style={[styles.detailsContainer, { height: _topSpacing * 0.35, marginTop: height * 0.12, paddingBottom: 40 }]}>
-        {barbers.map((barber, index) => (
+        {displayBarbers.map((barber, index) => (
           <BarberDetails
             key={`details-${barber.id}`}
             index={index}
@@ -370,9 +389,11 @@ export default function SelectBarberScreen() {
         ))}
       </View>
 
-      {/* Carousel */}
+      {/* Carousel — data is reversed so barbers[0] sits at the physical-right end.
+          Swiping RIGHT reduces contentOffset.x and reveals the next barber. */}
       <Animated.FlatList
-        data={barbers}
+        ref={flatListRef}
+        data={displayBarbers}
         keyExtractor={(item) => String(item.id)}
         style={{ flexGrow: 0, marginTop: -40 }}
         contentContainerStyle={{
@@ -387,7 +408,8 @@ export default function SelectBarberScreen() {
             barber={item}
             scrollX={scrollX}
             onPress={() => {
-              setActiveIndex(index);
+              // Convert display index back to original barbers index
+              setActiveIndex(barbers.length - 1 - index);
             }}
           />
         )}
@@ -398,11 +420,12 @@ export default function SelectBarberScreen() {
         onScroll={onScroll}
         scrollEventThrottle={1000 / 60}
         onMomentumScrollEnd={(e) => {
-          const newIndex = Math.round(
+          const displayIndex = Math.round(
             e.nativeEvent.contentOffset.x / (_slideWidth + _spacing)
           );
-          if (newIndex >= 0 && newIndex < barbers.length) {
-            setActiveIndex(newIndex);
+          const originalIndex = barbers.length - 1 - displayIndex;
+          if (originalIndex >= 0 && originalIndex < barbers.length) {
+            setActiveIndex(originalIndex);
           }
         }}
       />

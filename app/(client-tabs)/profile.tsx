@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Modal, Pressable, TextInput, ActivityIndicator, Image, Platform, I18nManager, type LayoutChangeEvent } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Animated, PanResponder, StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Modal, Pressable, TextInput, ActivityIndicator, Image, Platform, I18nManager, type LayoutChangeEvent } from 'react-native';
 import { KeyboardAwareScreenScroll } from '@/components/KeyboardAwareScreenScroll';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,6 +37,58 @@ export default function ClientProfileScreen() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [profileLavaLayout, setProfileLavaLayout] = useState({ w: 0, h: 0 });
+
+  // Language sheet animation
+  const langSheetTranslateY = useRef(new Animated.Value(500)).current;
+  const langBackdropOpacity = useRef(new Animated.Value(0)).current;
+
+  const openLanguageSheet = useCallback(() => {
+    langSheetTranslateY.setValue(500);
+    langBackdropOpacity.setValue(0);
+    setIsLanguageOpen(true);
+  }, [langSheetTranslateY, langBackdropOpacity]);
+
+  useEffect(() => {
+    if (isLanguageOpen) {
+      Animated.parallel([
+        Animated.timing(langBackdropOpacity, { toValue: 1, duration: 260, useNativeDriver: true }),
+        Animated.spring(langSheetTranslateY, { toValue: 0, damping: 22, stiffness: 220, mass: 1, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [isLanguageOpen, langBackdropOpacity, langSheetTranslateY]);
+
+  const closeLanguageSheetRef = useRef<() => void>(() => {});
+  const closeLanguageSheet = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(langBackdropOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+      Animated.timing(langSheetTranslateY, { toValue: 500, duration: 240, useNativeDriver: true }),
+    ]).start(() => setIsLanguageOpen(false));
+  }, [langBackdropOpacity, langSheetTranslateY]);
+  useEffect(() => { closeLanguageSheetRef.current = closeLanguageSheet; }, [closeLanguageSheet]);
+
+  const langPanResponder = useRef(
+    PanResponder.create({
+      // Don't steal touch on tap start — let children (TouchableOpacity) handle taps
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      // But capture vertical-down drags even from children
+      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 8 && gs.dy > Math.abs(gs.dx),
+      onMoveShouldSetPanResponderCapture: (_, gs) => gs.dy > 8 && gs.dy > Math.abs(gs.dx),
+      onPanResponderMove: (_, gs) => {
+        if (gs.dy > 0) langSheetTranslateY.setValue(gs.dy);
+      },
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dy > 80 || gs.vy > 0.5) {
+          closeLanguageSheetRef.current();
+        } else {
+          Animated.spring(langSheetTranslateY, { toValue: 0, damping: 20, stiffness: 200, useNativeDriver: true }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(langSheetTranslateY, { toValue: 0, damping: 20, stiffness: 200, useNativeDriver: true }).start();
+      },
+    })
+  ).current;
   const onProfileLavaLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
     if (width > 0 && height > 0) {
@@ -378,7 +430,7 @@ export default function ClientProfileScreen() {
                     return t('profile.language.english', 'English');
                 }
               })(),
-              () => setIsLanguageOpen(true),
+              openLanguageSheet,
             )}
             <View style={[styles.settingDivider, isRtl ? styles.settingDividerRtl : styles.settingDividerLtr]} />
 
@@ -590,96 +642,73 @@ export default function ClientProfileScreen() {
       </Modal>
 
       {/* Language Bottom Sheet */}
-      <Modal visible={isLanguageOpen} transparent animationType="slide" onRequestClose={() => setIsLanguageOpen(false)}>
-        <View style={styles.historyOverlay}>
-          <View style={styles.historySheet}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetHeader}>
-              <View style={{ width: 44 }} />
-              <Text style={styles.sheetTitle}>{t('profile.language.title','Language')}</Text>
-              <TouchableOpacity onPress={() => setIsLanguageOpen(false)} style={styles.sheetCloseBtn}>
-                <Ionicons name="close" size={22} color={Colors.text} />
-              </TouchableOpacity>
-            </View>
-            <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
-              <TouchableOpacity
-                style={styles.languageOption}
-                onPress={async () => {
-                  try {
-                    await i18n.changeLanguage('en');
-                    await persistAppUiLanguage('en');
-                    if (user?.id) {
-                      await usersApi.updateUser(user.id, { language: 'en' } as any);
-                      updateUserProfile({ language: 'en' } as any);
-                    }
-                  } finally {
-                    setIsLanguageOpen(false);
-                  }
-                }}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.languageOptionText}>{t('profile.language.english','English')}</Text>
-                {i18n.language?.startsWith('en') && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.languageOption}
-                onPress={async () => {
-                  try {
-                    await i18n.changeLanguage('he');
-                    await persistAppUiLanguage('he');
-                    if (user?.id) {
-                      await usersApi.updateUser(user.id, { language: 'he' } as any);
-                      updateUserProfile({ language: 'he' } as any);
-                    }
-                  } finally {
-                    setIsLanguageOpen(false);
-                  }
-                }}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.languageOptionText}>{t('profile.language.hebrew','Hebrew')}</Text>
-                {i18n.language?.startsWith('he') && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.languageOption}
-                onPress={async () => {
-                  try {
-                    await i18n.changeLanguage('ar');
-                    await persistAppUiLanguage('ar');
-                    if (user?.id) {
-                      await usersApi.updateUser(user.id, { language: 'ar' } as any);
-                      updateUserProfile({ language: 'ar' } as any);
-                    }
-                  } finally {
-                    setIsLanguageOpen(false);
-                  }
-                }}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.languageOptionText}>{t('profile.language.arabic', 'Arabic')}</Text>
-                {i18n.language?.startsWith('ar') && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.languageOption}
-                onPress={async () => {
-                  try {
-                    await i18n.changeLanguage('ru');
-                    await persistAppUiLanguage('ru');
-                    if (user?.id) {
-                      await usersApi.updateUser(user.id, { language: 'ru' } as any);
-                      updateUserProfile({ language: 'ru' } as any);
-                    }
-                  } finally {
-                    setIsLanguageOpen(false);
-                  }
-                }}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.languageOptionText}>{t('profile.language.russian', 'Russian')}</Text>
-                {i18n.language?.startsWith('ru') && <Ionicons name="checkmark" size={18} color={businessColors.primary} />}
-              </TouchableOpacity>
-              <Text style={styles.helperNote}>{t('profile.language.restartNote','Direction changes may require app restart')}</Text>
-            </View>
+      <Modal visible={isLanguageOpen} transparent animationType="none" onRequestClose={closeLanguageSheet}>
+        <View style={{ flex: 1 }}>
+          {/* Animated backdrop */}
+          <Animated.View style={[StyleSheet.absoluteFill, styles.langBackdrop, { opacity: langBackdropOpacity }]} />
+          {/* Tap-outside to close */}
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeLanguageSheet} />
+          {/* Animated sheet */}
+          <View style={styles.langSheetPositioner} pointerEvents="box-none">
+            <Animated.View
+              style={[styles.historySheet, { transform: [{ translateY: langSheetTranslateY }] }]}
+              {...langPanResponder.panHandlers}
+            >
+              <View style={styles.sheetHandle} />
+              <View style={styles.sheetHeaderCenter}>
+                <Text style={styles.sheetTitle}>{t('profile.language.title', 'Language')}</Text>
+              </View>
+
+              <View style={styles.languageList}>
+                {([
+                  { code: 'en', flag: '🇺🇸', label: t('profile.language.english', 'English') },
+                  { code: 'he', flag: '🇮🇱', label: t('profile.language.hebrew', 'Hebrew') },
+                  { code: 'ar', flag: '🇸🇦', label: t('profile.language.arabic', 'Arabic') },
+                  { code: 'ru', flag: '🇷🇺', label: t('profile.language.russian', 'Russian') },
+                ] as { code: string; flag: string; label: string }[]).map(({ code, flag, label }) => {
+                  const isSelected = i18n.language?.startsWith(code);
+                  return (
+                    <TouchableOpacity
+                      key={code}
+                      style={[
+                        styles.languageRow,
+                        isSelected && { backgroundColor: `${businessColors.primary}10` },
+                      ]}
+                      onPress={async () => {
+                        try {
+                          await i18n.changeLanguage(code);
+                          await persistAppUiLanguage(code);
+                          if (user?.id) {
+                            await usersApi.updateUser(user.id, { language: code } as any);
+                            updateUserProfile({ language: code } as any);
+                          }
+                        } finally {
+                          closeLanguageSheet();
+                        }
+                      }}
+                      activeOpacity={0.75}
+                    >
+                      <View style={styles.languageRowLeft}>
+                        <View style={styles.languageFlagWrap}>
+                          <Text style={styles.languageFlag}>{flag}</Text>
+                        </View>
+                        <Text style={[styles.languageOptionText, isSelected && { color: businessColors.primary, fontWeight: '700' }]}>
+                          {label}
+                        </Text>
+                      </View>
+                      {isSelected && (
+                        <View style={[styles.languageCheckCircle, { backgroundColor: businessColors.primary }]}>
+                          <Ionicons name="checkmark" size={13} color="#fff" />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.helperNote}>{t('profile.language.restartNote', 'Direction changes may require app restart')}</Text>
+              <View style={{ height: 28 }} />
+            </Animated.View>
           </View>
         </View>
       </Modal>
@@ -1227,6 +1256,11 @@ const styles = StyleSheet.create<any>({
     paddingHorizontal: 16,
     paddingBottom: 8,
   },
+  sheetHeaderCenter: {
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
   sheetTitle: {
     fontSize: 18,
     fontWeight: '700',
@@ -1237,6 +1271,13 @@ const styles = StyleSheet.create<any>({
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  langBackdrop: {
+    backgroundColor: 'rgba(0,0,0,0.42)',
+  },
+  langSheetPositioner: {
+    flex: 1,
+    justifyContent: 'flex-end',
   },
   historyList: {
     paddingHorizontal: 16,
@@ -1337,28 +1378,62 @@ const styles = StyleSheet.create<any>({
     lineHeight: 22,
     textAlign: 'left',
   },
-  languageOption: {
+  languageList: {
+    paddingHorizontal: 12,
+    paddingTop: 4,
+    gap: 2,
+  },
+  languageRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    marginBottom: 10,
+    borderRadius: 14,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+  },
+  languageRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  languageFlagWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F2F2F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  languageFlag: {
+    fontSize: 22,
   },
   languageOptionText: {
     fontSize: 16,
     color: Colors.text,
-    fontWeight: '600',
+    fontWeight: '500',
+  },
+  languageCheckCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetCloseBtnCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(60,60,67,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   helperNote: {
-    marginTop: 6,
+    marginTop: 10,
+    marginHorizontal: 26,
     fontSize: 12,
     color: Colors.subtext,
-    textAlign: 'left',
+    textAlign: 'center',
   },
   quickActionsContainer: {
     flexDirection: 'row',

@@ -652,24 +652,18 @@ export default function ClientHomeScreen() {
     }
   }, [user?.phone]);
 
-  /** Server-side delete only; UI (loader → ✓) lives inside `WaitlistHomeFabPanel`. Clear list on Got it. */
-  const handleConfirmRemoveWaitlistAll = useCallback(async (): Promise<boolean> => {
-    const ids = waitlistEntries.map((e) => e.id);
-    if (ids.length === 0) return false;
+  /** Server-side delete for a single entry; UI (loader → ✓) lives inside `WaitlistHomeFabPanel`. */
+  const handleConfirmRemoveWaitlistEntry = useCallback(async (entryId: string): Promise<boolean> => {
     try {
-      for (const id of ids) {
-        const ok = await clientHomeApi.removeFromWaitlist(id);
-        if (!ok) return false;
-      }
-      return true;
+      return await clientHomeApi.removeFromWaitlist(entryId);
     } catch (error) {
       console.error('Error removing from waitlist:', error);
       return false;
     }
-  }, [waitlistEntries]);
+  }, []);
 
-  const handleWaitlistLeaveSuccessDismiss = useCallback(() => {
-    setWaitlistEntries([]);
+  const handleWaitlistRemoveEntrySuccessDismiss = useCallback((entryId: string) => {
+    setWaitlistEntries((prev) => prev.filter((e) => e.id !== entryId));
   }, []);
 
   // Fetch active swap requests from OTHER users that want MY next appointment slot
@@ -1194,8 +1188,8 @@ export default function ClientHomeScreen() {
                 entries={waitlistEntries}
                 formatWaitlistDate={formatWaitlistDate}
                 triggerVariant="card"
-                onConfirmRemoveAll={handleConfirmRemoveWaitlistAll}
-                onLeaveSuccessDismiss={handleWaitlistLeaveSuccessDismiss}
+                onConfirmRemoveEntry={handleConfirmRemoveWaitlistEntry}
+                onRemoveEntrySuccessDismiss={handleWaitlistRemoveEntrySuccessDismiss}
               />
             </View>
           ) : null}
@@ -2378,8 +2372,13 @@ const styles = StyleSheet.create<any>({
     borderRadius: 20,
     marginHorizontal: 4,
     ...Platform.select({
-      ios: { shadowColor: '#1e253b', shadowOpacity: 0.09, shadowRadius: 14, shadowOffset: { width: 0, height: 5 } },
-      android: { elevation: 5 },
+      ios: {
+        shadowColor: '#1e253b',
+        shadowOpacity: 0.16,
+        shadowRadius: 18,
+        shadowOffset: { width: 0, height: 8 },
+      },
+      android: { elevation: 9 },
     }),
   },
   clientNextHeader: {

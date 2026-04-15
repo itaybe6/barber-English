@@ -76,35 +76,55 @@ function WaitlistInlineSuccessView({
 
   return (
     <Animated.View style={[inlineSuccessStyles.root, rootStyle]}>
+
+      {/* Checkmark with glow ring */}
       <Animated.View style={[inlineSuccessStyles.checkWrap, checkStyle]}>
-        <Ionicons name="checkmark-circle" size={72} color={primaryColor} />
+        <View style={[inlineSuccessStyles.checkGlow, { backgroundColor: `${primaryColor}18` }]}>
+          <Ionicons name="checkmark-circle" size={72} color={primaryColor} />
+        </View>
       </Animated.View>
+
+      {/* Title */}
       <Text style={[inlineSuccessStyles.title, { color: primaryColor }]} maxFontSizeMultiplier={1.25}>
         {headline}
       </Text>
-      <Text
-        style={[inlineSuccessStyles.dateLine, { color: textSecondary }]}
-        maxFontSizeMultiplier={1.2}
-      >
-        {dateLine}
-      </Text>
-      <View style={inlineSuccessStyles.meta}>
-        <Text style={[inlineSuccessStyles.metaLabel, { color: textSecondary }]}>{serviceLabel}</Text>
-        <Text style={[inlineSuccessStyles.metaValue, { color: textPrimary }]} numberOfLines={2}>
-          {serviceValue}
-        </Text>
-        <View style={inlineSuccessStyles.divider} />
-        <Text style={[inlineSuccessStyles.metaLabel, { color: textSecondary }]}>{windowLabel}</Text>
-        <Text style={[inlineSuccessStyles.metaValue, { color: textPrimary }]} numberOfLines={2}>
-          {windowValue}
+
+      {/* Date pill */}
+      <View style={[inlineSuccessStyles.datePill, { backgroundColor: `${primaryColor}14` }]}>
+        <Ionicons name="calendar-outline" size={13} color={primaryColor} />
+        <Text style={[inlineSuccessStyles.dateLine, { color: primaryColor }]} maxFontSizeMultiplier={1.2}>
+          {dateLine}
         </Text>
       </View>
-      <Text
-        style={[inlineSuccessStyles.notify, { color: textSecondary }]}
-        maxFontSizeMultiplier={1.15}
-      >
-        {notify}
-      </Text>
+
+      {/* Meta card */}
+      <View style={inlineSuccessStyles.metaCard}>
+        <View style={inlineSuccessStyles.metaRow}>
+          <Text style={[inlineSuccessStyles.metaLabel, { color: textSecondary }]}>{serviceLabel}</Text>
+          <Text style={[inlineSuccessStyles.metaValue, { color: textPrimary }]} numberOfLines={2}>
+            {serviceValue}
+          </Text>
+        </View>
+        <View style={inlineSuccessStyles.metaDivider} />
+        <View style={inlineSuccessStyles.metaRow}>
+          <Text style={[inlineSuccessStyles.metaLabel, { color: textSecondary }]}>{windowLabel}</Text>
+          <Text style={[inlineSuccessStyles.metaValue, { color: textPrimary }]} numberOfLines={2}>
+            {windowValue}
+          </Text>
+        </View>
+      </View>
+
+      {/* Notify info box */}
+      <View style={inlineSuccessStyles.notifyBox}>
+        <Text
+          style={[inlineSuccessStyles.notify, { color: textSecondary }]}
+          maxFontSizeMultiplier={1.15}
+        >
+          {notify}
+        </Text>
+      </View>
+
+      {/* Got it button */}
       <TouchableOpacity
         activeOpacity={0.88}
         onPress={onGotIt}
@@ -114,6 +134,7 @@ function WaitlistInlineSuccessView({
       >
         <Text style={inlineSuccessStyles.gotItText}>{gotItLabel}</Text>
       </TouchableOpacity>
+
     </Animated.View>
   );
 }
@@ -122,74 +143,115 @@ const inlineSuccessStyles = StyleSheet.create({
   root: {
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingTop: 8,
+    paddingTop: 12,
     paddingBottom: 8,
-    paddingHorizontal: 8,
-    minHeight: 360,
-    gap: 8,
+    paddingHorizontal: 4,
+    gap: 12,
   },
-  checkWrap: {
-    marginBottom: 4,
+  checkWrap: {},
+  checkGlow: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800',
     textAlign: 'center',
-    letterSpacing: -0.3,
-    lineHeight: 26,
+    letterSpacing: -0.4,
+    lineHeight: 28,
+  },
+  datePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
   },
   dateLine: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     textAlign: 'center',
     letterSpacing: -0.1,
-    marginBottom: 4,
   },
-  meta: {
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
+  metaCard: {
     width: '100%',
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.04)',
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
+      },
+      android: { elevation: 1 },
+    }),
+  },
+  metaRow: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: 3,
+  },
+  metaDivider: {
+    width: '88%',
+    alignSelf: 'center',
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(0,0,0,0.10)',
   },
   metaLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    opacity: 0.7,
   },
   metaValue: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
     textAlign: 'center',
     letterSpacing: -0.2,
   },
-  divider: {
-    width: 32,
-    height: 1,
-    backgroundColor: 'rgba(0,0,0,0.08)',
-    marginVertical: 6,
-  },
-  notify: {
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginTop: 6,
+  notifyBox: {
+    width: '100%',
+    paddingVertical: 4,
     paddingHorizontal: 8,
   },
+  notifyIcon: {},
+  notify: {
+    fontSize: 13,
+    fontWeight: '500',
+    textAlign: 'center',
+    lineHeight: 19,
+  },
   gotItBtn: {
-    marginTop: 14,
+    marginTop: 4,
+    width: '100%',
     borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 36,
+    paddingVertical: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 200,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+      },
+      android: { elevation: 4 },
+    }),
   },
   gotItText: {
     color: '#FFFFFF',
     fontSize: 17,
-    fontWeight: '700',
-    letterSpacing: -0.2,
+    fontWeight: '800',
+    letterSpacing: -0.3,
   },
 });
 

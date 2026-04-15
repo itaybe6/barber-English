@@ -86,34 +86,6 @@ export const useWaitlistStore = create<WaitlistStore>((set) => ({
         return false;
       }
 
-      const { data: anyActive, error: anyActiveErr } = await supabase
-        .from('waitlist_entries')
-        .select('id')
-        .eq('client_phone', clientPhone)
-        .eq('business_id', businessId)
-        .eq('status', 'waiting')
-        .limit(1);
-
-      if (anyActiveErr) {
-        console.error('Error checking existing waitlist:', anyActiveErr);
-        set({
-          error: i18n.t('waitlist.addError', 'An error occurred while adding to the waitlist'),
-          isLoading: false,
-        });
-        return false;
-      }
-
-      if (anyActive && anyActive.length > 0) {
-        set({
-          error: i18n.t(
-            'waitlist.mustLeaveWaitlistFirst',
-            'You are already on the waitlist. Leave it from the home screen before joining again.'
-          ),
-          isLoading: false,
-        });
-        return false;
-      }
-
       const { data: existingRows, error: existingErr } = await supabase
         .from('waitlist_entries')
         .select('time_period')

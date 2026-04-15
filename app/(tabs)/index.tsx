@@ -135,7 +135,7 @@ interface WaitlistPreviewClientRow {
  * דמו כרטיס רשימת המתנה בדף הבית (מספר + פריוויו מרובה) — רק ב־`__DEV__`.
  * כבה: `&& false` כשמסיימים לבדוק.
  */
-const ADMIN_HOME_WAITLIST_CARD_DEMO = __DEV__ && true;
+const ADMIN_HOME_WAITLIST_CARD_DEMO = false;
 
 /** כרטיס הבית: עד (ערך−1) עיגולי ראשי תיבות, ואז עיגול +N — לא מציגים את כולם */
 const ADMIN_HOME_WAITLIST_PREVIEW_MAX_SLOTS = 9;

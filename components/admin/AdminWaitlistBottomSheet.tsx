@@ -368,12 +368,11 @@ export function AdminWaitlistBottomSheet() {
             styles.iconCircleBtn,
             styles.iconCircleBtnDanger,
             {
-              borderColor: 'rgba(239, 68, 68, 0.32)',
-              backgroundColor: pressed ? 'rgba(239, 68, 68, 0.08)' : 'rgba(255,255,255,0.6)',
+              backgroundColor: pressed ? 'rgba(239, 68, 68, 0.82)' : colors.error,
             },
           ]}
         >
-          <Trash2 size={16} color={colors.error} strokeWidth={2} />
+          <Trash2 size={16} color="#FFFFFF" strokeWidth={2} />
         </Pressable>
       </View>
     );
@@ -395,13 +394,13 @@ export function AdminWaitlistBottomSheet() {
           <View style={styles.cardInner}>
             {I18nManager.isRTL ? (
               <>
-                {cardBlock}
                 {iconStack}
+                {cardBlock}
               </>
             ) : (
               <>
-                {iconStack}
                 {cardBlock}
+                {iconStack}
               </>
             )}
           </View>
@@ -536,7 +535,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   iconActionColumn: {
-    width: 40,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
@@ -557,9 +556,7 @@ const styles = StyleSheet.create({
   iconCircleBtnPrimaryAndroid: {
     elevation: 2,
   },
-  iconCircleBtnDanger: {
-    borderWidth: 1,
-  },
+  iconCircleBtnDanger: {},
   emptyState: {
     justifyContent: 'center',
     alignItems: 'center',

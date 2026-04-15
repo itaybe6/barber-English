@@ -113,25 +113,18 @@ export const usersApi = {
         }
       }
 
-      // 5) Delete recurring appointments that reference this user (support user_id or admin_id column)
+      // 5) Delete recurring appointments that reference this user (client_id / user_id / admin_id — do not short-circuit)
       {
-        let deleted = false;
-        if (await columnExists('recurring_appointments', 'user_id')) {
+        const recurringFkCols = ['client_id', 'user_id', 'admin_id'] as const;
+        for (const col of recurringFkCols) {
+          if (!(await columnExists('recurring_appointments', col))) continue;
           const { error } = await supabase
             .from('recurring_appointments')
             .delete()
             .eq('business_id', businessId)
-            .eq('user_id', targetUserId);
-          if (!error) deleted = true; else console.warn('recurring_appointments delete by user_id failed:', error);
-        }
-        if (!deleted && (await columnExists('recurring_appointments', 'admin_id'))) {
-          const { error } = await supabase
-            .from('recurring_appointments')
-            .delete()
-            .eq('business_id', businessId)
-            .eq('admin_id', targetUserId);
+            .eq(col, targetUserId);
           if (error) {
-            console.error('Failed to delete recurring_appointments for user:', error);
+            console.error(`Failed to delete recurring_appointments (${col}) for user:`, error);
             return false;
           }
         }
@@ -565,25 +558,18 @@ export const usersApi = {
         }
       }
 
-      // 6) Delete recurring appointments that reference this user (support user_id or admin_id column)
+      // 6) Delete recurring appointments that reference this user (client_id / user_id / admin_id — do not short-circuit)
       {
-        let deleted = false;
-        if (await columnExists('recurring_appointments', 'user_id')) {
+        const recurringFkCols = ['client_id', 'user_id', 'admin_id'] as const;
+        for (const col of recurringFkCols) {
+          if (!(await columnExists('recurring_appointments', col))) continue;
           const { error } = await supabase
             .from('recurring_appointments')
             .delete()
             .eq('business_id', businessId)
-            .eq('user_id', userId);
-          if (!error) deleted = true; else console.warn('recurring_appointments delete by user_id failed:', error);
-        }
-        if (!deleted && (await columnExists('recurring_appointments', 'admin_id'))) {
-          const { error } = await supabase
-            .from('recurring_appointments')
-            .delete()
-            .eq('business_id', businessId)
-            .eq('admin_id', userId);
+            .eq(col, userId);
           if (error) {
-            console.error('Failed to delete recurring_appointments for user:', error);
+            console.error(`Failed to delete recurring_appointments (${col}) for user:`, error);
             return false;
           }
         }

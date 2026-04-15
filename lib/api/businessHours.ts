@@ -366,6 +366,8 @@ export const businessHoursApi = {
             client_phone: null,
             service_name: 'Available Slot', // Set a default value instead of null
             user_id: userId || null,
+            // Keep in sync with booked rows / client filters that scope by barber_id
+            barber_id: userId || null,
           });
           t = addMinutes(t, slotDurationMinutes);
         }

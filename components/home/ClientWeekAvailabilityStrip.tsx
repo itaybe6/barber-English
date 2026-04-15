@@ -10,24 +10,19 @@ import {
   I18nManager,
   Image,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { formatDateToYMDLocal } from '@/lib/utils/localDate';
 import { fetchFutureAvailableSlotCountsByDate } from '@/lib/api/clientWeekAvailability';
 import { businessProfileApi } from '@/lib/api/businessProfile';
+import { businessHoursApi } from '@/lib/api/businessHours';
 import { usersApi } from '@/lib/api/users';
 import { toBcp47Locale } from '@/lib/i18nLocale';
 import { parseHexRgb } from '@/lib/colorContrast';
 import type { User } from '@/lib/supabase';
 
-const DAY_COLUMN_W = 52;
 const CARD_RADIUS = 20;
-/** Apple system green — availability */
-const AVAILABILITY_GREEN = '#34C759';
-const AVAILABILITY_GREEN_SOFT = 'rgba(52, 199, 89, 0.16)';
 
 function primaryRgba(hex: string, alpha: number): string {
   const rgb = parseHexRgb(hex);
@@ -50,23 +45,19 @@ interface WeekDayModel {
   isToday: boolean;
   isPastCalendarDay: boolean;
   isBeyondBookingHorizon: boolean;
+  isClosed: boolean;
   count: number;
 }
 
-function startOfWeekSunday(d: Date): Date {
-  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const dow = x.getDay();
-  x.setDate(x.getDate() - dow);
-  return x;
-}
+const STRIP_DAYS = 6;
 
 function buildWeekDays(
   counts: Record<string, number>,
   today: Date,
   bookingHorizonDays: number,
   locale: string,
+  activeDayMap: Record<number, boolean>,
 ): WeekDayModel[] {
-  const start = startOfWeekSunday(today);
   const todayNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const todayKey = formatDateToYMDLocal(todayNorm);
   const lastBookable = new Date(todayNorm);
@@ -74,31 +65,46 @@ function buildWeekDays(
   const lastBookableKey = formatDateToYMDLocal(lastBookable);
 
   const out: WeekDayModel[] = [];
-  for (let i = 0; i < 7; i++) {
-    const date = new Date(start);
-    date.setDate(start.getDate() + i);
+  for (let i = 0; i < STRIP_DAYS; i++) {
+    const date = new Date(todayNorm);
+    date.setDate(todayNorm.getDate() + i);
     const dateKey = formatDateToYMDLocal(date);
-    const isPastCalendarDay = dateKey < todayKey;
     const isToday = dateKey === todayKey;
     const isBeyondBookingHorizon = dateKey > lastBookableKey;
     const weekdayShort = date.toLocaleDateString(locale, { weekday: 'short' });
     const dayNum = String(date.getDate());
+    const dayOfWeek = date.getDay();
+    // A day is closed if the business_hours row for that day_of_week is is_active=false.
+    // If activeDayMap has no entry for this day (no hours row at all), treat it as closed.
+    const isClosed = Object.keys(activeDayMap).length > 0
+      ? activeDayMap[dayOfWeek] === false
+      : false;
     out.push({
       dateKey,
       date,
       weekdayShort,
       dayNum,
       isToday,
-      isPastCalendarDay,
+      isPastCalendarDay: false,
       isBeyondBookingHorizon,
-      count: counts[dateKey] ?? 0,
+      isClosed,
+      count: isClosed ? 0 : (counts[dateKey] ?? 0),
     });
   }
   return out;
 }
 
-const BARBER_AVATAR = 44;
-const ALL_CHIP = 44;
+const BARBER_AVATAR = 54;
+
+/**
+ * Returns the id of the rightmost barber chip.
+ * In RTL with `row-reverse` the scroll renders index 0 on the visual RIGHT (first for RTL readers).
+ * In LTR with `row` the last element is the rightmost.
+ */
+function defaultStripBarberId(admins: User[], rtl: boolean): string | null {
+  if (admins.length === 0) return null;
+  return rtl ? admins[0].id : admins[admins.length - 1].id;
+}
 
 export function ClientWeekAvailabilityStrip({
   primaryColor,
@@ -115,41 +121,76 @@ export function ClientWeekAvailabilityStrip({
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [horizonDays, setHorizonDays] = useState(14);
   const [barbers, setBarbers] = useState<User[]>([]);
-  /** null = all barbers aggregated */
+  /** Selected staff for counts; auto-set to rightmost default when list loads. */
   const [selectedBarberId, setSelectedBarberId] = useState<string | null>(null);
+  /** Map of day_of_week → is_active for the selected barber (or global hours). */
+  const [activeDayMap, setActiveDayMap] = useState<Record<number, boolean>>({});
+
+  // Stale-request guard: only the latest request's results are applied
+  const loadRequestIdRef = useRef(0);
 
   const load = useCallback(async () => {
+    const requestId = ++loadRequestIdRef.current;
     setLoading(true);
     try {
       const [admins, horizon] = await Promise.all([
         usersApi.getAdminUsers(),
         businessProfileApi.getMaxBookingOpenDaysAcrossBusiness(),
       ]);
+
+      if (requestId !== loadRequestIdRef.current) return;
+
       setBarbers(admins);
       setHorizonDays(Math.max(0, horizon));
 
-      let barberForQuery = selectedBarberId;
-      if (barberForQuery !== null && !admins.some((a) => a.id === barberForQuery)) {
-        barberForQuery = null;
-        setSelectedBarberId(null);
-      }
+      const resolvedBarberId =
+        selectedBarberId !== null && admins.some((a) => a.id === selectedBarberId)
+          ? selectedBarberId
+          : defaultStripBarberId(admins, rtl);
 
       const today = new Date();
-      const start = startOfWeekSunday(today);
+      const todayNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       const keys: string[] = [];
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(start);
-        d.setDate(start.getDate() + i);
+      for (let i = 0; i < STRIP_DAYS; i++) {
+        const d = new Date(todayNorm);
+        d.setDate(todayNorm.getDate() + i);
         keys.push(formatDateToYMDLocal(d));
       }
-      const next = await fetchFutureAvailableSlotCountsByDate(keys, barberForQuery);
+
+      // Fetch counts + all business hours in parallel
+      const [next, allHours] = await Promise.all([
+        fetchFutureAvailableSlotCountsByDate(keys, resolvedBarberId),
+        businessHoursApi.getAllBusinessHours(),
+      ]);
+
+      if (requestId !== loadRequestIdRef.current) return;
+
+      // Build active-day map: global hours first, then override with barber-specific rows
+      const globalHours = allHours.filter((h) => !h.user_id);
+      const barberHours = resolvedBarberId
+        ? allHours.filter((h) => h.user_id === resolvedBarberId)
+        : [];
+      const newActiveDayMap: Record<number, boolean> = {};
+      for (const h of globalHours) {
+        newActiveDayMap[h.day_of_week] = h.is_active;
+      }
+      for (const h of barberHours) {
+        newActiveDayMap[h.day_of_week] = h.is_active;
+      }
+      setActiveDayMap(newActiveDayMap);
+
       setCounts(next);
+      if (resolvedBarberId && selectedBarberId !== resolvedBarberId) {
+        setSelectedBarberId(resolvedBarberId);
+      }
     } catch {
+      if (requestId !== loadRequestIdRef.current) return;
       setCounts({});
     } finally {
+      if (requestId !== loadRequestIdRef.current) return;
       setLoading(false);
     }
-  }, [selectedBarberId]);
+  }, [selectedBarberId, rtl]);
 
   const loadRef = useRef(load);
   loadRef.current = load;
@@ -169,39 +210,11 @@ export function ClientWeekAvailabilityStrip({
     void load();
   }, [reloadToken, load]);
 
-  const { weekDays, totalSlots, daysWithSlots } = useMemo(() => {
+  const weekDays = useMemo(() => {
     const today = new Date();
-    const days = buildWeekDays(counts, today, horizonDays, locale);
-    let total = 0;
-    let withSlots = 0;
-    for (const d of days) {
-      if (d.isPastCalendarDay || d.isBeyondBookingHorizon) continue;
-      if (d.count > 0) {
-        withSlots += 1;
-        total += d.count;
-      }
-    }
-    return { weekDays: days, totalSlots: total, daysWithSlots: withSlots };
-  }, [counts, horizonDays, locale]);
+    return buildWeekDays(counts, today, horizonDays, locale, activeDayMap);
+  }, [counts, horizonDays, locale, activeDayMap]);
 
-  const summaryText = useMemo(() => {
-    if (loading) return t('home.weekAvailability.summaryLoading', 'Checking open spots…');
-    if (totalSlots === 0) {
-      return t('home.weekAvailability.summaryNone', 'No open spots left this week — try again soon.');
-    }
-    return t('home.weekAvailability.summary', {
-      slots: totalSlots,
-      days: daysWithSlots,
-    });
-  }, [loading, totalSlots, daysWithSlots, t]);
-
-  const onOpenBooking = () => {
-    if (isBlocked || awaitingApproval) return;
-    router.push('/(client-tabs)/book-appointment');
-  };
-
-  const borderPrimary = primaryRgba(primaryColor, 0.28);
-  const washPrimary = primaryRgba(primaryColor, 0.08);
   const titleColor = '#1C1C1E';
   const secondaryLabel = 'rgba(60, 60, 67, 0.64)';
   const tertiaryLabel = 'rgba(60, 60, 67, 0.45)';
@@ -213,25 +226,12 @@ export function ClientWeekAvailabilityStrip({
       style={[styles.touchWrap, (isBlocked || awaitingApproval) && { opacity: 0.5 }]}
       accessibilityElementsHidden={isBlocked || awaitingApproval}
     >
-      <View style={[styles.cardOuter, { borderColor: borderPrimary }]}>
-        {Platform.OS === 'ios' ? (
-          <BlurView intensity={55} tint="light" style={StyleSheet.absoluteFillObject} />
-        ) : (
-          <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(255,255,255,0.72)' }]} />
-        )}
-        <LinearGradient
-          colors={[washPrimary, 'rgba(255,255,255,0)', washPrimary]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.primaryWash}
-          pointerEvents="none"
-        />
-
+      <Text style={[styles.title, { color: titleColor }]}>
+        {t('home.weekAvailability.title', 'תורים פנויים בימים הקרובים')}
+      </Text>
+      {/** White card — title sits above (outside), like waitlist section title vs card */}
+      <View style={styles.sectionCard}>
         <View style={styles.cardInner}>
-          <Text style={[styles.title, { color: titleColor, textAlign: rtl ? 'right' : 'left' }]}>
-            {t('home.weekAvailability.title', 'Available appointments this week')}
-          </Text>
-
           {showBarberRow ? (
             <ScrollView
               horizontal
@@ -243,35 +243,6 @@ export function ClientWeekAvailabilityStrip({
               ]}
               keyboardShouldPersistTaps="handled"
             >
-              <TouchableOpacity
-                onPress={() => setSelectedBarberId(null)}
-                activeOpacity={0.75}
-                style={styles.barberChipWrap}
-                accessibilityRole="button"
-                accessibilityState={{ selected: selectedBarberId === null }}
-                accessibilityLabel={t('home.weekAvailability.allBarbers', 'All barbers')}
-              >
-                <View
-                  style={[
-                    styles.allChip,
-                    {
-                      borderColor: selectedBarberId === null ? primaryColor : 'rgba(60,60,67,0.18)',
-                      borderWidth: selectedBarberId === null ? 2.5 : 1,
-                      backgroundColor: selectedBarberId === null ? primaryRgba(primaryColor, 0.12) : 'rgba(255,255,255,0.5)',
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="people"
-                    size={20}
-                    color={selectedBarberId === null ? primaryColor : tertiaryLabel}
-                  />
-                </View>
-                <Text style={[styles.barberLabel, { color: secondaryLabel }]} numberOfLines={1}>
-                  {t('home.weekAvailability.allBarbers', 'All')}
-                </Text>
-              </TouchableOpacity>
-
               {barbers.map((b) => {
                 const selected = selectedBarberId === b.id;
                 const uri = String(b.image_url ?? '').trim();
@@ -298,7 +269,7 @@ export function ClientWeekAvailabilityStrip({
                         <Image source={{ uri }} style={styles.avatarImg} resizeMode="cover" />
                       ) : (
                         <View style={styles.avatarFallback}>
-                          <Ionicons name="person" size={22} color={tertiaryLabel} />
+                          <Ionicons name="person" size={26} color={tertiaryLabel} />
                         </View>
                       )}
                     </View>
@@ -311,83 +282,84 @@ export function ClientWeekAvailabilityStrip({
             </ScrollView>
           ) : null}
 
-          <Text style={[styles.summary, { color: secondaryLabel, textAlign: rtl ? 'right' : 'left' }]} numberOfLines={2}>
-            {summaryText}
-          </Text>
-
-          <View style={[styles.hairline, { backgroundColor: primaryRgba(primaryColor, 0.15) }]} />
+          <View style={styles.sectionDivider} />
 
           {loading ? (
             <View style={styles.loadingRow}>
               <ActivityIndicator size="small" color={primaryColor} />
             </View>
           ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={[
-                styles.scrollContent,
-                { flexDirection: rtl ? 'row-reverse' : 'row' },
-              ]}
-            >
+            <View style={[styles.daysRow, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
               {weekDays.map((d) => {
-                const dimmed = d.isPastCalendarDay || d.isBeyondBookingHorizon;
-                const has = !dimmed && d.count > 0;
+                  const dimmed = d.isPastCalendarDay || d.isBeyondBookingHorizon || d.isClosed;
+                  const has = !dimmed && d.count > 0;
+                  /** Same chrome as "today" — primary wash + border when this calendar day has open slots */
+                  const primaryHighlight = !dimmed && (d.isToday || has);
 
-                return (
-                  <View key={d.dateKey} style={styles.dayColumn}>
-                    <Text style={[styles.weekdayLabel, { color: tertiaryLabel }, dimmed && styles.dayMuted]} numberOfLines={1}>
-                      {d.weekdayShort}
-                    </Text>
-                    {d.isToday ? (
-                      <Text style={[styles.todayTag, { color: primaryColor }]} numberOfLines={1}>
-                        {t('home.weekAvailability.today', 'Today')}
+                  const bgColor = dimmed
+                    ? 'rgba(0,0,0,0.03)'
+                    : primaryHighlight
+                    ? primaryRgba(primaryColor, 0.09)
+                    : 'rgba(0,0,0,0.04)';
+
+                  const borderColor = dimmed
+                    ? 'rgba(60,60,67,0.07)'
+                    : primaryHighlight
+                    ? primaryColor
+                    : 'rgba(60,60,67,0.14)';
+
+                  const borderWidth = primaryHighlight ? 1.5 : 1;
+
+                  const countColor = dimmed
+                    ? 'rgba(60,60,67,0.22)'
+                    : 'rgba(60,60,67,0.28)';
+
+                  const weekdayColor = dimmed
+                    ? 'rgba(60,60,67,0.25)'
+                    : primaryHighlight
+                    ? primaryColor
+                    : tertiaryLabel;
+
+                  return (
+                    <TouchableOpacity
+                      key={d.dateKey}
+                      activeOpacity={dimmed ? 1 : 0.68}
+                      disabled={dimmed || isBlocked || awaitingApproval}
+                      onPress={() => {
+                        if (!dimmed && !isBlocked && !awaitingApproval) {
+                          router.push('/(client-tabs)/book-appointment');
+                        }
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${d.isToday ? t('home.weekAvailability.today', 'Today') : d.weekdayShort}, ${d.dayNum}`}
+                      style={[
+                        styles.dayBtn,
+                        {
+                          backgroundColor: bgColor,
+                          borderColor,
+                          borderWidth,
+                        },
+                        dimmed && styles.dayBtnDimmed,
+                      ]}
+                    >
+                      <Text
+                        style={[styles.dayBtnWeekday, { color: weekdayColor }]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.7}
+                      >
+                        {d.isToday
+                          ? t('home.weekAvailability.today', 'Today')
+                          : d.weekdayShort}
                       </Text>
-                    ) : (
-                      <Text style={[styles.dayNum, { color: tertiaryLabel }, dimmed && styles.dayMuted]}>{d.dayNum}</Text>
-                    )}
-
-                    <View
-                      style={[
-                        styles.slotDot,
-                        has && { backgroundColor: AVAILABILITY_GREEN_SOFT, borderColor: AVAILABILITY_GREEN },
-                        !has && !dimmed && { borderColor: 'rgba(60,60,67,0.12)', backgroundColor: 'rgba(255,255,255,0.45)' },
-                        dimmed && { borderColor: 'rgba(60,60,67,0.08)', backgroundColor: 'rgba(0,0,0,0.03)' },
-                      ]}
-                    >
-                      {has ? (
-                        <View style={styles.greenInner} />
-                      ) : null}
-                    </View>
-
-                    <Text
-                      style={[
-                        styles.count,
-                        dimmed && styles.countMuted,
-                        has && { color: AVAILABILITY_GREEN },
-                        !has && !dimmed && { color: tertiaryLabel },
-                      ]}
-                    >
-                      {dimmed ? '—' : d.count}
-                    </Text>
-                  </View>
-                );
-              })}
-            </ScrollView>
+                      <Text style={[styles.dayBtnCount, { color: countColor }]}>
+                        {dimmed ? '—' : String(d.count)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+            </View>
           )}
-
-          <TouchableOpacity
-            onPress={onOpenBooking}
-            disabled={isBlocked || awaitingApproval}
-            activeOpacity={0.7}
-            style={styles.footerBtn}
-            accessibilityRole="button"
-            accessibilityLabel={t('home.weekAvailability.a11y', 'Weekly availability, book an appointment')}
-          >
-            <Text style={[styles.footerHintText, { color: primaryColor }]}>
-              {t('home.weekAvailability.tapToBook', 'Tap to book')}
-            </Text>
-          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -395,58 +367,54 @@ export function ClientWeekAvailabilityStrip({
 }
 
 const styles = StyleSheet.create({
+  /** Room so iOS/Android shadow is not clipped by siblings / parent */
   touchWrap: {
     marginTop: 14,
+    marginBottom: 10,
+    paddingHorizontal: 2,
+    paddingVertical: 4,
   },
-  cardOuter: {
+  /** Same family as `WaitlistHomeFabPanel` `cardTrigger` — no `overflow: hidden` here or iOS clips the shadow */
+  sectionCard: {
+    backgroundColor: '#FFFFFF',
     borderRadius: CARD_RADIUS,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth * 2,
+    marginHorizontal: 4,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: '#1e253b',
+        shadowOpacity: 0.12,
+        shadowRadius: 18,
         shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.06,
-        shadowRadius: 16,
       },
-      android: { elevation: 3 },
+      android: { elevation: 6 },
     }),
-  },
-  primaryWash: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.85,
   },
   cardInner: {
     paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 10,
+    paddingTop: 12,
+    paddingBottom: 14,
   },
   title: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     letterSpacing: -0.4,
-    marginBottom: 12,
+    textAlign: 'center',
+    marginBottom: 10,
+    paddingHorizontal: 8,
   },
   barberScroll: {
-    marginBottom: 10,
-    maxHeight: BARBER_AVATAR + 22,
+    marginBottom: 8,
+    maxHeight: BARBER_AVATAR + 26,
   },
   barberScrollContent: {
     alignItems: 'flex-start',
-    gap: 14,
+    gap: 12,
     paddingVertical: 2,
     paddingRight: 4,
   },
   barberChipWrap: {
     alignItems: 'center',
-    width: 64,
-  },
-  allChip: {
-    width: ALL_CHIP,
-    height: ALL_CHIP,
-    borderRadius: ALL_CHIP / 2,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 70,
   },
   avatarRing: {
     width: BARBER_AVATAR,
@@ -476,84 +444,43 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     maxWidth: 64,
   },
-  summary: {
-    fontSize: 13,
-    fontWeight: '500',
-    lineHeight: 18,
-    marginBottom: 10,
-  },
-  hairline: {
-    height: StyleSheet.hairlineWidth,
-    marginBottom: 10,
+  sectionDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginBottom: 8,
   },
   loadingRow: {
-    paddingVertical: 20,
+    paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  scrollContent: {
-    paddingVertical: 4,
-    paddingHorizontal: 2,
-    gap: 2,
+  daysRow: {
+    gap: 5,
+    marginTop: 2,
   },
-  dayColumn: {
-    width: DAY_COLUMN_W,
+  dayBtn: {
+    flex: 1,
+    borderRadius: 14,
     alignItems: 'center',
-    paddingVertical: 4,
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 3,
+    gap: 4,
+    ...Platform.select({ ios: { borderCurve: 'continuous' as any } }),
   },
-  weekdayLabel: {
-    fontSize: 11,
-    fontWeight: '600',
+  dayBtnDimmed: {
+    opacity: 0.35,
   },
-  dayNum: {
+  dayBtnWeekday: {
     fontSize: 10,
     fontWeight: '600',
-    marginTop: 2,
-    marginBottom: 8,
+    textAlign: 'center',
+    letterSpacing: 0,
   },
-  todayTag: {
-    fontSize: 10,
-    fontWeight: '700',
-    marginTop: 2,
-    marginBottom: 8,
-    letterSpacing: 0.1,
-  },
-  dayMuted: {
-    opacity: 0.45,
-  },
-  /** Minimal Apple-style availability marker */
-  slotDot: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  greenInner: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: AVAILABILITY_GREEN,
-  },
-  count: {
-    fontSize: 17,
-    fontWeight: '700',
-    letterSpacing: -0.4,
-  },
-  countMuted: {
-    color: 'rgba(60, 60, 67, 0.28)',
-  },
-  footerBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-    paddingVertical: 6,
-  },
-  footerHintText: {
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: -0.1,
+  dayBtnCount: {
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    textAlign: 'center',
   },
 });

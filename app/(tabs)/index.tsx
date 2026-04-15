@@ -45,7 +45,7 @@ import { generateAppointments } from '@/constants/appointments';
 import { services } from '@/constants/services';
 import { clients } from '@/constants/clients';
 // import { AvailableTimeSlot } from '@/lib/supabase'; // Not used in this file
-import { supabase } from '@/lib/supabase';
+import { supabase, type BusinessProfile } from '@/lib/supabase';
 import { businessProfileApi, getHomeHeaderTitleWhenLogoHidden } from '@/lib/api/businessProfile';
 import {
   homeHeaderTitleFontStyle,
@@ -208,15 +208,27 @@ export default function HomeScreen() {
 
   const [heroImages, setHeroImages] = useState<string[] | null>(null);
   const [homeLogoUrl, setHomeLogoUrl] = useState<string | null>(null);
+  /** False until we know `home_logo_url` from DB (avoids flashing bundled branding before Supabase loads). */
+  const [isHomeLogoProfileLoaded, setIsHomeLogoProfileLoaded] = useState(false);
+  const homeLogoInitialFetchDoneRef = useRef(false);
+  const homeLogoPrevUserIdRef = useRef<string | undefined>(undefined);
   const [homeHeaderShowLogo, setHomeHeaderShowLogo] = useState(true);
   const [homeHeaderDisplayName, setHomeHeaderDisplayName] = useState('');
   const [homeHeaderTitleFontId, setHomeHeaderTitleFontId] = useState<HomeHeaderTitleFontId>('system');
 
+  useEffect(() => {
+    const id = user?.id;
+    const prev = homeLogoPrevUserIdRef.current;
+    if (id === prev) return;
+    if (prev && id && prev !== id) {
+      homeLogoInitialFetchDoneRef.current = false;
+      setIsHomeLogoProfileLoaded(false);
+    }
+    homeLogoPrevUserIdRef.current = id;
+  }, [user?.id]);
+
   const loadHeroImages = useCallback(async () => {
-    try {
-      const p = await businessProfileApi.getProfile();
-      // getProfile() can return null on transient errors — do not clear hero/logo state.
-      if (!p) return;
+    const applyFromProfile = (p: BusinessProfile) => {
       const list = sanitizeUrlArray((p as any)?.home_hero_images);
       setHeroImages(list.length > 0 ? list : null);
       const rawLogo = String(p?.home_logo_url ?? '').trim();
@@ -224,6 +236,43 @@ export default function HomeScreen() {
       setHomeHeaderShowLogo(p?.home_header_show_logo !== false);
       setHomeHeaderDisplayName(getHomeHeaderTitleWhenLogoHidden(p));
       setHomeHeaderTitleFontId(normalizeHomeHeaderTitleFontId((p as any)?.home_header_title_font));
+    };
+
+    if (!homeLogoInitialFetchDoneRef.current) {
+      const MAX_ATTEMPTS = 5;
+      const BASE_DELAY_MS = 280;
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        try {
+          const p = await businessProfileApi.getProfile();
+          if (p) {
+            applyFromProfile(p);
+            homeLogoInitialFetchDoneRef.current = true;
+            setIsHomeLogoProfileLoaded(true);
+            return;
+          }
+        } catch {
+          setHeroImages(null);
+          setHomeLogoUrl(null);
+          setHomeHeaderShowLogo(true);
+          setHomeHeaderDisplayName('');
+          setHomeHeaderTitleFontId('system');
+          homeLogoInitialFetchDoneRef.current = true;
+          setIsHomeLogoProfileLoaded(true);
+          return;
+        }
+        if (attempt < MAX_ATTEMPTS - 1) {
+          await new Promise<void>((resolve) => setTimeout(resolve, BASE_DELAY_MS * (attempt + 1)));
+        }
+      }
+      homeLogoInitialFetchDoneRef.current = true;
+      setIsHomeLogoProfileLoaded(true);
+      return;
+    }
+
+    try {
+      const p = await businessProfileApi.getProfile();
+      if (!p) return;
+      applyFromProfile(p);
     } catch {
       setHeroImages(null);
       setHomeLogoUrl(null);
@@ -239,8 +288,8 @@ export default function HomeScreen() {
   );
 
   useEffect(() => {
-    loadHeroImages();
-  }, [loadHeroImages]);
+    void loadHeroImages();
+  }, [loadHeroImages, user?.id]);
 
   useEffect(() => {
     setAdminProductCarouselIndex(0);
@@ -1859,11 +1908,15 @@ export default function HomeScreen() {
       >
         {homeHeaderShowLogo ? (
           <View style={styles.overlayLogoInner}>
-            <Image
-              source={getHomeLogoSourceFromUrl(homeLogoUrl)}
-              style={[styles.overlayLogo, styles.overlayLogoHeroWhite]}
-              resizeMode="contain"
-            />
+            {isHomeLogoProfileLoaded ? (
+              <Image
+                source={getHomeLogoSourceFromUrl(homeLogoUrl)}
+                style={[styles.overlayLogo, styles.overlayLogoHeroWhite]}
+                resizeMode="contain"
+              />
+            ) : (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            )}
           </View>
         ) : (
           <View style={styles.overlayNameInner}>

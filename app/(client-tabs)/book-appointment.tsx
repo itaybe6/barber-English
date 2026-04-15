@@ -38,6 +38,7 @@ import BookingTimeConfirmPanel from '@/components/book-appointment/BookingTimeCo
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { Service } from '@/lib/supabase';
 import { servicesApi, filterServicesForBookingBarber } from '@/lib/api/services';
+import { appointmentBarberSlotOrFilter } from '@/lib/api/clientWeekAvailability';
 import { supabase, getBusinessId, Appointment } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { useWaitlistStore } from '@/stores/waitlistStore';
@@ -68,7 +69,7 @@ const bookingApi = {
         .eq('business_id', businessId);
 
       if (barberId) {
-        query = query.eq('barber_id', barberId);
+        query = query.or(appointmentBarberSlotOrFilter(barberId));
       }
 
       const { data, error } = await query.order('slot_time');
@@ -235,7 +236,7 @@ const bookingApi = {
         .eq('is_available', true);
 
       if (barberId) {
-        updateQuery = updateQuery.eq('barber_id', barberId);
+        updateQuery = updateQuery.or(appointmentBarberSlotOrFilter(barberId));
       }
 
       const { data: updated, error: updateError } = await updateQuery
@@ -255,7 +256,7 @@ const bookingApi = {
         .eq('business_id', businessId);
 
       if (barberId) {
-        existingQuery = existingQuery.eq('barber_id', barberId);
+        existingQuery = existingQuery.or(appointmentBarberSlotOrFilter(barberId));
       }
 
       const { data: existing } = await existingQuery;
@@ -1131,7 +1132,7 @@ export default function BookAppointment() {
           .in('client_phone', phoneVariants);
 
         if (selectedBarber?.id) {
-          query = query.eq('barber_id', selectedBarber.id);
+          query = query.or(appointmentBarberSlotOrFilter(selectedBarber.id));
         }
 
         const res = await query.order('slot_time');
@@ -1147,7 +1148,7 @@ export default function BookAppointment() {
           .ilike('client_name', `%${nameRaw}%`);
 
         if (selectedBarber?.id) {
-          query = query.eq('barber_id', selectedBarber.id);
+          query = query.or(appointmentBarberSlotOrFilter(selectedBarber.id));
         }
 
         const res = await query.order('slot_time');

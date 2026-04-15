@@ -4,6 +4,8 @@ import { View } from "react-native";
 import { MenuProvider } from "@/components/shopify-tab-bar/menu-provider";
 import { AnimatedTabsContainer } from "@/components/shopify-tab-bar/animated-tabs-container";
 import { AdminFloatingTabBar } from "@/components/shopify-tab-bar/admin-floating-tab-bar";
+import { AdminWaitlistBottomSheet } from "@/components/admin/AdminWaitlistBottomSheet";
+import { useAuthStore } from "@/stores/authStore";
 import { AdminCalendarViewProvider } from "@/contexts/AdminCalendarViewContext";
 import { AdminWaitlistCalendarViewProvider } from "@/contexts/AdminWaitlistCalendarViewContext";
 import { AdminCalendarReminderFabProvider } from "@/contexts/AdminCalendarReminderFabContext";
@@ -12,6 +14,8 @@ import { EditProductsTabBarProvider } from "@/contexts/EditProductsTabBarContext
 import { PickPrimaryColorTabBarProvider } from "@/contexts/PickPrimaryColorTabBarContext";
 
 export default function TabsLayout() {
+  const isAdmin = useAuthStore((s) => s.isAdmin);
+
   return (
     <MenuProvider>
       <PickPrimaryColorTabBarProvider>
@@ -50,6 +54,7 @@ export default function TabsLayout() {
               </AnimatedTabsContainer>
 
               <AdminFloatingTabBar />
+              {isAdmin ? <AdminWaitlistBottomSheet /> : null}
             </View>
           </EditProductsTabBarProvider>
           </EditGalleryTabBarProvider>

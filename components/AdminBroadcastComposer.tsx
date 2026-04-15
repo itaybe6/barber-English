@@ -440,19 +440,6 @@ export default function AdminBroadcastComposer({
               >
                 {/* ── Hero header ── */}
                 <View style={styles.heroSection}>
-                  {/* Close button */}
-                  <TouchableOpacity
-                    style={[styles.closeBtn, isRTL ? { left: 16 } : { right: 16 }]}
-                    onPress={requestCloseSheet}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    accessibilityRole="button"
-                    accessibilityLabel={strings.cancel}
-                  >
-                    <View style={[styles.closeBtnInner, { backgroundColor: `${colors.textSecondary}18` }]}>
-                      <Ionicons name="close" size={16} color={colors.textSecondary} />
-                    </View>
-                  </TouchableOpacity>
-
                   {/* Icon */}
                   <View style={[styles.heroIconWrap, { backgroundColor: `${colors.primary}14` }]}>
                     <LinearGradient
@@ -715,7 +702,8 @@ const createStyles = (colors: { primary: string; text?: string }) =>
     sheet: {
       width: '100%',
       maxWidth: 560,
-      maxHeight: '99%',
+      /** Leave visible area above the sheet; content scrolls inside */
+      maxHeight: '86%',
       borderTopLeftRadius: 28,
       borderTopRightRadius: 28,
       overflow: 'hidden',
@@ -731,16 +719,16 @@ const createStyles = (colors: { primary: string; text?: string }) =>
       }),
     },
     dragHandleZone: {
-      paddingTop: 6,
-      paddingBottom: 14,
+      paddingTop: 8,
+      paddingBottom: 12,
       alignItems: 'center',
       justifyContent: 'center',
     },
     dragHandle: {
-      width: 36,
-      height: 4,
-      borderRadius: 2,
-      backgroundColor: 'rgba(60,60,67,0.25)',
+      width: 44,
+      height: 5,
+      borderRadius: 2.5,
+      backgroundColor: 'rgba(60,60,67,0.32)',
       alignSelf: 'center',
     },
     scrollContent: {
@@ -750,21 +738,9 @@ const createStyles = (colors: { primary: string; text?: string }) =>
     /* ─── Hero header ─── */
     heroSection: {
       alignItems: 'center',
-      paddingTop: 20,
+      paddingTop: 4,
       paddingBottom: 22,
       paddingHorizontal: 20,
-    },
-    closeBtn: {
-      position: 'absolute',
-      top: 16,
-      zIndex: 10,
-    },
-    closeBtnInner: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
-      alignItems: 'center',
-      justifyContent: 'center',
     },
     heroIconWrap: {
       width: 72,

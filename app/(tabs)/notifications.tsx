@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import React, { useState, useEffect, useCallback, memo, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -14,7 +14,6 @@ import { useTranslation } from 'react-i18next';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
-import Colors from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
 import { notificationsApi } from '@/lib/api/notifications';
 import { Notification } from '@/lib/supabase';
@@ -25,9 +24,17 @@ import {
   Calendar,
   User,
   Receipt,
+  Phone,
+  Tag,
+  Timer,
 } from 'lucide-react-native';
 import { useColors } from '@/src/theme/ThemeProvider';
-import { formatTimeFromDate } from '@/lib/utils/timeFormat';
+import {
+  parseNotificationContent,
+  localeForDates,
+  type ParsedNotificationFields,
+} from '@/lib/utils/parseNotificationContent';
+import type { TFunction } from 'i18next';
 
 /** Only load notifications from the last N days on this screen (smaller queries). */
 const NOTIFICATIONS_FETCH_MAX_AGE_DAYS = 2;
@@ -55,60 +62,7 @@ function extractYyyyMmDdFromNotification(n: Pick<Notification, 'title' | 'conten
   return `${m[1]}-${m[2]}-${m[3]}`;
 }
 
-function parseNotificationContentStatic(title: string, content: string) {
-  try {
-    let text = content || '';
-    if (title) {
-      const safeTitle = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      text = text.replace(new RegExp(safeTitle, 'g'), '').trim();
-    }
-
-    let name: string | undefined;
-    let phone: string | undefined;
-    const namePhoneMatch = text.match(/([A-Za-z\-\s']+)\s*\((0\d{8,10})\)/);
-    if (namePhoneMatch) {
-      name = namePhoneMatch[1].trim();
-      phone = namePhoneMatch[2];
-      text = text.replace(namePhoneMatch[0], '').trim();
-    } else {
-      const phoneMatch = text.match(/\((0\d{8,10})\)/);
-      if (phoneMatch) {
-        phone = phoneMatch[1];
-        text = text.replace(phoneMatch[0], '').trim();
-      }
-    }
-
-    const serviceMatch = text.match(/"([^\"]+)"/);
-    const service = serviceMatch ? serviceMatch[1] : undefined;
-    if (serviceMatch) text = text.replace(serviceMatch[0], service || '').trim();
-
-    const dateMatch = text.match(/(\d{4}-\d{2}-\d{2})/);
-    const timeMatch = text.match(/(\d{2}:\d{2})(?::\d{2})?/);
-    let datePretty: string | undefined;
-    let timePretty: string | undefined;
-    if (dateMatch) {
-      const dt = new Date(`${dateMatch[1]}T00:00:00`);
-      datePretty = dt.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
-      text = text.replace(dateMatch[1], '').trim();
-    }
-    if (timeMatch) {
-      const tm = timeMatch[1];
-      const [h, m] = tm.split(':');
-      const fake = new Date();
-      fake.setHours(Number(h), Number(m));
-      timePretty = formatTimeFromDate(fake);
-      text = text.replace(timeMatch[0], '').trim();
-    }
-
-    text = text.replace(/\s{2,}/g, ' ').trim();
-
-    return { primary: text, name, phone, service, datePretty, timePretty };
-  } catch {
-    return { primary: content } as const;
-  }
-}
-
-type ParsedNotification = ReturnType<typeof parseNotificationContentStatic>;
+type ParsedNotification = ParsedNotificationFields;
 
 type NotifKind = 'new' | 'cancel' | 'reminder' | 'waitlist' | 'system' | 'finance' | 'default';
 
@@ -172,18 +126,22 @@ function getTypeConfig(kind: NotifKind): TypeConfig {
   }
 }
 
-function formatRelativeDate(dateString: string): string {
+function formatRelativeDate(dateString: string, t: TFunction, lang: string): string {
   if (!dateString) return '';
   const date = new Date(dateString);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMin = Math.floor(diffMs / 60000);
   const diffHrs = Math.floor(diffMin / 60);
-  if (diffMin < 1) return 'עכשיו';
-  if (diffMin < 60) return `לפני ${diffMin} דק׳`;
-  if (diffHrs < 24) return `לפני ${diffHrs} שע׳`;
-  if (diffHrs < 48) return 'אתמול';
-  return date.toLocaleDateString('he-IL', { day: 'numeric', month: 'short' });
+  if (diffMin < 1) return t('notifications.relative.justNow', 'עכשיו');
+  if (diffMin < 60) {
+    return t('notifications.relative.minutesAgo', 'לפני {{count}} דק׳', { count: diffMin });
+  }
+  if (diffHrs < 24) {
+    return t('notifications.relative.hoursAgo', 'לפני {{count}} שע׳', { count: diffHrs });
+  }
+  if (diffHrs < 48) return t('notifications.relative.yesterday', 'אתמול');
+  return date.toLocaleDateString(localeForDates(lang), { day: 'numeric', month: 'short' });
 }
 
 interface NotificationListRowProps {
@@ -201,11 +159,31 @@ const NotificationListRow = memo(function NotificationListRow({
   onPress,
   isAdminReminder,
 }: NotificationListRowProps) {
-  const parsed: ParsedNotification = parseNotificationContentStatic(notification.title, notification.content);
+  const { t, i18n } = useTranslation();
+  const parsed: ParsedNotification = useMemo(
+    () => parseNotificationContent(notification.title, notification.content, i18n.language),
+    [notification.title, notification.content, i18n.language]
+  );
   const cfg = getTypeConfig(kind);
   const isUnread = !notification.is_read;
-  const timeAgo = formatRelativeDate((notification as { created_at?: string }).created_at || '');
+  const timeAgo = formatRelativeDate(
+    (notification as { created_at?: string }).created_at || '',
+    t,
+    i18n.language
+  );
   const rtlText = rtlTextStyle();
+
+  const showChips =
+    Boolean(
+      parsed.name ||
+        parsed.phone ||
+        parsed.service ||
+        parsed.datePretty ||
+        parsed.timePretty ||
+        parsed.periodLabel
+    ) ||
+    isAdminReminder(notification) ||
+    kind === 'finance';
 
   const cardBody = (
     <View style={styles.cardInner}>
@@ -222,17 +200,19 @@ const NotificationListRow = memo(function NotificationListRow({
         </View>
 
         {parsed.primary ? (
-          <Text style={[styles.cardBody, rtlText]} numberOfLines={3}>
+          <Text style={[styles.cardBody, rtlText]} numberOfLines={6}>
             {parsed.primary}
           </Text>
         ) : null}
 
-        {(parsed.name || parsed.datePretty || isAdminReminder(notification) || kind === 'finance') ? (
+        {showChips ? (
           <View style={styles.chipsRow}>
             {kind === 'finance' ? (
               <View style={[styles.chip, { backgroundColor: '#DCFCE7' }]}>
                 <Receipt size={11} color="#16A34A" />
-                <Text style={[styles.chipText, { color: '#16A34A' }, rtlText]}>סגירת חודש</Text>
+                <Text style={[styles.chipText, { color: '#16A34A' }, rtlText]}>
+                  {t('notifications.chip.monthClosure', 'סגירת חודש')}
+                </Text>
               </View>
             ) : null}
             {parsed.name ? (
@@ -241,16 +221,42 @@ const NotificationListRow = memo(function NotificationListRow({
                 <Text style={[styles.chipText, { color: cfg.color }, rtlText]}>{parsed.name}</Text>
               </View>
             ) : null}
+            {parsed.phone ? (
+              <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
+                <Phone size={11} color={cfg.color} />
+                <Text style={[styles.chipText, { color: cfg.color }, rtlText]}>{parsed.phone}</Text>
+              </View>
+            ) : null}
+            {parsed.service ? (
+              <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
+                <Tag size={11} color={cfg.color} />
+                <Text style={[styles.chipText, { color: cfg.color }, rtlText]}>{parsed.service}</Text>
+              </View>
+            ) : null}
             {parsed.datePretty ? (
               <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
                 <Calendar size={11} color={cfg.color} />
                 <Text style={[styles.chipText, { color: cfg.color }, rtlText]}>{parsed.datePretty}</Text>
               </View>
             ) : null}
+            {parsed.timePretty ? (
+              <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
+                <Clock size={11} color={cfg.color} />
+                <Text style={[styles.chipText, { color: cfg.color }, rtlText]}>{parsed.timePretty}</Text>
+              </View>
+            ) : null}
+            {parsed.periodLabel ? (
+              <View style={[styles.chip, { backgroundColor: cfg.bg }]}>
+                <Timer size={11} color={cfg.color} />
+                <Text style={[styles.chipText, { color: cfg.color }, rtlText]}>{parsed.periodLabel}</Text>
+              </View>
+            ) : null}
             {isAdminReminder(notification) ? (
               <View style={[styles.chip, { backgroundColor: '#FFF3E0' }]}>
                 <Clock size={11} color="#FF9500" />
-                <Text style={[styles.chipText, { color: '#FF9500' }, rtlText]}>תזכורת</Text>
+                <Text style={[styles.chipText, { color: '#FF9500' }, rtlText]}>
+                  {t('notifications.chip.reminder', 'תזכורת')}
+                </Text>
               </View>
             ) : null}
           </View>
@@ -259,7 +265,9 @@ const NotificationListRow = memo(function NotificationListRow({
         {(notification as { push_sent?: boolean }).push_sent && (
           <View style={styles.pushBadge}>
             <CheckCircle size={12} color="#34C759" />
-            <Text style={[styles.pushBadgeText, rtlText]}>נשלח בהצלחה</Text>
+            <Text style={[styles.pushBadgeText, rtlText]}>
+              {t('notifications.pushSent', 'נשלח בהצלחה')}
+            </Text>
           </View>
         )}
       </View>
@@ -548,7 +556,7 @@ export default function AdminNotificationsScreen() {
               <TouchableOpacity
                 key={key}
                 onPress={() => setActiveFilter(key)}
-                style={[styles.filterChip, isActive && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                style={[styles.filterChip, isActive && { backgroundColor: colors.primary }]}
                 activeOpacity={0.8}
               >
                 <Text style={[styles.filterChipText, rtlText, isActive && { color: '#FFFFFF' }]}>
@@ -655,9 +663,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
-    borderColor: '#E5E5EA',
+    backgroundColor: '#f2f2f7',
   },
   filterChipText: {
     fontSize: 13,

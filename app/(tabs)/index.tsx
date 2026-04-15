@@ -82,6 +82,7 @@ import { PendingClientApprovalsCard, PendingClientApprovalsCardHandle } from '@/
 import WaitlistHomePreviewAvatars from '@/components/admin/WaitlistHomePreviewAvatars';
 import WaitlistHomePreviewNamedRows from '@/components/admin/WaitlistHomePreviewNamedRows';
 import { ClientsListModalEmptyState } from '@/components/admin/ClientsListModalEmptyState';
+import { useAdminWaitlistSheetStore } from '@/stores/adminWaitlistSheetStore';
 import { clientAppointmentStatsApi } from '@/lib/api/clientAppointmentStats';
 import { HorizontalCarouselDots, carouselIndexFromOffset } from '@/components/HorizontalCarouselDots';
 import { usersApi } from '@/lib/api/users';
@@ -1437,7 +1438,7 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={[styles.waitlistCard, { backgroundColor: colors.surface }]}
               activeOpacity={0.88}
-              onPress={() => router.push('/(tabs)/waitlist')}
+              onPress={() => useAdminWaitlistSheetStore.getState().open()}
               accessibilityRole="button"
               accessibilityLabel={t('admin.waitlist.title', 'רשימת המתנה')}
             >
@@ -3727,16 +3728,12 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
   },
   filterButton: {
     backgroundColor: '#f2f2f7',
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
     borderRadius: 16,
     paddingVertical: 8,
     paddingHorizontal: 12,
   },
   filterButtonActive: {
     backgroundColor: `${colors.primary}20`,
-    borderWidth: 0,
-    borderColor: 'transparent',
   },
   filterButtonText: {
     color: colors.text,

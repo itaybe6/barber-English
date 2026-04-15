@@ -503,11 +503,14 @@ export default function ClientProfileScreen() {
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.editSheet}>
-              <View style={styles.editSheetHandle} />
-
               <View style={styles.editSheetHeader}>
-                <View style={{ width: 44 }} />
-                <Text style={styles.editSheetTitle}>{t('profile.edit.title', 'Edit Profile')}</Text>
+                <View style={styles.editSheetHeaderSpacer} />
+                <View style={styles.editSheetHeaderCopy}>
+                  <Text style={styles.editSheetTitle}>{t('profile.edit.title', 'Edit Profile')}</Text>
+                  <Text style={styles.editSheetSubtitle}>
+                    {t('profile.edit.subtitle', 'עדכן את הפרטים האישיים שלך')}
+                  </Text>
+                </View>
                 <TouchableOpacity
                   onPress={() => setIsEditOpen(false)}
                   style={styles.editSheetCloseBtn}
@@ -522,9 +525,6 @@ export default function ClientProfileScreen() {
 
               <View style={styles.editSheetBody}>
                 <View style={styles.fieldCard}>
-                  <Text style={[styles.fieldLabel, isRtl ? styles.fieldLabelRtl : styles.fieldLabelLtr]}>
-                    {t('profile.edit.name', 'Name')}
-                  </Text>
                   <View style={[styles.fieldRow, isRtl ? styles.fieldRowRtl : styles.fieldRowLtr]}>
                     <View style={[styles.fieldIconWrap, { backgroundColor: `${businessColors.primary}12` }]}>
                       <Ionicons name="person-outline" size={18} color={businessColors.primary} />
@@ -547,9 +547,6 @@ export default function ClientProfileScreen() {
                 </View>
 
                 <View style={styles.fieldCard}>
-                  <Text style={[styles.fieldLabel, isRtl ? styles.fieldLabelRtl : styles.fieldLabelLtr]}>
-                    {t('profile.edit.phone', 'Phone')}
-                  </Text>
                   <View style={[styles.fieldRow, isRtl ? styles.fieldRowRtl : styles.fieldRowLtr]}>
                     <View style={[styles.fieldIconWrap, { backgroundColor: `${businessColors.primary}12` }]}>
                       <Ionicons name="call-outline" size={18} color={businessColors.primary} />
@@ -1057,7 +1054,7 @@ const styles = StyleSheet.create<any>({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.34)',
     padding: 20,
   },
   modalBackdropPressable: {
@@ -1078,41 +1075,52 @@ const styles = StyleSheet.create<any>({
     backgroundColor: Colors.white,
     borderRadius: 24,
     borderCurve: 'continuous',
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 14,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 18,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(60, 60, 67, 0.12)',
+    borderColor: 'rgba(60, 60, 67, 0.10)',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 12 },
-        shadowOpacity: 0.2,
-        shadowRadius: 24,
+        shadowOpacity: 0.16,
+        shadowRadius: 28,
       },
-      android: { elevation: 10 },
+      android: { elevation: 12 },
     }),
-  },
-  editSheetHandle: {
-    alignSelf: 'center',
-    width: 44,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: 'rgba(60,60,67,0.18)',
-    marginTop: 2,
-    marginBottom: 10,
   },
   editSheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: 6,
+    paddingBottom: 14,
+    marginBottom: 2,
+  },
+  editSheetHeaderCopy: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  editSheetHeaderSpacer: {
+    width: 44,
+    height: 44,
   },
   editSheetTitle: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: '800',
     color: Colors.text,
-    letterSpacing: -0.2,
+    letterSpacing: -0.35,
+    textAlign: 'center',
+  },
+  editSheetSubtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: '500',
+    color: Colors.subtext,
+    textAlign: 'center',
+    lineHeight: 18,
   },
   editSheetCloseBtn: {
     width: 44,
@@ -1120,21 +1128,21 @@ const styles = StyleSheet.create<any>({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(60,60,67,0.06)',
+    backgroundColor: 'rgba(60,60,67,0.07)',
   },
   editSheetBody: {
-    paddingTop: 8,
-    gap: 12,
+    paddingTop: 4,
+    gap: 14,
   },
   fieldCard: {
-    backgroundColor: '#F6F7FB',
-    borderRadius: 16,
+    backgroundColor: '#F7F8FC',
+    borderRadius: 18,
     borderCurve: 'continuous',
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 10,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(60,60,67,0.10)',
+    borderColor: 'rgba(60,60,67,0.08)',
   },
   fieldLabel: {
     fontSize: 12,
@@ -1151,8 +1159,8 @@ const styles = StyleSheet.create<any>({
   fieldRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    minHeight: 44,
+    gap: 12,
+    minHeight: 48,
   },
   fieldRowLtr: {
     flexDirection: 'row',
@@ -1161,9 +1169,9 @@ const styles = StyleSheet.create<any>({
     flexDirection: 'row-reverse',
   },
   fieldIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 14,
     borderCurve: 'continuous',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1191,18 +1199,18 @@ const styles = StyleSheet.create<any>({
   editSheetFooter: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 14,
+    marginTop: 18,
   },
   footerBtn: {
     flex: 1,
-    minHeight: 48,
-    borderRadius: 16,
+    minHeight: 50,
+    borderRadius: 17,
     borderCurve: 'continuous',
     alignItems: 'center',
     justifyContent: 'center',
   },
   footerBtnSecondary: {
-    backgroundColor: 'rgba(60,60,67,0.08)',
+    backgroundColor: 'rgba(60,60,67,0.07)',
   },
   footerBtnSecondaryText: {
     fontSize: 16,
@@ -1211,8 +1219,8 @@ const styles = StyleSheet.create<any>({
   },
   footerBtnPrimaryGradient: {
     width: '100%',
-    minHeight: 48,
-    borderRadius: 16,
+    minHeight: 50,
+    borderRadius: 17,
     borderCurve: 'continuous',
     alignItems: 'center',
     justifyContent: 'center',

@@ -17,6 +17,7 @@ import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { formatDateToYMDLocal } from '@/lib/utils/localDate';
 import SwapRequestModal from '@/components/SwapRequestModal';
+import CancelAppointmentBottomSheet from '@/components/appointments/CancelAppointmentBottomSheet';
 import { toBcp47Locale } from '@/lib/i18nLocale';
 
 type TabType = 'upcoming' | 'past';
@@ -636,12 +637,6 @@ export default function ClientAppointmentsScreen() {
     );
   }, [barberImages, colors.primary]);
 
-  // Hero card — reuses the same premium card style as renderAppointment
-  const NextAppointmentHero: React.FC = React.useCallback(() => {
-    if (!(activeTab === 'upcoming' && nextAppointment)) return null;
-    return renderAppointment({ item: nextAppointment! });
-  }, [activeTab, nextAppointment, renderAppointment]);
-
   // Handle cancel appointment
   function handleCancelAppointment(appointment: AvailableTimeSlot) {
     setSelectedAppointment(appointment);
@@ -652,8 +647,13 @@ export default function ClientAppointmentsScreen() {
     setShowCancelModal(true);
   }
 
-  const confirmCancelAppointment = async () => {
-    if (!selectedAppointment) return;
+  const dismissCancelSheet = useCallback(() => {
+    setShowCancelModal(false);
+    setSelectedAppointment(null);
+  }, []);
+
+  const confirmCancelAppointment = async (): Promise<boolean> => {
+    if (!selectedAppointment || isCanceling) return false;
 
     setIsCanceling(true);
     try {
@@ -665,8 +665,6 @@ export default function ClientAppointmentsScreen() {
       if (result.success) {
         // Remove the canceled appointment from the list
         setUserAppointments(prev => prev.filter(apt => apt.id !== selectedAppointment.id));
-        setShowCancelModal(false);
-        setSelectedAppointment(null);
 
         // Create admin notification about the cancellation (target specific assigned barber if available)
         const canceledBy = user?.name || selectedAppointment.client_name || t('common.client', 'Client');
@@ -731,11 +729,14 @@ export default function ClientAppointmentsScreen() {
               .catch(() => {});
           }
         }
+        return true;
       } else {
         Alert.alert(t('appointments.cannotCancel.title', 'Cannot Cancel Appointment'), result.error || t('appointments.cannotCancel.message', 'Unable to cancel the appointment. Please try again.'));
+        return false;
       }
     } catch (error) {
       Alert.alert(t('error.generic', 'Error'), t('appointments.cancelError', 'An error occurred while cancelling. Please try again.'));
+      return false;
     } finally {
       setIsCanceling(false);
     }
@@ -996,66 +997,14 @@ export default function ClientAppointmentsScreen() {
         )}
       </View>
 
-      {/* Cancel Appointment Modal */}
-      <Modal
-        animationType="fade"
-        transparent={true}
+      <CancelAppointmentBottomSheet
         visible={showCancelModal}
-        onRequestClose={() => setShowCancelModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.cancelModal}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('appointments.cancel.title', 'Cancel Appointment')}</Text>
-              <Text style={styles.modalMessage}>
-                {t('appointments.cancel.message', 'Would you like to cancel your appointment?')}
-              </Text>
-              {selectedAppointment && (
-                <View style={styles.appointmentChips}>
-                  <View style={styles.chip}>
-                    <Ionicons name="calendar" size={14} color={colors.primary} style={styles.chipIcon} />
-                    <Text style={styles.chipText}>{formatDate(selectedAppointment.slot_date)}</Text>
-                  </View>
-                  {Boolean(selectedAppointment.slot_time) && (
-                    <View style={styles.chip}>
-                      <Ionicons name="time-outline" size={14} color={colors.primary} style={styles.chipIcon} />
-                      <Text style={styles.chipText}>{formatTime(selectedAppointment.slot_time)}</Text>
-                    </View>
-                  )}
-                  {Boolean(selectedAppointment.service_name) && (
-                    <View style={styles.chip}>
-                      <Ionicons name="pricetag" size={14} color={colors.primary} style={styles.chipIcon} />
-                      <Text style={styles.chipText}>{selectedAppointment.service_name}</Text>
-                    </View>
-                  )}
-                </View>
-              )}
-            </View>
-            
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelModalButton]}
-                onPress={() => setShowCancelModal(false)}
-                disabled={isCanceling}
-              >
-                <Text style={styles.cancelModalButtonText}>{t('cancel', 'Cancel')}</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.modalButton, styles.confirmModalButton]}
-                onPress={confirmCancelAppointment}
-                disabled={isCanceling}
-              >
-                {isCanceling ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.confirmModalButtonText}>{t('confirm', 'Confirm')}</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        appointment={selectedAppointment}
+        onClose={dismissCancelSheet}
+        onConfirm={confirmCancelAppointment}
+        formatDate={formatDate}
+        formatTime={formatTime}
+      />
 
       {/* Swap Request Modal */}
       <SwapRequestModal
@@ -1379,14 +1328,12 @@ const styles = StyleSheet.create<any>({
     marginBottom: 12,
     marginTop: 4,
     borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: 'rgba(15,23,42,0.07)',
+    backgroundColor: '#F4F5F7',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
-    elevation: 2,
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 1,
     padding: 14,
   },
   apptCardHeader: {

@@ -5139,7 +5139,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: SETTINGS_GROUPED_BG,
   },
   /**
    * Top safe area is covered by the full-bleed profile header overlay; body uses grouped gray in scroll.

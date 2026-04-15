@@ -2870,10 +2870,8 @@ export default function SettingsScreen() {
                         ) : (
                           <>
                             <View style={[styles.svcAddCardHeaderBand, { backgroundColor: `${businessColors.primary}12` }]}>
-                              <Text style={styles.svcAddCardTitle} numberOfLines={1}>
-                                {svc.name || t('common.noName','No name')}
-                              </Text>
                               <TouchableOpacity
+                                style={styles.svcListChevronHit}
                                 onPress={() => setExpandedServiceId(null)}
                                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                               >
@@ -2886,11 +2884,14 @@ export default function SettingsScreen() {
                                   <ChevronUp size={18} color={Colors.subtext} />
                                 )}
                               </TouchableOpacity>
+                              <Text style={[styles.svcAddCardTitle, { flex: 1, textAlign: 'right' }]} numberOfLines={1}>
+                                {svc.name || t('common.noName','No name')}
+                              </Text>
                             </View>
 
                             <View style={styles.svcAddFieldsArea}>
                               <View style={[styles.formGroup, { marginBottom: 10 }]}>
-                                <Text style={styles.formLabel}>{t('settings.services.name','שם השירות')}</Text>
+                                <Text style={[styles.formLabel, styles.svcEditFormLabel]}>{t('settings.services.name','שם השירות')}</Text>
                                 <TextInput
                                   style={[styles.formInput, styles.svcAddNameInput]}
                                   value={svc.name}
@@ -2901,7 +2902,7 @@ export default function SettingsScreen() {
 
                               <View style={[styles.twoColumnRow, { flexDirection: 'row', marginBottom: 4 }]}>
                                 <View style={[styles.formGroup, styles.twoColumnItem, { marginBottom: 0 }]}>
-                                  <Text style={styles.formLabel}>{t('settings.services.price','מחיר (₪)')}</Text>
+                                  <Text style={[styles.formLabel, styles.svcEditFormLabel]}>{t('settings.services.price','מחיר (₪)')}</Text>
                                   <TextInput
                                     style={styles.formInput}
                                     value={String(svc.price ?? '')}
@@ -2914,13 +2915,13 @@ export default function SettingsScreen() {
                                   />
                                 </View>
                                 <View style={[styles.formGroup, styles.twoColumnItem, { marginBottom: 0 }]}>
-                                  <Text style={styles.formLabel}>{t('settings.services.duration','משך')}</Text>
+                                  <Text style={[styles.formLabel, styles.svcEditFormLabel]}>{t('settings.services.duration','משך')}</Text>
                                   <TouchableOpacity
-                                    style={styles.svcDurationPickerBtn}
+                                    style={[styles.svcDurationPickerBtn, { flexDirection: 'row-reverse' }]}
                                     onPress={() => { setEditingServiceDurationId(svc.id); setShowDurationPicker(true); }}
                                     activeOpacity={0.8}
                                   >
-                                    <Text style={styles.svcDurationPickerBtnText}>
+                                    <Text style={[styles.svcDurationPickerBtnText, { flex: 1, textAlign: 'right' }]} numberOfLines={1}>
                                       {svc.duration_minutes
                                         ? `${svc.duration_minutes} ${t('settings.services.minShort','דק׳')}`
                                         : t('settings.services.selectDuration','בחר...')}
@@ -3273,39 +3274,43 @@ export default function SettingsScreen() {
                       adminUsers.map((adm: any) => {
                         return (
                           <View key={adm.id} style={{ marginBottom: 10 }}>
-                            <SettingsServiceSwipeRow
-                              enabled
-                              outerBorderRadius={16}
-                              onDeletePress={() => openRemoveEmployeeDialog(adm)}
-                              deleteButtonText={t('settings.services.delete', 'Delete')}
-                              deleteAccessibilityLabel={t('settings.admin.removeEmployeeTitle', 'Remove employee')}
-                            >
-                              <View style={styles.iosCard}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <View style={styles.iosCard}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', direction: 'ltr' }}>
+                                <TouchableOpacity
+                                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                  style={{
+                                    width: 34,
+                                    height: 34,
+                                    borderRadius: 17,
+                                    backgroundColor: Colors.error,
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                  }}
+                                  onPress={() => openRemoveEmployeeDialog(adm)}
+                                  accessibilityRole="button"
+                                  accessibilityLabel={t('settings.recurring.a11yDelete', 'Delete')}
+                                >
+                                  <Trash2 size={16} color={Colors.white} strokeWidth={1.65} />
+                                </TouchableOpacity>
+                                <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                  <View style={{ alignItems: 'flex-end', maxWidth: '100%', flexShrink: 1 }}>
+                                    <Text style={[styles.previewNotificationTitle, { textAlign: 'right', marginBottom: adm.phone ? 4 : 8 }]}>
+                                      {adm.name || 'Admin'}
+                                    </Text>
+                                    {!!adm.phone && (
+                                      <Text style={[styles.previewNotificationContent, { textAlign: 'right' }]}>{adm.phone}</Text>
+                                    )}
+                                  </View>
                                   {adm.image_url ? (
-                                    <Image source={{ uri: adm.image_url }} style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12 }} resizeMode="cover" />
+                                    <Image source={{ uri: adm.image_url }} style={{ width: 40, height: 40, borderRadius: 20, marginStart: 12 }} resizeMode="cover" />
                                   ) : (
-                                    <View style={{ width: 40, height: 40, borderRadius: 20, marginRight: 12, backgroundColor: '#F2F2F7', alignItems: 'center', justifyContent: 'center' }}>
+                                    <View style={{ width: 40, height: 40, borderRadius: 20, marginStart: 12, backgroundColor: '#F2F2F7', alignItems: 'center', justifyContent: 'center' }}>
                                       <User size={22} color={Colors.subtext} strokeWidth={1.75} />
                                     </View>
                                   )}
-                                  <View style={{ alignItems: 'flex-start', flex: 1 }}>
-                                    <Text style={styles.previewNotificationTitle}>{adm.name || 'Admin'}</Text>
-                                    {!!adm.phone && <Text style={styles.previewNotificationContent}>{adm.phone}</Text>}
-                                  </View>
-                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                    <TouchableOpacity
-                                      style={[styles.iconActionButton, { backgroundColor: '#FFECEC', borderColor: '#FFD1D1' }]}
-                                      onPress={() => openRemoveEmployeeDialog(adm)}
-                                      accessibilityRole="button"
-                                      accessibilityLabel={t('settings.recurring.a11yDelete', 'Delete')}
-                                    >
-                                      <Trash2 size={20} color="#FF3B30" />
-                                    </TouchableOpacity>
-                                  </View>
                                 </View>
                               </View>
-                            </SettingsServiceSwipeRow>
+                            </View>
                           </View>
                         );
                       })
@@ -7769,6 +7774,10 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     textAlign: 'left',
   },
+  /** Service inline editor — matches collapsed list RTL (Hebrew labels on the right) */
+  svcEditFormLabel: {
+    textAlign: 'right',
+  },
   formInput: {
     backgroundColor: Colors.white,
     borderRadius: 12,
@@ -7880,6 +7889,7 @@ const styles = StyleSheet.create({
   },
   svcAddCardHeaderBand: {
     flexDirection: 'row',
+    direction: 'ltr',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 18,

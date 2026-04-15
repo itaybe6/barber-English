@@ -1471,7 +1471,7 @@ export default function HomeScreen() {
                 <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
                   <Ionicons name="notifications-outline" size={24} color={primaryOnSurface} />
                   {unreadCount > 0 ? (
-                    <View style={[styles.quickTileBadge, { backgroundColor: '#EF4444' }]}>
+                    <View style={[styles.quickTileNotificationBadge, { backgroundColor: '#EF4444' }]}>
                       <Text style={styles.quickTileBadgeText}>
                         {unreadCount > 99 ? '99+' : unreadCount}
                       </Text>
@@ -2181,7 +2181,7 @@ export default function HomeScreen() {
                              </View>
                            </View>
                            <View style={styles.clientCardActions} collapsable={false}>
-                             <GHTouchableOpacity
+                            <TouchableOpacity
                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                style={[styles.clientUnblockPill, { backgroundColor: `${colors.primary}14`, borderColor: `${colors.primary}35` }]}
                                onPress={() => approvePendingClient(item.id)}
@@ -2197,8 +2197,8 @@ export default function HomeScreen() {
                                    {t('admin.pendingClients.approve', 'Approve')}
                                  </Text>
                                )}
-                             </GHTouchableOpacity>
-                             <GHTouchableOpacity
+                            </TouchableOpacity>
+                            <TouchableOpacity
                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                style={styles.clientBlockPill}
                                onPress={() => rejectPendingClient(item)}
@@ -2214,7 +2214,7 @@ export default function HomeScreen() {
                                    {t('admin.pendingClients.decline', 'Decline')}
                                  </Text>
                                )}
-                             </GHTouchableOpacity>
+                            </TouchableOpacity>
                            </View>
                          </View>
                        </View>
@@ -2302,7 +2302,7 @@ export default function HomeScreen() {
                             </View>
                           </View>
                           <View style={styles.clientCardActions} collapsable={false}>
-                            <GHTouchableOpacity
+                            <TouchableOpacity
                               disabled={!phoneLine}
                               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                               style={[
@@ -2316,8 +2316,8 @@ export default function HomeScreen() {
                               accessibilityState={{ disabled: !phoneLine }}
                             >
                               <Ionicons name="call" size={18} color={primaryOnSurface} />
-                            </GHTouchableOpacity>
-                            <GHTouchableOpacity
+                            </TouchableOpacity>
+                            <TouchableOpacity
                               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                               style={item.block ? styles.clientUnblockPill : styles.clientBlockPill}
                               onPress={() => (item.block ? handleUnblockClient(item) : handleBlockClient(item))}
@@ -2334,7 +2334,7 @@ export default function HomeScreen() {
                                   ? t('clients.actions.unblock', 'Unblock')
                                   : t('clients.actions.block', 'Block')}
                               </Text>
-                            </GHTouchableOpacity>
+                            </TouchableOpacity>
                           </View>
                         </View>
 
@@ -2675,6 +2675,17 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     paddingHorizontal: 5,
     borderWidth: 2,
     borderColor: '#FFFFFF',
+  },
+  quickTileNotificationBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
   },
   quickTileBadgeText: {
     color: '#FFFFFF',

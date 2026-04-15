@@ -209,7 +209,7 @@
   "login.awaitingAdminToEnterApp": "עליך לחכות לאישור המנהל לפני שניתן להיכנס לאפליקציה.\n\nלאחר האישור תוכל/י להתחבר שוב עם מספר הטלפון.\n\nטלפון: {{phone}}",
   "register.pendingApprovalTitle": "נרשמת בהצלחה",
   "register.success.pendingApproval": "החשבון נוצר. המנהל יאשר אותך בקרוב.\n\nלאחר האישור תוכל/י להתחבר עם מספר הטלפון ולקבוע תורים.\n\nטלפון: {{phone}}",
-  "admin.insights.title": "תובנות חודשיות",
+  "admin.insights.title": "מצב החודש",
   "admin.insights.noData": "אין נתוני תורים החודש",
   "admin.insights.booked": "מוזמנו",
   "admin.insights.completed": "הושלמו",

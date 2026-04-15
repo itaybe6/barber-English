@@ -342,11 +342,11 @@ const createStyles = (colors: any) => StyleSheet.create({
     ...Platform.select({
       ios: {
         shadowColor: '#1e293b',
-        shadowOpacity: 0.09,
-        shadowRadius: 14,
-        shadowOffset: { width: 0, height: 5 },
+        shadowOpacity: 0.16,
+        shadowRadius: 20,
+        shadowOffset: { width: 0, height: 8 },
       },
-      android: { elevation: 5 },
+      android: { elevation: 9 },
     }),
   },
   nextHeader: {

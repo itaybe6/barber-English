@@ -1,11 +1,12 @@
 import * as React from 'react';
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
   View,
   ScrollView,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   Image,
   Platform,
   Modal,
@@ -17,8 +18,25 @@ import {
   RefreshControl,
   Dimensions,
   I18nManager,
+  useWindowDimensions,
 } from 'react-native';
-import Animated, { useSharedValue, useAnimatedScrollHandler, runOnJS, useAnimatedStyle } from 'react-native-reanimated';
+import Animated, {
+  useSharedValue,
+  useAnimatedScrollHandler,
+  runOnJS,
+  useAnimatedStyle,
+  withTiming,
+  interpolate,
+  Extrapolate,
+  Easing,
+} from 'react-native-reanimated';
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+  TouchableOpacity as GHTouchableOpacity,
+  FlatList as GHFlatList,
+} from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -62,6 +80,8 @@ import { AdminHomeHeroMarquee } from '@/components/home/AdminHomeHeroMarquee';
 import MonthlyInsightsCard from '@/components/MonthlyInsightsCard';
 import { PendingClientApprovalsCard, PendingClientApprovalsCardHandle } from '@/components/admin/PendingClientApprovalsCard';
 import WaitlistHomePreviewAvatars from '@/components/admin/WaitlistHomePreviewAvatars';
+import WaitlistHomePreviewNamedRows from '@/components/admin/WaitlistHomePreviewNamedRows';
+import { ClientsListModalEmptyState } from '@/components/admin/ClientsListModalEmptyState';
 import { clientAppointmentStatsApi } from '@/lib/api/clientAppointmentStats';
 import { HorizontalCarouselDots, carouselIndexFromOffset } from '@/components/HorizontalCarouselDots';
 import { usersApi } from '@/lib/api/users';
@@ -103,11 +123,33 @@ function sanitizeUrlArray(value: unknown): string[] {
     .filter((x) => x.length > 0);
 }
 
+interface WaitlistPreviewClientRow {
+  key: string;
+  client_name: string;
+  client_phone?: string;
+  image_url?: string;
+}
+
+/**
+ * דמו כרטיס רשימת המתנה בדף הבית (מספר + פריוויו מרובה) — רק ב־`__DEV__`.
+ * כבה: `&& false` כשמסיימים לבדוק.
+ */
+const ADMIN_HOME_WAITLIST_CARD_DEMO = __DEV__ && true;
+
+/** כרטיס הבית: עד (ערך−1) עיגולי ראשי תיבות, ואז עיגול +N — לא מציגים את כולם */
+const ADMIN_HOME_WAITLIST_PREVIEW_MAX_SLOTS = 9;
+
+const ADMIN_HOME_WAITLIST_CARD_DEMO_CLIENTS: WaitlistPreviewClientRow[] = [
+  { key: 'demo-wl-1', client_name: 'איתי בן יאיר' },
+  { key: 'demo-wl-2', client_name: 'דני כהן' },
+];
+
 export default function HomeScreen() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
   const params = useLocalSearchParams<{ openPendingClients?: string }>();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const designsFromStore = useDesignsStore((state) => state.designs);
   const isLoadingDesigns = useDesignsStore((state) => state.isLoading);
   const fetchDesigns = useDesignsStore((state) => state.fetchDesigns);
@@ -154,6 +196,14 @@ export default function HomeScreen() {
   /** Section headers: Hebrew titles flush right, edit control on the opposite side (LTR physical layout). */
   const adminSectionTitleOnRight = Boolean(i18n.language?.startsWith('he'));
   const isRTL = I18nManager.isRTL;
+  /** רשימת לקוחות: אייקון חיפוש בקצה הוויזואלי + placeholder צמוד (גם כש־I18nManager לא RTL) */
+  const clientsSearchLangRtl = (() => {
+    const lang = (i18n.language || '').toLowerCase();
+    return lang.startsWith('he') || lang.startsWith('iw') || lang.startsWith('ar');
+  })();
+  const clientsSearchFlexDir: 'row' | 'row-reverse' = isRTL ? 'row' : clientsSearchLangRtl ? 'row-reverse' : 'row';
+  const clientsSearchInputAlignStyle =
+    isRTL || clientsSearchLangRtl ? styles.searchInputRtl : styles.searchInputLtr;
 
   const [heroImages, setHeroImages] = useState<string[] | null>(null);
   const [homeLogoUrl, setHomeLogoUrl] = useState<string | null>(null);
@@ -263,6 +313,7 @@ export default function HomeScreen() {
   const [todayAppointmentsCount, setTodayAppointmentsCount] = useState(0);
   const [loadingTodayCount, setLoadingTodayCount] = useState(true);
   const [showClientsModal, setShowClientsModal] = useState(false);
+  const [displayClientsModal, setDisplayClientsModal] = useState(false);
   const [clients, setClients] = useState<any[]>([]);
   const [filteredClients, setFilteredClients] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -333,9 +384,7 @@ export default function HomeScreen() {
     });
   }, [pendingClients, searchQuery]);
   const [waitlistWaitingCount, setWaitlistWaitingCount] = useState(0);
-  const [waitlistPreviewClients, setWaitlistPreviewClients] = useState<
-    { key: string; client_name: string }[]
-  >([]);
+  const [waitlistPreviewClients, setWaitlistPreviewClients] = useState<WaitlistPreviewClientRow[]>([]);
 
   /** SharedValue tracks inner-scroll state so the UI-thread worklet can read it without crossing to JS */
   const innerActiveSV = useSharedValue(0);
@@ -644,7 +693,7 @@ export default function HomeScreen() {
         setWaitlistPreviewClients([]);
       } else {
         const seen = new Set<string>();
-        const unique: { key: string; client_name: string }[] = [];
+        const unique: WaitlistPreviewClientRow[] = [];
         for (const row of waitlistPreviewRes.data || []) {
           const r = row as { id?: string; client_name?: string; client_phone?: string };
           const phone = String(r.client_phone || '').trim();
@@ -654,9 +703,42 @@ export default function HomeScreen() {
           unique.push({
             key: String(r.id),
             client_name: String(r.client_name || '').trim() || '?',
+            client_phone: phone || undefined,
           });
         }
-        setWaitlistPreviewClients(unique);
+        let withImages: WaitlistPreviewClientRow[] = unique;
+        if (withImages.length >= 1 && withImages.length <= 2) {
+          const phones = withImages
+            .map((u) => String(u.client_phone || '').trim())
+            .filter(Boolean);
+          if (phones.length) {
+            const { data: imgRows, error: imgErr } = await supabase
+              .from('users')
+              .select('phone, image_url')
+              .eq('business_id', businessId)
+              .eq('user_type', 'client')
+              .in('phone', phones);
+            if (imgErr) {
+              console.error('Error fetching waitlist preview avatars:', imgErr);
+            } else {
+              const phoneToUrl: Record<string, string> = {};
+              for (const u of imgRows || []) {
+                const p = String((u as { phone?: string }).phone || '').trim();
+                const url = String((u as { image_url?: string }).image_url || '').trim();
+                if (p) phoneToUrl[p] = url;
+              }
+              withImages = withImages.map((u) => {
+                const p = String(u.client_phone || '').trim();
+                return { ...u, image_url: (p && phoneToUrl[p]) || u.image_url || '' };
+              });
+            }
+          }
+        }
+        setWaitlistPreviewClients(withImages);
+      }
+      if (ADMIN_HOME_WAITLIST_CARD_DEMO) {
+        setWaitlistWaitingCount(ADMIN_HOME_WAITLIST_CARD_DEMO_CLIENTS.length);
+        setWaitlistPreviewClients([...ADMIN_HOME_WAITLIST_CARD_DEMO_CLIENTS]);
       }
     } catch (error) {
       console.error('Error in fetchInsightsData:', error);
@@ -821,12 +903,101 @@ export default function HomeScreen() {
     [t]
   );
 
-  const closeClientsModal = useCallback(() => {
-    if (Date.now() - clientsModalOpenTsRef.current < 400) return;
-    setShowClientsModal(false);
+  const CLIENTS_SHEET_OPEN_MS = 420;
+  const CLIENTS_SHEET_CLOSE_MS = 380;
+  const clientsOffBottom = useMemo(
+    () => Math.min(windowHeight * 1.05, windowHeight + 80),
+    [windowHeight]
+  );
+  const clientsSheetHeight = useMemo(
+    () => Math.round(Math.min(windowHeight * 0.92, windowHeight - insets.top - 8)),
+    [windowHeight, insets.top]
+  );
+  const clientsSheetDragClosePx = useMemo(
+    () => Math.max(96, Math.round(clientsSheetHeight * 0.14)),
+    [clientsSheetHeight]
+  );
+  const clientsSheetY = useSharedValue(clientsOffBottom);
+  const clientsPanStartY = useSharedValue(0);
+
+  const finishClientsModalClose = useCallback(() => {
+    setDisplayClientsModal(false);
     setClientsListMode('all');
     setPendingClients([]);
   }, []);
+
+  const requestCloseClientsModal = useCallback(() => {
+    if (Date.now() - clientsModalOpenTsRef.current < 400) return;
+    setShowClientsModal(false);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!displayClientsModal) {
+      clientsSheetY.value = clientsOffBottom;
+    }
+  }, [displayClientsModal, clientsOffBottom, clientsSheetY]);
+
+  useEffect(() => {
+    if (!showClientsModal) return;
+    setDisplayClientsModal(true);
+    clientsSheetY.value = clientsOffBottom;
+    clientsSheetY.value = withTiming(0, {
+      duration: CLIENTS_SHEET_OPEN_MS,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [showClientsModal, clientsOffBottom, clientsSheetY]);
+
+  useEffect(() => {
+    if (showClientsModal || !displayClientsModal) return;
+    clientsSheetY.value = withTiming(
+      clientsOffBottom,
+      { duration: CLIENTS_SHEET_CLOSE_MS, easing: Easing.in(Easing.cubic) },
+      (finished) => {
+        if (finished) runOnJS(finishClientsModalClose)();
+      }
+    );
+  }, [showClientsModal, displayClientsModal, clientsOffBottom, clientsSheetY, finishClientsModalClose]);
+
+  const clientsModalBackdropStyle = useAnimatedStyle(
+    () => ({
+      opacity: interpolate(clientsSheetY.value, [0, clientsOffBottom], [0.48, 0], Extrapolate.CLAMP),
+    }),
+    [clientsOffBottom]
+  );
+
+  const clientsModalSheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: clientsSheetY.value }],
+  }));
+
+  const clientsSheetPanGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetY([12, 10000])
+        .failOffsetX([-28, 28])
+        .onBegin(() => {
+          'worklet';
+          clientsPanStartY.value = clientsSheetY.value;
+        })
+        .onUpdate((e) => {
+          'worklet';
+          const next = clientsPanStartY.value + e.translationY;
+          clientsSheetY.value = Math.max(0, next);
+        })
+        .onEnd((e) => {
+          'worklet';
+          const y = clientsSheetY.value;
+          const vel = e.velocityY;
+          if (y > clientsSheetDragClosePx || vel > 900) {
+            runOnJS(requestCloseClientsModal)();
+          } else {
+            clientsSheetY.value = withTiming(0, {
+              duration: 260,
+              easing: Easing.out(Easing.cubic),
+            });
+          }
+        }),
+    [clientsSheetDragClosePx, requestCloseClientsModal]
+  );
 
   // Filter clients based on search query
   useEffect(() => {
@@ -837,9 +1008,17 @@ export default function HomeScreen() {
       filtered = filtered.filter((c) => !c.block);
     }
     if (searchQuery.trim() !== '') {
-      filtered = filtered.filter((client) =>
-        client.name?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      const raw = searchQuery.trim();
+      const q = raw.toLowerCase();
+      const qDigits = raw.replace(/\D/g, '');
+      filtered = filtered.filter((client) => {
+        const name = String(client?.name || '').toLowerCase();
+        const phone = String(client?.phone || '');
+        const phoneDigits = phone.replace(/\D/g, '');
+        if (name.includes(q)) return true;
+        if (qDigits && phoneDigits.includes(qDigits)) return true;
+        return false;
+      });
     }
     setFilteredClients(filtered);
   }, [searchQuery, clients, blockedFilter]);
@@ -1284,23 +1463,69 @@ export default function HomeScreen() {
                     { alignItems: isRTL ? 'flex-end' : 'flex-start' },
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.waitlistCardSub,
-                      { color: '#94A3B8', textAlign: isRTL ? 'right' : 'left' },
-                    ]}
-                    numberOfLines={2}
-                  >
-                    {t('admin.waitlist.viewAndManage', 'צפייה וניהול לקוחות ממתינים')}
-                  </Text>
-                  {waitlistPreviewClients.length > 0 ? (
-                    <WaitlistHomePreviewAvatars
-                      clients={waitlistPreviewClients}
-                      primaryColor={colors.primary}
-                      surfaceColor={colors.surface}
-                      maxSlots={5}
-                    />
-                  ) : null}
+                  {waitlistPreviewClients.length > 2 ? (
+                    <>
+                      <Text
+                        style={[
+                          styles.waitlistCardNamesLine,
+                          { color: colors.text, textAlign: isRTL ? 'right' : 'left' },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {t('admin.waitlist.previewMultiTitle', 'לקוחות ממתינים')}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.waitlistCardSub,
+                          { color: '#94A3B8', textAlign: isRTL ? 'right' : 'left' },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {t('admin.waitlist.viewAndManage', 'צפייה וניהול לקוחות ממתינים')}
+                      </Text>
+                      <WaitlistHomePreviewAvatars
+                        clients={waitlistPreviewClients}
+                        primaryColor={colors.primary}
+                        surfaceColor={colors.surface}
+                        maxSlots={ADMIN_HOME_WAITLIST_PREVIEW_MAX_SLOTS}
+                      />
+                    </>
+                  ) : waitlistPreviewClients.length >= 1 ? (
+                    <>
+                      <Text
+                        style={[
+                          styles.waitlistCardNamesLine,
+                          { color: colors.text, textAlign: isRTL ? 'right' : 'left' },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {t('admin.waitlist.previewMultiTitle', 'לקוחות ממתינים')}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.waitlistCardSub,
+                          { color: '#94A3B8', textAlign: isRTL ? 'right' : 'left' },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {t('admin.waitlist.viewAndManage', 'צפייה וניהול לקוחות ממתינים')}
+                      </Text>
+                      <WaitlistHomePreviewNamedRows
+                        clients={waitlistPreviewClients}
+                        primaryColor={colors.primary}
+                      />
+                    </>
+                  ) : (
+                    <Text
+                      style={[
+                        styles.waitlistCardSub,
+                        { color: '#94A3B8', textAlign: isRTL ? 'right' : 'left' },
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {t('admin.waitlist.viewAndManage', 'צפייה וניהול לקוחות ממתינים')}
+                    </Text>
+                  )}
                 </View>
                 <View style={[styles.waitlistCardVertDivider, { backgroundColor: `${colors.primary}25` }]} />
                 <View style={styles.waitlistCardCountBlock}>
@@ -1676,39 +1901,47 @@ export default function HomeScreen() {
          </View>
        </Modal>
 
-       {/* Clients Modal */}
+       {/* Clients — bottom sheet (גרירה לסגירה, בלי X) */}
        <Modal
-         animationType="slide"
-         transparent={true}
-         visible={showClientsModal}
-         onRequestClose={closeClientsModal}
+         animationType="none"
+         transparent
+         statusBarTranslucent
+         visible={displayClientsModal}
+         onRequestClose={requestCloseClientsModal}
        >
-         <View style={styles.modalOverlay}>
-            <View style={styles.clientsModal}>
-              <View style={styles.modalHeader}>
-                <View style={{ width: 36, height: 36 }} />
-                <Text style={styles.modalTitle}>
-                  {clientsListMode === 'newThisMonth'
-                    ? t('admin.insights.newClientsListTitle', 'New clients this month')
-                    : t('clients.listTitle', 'Clients List')}
-                </Text>
-                <TouchableOpacity 
-                  style={styles.closeButton}
-                  onPress={closeClientsModal}
-                >
-                  <Ionicons name="close" size={24} color={colors.text} />
-                </TouchableOpacity>
-              </View>
+         {/** Modal is outside the app GH root — RNGH needs its own root or touchables inside lists won't fire. */}
+         <GestureHandlerRootView style={{ flex: 1 }}>
+         <View style={styles.clientsModalRoot} pointerEvents="box-none">
+           <TouchableWithoutFeedback onPress={requestCloseClientsModal}>
+             <Animated.View style={[styles.clientsModalBackdrop, clientsModalBackdropStyle]} />
+           </TouchableWithoutFeedback>
+           <Animated.View
+             style={[styles.clientsSheetOuter, { height: clientsSheetHeight }, clientsModalSheetStyle]}
+           >
+             <View style={styles.clientsSheetSurface}>
+               <GestureDetector gesture={clientsSheetPanGesture}>
+                 <View
+                   style={styles.clientsSheetDragZone}
+                   accessibilityRole="adjustable"
+                   accessibilityLabel={t('clients.sheet.dragToClose', 'גרור למטה לסגירה')}
+                 >
+                   <View style={[styles.clientsSheetDragPill, { backgroundColor: 'rgba(15,23,42,0.2)' }]} />
+                 </View>
+               </GestureDetector>
+               <View style={[styles.modalHeader, styles.clientsModalHeaderTight]}>
+                 <Text style={styles.modalTitle}>
+                   {clientsListMode === 'newThisMonth'
+                     ? t('admin.insights.newClientsListTitle', 'New clients this month')
+                     : t('clients.listTitle', 'Clients List')}
+                 </Text>
+               </View>
 
              {clientsListMode === 'all' || clientsListMode === 'pendingApproval' ? (
-               <View style={styles.searchContainer}>
+               <View style={[styles.searchContainer, { flexDirection: clientsSearchFlexDir }]}>
                  <Ionicons name="search" size={20} color={primaryOnSurface} style={styles.searchIcon} />
                  <TextInput
-                   style={[
-                     styles.searchInput,
-                     I18nManager.isRTL ? styles.searchInputRtl : styles.searchInputLtr,
-                   ]}
-                   placeholder={t('common.searchByName', 'Search by name...')}
+                   style={[styles.searchInput, clientsSearchInputAlignStyle]}
+                   placeholder={t('common.searchByNamePhone', 'Search by name or phone...')}
                    placeholderTextColor={colors.textSecondary}
                    value={searchQuery}
                    onChangeText={setSearchQuery}
@@ -1716,9 +1949,18 @@ export default function HomeScreen() {
                </View>
              ) : null}
 
-             {/* Blocked Filter + New Clients (single row) */}
+             {/* Blocked Filter + New Clients (single row) — host has fixed height so ScrollView cannot expand over the list and steal touches */}
              {clientsListMode !== 'newThisMonth' ? (
-               <View style={styles.filterRow}>
+               <View style={styles.clientsFilterRowHost} collapsable={false}>
+               <ScrollView
+                 horizontal
+                 showsHorizontalScrollIndicator={false}
+                 style={styles.filterRowScrollInner}
+                 contentContainerStyle={styles.filterRowScrollContent}
+                 keyboardShouldPersistTaps="handled"
+                 bounces={false}
+                 overScrollMode="never"
+               >
                  <TouchableOpacity
                    onPress={() => {
                      const needsReload = clientsListMode !== 'all';
@@ -1820,6 +2062,7 @@ export default function HomeScreen() {
                        : t('admin.pendingClients.bannerTitle')}
                    </Text>
                  </TouchableOpacity>
+               </ScrollView>
                </View>
              ) : null}
 
@@ -1832,23 +2075,31 @@ export default function HomeScreen() {
                    <Text style={styles.loadingText}>{t('admin.pendingClients.loading', 'Loading…')}</Text>
                  </View>
                ) : (
-                 <FlatList
+                 <GHFlatList
                    style={styles.clientsFlatList}
                    data={pendingFilteredClients}
                    keyExtractor={(item) => item.id}
-                   keyboardShouldPersistTaps="handled"
+                   keyboardShouldPersistTaps="always"
+                   removeClippedSubviews={false}
                    showsVerticalScrollIndicator={true}
                    ListEmptyComponent={
-                     <View style={styles.clientsEmptyWrap}>
-                       <View style={[styles.clientsEmptyIcon, { backgroundColor: `${colors.primary}14` }]}>
-                         <Ionicons name="people-outline" size={40} color={primaryOnSurface} />
-                       </View>
-                       <Text style={[styles.clientsEmptyTitle, { color: colors.text }]}>
-                         {pendingClients.length === 0
+                     <ClientsListModalEmptyState
+                       primaryColor={colors.primary}
+                       primaryOnSurface={primaryOnSurface}
+                       textColor={colors.text}
+                       textSecondaryColor={colors.textSecondary}
+                       surfaceColor={colors.surface}
+                       title={
+                         pendingClients.length === 0
                            ? t('admin.pendingClients.empty', 'No pending clients')
-                           : t('common.noResults', 'No results')}
-                       </Text>
-                     </View>
+                           : t('common.noResults', 'No results')
+                       }
+                       subtitle={
+                         pendingClients.length === 0
+                           ? t('admin.pendingClients.emptySubtitle')
+                           : t('clients.emptySearchHint')
+                       }
+                     />
                    }
                    renderItem={({ item }) => {
                      const busy = pendingClientActionId === item.id;
@@ -1869,14 +2120,15 @@ export default function HomeScreen() {
                                  </Text>
                                </View>
                                {item.phone ? (
-                                 <Text style={[styles.clientStatCaption, { color: colors.textSecondary }]} numberOfLines={1}>
+                                 <Text style={[styles.clientCardPhoneLine, { color: colors.textSecondary }]} numberOfLines={1}>
                                    {item.phone}
                                  </Text>
                                ) : null}
                              </View>
                            </View>
-                           <View style={styles.clientCardActions}>
-                             <TouchableOpacity
+                           <View style={styles.clientCardActions} collapsable={false}>
+                             <GHTouchableOpacity
+                               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                style={[styles.clientUnblockPill, { backgroundColor: `${colors.primary}14`, borderColor: `${colors.primary}35` }]}
                                onPress={() => approvePendingClient(item.id)}
                                disabled={busy}
@@ -1891,8 +2143,9 @@ export default function HomeScreen() {
                                    {t('admin.pendingClients.approve', 'Approve')}
                                  </Text>
                                )}
-                             </TouchableOpacity>
-                             <TouchableOpacity
+                             </GHTouchableOpacity>
+                             <GHTouchableOpacity
+                               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                style={styles.clientBlockPill}
                                onPress={() => rejectPendingClient(item)}
                                disabled={busy}
@@ -1907,7 +2160,7 @@ export default function HomeScreen() {
                                    {t('admin.pendingClients.decline', 'Decline')}
                                  </Text>
                                )}
-                             </TouchableOpacity>
+                             </GHTouchableOpacity>
                            </View>
                          </View>
                        </View>
@@ -1926,39 +2179,41 @@ export default function HomeScreen() {
                  <Text style={styles.loadingText}>{t('clients.loading','Loading clients...')}</Text>
                </View>
               ) : (
-                 <FlatList
+                 <GHFlatList
                   style={styles.clientsFlatList}
                   data={filteredClients}
                   keyExtractor={(item) => item.id}
-                  keyboardShouldPersistTaps="handled"
+                  keyboardShouldPersistTaps="always"
+                  removeClippedSubviews={false}
                   showsVerticalScrollIndicator={true}
                   ListEmptyComponent={
-                    <View style={styles.clientsEmptyWrap}>
-                      <View style={[styles.clientsEmptyIcon, { backgroundColor: `${colors.primary}14` }]}>
-                        <Ionicons name="people-outline" size={40} color={primaryOnSurface} />
-                      </View>
-                      <Text style={[styles.clientsEmptyTitle, { color: colors.text }]}>
-                        {clientsListMode === 'newThisMonth'
+                    <ClientsListModalEmptyState
+                      primaryColor={colors.primary}
+                      primaryOnSurface={primaryOnSurface}
+                      textColor={colors.text}
+                      textSecondaryColor={colors.textSecondary}
+                      surfaceColor={colors.surface}
+                      title={
+                        clientsListMode === 'newThisMonth'
                           ? t('admin.insights.newClientsListEmpty', 'No new clients registered this month')
-                          : t('clients.listEmpty')}
-                      </Text>
-                    </View>
+                          : t('clients.listEmptyTitle', 'Nothing to show yet')
+                      }
+                      subtitle={
+                        clientsListMode === 'newThisMonth'
+                          ? t('admin.insights.newClientsListEmptyHint')
+                          : t('clients.listEmptySubtitle', 'Try another search or filter.')
+                      }
+                    />
                   }
                   renderItem={({ item }) => {
                     const stats = clientStatsMap[item.id];
                     const totalAppts = stats?.totalAppointments ?? 0;
                     const avgMo = stats?.avgMonthlySpend;
                     const initial = (item.name || '?').trim().charAt(0).toUpperCase() || '?';
-                    const a11y = t('clients.stats.a11yCard', '{{name}}: {{visits}} visits, {{spend}}', {
-                      name: item.name || '',
-                      visits: totalAppts,
-                      spend:
-                        avgMo != null
-                          ? formatClientMoney(avgMo)
-                          : t('clients.stats.noSpendShort', 'No data'),
-                    });
+                    const phoneLine = item.phone?.trim() || '';
                     return (
                       <View
+                        accessible={false}
                         style={[
                           styles.clientCard,
                           item.block && [
@@ -1966,11 +2221,10 @@ export default function HomeScreen() {
                             { borderStartColor: '#EF4444' },
                           ],
                         ]}
-                        accessibilityLabel={a11y}
                       >
                         <View style={styles.clientCardHeader}>
                           <View style={styles.clientCardLead}>
-                            <View style={[styles.clientAvatar, { backgroundColor: `${colors.primary}22` }]}>
+                            <View style={[styles.clientAvatar, { backgroundColor: `${colors.primary}18` }]}>
                               <Text style={[styles.clientAvatarLetter, { color: primaryOnSurface }]}>
                                 {initial}
                               </Text>
@@ -1986,18 +2240,31 @@ export default function HomeScreen() {
                                   </View>
                                 ) : null}
                               </View>
+                              {phoneLine ? (
+                                <Text style={[styles.clientCardPhoneLine, { color: colors.textSecondary }]} numberOfLines={1}>
+                                  {phoneLine}
+                                </Text>
+                              ) : null}
                             </View>
                           </View>
-                          <View style={styles.clientCardActions}>
-                            <TouchableOpacity
-                              style={[styles.clientCallPill, { backgroundColor: `${colors.primary}14`, borderColor: `${colors.primary}35` }]}
+                          <View style={styles.clientCardActions} collapsable={false}>
+                            <GHTouchableOpacity
+                              disabled={!phoneLine}
+                              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                              style={[
+                                styles.clientCallPill,
+                                { backgroundColor: `${colors.primary}0D`, borderColor: `${colors.primary}26` },
+                                !phoneLine && styles.clientCallPillDisabled,
+                              ]}
                               onPress={() => handlePhoneCall(item.phone)}
                               accessibilityRole="button"
                               accessibilityLabel={t('clients.call.title', 'Call')}
+                              accessibilityState={{ disabled: !phoneLine }}
                             >
-                              <Ionicons name="call" size={20} color={primaryOnSurface} />
-                            </TouchableOpacity>
-                            <TouchableOpacity
+                              <Ionicons name="call" size={18} color={primaryOnSurface} />
+                            </GHTouchableOpacity>
+                            <GHTouchableOpacity
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                               style={item.block ? styles.clientUnblockPill : styles.clientBlockPill}
                               onPress={() => (item.block ? handleUnblockClient(item) : handleBlockClient(item))}
                               activeOpacity={0.85}
@@ -2013,15 +2280,18 @@ export default function HomeScreen() {
                                   ? t('clients.actions.unblock', 'Unblock')
                                   : t('clients.actions.block', 'Block')}
                               </Text>
-                            </TouchableOpacity>
+                            </GHTouchableOpacity>
                           </View>
                         </View>
 
-                        <View style={[styles.clientStatsStrip, { backgroundColor: `${colors.primary}10` }]}>
+                        <View style={[styles.clientStatsStrip, { borderTopColor: colors.border }]}>
                           <View style={styles.clientStatCell}>
-                            <View style={[styles.clientStatIconWrap, { backgroundColor: `${colors.primary}1E` }]}>
-                              <Ionicons name="calendar-outline" size={20} color={primaryOnSurface} />
-                            </View>
+                            <Ionicons
+                              name="calendar-outline"
+                              size={17}
+                              color={primaryOnSurface}
+                              style={styles.clientStatIcon}
+                            />
                             <View style={styles.clientStatTextCol}>
                               <Text style={[styles.clientStatValue, { color: colors.text }]}>{totalAppts}</Text>
                               <Text style={[styles.clientStatCaption, { color: colors.textSecondary }]}>
@@ -2031,9 +2301,12 @@ export default function HomeScreen() {
                           </View>
                           <View style={[styles.clientStatVRule, { backgroundColor: colors.border }]} />
                           <View style={styles.clientStatCell}>
-                            <View style={[styles.clientStatIconWrap, { backgroundColor: `${colors.primary}1E` }]}>
-                              <Ionicons name="wallet-outline" size={20} color={primaryOnSurface} />
-                            </View>
+                            <Ionicons
+                              name="wallet-outline"
+                              size={17}
+                              color={primaryOnSurface}
+                              style={styles.clientStatIcon}
+                            />
                             <View style={styles.clientStatTextCol}>
                               <Text
                                 style={[
@@ -2062,8 +2335,10 @@ export default function HomeScreen() {
                 />
              )}
              </View>
-           </View>
+             </View>
+           </Animated.View>
          </View>
+         </GestureHandlerRootView>
        </Modal>
 
       {isAdmin && (
@@ -2211,11 +2486,11 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     ...Platform.select({
       ios: {
         shadowColor: '#1e293b',
-        shadowOpacity: 0.09,
-        shadowRadius: 14,
-        shadowOffset: { width: 0, height: 5 },
+        shadowOpacity: 0.16,
+        shadowRadius: 20,
+        shadowOffset: { width: 0, height: 8 },
       },
-      android: { elevation: 5 },
+      android: { elevation: 9 },
     }),
   },
   waitlistCardHeader: {
@@ -2269,6 +2544,13 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     fontSize: 13,
     fontWeight: '500',
     lineHeight: 18,
+    width: '100%',
+  },
+  waitlistCardNamesLine: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.25,
+    lineHeight: 20,
     width: '100%',
   },
   waitlistCardVertDivider: {
@@ -3286,33 +3568,56 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     left: 16,
     zIndex: 20,
   },
-  modalOverlay: {
+  clientsModalRoot: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
-    alignItems: 'center',
   },
-
-  // Clients Modal Styles
-  clientsModal: {
-    backgroundColor: '#fff',
-    margin: 10,
-    borderRadius: 20,
-    height: '88%',
-    width: '95%',
-    alignSelf: 'center',
+  clientsModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#0f172a',
+    zIndex: 0,
+  },
+  clientsSheetOuter: {
+    width: '100%',
+    zIndex: 1,
+  },
+  clientsSheetSurface: {
+    flex: 1,
+    minHeight: 0,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(15,23,42,0.08)',
     overflow: 'hidden',
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.25,
-        shadowRadius: 20,
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: -10 },
+        shadowOpacity: 0.14,
+        shadowRadius: 22,
       },
-      android: {
-        elevation: 10,
-      },
+      android: { elevation: 16 },
     }),
+  },
+  clientsSheetDragZone: {
+    alignItems: 'center',
+    paddingTop: 10,
+    /** מרווח מהידית — הכותרת לא “נדבקת” לקו/ל־pill */
+    paddingBottom: 14,
+  },
+  clientsSheetDragPill: {
+    width: 44,
+    height: 5,
+    borderRadius: 3,
+  },
+  clientsModalHeaderTight: {
+    justifyContent: 'center',
+    paddingTop: 0,
+    /** קרוב יותר לשורת החיפוש מתחת */
+    paddingBottom: 6,
+    paddingHorizontal: 16,
+    borderBottomWidth: 0,
   },
   modalHeader: {
     flexDirection: 'row', // LTR
@@ -3333,26 +3638,29 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
     backgroundColor: '#f2f2f7',
     borderRadius: 16,
     marginHorizontal: 20,
-    marginTop: 10,
+    marginTop: 4,
     marginBottom: 10,
     paddingHorizontal: 16,
     paddingVertical: 13,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#E8E8ED',
-    position: 'relative',
   },
+  /** ילד ראשון בשורה — ב־RTL מימין, ב־LTR משמאל; צמוד ל־TextInput בלי absolute */
   searchIcon: {
-    position: 'absolute',
-    left: 16,
+    flexShrink: 0,
   },
   searchInput: {
     flex: 1,
+    minWidth: 0,
     fontSize: 16,
     color: colors.text,
-    paddingLeft: 32, // leave space for the left search icon
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    margin: 0,
   },
   searchInputRtl: {
     textAlign: 'right',
@@ -3377,10 +3685,14 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
   },
   clientsListSheet: {
     flex: 1,
+    minHeight: 0,
     backgroundColor: '#F2F4F8',
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
-    minHeight: 120,
+    zIndex: 2,
+    ...Platform.select({
+      android: { elevation: 3 },
+    }),
   },
   clientsFlatList: {
     flex: 1,
@@ -3394,34 +3706,24 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     flexGrow: 1,
     justifyContent: 'center',
   },
-  clientsEmptyWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 48,
-    paddingHorizontal: 24,
+  /** Fixed band — prevents horizontal ScrollView from growing with flex and blocking taps on the list below */
+  clientsFilterRowHost: {
+    height: 46,
+    maxHeight: 46,
+    marginBottom: 8,
+    overflow: 'hidden',
+    zIndex: 0,
   },
-  clientsEmptyIcon: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
+  filterRowScrollInner: {
+    height: 44,
+    maxHeight: 44,
   },
-  clientsEmptyTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    textAlign: 'center',
-    lineHeight: 22,
-    letterSpacing: -0.2,
-  },
-  filterRow: {
-    flexDirection: 'row', // LTR
+  filterRowScrollContent: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
     gap: 8,
     paddingHorizontal: 20,
-    marginBottom: 8,
+    paddingVertical: 2,
   },
   filterButton: {
     backgroundColor: '#f2f2f7',
@@ -3430,11 +3732,11 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     borderRadius: 16,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    marginRight: 8,
   },
   filterButtonActive: {
     backgroundColor: `${colors.primary}20`,
-    borderColor: colors.primary,
+    borderWidth: 0,
+    borderColor: 'transparent',
   },
   filterButtonText: {
     color: colors.text,
@@ -3468,132 +3770,151 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
   },
   clientCardHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 14,
+    gap: 10,
+    marginBottom: 10,
   },
   clientCardLead: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
     minWidth: 0,
-    gap: 12,
+    gap: 10,
   },
   clientAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  clientAvatarLetter: {
-    fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  clientCardTextCol: {
-    flex: 1,
-    minWidth: 0,
-    justifyContent: 'center',
-  },
-  clientNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  clientBlockedBadge: {
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  clientBlockedBadgeText: {
-    color: '#B91C1C',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: -0.1,
-  },
-  modalClientName: {
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.35,
-    flexShrink: 1,
-  },
-  clientCardActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexShrink: 0,
-    paddingTop: 2,
-  },
-  clientCallPill: {
     width: 46,
     height: 46,
     borderRadius: 23,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
+    flexShrink: 0,
+  },
+  clientAvatarLetter: {
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+  },
+  clientCardTextCol: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+    alignItems: 'stretch',
+  },
+  clientNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    alignSelf: 'stretch',
+    justifyContent: I18nManager.isRTL ? 'flex-end' : 'flex-start',
+  },
+  clientBlockedBadge: {
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 7,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#FECDD3',
+  },
+  clientBlockedBadgeText: {
+    color: '#C2410C',
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: -0.05,
+  },
+  modalClientName: {
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: -0.28,
+    flexShrink: 1,
+    lineHeight: 21,
+    textAlign: I18nManager.isRTL ? 'right' : 'left',
+    alignSelf: 'stretch',
+  },
+  clientCardPhoneLine: {
+    fontSize: 12,
+    fontWeight: '500',
+    letterSpacing: -0.04,
+    marginTop: 3,
+    lineHeight: 16,
+    textAlign: I18nManager.isRTL ? 'right' : 'left',
+    alignSelf: 'stretch',
+    writingDirection: 'ltr',
+  },
+  clientCardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    flexShrink: 0,
+    zIndex: 2,
+    ...Platform.select({ android: { elevation: 4 } }),
+  },
+  clientCallPill: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  clientCallPillDisabled: {
+    opacity: 0.38,
   },
   clientBlockPill: {
-    backgroundColor: '#FEE2E2',
-    paddingVertical: 11,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    minWidth: 78,
+    backgroundColor: '#FEF2F2',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 11,
+    minWidth: 72,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#FECACA',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#FECDD3',
   },
   clientBlockPillText: {
-    color: '#DC2626',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: -0.1,
+    color: '#C2410C',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: -0.08,
   },
   clientUnblockPill: {
-    backgroundColor: '#D1FAE5',
-    paddingVertical: 11,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    minWidth: 78,
+    backgroundColor: '#ECFDF5',
+    paddingVertical: 8,
+    paddingHorizontal: 11,
+    borderRadius: 11,
+    minWidth: 72,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#A7F3D0',
   },
   clientUnblockPillText: {
     color: '#047857',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: -0.1,
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: -0.08,
   },
   clientStatsStrip: {
     flexDirection: 'row',
-    alignItems: 'stretch',
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    gap: 4,
+    alignItems: 'center',
+    marginTop: 10,
+    paddingTop: 10,
+    paddingBottom: 2,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 10,
   },
   clientStatCell: {
     flex: 1,
     /** Icon on visual right, numbers/labels on visual left (RTL + LTR) */
     flexDirection: I18nManager.isRTL ? 'row' : 'row-reverse',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
     minWidth: 0,
   },
-  clientStatIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
+  clientStatIcon: {
+    opacity: 0.85,
+    marginTop: 1,
   },
   clientStatTextCol: {
     flex: 1,
@@ -3602,23 +3923,25 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     alignItems: I18nManager.isRTL ? 'flex-end' : 'flex-start',
   },
   clientStatValue: {
-    fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: -0.6,
-    marginBottom: 2,
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: -0.35,
+    marginBottom: 1,
+    lineHeight: 19,
     textAlign: I18nManager.isRTL ? 'right' : 'left',
   },
   clientStatCaption: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '500',
     letterSpacing: -0.05,
+    lineHeight: 14,
     textAlign: I18nManager.isRTL ? 'right' : 'left',
   },
   clientStatVRule: {
     width: StyleSheet.hairlineWidth,
-    alignSelf: 'stretch',
-    marginVertical: 4,
-    opacity: 0.85,
+    height: 28,
+    alignSelf: 'center',
+    opacity: 0.9,
   },
   iconCircleButton: {
     width: 36,
@@ -3629,14 +3952,6 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#E5E5EA',
-  },
-  closeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#f2f2f7',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   imagePreviewOverlay: {
     flex: 1,

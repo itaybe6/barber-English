@@ -392,23 +392,8 @@ export default function WaitlistScreen() {
     const pref = formatTimePreference(entry.time_period);
     const timePreferenceLabel = pref || undefined;
     return (
-      <View
-        style={[
-          styles.waitlistCard,
-          {
-            borderColor: colors.border,
-            ...Platform.select({
-              ios: {
-                shadowColor: colors.text,
-                shadowOffset: { width: 0, height: 8 },
-                shadowOpacity: 0.07,
-                shadowRadius: 20,
-              },
-              android: { elevation: 4 },
-            }),
-          },
-        ]}
-      >
+      <View style={styles.waitlistCardShadowWrap}>
+        <View style={[styles.waitlistCard, { borderColor: colors.border }]}>
         <View
           style={[
             styles.cardAccent,
@@ -456,6 +441,7 @@ export default function WaitlistScreen() {
               {t('settings.services.delete', 'Delete')}
             </Text>
           </Pressable>
+        </View>
         </View>
       </View>
     );
@@ -744,6 +730,19 @@ const styles = StyleSheet.create({
   monthModalScroll: {
     padding: 16,
     paddingTop: 16,
+  },
+  /** צל כאן (לא על הכרטיס עם overflow:hidden) כדי שלא ייחתך ב‑iOS — כמו nextCard ב‑DailySchedule */
+  waitlistCardShadowWrap: {
+    borderRadius: 22,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#1e293b',
+        shadowOpacity: 0.16,
+        shadowRadius: 20,
+        shadowOffset: { width: 0, height: 8 },
+      },
+      android: { elevation: 9 },
+    }),
   },
   waitlistCard: {
     backgroundColor: GC_SURFACE,

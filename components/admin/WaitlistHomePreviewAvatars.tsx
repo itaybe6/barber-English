@@ -3,8 +3,10 @@ import { View, Text, StyleSheet, I18nManager, Platform } from 'react-native';
 
 const SIZE = 28;
 const OVERLAP = 9;
-/** מקסימום "חלונות" בכרטיס: עיגולי ראשי תיבות + אופציונלית תג +N */
-const MAX_SLOTS_DEFAULT = 5;
+/** מקסימום עיגולים בשורה (ראשי תיבות + אופציונלית +N). ברירת מחדל 9 = עד 8 ראשי תיבות + תג */
+const MAX_SLOTS_DEFAULT = 9;
+/** תקרה קשיחה כדי שלא יימתח הכרטיס */
+const MAX_SLOTS_CAP = 9;
 
 const PASTEL_FILLS = ['#EEF2FF', '#FDF2F8', '#ECFDF5', '#FFFBEB', '#E0F2FE', '#F3E8FF', '#FEF3C7'];
 
@@ -41,7 +43,7 @@ interface WaitlistHomePreviewAvatarsProps {
   clients: WaitlistPreviewClient[];
   primaryColor: string;
   surfaceColor: string;
-  /** מקסימום רוחב לוגי (מספר עיגולים כולל +N אם צריך) */
+  /** מקסימום עיגולים בשורה (כולל תג +N כשיש עודף). עד 9 מומלץ לכרטיס הבית */
   maxSlots?: number;
 }
 
@@ -58,7 +60,7 @@ export default function WaitlistHomePreviewAvatars({
 
   const { initialsSlots, overflowPlus } = useMemo(() => {
     const list = clients || [];
-    const slots = Math.max(3, Math.min(maxSlots, 6));
+    const slots = Math.max(3, Math.min(maxSlots, MAX_SLOTS_CAP));
     if (list.length === 0) {
       return { initialsSlots: [] as WaitlistPreviewClient[], overflowPlus: 0 };
     }

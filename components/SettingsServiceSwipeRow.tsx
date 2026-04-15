@@ -13,7 +13,7 @@ interface SettingsServiceSwipeRowProps {
   enabled: boolean;
   onDeletePress: () => void;
   children: React.ReactNode;
-  /** Clip radius — match inner card (services ~18, employees iosCard 16) */
+  /** Clip radius — match inner card (services ~18) */
   outerBorderRadius?: number;
   /** Optional copy for the red swipe delete chip */
   deleteButtonText?: string;
@@ -21,7 +21,7 @@ interface SettingsServiceSwipeRowProps {
 }
 
 /**
- * Swipe-to-delete for settings list rows (services, employees) with a hard cap on travel.
+ * Swipe-to-delete for settings list rows (services) with a hard cap on travel.
  * Replaces RNGH `Swipeable`: under RTL its right-panel width measurement breaks, so the row
  * could drag across the full screen while the delete chip stayed a thin sliver.
  */

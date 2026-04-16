@@ -114,9 +114,6 @@ const ADMIN_HOME_LOGO_TOP_OFFSET = 8;
 /** Hero header logo frame — compact so mark doesn’t dominate the hero. */
 const ADMIN_HOME_LOGO_HEIGHT = 52;
 const ADMIN_HOME_LOGO_WIDTH = 138;
-const OUTER_INNER_HANDOFF_ON_PX = 4;
-/** Wider band reduces handoff flutter when flinging the sheet down */
-const OUTER_INNER_HANDOFF_OFF_PX = 36;
 function sanitizeUrlArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -382,31 +379,6 @@ export default function HomeScreen() {
   const [loadingInsights, setLoadingInsights] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showBroadcast, setShowBroadcast] = useState(false);
-  const [innerScrollEnabled, setInnerScrollEnabled] = useState(false);
-  const innerScrollEnabledRef = useRef(false);
-  const innerScrollRef = useRef<ScrollView>(null);
-  /** SharedValue cap so the animated scroll handler (UI thread) can access it */
-  const outerScrollCapSV = useSharedValue(0);
-  const outerScrollLayoutHRef = useRef(0);
-  const outerScrollContentHRef = useRef(0);
-  const applyOuterScrollCap = useCallback(() => {
-    const lh = outerScrollLayoutHRef.current;
-    const ch = outerScrollContentHRef.current;
-    if (lh > 0 && ch > lh + 1) {
-      outerScrollCapSV.value = ch - lh;
-    } else {
-      outerScrollCapSV.value = Math.max(
-        0,
-        HERO_HEIGHT - HERO_OVERLAP - insets.top - 60 - HERO_SHEET_PULL_UP
-      );
-    }
-  }, [insets.top, outerScrollCapSV]);
-  useEffect(() => {
-    outerScrollCapSV.value = Math.max(
-      0,
-      HERO_HEIGHT - HERO_OVERLAP - insets.top - 60 - HERO_SHEET_PULL_UP
-    );
-  }, [insets.top, outerScrollCapSV]);
   const [blockedFilter, setBlockedFilter] = useState<'all' | 'blocked' | 'unblocked'>('all');
   const [clientsListMode, setClientsListMode] = useState<'all' | 'newThisMonth' | 'pendingApproval'>('all');
   const [clientStatsMap, setClientStatsMap] = useState<
@@ -436,51 +408,13 @@ export default function HomeScreen() {
   const [waitlistWaitingCount, setWaitlistWaitingCount] = useState(0);
   const [waitlistPreviewClients, setWaitlistPreviewClients] = useState<WaitlistPreviewClientRow[]>([]);
 
-  /** SharedValue tracks inner-scroll state so the UI-thread worklet can read it without crossing to JS */
-  const innerActiveSV = useSharedValue(0);
-  /** Drives subtle hero parallax while dragging the sheet */
+  /** Scroll Y — hero parallax + logo/scrim fade (single scroll surface, aligned with client home). */
   const outerScrollYSV = useSharedValue(0);
 
-  const enableInnerScrollJS = useCallback(
-    (enabled: boolean) => {
-      innerScrollEnabledRef.current = enabled;
-      setInnerScrollEnabled(enabled);
-      if (!enabled) {
-        const resetInner = () => innerScrollRef.current?.scrollTo({ y: 0, animated: false });
-        if (typeof requestAnimationFrame === 'function') {
-          requestAnimationFrame(() => {
-            requestAnimationFrame(resetInner);
-          });
-        } else {
-          resetInner();
-        }
-      }
-    },
-    []
-  );
-
-  /** Only coordinates outer ↔ inner scroll handoff — hero marquee is a fixed layer, not driven by scroll */
   const outerScrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       'worklet';
-      const y = event.contentOffset.y;
-      outerScrollYSV.value = y;
-      const cap = outerScrollCapSV.value;
-      const wasInner = innerActiveSV.value === 1;
-      let nextInner = wasInner;
-      if (cap > 0) {
-        if (wasInner) {
-          nextInner = y > cap - OUTER_INNER_HANDOFF_OFF_PX;
-        } else {
-          nextInner = y >= cap - OUTER_INNER_HANDOFF_ON_PX;
-        }
-      } else {
-        nextInner = false;
-      }
-      if (nextInner !== wasInner) {
-        innerActiveSV.value = nextInner ? 1 : 0;
-        runOnJS(enableInnerScrollJS)(nextInner);
-      }
+      outerScrollYSV.value = event.contentOffset.y;
     },
   });
 
@@ -1365,16 +1299,11 @@ export default function HomeScreen() {
         overScrollMode="never"
         pointerEvents="box-none"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={primaryOnSurface} />}
-        contentContainerStyle={{ paddingTop: Platform.OS === 'android' ? 0 : (HERO_HEIGHT - HERO_OVERLAP) }}
+        contentContainerStyle={{
+          paddingTop: Platform.OS === 'android' ? 0 : (HERO_HEIGHT - HERO_OVERLAP),
+          paddingBottom: insets.bottom + 120,
+        }}
         scrollEventThrottle={1}
-        onLayout={(e) => {
-          outerScrollLayoutHRef.current = e.nativeEvent.layout.height;
-          applyOuterScrollCap();
-        }}
-        onContentSizeChange={(_w, h) => {
-          outerScrollContentHRef.current = h;
-          applyOuterScrollCap();
-        }}
         onScroll={outerScrollHandler}
       >
         {/* On Android, hero marquee scrolls with content to avoid z-ordering issues */}
@@ -1391,11 +1320,11 @@ export default function HomeScreen() {
             />
           </View>
         )}
-        {/* Content wrapper — fixed height so outer scroll stops below header */}
+        {/* Content wrapper — minHeight like client home so the sheet fills the viewport and scrolls as one surface */}
         <View
           style={[
             styles.contentWrapper,
-            { height: SCREEN_HEIGHT - insets.top - 60, marginTop: -HERO_SHEET_PULL_UP },
+            { minHeight: SCREEN_HEIGHT - insets.top - 60, marginTop: -HERO_SHEET_PULL_UP },
           ]}
         >
           {/* Drag handle indicator */}
@@ -1408,15 +1337,7 @@ export default function HomeScreen() {
             style={styles.sheetTopShadow}
             pointerEvents="none"
           />
-          <ScrollView
-            ref={innerScrollRef}
-            nestedScrollEnabled
-            keyboardShouldPersistTaps="handled"
-            scrollEnabled={innerScrollEnabled}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
-          >
-            <View style={styles.scrollContent}>
+          <View style={styles.scrollContent}>
 
         {/* ── DAILY SCHEDULE ── */}
         <View style={styles.dailyScheduleWrap}>
@@ -1888,8 +1809,7 @@ export default function HomeScreen() {
 
         {/* ── PRODUCTS SECTION (non-admin only) ── */}
         {!isAdmin && <ProductsSection />}
-            </View>
-          </ScrollView>
+          </View>
         </View>
       </Animated.ScrollView>
 

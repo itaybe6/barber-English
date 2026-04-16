@@ -17,13 +17,15 @@ import Animated, {
   FadeIn,
   FadeOut,
   LinearTransition,
-  SlideInDown,
   ZoomIn,
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useTranslation } from 'react-i18next';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 
 import type { WaitlistEntry } from '@/lib/supabase';
@@ -32,10 +34,10 @@ import { useColors, usePrimaryContrast } from '@/src/theme/ThemeProvider';
 export interface WaitlistHomeFabPanelProps {
   entries: WaitlistEntry[];
   formatWaitlistDate: (dateString: string) => string;
-  /** Delete waitlist rows on server; return true if all succeeded (entries cleared in parent only after `onLeaveSuccessDismiss`). */
-  onConfirmRemoveAll: () => Promise<boolean>;
-  /** After in-sheet success + user tapped Got it — clear local waitlist state / refresh. */
-  onLeaveSuccessDismiss: () => void;
+  /** Delete a single waitlist row on server; return true on success. */
+  onConfirmRemoveEntry: (entryId: string) => Promise<boolean>;
+  /** After in-sheet success + user tapped Got it — remove that entry from local state. */
+  onRemoveEntrySuccessDismiss: (entryId: string) => void;
   /** `tag` — compact chip. `banner` — full-width prominent row. `card` — same style as next-appointment card. */
   triggerVariant?: 'tag' | 'banner' | 'card';
 }
@@ -56,30 +58,79 @@ type RemoveSheetPhase = 'main' | 'confirm' | 'working' | 'success';
 export function WaitlistHomeFabPanel({
   entries,
   formatWaitlistDate,
-  onConfirmRemoveAll,
-  onLeaveSuccessDismiss,
+  onConfirmRemoveEntry,
+  onRemoveEntrySuccessDismiss,
   triggerVariant = 'tag',
 }: WaitlistHomeFabPanelProps) {
   const { t } = useTranslation();
   const colors = useColors();
-  const insets = useSafeAreaInsets();
-  const { height: winH, width: winW } = useWindowDimensions();
-  /** Max pill width: sheet padding (~40) + small margin; keeps content-sized pills centered without overflow. */
-  const tagPillMaxWidth = Math.max(220, winW - 48);
-  /** Date + time share one row; each pill caps at half the row (sheet padding 20×2, gap 8). */
-  const topRowPillMaxWidth = Math.max(100, Math.floor((winW - 40 - 8) / 2));
+  const { height: winH } = useWindowDimensions();
   const [isOpen, setIsOpen] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   const [removePhase, setRemovePhase] = useState<RemoveSheetPhase>('main');
+  const [pendingEntryId, setPendingEntryId] = useState<string | null>(null);
+  const sheetTranslateY = useSharedValue(winH);
+  const backdropOpacity = useSharedValue(0);
 
   useEffect(() => {
-    if (entries.length === 0) setIsOpen(false);
+    if (entries.length === 0) {
+      setIsOpen(false);
+      setIsClosing(false);
+    }
   }, [entries.length]);
 
+  useEffect(() => {
+    if (!isOpen || !isClosing) return;
+    const timer = setTimeout(() => {
+      setIsOpen(false);
+      setIsClosing(false);
+    }, MODAL_ANIM_MS);
+    return () => clearTimeout(timer);
+  }, [isClosing, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      sheetTranslateY.set(winH);
+      backdropOpacity.set(0);
+      return;
+    }
+
+    if (isClosing) {
+      sheetTranslateY.set(
+        withTiming(winH, {
+          duration: MODAL_ANIM_MS,
+          easing: Easing.in(Easing.cubic),
+        })
+      );
+      backdropOpacity.set(
+        withTiming(0, {
+          duration: MODAL_ANIM_MS,
+          easing: Easing.in(Easing.cubic),
+        })
+      );
+      return;
+    }
+
+    sheetTranslateY.set(
+      withTiming(0, {
+        duration: MODAL_ANIM_MS,
+        easing: Easing.out(Easing.cubic),
+      })
+    );
+    backdropOpacity.set(
+      withTiming(1, {
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+      })
+    );
+  }, [backdropOpacity, isClosing, isOpen, sheetTranslateY, winH]);
+
   const close = useCallback(() => {
+    if (isClosing) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setRemovePhase('main');
-    setIsOpen(false);
-  }, []);
+    setIsClosing(true);
+  }, [isClosing]);
 
   /** From the leave-confirm step — return to the waitlist details without closing the sheet. */
   const backFromConfirmStep = useCallback(() => {
@@ -90,13 +141,22 @@ export function WaitlistHomeFabPanel({
   const open = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setRemovePhase('main');
+    setPendingEntryId(null);
+    setIsClosing(false);
     setIsOpen(true);
   }, []);
 
+  const startRemoveEntry = useCallback((entryId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setPendingEntryId(entryId);
+    setRemovePhase('confirm');
+  }, []);
+
   const runConfirmRemove = useCallback(async () => {
+    if (!pendingEntryId) return;
     setRemovePhase('working');
     try {
-      const ok = await onConfirmRemoveAll();
+      const ok = await onConfirmRemoveEntry(pendingEntryId);
       if (ok) {
         try {
           await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -118,7 +178,7 @@ export function WaitlistHomeFabPanel({
         t('error.removing.waitlist', 'An error occurred while removing from the waitlist')
       );
     }
-  }, [onConfirmRemoveAll, t]);
+  }, [pendingEntryId, onConfirmRemoveEntry, t]);
 
   const listMaxHeight = Math.round(winH * 0.5);
   const sheetMaxHeight = Math.round(winH * 0.9);
@@ -136,6 +196,14 @@ export function WaitlistHomeFabPanel({
     }),
     []
   );
+
+  const sheetAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: sheetTranslateY.get() }],
+  }));
+
+  const backdropAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: backdropOpacity.get(),
+  }));
 
   if (entries.length === 0) return null;
 
@@ -348,7 +416,10 @@ export function WaitlistHomeFabPanel({
         onRequestClose={() => {
           if (removePhase === 'working') return;
           if (removePhase === 'success') {
-            onLeaveSuccessDismiss();
+            const id = pendingEntryId;
+            setPendingEntryId(null);
+            setRemovePhase('main');
+            if (id) onRemoveEntrySuccessDismiss(id);
             return;
           }
           if (removePhase === 'confirm') {
@@ -359,7 +430,9 @@ export function WaitlistHomeFabPanel({
         }}
       >
         <View style={styles.modalRoot} pointerEvents="box-none">
-          <Animated.View entering={FadeIn.duration(200)} style={styles.backdrop}>
+          <Animated.View
+            style={[styles.backdrop, backdropAnimatedStyle]}
+          >
             <Pressable
               style={StyleSheet.absoluteFillObject}
               onPress={
@@ -375,21 +448,19 @@ export function WaitlistHomeFabPanel({
           </Animated.View>
 
           <Animated.View
-            entering={SlideInDown.duration(MODAL_ANIM_MS)}
             layout={WAITLIST_SHEET_LAYOUT}
             style={[
               styles.sheet,
+              sheetAnimatedStyle,
               {
                 backgroundColor: colors.background,
                 maxHeight: sheetMaxHeight,
-                paddingTop: removePhase === 'confirm' ? 6 : 18,
-                paddingBottom:
-                  removePhase === 'confirm'
-                    ? Math.max(insets.bottom, 10) + 8
-                    : Math.max(insets.bottom, 16) + 12,
+                paddingTop: removePhase === 'confirm' ? 8 : 10,
+                paddingBottom: 10,
               },
             ]}
           >
+            <View style={[styles.sheetHandle, { backgroundColor: `${colors.text}18` }]} />
             {removePhase === 'main' && (
               <View
                 style={[
@@ -493,7 +564,12 @@ export function WaitlistHomeFabPanel({
                             opacity: pressed ? 0.9 : 1,
                           },
                         ]}
-                        onPress={onLeaveSuccessDismiss}
+                        onPress={() => {
+                          const id = pendingEntryId;
+                          setPendingEntryId(null);
+                          setRemovePhase('main');
+                          if (id) onRemoveEntrySuccessDismiss(id);
+                        }}
                         accessibilityRole="button"
                         accessibilityLabel={t('booking.gotIt', 'Got it')}
                       >
@@ -517,7 +593,7 @@ export function WaitlistHomeFabPanel({
               nestedScrollEnabled
             >
               {entries.map((entry) => {
-                const periodIcon =
+                const entryPeriodIcon =
                   entry.time_period === 'morning'
                     ? 'sunny'
                     : entry.time_period === 'afternoon'
@@ -529,7 +605,7 @@ export function WaitlistHomeFabPanel({
                   entry.time_period === 'any'
                     ? `${t('time_period.any')} — ${t('time_period.flexible')}`
                     : `${t(`time_period.${entry.time_period}`)} · ${t(`time_period.range.${entry.time_period}` as never)}`;
-                const periodColor =
+                const entryPeriodColor =
                   entry.time_period === 'morning' ? '#F5A623' : colors.primary;
                 const staffLabel =
                   entry.staff_name && entry.staff_name.length > 0
@@ -537,136 +613,202 @@ export function WaitlistHomeFabPanel({
                     : t('waitlist.staffAny', 'Any staff');
                 const serviceLabel = getServiceLabel(entry);
 
-                const tagPill = (
-                  bg: string,
-                  icon: keyof typeof Ionicons.glyphMap,
-                  iconColor: string,
-                  label: string,
-                  maxW: number
-                ) => (
-                  <View
-                    style={[
-                      styles.entryTag,
-                      { flexDirection: rtl ? 'row-reverse' : 'row' },
-                      { backgroundColor: bg },
-                      { maxWidth: maxW },
-                    ]}
-                  >
-                    <Ionicons name={icon} size={16} color={iconColor} />
-                    <Text
-                      style={[styles.entryTagText, { color: colors.text, textAlign }]}
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
-                    >
-                      {label}
-                    </Text>
-                  </View>
-                );
-
-                const staffTagPill = (
-                  <View
-                    style={[
-                      styles.entryTag,
-                      { flexDirection: rtl ? 'row-reverse' : 'row' },
-                      { backgroundColor: `${colors.primary}14` },
-                      { maxWidth: tagPillMaxWidth },
-                    ]}
-                  >
-                    <View style={styles.staffAvatarRing}>
-                      {entry.staff_image_url ? (
-                        <Image
-                          source={{ uri: entry.staff_image_url }}
-                          style={styles.staffAvatarImg}
-                          contentFit="cover"
-                        />
-                      ) : (
-                        <View
-                          style={[
-                            styles.staffAvatarFallback,
-                            { backgroundColor: `${colors.primary}22` },
-                          ]}
-                        >
-                          <Ionicons name="person" size={16} color={colors.primary} />
-                        </View>
-                      )}
-                    </View>
-                    <Text
-                      style={[
-                        styles.entryTagText,
-                        styles.entryTagTextStaffOnlyLayout,
-                        { color: colors.text, textAlign },
-                      ]}
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
-                    >
-                      {staffLabel}
-                    </Text>
-                  </View>
-                );
-
                 return (
-                  <View key={entry.id} style={styles.entryGridBlock}>
-                    {entries.length > 1 ? (
-                      <Text
-                        style={[
-                          styles.entryWaitingLead,
-                          { color: colors.textSecondary, textAlign },
-                        ]}
-                      >
-                        {t('waitlist.waitingForIntro')}
-                        {serviceLabel}
-                      </Text>
-                    ) : null}
-                    <View style={styles.entryTagRows}>
+                  <View
+                    key={entry.id}
+                    style={[
+                      styles.entryCardShadowWrap,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.entryCard,
+                        {
+                          backgroundColor: `${colors.text}07`,
+                        },
+                      ]}
+                    >
                       <View
                         style={[
-                          styles.entryTagTopRow,
+                          styles.entryCardHeader,
                           { flexDirection: rtl ? 'row-reverse' : 'row' },
                         ]}
                       >
-                        <View style={styles.entryTagTopCell}>
-                          {tagPill(
-                            `${colors.primary}20`,
-                            'calendar',
-                            colors.primary,
-                            formatWaitlistDate(entry.requested_date),
-                            topRowPillMaxWidth
-                          )}
+                        <View
+                          style={[
+                            styles.entryCardIconWrap,
+                            { backgroundColor: `${colors.primary}10` },
+                          ]}
+                        >
+                          <Ionicons name="time-outline" size={18} color={colors.primary} />
                         </View>
-                        <View style={styles.entryTagTopCell}>
-                          {tagPill(
-                            `${periodColor}2B`,
-                            periodIcon,
-                            periodColor,
-                            timeLine,
-                            topRowPillMaxWidth
-                          )}
+                        <View style={styles.entryCardTitleWrap}>
+                          <Text
+                            style={[
+                              styles.entryCardService,
+                              { color: colors.text, textAlign },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {serviceLabel}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.entryCardCaption,
+                              { color: colors.textSecondary, textAlign },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {t('waitlist.title')}
+                          </Text>
+                        </View>
+                        <Pressable
+                          onPress={() => startRemoveEntry(entry.id)}
+                          hitSlop={10}
+                          style={({ pressed }) => [
+                            styles.entryCardRemoveBtn,
+                            {
+                              backgroundColor: pressed ? `${colors.text}0A` : `${colors.text}06`,
+                              borderColor: pressed ? `${colors.text}12` : `${colors.text}0A`,
+                            },
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityLabel={t('waitlist.remove')}
+                        >
+                          <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                        </Pressable>
+                      </View>
+
+                      <View
+                        style={[
+                          styles.entryCardDivider,
+                          { backgroundColor: `${colors.text}14` },
+                        ]}
+                      />
+
+                      <View
+                        style={[
+                          styles.entryCardDetails,
+                          { alignItems: rtl ? 'flex-end' : 'flex-start' },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.entryCardMetaTopRow,
+                            { flexDirection: rtl ? 'row-reverse' : 'row' },
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.entryCardDetailRow,
+                              styles.entryCardDetailRowCompact,
+                              {
+                                flexDirection: rtl ? 'row-reverse' : 'row',
+                                backgroundColor: `${colors.text}05`,
+                              },
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.entryCardMetaIconWrap,
+                                styles.entryCardMetaIconWrapCompact,
+                                { backgroundColor: `${colors.primary}10` },
+                              ]}
+                            >
+                              {entry.staff_image_url ? (
+                                <Image
+                                  source={{ uri: entry.staff_image_url }}
+                                  style={styles.entryCardStaffImgCompact}
+                                  contentFit="cover"
+                                />
+                              ) : (
+                                <Ionicons name="person-outline" size={12} color={colors.primary} />
+                              )}
+                            </View>
+                            <Text
+                              style={[
+                                styles.entryCardDetailText,
+                                styles.entryCardDetailTextCompact,
+                                { color: colors.text, textAlign },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {staffLabel}
+                            </Text>
+                          </View>
+
+                          <View
+                            style={[
+                              styles.entryCardDetailRow,
+                              styles.entryCardDetailRowCompact,
+                              {
+                                flexDirection: rtl ? 'row-reverse' : 'row',
+                                backgroundColor: `${colors.primary}08`,
+                              },
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.entryCardMetaIconWrap,
+                                styles.entryCardMetaIconWrapCompact,
+                                { backgroundColor: `${colors.primary}12` },
+                              ]}
+                            >
+                              <Ionicons name="calendar-outline" size={12} color={colors.primary} />
+                            </View>
+                            <Text
+                              style={[
+                                styles.entryCardDetailText,
+                                styles.entryCardDetailTextCompact,
+                                { color: colors.text, textAlign },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {formatWaitlistDate(entry.requested_date)}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View
+                          style={[
+                            styles.entryCardDetailRow,
+                            styles.entryCardDetailRowCompact,
+                            {
+                              flexDirection: rtl ? 'row-reverse' : 'row',
+                              backgroundColor: `${entryPeriodColor}10`,
+                            },
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.entryCardMetaIconWrap,
+                              styles.entryCardMetaIconWrapCompact,
+                              { backgroundColor: `${entryPeriodColor}12` },
+                            ]}
+                          >
+                            <Ionicons
+                              name={entryPeriodIcon as any}
+                              size={12}
+                              color={entryPeriodColor}
+                            />
+                          </View>
+                          <Text
+                            style={[
+                              styles.entryCardDetailText,
+                              styles.entryCardDetailTextCompact,
+                              { color: entryPeriodColor, textAlign },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {timeLine}
+                          </Text>
                         </View>
                       </View>
-                      <View style={styles.tagRowCenter}>{staffTagPill}</View>
                     </View>
                   </View>
                 );
               })}
             </ScrollView>
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.removeBtn,
-                  {
-                    backgroundColor: colors.primary,
-                    opacity: pressed ? 0.92 : 1,
-                  },
-                ]}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setRemovePhase('confirm');
-                }}
-                accessibilityRole="button"
-                accessibilityLabel={t('waitlist.remove')}
-              >
-                <Text style={styles.removeBtnText}>{t('waitlist.remove')}</Text>
-              </Pressable>
               </Animated.View>
             ) : (
               <Animated.View
@@ -711,10 +853,23 @@ export function WaitlistHomeFabPanel({
                       { color: colors.textSecondary, textAlign },
                     ]}
                   >
-                    {t(
-                      'waitlist.leaveConfirmHint',
-                      'Leaving the list will cancel your request for an appointment.\nTo go back, tap Cancel.'
-                    )}
+                    {(() => {
+                      const e = entries.find((x) => x.id === pendingEntryId);
+                      if (e) {
+                        return t(
+                          'waitlist.leaveConfirmHintEntry',
+                          'This will remove your waitlist request for {{service}} on {{date}}.',
+                          {
+                            service: getServiceLabel(e),
+                            date: formatWaitlistDate(e.requested_date),
+                          }
+                        );
+                      }
+                      return t(
+                        'waitlist.leaveConfirmHint',
+                        'Leaving the list will cancel your request for an appointment.\nTo go back, tap Cancel.'
+                      );
+                    })()}
                   </Text>
                 </View>
                 <View
@@ -771,8 +926,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginHorizontal: 4,
     ...Platform.select({
-      ios: { shadowColor: '#1e253b', shadowOpacity: 0.09, shadowRadius: 14, shadowOffset: { width: 0, height: 5 } },
-      android: { elevation: 5 },
+      ios: { shadowColor: '#1e253b', shadowOpacity: 0.16, shadowRadius: 18, shadowOffset: { width: 0, height: 8 } },
+      android: { elevation: 9 },
     }),
   },
   cardHeader: {
@@ -963,6 +1118,13 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 24,
   },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 42,
+    height: 5,
+    borderRadius: 999,
+    marginBottom: 12,
+  },
   sheetCloseBtn: {
     marginTop: 2,
     width: 40,
@@ -995,108 +1157,118 @@ const styles = StyleSheet.create({
     letterSpacing: -0.1,
     lineHeight: 22,
   },
-  entryWaitingLead: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 10,
-    letterSpacing: -0.1,
-    lineHeight: 20,
+  entryCardShadowWrap: {
+    borderRadius: 20,
+    marginBottom: 14,
   },
-  entryGridBlock: {
-    marginBottom: 16,
-    gap: 10,
-    width: '100%',
-  },
-  entryTagRows: {
-    width: '100%',
-    gap: 10,
-    alignItems: 'stretch',
-  },
-  /** Date + time: two columns; staff pill sits centered on the row below. */
-  entryTagTopRow: {
-    width: '100%',
-    gap: 8,
-    alignItems: 'stretch',
-  },
-  entryTagTopCell: {
-    flex: 1,
-    minWidth: 0,
-    alignItems: 'center',
-  },
-  /** Centers a content-sized pill; row is only as wide as the pill (up to maxWidth). */
-  tagRowCenter: {
-    width: '100%',
-    alignItems: 'center',
-    minWidth: 0,
-  },
-  entryTag: {
-    flexGrow: 0,
-    alignItems: 'center',
-    alignSelf: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 9999,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 6,
-      },
-      android: { elevation: 3 },
-      default: {},
-    }),
-  },
-  entryTagText: {
-    flexShrink: 1,
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-    lineHeight: 18,
-  },
-  /** Same font as `entryTagText`; only layout differs so the chip stays content-sized. */
-  entryTagTextStaffOnlyLayout: {
-    flex: 0,
-    flexShrink: 1,
-    flexBasis: 'auto',
-  },
-  /** Slightly larger than row icons so the face is visible; pill still uses same padding as other tags. */
-  staffAvatarRing: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
+  entryCard: {
+    borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: '#FFFFFF',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.12,
-        shadowRadius: 3,
-      },
-      android: { elevation: 2 },
-      default: {},
-    }),
   },
-  staffAvatarImg: {
-    width: '100%',
-    height: '100%',
+  entryCardHeader: {
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
   },
-  staffAvatarFallback: {
+  entryCardDivider: {
+    height: StyleSheet.hairlineWidth,
+    alignSelf: 'stretch',
+    marginHorizontal: 16,
+  },
+  entryCardIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  entryCardTitleWrap: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    minWidth: 0,
+    gap: 2,
   },
-  removeBtn: {
-    marginTop: 8,
+  entryCardService: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.25,
+    lineHeight: 21,
+  },
+  entryCardCaption: {
+    fontSize: 12,
+    fontWeight: '500',
+    letterSpacing: 0,
+  },
+  entryCardRemoveBtn: {
+    width: 32,
+    height: 32,
     borderRadius: 16,
-    paddingVertical: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 54,
+    flexShrink: 0,
+    borderWidth: 1,
+  },
+  entryCardDetails: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
+    gap: 8,
+  },
+  entryCardMetaTopRow: {
+    width: '100%',
+    gap: 8,
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  entryCardDetailRow: {
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  entryCardDetailRowCompact: {
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    gap: 6,
+  },
+  entryCardMetaIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  entryCardMetaIconWrapCompact: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+  },
+  entryCardDetailText: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+    flexShrink: 1,
+  },
+  entryCardDetailTextCompact: {
+    fontSize: 12,
+    fontWeight: '500',
+    letterSpacing: 0,
+  },
+  entryCardStaffImg: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+  },
+  entryCardStaffImgCompact: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
   },
   removeBtnText: {
     color: '#FFFFFF',
@@ -1107,8 +1279,8 @@ const styles = StyleSheet.create({
   removeConfirmSoloOuter: {
     width: '100%',
     paddingTop: 0,
-    paddingBottom: 0,
-    gap: 22,
+    paddingBottom: 18,
+    gap: 18,
   },
   /** Title + X on one row; subtitle below. */
   removeConfirmMessageContent: {
@@ -1132,7 +1304,7 @@ const styles = StyleSheet.create({
   },
   removeConfirmSoloSub: {
     marginTop: 2,
-    marginBottom: 4,
+    marginBottom: 2,
     fontSize: 14,
     fontWeight: '600',
     lineHeight: 22,
@@ -1144,6 +1316,7 @@ const styles = StyleSheet.create({
     width: '100%',
     gap: 10,
     alignItems: 'stretch',
+    marginTop: 0,
   },
   removeConfirmBtnSecondary: {
     flex: 1,

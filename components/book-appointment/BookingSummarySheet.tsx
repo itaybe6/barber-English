@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import {
   View,
   Text,
@@ -47,8 +47,8 @@ const CONFIRM_BTN_H = 50;
 const CONFIRM_BTN_MARGIN = 8;
 /** Padding under the confirm button before the peek strip (keep small — tall sheet felt empty). */
 const EXPANDED_PAD_BELOW_CONFIRM = 10;
-/** Fixed height of the success view that replaces the summary rows after booking. */
-const SUCCESS_H = 390;
+/** Height of the success view — sized to fit content with space-between layout. */
+const SUCCESS_H_MIN = 510;
 /** Y from top of `sheet` where the expanded header title ends (matches expandedArea paddingTop). */
 const SUMMARY_TITLE_TOP = HANDLE_RADIUS + 10;
 /** Peek: title sits a bit lower so it clears the floating handle pill. */
@@ -183,9 +183,11 @@ const BookingSummarySheet = forwardRef<BookingSummarySheetHandle, BookingSummary
   const hasTime = chips.some((c) => c.kind === 'time');
   const hasConfirmBtn = hasTime && typeof onConfirm === 'function';
   const hasServiceChip = chips.some((c) => c.kind === 'service');
-  const { width: winW } = useWindowDimensions();
+  const { width: winW, height: winH } = useWindowDimensions();
   const summaryDividerLineW = Math.max(160, winW - 32);
   const expandedH = computeExpandedH(chips.length, hasConfirmBtn, hasServiceChip);
+  // Fit content; on very small screens shrink to 76% of viewport
+  const successH = Math.min(SUCCESS_H_MIN, winH * 0.76);
 
   // Only the inner expanded container animates — the sheet itself sizes naturally
   const expandedContainerH = useSharedValue(0);
@@ -228,10 +230,10 @@ const BookingSummarySheet = forwardRef<BookingSummarySheetHandle, BookingSummary
 
   useEffect(() => {
     if (successData) {
-      // Auto-expand and resize to SUCCESS_H
+      // Auto-expand and resize to fit the success content
       if (!expanded) setExpanded(true);
       progress.value = withTiming(1, expandAnim);
-      expandedContainerH.value = withTiming(SUCCESS_H, expandAnim);
+      expandedContainerH.value = withTiming(successH, expandAnim);
       // Fade in success content, then spring-in checkmark
       successEnter.value = withDelay(160, withTiming(1, { duration: 380 }));
       checkScale.value   = withDelay(340, withSpring(1, { damping: 11, stiffness: 155 }));
@@ -586,8 +588,11 @@ const BookingSummarySheet = forwardRef<BookingSummarySheetHandle, BookingSummary
             style={[StyleSheet.absoluteFill, styles.successOverlay, successFadeStyle]}
             pointerEvents={successData ? 'auto' : 'none'}
           >
+            {/* Checkmark with glow ring */}
             <Animated.View style={[styles.successCheckWrap, checkmarkAnimStyle]}>
-              <Ionicons name="checkmark-circle" size={72} color={primaryColor} />
+              <View style={[styles.successCheckGlow, { backgroundColor: `${primaryColor}18` }]}>
+                <Ionicons name="checkmark-circle" size={72} color={primaryColor} />
+              </View>
             </Animated.View>
 
             <Text style={[styles.successTitle, { color: primaryColor }]}>
@@ -595,24 +600,61 @@ const BookingSummarySheet = forwardRef<BookingSummarySheetHandle, BookingSummary
             </Text>
 
             {successData && (
-              <View style={styles.successMeta}>
-                <Text style={styles.successMetaService} numberOfLines={2}>{successData.serviceName}</Text>
-                {successData.barberName ? (
-                  <Text style={styles.successMetaBarber} numberOfLines={1}>{successData.barberName}</Text>
-                ) : null}
-                <View style={styles.successMetaDivider} />
-                <Text style={styles.successMetaLine}>{successData.dateLabel}</Text>
-                <Text style={styles.successMetaLine}>{successData.timeLabel}</Text>
-              </View>
+              <>
+                {/* Date pill */}
+                <View style={[styles.successDatePill, { backgroundColor: `${primaryColor}14` }]}>
+                  <Ionicons name="calendar-outline" size={13} color={primaryColor} />
+                  <Text style={[styles.successDatePillText, { color: primaryColor }]}>
+                    {successData.dateLabel}
+                  </Text>
+                </View>
+
+                {/* Time pill */}
+                <View style={[styles.successDatePill, { backgroundColor: `${primaryColor}14` }]}>
+                  <Ionicons name="time-outline" size={13} color={primaryColor} />
+                  <Text style={[styles.successDatePillText, { color: primaryColor }]}>
+                    {successData.timeLabel}
+                  </Text>
+                </View>
+
+                {/* Meta card */}
+                <View style={styles.successMetaCard}>
+                  <View style={styles.successMetaRow}>
+                    <Text style={styles.successMetaLabel}>
+                      {t('booking.field.service', '\u05E9\u05D9\u05E8\u05D5\u05EA')}
+                    </Text>
+                    <Text style={styles.successMetaValue} numberOfLines={2}>
+                      {successData.serviceName}
+                    </Text>
+                  </View>
+                  {successData.barberName ? (
+                    <>
+                      <View style={styles.successMetaCardDivider} />
+                      <View style={styles.successMetaRow}>
+                        <Text style={styles.successMetaLabel}>
+                          {t('booking.field.barber', '\u05E1\u05E4\u05E8')}
+                        </Text>
+                        <Text style={styles.successMetaValue} numberOfLines={1}>
+                          {successData.barberName}
+                        </Text>
+                      </View>
+                    </>
+                  ) : null}
+                </View>
+              </>
             )}
 
-            <View style={styles.successBtns}>
+            <View style={[styles.successBtns, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
               {onAddToCalendar ? (
                 <Pressable
                   onPress={onAddToCalendar}
-                  style={({ pressed }) => [styles.successBtnCalendar, { borderColor: primaryColor }, pressed && styles.successBtnCalendarPressed]}
+                  style={({ pressed }) => [
+                    styles.successBtnCalendar,
+                    { backgroundColor: `${primaryColor}12` },
+                    pressed && styles.successBtnCalendarPressed,
+                  ]}
                 >
-                  <Ionicons name="calendar-outline" size={16} color={primaryColor} />
+                  <Ionicons name="calendar-outline" size={17} color={primaryColor} />
                   <Text style={[styles.successBtnCalendarText, { color: primaryColor }]}>
                     {addToCalendarLabel ?? t('booking.addToCalendar', '\u05D4\u05D5\u05E1\u05E3 \u05DC\u05D9\u05D5\u05DE\u05DF')}
                   </Text>
@@ -620,7 +662,7 @@ const BookingSummarySheet = forwardRef<BookingSummarySheetHandle, BookingSummary
               ) : null}
               <Pressable
                 onPress={onSuccessDismiss}
-                style={({ pressed }) => [styles.confirmBtn, { backgroundColor: primaryColor }, pressed && styles.confirmBtnPressed]}
+                style={({ pressed }) => [styles.confirmBtn, { backgroundColor: primaryColor, flex: 1, marginTop: 0 }, pressed && styles.confirmBtnPressed]}
               >
                 <Text style={styles.confirmBtnText}>
                   {gotItLabel ?? t('booking.gotIt', '\u05D4\u05D1\u05E0\u05EA\u05D9')}
@@ -959,75 +1001,113 @@ const styles = StyleSheet.create({
   // ── Success overlay ──
   successOverlay: {
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 20,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 56,
     paddingBottom: 16,
-    gap: 10,
+    zIndex: 100,
+    backgroundColor: '#FFFFFF',
   },
-  successCheckWrap: {
-    marginBottom: 4,
+  successCheckWrap: {},
+  successCheckGlow: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   successTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800',
     textAlign: 'center',
-    letterSpacing: -0.3,
-    lineHeight: 26,
+    letterSpacing: -0.4,
+    lineHeight: 28,
   },
-  successMeta: {
+  successDatePill: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
+    gap: 5,
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
   },
-  successMetaService: {
-    fontSize: 14,
+  successDatePillText: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: -0.1,
+  },
+  successMetaCard: {
+    width: '100%',
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.04)',
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
+      },
+      android: { elevation: 1 },
+    }),
+  },
+  successMetaRow: {
+    alignItems: 'center',
+    paddingVertical: 8,
+    gap: 2,
+  },
+  successMetaCardDivider: {
+    width: '88%',
+    alignSelf: 'center',
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(0,0,0,0.10)',
+  },
+  successMetaLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#8e8e93',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  successMetaValue: {
+    fontSize: 15,
     fontWeight: '700',
     color: '#1a1a1a',
     textAlign: 'center',
     letterSpacing: -0.2,
   },
-  successMetaBarber: {
-    fontSize: 12.5,
-    fontWeight: '500',
-    color: '#6e6e73',
-    textAlign: 'center',
-  },
-  successMetaDivider: {
-    width: 32,
-    height: 1,
-    backgroundColor: 'rgba(0,0,0,0.08)',
-    marginVertical: 4,
-  },
-  successMetaLine: {
-    fontSize: 13.5,
-    fontWeight: '600',
-    color: '#3a3a3c',
-    textAlign: 'center',
-    letterSpacing: -0.1,
-  },
   successBtns: {
     width: '100%',
     gap: 10,
     marginTop: 8,
+    alignItems: 'stretch',
   },
   successBtnCalendar: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 7,
-    borderWidth: 1.5,
-    borderRadius: 14,
-    paddingVertical: 11,
-    paddingHorizontal: 20,
+    gap: 6,
+    borderWidth: 0,
+    borderRadius: 16,
+    paddingVertical: 0,
+    paddingHorizontal: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.10,
+    shadowRadius: 6,
+    elevation: 3,
   },
   successBtnCalendarPressed: {
-    opacity: 0.7,
+    opacity: 0.72,
+    transform: [{ scale: 0.97 }],
   },
   successBtnCalendarText: {
     fontSize: 14,
     fontWeight: '700',
-    letterSpacing: -0.1,
+    letterSpacing: -0.2,
   },
 
   // ── Peek bar ──
@@ -1198,6 +1278,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
   },
   confirmBtnPressed: {
     opacity: 0.84,

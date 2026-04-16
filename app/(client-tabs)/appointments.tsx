@@ -17,6 +17,7 @@ import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { formatTime12Hour } from '@/lib/utils/timeFormat';
 import { formatDateToYMDLocal } from '@/lib/utils/localDate';
 import SwapRequestModal from '@/components/SwapRequestModal';
+import CancelAppointmentBottomSheet from '@/components/appointments/CancelAppointmentBottomSheet';
 import { toBcp47Locale } from '@/lib/i18nLocale';
 
 type TabType = 'upcoming' | 'past';
@@ -606,12 +607,11 @@ export default function ClientAppointmentsScreen() {
         style={[
           styles.barberAvatarRing,
           {
-            width: ringSize,
-            height: ringSize,
-            borderRadius: ringSize / 2,
-            borderColor: hasImage ? colors.primary : 'rgba(142,142,147,0.25)',
-            shadowColor: hasImage ? colors.primary : '#000',
-            shadowOpacity: hasImage ? 0.18 : 0.08,
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            borderColor: 'transparent',
+            shadowOpacity: 0,
           },
         ]}
       >
@@ -637,12 +637,6 @@ export default function ClientAppointmentsScreen() {
     );
   }, [barberImages, colors.primary]);
 
-  // Hero card — reuses the same premium card style as renderAppointment
-  const NextAppointmentHero: React.FC = React.useCallback(() => {
-    if (!(activeTab === 'upcoming' && nextAppointment)) return null;
-    return renderAppointment({ item: nextAppointment! });
-  }, [activeTab, nextAppointment, renderAppointment]);
-
   // Handle cancel appointment
   function handleCancelAppointment(appointment: AvailableTimeSlot) {
     setSelectedAppointment(appointment);
@@ -653,8 +647,13 @@ export default function ClientAppointmentsScreen() {
     setShowCancelModal(true);
   }
 
-  const confirmCancelAppointment = async () => {
-    if (!selectedAppointment) return;
+  const dismissCancelSheet = useCallback(() => {
+    setShowCancelModal(false);
+    setSelectedAppointment(null);
+  }, []);
+
+  const confirmCancelAppointment = async (): Promise<boolean> => {
+    if (!selectedAppointment || isCanceling) return false;
 
     setIsCanceling(true);
     try {
@@ -666,8 +665,6 @@ export default function ClientAppointmentsScreen() {
       if (result.success) {
         // Remove the canceled appointment from the list
         setUserAppointments(prev => prev.filter(apt => apt.id !== selectedAppointment.id));
-        setShowCancelModal(false);
-        setSelectedAppointment(null);
 
         // Create admin notification about the cancellation (target specific assigned barber if available)
         const canceledBy = user?.name || selectedAppointment.client_name || t('common.client', 'Client');
@@ -732,11 +729,14 @@ export default function ClientAppointmentsScreen() {
               .catch(() => {});
           }
         }
+        return true;
       } else {
         Alert.alert(t('appointments.cannotCancel.title', 'Cannot Cancel Appointment'), result.error || t('appointments.cannotCancel.message', 'Unable to cancel the appointment. Please try again.'));
+        return false;
       }
     } catch (error) {
       Alert.alert(t('error.generic', 'Error'), t('appointments.cancelError', 'An error occurred while cancelling. Please try again.'));
+      return false;
     } finally {
       setIsCanceling(false);
     }
@@ -793,97 +793,43 @@ export default function ClientAppointmentsScreen() {
 
     return (
       <View style={styles.apptCardShadow}>
-        {/* ── שורה עליונה: אווטאר ימין + שם שירות + נותן שירות ── */}
+        {/* ── שורה עליונה: תוכן ימין + אווטאר שמאל ── */}
         <View style={styles.apptCardHeader}>
-          {/* אווטאר – ראשון ב־row → ימין ב־RTL */}
-          <BarberAvatar barberId={item.barber_id} size={64} />
-
+          {/* תוכן – ראשון ב־row → ימין ב־RTL */}
           <View style={styles.apptCardHeaderContent}>
             <Text style={styles.apptServiceName} numberOfLines={2}>
               {item.service_name || t('booking.field.service', 'Service')}
             </Text>
             {secondaryInfo ? (
-              <View style={styles.apptInfoRow}>
-                <Ionicons name="person-outline" size={13} color="#8E8E93" />
-                <Text style={styles.apptInfoText} numberOfLines={1}>
-                  {secondaryInfo}
+              <Text style={styles.apptInfoText} numberOfLines={1}>
+                {secondaryInfo}
+              </Text>
+            ) : null}
+            {/* שעה — מוטמעת בתוך הכותרת */}
+            <View style={styles.apptTopMetaRow}>
+              <View style={[styles.apptMiniDateChip, { backgroundColor: colors.primary + '10' }]}>
+                <Ionicons name="time-outline" size={12} color={colors.primary} />
+                <Text style={[styles.apptMiniDateChipText, { color: colors.primary }]}>
+                  {formatTime(item.slot_time)}
                 </Text>
               </View>
-            ) : null}
-          </View>
-        </View>
-
-        {/* ── שורת צ'יפים + מיקום ── */}
-        <View style={styles.apptTopMetaRow}>
-          {/* צ'יפים – ראשון ב־row → ימין ב־RTL */}
-          <View style={styles.apptCardBadgeRow}>
-            <View
-              style={[
-                styles.apptMiniDateChip,
-                {
-                  backgroundColor: colors.primary + '0B',
-                  borderColor: colors.primary + '14',
-                },
-              ]}
-            >
-              <Ionicons name="calendar-outline" size={12} color={colors.primary} />
-              <Text style={[styles.apptMiniDateChipText, { color: colors.primary }]}>
-                {formatCompactDate(item.slot_date)}
-              </Text>
-            </View>
-
-            {/* צ'יפ שעה */}
-            <View
-              style={[
-                styles.apptMiniDateChip,
-                {
-                  backgroundColor: colors.primary + '0D',
-                  borderColor: colors.primary + '18',
-                },
-              ]}
-            >
-              <Ionicons name="time-outline" size={12} color={colors.primary} />
-              <Text style={[styles.apptMiniDateChipText, { color: colors.primary }]}>
-                {formatTime(item.slot_time)}
-              </Text>
             </View>
           </View>
 
-          {/* מיקום – אחרון ב־row → שמאל ב־RTL */}
-          {businessAddress ? (
-            <TouchableOpacity
-              style={[styles.apptLocationBtn, { borderColor: colors.primary + '22' }]}
-              onPress={openBusinessLocation}
-              activeOpacity={0.75}
-            >
-              <Ionicons name="location-outline" size={16} color={colors.primary} />
-            </TouchableOpacity>
-          ) : <View style={{ width: 42 }} />}
+          {/* אווטאר – אחרון ב־row → שמאל ב־RTL */}
+          <BarberAvatar barberId={item.barber_id} size={58} />
         </View>
 
         {!isPast && (
           <>
             <View style={styles.apptCardDivider} />
 
-            {/* ── שורת כפתורים תחתונה: ביטול | החלף ── */}
+            {/* ── שורת כפתורים תחתונה: החלף | ביטול ── */}
             <View style={styles.apptCardFooter}>
-              {/* ביטול – ראשון → ימין ב־RTL */}
-              <TouchableOpacity
-                style={[styles.apptFooterBtn, styles.apptCancelBtn]}
-                onPress={() => handleCancelAppointment(item)}
-                activeOpacity={0.78}
-              >
-                <Ionicons name="close" size={14} color="#FF3B30" />
-                <Text style={styles.apptCancelBtnText}>{t('cancel', 'Cancel')}</Text>
-              </TouchableOpacity>
-
-              {/* החלף – שני → שמאל ב־RTL */}
+              {/* החלף – ראשון → ימין ב־RTL */}
               {user?.user_type !== 'admin' && clientSwapEnabled ? (
                 <TouchableOpacity
-                  style={[
-                    styles.apptFooterBtn,
-                  styles.apptSwapBtn,
-                  ]}
+                  style={[styles.apptFooterBtn, styles.apptSwapBtn]}
                   onPress={() => {
                     setSwapAppointment(item);
                     setShowSwapModal(true);
@@ -894,6 +840,16 @@ export default function ClientAppointmentsScreen() {
                   <Text style={styles.apptSwapBtnText}>{t('swap.swap', 'Swap')}</Text>
                 </TouchableOpacity>
               ) : null}
+
+              {/* ביטול – שני → שמאל ב־RTL */}
+              <TouchableOpacity
+                style={[styles.apptFooterBtn, styles.apptCancelBtn]}
+                onPress={() => handleCancelAppointment(item)}
+                activeOpacity={0.78}
+              >
+                <Ionicons name="close" size={14} color="#FF3B30" />
+                <Text style={styles.apptCancelBtnText}>{t('cancel', 'Cancel')}</Text>
+              </TouchableOpacity>
             </View>
           </>
         )}
@@ -1041,66 +997,14 @@ export default function ClientAppointmentsScreen() {
         )}
       </View>
 
-      {/* Cancel Appointment Modal */}
-      <Modal
-        animationType="fade"
-        transparent={true}
+      <CancelAppointmentBottomSheet
         visible={showCancelModal}
-        onRequestClose={() => setShowCancelModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.cancelModal}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('appointments.cancel.title', 'Cancel Appointment')}</Text>
-              <Text style={styles.modalMessage}>
-                {t('appointments.cancel.message', 'Would you like to cancel your appointment?')}
-              </Text>
-              {selectedAppointment && (
-                <View style={styles.appointmentChips}>
-                  <View style={styles.chip}>
-                    <Ionicons name="calendar" size={14} color={colors.primary} style={styles.chipIcon} />
-                    <Text style={styles.chipText}>{formatDate(selectedAppointment.slot_date)}</Text>
-                  </View>
-                  {Boolean(selectedAppointment.slot_time) && (
-                    <View style={styles.chip}>
-                      <Ionicons name="time-outline" size={14} color={colors.primary} style={styles.chipIcon} />
-                      <Text style={styles.chipText}>{formatTime(selectedAppointment.slot_time)}</Text>
-                    </View>
-                  )}
-                  {Boolean(selectedAppointment.service_name) && (
-                    <View style={styles.chip}>
-                      <Ionicons name="pricetag" size={14} color={colors.primary} style={styles.chipIcon} />
-                      <Text style={styles.chipText}>{selectedAppointment.service_name}</Text>
-                    </View>
-                  )}
-                </View>
-              )}
-            </View>
-            
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelModalButton]}
-                onPress={() => setShowCancelModal(false)}
-                disabled={isCanceling}
-              >
-                <Text style={styles.cancelModalButtonText}>{t('cancel', 'Cancel')}</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.modalButton, styles.confirmModalButton]}
-                onPress={confirmCancelAppointment}
-                disabled={isCanceling}
-              >
-                {isCanceling ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.confirmModalButtonText}>{t('confirm', 'Confirm')}</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        appointment={selectedAppointment}
+        onClose={dismissCancelSheet}
+        onConfirm={confirmCancelAppointment}
+        formatDate={formatDate}
+        formatTime={formatTime}
+      />
 
       {/* Swap Request Modal */}
       <SwapRequestModal
@@ -1372,7 +1276,7 @@ const styles = StyleSheet.create<any>({
   },
   cardFooter: {
     marginTop: 20,
-    alignItems: 'flex-start',
+    alignItems: 'flex-end',
   },
   priorityIndicator: {
     width: 60,
@@ -1421,38 +1325,32 @@ const styles = StyleSheet.create<any>({
   },
   // ─── Premium Appointment Card ────────────────────────────────────────────
   apptCardShadow: {
-    marginBottom: 16,
+    marginBottom: 12,
     marginTop: 4,
-    borderRadius: 26,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: 'rgba(15,23,42,0.05)',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.08,
-    shadowRadius: 24,
-    elevation: 5,
-    padding: 20,
+    borderRadius: 20,
+    backgroundColor: '#F4F5F7',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 1,
+    padding: 14,
   },
   apptCardHeader: {
-    // row + RTL → first child (avatar) lands on the RIGHT
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 14,
+    marginBottom: 0,
   },
   apptCardHeaderContent: {
-    flexShrink: 1,
+    flex: 1,
     alignItems: 'flex-start',
-    gap: 3,
+    gap: 4,
   },
   apptTopMetaRow: {
-    // row + RTL → badges (first) RIGHT, location (last) LEFT
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    marginBottom: 2,
+    marginTop: 2,
   },
   apptCardBadgeRow: {
     // row + RTL → status (first) rightmost, date second
@@ -1555,22 +1453,22 @@ const styles = StyleSheet.create<any>({
   apptMiniDateChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
     borderRadius: 999,
-    borderWidth: 1,
+    borderWidth: 0,
   },
   apptMiniDateChipText: {
-    fontSize: 11.5,
-    fontWeight: '700',
+    fontSize: 12.5,
+    fontWeight: '600',
     letterSpacing: -0.1,
   },
   apptServiceName: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 16,
+    fontWeight: '700',
     color: '#1C1C1E',
-    letterSpacing: -0.5,
+    letterSpacing: -0.3,
   },
   apptInfoRow: {
     flexDirection: 'row',
@@ -1586,9 +1484,9 @@ const styles = StyleSheet.create<any>({
     justifyContent: 'center',
   },
   apptInfoText: {
-    fontSize: 13.5,
+    fontSize: 13,
     fontWeight: '500',
-    color: '#8E8E93',
+    color: '#AEAEB2',
     textAlign: 'right',
     flexShrink: 1,
   },
@@ -1601,7 +1499,8 @@ const styles = StyleSheet.create<any>({
   apptCardDivider: {
     height: 1,
     backgroundColor: 'rgba(15,23,42,0.06)',
-    marginVertical: 16,
+    marginTop: 14,
+    marginBottom: 10,
   },
   apptCardFooter: {
     // row + RTL → cancel (first) RIGHT, swap middle, time (last) LEFT
@@ -1618,34 +1517,34 @@ const styles = StyleSheet.create<any>({
     backgroundColor: '#F5F5F7',
     borderWidth: 1,
   },
-  // ── שלושת כפתורי ה-footer – pill אחיד ──
+  // ── כפתורי footer ──
   apptFooterBtn: {
     flex: 1,
-    height: 46,
-    borderRadius: 999,
+    height: 42,
+    borderRadius: 14,
     borderWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 5,
   },
   apptCancelBtn: {
-    backgroundColor: 'rgba(255,59,48,0.09)',
+    backgroundColor: 'rgba(255,59,48,0.07)',
   },
   apptCancelBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 13.5,
+    fontWeight: '600',
     color: '#FF3B30',
-    letterSpacing: -0.2,
+    letterSpacing: -0.1,
   },
   apptSwapBtn: {
-    backgroundColor: '#F5F5F7',
+    backgroundColor: 'rgba(0,0,0,0.04)',
   },
   apptSwapBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 13.5,
+    fontWeight: '600',
     color: '#3C3C43',
-    letterSpacing: -0.2,
+    letterSpacing: -0.1,
   },
   apptTimeBtn: {
     // primary-tinted pill, no border radius override needed
@@ -1666,12 +1565,9 @@ const styles = StyleSheet.create<any>({
   apptCancelButtonText: { fontSize: 14, fontWeight: '700', color: '#FF3B30' },
   // ─── BarberAvatar (premium ring + glow) ──────────────────────────────────
   barberAvatarRing: {
-    borderWidth: 2,
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 10,
-    elevation: 4,
   },
   barberAvatarInner: {
     overflow: 'hidden',
@@ -1876,11 +1772,11 @@ const styles = StyleSheet.create<any>({
     marginBottom: 8,
   },
   dateHeaderText: {
-    fontSize: 18,
-    fontWeight: '700' as const,
-    color: '#1C1C1E',
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#3C3C43',
     marginRight: 12,
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
   },
   dateHeaderLine: {
     flex: 1,

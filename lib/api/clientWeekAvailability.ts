@@ -78,6 +78,10 @@ export async function fetchFutureAvailableSlotCountsByDate(
 
   const counts = empty();
   const now = new Date();
+  // Track distinct slot_times per date — the same time may appear in multiple rows
+  // (e.g. different services or duplicate barber/user_id rows). Counting unique times
+  // gives a number that matches what the user sees on the booking screen.
+  const seenTimes: Record<string, Set<string>> = {};
 
   for (const row of data || []) {
     const ds = String((row as { slot_date?: string }).slot_date ?? '');
@@ -88,6 +92,9 @@ export async function fetchFutureAvailableSlotCountsByDate(
       `${ds}T${String(parseInt(hh, 10) || 0).padStart(2, '0')}:${String(parseInt(mm, 10) || 0).padStart(2, '0')}:00`,
     );
     if (slotDt.getTime() < now.getTime()) continue;
+    if (!seenTimes[ds]) seenTimes[ds] = new Set();
+    if (seenTimes[ds].has(ts)) continue;
+    seenTimes[ds].add(ts);
     counts[ds] += 1;
   }
 

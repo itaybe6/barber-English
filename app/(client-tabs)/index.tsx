@@ -1154,6 +1154,7 @@ export default function ClientHomeScreen() {
         {designs && designs.length > 0 && (
           <DesignCarousel
             designs={designs}
+            title={t('home.designCarouselTitle')}
             showDots={false}
             showSubtitle={false}
             onDesignPress={(design) => {
@@ -2482,14 +2483,14 @@ const styles = StyleSheet.create<any>({
     textAlign: 'center',
     ...(Platform.OS === 'ios'
       ? {
-          fontFamily: 'Didot',
+          fontFamily: 'Didot-Bold',
           fontWeight: '400' as const,
-          letterSpacing: 0.8,
+          letterSpacing: 0.65,
         }
       : {
           fontFamily: 'serif',
-          fontWeight: '600' as const,
-          letterSpacing: 0.4,
+          fontWeight: '800' as const,
+          letterSpacing: 0.35,
         }),
   },
   sectionAccentLine: {

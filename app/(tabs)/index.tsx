@@ -1417,8 +1417,8 @@ export default function HomeScreen() {
                 <View style={[styles.quickTileIconWrap, { backgroundColor: `${colors.primary}1C` }]}>
                   <Ionicons name="notifications-outline" size={24} color={primaryOnSurface} />
                   {unreadCount > 0 ? (
-                    <View style={[styles.quickTileNotificationBadge, { backgroundColor: '#EF4444' }]}>
-                      <Text style={styles.quickTileBadgeText}>
+                    <View style={[styles.quickTileNotificationBadge, { backgroundColor: '#FFFFFF' }]}>
+                      <Text style={[styles.quickTileBadgeText, styles.quickTileNotificationBadgeText, { color: colors.primary }]}>
                         {unreadCount > 99 ? '99+' : unreadCount}
                       </Text>
                     </View>
@@ -2626,12 +2626,16 @@ const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.creat
     position: 'absolute',
     top: -4,
     right: -4,
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
+    minWidth: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
+  },
+  quickTileNotificationBadgeText: {
+    fontSize: 13,
+    lineHeight: 16,
   },
   quickTileBadgeText: {
     color: '#FFFFFF',

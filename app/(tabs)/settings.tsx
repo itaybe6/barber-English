@@ -3155,7 +3155,11 @@ export default function SettingsScreen() {
                 t('settings.profile.homeAnimationRowTitle', 'Home animation images'),
                 t('settings.profile.homeAnimationRowSubtitle', 'Edit the images in the top home animation'),
                 undefined,
-                () => router.push('/(tabs)/edit-home-hero'),
+                () =>
+                  router.push({
+                    pathname: '/(tabs)/edit-home-hero',
+                    params: { returnSettingsTab: 'design' },
+                  }),
                 false,
                 false
               )}
@@ -3168,7 +3172,7 @@ export default function SettingsScreen() {
                     <Text style={styles.settingSubtitleLTR}>
                       {t(
                         'settings.profile.homeHeaderShowLogoSubtitle',
-                        'When off, show an English name at the top (manager and client). Leave blank to use the business display name from business details.',
+                        'Off: English text at the top. Empty uses the display name from business details.',
                       )}
                     </Text>
                   </View>
@@ -3288,12 +3292,6 @@ export default function SettingsScreen() {
                   <>
                     <View style={styles.settingDivider} />
                     <View style={styles.homeLogoBrandingPreviewSection}>
-                      <Text style={styles.homeHeaderBrandingPreviewHint}>
-                        {t(
-                          'settings.profile.homeLogoBrandingOnlySubtitle',
-                          'The logo is taken from your app build (white-label). Managers cannot upload a different logo here.',
-                        )}
-                      </Text>
                       <View style={styles.homeLogoPreviewWrapCentered}>
                         <View style={styles.homeLogoPreviewWrap}>
                           <Image
@@ -5766,13 +5764,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 6,
     paddingBottom: 12,
-  },
-  homeHeaderBrandingPreviewHint: {
-    fontSize: 12,
-    lineHeight: 17,
-    color: Colors.subtext,
-    marginBottom: 10,
-    textAlign: 'left',
   },
   homeLogoPreviewWrapCentered: {
     alignItems: 'center',

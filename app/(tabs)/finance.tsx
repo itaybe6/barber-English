@@ -166,8 +166,8 @@ function IncomeDonut({
   totalIncome: number;
   fmtCurrency: (n: number) => string;
 }) {
-  const SIZE = 160;
-  const STROKE = 26;
+  const SIZE = 148;
+  const STROKE = 23;
   const cx = SIZE / 2;
   const cy = SIZE / 2;
   const r = (SIZE - STROKE) / 2;
@@ -214,8 +214,8 @@ function IncomeDonut({
   );
 }
 const donutStyles = StyleSheet.create({
-  centreValue: { fontSize: 14, fontWeight: '900', color: Colors.text, textAlign: 'center' },
-  centreLabel: { fontSize: 10, color: Colors.subtext, textAlign: 'center', marginTop: 2 },
+  centreValue: { fontSize: 13, fontWeight: '900', color: Colors.text, textAlign: 'center' },
+  centreLabel: { fontSize: 9, color: Colors.subtext, textAlign: 'center', marginTop: 1 },
 });
 
 /** Daily-income area / line sparkline for the current month */
@@ -228,9 +228,9 @@ function DailySparkline({
   primaryColor: string;
   chartWidth: number;
 }) {
-  const H = 110;
-  const padTop = 24;
-  const padBottom = 20;
+  const H = 100;
+  const padTop = 22;
+  const padBottom = 18;
   const n = dailyTotals.length;
 
   if (n < 2 || chartWidth < 10) return null;
@@ -272,14 +272,14 @@ function DailySparkline({
       <Path d={area} fill="url(#areaGrad)" />
 
       {/* Line */}
-      <Path d={line} fill="none" stroke={primaryColor} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d={line} fill="none" stroke={primaryColor} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
 
       {/* Peak pulse */}
       {dailyTotals[peakIdx] > 0 && (
         <>
-          <Circle cx={pts[peakIdx].x} cy={pts[peakIdx].y} r={10} fill={primaryColor} opacity={0.12} />
-          <Circle cx={pts[peakIdx].x} cy={pts[peakIdx].y} r={5} fill={primaryColor} />
-          <Circle cx={pts[peakIdx].x} cy={pts[peakIdx].y} r={2.5} fill="#fff" />
+          <Circle cx={pts[peakIdx].x} cy={pts[peakIdx].y} r={9} fill={primaryColor} opacity={0.12} />
+          <Circle cx={pts[peakIdx].x} cy={pts[peakIdx].y} r={4.5} fill={primaryColor} />
+          <Circle cx={pts[peakIdx].x} cy={pts[peakIdx].y} r={2.2} fill="#fff" />
         </>
       )}
 
@@ -288,9 +288,9 @@ function DailySparkline({
         <SvgText
           key={di}
           x={pts[di].x}
-          y={H - 4}
+          y={H - 3}
           textAnchor="middle"
-          fontSize={10}
+          fontSize={9}
           fill="#9CA3AF"
         >
           {di + 1}
@@ -312,10 +312,13 @@ function WeeklyBarChart({
   textColor: string;
   chartWidth: number;
 }) {
-  const CHART_H = 150;
-  const LABEL_AREA = 58;
+  const CHART_H = 136;
+  /** Extra vertical room so date range + "N תורים" baselines never overlap (SVG y = text baseline). */
+  const LABEL_AREA = 62;
   const TOTAL_H = CHART_H + LABEL_AREA;
   const MAX_BAR_H = CHART_H - 28;
+  const Y_RANGE = CHART_H + 13;
+  const Y_APPTS = CHART_H + 30;
   const n = weekSlices.length;
 
   if (n === 0 || chartWidth < 10) return null;
@@ -326,7 +329,7 @@ function WeeklyBarChart({
     0,
   );
 
-  const BAR_W = Math.max(28, Math.floor((chartWidth - 16) / n) - 14);
+  const BAR_W = Math.max(26, Math.floor((chartWidth - 16) / n) - 15);
   const BAR_STEP = (chartWidth - 16) / n;
 
   return (
@@ -379,7 +382,7 @@ function WeeklyBarChart({
             <Rect
               x={x + 2} y={y + 4}
               width={BAR_W} height={barH}
-              rx={9}
+              rx={8}
               fill={isBest ? '#D97706' : primaryColor}
               opacity={0.15}
             />
@@ -387,7 +390,7 @@ function WeeklyBarChart({
             <Rect
               x={x} y={y}
               width={BAR_W} height={barH}
-              rx={9}
+              rx={8}
               fill={isBest ? 'url(#wBarBest)' : 'url(#wBar)'}
               opacity={isBest ? 1 : 0.45 + (w.total / maxVal) * 0.55}
             />
@@ -396,9 +399,9 @@ function WeeklyBarChart({
             {amtLabel.length > 0 && (
               <SvgText
                 x={x + BAR_W / 2}
-                y={Math.max(14, y - 6)}
+                y={Math.max(11, y - 7)}
                 textAnchor="middle"
-                fontSize={11}
+                fontSize={10}
                 fontWeight="700"
                 fill={isBest ? '#B45309' : primaryColor}
               >
@@ -406,41 +409,29 @@ function WeeklyBarChart({
               </SvgText>
             )}
 
-            {/* Range label */}
+            {/* Range label — first line below bars */}
             <SvgText
               x={x + BAR_W / 2}
-              y={CHART_H + 15}
+              y={Y_RANGE}
               textAnchor="middle"
               fontSize={10}
               fontWeight="700"
               fill={isBest ? '#D97706' : textColor}
-              opacity={isBest ? 1 : 0.65}
+              opacity={isBest ? 1 : 0.72}
             >
               {shortRange}
             </SvgText>
 
-            {/* Appointment count */}
+            {/* Appointment count — second line, clear gap from range */}
             <SvgText
               x={x + BAR_W / 2}
-              y={CHART_H + 30}
+              y={Y_APPTS}
               textAnchor="middle"
-              fontSize={10}
+              fontSize={9}
               fill="#9CA3AF"
             >
-              {w.appointmentCount} תורים
+              {`${w.appointmentCount} תורים`}
             </SvgText>
-
-            {/* Best star */}
-            {isBest && w.total > 0 && (
-              <SvgText
-                x={x + BAR_W / 2}
-                y={CHART_H + 47}
-                textAnchor="middle"
-                fontSize={13}
-              >
-                ⭐
-              </SvgText>
-            )}
           </G>
         );
       })}
@@ -873,11 +864,18 @@ export default function FinanceScreen() {
                   {incomeBreakdown.map((item, i) => {
                     const color = CHART_COLORS[i % CHART_COLORS.length];
                     const pct = totalIncome > 0 ? Math.round((item.total / totalIncome) * 100) : 0;
+                    const isLast = i === incomeBreakdown.length - 1;
                     return (
-                      <View key={item.service_id || item.service_name} style={styles.legendItem}>
+                      <View
+                        key={item.service_id || item.service_name}
+                        style={[
+                          styles.legendItem,
+                          !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#EEF0F5' },
+                        ]}
+                      >
                         <View style={[styles.legendDot, { backgroundColor: color }]} />
                         <View style={styles.legendBody}>
-                          <RtlText style={[styles.legendName, { color: theme.text }]} numberOfLines={1}>
+                          <RtlText style={[styles.legendName, { color: theme.text }]} numberOfLines={2}>
                             {item.service_name}
                           </RtlText>
                           <View style={styles.legendMeta}>
@@ -912,7 +910,19 @@ export default function FinanceScreen() {
             </View>
           )}
         </View>
-        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: `${theme.border}14`, paddingHorizontal: 12, paddingVertical: 16 }]}>
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: theme.surface,
+              borderColor: `${theme.border}14`,
+              paddingHorizontal: 12,
+              paddingTop: 16,
+              paddingBottom: 28,
+              marginBottom: 14,
+            },
+          ]}
+        >
           {analyticsLoading ? (
             <ActivityIndicator style={{ marginVertical: 30 }} color={primaryColor} />
           ) : weekSlices.length === 0 ? (
@@ -1082,7 +1092,7 @@ export default function FinanceScreen() {
           )}
         </View>
 
-        <View style={{ height: 110 }} />
+        <View style={{ height: Math.max(120, insets.bottom + 108) }} />
       </AnimatedKeyboardAwareScrollView>
 
       {/* ── Add Expense Modal ── */}
@@ -1217,7 +1227,7 @@ const styles = StyleSheet.create({
   monthNameHe: { fontSize: 22, fontWeight: '800', color: '#FFFFFF', textAlign: 'center' },
   monthYearHe: { fontSize: 14, color: 'rgba(255,255,255,0.75)', textAlign: 'center', marginTop: 2 },
   heroNetLabel: { fontSize: 13, color: 'rgba(255,255,255,0.7)', fontWeight: '600', textAlign: 'center', letterSpacing: 0.5, marginBottom: 4 },
-  heroNetAmount: { fontSize: 46, fontWeight: '800', textAlign: 'center', letterSpacing: -1, marginBottom: 24 },
+  heroNetAmount: { fontSize: 42, fontWeight: '800', textAlign: 'center', letterSpacing: -1, marginBottom: 20 },
   heroMiniRow: { flexDirection: 'row-reverse', backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)' },
   heroMiniCard: { flex: 1, alignItems: 'center', gap: 4 },
   heroMiniDivider: { width: 1, height: 40, backgroundColor: 'rgba(255,255,255,0.25)', marginHorizontal: 8 },
@@ -1232,11 +1242,11 @@ const styles = StyleSheet.create({
   heroRatioFill: { height: '100%', borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.92)' },
 
   // ── KPI strip ──
-  kpiStrip: { flexDirection: 'row-reverse', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4, gap: 10 },
-  kpiCard: { flex: 1, borderRadius: 18, borderWidth: 1, paddingVertical: 14, paddingHorizontal: 10, alignItems: 'center', gap: 5, ...cardShadow },
-  kpiIconWrap: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
-  kpiValue: { fontSize: 15, fontWeight: '900', textAlign: 'center', letterSpacing: -0.3 },
-  kpiLabel: { fontSize: 11, fontWeight: '600', textAlign: 'center' },
+  kpiStrip: { flexDirection: 'row-reverse', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, gap: 9 },
+  kpiCard: { flex: 1, borderRadius: 16, borderWidth: 1, paddingVertical: 12, paddingHorizontal: 9, alignItems: 'center', gap: 4, ...cardShadow },
+  kpiIconWrap: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 1 },
+  kpiValue: { fontSize: 14, fontWeight: '900', textAlign: 'center', letterSpacing: -0.3 },
+  kpiLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center' },
 
   // ── Section labels ──
   sectionLabel: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8 },
@@ -1253,16 +1263,22 @@ const styles = StyleSheet.create({
   sparklineLegendText: { fontSize: 10, textAlign: 'center' },
 
   // ── Donut + legend ──
-  donutRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 16 },
-  donutLegend: { flex: 1, gap: 10 },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  legendDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
-  legendBody: { flex: 1 },
-  legendName: { fontSize: 13, fontWeight: '700', textAlign: 'right' },
-  legendMeta: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginTop: 2 },
-  legendAmt: { fontSize: 13, fontWeight: '800' },
-  legendPct: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 20 },
-  legendPctText: { fontSize: 11, fontWeight: '700' },
+  donutRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 14 },
+  donutLegend: { flex: 1, gap: 0 },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingVertical: 10,
+    paddingLeft: 2,
+  },
+  legendDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0, marginTop: 3 },
+  legendBody: { flex: 1, gap: 6 },
+  legendName: { fontSize: 13, fontWeight: '700', textAlign: 'right', lineHeight: 18 },
+  legendMeta: { flexDirection: 'row-reverse', alignItems: 'center', gap: 7, flexWrap: 'wrap' },
+  legendAmt: { fontSize: 14, fontWeight: '800' },
+  legendPct: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 20 },
+  legendPctText: { fontSize: 10, fontWeight: '700' },
 
   // ── Income totals ──
   incomeTotalRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingTop: 14, paddingBottom: 2, borderTopWidth: StyleSheet.hairlineWidth },

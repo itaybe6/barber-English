@@ -11,9 +11,10 @@ import {
   Pressable,
   Modal,
   useWindowDimensions,
+  BackHandler,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useTranslation } from 'react-i18next';
@@ -350,6 +351,33 @@ export default function EditHomeHeroScreen() {
     ];
   }, [showUploadSuccessModal, t]);
 
+  const { returnSettingsTab: returnSettingsTabParam } = useLocalSearchParams<{
+    returnSettingsTab?: string | string[];
+  }>();
+  const settingsTabOnExit = useMemo(() => {
+    const raw = returnSettingsTabParam;
+    const v = Array.isArray(raw) ? raw[0] : raw;
+    if (typeof v === 'string' && v.trim()) return v.trim();
+    return 'design';
+  }, [returnSettingsTabParam]);
+
+  const exitToSettingsSection = useCallback(() => {
+    router.replace({
+      pathname: '/(tabs)/settings',
+      params: { tab: settingsTabOnExit },
+    });
+  }, [router, settingsTabOnExit]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        exitToSettingsSection();
+        return true;
+      });
+      return () => sub.remove();
+    }, [exitToSettingsSection])
+  );
+
   const goHomeAfterHeroUpload = useCallback(() => {
     setShowUploadSuccessModal(false);
     try {
@@ -396,7 +424,7 @@ export default function EditHomeHeroScreen() {
   useEffect(() => {
     if (!isAdmin) {
       Alert.alert(t('error.generic', 'Error'), t('auth.adminOnly', 'Admins only'));
-      router.back();
+      router.replace('/(tabs)' as const);
       return;
     }
     load();
@@ -590,7 +618,7 @@ export default function EditHomeHeroScreen() {
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={{ backgroundColor: colors.background }}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} activeOpacity={0.8} style={styles.headerAddHit}>
+          <TouchableOpacity onPress={exitToSettingsSection} activeOpacity={0.8} style={styles.headerAddHit}>
             <Ionicons name="arrow-forward" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t('settings.profile.homeHeroTitle')}</Text>

@@ -218,18 +218,6 @@ export default function PickPrimaryColorScreen() {
     setPreviewHex(n.startsWith('#') ? n : `#${n}`);
   }, [colors.primary]);
 
-  /** טאב נסתר: חזרה ל־settings עם אותו מקטע (tab) שממנו נכנסו. */
-  const exitToSettings = useCallback(() => {
-    if (normalizedReturnSettingsTab) {
-      router.replace({
-        pathname: '/(tabs)/settings',
-        params: { tab: normalizedReturnSettingsTab },
-      });
-    } else {
-      router.replace('/(tabs)/settings' as const);
-    }
-  }, [router, normalizedReturnSettingsTab]);
-
   const confirmAndSave = useCallback(async () => {
     if (savingLock.current) return;
     savingLock.current = true;
@@ -238,7 +226,7 @@ export default function PickPrimaryColorScreen() {
       const ok = await updatePrimaryColor(previewHex);
       if (ok) {
         triggerColorUpdate();
-        exitToSettings();
+        router.replace('/(tabs)' as const);
       } else {
         Alert.alert(t('error.generic', 'Error'), t('color.updateFailed', 'Unable to update the color'));
       }
@@ -249,7 +237,7 @@ export default function PickPrimaryColorScreen() {
       savingLock.current = false;
       setIsSaving(false);
     }
-  }, [exitToSettings, previewHex, t, triggerColorUpdate, updatePrimaryColor]);
+  }, [previewHex, router, t, triggerColorUpdate, updatePrimaryColor]);
 
   useEffect(() => {
     pickPrimaryTabBar.register({

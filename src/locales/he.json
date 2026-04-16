@@ -16,6 +16,7 @@
   "home.weekAvailability.a11y": "זמינות לפי ימים השבוע. לחיצה לקביעת תור.",
   "home.weekAvailability.today": "היום",
   "home.designCarouselTitle": "ברוך הבא לעולם שלנו",
+  "home.designCarouselSubtitle": "חלק מהעבודות האחרונות שלנו",
   "profile.title": "הגדרות ופרופיל",
   "notifications.title": "התראות",
   
@@ -564,7 +565,7 @@
     "loginToViewDetails": "אנא התחבר/י להצגת פרטי המוצר",
     "ratingSummary": "{{rating}} ({{count}} ביקורות)",
     "carouselTitle": "המוצרים שלנו",
-    "carouselSubtitle": "גלו את האוסף הנבחר שלנו"
+    "carouselSubtitle": "המוצרים שמתאימים בדיוק בשבילכם"
   },
   "auth": { "signInNow": "התחבר/י עכשיו", "maybeLater": "אולי אחר כך" },
   "nearestSlots": { "title": "תורים זמינים בקרוב", "empty": "אין תורים זמינים בקרוב" },

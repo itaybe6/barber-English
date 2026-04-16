@@ -34,6 +34,14 @@ export function getRelativeLuminance(hex: string): number {
   return 0.2126 * R + 0.7152 * G + 0.0722 * B;
 }
 
+export function getContrastRatio(foregroundHex: string, backgroundHex: string): number {
+  const fg = getRelativeLuminance(foregroundHex);
+  const bg = getRelativeLuminance(backgroundHex);
+  const lighter = Math.max(fg, bg);
+  const darker = Math.min(fg, bg);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 /**
  * True when the primary is so light that white foreground fails contrast
  * (pale yellow, cream, etc.).
@@ -42,17 +50,41 @@ export function isLightPrimaryColor(hex: string, luminanceThreshold = 0.62): boo
   return getRelativeLuminance(hex) > luminanceThreshold;
 }
 
+function hexToRgba(hex: string, alpha: number): string {
+  const rgb = parseHexRgb(hex);
+  if (!rgb) return `rgba(28,28,30,${alpha})`;
+  return `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha})`;
+}
+
+function darkenPrimaryUntilContrast(
+  primaryHex: string,
+  backgroundHex: string,
+  minimumContrast = 4.5
+): string {
+  for (let ratio = 0.18; ratio <= 0.9; ratio += 0.04) {
+    const candidate = darkenHex(primaryHex, ratio);
+    if (getContrastRatio(candidate, backgroundHex) >= minimumContrast) {
+      return candidate;
+    }
+  }
+  return '#1C1C1E';
+}
+
 export function getOnPrimaryForeground(primaryHex: string): string {
-  return isLightPrimaryColor(primaryHex) ? '#1C1C1E' : '#FFFFFF';
+  if (!isLightPrimaryColor(primaryHex)) return '#FFFFFF';
+  return darkenPrimaryUntilContrast(primaryHex, primaryHex, 4.5);
 }
 
 export function getOnPrimaryForegroundMuted(primaryHex: string): string {
-  return isLightPrimaryColor(primaryHex) ? 'rgba(28,28,30,0.72)' : 'rgba(255,255,255,0.88)';
+  if (!isLightPrimaryColor(primaryHex)) return 'rgba(255,255,255,0.88)';
+  return hexToRgba(getOnPrimaryForeground(primaryHex), 0.74);
 }
 
 /** Icons / accent text on white or very light primary tints */
 export function getPrimaryAsForegroundOnLightSurface(primaryHex: string, themeText: string): string {
-  return isLightPrimaryColor(primaryHex) ? themeText : primaryHex;
+  if (!isLightPrimaryColor(primaryHex)) return primaryHex;
+  const candidate = darkenPrimaryUntilContrast(primaryHex, '#FFFFFF', 4.5);
+  return getContrastRatio(candidate, '#FFFFFF') >= 4.5 ? candidate : themeText;
 }
 
 export function darkenHex(hex: string, ratio: number): string {

@@ -539,43 +539,31 @@ export default function LoginScreen() {
 
               {usePasswordLogin ? (
                 <LoginEntranceSection delayMs={480} style={styles.fieldWrap}>
-                  <Text
-                    style={[
-                      styles.fieldLabel,
-                      { color: heroMuted, textAlign: isRtl ? 'right' : 'left' },
-                    ]}
-                  >
-                    {t('login.field.password', 'סיסמה')}
-                  </Text>
                   <View
                     style={[
-                      styles.inputRow,
-                      { flexDirection: isRtl ? 'row-reverse' : 'row' },
-                      useLightFg
-                        ? {
-                            borderColor: passFocused ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.32)',
-                            backgroundColor: passFocused ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.12)',
-                          }
-                        : {
-                            borderColor: passFocused ? primary : 'rgba(0,0,0,0.1)',
-                            backgroundColor: passFocused ? hexToRgba(primary, 0.06) : '#F7F7F7',
-                          },
+                      styles.passwordOpenRow,
+                      { flexDirection: 'row' },
+                      {
+                        borderBottomColor: passFocused ? phoneBorderFocus : phoneBorderUnfocus,
+                        borderBottomWidth: passFocused ? 2.5 : 1.5,
+                      },
                     ]}
                   >
-                    <View accessible={false}>
+                    <View style={styles.phoneOpenIconSlot} accessible={false}>
                       <Lock
-                        size={19}
-                        color={passFocused ? (useLightFg ? '#FFFFFF' : primary) : useLightFg ? heroFaint : '#ABABAB'}
-                        strokeWidth={1.7}
+                        size={18}
+                        color={passFocused ? phoneBorderFocus : heroFaint}
+                        strokeWidth={1.5}
                       />
                     </View>
                     <TextInput
                       style={[
-                        styles.input,
+                        styles.passwordOpenInput,
                         { textAlign: isRtl ? 'right' : 'left', color: heroText },
                       ]}
+                      accessibilityLabel={t('login.field.password', 'סיסמה')}
                       placeholder={t('login.passwordPlaceholder', 'סיסמה')}
-                      placeholderTextColor={useLightFg ? 'rgba(255,255,255,0.45)' : '#C0C0C0'}
+                      placeholderTextColor={heroFaint}
                       value={password}
                       onChangeText={setPassword}
                       secureTextEntry={!showPassword}
@@ -588,7 +576,7 @@ export default function LoginScreen() {
                     />
                     <TouchableOpacity
                       onPress={() => setShowPassword((v) => !v)}
-                      style={styles.eyeBtn}
+                      style={styles.eyeBtnOpen}
                       hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                       accessibilityRole="button"
                       accessibilityLabel={
@@ -599,15 +587,15 @@ export default function LoginScreen() {
                     >
                       {showPassword ? (
                         <EyeOff
-                          size={19}
-                          color={passFocused ? (useLightFg ? '#FFFFFF' : primary) : useLightFg ? heroFaint : '#ABABAB'}
-                          strokeWidth={1.7}
+                          size={18}
+                          color={passFocused ? phoneBorderFocus : heroFaint}
+                          strokeWidth={1.5}
                         />
                       ) : (
                         <Eye
-                          size={19}
-                          color={passFocused ? (useLightFg ? '#FFFFFF' : primary) : useLightFg ? heroFaint : '#ABABAB'}
-                          strokeWidth={1.7}
+                          size={18}
+                          color={passFocused ? phoneBorderFocus : heroFaint}
+                          strokeWidth={1.5}
                         />
                       )}
                     </TouchableOpacity>
@@ -981,21 +969,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     margin: 0,
   },
-  inputRow: {
-    flexDirection: 'row',
+  passwordOpenRow: {
     alignItems: 'center',
-    borderRadius: 14,
-    minHeight: 54,
-    paddingHorizontal: 15,
-    paddingVertical: 2,
-    borderWidth: 1,
-    gap: 11,
+    paddingTop: 2,
+    paddingBottom: 1,
+    minHeight: 48,
+    gap: 6,
   },
-  input: {
+  passwordOpenInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '400',
-    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+    letterSpacing: 0.2,
+    paddingVertical: Platform.OS === 'ios' ? 8 : 7,
+    paddingHorizontal: 0,
+    margin: 0,
   },
   lockBanner: {
     fontSize: 13,
@@ -1003,9 +991,9 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     paddingHorizontal: 2,
   },
-  eyeBtn: {
-    minWidth: 44,
-    minHeight: 44,
+  eyeBtnOpen: {
+    minWidth: 34,
+    minHeight: 34,
     alignItems: 'center',
     justifyContent: 'center',
   },

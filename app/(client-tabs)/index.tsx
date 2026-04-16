@@ -1155,8 +1155,8 @@ export default function ClientHomeScreen() {
           <DesignCarousel
             designs={designs}
             title={t('home.designCarouselTitle')}
+            subtitle={t('home.designCarouselSubtitle')}
             showDots={false}
-            showSubtitle={false}
             onDesignPress={(design) => {
               if (!isAuthenticated) {
                 router.push('/login');
@@ -1173,7 +1173,7 @@ export default function ClientHomeScreen() {
         {products && products.length > 0 && (
           <ProductCarousel
             products={products}
-            showSubtitle={false}
+            subtitle={t('products.carouselSubtitle')}
             onProductPress={(product) => {
               if (!isAuthenticated) {
                 router.push('/login');

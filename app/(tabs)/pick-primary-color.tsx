@@ -31,7 +31,7 @@ import {
 } from '@/lib/constants/primaryColorPresets';
 import { useBusinessColors } from '@/lib/hooks/useBusinessColors';
 import { useColorUpdate } from '@/lib/contexts/ColorUpdateContext';
-import { readableOnHex } from '@/lib/utils/readableOnHex';
+import { getOnPrimaryForeground, getOnPrimaryForegroundMuted } from '@/lib/colorContrast';
 import { useCustomColorsStore } from '@/stores/customColorsStore';
 import { usePickPrimaryColorTabBar } from '@/contexts/PickPrimaryColorTabBarContext';
 import { AnimatedSentence } from '@/components/book-appointment/AnimatedSentence';
@@ -145,8 +145,9 @@ export default function PickPrimaryColorScreen() {
     previewHex.replace('#', '').toUpperCase() !==
     (colors.primary || '').replace('#', '').toUpperCase();
 
-  const fg = readableOnHex(previewHex);
+  const fg = getOnPrimaryForeground(previewHex);
   const onDark = fg === '#FFFFFF';
+  const fgMuted = getOnPrimaryForegroundMuted(previewHex);
 
   /** כמו מסך סיכום תור אחרי קביעת תור — בהיר למעלה, כהה למטה */
   const loginGradient = useMemo(
@@ -186,10 +187,10 @@ export default function PickPrimaryColorScreen() {
       {
         textAlign: 'center' as const,
         writingDirection,
-        color: onDark ? 'rgba(255,255,255,0.86)' : 'rgba(0,0,0,0.58)',
+        color: onDark ? 'rgba(255,255,255,0.86)' : fgMuted,
       },
     ],
-    [onDark, writingDirection]
+    [fgMuted, onDark, writingDirection]
   );
 
   // ── Handlers ──────────────────────────────────────────────────────────────

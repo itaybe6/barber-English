@@ -1673,7 +1673,7 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               </View>
             ) : (
-              <View>
+              <View style={{ paddingBottom: 12 }}>
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
@@ -2220,11 +2220,11 @@ export default function HomeScreen() {
 const createStyles = (colors: any, primaryOnSurface: string) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
   },
   contentWrapper: {
     zIndex: 3,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     overflow: 'hidden',

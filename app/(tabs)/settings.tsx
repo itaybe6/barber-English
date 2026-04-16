@@ -64,6 +64,7 @@ import { BrandLavaLampBackground } from '@/src/components/lava-lamp-background-a
 import { BookingDaysRuler, type BookingDaysRulerHandle } from '@/components/BookingDaysRuler';
 import { getExpoExtra } from '@/lib/getExtra';
 import { getHomeLogoSource } from '@/src/theme/assets';
+import { usePrimaryContrast } from '@/src/theme/ThemeProvider';
 import {
   HOME_HEADER_TITLE_FONT_IDS,
   filterEnglishHomeHeaderTitle,
@@ -109,6 +110,7 @@ export default function SettingsScreen() {
   const updateUserProfile = useAuthStore((s) => s.updateUserProfile);
   const { triggerColorUpdate, forceAppRefresh } = useColorUpdate();
   const { colors: businessColors } = useBusinessColors();
+  const { onPrimary, onPrimaryMuted, isLightPrimary } = usePrimaryContrast();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t, i18n } = useTranslation();
@@ -2198,8 +2200,19 @@ export default function SettingsScreen() {
                       setShowEditAdminModal(true);
                     }}
                   >
-                    <View style={styles.adminProfileEditIconCircle}>
-                      <Pencil size={20} color="rgba(255,255,255,0.95)" strokeWidth={2} />
+                    <View
+                      style={[
+                        styles.adminProfileEditIconCircle,
+                        isLightPrimary
+                          ? {
+                              backgroundColor: `${onPrimary}1C`,
+                              borderWidth: 1,
+                              borderColor: `${onPrimary}33`,
+                            }
+                          : null,
+                      ]}
+                    >
+                      <Pencil size={20} color={onPrimary} strokeWidth={2} />
                     </View>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -2238,19 +2251,25 @@ export default function SettingsScreen() {
                         }}
                       >
                         {(profileDisplayName || '').trim() ? (
-                          <Text style={styles.adminBusinessDisplayName} numberOfLines={1}>
+                          <Text style={[styles.adminBusinessDisplayName, { color: onPrimaryMuted }]} numberOfLines={1}>
                             {profileDisplayName}
                           </Text>
                         ) : (
-                          <Text style={[styles.adminBusinessDisplayName, { opacity: 0.64 }]} numberOfLines={1}>
+                          <Text
+                            style={[
+                              styles.adminBusinessDisplayName,
+                              { color: onPrimaryMuted, opacity: 0.64 },
+                            ]}
+                            numberOfLines={1}
+                          >
                             {t('settings.profile.addBusinessName', 'Add business name')}
                           </Text>
                         )}
                       </TouchableOpacity>
-                      <Text style={styles.adminName} numberOfLines={1}>
+                      <Text style={[styles.adminName, { color: onPrimary }]} numberOfLines={1}>
                         {user?.name || 'Manager'}
                       </Text>
-                      <Text style={styles.adminPhone} numberOfLines={1}>
+                      <Text style={[styles.adminPhone, { color: onPrimaryMuted }]} numberOfLines={1}>
                         {user?.phone || 'Phone Number'}
                       </Text>
                     </View>
